@@ -538,12 +538,11 @@ impl Payload {
             }
 
             (messages, None) => {
-                if let Some(messages) = messages {
-                    if other.header.begin() > messages.begin()
-                        || other.header.end() < messages.end()
-                    {
-                        return Err(CertifiedSliceError::InvalidAppend(IndexMismatch));
-                    }
+                if let Some(messages) = messages
+                    && (other.header.begin() > messages.begin()
+                        || other.header.end() < messages.end())
+                {
+                    return Err(CertifiedSliceError::InvalidAppend(IndexMismatch));
                 }
                 // `other` has no messages: take its `header`, keep the rest.
                 self.header = other.header;
@@ -638,10 +637,10 @@ impl Payload {
                 InvalidSlice::ExtraContents,
             ));
         }
-        if let Some(messages) = messages.as_ref() {
-            if messages.is_empty() {
-                return Err(CertifiedSliceError::InvalidPayload(EmptyMessages));
-            }
+        if let Some(messages) = messages.as_ref()
+            && messages.is_empty()
+        {
+            return Err(CertifiedSliceError::InvalidPayload(EmptyMessages));
         }
 
         Ok((subnet_id, header, messages))
@@ -666,10 +665,10 @@ impl Payload {
         if let Some(header) = header {
             stream.push((Label::from(LABEL_HEADER), LabeledTree::Leaf(header)));
         }
-        if let Some(messages) = messages {
-            if !messages.is_empty() {
-                stream.push((Label::from(LABEL_MESSAGES), LabeledTree::SubTree(messages)));
-            }
+        if let Some(messages) = messages
+            && !messages.is_empty()
+        {
+            stream.push((Label::from(LABEL_MESSAGES), LabeledTree::SubTree(messages)));
         }
         let stream = FlatMap::from_key_values(stream);
         let streams = FlatMap::from_key_values(vec![(subnet_id, LabeledTree::SubTree(stream))]);
@@ -746,10 +745,10 @@ impl TryFrom<&[u8]> for Payload {
         let header = Header::try_from(header)?;
 
         let messages = messages.map(Messages::new).transpose()?;
-        if let Some(messages) = messages.as_ref() {
-            if header.begin() > messages.begin() || messages.end() > header.end() {
-                return Err(CertifiedSliceError::InvalidPayload(InvalidBounds));
-            }
+        if let Some(messages) = messages.as_ref()
+            && (header.begin() > messages.begin() || messages.end() > header.end())
+        {
+            return Err(CertifiedSliceError::InvalidPayload(InvalidBounds));
         }
 
         Ok(Self {
@@ -1201,11 +1200,11 @@ impl CertifiedSlicePool {
                 }
             };
 
-            if let Some(actual_begin) = slice.payload.messages_begin() {
-                if actual_begin != begin.message_index {
-                    // Slice's `messages.begin` is past the requested stream index, bail out.
-                    return Err(CertifiedSliceError::TakeBeforeSliceBegin);
-                }
+            if let Some(actual_begin) = slice.payload.messages_begin()
+                && actual_begin != begin.message_index
+            {
+                // Slice's `messages.begin` is past the requested stream index, bail out.
+                return Err(CertifiedSliceError::TakeBeforeSliceBegin);
             }
         }
 

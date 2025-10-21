@@ -1,13 +1,14 @@
 use crate::common::local_replica;
 use crate::common::local_replica::{create_and_install_icrc_ledger, test_identity};
-use crate::common::utils::{get_rosetta_blocks_from_icrc1_ledger, wait_for_rosetta_block};
-use candid::Nat;
-use candid::Principal;
+use crate::common::utils::{
+    get_rosetta_blocks_from_icrc1_ledger, metrics_gauge_value, wait_for_rosetta_block,
+};
+use crate::local_replica::create_and_install_custom_icrc_ledger;
+use candid::{Decode, Encode, Nat, Principal};
 use common::local_replica::get_custom_agent;
-use ic_agent::Identity;
 use ic_agent::identity::BasicIdentity;
-use ic_base_types::CanisterId;
-use ic_base_types::PrincipalId;
+use ic_agent::{Agent, Identity};
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc_rosetta::common::constants::STATUS_COMPLETED;
 use ic_icrc_rosetta::common::types::Error;
 use ic_icrc_rosetta::common::types::OperationType;
@@ -23,8 +24,9 @@ use ic_icrc_rosetta_runner::{
     DEFAULT_DECIMAL_PLACES, RosettaContext, RosettaOptions, start_rosetta,
 };
 use ic_icrc_rosetta_runner::{DEFAULT_TOKEN_SYMBOL, make_transaction_with_rosetta_client_binary};
-use ic_icrc1_ledger::{InitArgs, InitArgsBuilder};
+use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, Tokens};
 use ic_icrc1_test_utils::KeyPairGenerator;
+use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_icrc1_test_utils::{
     ArgWithCaller, DEFAULT_TRANSFER_FEE, LedgerEndpointArg, minter_identity,
     valid_transactions_strategy,
@@ -33,6 +35,7 @@ use ic_icrc1_tokens_u256::U256;
 use ic_rosetta_api::DEFAULT_BLOCKCHAIN;
 use icrc_ledger_agent::CallMode;
 use icrc_ledger_agent::Icrc1Agent;
+use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
@@ -56,6 +59,7 @@ use rosetta_core::response_types::BlockResponse;
 use rosetta_core::response_types::ConstructionPreprocessResponse;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::io::Read;
 use std::time::Instant;
 use std::{
     path::PathBuf,
@@ -64,6 +68,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 use strum::IntoEnumIterator;
+use tempfile::NamedTempFile;
 use tokio::runtime::Runtime;
 
 pub mod common;
@@ -121,6 +126,7 @@ impl Setup {
     fn builder() -> SetupBuilder {
         SetupBuilder {
             icrc1_ledger_init_args_builder: None,
+            custom_ledger_wasm: None,
         }
     }
 }
@@ -131,8 +137,13 @@ impl Drop for Setup {
     }
 }
 
+fn icrc3_test_ledger() -> Vec<u8> {
+    std::fs::read(std::env::var("ICRC3_TEST_LEDGER_CANISTER_WASM_PATH").unwrap()).unwrap()
+}
+
 struct SetupBuilder {
     icrc1_ledger_init_args_builder: Option<InitArgsBuilder>,
+    custom_ledger_wasm: Option<Vec<u8>>,
 }
 
 impl SetupBuilder {
@@ -142,6 +153,11 @@ impl SetupBuilder {
                 .unwrap_or_else(local_replica::icrc_ledger_default_args_builder)
                 .with_initial_balance(account, amount),
         );
+        self
+    }
+
+    fn with_custom_ledger_wasm(mut self, ledger_wasm: Vec<u8>) -> Self {
+        self.custom_ledger_wasm = Some(ledger_wasm);
         self
     }
 
@@ -157,7 +173,15 @@ impl SetupBuilder {
             .unwrap_or(local_replica::icrc_ledger_default_args_builder())
             .with_minting_account(minting_account)
             .build();
-        let canister_id = create_and_install_icrc_ledger(&pocket_ic, init_args.clone(), None);
+        let canister_id = match self.custom_ledger_wasm {
+            None => create_and_install_icrc_ledger(&pocket_ic, init_args.clone(), None),
+            Some(ledger_wasm) => create_and_install_custom_icrc_ledger(
+                &pocket_ic,
+                init_args.clone(),
+                ledger_wasm,
+                None,
+            ),
+        };
 
         let subnet_id = pocket_ic.get_subnet(canister_id).unwrap();
         println!("Installed the ICRC1 ledger canister ({canister_id}) onto {subnet_id:?}");
@@ -196,6 +220,7 @@ struct RosettaTestingEnvironmentBuilder {
     offline: bool,
     port: u16,
     icrc1_symbol: Option<String>,
+    log_file_path: Option<String>,
 }
 
 /// Timeout for the Rosetta client to wait for transactions to be added to the blockchain.
@@ -210,6 +235,7 @@ impl RosettaTestingEnvironmentBuilder {
             offline: false,
             port: setup.port,
             icrc1_symbol: None,
+            log_file_path: None,
         }
     }
 
@@ -225,6 +251,11 @@ impl RosettaTestingEnvironmentBuilder {
 
     pub fn with_icrc1_symbol(mut self, symbol: String) -> Self {
         self.icrc1_symbol = Some(symbol);
+        self
+    }
+
+    pub fn with_log_file_path(mut self, log_file_path: String) -> Self {
+        self.log_file_path = Some(log_file_path);
         self
     }
 
@@ -288,6 +319,7 @@ impl RosettaTestingEnvironmentBuilder {
                         .clone()
                         .unwrap_or(DEFAULT_TOKEN_SYMBOL.to_string()),
                 ),
+                log_file: self.log_file_path.clone(),
                 ..RosettaOptions::default()
             },
         )
@@ -763,6 +795,181 @@ fn test_construction_derive() {
             .account_identifier
             .expect("/construction/derive did not return an account identifier");
         assert_eq!(account_identifier, account.into());
+    });
+}
+
+/// Adds the block to the ledger
+pub async fn add_block(
+    agent: &Agent,
+    ledger_canister_id: &Principal,
+    block: &ICRC3Value,
+) -> Result<Nat, String> {
+    let result = agent
+        .update(ledger_canister_id, "add_block")
+        .with_arg(Encode!(block).expect("failed to encode arg"))
+        .call_and_wait()
+        .await
+        .expect("failed to add block");
+    Decode!(&result, Result<Nat, String>).unwrap()
+}
+
+#[test]
+fn test_error_backoff() {
+    let rt = Runtime::new().unwrap();
+    let setup = Setup::builder()
+        .with_custom_ledger_wasm(icrc3_test_ledger())
+        .build();
+
+    rt.block_on(async {
+        let mut log_file = NamedTempFile::new().expect("failed to create a temp file");
+
+        let env = RosettaTestingEnvironmentBuilder::new(&setup)
+            .with_log_file_path(log_file.path().to_str().unwrap().to_string())
+            .build()
+            .await;
+
+        let agent = get_custom_agent(Arc::new(test_identity()), setup.port).await;
+
+        let block0 = BlockBuilder::new(0, 1000)
+            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
+            .build();
+        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block0)
+            .await
+            .expect("failed to add block");
+        assert_eq!(block_index, Nat::from(0u64));
+
+        let block_index =
+            wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0).await;
+        assert_eq!(block_index.unwrap(), 0);
+
+        assert_rosetta_balance(
+            *TEST_ACCOUNT,
+            0,
+            1000u64,
+            &env.rosetta_client,
+            env.network_identifier.clone(),
+        )
+        .await;
+
+        let mut log_contents = String::new();
+        log_file
+            .read_to_string(&mut log_contents)
+            .expect("failed to read log file");
+        assert!(log_contents.contains("Fully synched to block height: 0"));
+        assert!(!log_contents.contains("Error encountered, waiting"));
+
+        let block1 = ICRC3Value::Text("invalid block".to_string());
+        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block1)
+            .await
+            .expect("failed to add block");
+        assert_eq!(block_index, Nat::from(1u64));
+
+        let mut found_backoff_message = false;
+        for _ in 0..10 {
+            let mut log_contents = String::new();
+            log_file
+                .read_to_string(&mut log_contents)
+                .expect("failed to read log file");
+            if log_contents.contains("Error encountered, waiting 2s before retrying") {
+                found_backoff_message = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+        assert!(found_backoff_message);
+    });
+}
+
+#[test]
+fn test_metrics_with_unrecognized_blocks() {
+    let rt = Runtime::new().unwrap();
+    let setup = Setup::builder()
+        .with_custom_ledger_wasm(icrc3_test_ledger())
+        .build();
+
+    rt.block_on(async {
+        let env = RosettaTestingEnvironmentBuilder::new(&setup).build().await;
+
+        let agent = get_custom_agent(Arc::new(test_identity()), setup.port).await;
+
+        let block0 = BlockBuilder::new(0, 1000)
+            .mint(*TEST_ACCOUNT, Tokens::from(1_000u64))
+            .build();
+        let block_index = add_block(&agent, &env.icrc1_ledger_id, &block0)
+            .await
+            .expect("failed to add block");
+        assert_eq!(block_index, Nat::from(0u64));
+
+        let block_index =
+            wait_for_rosetta_block(&env.rosetta_client, env.network_identifier.clone(), 0)
+                .await
+                .unwrap();
+        assert_eq!(block_index, 0);
+
+        let metrics = env
+            .rosetta_client
+            .metrics()
+            .await
+            .expect("should return metrics");
+
+        let rosetta_synched_block_height =
+            metrics_gauge_value(&metrics, "rosetta_synched_block_height")
+                .expect("should export rosetta_synched_block_height metric");
+        assert_eq!(rosetta_synched_block_height as u64, block_index);
+        let rosetta_verified_block_height =
+            metrics_gauge_value(&metrics, "rosetta_verified_block_height")
+                .expect("should export rosetta_verified_block_height metric");
+        assert_eq!(rosetta_verified_block_height as u64, block_index);
+        let rosetta_target_block_height =
+            metrics_gauge_value(&metrics, "rosetta_target_block_height")
+                .expect("should export rosetta_target_block_height metric");
+        assert_eq!(rosetta_target_block_height as u64, block_index);
+
+        let block1 = ICRC3Value::Text("invalid block".to_string());
+        let bad_block_index = add_block(&agent, &env.icrc1_ledger_id, &block1)
+            .await
+            .expect("failed to add block");
+        assert_eq!(bad_block_index, Nat::from(1u64));
+
+        let await_updated_metrics = async || {
+            const MAX_RETRIES: usize = 10;
+            let mut retries = 0;
+            loop {
+                let metrics = env
+                    .rosetta_client
+                    .metrics()
+                    .await
+                    .expect("should return metrics");
+
+                let rosetta_target_block_height =
+                    metrics_gauge_value(&metrics, "rosetta_target_block_height")
+                        .expect("should export rosetta_target_block_height metric");
+
+                if rosetta_target_block_height as u64 == bad_block_index {
+                    return metrics;
+                } else {
+                    assert!(
+                        retries < MAX_RETRIES,
+                        "rosetta did not pick up the bad block after {MAX_RETRIES} retries"
+                    );
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    retries += 1;
+                }
+            }
+        };
+        let bad_metrics = await_updated_metrics().await;
+
+        // The synced block height is only updated when a block is retrieved successfully from the
+        // ledger, and added to the Rosetta DB. Unrecognized blocks are not stored to disk, so the
+        // following metrics will not be updated.
+        let rosetta_synched_block_height =
+            metrics_gauge_value(&bad_metrics, "rosetta_synched_block_height")
+                .expect("should export rosetta_synched_block_height metric");
+        assert_eq!(rosetta_synched_block_height as u64, block_index);
+        let rosetta_verified_block_height =
+            metrics_gauge_value(&bad_metrics, "rosetta_verified_block_height")
+                .expect("should export rosetta_verified_block_height metric");
+        assert_eq!(rosetta_verified_block_height as u64, block_index);
     });
 }
 

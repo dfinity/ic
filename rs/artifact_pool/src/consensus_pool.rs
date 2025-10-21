@@ -538,14 +538,14 @@ impl ConsensusPoolImpl {
             self.validated_metrics.update(self.validated.pool_section());
 
             // Update the metrics if necessary.
-            if let (Some(last_height), Some(new_height)) = (last_height, new_height) {
-                if new_height != last_height {
-                    self.validated_metrics.update_count_per_height(
-                        self.validated.pool_section(),
-                        last_height,
-                        new_height,
-                    );
-                }
+            if let (Some(last_height), Some(new_height)) = (last_height, new_height)
+                && new_height != last_height
+            {
+                self.validated_metrics.update_count_per_height(
+                    self.validated.pool_section(),
+                    last_height,
+                    new_height,
+                );
             }
             purged
         } else {
@@ -1045,13 +1045,14 @@ mod tests {
     use crate::backup::{BackupAge, PurgingError};
 
     use super::*;
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::p2p::consensus::UnvalidatedArtifact;
     use ic_interfaces::time_source::TimeSource;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::types::v1 as pb;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
+    use ic_test_utilities::state_manager::FakeStateManager;
     use ic_test_utilities_consensus::{fake::*, make_genesis};
     use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
     use ic_test_utilities_time::FastForwardTimeSource;

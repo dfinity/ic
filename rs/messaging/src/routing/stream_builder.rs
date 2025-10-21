@@ -234,6 +234,7 @@ impl StreamBuilderImpl {
                     response
                 );
                 self.metrics.critical_error_induct_response_failed.inc();
+                state.observe_lost_cycles_due_to_dropped_messages(req.payment);
             });
     }
 
@@ -426,14 +427,14 @@ impl StreamBuilderImpl {
                                 }
                             }
 
-                            dst_stream_entry.or_default().push(msg);
+                            dst_stream_entry.or_default().push(msg.into());
                         }
 
                         _ => {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            dst_stream_entry.or_default().push(msg);
+                            dst_stream_entry.or_default().push(msg.into());
                         }
                     };
                 }

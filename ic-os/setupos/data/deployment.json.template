@@ -1,6 +1,6 @@
 {
   "deployment": {
-    "deployment_environment": "mainnet",
+    "deployment_environment": "DEPLOYMENT_ENVIRONMENT",
     "mgmt_mac": null
   },
   "logging": {},

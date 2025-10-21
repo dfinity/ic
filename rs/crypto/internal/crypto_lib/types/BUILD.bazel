@@ -16,7 +16,6 @@ rust_library(
         "//rs/crypto:__subpackages__",
         "//rs/registry/admin:__pkg__",
         "//rs/replay:__pkg__",
-        "//rs/test_utilities:__pkg__",
         "//rs/types/types:__pkg__",
         "//rs/validator/http_request_test_utils:__subpackages__",
     ],

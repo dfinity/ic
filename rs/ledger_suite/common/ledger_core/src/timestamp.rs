@@ -87,7 +87,7 @@ impl Sub<Duration> for TimeStamp {
 }
 
 impl Storable for TimeStamp {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(self.as_nanos_since_unix_epoch().to_le_bytes().to_vec())
     }
 

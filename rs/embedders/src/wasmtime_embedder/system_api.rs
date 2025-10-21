@@ -32,9 +32,7 @@ use ic_types::{
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
 use request_in_prep::{RequestInPrep, into_request};
-use sandbox_safe_system_state::{
-    CanisterStatusView, SandboxSafeSystemState, SystemStateModifications,
-};
+use sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
@@ -131,16 +129,12 @@ pub struct InstructionLimits {
 }
 
 impl InstructionLimits {
-    /// Returns the message and slice instruction limits based on the
-    /// deterministic time slicing flag.
-    pub fn new(dts: FlagStatus, message: NumInstructions, max_slice: NumInstructions) -> Self {
+    /// Returns the message and slice instruction limits.
+    pub fn new(message: NumInstructions, max_slice: NumInstructions) -> Self {
         Self {
             message,
             limit_to_report: message,
-            max_slice: match dts {
-                FlagStatus::Enabled => max_slice,
-                FlagStatus::Disabled => message,
-            },
+            max_slice,
         }
     }
 
@@ -1083,14 +1077,14 @@ impl MemoryUsage {
             new_message_usage,
         )?;
 
-        if message_memory_usage.guaranteed_response.get() != 0 {
-            if let Err(_err) = self.subnet_available_memory.try_decrement(
+        if message_memory_usage.guaranteed_response.get() != 0
+            && let Err(_err) = self.subnet_available_memory.try_decrement(
                 NumBytes::new(0),
                 message_memory_usage.guaranteed_response,
                 NumBytes::new(0),
-            ) {
-                return Err(HypervisorError::OutOfMemory);
-            }
+            )
+        {
+            return Err(HypervisorError::OutOfMemory);
         }
 
         self.allocated_message_memory += message_memory_usage;
@@ -3897,11 +3891,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback { .. }
             | ApiType::CompositeRejectCallback { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. } => match self.sandbox_safe_system_state.status {
-                CanisterStatusView::Running => Ok(1),
-                CanisterStatusView::Stopping => Ok(2),
-                CanisterStatusView::Stopped => Ok(3),
-            },
+            | ApiType::InspectMessage { .. } => Ok(self.sandbox_safe_system_state.status as u32),
         };
         trace_syscall!(self, CanisterStatus, result);
         result
@@ -3977,7 +3967,7 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_trap(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()> {
-        const MAX_ERROR_MESSAGE_SIZE: usize = 16 * 1024;
+        const MAX_ERROR_MESSAGE_SIZE: usize = 32 * 1024;
         let size = size.min(MAX_ERROR_MESSAGE_SIZE);
         let result = {
             let message = valid_subslice(

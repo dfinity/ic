@@ -81,7 +81,6 @@ rust_test(
             "//rs/ledger_suite/common/ledger_core",
             "//rs/ledger_suite/icrc1",
             "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
-            "//rs/rosetta-api/icp/test_utils",
             "//rs/state_machine_tests",
             "//rs/test_utilities/load_wasm",
             "//rs/types/base_types",

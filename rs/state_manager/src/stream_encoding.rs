@@ -122,12 +122,11 @@ pub fn encode_stream_slice(
     // input, so we remove `messages` if it's empty.
     if let Some(LabeledTree::SubTree(stream)) =
         find_path(&mut tree, &[LABEL_STREAMS, subnet.as_slice()])
+        && let Some(LabeledTree::SubTree(messages)) = stream.get(&Label::from(LABEL_MESSAGES))
     {
-        if let Some(LabeledTree::SubTree(messages)) = stream.get(&Label::from(LABEL_MESSAGES)) {
-            actual_to += (messages.len() as u64).into();
-            if messages.is_empty() {
-                stream.remove(&Label::from(LABEL_MESSAGES));
-            }
+        actual_to += (messages.len() as u64).into();
+        if messages.is_empty() {
+            stream.remove(&Label::from(LABEL_MESSAGES));
         }
     }
 

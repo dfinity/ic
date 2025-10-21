@@ -117,6 +117,8 @@ pub struct ICOSSettings {
     pub deployment_environment: DeploymentEnvironment,
     #[serde(default)]
     pub logging: Logging,
+    // NODE-1653: remove field after next HostOS/GuestOS upgrade reaches NNS
+    #[serde(default)]
     pub use_nns_public_key: bool,
     /// The URL (HTTP) of the NNS node(s).
     pub nns_urls: Vec<Url>,

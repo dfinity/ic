@@ -13,7 +13,7 @@ use crate::{
 };
 
 /// An error thrown when trying to validate a header.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum ValidateHeaderError {
     /// Used when the timestamp in the header is lower than
     /// the median of timestamps of past 11 headers.
@@ -313,7 +313,7 @@ fn get_next_compact_target(
 ) -> CompactTarget {
     match network {
         Network::Testnet | Network::Regtest | Network::Testnet4 => {
-            if (prev_height + 1) % DIFFICULTY_ADJUSTMENT_INTERVAL != 0 {
+            if !(prev_height + 1).is_multiple_of(DIFFICULTY_ADJUSTMENT_INTERVAL) {
                 // This if statements is reached only for Regtest and Testnet networks
                 // Here is the quote from "https://en.bitcoin.it/wiki/Testnet"
                 // "If no block has been found in 20 minutes, the difficulty automatically
@@ -367,7 +367,7 @@ fn find_next_difficulty_in_chain(
             loop {
                 // Check if non-limit PoW found or it's time to adjust difficulty.
                 if current_header.bits != pow_limit_bits
-                    || current_height % DIFFICULTY_ADJUSTMENT_INTERVAL == 0
+                    || current_height.is_multiple_of(DIFFICULTY_ADJUSTMENT_INTERVAL)
                 {
                     return current_header.bits;
                 }
@@ -407,7 +407,7 @@ fn compute_next_difficulty(
     // regtest, simply return the previous difficulty target
 
     let height = prev_height + 1;
-    if height % DIFFICULTY_ADJUSTMENT_INTERVAL != 0 || no_pow_retargeting(network) {
+    if !height.is_multiple_of(DIFFICULTY_ADJUSTMENT_INTERVAL) || no_pow_retargeting(network) {
         return prev_header.bits;
     }
 

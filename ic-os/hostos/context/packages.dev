@@ -32,3 +32,6 @@ perf-tools-unstable
 xz-utils
 # static busybox for various missing utilities and to have a static binary with less noise
 busybox-static
+
+# fast reboots via kexec
+kexec-tools

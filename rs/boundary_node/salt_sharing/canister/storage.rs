@@ -25,7 +25,7 @@ pub struct StorableSalt {
 }
 
 impl Storable for StorableSalt {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("StorableSalt serialization failed"))
     }
 

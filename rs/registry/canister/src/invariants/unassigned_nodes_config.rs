@@ -20,18 +20,17 @@ pub(crate) fn check_unassigned_nodes_config_invariants(
     if let Some(config) = get_value_from_snapshot::<UnassignedNodesConfigRecord>(
         snapshot,
         make_unassigned_nodes_config_record_key(),
-    ) {
-        if config.ssh_readonly_access.len() > MAX_NUM_SSH_KEYS {
-            return Err(InvariantCheckError {
-                msg: format!(
-                    "Mutation would have resulted in an SSH key access list that is too long, \
+    ) && config.ssh_readonly_access.len() > MAX_NUM_SSH_KEYS
+    {
+        return Err(InvariantCheckError {
+            msg: format!(
+                "Mutation would have resulted in an SSH key access list that is too long, \
                     the maximum allowable length is {}, and the `readonly` list had {} keys",
-                    MAX_NUM_SSH_KEYS,
-                    config.ssh_readonly_access.len(),
-                ),
-                source: None,
-            });
-        }
+                MAX_NUM_SSH_KEYS,
+                config.ssh_readonly_access.len(),
+            ),
+            source: None,
+        });
     }
 
     Ok(())

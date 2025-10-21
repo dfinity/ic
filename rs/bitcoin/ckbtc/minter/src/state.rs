@@ -6,6 +6,7 @@
 #[cfg(test)]
 mod tests;
 
+use crate::Priority;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -17,7 +18,6 @@ pub mod invariants;
 
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
-use crate::logs::P0;
 use crate::reimbursement::{
     InvalidTransactionError, ReimburseWithdrawalTask, ReimbursedError, ReimbursedWithdrawal,
     ReimbursedWithdrawalResult, WithdrawalReimbursementReason,
@@ -29,9 +29,9 @@ use crate::{
     compute_min_withdrawal_amount,
 };
 use candid::{CandidType, Deserialize, Principal};
+use canlog::log;
 use ic_base_types::CanisterId;
 use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Txid, Utxo};
-use ic_canister_log::log;
 use ic_utils_ensure::ensure_eq;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
@@ -565,7 +565,7 @@ impl CkBtcMinterState {
                 self.min_confirmations = min_conf;
             } else {
                 log!(
-                    P0,
+                    Priority::Info,
                     "Didn't increase min_confirmations to {} (current value: {})",
                     min_conf,
                     self.min_confirmations
@@ -749,20 +749,17 @@ impl CkBtcMinterState {
             return true;
         }
 
-        if let Some(req) = self.pending_retrieve_btc_requests.first() {
-            if self.max_time_in_queue_nanos < now.saturating_sub(req.received_at) {
-                return true;
-            }
+        if let Some(req) = self.pending_retrieve_btc_requests.first()
+            && self.max_time_in_queue_nanos < now.saturating_sub(req.received_at)
+        {
+            return true;
         }
 
-        if let Some(req) = self.pending_retrieve_btc_requests.last() {
-            if let Some(last_submission_time) = self.last_transaction_submission_time_ns {
-                if self.max_time_in_queue_nanos
-                    < req.received_at.saturating_sub(last_submission_time)
-                {
-                    return true;
-                }
-            }
+        if let Some(req) = self.pending_retrieve_btc_requests.last()
+            && let Some(last_submission_time) = self.last_transaction_submission_time_ns
+            && self.max_time_in_queue_nanos < req.received_at.saturating_sub(last_submission_time)
+        {
+            return true;
         }
 
         false
@@ -1536,7 +1533,7 @@ impl CkBtcMinterState {
     ) -> Option<MillisatoshiPerByte> {
         if fees.len() < 100 {
             log!(
-                P0,
+                Priority::Info,
                 "[update_median_fee_per_vbyte]: not enough data points ({}) to compute the fee",
                 fees.len()
             );

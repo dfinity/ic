@@ -519,10 +519,10 @@ impl RosettaApiClient {
         let timeout = std::time::Duration::from_secs(5);
         let now = std::time::SystemTime::now();
         while now.elapsed().unwrap() < timeout {
-            if let Ok(Ok(resp)) = self.block_at(idx).await {
-                if let Some(b) = resp.block {
-                    return Ok(b);
-                }
+            if let Ok(Ok(resp)) = self.block_at(idx).await
+                && let Some(b) = resp.block
+            {
+                return Ok(b);
             }
             sleep(Duration::from_millis(100)).await;
         }
@@ -537,10 +537,10 @@ impl RosettaApiClient {
         let timeout = std::time::Duration::from_secs(5);
         let now = std::time::SystemTime::now();
         while now.elapsed().unwrap() < timeout {
-            if let Ok(Ok(resp)) = self.network_status().await {
-                if resp.current_block_identifier.index >= tip_idx {
-                    return Ok(());
-                }
+            if let Ok(Ok(resp)) = self.network_status().await
+                && resp.current_block_identifier.index >= tip_idx
+            {
+                return Ok(());
             }
             sleep(Duration::from_millis(100)).await;
         }

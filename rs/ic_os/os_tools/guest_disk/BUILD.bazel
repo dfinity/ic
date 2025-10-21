@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -25,7 +25,22 @@ DEV_DEPENDENCIES = [
 
 rust_binary(
     name = "guest_disk",
-    srcs = glob(["src/**/*.rs"]),
+    srcs = [
+        "src/main.rs",
+        "src/tests.rs",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES + [":guest_disk_lib"],
+)
+
+rust_library(
+    name = "guest_disk_lib",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
     crate_name = "guest_disk",
     target_compatible_with = [
         "@platforms//os:linux",

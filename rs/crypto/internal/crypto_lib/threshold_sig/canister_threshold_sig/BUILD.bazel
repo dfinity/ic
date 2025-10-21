@@ -90,7 +90,6 @@ rust_bench(
         # Keep sorted.
         ":canister_threshold_sig",
         "//rs/crypto/test_utils/reproducible_rng",
-        "//rs/rust_canisters/canister_test",
         "//rs/types/types",
         "@crate_index//:criterion",
         "@crate_index//:rand",
@@ -101,6 +100,19 @@ rust_bench(
     name = "group_ops_bench",
     testonly = True,
     srcs = ["benches/group_ops.rs"],
+    deps = [
+        # Keep sorted.
+        ":canister_threshold_sig",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "@crate_index//:criterion",
+        "@crate_index//:rand",
+    ],
+)
+
+rust_bench(
+    name = "scalar_bench",
+    testonly = True,
+    srcs = ["benches/scalar.rs"],
     deps = [
         # Keep sorted.
         ":canister_threshold_sig",

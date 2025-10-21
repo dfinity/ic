@@ -89,7 +89,10 @@ pub mod xnet;
 #[cfg(test)]
 pub mod exhaustive;
 
-pub use crate::canister_log::{CanisterLog, MAX_ALLOWED_CANISTER_LOG_BUFFER_SIZE};
+pub use crate::canister_log::{
+    CanisterLog, default_log_memory_limit, max_allowed_log_memory_limit,
+    min_allowed_log_memory_limit,
+};
 pub use crate::replica_version::ReplicaVersion;
 pub use crate::time::Time;
 pub use funds::*;
@@ -515,15 +518,6 @@ impl PartialOrd for MemoryAllocation {
     }
 }
 
-/// The error that occurs when an end-user specifies an invalid
-/// [`MemoryAllocation`].
-#[derive(Clone, Debug)]
-pub struct InvalidMemoryAllocationError {
-    pub min: candid::Nat,
-    pub max: candid::Nat,
-    pub given: candid::Nat,
-}
-
 const GIB: u64 = 1024 * 1024 * 1024;
 
 /// The upper limit on the stable memory size.
@@ -541,38 +535,8 @@ pub const MAX_WASM_MEMORY_IN_BYTES: u64 = 4 * GIB;
 /// it is public and `u64` (`NumBytes` cannot be used in const expressions).
 pub const MAX_WASM64_MEMORY_IN_BYTES: u64 = 6 * GIB;
 
-const MIN_MEMORY_ALLOCATION: NumBytes = NumBytes::new(0);
-pub const MAX_MEMORY_ALLOCATION: NumBytes =
-    NumBytes::new(MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM64_MEMORY_IN_BYTES);
-
-impl InvalidMemoryAllocationError {
-    pub fn new(given: candid::Nat) -> Self {
-        Self {
-            min: candid::Nat::from(MIN_MEMORY_ALLOCATION.get()),
-            max: candid::Nat::from(MAX_MEMORY_ALLOCATION.get()),
-            given,
-        }
-    }
-}
-
-impl TryFrom<NumBytes> for MemoryAllocation {
-    type Error = InvalidMemoryAllocationError;
-
-    fn try_from(bytes: NumBytes) -> Result<Self, Self::Error> {
-        if bytes > MAX_MEMORY_ALLOCATION {
-            return Err(InvalidMemoryAllocationError::new(candid::Nat::from(
-                bytes.get(),
-            )));
-        }
-        Ok(MemoryAllocation::new_unchecked(bytes))
-    }
-}
-
-impl MemoryAllocation {
-    // This function should only be used when loading a checkpoint.
-    // Otherwise, `TryFrom<NumBytes>` must be used.
-    // TODO: replace by `From<NumBytes>` after dropping the bound `MAX_MEMORY_ALLOCATION`.
-    pub fn new_unchecked(bytes: NumBytes) -> Self {
+impl From<NumBytes> for MemoryAllocation {
+    fn from(bytes: NumBytes) -> Self {
         // A memory allocation of 0 means that the canister's memory growth will be
         // best-effort.
         if bytes.get() == 0 {

@@ -31,7 +31,7 @@ fn main() {
         dir: args.dir,
         nns_url: args.nns_url,
         replica_version: args.replica_version,
-        key_file: args.key_file,
+        admin_key_file: args.admin_key_file,
         test_mode: args.test,
         skip_prompts: args.skip_prompts,
         use_local_binaries: args.use_local_binaries,

@@ -1,5 +1,8 @@
 use hex_literal::hex;
-use ic_secp256k1::{DerivationPath, KeyDecodingError, PrivateKey, PublicKey};
+use ic_secp256k1::{
+    DerivationPath, KeyDecodingError, MasterPublicKeyId, PocketIcMasterPublicKeyId, PrivateKey,
+    PublicKey,
+};
 use rand::Rng;
 use rand_chacha::ChaCha20Rng;
 
@@ -742,84 +745,153 @@ Fuih1ILwOK+Hmr2Q5yPe4k0Kz2se3NM1eQeVaTl5BtwlTTc9IOcky4I7oQ==
     }
 }
 
-#[test]
-fn offline_ecdsa_key_derivation_matches_mainnet_for_key_1() {
+fn test_key_derivation(
+    mk: PublicKey,
+    canister_id: &'static str,
+    derivation_path: &[Vec<u8>],
+    expected_key: &'static str,
+) {
     use std::str::FromStr;
 
-    let canister_id = ic_secp256k1::CanisterId::from_str("h5jwf-5iaaa-aaaan-qmvoa-cai").unwrap();
-    let derivation_path = [hex!("ABCDEF").to_vec(), hex!("012345").to_vec()];
+    let canister_id = ic_secp256k1::CanisterId::from_str(canister_id).unwrap();
 
-    let dpk = PublicKey::derive_mainnet_key(
-        ic_secp256k1::MasterPublicKeyId::EcdsaKey1,
-        &canister_id,
-        &derivation_path,
-    );
+    let dpk = mk.derive_subkey(&DerivationPath::from_canister_id_and_path(
+        canister_id.as_slice(),
+        derivation_path,
+    ));
 
-    assert_eq!(
-        hex::encode(dpk.0.serialize_sec1(true)),
+    assert_eq!(hex::encode(dpk.0.serialize_sec1(true)), expected_key,);
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_mainnet_for_key_1() {
+    test_key_derivation(
+        PublicKey::mainnet_key(MasterPublicKeyId::EcdsaKey1),
+        "h5jwf-5iaaa-aaaan-qmvoa-cai",
+        &[hex!("ABCDEF").to_vec(), hex!("012345").to_vec()],
         "02735ca28b5c3e380016d7f28bf4703b540a8bbe8e24beffdc021455ca2ab93fe3",
     );
 }
 
 #[test]
 fn offline_ecdsa_key_derivation_matches_mainnet_for_test_key_1() {
-    use std::str::FromStr;
-
-    let canister_id = ic_secp256k1::CanisterId::from_str("h5jwf-5iaaa-aaaan-qmvoa-cai").unwrap();
     let derivation_path = [
         "Hello".as_bytes().to_vec(),
         "Threshold".as_bytes().to_vec(),
         "Signatures".as_bytes().to_vec(),
     ];
-    let dpk = PublicKey::derive_mainnet_key(
-        ic_secp256k1::MasterPublicKeyId::EcdsaTestKey1,
-        &canister_id,
-        &derivation_path,
-    );
 
-    assert_eq!(
-        hex::encode(dpk.0.serialize_sec1(true)),
-        "0315ae8bb8c6e9f78eec2167f5ac773067f37a39da1a1efbc585f9e90658d1c620"
+    test_key_derivation(
+        PublicKey::mainnet_key(MasterPublicKeyId::EcdsaTestKey1),
+        "h5jwf-5iaaa-aaaan-qmvoa-cai",
+        &derivation_path,
+        "0315ae8bb8c6e9f78eec2167f5ac773067f37a39da1a1efbc585f9e90658d1c620",
     );
 }
 
 #[test]
 fn offline_schnorr_key_derivation_matches_mainnet_for_key_1() {
-    use std::str::FromStr;
-
-    let canister_id = ic_secp256k1::CanisterId::from_str("h5jwf-5iaaa-aaaan-qmvoa-cai").unwrap();
-    let derivation_path = [hex!("ABCDEF").to_vec(), hex!("012345").to_vec()];
-
-    let dpk = PublicKey::derive_mainnet_key(
-        ic_secp256k1::MasterPublicKeyId::SchnorrKey1,
-        &canister_id,
-        &derivation_path,
-    );
-
-    assert_eq!(
-        hex::encode(dpk.0.serialize_sec1(true)),
+    test_key_derivation(
+        PublicKey::mainnet_key(MasterPublicKeyId::SchnorrKey1),
+        "h5jwf-5iaaa-aaaan-qmvoa-cai",
+        &[hex!("ABCDEF").to_vec(), hex!("012345").to_vec()],
         "03e5e92c2399985f82521b110ac3dbf697a6b9522002c0d31d0b7cd5352c343457",
     );
 }
 
 #[test]
 fn offline_schnorr_key_derivation_matches_mainnet_for_test_key_1() {
-    use std::str::FromStr;
-
-    let canister_id = ic_secp256k1::CanisterId::from_str("h5jwf-5iaaa-aaaan-qmvoa-cai").unwrap();
     let derivation_path = [
         "Hello".as_bytes().to_vec(),
         "Threshold".as_bytes().to_vec(),
         "Signatures".as_bytes().to_vec(),
     ];
-    let dpk = PublicKey::derive_mainnet_key(
-        ic_secp256k1::MasterPublicKeyId::SchnorrTestKey1,
-        &canister_id,
-        &derivation_path,
-    );
 
-    assert_eq!(
-        hex::encode(dpk.0.serialize_sec1(true)),
+    test_key_derivation(
+        PublicKey::mainnet_key(MasterPublicKeyId::SchnorrTestKey1),
+        "h5jwf-5iaaa-aaaan-qmvoa-cai",
+        &derivation_path,
         "0237ca6a41c1db8ab40410445250a5d46fbec7f3e449c8f40f86d8622a4106cebd",
+    );
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_pocketic_for_key_1() {
+    test_key_derivation(
+        PublicKey::pocketic_key(PocketIcMasterPublicKeyId::EcdsaKey1),
+        "uzt4z-lp777-77774-qaabq-cai",
+        &[],
+        "02b0b6acdac2848231bdf5946f4b8d53919e542453fc8a5e2f6ed86f1c10112dd1",
+    );
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_pocketic_for_test_key_1() {
+    test_key_derivation(
+        PublicKey::pocketic_key(PocketIcMasterPublicKeyId::EcdsaTestKey1),
+        "uzt4z-lp777-77774-qaabq-cai",
+        &[],
+        "03a92d76d67a715fa4c938abee3f87736106ffc3f86a8dd0ac86268d823f0cfada",
+    );
+}
+
+#[test]
+fn offline_ecdsa_key_derivation_matches_pocketic_for_dfx_test_key() {
+    test_key_derivation(
+        PublicKey::pocketic_key(PocketIcMasterPublicKeyId::EcdsaDfxTestKey),
+        "uzt4z-lp777-77774-qaabq-cai",
+        &[],
+        "036d7246f93e7921a1f909fb451a19dbf7efc7166aa95dd14b1e9d6a58b619a98c",
+    );
+}
+
+#[test]
+fn offline_bip340_key_derivation_matches_pocketic_for_key_1() {
+    let derivation_path = vec![
+        b"Test".to_vec(),
+        b"Derivation".to_vec(),
+        b"For".to_vec(),
+        b"Bip340secp256k1".to_vec(),
+        b"key_1".to_vec(),
+    ];
+    test_key_derivation(
+        PublicKey::pocketic_key(PocketIcMasterPublicKeyId::SchnorrKey1),
+        "uzt4z-lp777-77774-qaabq-cai",
+        &derivation_path,
+        "026bdb2db9f5bf4993db8f278820096f69a3a7ba9cecde62396c8f828f6aaebe2c",
+    );
+}
+
+#[test]
+fn offline_bip340_key_derivation_matches_pocketic_for_test_key_1() {
+    let derivation_path = vec![
+        b"Test".to_vec(),
+        b"Derivation".to_vec(),
+        b"For".to_vec(),
+        b"Bip340secp256k1".to_vec(),
+        b"test_key_1".to_vec(),
+    ];
+    test_key_derivation(
+        PublicKey::pocketic_key(PocketIcMasterPublicKeyId::SchnorrTestKey1),
+        "uzt4z-lp777-77774-qaabq-cai",
+        &derivation_path,
+        "03e02e9e0304adf56b602f281f221b8b31ec18f294a93ef2434f7fa6d1d7714cbd",
+    );
+}
+
+#[test]
+fn offline_bip340_key_derivation_matches_pocketic_for_dfx_test_key() {
+    let derivation_path = vec![
+        b"Test".to_vec(),
+        b"Derivation".to_vec(),
+        b"For".to_vec(),
+        b"Bip340secp256k1".to_vec(),
+        b"dfx_test_key".to_vec(),
+    ];
+    test_key_derivation(
+        PublicKey::pocketic_key(PocketIcMasterPublicKeyId::SchnorrDfxTestKey),
+        "uzt4z-lp777-77774-qaabq-cai",
+        &derivation_path,
+        "03ccb166a97a93df8cc130e0a7873aab5f2e31d2ca52dc46bd5ddf72ae78d73f68",
     );
 }

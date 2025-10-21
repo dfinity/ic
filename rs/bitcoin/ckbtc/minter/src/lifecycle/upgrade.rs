@@ -1,12 +1,12 @@
-use crate::IC_CANISTER_RUNTIME;
-use crate::logs::P0;
+use crate::CanisterRuntime;
+use crate::logs::Priority;
 use crate::state::eventlog::{EventType, replay};
 use crate::state::invariants::CheckInvariantsImpl;
 use crate::state::{Mode, replace_state};
 use crate::storage::{count_events, events, migrate_old_events_if_not_empty, record_event};
 use candid::{CandidType, Deserialize};
+use canlog::log;
 use ic_base_types::CanisterId;
-use ic_canister_log::log;
 use serde::Serialize;
 
 #[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize, Serialize)]
@@ -51,22 +51,30 @@ pub struct UpgradeArgs {
     pub get_utxos_cache_expiration_seconds: Option<u64>,
 }
 
-pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
+pub fn post_upgrade<R: CanisterRuntime>(upgrade_args: Option<UpgradeArgs>, runtime: &R) {
     if let Some(upgrade_args) = upgrade_args {
         log!(
-            P0,
+            Priority::Info,
             "[upgrade]: updating configuration with {:?}",
             upgrade_args
         );
-        record_event(EventType::Upgrade(upgrade_args), &IC_CANISTER_RUNTIME);
+        record_event(EventType::Upgrade(upgrade_args), runtime);
     };
 
     let start = ic_cdk::api::instruction_counter();
 
     if let Some(removed) = migrate_old_events_if_not_empty() {
-        log!(P0, "[upgrade]: {} empty events removed", removed)
+        log!(
+            Priority::Info,
+            "[upgrade]: {} empty events removed",
+            removed
+        )
     }
-    log!(P0, "[upgrade]: replaying {} events", count_events());
+    log!(
+        Priority::Info,
+        "[upgrade]: replaying {} events",
+        count_events()
+    );
 
     let state = replay::<CheckInvariantsImpl>(events()).unwrap_or_else(|e| {
         ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
@@ -79,7 +87,7 @@ pub fn post_upgrade(upgrade_args: Option<UpgradeArgs>) {
     let end = ic_cdk::api::instruction_counter();
 
     log!(
-        P0,
+        Priority::Info,
         "[upgrade]: replaying events consumed {} instructions",
         end - start
     );

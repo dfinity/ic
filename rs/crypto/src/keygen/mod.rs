@@ -198,24 +198,23 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
                     );
                     if let Some(latest_local_idkg_dealing_encryption_key_timestamp) =
                         latest_local_idkg_dealing_encryption_key_timestamp
-                    {
-                        if self.is_current_key_too_old(
+                        && self.is_current_key_too_old(
                             latest_local_idkg_dealing_encryption_key_timestamp,
                             key_rotation_period,
-                        ) {
-                            warn!(
-                                self.logger,
-                                "Local iDKG dealing encryption key is too old ({}), but it still has not been registered in the registry",
-                                latest_local_idkg_dealing_encryption_key_timestamp;
-                            );
-                            return Ok(
-                                IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
-                                    KeyRotationOutcome::KeyNotRotatedButTooOld {
-                                        existing_key: current_idkg_public_key_proto,
-                                    },
-                                ),
-                            );
-                        }
+                        )
+                    {
+                        warn!(
+                            self.logger,
+                            "Local iDKG dealing encryption key is too old ({}), but it still has not been registered in the registry",
+                            latest_local_idkg_dealing_encryption_key_timestamp;
+                        );
+                        return Ok(
+                            IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
+                                KeyRotationOutcome::KeyNotRotatedButTooOld {
+                                    existing_key: current_idkg_public_key_proto,
+                                },
+                            ),
+                        );
                     }
                     return Ok(
                         IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(

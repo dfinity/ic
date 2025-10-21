@@ -1,8 +1,10 @@
 use crate::{
     CUPS_DIR, IC_STATE_DIR, RecoveryArgs, RecoveryResult,
-    cli::{print_height_info, read_optional, read_optional_data_location, read_optional_version},
+    cli::{
+        consent_given, print_height_info, read_optional, read_optional_data_location,
+        read_optional_version,
+    },
     error::{GracefulExpect, RecoveryError},
-    file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
     util::{DataLocation, SshUser},
@@ -32,12 +34,11 @@ pub enum StepType {
     ValidateReplayOutput,
     UpdateRegistryLocalStore,
     CreateRegistryTar,
-    CopyIcState,
     GetRecoveryCUP,
     CreateArtifacts,
+    UploadState,
     UploadCUPAndRegistry,
     WaitForCUP,
-    UploadState,
     Cleanup,
 }
 
@@ -52,10 +53,6 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long)]
     pub upgrade_version: Option<ReplicaVersion>,
 
-    #[clap(long)]
-    /// The replay will stop at this height and make a checkpoint.
-    pub replay_until_height: Option<u64>,
-
     /// URL of the upgrade image
     #[clap(long)]
     pub upgrade_image_url: Option<Url>,
@@ -64,23 +61,30 @@ pub struct NNSRecoverySameNodesArgs {
     #[clap(long)]
     pub upgrade_image_hash: Option<String>,
 
+    /// Whether to add and bless the upgrade version before upgrading the subnet to it.
+    #[clap(long)]
+    pub add_and_bless_upgrade_version: Option<bool>,
+
+    #[clap(long)]
+    /// The replay will stop at this height and make a checkpoint.
+    pub replay_until_height: Option<u64>,
+
     /// IP address of the node to download the consensus pool from.
     #[clap(long)]
     pub download_pool_node: Option<IpAddr>,
 
-    /// The method of downloading state. Possible values are either `local` (for a
-    /// local recovery on the admin node) or the ipv6 address of the source node.
-    /// Local recoveries allow us to skip a potentially expensive data transfer.
+    /// The location of the node with admin access. Possible values are either `local` (for a local
+    /// recovery on the admin node) or the ipv6 address of the source node. Local recoveries allow
+    /// us to skip a potentially expensive data transfer.
     #[clap(long, value_parser=crate::util::data_location_from_str)]
-    pub download_state_method: Option<DataLocation>,
+    pub admin_access_location: Option<DataLocation>,
 
-    /// The method of uploading state. Possible values are either `local` (for a
-    /// local recovery on the admin node) or the ipv6 address of the target node.
-    /// Local recoveries allow us to skip a potentially expensive data transfer.
-    #[clap(long, value_parser=crate::util::data_location_from_str)]
-    pub upload_method: Option<DataLocation>,
+    /// If the downloaded state should be backed up locally
+    #[clap(long)]
+    pub keep_downloaded_state: Option<bool>,
 
-    /// IP address of the node used to poll for the recovery CUP
+    /// IP address of the node used to upload the recovery CUP and registry local store to and poll
+    /// for the CUP
     #[clap(long)]
     pub wait_for_cup_node: Option<IpAddr>,
 
@@ -111,7 +115,6 @@ pub struct NNSRecoverySameNodes {
     pub recovery_args: RecoveryArgs,
     pub recovery: Recovery,
     logger: Logger,
-    new_state_dir: PathBuf,
 }
 
 impl NNSRecoverySameNodes {
@@ -134,15 +137,12 @@ impl NNSRecoverySameNodes {
         )
         .expect_graceful("Failed to init recovery");
 
-        let new_state_dir = recovery.work_dir.join("new_ic_state");
-        create_dir(&new_state_dir).expect_graceful("Failed to create state directory for upload.");
         Self {
             step_iterator: StepType::iter().peekable(),
             params: subnet_args,
             recovery_args,
             recovery,
             logger,
-            new_state_dir,
         }
     }
 
@@ -174,15 +174,17 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
     fn read_step_params(&mut self, step_type: StepType) {
         match step_type {
-            StepType::StopReplica | StepType::DownloadState => {
-                if self.params.download_state_method.is_none() {
-                    self.params.download_state_method = read_optional_data_location(
+            StepType::StopReplica | StepType::DownloadState | StepType::UploadState => {
+                if self.params.admin_access_location.is_none() {
+                    self.params.admin_access_location = read_optional_data_location(
                         &self.logger,
-                        "Enter state download location (admin access required) [local/<ipv6>]:",
+                        "Enter state download/upload location (admin access required) [local/<ipv6>]:",
                     );
                 }
             }
-
+            _ => {}
+        }
+        match step_type {
             StepType::DownloadConsensusPool => {
                 print_height_info(
                     &self.logger,
@@ -198,11 +200,32 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 }
             }
 
+            StepType::DownloadState => {
+                if self.params.keep_downloaded_state.is_none()
+                    && let Some(&DataLocation::Remote(_)) =
+                        self.params.admin_access_location.as_ref()
+                {
+                    self.params.keep_downloaded_state = Some(consent_given(
+                        &self.logger,
+                        "Preserve original downloaded state locally?",
+                    ));
+                }
+            }
+
             StepType::ICReplay => {
                 if self.params.upgrade_version.is_none() {
                     self.params.upgrade_version =
                         read_optional_version(&self.logger, "Upgrade version: ");
                 };
+                if self.params.upgrade_version.is_some()
+                    && self.params.add_and_bless_upgrade_version.is_none()
+                {
+                    self.params.add_and_bless_upgrade_version = Some(consent_given(
+                        &self.logger,
+                        "Add and bless the upgrade version before upgrading the subnet?",
+                    ));
+                }
+
                 if self.params.replay_until_height.is_none() {
                     self.params.replay_until_height =
                         read_optional(&self.logger, "Replay until height: ");
@@ -213,28 +236,31 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 if self.params.output_dir.is_none() {
                     self.params.output_dir = read_optional(
                         &self.logger,
-                        "Enter output directory for recovery artifacts (must be in a shared mount if doing local recovery):",
+                        &format!(
+                            "Enter output directory for recovery artifacts (must be in a shared mount if doing local recovery, default: {}):",
+                            self.recovery.recovery_dir.join("output").display()
+                        ),
                     );
                 }
             }
 
-            StepType::UploadCUPAndRegistry | StepType::UploadState => {
-                if self.params.upload_method.is_none() {
-                    self.params.upload_method = read_optional_data_location(
-                        &self.logger,
-                        "Are you performing a local recovery directly on the node, or a remote recovery? [local/<ipv6>]",
-                    );
-                }
-            }
-
-            StepType::WaitForCUP => {
-                if let Some(DataLocation::Remote(ip)) = self.params.upload_method {
-                    self.params.wait_for_cup_node = Some(ip);
-                } else {
-                    self.params.wait_for_cup_node = read_optional(
-                        &self.logger,
-                        "Enter IP of the node to be polled for the recovery CUP:",
-                    );
+            StepType::UploadCUPAndRegistry => {
+                if self.params.wait_for_cup_node.is_none() {
+                    self.params.wait_for_cup_node = if let Some(DataLocation::Remote(ip)) =
+                        self.params.admin_access_location
+                    {
+                        consent_given(
+                            &self.logger,
+                            &format!(
+                                "Would you like to recover the admin node now, i.e. upload the CUP and registry local store to it? ({ip})"
+                            ),
+                            ).then_some(ip)
+                    } else {
+                        read_optional(
+                            &self.logger,
+                            "If you would like to recover the admin node now, i.e. upload the CUP and registry local store to it, enter its IP address:",
+                        )
+                    };
                 }
             }
 
@@ -245,7 +271,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
     fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>> {
         match step_type {
             StepType::StopReplica => {
-                if let Some(method) = self.params.download_state_method {
+                if let Some(method) = self.params.admin_access_location {
                     let node_ip = match method {
                         DataLocation::Remote(ip) => ip,
                         DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
@@ -274,6 +300,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     Ok(Box::new(self.recovery.get_download_state_step(
                         node_ip,
                         SshUser::Backup,
+                        self.params.backup_key_file.clone(),
                         /*keep_downloaded_state=*/ false,
                         /*additional_excludes=*/
                         vec![CUPS_DIR, IC_STATE_DIR, "orchestrator"], // exclude folders to
@@ -286,15 +313,16 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             }
 
             StepType::DownloadState => {
-                match self.params.download_state_method {
+                match self.params.admin_access_location {
                     Some(DataLocation::Local) => {
                         Ok(Box::new(self.recovery.get_copy_local_state_step()))
                     }
                     Some(DataLocation::Remote(node_ip)) => {
                         Ok(Box::new(self.recovery.get_download_state_step(
                             node_ip,
-                            /*try_readonly=*/ SshUser::Admin,
-                            /*keep_downloaded_state=*/ false,
+                            SshUser::Admin,
+                            self.recovery.admin_key_file.clone(),
+                            self.params.keep_downloaded_state == Some(true),
                             /*additional_excludes=*/ vec![CUPS_DIR],
                         )))
                     }
@@ -317,6 +345,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                         upgrade_version,
                         url,
                         hash,
+                        params.add_and_bless_upgrade_version == Some(true),
                         self.params.replay_until_height,
                         !self.interactive(),
                     )?))
@@ -350,10 +379,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 Ok(Box::new(self.recovery.get_create_registry_tar_step()))
             }
 
-            StepType::CopyIcState => Ok(Box::new(
-                self.recovery.get_copy_ic_state(self.new_state_dir.clone()),
-            )),
-
             StepType::GetRecoveryCUP => Ok(Box::new(
                 self.recovery
                     .get_recovery_cup_step(self.params.subnet_id, !self.interactive())?,
@@ -364,12 +389,16 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     .get_create_nns_recovery_tar_step(self.params.output_dir.clone()),
             )),
 
+            StepType::UploadState => {
+                if let Some(method) = self.params.admin_access_location {
+                    Ok(Box::new(self.recovery.get_upload_and_restart_step(method)))
+                } else {
+                    Err(RecoveryError::StepSkipped)
+                }
+            }
+
             StepType::UploadCUPAndRegistry => {
-                if let Some(method) = self.params.upload_method {
-                    let node_ip = match method {
-                        DataLocation::Remote(ip) => ip,
-                        DataLocation::Local => IpAddr::V6(Ipv6Addr::LOCALHOST),
-                    };
+                if let Some(node_ip) = self.params.wait_for_cup_node {
                     Ok(Box::new(self.recovery.get_upload_cup_and_tar_step(node_ip)))
                 } else {
                     Err(RecoveryError::StepSkipped)
@@ -379,19 +408,6 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
             StepType::WaitForCUP => {
                 if let Some(node_ip) = self.params.wait_for_cup_node {
                     Ok(Box::new(self.recovery.get_wait_for_cup_step(node_ip)))
-                } else {
-                    Err(RecoveryError::StepSkipped)
-                }
-            }
-
-            StepType::UploadState => {
-                if let Some(method) = self.params.upload_method {
-                    Ok(Box::new(
-                        self.recovery.get_upload_and_restart_step_with_data_src(
-                            method,
-                            self.new_state_dir.clone(),
-                        ),
-                    ))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

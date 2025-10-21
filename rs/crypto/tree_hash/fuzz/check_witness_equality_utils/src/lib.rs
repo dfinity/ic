@@ -143,7 +143,7 @@ pub enum AbsentLabelRange<'a> {
     Between(&'a Label, &'a Label),
 }
 
-fn paths_to_absent_ranges(tree: &LabeledTree<Vec<u8>>) -> Vec<(Vec<&Label>, AbsentLabelRange)> {
+fn paths_to_absent_ranges(tree: &LabeledTree<Vec<u8>>) -> Vec<(Vec<&Label>, AbsentLabelRange<'_>)> {
     fn paths_to_ranges_impl<'a>(
         tree: &'a LabeledTree<Vec<u8>>,
         path: &mut Vec<&'a Label>,

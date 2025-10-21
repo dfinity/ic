@@ -1,4 +1,4 @@
-use dfn_macro::query;
+use ic_cdk::query;
 
 #[query]
 fn reverse_words(words: Vec<String>) -> Vec<String> {

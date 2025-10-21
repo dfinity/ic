@@ -330,41 +330,40 @@ fn verify_paths(
                     ),
                 })?;
 
-                if let Some(x) = last_request_status_id {
-                    if x != message_id {
-                        return Err(HttpError {
-                            status: StatusCode::BAD_REQUEST,
-                            message: format!(
-                                "More than one non-unique request ID exists in \
+                if let Some(x) = last_request_status_id
+                    && x != message_id
+                {
+                    return Err(HttpError {
+                        status: StatusCode::BAD_REQUEST,
+                        message: format!(
+                            "More than one non-unique request ID exists in \
                                 request_status paths: {x} and {message_id}."
-                            ),
-                        });
-                    }
+                        ),
+                    });
                 }
                 last_request_status_id = Some(message_id.clone());
 
                 // Verify that the request was signed by the same user.
                 let ingress_status = state.get_ingress_status(&message_id);
-                if let Some(ingress_user_id) = ingress_status.user_id() {
-                    if ingress_user_id != *user {
-                        return Err(HttpError {
-                            status: StatusCode::FORBIDDEN,
-                            message:
-                                "The user tries to access Request ID not signed by the caller."
-                                    .to_string(),
-                        });
-                    }
+                if let Some(ingress_user_id) = ingress_status.user_id()
+                    && ingress_user_id != *user
+                {
+                    return Err(HttpError {
+                        status: StatusCode::FORBIDDEN,
+                        message: "The user tries to access Request ID not signed by the caller."
+                            .to_string(),
+                    });
                 }
 
-                if let Some(receiver) = ingress_status.receiver() {
-                    if !targets.contains(&receiver) {
-                        return Err(HttpError {
-                            status: StatusCode::FORBIDDEN,
-                            message: "The user tries to access request IDs for canisters \
+                if let Some(receiver) = ingress_status.receiver()
+                    && !targets.contains(&receiver)
+                {
+                    return Err(HttpError {
+                        status: StatusCode::FORBIDDEN,
+                        message: "The user tries to access request IDs for canisters \
                                       not belonging to sender delegation targets."
-                                .to_string(),
-                        });
-                    }
+                            .to_string(),
+                    });
                 }
             }
             _ => {

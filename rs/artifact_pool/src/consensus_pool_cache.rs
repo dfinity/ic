@@ -101,10 +101,10 @@ impl<'a> CachedChainIterator<'a> {
             }
         }
         // Use cached blocks if the height is finalized
-        if parent_height <= self.finalized_chain.tip().height() {
-            if let Ok(block) = self.finalized_chain.get_block_by_height(parent_height) {
-                return Some(block.clone());
-            }
+        if parent_height <= self.finalized_chain.tip().height()
+            && let Ok(block) = self.finalized_chain.get_block_by_height(parent_height)
+        {
+            return Some(block.clone());
         }
 
         for proposal in self
@@ -505,9 +505,10 @@ impl ConsensusBlockChain for ConsensusBlockChainImpl {
 mod test {
     use super::*;
     use crate::test_utils::fake_block_proposal;
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_interfaces::consensus_pool::{HEIGHT_CONSIDERED_BEHIND, ValidatedConsensusArtifact};
     use ic_test_artifact_pool::consensus_pool::{Round, TestConsensusPool};
-    use ic_test_utilities::{crypto::CryptoReturningOk, state_manager::FakeStateManager};
+    use ic_test_utilities::state_manager::FakeStateManager;
     use ic_test_utilities_consensus::fake::*;
     use ic_test_utilities_registry::{SubnetRecordBuilder, setup_registry};
     use ic_test_utilities_time::FastForwardTimeSource;

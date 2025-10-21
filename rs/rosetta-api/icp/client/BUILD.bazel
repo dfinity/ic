@@ -49,7 +49,7 @@ rust_test(
     data = [
         "//rs/canister_sandbox",
         "//rs/canister_sandbox:sandbox_launcher",
-        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+        "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
         "//rs/pocket_ic_server:pocket-ic-server",
         "//rs/replica",
         "//rs/rosetta-api/icp:ic-rosetta-api-rosetta-blocks",
@@ -60,7 +60,7 @@ rust_test(
         "REPLICA_BIN": "$(rootpath //rs/replica)",
         "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icp:ic-rosetta-api-rosetta-blocks)",
         "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox:sandbox_launcher)",
-        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method)",
+        "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
     },
     deps = DEV_DEPENDENCIES,
 )

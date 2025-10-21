@@ -11,7 +11,7 @@ use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_test_utilities_types::ids::{SUBNET_0, SUBNET_1, SUBNET_2};
 use ic_types::{
     Cycles,
-    messages::{CallbackId, Payload, RequestOrResponse},
+    messages::{CallbackId, Payload, RequestOrResponse, StreamMessage},
     xnet::{StreamHeader, StreamIndexedQueue},
 };
 use maplit::btreemap;
@@ -312,7 +312,7 @@ fn get_output_queue_iter<'a>(
 fn stream_snapshot(
     from_subnet: &StateMachine,
     to_subnet: &StateMachine,
-) -> Option<(StreamHeader, StreamIndexedQueue<RequestOrResponse>)> {
+) -> Option<(StreamHeader, StreamIndexedQueue<StreamMessage>)> {
     from_subnet
         .get_latest_state()
         .get_stream(&to_subnet.get_subnet_id())
@@ -568,6 +568,7 @@ enum MessageSnapshot {
     Response(CallbackId),       // Response
     RejectResponse(CallbackId), // RejectResponse
     TimedOutRequest,            // TimedOutRequest
+    Refund,                     // Refund
 }
 
 /// Provides snappy debug prints.
@@ -578,6 +579,7 @@ impl std::fmt::Debug for MessageSnapshot {
             MessageSnapshot::Response(id) => f.debug_tuple("P").field(id).finish(),
             MessageSnapshot::RejectResponse(id) => f.debug_tuple("J").field(id).finish(),
             MessageSnapshot::TimedOutRequest => f.debug_tuple("T").finish(),
+            MessageSnapshot::Refund => f.debug_tuple("F").finish(),
         }
     }
 }
@@ -591,6 +593,20 @@ impl From<&RequestOrResponse> for MessageSnapshot {
                 Self::Response(response.originator_reply_callback)
             }
             Response(response) => Self::RejectResponse(response.originator_reply_callback),
+        }
+    }
+}
+
+impl From<&StreamMessage> for MessageSnapshot {
+    fn from(msg: &StreamMessage) -> Self {
+        use StreamMessage::*;
+        match msg {
+            Request(request) => Self::Request(request.sender_reply_callback),
+            Response(response) if matches!(response.response_payload, Payload::Data(_)) => {
+                Self::Response(response.originator_reply_callback)
+            }
+            Response(response) => Self::RejectResponse(response.originator_reply_callback),
+            Refund(_) => Self::Refund,
         }
     }
 }
@@ -667,10 +683,10 @@ impl std::fmt::Debug for SubnetSplittingTestState {
                 writeln!(f, "      {messages:?}")?;
             }
         }
-        if let Some(messages) = &self.local_queue {
-            if !messages.is_empty() {
-                writeln!(f, "   local queue: {messages:?}")?;
-            }
+        if let Some(messages) = &self.local_queue
+            && !messages.is_empty()
+        {
+            writeln!(f, "   local queue: {messages:?}")?;
         }
         if let Some((header, messages)) = &self.reverse_stream {
             writeln!(f, "   reverse stream:")?;
@@ -679,10 +695,10 @@ impl std::fmt::Debug for SubnetSplittingTestState {
                 writeln!(f, "      {messages:?}")?;
             }
         }
-        if let Some(messages) = &self.remote_queue {
-            if !messages.is_empty() {
-                writeln!(f, "   remote queue: {messages:?}")?;
-            }
+        if let Some(messages) = &self.remote_queue
+            && !messages.is_empty()
+        {
+            writeln!(f, "   remote queue: {messages:?}")?;
         }
         writeln!(
             f,
@@ -702,11 +718,11 @@ impl std::fmt::Debug for SubnetSplittingTestState {
 /// - msg is a request: The callback id is added to `add_callback_id_tracker`.
 /// - msg is a response: The callback id is removed from `remove_callback_id_tracker`.
 fn update_callback_id_trackers(
-    msg: &RequestOrResponse,
+    msg: &StreamMessage,
     add_callback_id_tracker: &mut BTreeSet<CallbackId>,
     remove_callback_id_tracker: &mut BTreeSet<CallbackId>,
 ) -> Result<(), String> {
-    use RequestOrResponse::{Request, Response};
+    use StreamMessage::*;
     match msg {
         Request(request) => {
             if !add_callback_id_tracker.insert(request.sender_reply_callback) {
@@ -724,6 +740,7 @@ fn update_callback_id_trackers(
                 ));
             }
         }
+        Refund(_) => { /* Ignore refunds. */ }
     }
     Ok(())
 }
@@ -930,7 +947,6 @@ fn induct_and_observe_until_stale(
 /// include all the relevant subnet splitting scenarios.
 #[test]
 fn state_machine_subnet_splitting_test() {
-    use RequestOrResponse::{Request, Response};
     let old_subnets_proxy = SubnetPairProxy::with_new_subnets();
     old_subnets_proxy.mark_remote_canister_as_being_migrated();
 
@@ -954,6 +970,8 @@ fn state_machine_subnet_splitting_test() {
         .unwrap();
     old_subnets_proxy.remote_env.tick();
     do_until_or_panic(MAX_TICKS, |_| {
+        use RequestOrResponse::{Request, Response};
+
         induct_messages_and_track_callback_ids(
             &old_subnets_proxy.local_env,    // from_subnet
             &old_subnets_proxy.remote_env,   // into_subnet
@@ -1004,6 +1022,8 @@ fn state_machine_subnet_splitting_test() {
         (&new_subnets_proxy.local_env, &new_subnets_proxy.remote_env),
         (&new_subnets_proxy.remote_env, &new_subnets_proxy.local_env),
     ] {
+        use StreamMessage::{Request, Response};
+
         if let Some((_, stream)) = stream_snapshot(from_env, into_env) {
             assert!(stream.iter().any(|(_, msg)| matches!(msg, Request(_))));
             assert!(stream.iter().any(|(_, msg)| matches!(msg, Response(_))));

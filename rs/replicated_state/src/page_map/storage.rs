@@ -214,7 +214,7 @@ impl Storage {
         self.init_or_die().get_page(page_index)
     }
 
-    pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
+    pub fn get_base_memory_instructions(&self) -> MemoryInstructions<'_> {
         self.init_or_die().get_base_memory_instructions()
     }
 
@@ -222,7 +222,7 @@ impl Storage {
         &self,
         range: Range<PageIndex>,
         filter: &mut BitVec,
-    ) -> MemoryInstructions {
+    ) -> MemoryInstructions<'_> {
         self.init_or_die().get_memory_instructions(range, filter)
     }
 
@@ -332,7 +332,7 @@ impl StorageImpl {
     }
 
     /// For base overlays and regular base we pre-mmap all data in constructor.
-    pub fn get_base_memory_instructions(&self) -> MemoryInstructions {
+    pub fn get_base_memory_instructions(&self) -> MemoryInstructions<'_> {
         match &self.base {
             BaseFile::Base(base) => base.get_memory_instructions(),
             BaseFile::Overlay(overlays) => MemoryInstructions {
@@ -354,7 +354,7 @@ impl StorageImpl {
         &self,
         range: Range<PageIndex>,
         filter: &mut BitVec,
-    ) -> MemoryInstructions {
+    ) -> MemoryInstructions<'_> {
         let mut result = Vec::<MemoryInstruction>::new();
 
         for overlay in self.overlays.iter().rev() {
@@ -567,7 +567,7 @@ impl OverlayFile {
     }
 
     /// For base overlays we mmap all content in constructor.
-    fn get_base_memory_instructions(&self) -> MemoryInstructions {
+    fn get_base_memory_instructions(&self) -> MemoryInstructions<'_> {
         assert_eq!(self.index_iter().count(), 1);
         let page_index_range = self.index_iter().next().unwrap();
         MemoryInstructions {
@@ -638,7 +638,7 @@ impl OverlayFile {
         &self,
         range: Range<PageIndex>,
         filter: &mut BitVec,
-    ) -> Vec<MemoryInstruction> {
+    ) -> Vec<MemoryInstruction<'_>> {
         let mut result = Vec::<MemoryInstruction>::new();
 
         for page_index_range in self.get_overlapping_page_ranges(range.clone()) {
@@ -821,7 +821,7 @@ fn check_mapping_correctness(mapping: &Mapping, path: &Path) -> Result<(), Persi
         - num_pages(mapping) * PAGE_SIZE
         - VERSION_NUM_BYTES
         - SIZE_NUM_BYTES;
-    if index_length % PAGE_INDEX_RANGE_NUM_BYTES != 0 {
+    if !index_length.is_multiple_of(PAGE_INDEX_RANGE_NUM_BYTES) {
         return Err(PersistenceError::InvalidOverlay {
             path: path.display().to_string(),
             message: "Invalid index length".to_string(),
@@ -1085,7 +1085,7 @@ pub struct MergeCandidate {
 /// Number of shards to serialize `num_pages` worth of data.
 fn num_shards(num_pages: u64, lsmt_config: &LsmtConfig) -> u64 {
     num_pages / lsmt_config.shard_num_pages
-        + if num_pages % lsmt_config.shard_num_pages == 0 {
+        + if num_pages.is_multiple_of(lsmt_config.shard_num_pages) {
             0
         } else {
             1
