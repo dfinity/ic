@@ -409,13 +409,13 @@ impl RegistryReplicator {
     /// Note that we will poll at most 1000 oldest registry versions (see the implementation of
     /// `get_certified_changes_since` of `RegistryCanister`), so multiple polls might be necessary
     /// to get the most recent version of the registry.
-    pub async fn poll(&self, nns_urls: Vec<Url>) -> Result<(), String> {
+    pub async fn poll(&self) -> Result<(), String> {
         InternalState::new(
             self.logger.clone(),
             self.node_id,
             self.registry_client.clone(),
             self.local_store.clone(),
-            nns_urls,
+            self.nns_urls.clone(),
             self.poll_delay,
         )
         .poll()

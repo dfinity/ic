@@ -48,7 +48,6 @@ pub enum RegistryPollingStrategy {
 ///    time a get_* method is called, before accessing the registry.
 #[derive(Clone)]
 pub struct RegistryHelper {
-    nns_url: Url,
     registry_replicator: Arc<RegistryReplicator>,
     polling_strategy: RegistryPollingStrategy,
 }
@@ -61,16 +60,16 @@ impl RegistryHelper {
         nns_pem_path: &Path,
         polling_strategy: RegistryPollingStrategy,
     ) -> Self {
+        let nns_pub_key = get_nns_public_key(&nns_url, nns_pem_path, &logger).ok();
         let registry_replicator = Arc::new(block_on(RegistryReplicator::new(
             logger.clone().into(),
             &local_store_path,
             Duration::from_secs(10),
-            vec![nns_url.clone()],
-            get_nns_public_key(&nns_url, nns_pem_path, &logger).ok(),
+            vec![nns_url],
+            nns_pub_key,
         )));
 
         Self {
-            nns_url,
             registry_replicator,
             polling_strategy,
         }
@@ -127,13 +126,11 @@ impl RegistryHelper {
     pub fn latest_registry_version(&self) -> RecoveryResult<RegistryVersion> {
         match self.polling_strategy {
             RegistryPollingStrategy::WithEveryRead => {
-                block_on(self.registry_replicator.poll(vec![self.nns_url.clone()])).map_err(
-                    |err| {
-                        RecoveryError::RegistryError(format!(
-                            "Failed to poll the newest registry: {err}"
-                        ))
-                    },
-                )?;
+                block_on(self.registry_replicator.poll()).map_err(|err| {
+                    RecoveryError::RegistryError(format!(
+                        "Failed to poll the newest registry: {err}",
+                    ))
+                })?;
             }
             RegistryPollingStrategy::OnlyOnInit => {}
         }
