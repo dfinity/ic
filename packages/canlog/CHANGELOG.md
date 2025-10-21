@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Change the library used to parse regex to reduce the binary size (`regex_lite` instead of `regex`) and introduce a custom error type `InvalidRegex` to avoid leaking error types from the underlying library.
+- Change the library used to parse regex to reduce the binary size (`regex_lite` instead of `regex`).
+- [BREAKING] Change the error type in the public methods `RegexString::compile` and `RegexString::try_is_valid` to a new custom error type `InvalidRegex` to avoid leaking error types from the underlying library.
 
 ## [0.2.0] - 2025-08-12
 
