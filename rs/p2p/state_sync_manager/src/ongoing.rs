@@ -282,10 +282,8 @@ impl OngoingStateSync {
         &mut self,
         tracker: &Mutex<Box<dyn Chunkable<T> + Send>>,
     ) {
-        // If we store chunks in self.chunks_to_download we will eventually initiate  and
+        // If we store chunks in self.chunks_to_download we will eventually initiate a download and
         // by filtering with the current in flight request we avoid double download.
-        // TODO: Evaluate performance impact of this since on mainnet it is possible
-        // that `chunks_to_download` returns 1Million elements.
         let chunks_to_download = tracker
             .lock()
             .unwrap()
