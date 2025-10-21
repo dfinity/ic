@@ -9,6 +9,7 @@ use ic_interfaces::messaging::LABEL_VALUE_CANISTER_NOT_FOUND;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::CyclesUseCase::DroppedMessages;
 use ic_replicated_state::metadata_state::StreamMap;
 use ic_replicated_state::replicated_state::LABEL_VALUE_OUT_OF_MEMORY;
 use ic_replicated_state::testing::{ReplicatedStateTesting, SystemStateTesting};
@@ -1333,11 +1334,8 @@ fn garbage_collect_local_state_with_reject_signals_for_misrouted_request() {
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_REQUEST_MISROUTED, 1),
             ]);
 
-            // One critical errors raised.
-            metrics.assert_eq_critical_errors(CriticalErrorCounts {
-                request_misrouted: 1,
-                ..CriticalErrorCounts::default()
-            });
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
         },
     );
 }
@@ -1949,14 +1947,17 @@ fn duplicate_best_effort_response_is_dropped() {
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream]);
-            // Cycles of the duplicate response are lost.
-            expected_state.observe_lost_cycles_due_to_dropped_messages(response.cycles());
+            // Cycles of the duplicate response are refunded.
+            expected_state.credit_refund(&ic_types::messages::Refund::anonymous(
+                *LOCAL_CANISTER,
+                response.cycles(),
+            ));
 
             // Push the clone of the best effort response onto the loopback stream.
             state.modify_streams(|streams| streams.get_mut(&LOCAL_SUBNET).unwrap().push(response));
 
             let inducted_state = stream_handler.induct_loopback_stream(state, &mut (i64::MAX / 2));
-            assert_eq!(inducted_state, expected_state);
+            assert_eq!(expected_state, inducted_state);
 
             // No critical errors raised.
             metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
@@ -1976,6 +1977,7 @@ fn duplicate_best_effort_response_is_dropped() {
 /// critical error.
 fn failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
     prepare_state: impl FnOnce(&mut ReplicatedState),
+    prepare_expected_state: impl FnOnce(&mut ReplicatedState, Cycles),
 ) {
     with_local_test_setup(
         btreemap![LOCAL_SUBNET => StreamConfig {
@@ -1997,8 +1999,7 @@ fn failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
                 ..StreamConfig::default()
             });
             expected_state.with_streams(btreemap![LOCAL_SUBNET => loopback_stream.clone()]);
-            // Cycles attached to the dropped response are lost.
-            expected_state.observe_lost_cycles_due_to_dropped_messages(response.cycles());
+            prepare_expected_state(&mut expected_state, response.cycles());
 
             let inducted_state = stream_handler.induct_loopback_stream(state, &mut (i64::MAX / 2));
             assert_eq!(expected_state, inducted_state);
@@ -2018,14 +2019,23 @@ fn failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
 /// error.
 #[test]
 fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critical_error() {
-    failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|state| {
-        // Set `LOCAL_CANISTER` to stopped.
-        state
-            .canister_state_mut(&LOCAL_CANISTER)
-            .unwrap()
-            .system_state
-            .set_status(CanisterStatus::Stopped);
-    });
+    failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
+        |state| {
+            // Set `LOCAL_CANISTER` to stopped.
+            state
+                .canister_state_mut(&LOCAL_CANISTER)
+                .unwrap()
+                .system_state
+                .set_status(CanisterStatus::Stopped);
+        },
+        |expected_state, refund| {
+            // Cycles attached to the late response are refunded.
+            expected_state.credit_refund(&ic_types::messages::Refund::anonymous(
+                *LOCAL_CANISTER,
+                refund,
+            ));
+        },
+    );
 }
 
 /// Tests that inducting a best-effort response addressed to a non-existent canister does not raise
@@ -2033,10 +2043,19 @@ fn inducting_best_effort_response_into_stopped_canister_does_not_raise_a_critica
 #[test]
 fn inducting_best_effort_response_addressed_to_non_existent_canister_does_not_raise_a_critical_error()
  {
-    failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(|state| {
-        // Remove the `LOCAL_CANISTER`.
-        state.canister_states.remove(&LOCAL_CANISTER).unwrap();
-    });
+    failing_to_induct_best_effort_response_does_not_raise_a_critical_error_impl(
+        |state| {
+            // Remove the `LOCAL_CANISTER`.
+            state.canister_states.remove(&LOCAL_CANISTER).unwrap();
+        },
+        |expected_state, refund| {
+            // Cycles attached to the dropped response are lost.
+            expected_state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(DroppedMessages, refund.into());
+        },
+    );
 }
 
 /// Tests that inducting stream slices results in signals appended to `StreamHeaders`;
@@ -3755,10 +3774,6 @@ impl MetricsFixture {
                     counts.sender_subnet_mismatch
                 ),
                 (
-                    &[("error", &CRITICAL_ERROR_REQUEST_MISROUTED.to_string())],
-                    counts.request_misrouted
-                ),
-                (
                     &[(
                         "error",
                         &CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH.to_string()
@@ -3777,7 +3792,6 @@ struct CriticalErrorCounts {
     pub bad_reject_signal_for_response: u64,
     pub sender_subnet_mismatch: u64,
     pub receiver_subnet_mismatch: u64,
-    pub request_misrouted: u64,
 }
 
 /// Populates the given `state`'s canister migrations with a single entry,

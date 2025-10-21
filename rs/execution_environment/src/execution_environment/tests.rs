@@ -54,7 +54,7 @@ mod canister_snapshots;
 mod compilation;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
-const ONE_GIB: i64 = 1 << 30;
+const ONE_GIB: u64 = 1 << 30;
 
 // A Wasm module calling call_perform
 const CALL_SIMPLE_WAT: &str = r#"(module
@@ -285,21 +285,18 @@ fn ingress_can_reject() {
 
 #[test]
 fn output_requests_on_system_subnet_ignore_memory_limits() {
-    let canister_memory: i64 = 1 << 30;
+    let canister_memory: u64 = 1 << 30;
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_subnet_execution_memory(canister_memory)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(13)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .build();
 
     let canister_id = test
-        .create_canister_with_allocation(
-            Cycles::new(1_000_000_000),
-            None,
-            Some(canister_memory as u64),
-        )
+        .create_canister_with_allocation(Cycles::new(1_000_000_000), None, Some(canister_memory))
         .unwrap();
     test.install_canister(canister_id, wat::parse_str(CALL_SIMPLE_WAT).unwrap())
         .unwrap();
@@ -328,16 +325,14 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(13)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
     let available_memory_after_create = test.subnet_available_memory().get_execution_memory();
-    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-    // Canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS.
     assert_eq!(
-        available_memory_after_create,
-        ONE_GIB - test.state().memory_taken().execution().get() as i64
-            + canister_history_memory as i64
+        available_memory_after_create + test.state().memory_taken().execution().get() as i64,
+        ONE_GIB as i64,
     );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
@@ -360,16 +355,14 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
     let available_memory_after_create = test.subnet_available_memory().get_execution_memory();
-    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-    // Canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS.
     assert_eq!(
-        available_memory_after_create,
-        ONE_GIB - test.state().memory_taken().execution().get() as i64
-            + canister_history_memory as i64
+        available_memory_after_create + test.state().memory_taken().execution().get() as i64,
+        ONE_GIB as i64
     );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
@@ -388,7 +381,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
     // Subnet available memory should have decreased by `MAX_RESPONSE_COUNT_BYTES`.
     assert_eq!(available_memory_after_create, subnet_total_memory);
     assert_eq!(
-        ONE_GIB - MAX_RESPONSE_COUNT_BYTES as i64,
+        (ONE_GIB - MAX_RESPONSE_COUNT_BYTES as u64) as i64,
         subnet_message_memory
     );
     assert_correct_request(system_state, canister_id);
@@ -400,6 +393,7 @@ fn output_best_effort_requests_on_application_subnets_update_subnet_available_me
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_BEST_EFFORT_WAT).unwrap();
@@ -422,7 +416,7 @@ fn output_best_effort_requests_on_application_subnets_update_subnet_available_me
     assert_eq!(1, system_state.queues().input_queues_reserved_slots());
     // Subnet available memory and message memory should be unchanged.
     assert_eq!(initia_available_memory, subnet_total_memory);
-    assert_eq!(ONE_GIB, subnet_message_memory);
+    assert_eq!(ONE_GIB as i64, subnet_message_memory);
     assert_correct_request(system_state, canister_id);
 }
 
@@ -890,21 +884,11 @@ fn get_canister_status_of_nonexisting_canister() {
     assert_eq!(ErrorCode::CanisterNotFound, err.code());
 }
 
-fn get_canister_status(
-    test: &mut ExecutionTest,
-    canister_id: CanisterId,
-) -> CanisterStatusResultV2 {
-    match test.canister_status(canister_id).unwrap() {
-        WasmResult::Reply(reply) => CanisterStatusResultV2::decode(&reply).unwrap(),
-        WasmResult::Reject(msg) => panic!("unexpected reject: {msg}"),
-    }
-}
-
 #[test]
 fn get_canister_status_memory_metrics() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
 
     let wasm_memory_size = csr.wasm_memory_size();
     let stable_memory_size = csr.stable_memory_size();
@@ -932,10 +916,12 @@ fn get_canister_status_memory_metrics() {
 fn get_canister_status_memory_metrics_wasm_memory_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
 
     assert_eq!(
-        get_canister_status(&mut test, canister_id).wasm_memory_size(),
+        test.canister_status(canister_id)
+            .unwrap()
+            .wasm_memory_size(),
         csr.wasm_memory_size()
     );
 
@@ -958,7 +944,7 @@ fn get_canister_status_memory_metrics_wasm_memory_size() {
 fn get_canister_status_memory_metrics_stable_memory_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     test.ingress(
         canister_id,
         "update",
@@ -971,7 +957,9 @@ fn get_canister_status_memory_metrics_stable_memory_size() {
     )
     .unwrap();
     assert_eq!(
-        get_canister_status(&mut test, canister_id).stable_memory_size(),
+        test.canister_status(canister_id)
+            .unwrap()
+            .stable_memory_size(),
         csr.stable_memory_size() + NumBytes::from(WASM_PAGE_SIZE_IN_BYTES as u64)
     );
 }
@@ -980,7 +968,7 @@ fn get_canister_status_memory_metrics_stable_memory_size() {
 fn get_canister_status_memory_metrics_global_memory_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     let exported_globals = test.execution_state(canister_id).exported_globals.clone();
     assert_eq!(
         csr.global_memory_size(),
@@ -992,7 +980,7 @@ fn get_canister_status_memory_metrics_global_memory_size() {
 fn get_canister_status_memory_metrics_wasm_binary_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     assert_eq!(
         csr.wasm_binary_size(),
         NumBytes::new(UNIVERSAL_CANISTER_WASM.len() as u64)
@@ -1003,7 +991,7 @@ fn get_canister_status_memory_metrics_wasm_binary_size() {
 fn get_canister_status_memory_metrics_custom_sections_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     let metadata = test.execution_state(canister_id).metadata.clone();
     assert_eq!(
         csr.custom_sections_size(),
@@ -1021,13 +1009,15 @@ fn get_canister_status_memory_metrics_custom_sections_size() {
 fn get_canister_status_memory_metrics_canister_history_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     test.set_controller(canister_id, test.user_id().get())
         .unwrap();
     let memory_difference =
         NumBytes::from((size_of::<CanisterChange>() + size_of::<PrincipalId>()) as u64);
     assert_eq!(
-        get_canister_status(&mut test, canister_id).canister_history_size(),
+        test.canister_status(canister_id)
+            .unwrap()
+            .canister_history_size(),
         csr.canister_history_size() + memory_difference
     );
 }
@@ -1036,7 +1026,7 @@ fn get_canister_status_memory_metrics_canister_history_size() {
 fn get_canister_status_memory_metrics_wasm_chunk_store_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     test.subnet_message(
         "upload_chunk",
         UploadChunkArgs {
@@ -1047,7 +1037,9 @@ fn get_canister_status_memory_metrics_wasm_chunk_store_size() {
     )
     .unwrap();
     assert_gt!(
-        get_canister_status(&mut test, canister_id).wasm_chunk_store_size(),
+        test.canister_status(canister_id)
+            .unwrap()
+            .wasm_chunk_store_size(),
         csr.wasm_chunk_store_size()
     );
 }
@@ -1056,7 +1048,7 @@ fn get_canister_status_memory_metrics_wasm_chunk_store_size() {
 fn get_canister_status_memory_metrics_snapshots_size() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
-    let csr: CanisterStatusResultV2 = get_canister_status(&mut test, canister_id);
+    let csr = test.canister_status(canister_id).unwrap();
     test.subnet_message(
         "take_canister_snapshot",
         TakeCanisterSnapshotArgs {
@@ -1067,7 +1059,7 @@ fn get_canister_status_memory_metrics_snapshots_size() {
     )
     .unwrap();
     assert_gt!(
-        get_canister_status(&mut test, canister_id).snapshots_size(),
+        test.canister_status(canister_id).unwrap().snapshots_size(),
         csr.snapshots_size()
     );
 }
@@ -2703,24 +2695,25 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
     let memory_after_create = test.state().memory_taken().execution().get() as i64;
-    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
-        ONE_GIB - memory_after_create + canister_history_memory as i64
+        test.subnet_available_memory().get_execution_memory() + memory_after_create,
+        ONE_GIB as i64,
     );
     let err = test.ingress(id, "test_with_trap", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     let memory = test.subnet_available_memory();
-    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
-        memory.get_execution_memory(),
-        ONE_GIB - memory_after_create + canister_history_memory as i64
+        memory.get_execution_memory() + memory_after_create,
+        ONE_GIB as i64
     );
-    assert_eq!(memory.get_guaranteed_response_message_memory(), ONE_GIB);
+    assert_eq!(
+        memory.get_guaranteed_response_message_memory(),
+        ONE_GIB as i64
+    );
 }
 
 #[test]
@@ -2729,26 +2722,27 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
     let memory_after_create = test.state().memory_taken().execution().get() as i64;
-    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
-        ONE_GIB - memory_after_create + canister_history_memory as i64
+        test.subnet_available_memory().get_execution_memory() + memory_after_create,
+        ONE_GIB as i64,
     );
     let result = test.ingress(id, "test_without_trap", vec![]);
     expect_canister_did_not_reply(result);
     // The canister allocates 10 pages in Wasm memory and stable memory.
     let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64;
     let memory = test.subnet_available_memory();
-    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
         memory.get_execution_memory() + new_memory_allocated + memory_after_create,
-        ONE_GIB + canister_history_memory as i64,
+        ONE_GIB as i64,
     );
-    assert_eq!(ONE_GIB, memory.get_guaranteed_response_message_memory());
+    assert_eq!(
+        ONE_GIB as i64,
+        memory.get_guaranteed_response_message_memory()
+    );
 }
 
 #[test]
@@ -3846,6 +3840,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .with_initial_canister_cycles(1_000_000_000_000_000)
         .build();
@@ -3866,7 +3861,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
             .guaranteed_response_memory_reservations()
     );
     assert_eq!(
-        ONE_GIB - MAX_RESPONSE_COUNT_BYTES as i64,
+        (ONE_GIB - MAX_RESPONSE_COUNT_BYTES as u64) as i64,
         subnet_message_memory
     );
     assert_correct_request(system_state, canister_id);
@@ -3878,8 +3873,7 @@ fn test_canister_settings_log_visibility_default_controllers() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.create_canister(Cycles::new(1_000_000_000));
     // Act.
-    let result = test.canister_status(canister_id);
-    let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
+    let canister_status = test.canister_status(canister_id).unwrap();
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
@@ -3900,8 +3894,7 @@ fn test_canister_settings_log_visibility_create_with_settings() {
                 .build(),
         )
         .unwrap();
-    let result = test.canister_status(canister_id);
-    let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
+    let canister_status = test.canister_status(canister_id).unwrap();
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),
@@ -3917,8 +3910,7 @@ fn test_canister_settings_log_visibility_set_to_public() {
     // Act.
     test.set_log_visibility(canister_id, LogVisibilityV2::Public)
         .unwrap();
-    let result = test.canister_status(canister_id);
-    let canister_status = CanisterStatusResultV2::decode(&get_reply(result)).unwrap();
+    let canister_status = test.canister_status(canister_id).unwrap();
     // Assert.
     assert_eq!(
         canister_status.settings().log_visibility(),

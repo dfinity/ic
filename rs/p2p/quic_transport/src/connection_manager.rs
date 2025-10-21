@@ -293,23 +293,6 @@ impl ConnectionManager {
                 () = cancellation.cancelled() => {
                     break;
                 },
-                Some(reconnect) = self.connect_queue.next() => {
-                    self.handle_outbound_conn_attemp(reconnect.into_inner())
-                },
-                // Ignore the case if the sender is dropped. It is not transport's responsibility to make
-                // sure topology senders are up and running.
-                Ok(()) = self.watcher.changed() => {
-                    self.handle_topology_change();
-                },
-                incoming = self.endpoint.accept() => {
-                    if let Some(incoming) = incoming {
-                        self.handle_inbound_conn_attemp(incoming);
-                    } else {
-                        error!(self.log, "Quic endpoint closed. Stopping transport.");
-                        // Endpoint is closed. This indicates NOT graceful shutdown.
-                        break;
-                    }
-                },
                 Some(conn_res) = self.outbound_connecting.join_next() => {
                     match conn_res {
                         Ok((Ok(conn), peer_id)) => self.handle_established_connection(conn, peer_id),
@@ -364,6 +347,23 @@ impl ConnectionManager {
                             }
                         }
                     }
+                },
+                Some(reconnect) = self.connect_queue.next() => {
+                    self.handle_outbound_conn_attemp(reconnect.into_inner())
+                },
+                incoming = self.endpoint.accept() => {
+                    if let Some(incoming) = incoming {
+                        self.handle_inbound_conn_attemp(incoming);
+                    } else {
+                        error!(self.log, "Quic endpoint closed. Stopping transport.");
+                        // Endpoint is closed. This indicates NOT graceful shutdown.
+                        break;
+                    }
+                },
+                // Ignore the case if the sender is dropped. It is not transport's responsibility to make
+                // sure topology senders are up and running.
+                Ok(()) = self.watcher.changed() => {
+                    self.handle_topology_change();
                 },
             }
             // Collect metrics

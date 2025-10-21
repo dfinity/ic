@@ -964,7 +964,9 @@ impl ReplicatedState {
                             subnet_available_guaranteed_response_memory,
                             own_subnet_type,
                             input_queue_type,
-                        ),
+                        )
+                        // Requests are never silently dropped.
+                        .map(|_| true),
 
                         RequestOrResponse::Response(response) => Err((
                             StateError::non_matching_response(
@@ -978,6 +980,9 @@ impl ReplicatedState {
                     match msg {
                         // Best-effort responses are silently dropped if the canister is not found.
                         RequestOrResponse::Response(response) if response.is_best_effort() => {
+                            if !response.refund.is_zero() {
+                                self.observe_lost_cycles_due_to_dropped_messages(response.refund);
+                            }
                             Ok(false)
                         }
                         // For all other messages this is an error.

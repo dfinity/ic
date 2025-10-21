@@ -18,12 +18,12 @@ fn test_evm_rpc_id_staging_value() {
 }
 
 mod eth_get_logs {
-    use evm_rpc_client::{Hex, Hex20, Hex32};
+    use evm_rpc_types::{Hex, Hex20, Hex32};
     use std::str::FromStr;
 
     #[test]
     fn deserialize_get_logs() {
-        use evm_rpc_client::LogEntry;
+        use evm_rpc_types::LogEntry;
 
         let logs: Vec<LogEntry> = serde_json::from_str(r#"[
  {

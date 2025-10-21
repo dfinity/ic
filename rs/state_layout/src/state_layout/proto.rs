@@ -6,6 +6,7 @@ use ic_protobuf::{
         canister_state_bits::v1 as pb_canister_state_bits,
     },
 };
+use ic_types::default_log_memory_limit;
 
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
@@ -59,6 +60,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             total_query_stats: Some((&item.total_query_stats).into()),
             log_visibility_v2: pb_canister_state_bits::LogVisibilityV2::from(&item.log_visibility)
                 .into(),
+            log_memory_limit: item.log_memory_limit.get(),
             canister_log_records: item
                 .canister_log
                 .records()
@@ -143,9 +145,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             .unwrap_or_default()
             .into(),
             execution_state_bits,
-            memory_allocation: MemoryAllocation::new_unchecked(NumBytes::from(
-                value.memory_allocation,
-            )),
+            memory_allocation: MemoryAllocation::from(NumBytes::from(value.memory_allocation)),
             wasm_memory_threshold: NumBytes::new(value.wasm_memory_threshold.unwrap_or(0)),
             freeze_threshold: NumSeconds::from(value.freeze_threshold),
             cycles_balance,
@@ -193,6 +193,9 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::log_visibility_v2",
             )
             .unwrap_or_default(),
+            // TODO(EXC-2118): remove this temporary code of setting the log memory limit to default value,
+            // read properly from `NumBytes::from(value.log_memory_limit)`.
+            log_memory_limit: default_log_memory_limit(),
             canister_log: CanisterLog::new(
                 value.next_canister_log_record_idx,
                 value

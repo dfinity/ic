@@ -34,8 +34,6 @@ use crate::driver::{
     test_env::TestEnvAttribute,
     test_env_api::CreateDnsRecords,
 };
-use crate::k8s::config::TNET_DNS_SUFFIX;
-use crate::k8s::tnet::TNet;
 
 const PROMETHEUS_VM_NAME: &str = "prometheus";
 
@@ -256,21 +254,8 @@ mkdir -p -m 755 {PROMETHEUS_SCRAPING_TARGETS_DIR}
 for name in replica orchestrator node_exporter; do
   echo '[]' > "{PROMETHEUS_SCRAPING_TARGETS_DIR}/$name.json"
 done
-
 mkdir -p /config/grafana/dashboards
-
-if uname -a | grep -q Ubuntu; then
-  # k8s
-  chmod g+s /etc/prometheus
-  cp -f /config/prometheus/prometheus.yml /etc/prometheus/prometheus.yml
-  cp -R /config/grafana/dashboards /var/lib/grafana/
-  chown -R grafana:grafana /var/lib/grafana/dashboards
-  chown -R {SSH_USERNAME}:prometheus /etc/prometheus
-  systemctl reload prometheus
-else
-  # farm
-  chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
-fi
+chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
 "#
                 ),
             )
@@ -341,21 +326,6 @@ fi
                     format!("{GRAFANA_DOMAIN_NAME}.{suffix}"),
                 )
             }
-            InfraProvider::K8s => {
-                let tnet = TNet::read_attribute(env);
-                (
-                    format!(
-                        "prometheus-{}.{}",
-                        tnet.unique_name.clone().expect("no unique name"),
-                        *TNET_DNS_SUFFIX
-                    ),
-                    format!(
-                        "grafana-{}.{}",
-                        tnet.unique_name.clone().expect("no unique name"),
-                        *TNET_DNS_SUFFIX
-                    ),
-                )
-            }
         };
         let prometheus_message = format!("Prometheus Web UI at http://{prometheus_fqdn}");
         let grafana_message = format!("Grafana at http://{grafana_fqdn}");
@@ -400,11 +370,7 @@ impl HasPrometheus for TestEnv {
         self.sync_with_prometheus_by_name("", None)
     }
 
-    fn sync_with_prometheus_by_name(&self, name: &str, mut playnet_domain: Option<String>) {
-        if InfraProvider::read_attribute(self) == InfraProvider::K8s {
-            playnet_domain = None;
-        }
-
+    fn sync_with_prometheus_by_name(&self, name: &str, playnet_domain: Option<String>) {
         let vm_name = PROMETHEUS_VM_NAME.to_string();
         // Write the scraping target JSON files to the local prometheus config directory.
         let prometheus_config_dir = self.get_universal_vm_config_dir(&vm_name);

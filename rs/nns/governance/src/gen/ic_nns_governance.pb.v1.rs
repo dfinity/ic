@@ -2169,6 +2169,8 @@ pub struct KnownNeuronData {
     pub description: ::core::option::Option<::prost::alloc::string::String>,
     #[prost(string, repeated, tag = "3")]
     pub links: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(enumeration = "Topic", repeated, tag = "4")]
+    pub committed_topics: ::prost::alloc::vec::Vec<i32>,
 }
 /// Proposal action to deregister a known neuron by removing its name and description.
 #[derive(
@@ -4707,6 +4709,12 @@ pub enum NnsFunction {
     DeployHostosToSomeNodes = 51,
     /// The proposal requests a subnet rental.
     SubnetRentalRequest = 52,
+    /// Instruct the migration canister to not accept any more migration requests.
+    PauseCanisterMigrations = 53,
+    /// Instruct the migration canister to accept migration requests again.
+    UnpauseCanisterMigrations = 54,
+    /// Take subnet offline or bring back online. Used as part of subnet recovery.
+    SetSubnetOperationalLevel = 55,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4777,6 +4785,9 @@ impl NnsFunction {
             Self::ReviseElectedHostosVersions => "NNS_FUNCTION_REVISE_ELECTED_HOSTOS_VERSIONS",
             Self::DeployHostosToSomeNodes => "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES",
             Self::SubnetRentalRequest => "NNS_FUNCTION_SUBNET_RENTAL_REQUEST",
+            Self::PauseCanisterMigrations => "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS",
+            Self::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
+            Self::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4854,6 +4865,9 @@ impl NnsFunction {
             }
             "NNS_FUNCTION_DEPLOY_HOSTOS_TO_SOME_NODES" => Some(Self::DeployHostosToSomeNodes),
             "NNS_FUNCTION_SUBNET_RENTAL_REQUEST" => Some(Self::SubnetRentalRequest),
+            "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS" => Some(Self::PauseCanisterMigrations),
+            "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
+            "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             _ => None,
         }
     }

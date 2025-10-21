@@ -4,12 +4,9 @@ In general, upcoming/unreleased behavior changes are described here. For details
 on the process that this file is part of, see
 `rs/nervous_system/changelog_process.md`.
 
-
 # Next Upgrade Proposal
 
 ## Added
-
-* Added an option `skip_update_latest_version` to skip updating latest version during `add_wasm`.
 
 ## Changed
 

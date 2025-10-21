@@ -11,7 +11,7 @@ use crate::state::eth_logs_scraping::LogScrapingId;
 use crate::state::{
     State, TaskType, audit::process_event, event::EventType, mutate_state, read_state,
 };
-use evm_rpc_client::{BlockTag, GetLogsArgs, Hex20, Hex32, LogEntry, Nat256};
+use evm_rpc_types::{BlockTag, GetLogsArgs, Hex20, Hex32, LogEntry, Nat256};
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
