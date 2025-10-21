@@ -698,7 +698,7 @@ pub mod blocks_verifier {
         for block in blockchain.iter().skip(1) {
             if block.get_parent_hash() != parent_hash {
                 if block.index == 0 {
-                    return Err(format!("Block with index 0 found at different location"));
+                    return Err("Block with index 0 found at different location".to_string());
                 } else {
                     return Err(format!("Invalid block at index {}", block.index - 1));
                 }
