@@ -12,8 +12,7 @@ use crate::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
-    is_known_neuron_voting_history_enabled, is_neuron_follow_restrictions_enabled,
-    is_set_subnet_operational_level_enabled,
+    is_neuron_follow_restrictions_enabled, is_set_subnet_operational_level_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -7071,12 +7070,7 @@ impl Governance {
                     };
                     p.reward_event_round = new_reward_event.day_after_genesis;
                     let ballots = std::mem::take(&mut p.ballots);
-                    record_known_neuron_abstentions(
-                        &known_neuron_ids,
-                        *pid,
-                        ballots,
-                        self.heap_data.first_proposal_id_to_record_voting_history,
-                    );
+                    record_known_neuron_abstentions(&known_neuron_ids, *pid, ballots);
                 }
             };
         }
@@ -8382,25 +8376,14 @@ fn record_known_neuron_abstentions(
     known_neuron_ids: &[NeuronId],
     proposal_id: ProposalId,
     ballots: HashMap<u64, Ballot>,
-    first_proposal_id_to_record_voting_history: ProposalId,
 ) {
-    // TODO(NNS1-4227): clean up `first_proposal_id_to_record_voting_history` after all proposals
-    // before this id have votes finalized.
-    if is_known_neuron_voting_history_enabled()
-        && proposal_id >= first_proposal_id_to_record_voting_history
-    {
-        for known_neuron_id in known_neuron_ids {
-            if let Some(ballot) = ballots.get(&known_neuron_id.id)
-                && ballot.vote() == Vote::Unspecified
-            {
-                with_voting_history_store_mut(|voting_history_store| {
-                    voting_history_store.record_vote(
-                        *known_neuron_id,
-                        proposal_id,
-                        Vote::Unspecified,
-                    );
-                });
-            }
+    for known_neuron_id in known_neuron_ids {
+        if let Some(ballot) = ballots.get(&known_neuron_id.id)
+            && ballot.vote() == Vote::Unspecified
+        {
+            with_voting_history_store_mut(|voting_history_store| {
+                voting_history_store.record_vote(*known_neuron_id, proposal_id, Vote::Unspecified);
+            });
         }
     }
 }

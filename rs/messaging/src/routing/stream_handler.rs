@@ -60,10 +60,6 @@ struct StreamHandlerMetrics {
     /// messages for canisters not hosted (now, or previously, according to
     /// `canister_migrations`) by this subnet.
     pub critical_error_receiver_subnet_mismatch: IntCounter,
-    /// Critical error counter (see [`MetricsRegistry::error_counter`]) tracking
-    /// requests for canisters misrouted by this subnet due to a problem with the
-    /// routing process or a prematurely completed canister migration.
-    pub critical_error_request_misrouted: IntCounter,
 }
 
 const METRIC_INDUCTED_XNET_MESSAGES: &str = "mr_inducted_xnet_message_count";
@@ -93,7 +89,6 @@ const LABEL_REMOTE: &str = "remote";
 const CRITICAL_ERROR_BAD_REJECT_SIGNAL_FOR_RESPONSE: &str = "mr_bad_reject_signal_for_response";
 const CRITICAL_ERROR_SENDER_SUBNET_MISMATCH: &str = "mr_sender_subnet_mismatch";
 const CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH: &str = "mr_receiver_subnet_mismatch";
-const CRITICAL_ERROR_REQUEST_MISROUTED: &str = "mr_request_misrouted";
 
 impl StreamHandlerMetrics {
     pub fn new(
@@ -140,8 +135,6 @@ impl StreamHandlerMetrics {
             metrics_registry.error_counter(CRITICAL_ERROR_SENDER_SUBNET_MISMATCH);
         let critical_error_receiver_subnet_mismatch =
             metrics_registry.error_counter(CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH);
-        let critical_error_request_misrouted =
-            metrics_registry.error_counter(CRITICAL_ERROR_REQUEST_MISROUTED);
 
         // Initialize all `inducted_xnet_messages` counters with zero, so they are all
         // exported from process start (`IntCounterVec` is really a map).
@@ -178,7 +171,6 @@ impl StreamHandlerMetrics {
             critical_error_induct_response_failed,
             critical_error_sender_subnet_mismatch,
             critical_error_receiver_subnet_mismatch,
-            critical_error_request_misrouted,
         }
     }
 }
@@ -606,22 +598,12 @@ impl StreamHandlerImpl {
                     {
                         // `remote_subnet_id` is not known to be a valid host for `msg.sender()`.
                         //
-                        // This can only happen if the initial request was misrouted or if a
-                        // canister migration was completed with in-flight messages still in the
-                        // system.
-                        error!(
-                            self.log,
-                            "{}: Dropping reject reason '{:?}' from subnet {} for request {:?}",
-                            CRITICAL_ERROR_REQUEST_MISROUTED,
-                            reason,
-                            remote_subnet_id,
-                            msg
-                        );
+                        // This can happen during a canister migration. It's not an error, but we add this case
+                        // to the metrics as its own status.
                         self.observe_inducted_message_status(
                             LABEL_VALUE_TYPE_REQUEST,
                             LABEL_VALUE_REQUEST_MISROUTED,
                         );
-                        self.metrics.critical_error_request_misrouted.inc();
                     }
 
                     // Try to induct the reject response.
@@ -885,8 +867,8 @@ impl StreamHandlerImpl {
                     // Message silently dropped, all done.
                     Ok(false) => {
                         self.observe_inducted_message_status(msg_type, LABEL_VALUE_DROPPED);
-                        // Cycles were lost.
-                        Accept(msg_cycles)
+                        // Cycles were credited.
+                        Accept(Cycles::zero())
                     }
 
                     // Message not inducted.
