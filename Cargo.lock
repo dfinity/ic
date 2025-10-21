@@ -798,9 +798,9 @@ checksum = "8b75356056920673b02621b35afd0f7dda9306d03c79a30f5c56c44cf256e3de"
 
 [[package]]
 name = "async-trait"
-version = "0.1.86"
+version = "0.1.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "644dd749086bf3771a2fbc5f256fdb982d53f011c7d5d560304eafeecebce79d"
+checksum = "9035ad2d096bed7955a320ee7e2230574d28fd3c3a0f186cbea1ff3c7eed5dbb"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2065,7 +2065,7 @@ dependencies = [
  "ic-canister-log 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic0",
  "proptest",
- "regex",
+ "regex-lite",
  "serde",
  "serde_json",
 ]
@@ -7397,6 +7397,8 @@ dependencies = [
  "candid",
  "candid_parser",
  "canister-test",
+ "canlog 0.2.0",
+ "canlog_derive 0.1.0",
  "ciborium",
  "flate2",
  "hex",
@@ -7405,7 +7407,6 @@ dependencies = [
  "ic-bitcoin-canister-mock",
  "ic-btc-checker",
  "ic-btc-interface",
- "ic-canister-log 0.2.0",
  "ic-cdk",
  "ic-config",
  "ic-crypto-sha2",
@@ -7457,6 +7458,7 @@ dependencies = [
  "ic-cdk",
  "ic-ckbtc-minter",
  "ic-ckdoge-minter-test-utils",
+ "ic-secp256k1 0.3.0",
  "icrc-ledger-types",
  "pocket-ic",
  "serde",
@@ -7470,6 +7472,7 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
+ "ic-bitcoin-canister-mock",
  "ic-ckdoge-minter",
  "ic-icrc1-ledger",
  "ic-management-canister-types",
@@ -12365,7 +12368,7 @@ dependencies = [
 
 [[package]]
 name = "ic-pub-key"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hex",
  "ic-ed25519 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -15790,7 +15793,7 @@ dependencies = [
 
 [[package]]
 name = "icrc-ledger-types"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "assert_matches",
  "base32",
@@ -16408,7 +16411,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3662a38d341d77efecb73caf01420cfa5aa63c0253fd7bc05289ef9f6616e1bf"
 dependencies = [
  "base64 0.13.1",
- "minreq",
  "serde",
  "serde_json",
 ]
@@ -17483,17 +17485,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8402cab7aefae129c6977bb0ff1b8fd9a04eb5b51efc50a70bea51cda0c7924"
 dependencies = [
  "adler2",
-]
-
-[[package]]
-name = "minreq"
-version = "2.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da0c420feb01b9fb5061f8c8f452534361dd783756dcf38ec45191ce55e7a161"
-dependencies = [
- "log",
- "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -20554,9 +20545,9 @@ dependencies = [
 
 [[package]]
 name = "regex-lite"
-version = "0.1.6"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53a49587ad06b26609c52e423de037e7f57f20d53535d66e08c695f347df952a"
+checksum = "8d942b98df5e658f56f20d592c7f868833fe38115e65c33003d8cd224b0155da"
 
 [[package]]
 name = "regex-syntax"

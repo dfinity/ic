@@ -614,6 +614,7 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
+/// Next ID: 57
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
@@ -687,6 +688,9 @@ pub struct CanisterStateBits {
     /// Log visibility for the canister.
     #[prost(message, optional, tag = "51")]
     pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
+    /// The capacity of the canister log in bytes.
+    #[prost(uint64, tag = "56")]
+    pub log_memory_limit: u64,
     /// Log records of the canister.
     #[prost(message, repeated, tag = "43")]
     pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,

@@ -56,12 +56,14 @@ use ic_replicated_state::{
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, PrincipalId, SnapshotId, SubnetId, Time,
+    NumInstructions, PrincipalId, SnapshotId, SubnetId, Time, default_log_memory_limit,
     ingress::{IngressState, IngressStatus},
+    max_allowed_log_memory_limit,
     messages::{
         CanisterCall, Payload, RejectContext, Response as CanisterResponse, SignedIngressContent,
         StopCanisterContext,
     },
+    min_allowed_log_memory_limit,
     nominal_cycles::NominalCycles,
 };
 use ic_wasm_types::WasmHash;
@@ -288,6 +290,9 @@ impl CanisterManager {
     /// - environment variables:
     ///     - the number of environment variables cannot exceed the given maximum.
     ///     - the key and value of each environment variable cannot exceed the given maximum length.
+    /// - log memory limit:
+    ///     - must be at least the specified minimum.
+    ///     - must not exceed the specified maximum.
     ///
     /// Keep this function in sync with `do_update_settings()`.
     #[allow(clippy::too_many_arguments)]
@@ -463,6 +468,25 @@ impl CanisterManager {
             });
         }
 
+        let log_memory_limit = settings
+            .log_memory_limit()
+            .or(Some(default_log_memory_limit()));
+        match log_memory_limit {
+            Some(bytes) if bytes < min_allowed_log_memory_limit() => {
+                return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooLow {
+                    bytes,
+                    limit: min_allowed_log_memory_limit(),
+                });
+            }
+            Some(bytes) if bytes > max_allowed_log_memory_limit() => {
+                return Err(CanisterManagerError::CanisterLogMemoryLimitIsTooHigh {
+                    bytes,
+                    limit: max_allowed_log_memory_limit(),
+                });
+            }
+            _ => {}
+        }
+
         Ok(ValidatedCanisterSettings::new(
             settings.controllers(),
             settings.compute_allocation(),
@@ -472,6 +496,7 @@ impl CanisterManager {
             settings.reserved_cycles_limit(),
             reservation_cycles,
             settings.log_visibility().cloned(),
+            log_memory_limit,
             settings.wasm_memory_limit(),
             settings.environment_variables().cloned(),
         ))
@@ -558,6 +583,9 @@ impl CanisterManager {
         }
         if let Some(log_visibility) = settings.log_visibility() {
             canister.system_state.log_visibility = log_visibility.clone();
+        }
+        if let Some(log_memory_limit) = settings.log_memory_limit() {
+            canister.system_state.log_memory_limit = log_memory_limit;
         }
         if let Some(wasm_memory_limit) = settings.wasm_memory_limit() {
             canister.system_state.wasm_memory_limit = Some(wasm_memory_limit);
@@ -3105,6 +3133,7 @@ pub(crate) fn get_canister_status(
     let freeze_threshold = canister.system_state.freeze_threshold;
     let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
     let log_visibility = canister.system_state.log_visibility.clone();
+    let log_memory_limit = canister.system_state.log_memory_limit;
     let wasm_memory_limit = canister.system_state.wasm_memory_limit;
     let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
 
@@ -3133,6 +3162,7 @@ pub(crate) fn get_canister_status(
         freeze_threshold.get(),
         reserved_cycles_limit.map(|x| x.get()),
         log_visibility,
+        log_memory_limit.get(),
         cycles_account_manager
             .idle_cycles_burned_rate(
                 memory_allocation,
