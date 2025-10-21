@@ -446,6 +446,13 @@ impl RegistryReplicator {
                 .store(RegistryVersion::from((v + 1) as u64), cle)
                 .expect("Could not store change log entry");
         }
+
+        if let Err(msg) = self.registry_client.poll_once() {
+            warn!(
+                self.logger,
+                "Failed to update the registry client after setting local registry data: {}", msg
+            )
+        }
     }
 
     pub fn stop_polling_and_set_local_registry_data(&self, source_registry: &dyn LocalStore) {
