@@ -14,40 +14,52 @@ canister-test = { path = "../../rust_canisters/canister_test" }
 canister_http = { path = "./canister_http" }
 cloner-canister-types = { path = "./canisters" }
 dfn_candid = { path = "../../rust_canisters/dfn_candid" }
+futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
+ic-certification = { path = "../../certification" }
 ic-crypto-tree-hash = { path = "../../crypto/tree_hash" }
+ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
+ic-http-endpoints-public = { path = "../../http_endpoints/public" }
 ic-http-endpoints-test-agent = { path = "../../http_endpoints/test_agent" }
 ic_consensus_system_test_utils = { path = "../consensus/utils" }
+ic_consensus_threshold_sig_system_test_utils = { path = "../consensus/tecdsa/utils" }
 ic-limits = { path = "../../limits" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-message = { path = "../test_canisters/message" }
 ic-networking-subnet-update-workload = { path = "./subnet_update_workload" }
+ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 ic-prep = { path = "../../prep" }
 ic-protobuf = { path = "../../protobuf" }
 ic-registry-keys = { path = "../../registry/keys" }
+ic-registry-routing-table = { path = "../../registry/routing_table" }
 ic-registry-subnet-features = { path = "../../registry/subnet_features" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
+ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-test-utilities = { path = "../../test_utilities" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }
 ic-types = { path = "../../types/types" }
 ic-utils = { workspace = true }
 itertools = { workspace = true }
 leb128 = { workspace = true }
+maplit = "1.0.2"
 proxy_canister = { path = "../../rust_canisters/proxy_canister" }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 registry-canister = { path = "../../registry/canister" }
+rejoin-test-lib = { path = "../message_routing/rejoin_test_lib" }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
+time = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }
+wat = { workspace = true }
 
 [[bin]]
 name = "ic-systest-canister-http-correctness"
@@ -116,6 +128,10 @@ path = "query_workload_long_test.rs"
 [[bin]]
 name = "ic-systest-update-workload-large-payload-test"
 path = "update_workload_large_payload.rs"
+
+[[bin]]
+name = "ic-systest-state-sync-performance"
+path = "state_sync_performance.rs"
 
 [[bin]]
 name = "ic-systest-cloner-canister-workload"

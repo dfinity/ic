@@ -1,8 +1,8 @@
 use candid::Principal;
 use ic_stable_structures::{
+    DefaultMemoryImpl, StableBTreeMap, Storable,
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
     storable::Bound,
-    DefaultMemoryImpl, StableBTreeMap, Storable,
 };
 use serde::{Deserialize, Serialize};
 use serde_cbor::{from_slice, to_vec};
@@ -25,7 +25,7 @@ pub struct StorableSalt {
 }
 
 impl Storable for StorableSalt {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(to_vec(&self).expect("StorableSalt serialization failed"))
     }
 

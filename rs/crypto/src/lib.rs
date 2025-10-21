@@ -20,8 +20,8 @@ mod vetkd;
 
 use ic_crypto_internal_csp::vault::api::CspVault;
 pub use sign::{
-    get_master_public_key_from_transcript, retrieve_mega_public_key_from_registry,
-    MegaKeyFromRegistryError,
+    MegaKeyFromRegistryError, get_master_public_key_from_transcript,
+    retrieve_mega_public_key_from_registry,
 };
 
 use crate::sign::ThresholdSigDataStoreImpl;
@@ -33,7 +33,7 @@ use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_interfaces::crypto::KeyManager;
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{new_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, new_logger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
 use ic_types::crypto::{CryptoError, CryptoResult, KeyPurpose};

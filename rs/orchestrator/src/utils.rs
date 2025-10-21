@@ -1,21 +1,27 @@
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_protobuf::registry::node::v1::ConnectionEndpoint;
 use std::{net::IpAddr, str::FromStr};
 use url::Url;
 
 pub(crate) fn http_endpoint_to_url(http: &ConnectionEndpoint, log: &ReplicaLogger) -> Option<Url> {
-    endpoint_to_url("http", http, log)
+    match endpoint_to_url("http", http) {
+        Ok(url) => Some(url),
+        Err(e) => {
+            warn!(log, "Failed to parse HTTP endpoint: {}", e);
+            None
+        }
+    }
 }
 
-pub(crate) fn https_endpoint_to_url(http: &ConnectionEndpoint, log: &ReplicaLogger) -> Option<Url> {
-    endpoint_to_url("https", http, log)
+pub(crate) fn https_endpoint_to_url(http: &ConnectionEndpoint) -> Result<Url, String> {
+    endpoint_to_url("https", http)
 }
 
-fn endpoint_to_url(protocol: &str, http: &ConnectionEndpoint, log: &ReplicaLogger) -> Option<Url> {
+fn endpoint_to_url(protocol: &str, http: &ConnectionEndpoint) -> Result<Url, String> {
     let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
         Ok(v) => {
             if v.is_ipv6() {
-                format!("[{}]", v)
+                format!("[{v}]")
             } else {
                 v.to_string()
             }
@@ -27,11 +33,5 @@ fn endpoint_to_url(protocol: &str, http: &ConnectionEndpoint, log: &ReplicaLogge
     };
 
     let url = format!("{}://{}:{}/", protocol, host_str, http.port);
-    match Url::parse(&url) {
-        Ok(v) => Some(v),
-        Err(e) => {
-            warn!(log, "Invalid url: {}: {:?}", url, e);
-            None
-        }
-    }
+    Url::parse(&url).map_err(|e| format!("Invalid {protocol} endpoint: {url}: {e:?}"))
 }

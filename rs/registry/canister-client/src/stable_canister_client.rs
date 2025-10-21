@@ -1,21 +1,21 @@
-use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 use crate::CanisterRegistryClient;
+use crate::stable_memory::{RegistryDataStableMemory, StorableRegistryKey, StorableRegistryValue};
 use async_trait::async_trait;
 use ic_cdk::println;
 use ic_interfaces_registry::{
-    empty_zero_registry_record, RegistryClientResult, RegistryClientVersionedResult,
-    RegistryRecord, ZERO_REGISTRY_VERSION,
+    RegistryClientResult, RegistryClientVersionedResult, RegistryRecord, ZERO_REGISTRY_VERSION,
+    empty_zero_registry_record,
 };
 use ic_nervous_system_canisters::registry::Registry;
 use ic_registry_transport::pb::v1::RegistryDelta;
-use ic_types::registry::RegistryClientError;
 use ic_types::RegistryVersion;
+use ic_types::registry::RegistryClientError;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering as AtomicOrdering;
-use std::sync::{Arc, RwLock, RwLockReadGuard};
+use std::sync::{Arc, RwLock};
 
 /// This implementation of CanisterRegistryClient uses StableMemory to store a copy of the
 /// Registry data in the canister.  An implementation of RegistryDataStableMemory trait that
@@ -51,12 +51,6 @@ impl<S: RegistryDataStableMemory> StableCanisterRegistryClient<S> {
             timestamp_to_versions_map: Arc::new(RwLock::new(timestamp_to_versions_map)),
             registry,
         }
-    }
-
-    pub fn timestamp_to_versions_map(
-        &self,
-    ) -> RwLockReadGuard<BTreeMap<u64, HashSet<RegistryVersion>>> {
-        self.timestamp_to_versions_map.read().unwrap()
     }
 
     fn add_deltas(&self, deltas: Vec<RegistryDelta>) -> Result<(), String> {
@@ -228,8 +222,7 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
                 }
                 Ordering::Greater => {
                     return Err(format!(
-                        "Registry version local {} > remote {}, this should never happen",
-                        current_local_version, remote_latest_version
+                        "Registry version local {current_local_version} > remote {remote_latest_version}, this should never happen"
                     ));
                 }
             }
@@ -238,13 +231,17 @@ impl<S: RegistryDataStableMemory> CanisterRegistryClient for StableCanisterRegis
                 .registry
                 .registry_changes_since(current_local_version)
                 .await
-                .map_err(|e| format!("{:?}", e))?;
+                .map_err(|e| format!("{e:?}"))?;
 
             self.add_deltas(remote_deltas)?;
             // add_deltas updates latest version based on what was inserted.
             current_local_version = self.get_latest_version();
         }
         Ok(current_local_version)
+    }
+
+    fn timestamp_to_versions_map(&self) -> BTreeMap<u64, HashSet<RegistryVersion>> {
+        self.timestamp_to_versions_map.read().unwrap().clone()
     }
 }
 

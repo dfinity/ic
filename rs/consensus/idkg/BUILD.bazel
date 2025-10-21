@@ -22,6 +22,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:prometheus",
     "@crate_index//:rand",
+    "@crate_index//:rayon",
     "@crate_index//:slog",
 ]
 
@@ -30,6 +31,7 @@ DEV_DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
     "//rs/crypto/temp_crypto",
+    "//rs/crypto/test_utils/crypto_returning_ok",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/registry/fake",
     "//rs/test_utilities",

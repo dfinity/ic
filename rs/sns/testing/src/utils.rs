@@ -1,33 +1,32 @@
-use anyhow::{anyhow, Result};
-use dfx_core::identity::identity_manager::InitializeIdentity;
+use anyhow::{Result, anyhow};
 use dfx_core::identity::IdentityManager;
+use dfx_core::identity::identity_manager::InitializeIdentity;
 use futures::future::join_all;
 use ic_agent::Identity;
-use ic_agent::{identity::Secp256k1Identity, Agent};
+use ic_agent::{Agent, identity::Secp256k1Identity};
 use ic_base_types::CanisterId;
 use ic_base_types::PrincipalId;
+use ic_nervous_system_agent::CallCanisters;
 use ic_nervous_system_agent::nns::governance::list_neurons;
 use ic_nervous_system_agent::nns::ledger::transfer;
 use ic_nervous_system_agent::nns::sns_wasm::{get_latest_sns_version_pretty, get_sns_subnet_ids};
 use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
-use ic_nervous_system_agent::CallCanisters;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
-    canister_id_to_nns_canister_name, CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID,
-    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    CYCLES_LEDGER_CANISTER_ID, CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID,
+    LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_WASM_CANISTER_ID, canister_id_to_nns_canister_name,
 };
 use ic_nns_governance_api::{ListNeurons, Neuron};
-use icp_ledger::{AccountIdBlob, Memo, Tokens, TransferArgs, TransferError, DEFAULT_TRANSFER_FEE};
+use icp_ledger::{AccountIdBlob, DEFAULT_TRANSFER_FEE, Memo, Tokens, TransferArgs, TransferError};
 use k256::SecretKey;
 use lazy_static::lazy_static;
 use thiserror::Error;
 
-pub const ALL_SNS_TESTING_CANISTER_IDS: [&CanisterId; 9] = [
+pub const ALL_SNS_TESTING_CANISTER_IDS: [&CanisterId; 8] = [
     &GOVERNANCE_CANISTER_ID,
     &LEDGER_CANISTER_ID,
     &ROOT_CANISTER_ID,
-    &LIFELINE_CANISTER_ID,
     &SNS_WASM_CANISTER_ID,
     &REGISTRY_CANISTER_ID,
     &CYCLES_MINTING_CANISTER_ID,

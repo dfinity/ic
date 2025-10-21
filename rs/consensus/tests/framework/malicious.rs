@@ -2,7 +2,7 @@
 
 use super::ComponentModifier;
 use ic_consensus::consensus::ConsensusImpl;
-use ic_consensus_idkg::{malicious_pre_signer, IDkgImpl};
+use ic_consensus_idkg::{IDkgImpl, malicious_pre_signer};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
     consensus_pool::{ChangeAction::*, ConsensusPool, Mutations, ValidatedConsensusArtifact},
@@ -39,13 +39,10 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for InvalidNotaryShareSignature 
                     })
                     .and_then(|share| NotarizationShare::try_from(share).ok())
                 {
-                    std::mem::swap(
-                        action,
-                        &mut AddToValidated(ValidatedConsensusArtifact {
-                            msg: share.into_message(),
-                            timestamp,
-                        }),
-                    );
+                    *action = AddToValidated(ValidatedConsensusArtifact {
+                        msg: share.into_message(),
+                        timestamp,
+                    });
                 }
             }
         }

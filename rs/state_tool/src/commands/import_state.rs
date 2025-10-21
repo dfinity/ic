@@ -23,14 +23,14 @@ pub fn do_import(state_path: PathBuf, config_path: PathBuf, height: u64) -> Resu
 
     state_layout
         .copy_and_sync_checkpoint(
-            &format!("import_{}", height),
+            &format!("import_{height}"),
             &state_path,
             &state_layout
                 .checkpoints()
                 .join(StateLayout::checkpoint_name(height)),
             None,
         )
-        .map_err(|e| format!("Failed to import checkpoint: {}", e))?;
+        .map_err(|e| format!("Failed to import checkpoint: {e}"))?;
 
     Ok(())
 }

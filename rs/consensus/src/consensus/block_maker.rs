@@ -1,8 +1,8 @@
 #![deny(missing_docs)]
 use crate::consensus::{
+    ConsensusCrypto,
     metrics::BlockMakerMetrics,
     status::{self, Status},
-    ConsensusCrypto,
 };
 use ic_consensus_dkg::payload_builder::create_payload as create_dkg_payload;
 use ic_consensus_idkg::{self as idkg, metrics::IDkgPayloadMetrics};
@@ -15,22 +15,24 @@ use ic_interfaces::{
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{debug, error, trace, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    CountBytes, Height, NodeId, RegistryVersion, SubnetId,
     batch::{BatchPayload, ValidationContext},
     consensus::{
+        Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
+        HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
         block_maker::SubnetRecords,
         dkg::{DkgDataPayload, DkgPayload},
-        hashed, Block, BlockMetadata, BlockPayload, BlockProposal, DataPayload, HasHeight, HasRank,
-        HashedBlock, Payload, RandomBeacon, Rank, SummaryPayload,
+        hashed,
     },
     replica_config::ReplicaConfig,
     time::current_time,
-    CountBytes, Height, NodeId, RegistryVersion, SubnetId,
 };
 use num_traits::ops::saturating::SaturatingSub;
+use rayon::ThreadPool;
 use std::{
     sync::{Arc, RwLock},
     time::Duration,
@@ -69,6 +71,7 @@ pub struct BlockMaker {
     payload_builder: Arc<dyn PayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
+    thread_pool: Arc<ThreadPool>,
     pub(crate) state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
     idkg_payload_metrics: IDkgPayloadMetrics,
@@ -91,6 +94,7 @@ impl BlockMaker {
         payload_builder: Arc<dyn PayloadBuilder>,
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         idkg_pool: Arc<RwLock<dyn IDkgPool>>,
+        thread_pool: Arc<ThreadPool>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         stable_registry_version_age: Duration,
         metrics_registry: MetricsRegistry,
@@ -105,6 +109,7 @@ impl BlockMaker {
             payload_builder,
             dkg_pool,
             idkg_pool,
+            thread_pool,
             state_manager,
             log,
             metrics: BlockMakerMetrics::new(metrics_registry.clone()),
@@ -362,6 +367,7 @@ impl BlockMaker {
                                 self.replica_config.subnet_id,
                                 &*self.registry_client,
                                 &*self.crypto,
+                                self.thread_pool.as_ref(),
                                 pool,
                                 self.idkg_pool.clone(),
                                 &*self.state_manager,
@@ -600,16 +606,18 @@ pub(super) fn is_time_to_make_block(
 
 #[cfg(test)]
 mod tests {
+    use crate::consensus::{MAX_CONSENSUS_THREADS, build_thread_pool};
+
     use super::*;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
+    use ic_consensus_mocks::{Dependencies, MockPayloadBuilder, dependencies_with_subnet_params};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_consensus::IDkgStatsNoOp;
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::{dkg, HasHeight, HasVersion},
+        consensus::{HasHeight, HasVersion, dkg},
         crypto::CryptoHash,
         *,
     };
@@ -670,6 +678,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager.clone(),
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -751,6 +760,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 idkg_pool,
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -765,11 +775,8 @@ mod tests {
             assert!(run_block_maker().is_none());
 
             time_source.set_time(expected_time).unwrap();
-            if let Some(proposal) = run_block_maker() {
-                assert_eq!(proposal.as_ref(), &expected_block);
-            } else {
-                panic!("Expected a new block proposal");
-            }
+            let proposal = run_block_maker().expect("Expected a new block proposal");
+            assert_eq!(proposal.as_ref(), &expected_block);
 
             // insert a rank 0 block for the current round
             let next_block = pool.make_next_block();
@@ -882,6 +889,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager.clone(),
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -921,6 +929,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 idkg_pool,
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -996,6 +1005,7 @@ mod tests {
                 Arc::new(payload_builder),
                 dkg_pool,
                 idkg_pool,
+                build_thread_pool(MAX_CONSENSUS_THREADS),
                 state_manager,
                 Duration::from_millis(0),
                 MetricsRegistry::new(),
@@ -1005,12 +1015,21 @@ mod tests {
             let delay = Duration::from_millis(1000);
 
             // We add a new version every `delay` ms.
+            let v1_timestamp = registry
+                .get_version_timestamp(RegistryVersion::from(1))
+                .unwrap();
             std::thread::sleep(delay);
             add_subnet_record(&registry_data_provider, 2, subnet_id, record.clone());
             registry.update_to_latest_version();
+            let v2_timestamp = registry
+                .get_version_timestamp(RegistryVersion::from(2))
+                .unwrap();
             std::thread::sleep(delay);
             add_subnet_record(&registry_data_provider, 3, subnet_id, record.clone());
             registry.update_to_latest_version();
+            let v3_timestamp = registry
+                .get_version_timestamp(RegistryVersion::from(3))
+                .unwrap();
             std::thread::sleep(delay);
             add_subnet_record(&registry_data_provider, 4, subnet_id, record);
             registry.update_to_latest_version();
@@ -1019,20 +1038,22 @@ mod tests {
             assert_eq!(registry.get_latest_version(), RegistryVersion::from(4));
 
             // Now we just request versions at every interval of the previously added
-            // version. To avoid hitting the boundaries, we use a little offset.
-            let offset = delay / 10 * 3;
+            // version.
             let mut parent = pool.get_cache().finalized_block();
-            block_maker.stable_registry_version_age = offset;
+            block_maker.stable_registry_version_age =
+                current_time().saturating_duration_since(v3_timestamp);
             assert_eq!(
                 block_maker.get_stable_registry_version(&parent).unwrap(),
                 RegistryVersion::from(3)
             );
-            block_maker.stable_registry_version_age = offset + delay;
+            block_maker.stable_registry_version_age =
+                current_time().saturating_duration_since(v2_timestamp);
             assert_eq!(
                 block_maker.get_stable_registry_version(&parent).unwrap(),
                 RegistryVersion::from(2)
             );
-            block_maker.stable_registry_version_age = offset + delay * 2;
+            block_maker.stable_registry_version_age =
+                current_time().saturating_duration_since(v1_timestamp);
             assert_eq!(
                 block_maker.get_stable_registry_version(&parent).unwrap(),
                 RegistryVersion::from(1)

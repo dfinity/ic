@@ -1,3 +1,4 @@
+use ic_sys::fs::{Clobber, write_atomically};
 use regex::Regex;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
@@ -120,19 +121,19 @@ impl GrubEnv {
         }
 
         if buffer.len() > GRUB_ENV_SIZE {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Buffer too large",
-            ))
+            Err(std::io::Error::other("Buffer too large"))
         } else {
             buffer.resize(GRUB_ENV_SIZE, b'#');
             Ok(buffer)
         }
     }
 
+    /// Writes the GRUB environment to a file atomically.
+    /// If the function fails, the file will not be modified.
     pub fn write_to_file(&self, path: &Path) -> Result<(), std::io::Error> {
-        // We write to a buffer first so that the file is not changed if there is a problem.
-        std::fs::write(path, self.write_to_vec()?)
+        write_atomically(path, Clobber::Yes, |file| {
+            file.write_all(&self.write_to_vec()?)
+        })
     }
 }
 

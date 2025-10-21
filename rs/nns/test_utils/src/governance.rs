@@ -13,15 +13,15 @@ use ic_nervous_system_clients::{
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_governance_api::{
+    AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError, InstallCodeRequest,
+    ListNodeProvidersResponse, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, NnsFunction, NodeProvider, ProposalActionRequest,
+    ProposalInfo, ProposalStatus,
     add_or_remove_node_provider::Change,
     bitcoin::{BitcoinNetwork, BitcoinSetConfigProposal},
     install_code::CanisterInstallMode,
     manage_neuron::NeuronIdOrSubaccount,
     manage_neuron_response::Command as CommandResponse,
-    AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError, InstallCodeRequest,
-    ListNodeProvidersResponse, MakeProposalRequest, ManageNeuronCommandRequest,
-    ManageNeuronRequest, ManageNeuronResponse, NnsFunction, NodeProvider, ProposalActionRequest,
-    ProposalInfo, ProposalStatus,
 };
 pub use ic_nns_handler_lifeline_interface::{
     HardResetNnsRootToVersionPayload, UpgradeRootProposal,
@@ -70,7 +70,7 @@ pub async fn submit_external_update_proposal_allowing_error(
     match response.command.unwrap() {
         CommandResponse::MakeProposal(resp) => Ok(ProposalId::from(resp.proposal_id.unwrap())),
         CommandResponse::Error(err) => Err(err),
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     }
 }
 
@@ -118,7 +118,7 @@ pub async fn submit_external_update_proposal(
         .unwrap()
     {
         CommandResponse::MakeProposal(resp) => ProposalId::from(resp.proposal_id.unwrap()),
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     }
 }
 
@@ -251,10 +251,7 @@ pub async fn wait_for_final_state(
         num_observed_accepted_state += 1;
         std::thread::sleep(Duration::from_millis(500));
     }
-    eprintln!(
-        "Non-final states were seen {} times for {}.",
-        num_observed_accepted_state, id
-    );
+    eprintln!("Non-final states were seen {num_observed_accepted_state} times for {id}.");
     // Return the final state
     get_proposal_info(governance_canister, id).await.unwrap()
 }
@@ -335,7 +332,7 @@ async fn change_nns_canister_by_proposal(
         .unwrap()
     {
         CommandResponse::MakeProposal(resp) => resp.proposal_id.expect("No proposal id"),
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     };
 
     // If the canister is the root canister, we need to wait for the proposal to be executed before
@@ -572,4 +569,34 @@ pub async fn invalid_bitcoin_set_config_by_proposal(
         "".to_string(),
     )
     .await
+}
+
+pub async fn pause_canister_migrations(governance: &Canister<'_>) {
+    let proposal: Vec<u8> = Vec::new();
+
+    submit_external_update_proposal(
+        governance,
+        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        NeuronId(TEST_NEURON_1_ID),
+        NnsFunction::PauseCanisterMigrations,
+        proposal,
+        "Pause Canister Migrations".to_string(),
+        "".to_string(),
+    )
+    .await;
+}
+
+pub async fn unpause_canister_migrations(governance: &Canister<'_>) {
+    let proposal: Vec<u8> = Vec::new();
+
+    submit_external_update_proposal(
+        governance,
+        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        NeuronId(TEST_NEURON_1_ID),
+        NnsFunction::UnpauseCanisterMigrations,
+        proposal,
+        "Unpause Canister Migrations".to_string(),
+        "".to_string(),
+    )
+    .await;
 }

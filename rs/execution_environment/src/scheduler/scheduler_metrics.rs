@@ -1,8 +1,10 @@
 use std::{collections::BTreeMap, time::Duration};
 
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
+    buckets::{
+        binary_buckets_with_zero, decimal_buckets, decimal_buckets_with_zero, linear_buckets,
+    },
 };
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_types::nominal_cycles::NominalCycles;
@@ -10,9 +12,13 @@ use prometheus::{
     Gauge, GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
 };
 
-use crate::metrics::{
-    cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
-    memory_histogram, messages_histogram, slices_histogram, unique_sorted_buckets, ScopedMetrics,
+use crate::{
+    metrics::{
+        ScopedMetrics, cycles_histogram, dts_pause_or_abort_histogram, duration_histogram,
+        instructions_histogram, memory_histogram, messages_histogram, slices_histogram,
+        unique_sorted_buckets,
+    },
+    scheduler::threshold_signatures::THRESHOLD_SIGNATURE_SCHEME_MISMATCH,
 };
 
 pub(crate) const CANISTER_INVARIANT_BROKEN: &str = "scheduler_canister_invariant_broken";
@@ -27,8 +33,9 @@ pub(super) struct SchedulerMetrics {
     pub(super) canister_compute_allocation_violation: IntCounter,
     pub(super) canister_balance: Histogram,
     pub(super) canister_binary_size: Histogram,
-    pub(super) canister_log_memory_usage: Histogram, // TODO(EXC-1722): remove after migrating to v2.
     pub(super) canister_log_memory_usage_v2: Histogram,
+    pub(super) canister_log_memory_usage_v3: Histogram,
+    pub(super) canister_log_delta_memory_usage: Histogram,
     pub(super) canister_wasm_memory_usage: Histogram,
     pub(super) canister_stable_memory_usage: Histogram,
     pub(super) canister_memory_allocation: Histogram,
@@ -111,8 +118,11 @@ pub(super) struct SchedulerMetrics {
     pub(super) inducted_messages: IntCounterVec,
     pub(super) threshold_signature_agreements: IntGaugeVec,
     pub(super) delivered_pre_signatures: HistogramVec,
+    pub(super) exceeding_pre_signatures: IntCounterVec,
     pub(super) in_flight_signature_request_contexts: HistogramVec,
     pub(super) completed_signature_request_contexts: IntCounterVec,
+    pub(super) pre_signature_stash_size: IntGaugeVec,
+    pub(super) threshold_signature_scheme_mismatch: IntCounter,
     // TODO(EXC-1466): Remove metric once all calls have `call_id` present.
     pub(super) stop_canister_calls_without_call_id: IntGauge,
     pub(super) canister_snapshots_memory_usage: IntGauge,
@@ -154,12 +164,6 @@ impl SchedulerMetrics {
                 "Canisters Wasm binary size distribution in bytes.",
                 metrics_registry,
             ),
-            // TODO(EXC-1722): remove after migrating to v2.
-            canister_log_memory_usage: memory_histogram(
-                "canister_log_memory_usage_bytes",
-                "Canisters log memory usage distribution in bytes.",
-                metrics_registry,
-            ),
             canister_log_memory_usage_v2: metrics_registry.histogram(
                 "canister_log_memory_usage_bytes_v2",
                 "Canisters log memory usage distribution in bytes.",
@@ -179,6 +183,18 @@ impl SchedulerMetrics {
                     5 * MIB,
                     10 * MIB,
                 ])
+            ),
+            canister_log_memory_usage_v3: metrics_registry.histogram(
+                "canister_log_memory_usage_bytes_v3",
+                "Canisters log memory usage distribution in bytes.",
+                // 4 KiB (2^12) .. 8 GiB (2^33), plus zero — 23 total buckets (0 + 22 powers).
+                binary_buckets_with_zero(12, 33)
+            ),
+            canister_log_delta_memory_usage: metrics_registry.histogram(
+                "canister_log_delta_memory_usage_bytes",
+                "Canisters log delta (per single execution) memory usage distribution in bytes.",
+                // 1 KiB (2^10) .. 8 MiB (2^23), plus zero — 15 total buckets (0 + 14 powers).
+                binary_buckets_with_zero(10, 23)
             ),
             canister_wasm_memory_usage: memory_histogram(
                 "canister_wasm_memory_usage_bytes",
@@ -278,6 +294,11 @@ impl SchedulerMetrics {
                 vec![0.0, 1.0, 2.0, 5.0, 10.0, 15.0, 20.0],
                 &["key_id"],
             ),
+            exceeding_pre_signatures: metrics_registry.int_counter_vec(
+                "execution_idkg_exceeding_pre_signatures",
+                "Number of IDkg pre-signatures delivered to execution that exceeded the maximum stash size",
+                &["key_id"],
+            ),
             in_flight_signature_request_contexts: metrics_registry.histogram_vec(
                 "execution_in_flight_signature_request_contexts",
                 "Number of in flight signature request contexts by key ID",
@@ -289,6 +310,12 @@ impl SchedulerMetrics {
                 "Total number of completed signature request contexts by key ID",
                 &["key_id"],
             ),
+            pre_signature_stash_size: metrics_registry.int_gauge_vec(
+                "execution_pre_signature_stash_size",
+                "Number of pre-signatures currently stored in the pre-signature stash, by key ID.",
+                &["key_id"],
+            ),
+            threshold_signature_scheme_mismatch: metrics_registry.error_counter(THRESHOLD_SIGNATURE_SCHEME_MISMATCH),
             input_queue_messages: metrics_registry.int_gauge_vec(
                 "execution_input_queue_messages",
                 "Count of messages currently enqueued in input queues, by message kind.",

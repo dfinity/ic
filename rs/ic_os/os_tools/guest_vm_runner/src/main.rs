@@ -1,35 +1,38 @@
-use crate::guest_direct_boot::{prepare_direct_boot, DirectBoot};
+use crate::guest_direct_boot::{DirectBoot, prepare_direct_boot};
 use crate::guest_vm_config::{
     assemble_config_media, generate_vm_config, serial_log_path, vm_domain_name,
 };
-use crate::mount::PartitionProvider;
 use crate::systemd_notifier::SystemdNotifier;
-use anyhow::{bail, Context, Error, Result};
+use crate::upgrade_device_mapper::create_mapped_device_for_upgrade;
+use anyhow::{Context, Error, Result, bail};
 use clap::{Parser, ValueEnum};
 use config_types::{HostOSConfig, Ipv6Config};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
+use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
+use ic_device::device_mapping::MappedDevice;
+use ic_device::mount::{GptPartitionProvider, PartitionProvider};
 use ic_metrics_tool::{Metric, MetricsWriter};
+use ic_sev::host::HostSevCertificateProvider;
+use nix::unistd::getuid;
 use std::fmt::{Debug, Formatter};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::NamedTempFile;
 use tokio::process::Command;
-use tokio::signal::unix::{signal, SignalKind};
+use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use virt::connect::Connect;
 use virt::domain::Domain;
-use virt::error::{ErrorDomain, ErrorNumber};
 use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING};
 
 mod boot_args;
 mod guest_direct_boot;
 mod guest_vm_config;
-mod mount;
 mod systemd_notifier;
+mod upgrade_device_mapper;
 
 const DEFAULT_METRICS_FILE_PATH: &str =
     "/run/node_exporter/collector_textfile/hostos_guestos_service.prom";
@@ -39,8 +42,11 @@ const UPGRADE_METRICS_FILE_PATH: &str =
 const DEFAULT_GUESTOS_SERVICE_NAME: &str = "guestos.service";
 const UPGRADE_GUESTOS_SERVICE_NAME: &str = "upgrade-guestos.service";
 
-const CONSOLE_TTY_PATH: &str = "/dev/tty1";
+const CONSOLE_TTY1_PATH: &str = "/dev/tty1";
+const CONSOLE_TTY_SERIAL_PATH: &str = "/dev/ttyS0";
 const GUESTOS_DEVICE: &str = "/dev/hostlvm/guestos";
+
+const SEV_CERTIFICATE_CACHE_DIR: &str = "/var/ic/sev/certificates";
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, ValueEnum)]
 pub enum GuestVMType {
@@ -65,6 +71,11 @@ struct Args {
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
+    // TODO: We could replace this with Linux capabilities but this works well for now.
+    if !getuid().is_root() {
+        bail!("This program requires root privileges.");
+    }
+
     let args = Args::parse();
 
     match args.vm_type {
@@ -81,10 +92,16 @@ pub async fn main() -> Result<()> {
             Ok(()) => return Ok(()),
             // If the VM started but stopped, we restart it. Note that we recreate the entire
             // service in order to start the VM with fresh config.
-            Err(GuestVmServiceError::VirtualMachineStopped) => {
-                println!("Guest VM stopped, restarting");
-                continue;
-            }
+            Err(GuestVmServiceError::VirtualMachineStopped) => match args.vm_type {
+                GuestVMType::Default => {
+                    println!("Guest VM stopped, restarting");
+                    continue;
+                }
+                GuestVMType::Upgrade => {
+                    println!("Upgrade VM stopped, exiting");
+                    break Ok(());
+                }
+            },
             // If we encounter an unexpected error, we exit with the error and let systemd restart
             // the service.
             Err(GuestVmServiceError::Other(err)) => return Err(err),
@@ -125,21 +142,33 @@ impl VirtualMachine {
         direct_boot: Option<DirectBoot>,
         vm_domain_name: &str,
     ) -> Result<Self> {
+        // Check if a domain with the same name already exists and, if so, try to destroy it
+        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name).context(
+            "Unable to create new domain while existing domain '{vm_domain_name}' exists.",
+        )?;
+
         let mut retries = 3;
         let domain = loop {
             let domain_result = Domain::create_xml(libvirt_connect, xml_config, VIR_DOMAIN_NONE);
             match domain_result {
-                Ok(domain) => break domain,
-                Err(e)
-                    if retries > 0
-                        && e.code() == ErrorNumber::OperationInvalid
-                        && e.domain() == ErrorDomain::Domain =>
-                {
-                    Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
+                Ok(domain) => {
+                    eprintln!("Domain successfully created: {vm_domain_name}");
+                    break domain;
+                }
+                Err(e) if retries > 0 => {
+                    eprintln!("Domain creation failed, retrying: {e}");
+                    // TODO: Monitor if this code path is ever triggered - remove if unused
+                    if Domain::lookup_by_name(libvirt_connect, vm_domain_name).is_ok() {
+                        eprintln!(
+                            "VM domain '{}' exists even though create_xml failed, attempting to destroy it before retry",
+                            vm_domain_name
+                        );
+                        let _ = Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
+                    }
                     retries -= 1;
                     continue;
                 }
-                err => err.context("Failed to create domain")?,
+                err => err.context("Failed to create domain after retries")?,
             };
         };
         Ok(Self {
@@ -151,13 +180,17 @@ impl VirtualMachine {
         })
     }
 
-    fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) {
-        println!("Attempting to destroy existing '{vm_domain_name}' domain");
-        if let Err(e) = Domain::lookup_by_name(libvirt_connect, vm_domain_name)
-            .and_then(|existing| existing.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL))
-        {
-            eprintln!("Failed to destroy existing domain: {e}");
+    fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) -> Result<()> {
+        if let Ok(existing_domain) = Domain::lookup_by_name(libvirt_connect, vm_domain_name) {
+            eprintln!("Attempting to destroy existing '{vm_domain_name}' domain");
+            existing_domain
+                .destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL)
+                .context("Failed to destroy existing domain")?;
+            eprintln!("Successfully destroyed existing domain");
+        } else {
+            eprintln!("No existing domain found to destroy");
         }
+        Ok(())
     }
 
     /// Checks if the virtual machine is currently running
@@ -240,9 +273,13 @@ pub struct GuestVmService {
     libvirt_connection: Connect,
     hostos_config: HostOSConfig,
     systemd_notifier: Arc<dyn SystemdNotifier>,
-    console_tty: Box<dyn Write + Send + Sync>,
-    partition_provider: Box<dyn PartitionProvider>,
+    console_ttys: Vec<Box<dyn Write + Send + Sync>>,
     guest_vm_type: GuestVMType,
+    sev_certificate_provider: HostSevCertificateProvider,
+    disk_device: PathBuf,
+    partition_provider: Box<dyn PartitionProvider>,
+    // Partition provider uses the mapped device, so it must be declared after it.
+    _upgrade_mapped_device: Option<MappedDevice>,
 }
 
 impl GuestVmService {
@@ -259,10 +296,37 @@ impl GuestVmService {
         let hostos_config: HostOSConfig =
             config::deserialize_config(config::DEFAULT_HOSTOS_CONFIG_OBJECT_PATH)
                 .context("Failed to read HostOS config file")?;
-        let console_tty = std::fs::File::options()
+        let console_tty1 = std::fs::File::options()
             .write(true)
-            .open(CONSOLE_TTY_PATH)
-            .context("Failed to open console")?;
+            .open(CONSOLE_TTY1_PATH)
+            .context("Failed to open console tty1")?;
+
+        let console_tty_serial = std::fs::File::options()
+            .write(true)
+            .open(CONSOLE_TTY_SERIAL_PATH)
+            .context("Failed to open console ttyS0")?;
+
+        let sev_certificate_provider = HostSevCertificateProvider::new(
+            PathBuf::from(SEV_CERTIFICATE_CACHE_DIR),
+            hostos_config
+                .icos_settings
+                .enable_trusted_execution_environment,
+        )
+        .context("Could not initialize SEV certificate provider")?;
+
+        // If this is an Upgrade VM, create a mapped device which protects the data partition of the
+        // Guest device.
+        let upgrade_mapped_device = (guest_vm_type == GuestVMType::Upgrade)
+            .then(|| {
+                create_mapped_device_for_upgrade(Path::new(GUESTOS_DEVICE))
+                    .context("Cannot create mapped device")
+            })
+            .transpose()?;
+
+        let disk_device = upgrade_mapped_device
+            .as_ref()
+            .map(|x| x.path())
+            .unwrap_or(Path::new(GUESTOS_DEVICE));
 
         Ok(Self {
             metrics_writer,
@@ -270,8 +334,14 @@ impl GuestVmService {
             hostos_config,
             guest_vm_type,
             systemd_notifier: Arc::new(systemd_notifier::DefaultSystemdNotifier),
-            console_tty: Box::new(console_tty),
-            partition_provider: Box::new(mount::GptPartitionProvider::new(GUESTOS_DEVICE.into())?),
+            console_ttys: vec![Box::new(console_tty1), Box::new(console_tty_serial)],
+            sev_certificate_provider,
+            partition_provider: Box::new(
+                GptPartitionProvider::new(disk_device.to_path_buf())
+                    .context("Failed to create partition provider")?,
+            ),
+            disk_device: disk_device.to_path_buf(),
+            _upgrade_mapped_device: upgrade_mapped_device,
         })
     }
 
@@ -300,7 +370,7 @@ impl GuestVmService {
                 virtual_machine
             }
             Err(err) => {
-                self.handle_startup_error(&err).await?;
+                self.handle_startup_error(&err).await;
                 self.metrics_writer
                     .write_metrics(&[Metric::with_annotation(
                         "hostos_guestos_service_start",
@@ -317,7 +387,8 @@ impl GuestVmService {
     }
 
     async fn start_virtual_machine(&mut self) -> Result<VirtualMachine> {
-        let config_media = NamedTempFile::new().context("Failed to create config media file")?;
+        let config_media = NamedTempFile::with_prefix("config_media")
+            .context("Failed to create config media file")?;
 
         println!("Extracting direct boot dependencies");
         let direct_boot = prepare_direct_boot(self.guest_vm_type, self.partition_provider.as_ref())
@@ -342,13 +413,25 @@ impl GuestVmService {
             )
         }
 
-        assemble_config_media(&self.hostos_config, self.guest_vm_type, config_media.path())
-            .context("Failed to assemble config media")?;
+        let sev_certificate_chain_pem = self
+            .sev_certificate_provider
+            .load_certificate_chain_pem()
+            .await
+            .context("Failed to load SEV certificate chain")?;
+
+        assemble_config_media(
+            &self.hostos_config,
+            self.guest_vm_type,
+            sev_certificate_chain_pem,
+            config_media.path(),
+        )
+        .context("Failed to assemble config media")?;
 
         let vm_config = generate_vm_config(
             &self.hostos_config,
             config_media.path(),
             direct_boot.as_ref().map(DirectBoot::to_config),
+            &self.disk_device,
             self.guest_vm_type,
         )
         .context("Failed to generate GuestOS VM config")?;
@@ -416,7 +499,7 @@ impl GuestVmService {
     }
 
     /// Handles errors that occur during VM startup
-    async fn handle_startup_error(&mut self, e: &Error) -> Result<()> {
+    async fn handle_startup_error(&mut self, e: &Error) {
         // Give QEMU time to clear the console before printing error messages
         // (but not in unit tests otherwise tests take too long to finish).
         #[cfg(not(test))]
@@ -432,7 +515,7 @@ impl GuestVmService {
         ));
         self.write_to_console("#################################################");
 
-        self.display_systemd_logs().await?;
+        let _ignore = self.display_systemd_logs().await;
 
         self.write_to_console("#################################################");
         self.write_to_console("###          TROUBLESHOOTING INFO...          ###");
@@ -443,14 +526,12 @@ impl GuestVmService {
         ));
 
         // Check for and display serial logs if they exist
-        self.display_serial_logs().await?;
+        let _ignore = self.display_serial_logs().await;
 
         self.write_to_console_and_stdout(&format!(
             "Exiting so that systemd can restart {}",
             self.systemd_service_name()
         ));
-
-        Ok(())
     }
 
     /// Captures and displays journalctl logs for the guestos service
@@ -492,14 +573,14 @@ impl GuestVmService {
             self.write_to_console_and_stdout("#################################################");
 
             let tail_output = Command::new("tail")
-                .args(["-n", "30", serial_log_path.to_str().unwrap()])
+                .args(["-n", "100", serial_log_path.to_str().unwrap()])
                 .output()
                 .await
                 .context("Failed to tail serial log")?;
 
             let logs = String::from_utf8_lossy(&tail_output.stdout);
             for line in logs.lines() {
-                self.write_to_console_and_stdout(line);
+                self.write_to_console_and_stdout(&format!("[GUESTOS] {line}"));
             }
         } else {
             self.write_to_console_and_stdout("No console log file found.");
@@ -537,8 +618,10 @@ impl GuestVmService {
     }
 
     fn write_to_console(&mut self, message: &str) {
-        let _ignore = writeln!(self.console_tty, "{message}");
-        let _ignore = self.console_tty.flush();
+        for console_tty in &mut self.console_ttys {
+            let _ignore = writeln!(console_tty, "{message}");
+            let _ignore = console_tty.flush();
+        }
     }
 }
 
@@ -551,13 +634,14 @@ impl Drop for GuestVmService {
 #[cfg(all(test, feature = "integration_tests"))]
 mod tests {
     use super::*;
-    use crate::mount::testing::ExtractingFilesystemMounter;
-    use crate::mount::GptPartitionProvider;
     use crate::systemd_notifier::testing::MockSystemdNotifier;
     use config_types::{
         DeploymentEnvironment, DeterministicIpv6Config, HostOSSettings, ICOSSettings,
         NetworkSettings,
     };
+    use ic_device::mount::GptPartitionProvider;
+    use ic_device::mount::testing::ExtractingFilesystemMounter;
+    use ic_sev::host::testing::mock_host_sev_certificate_provider;
     use nix::sys::signal::SIGTERM;
     use regex::Regex;
     use std::fs::File;
@@ -588,7 +672,7 @@ mod tests {
             "Tar returned error"
         );
 
-        let guestos_device = NamedTempFile::new().unwrap();
+        let guestos_device = NamedTempFile::with_prefix("guestos_device").unwrap();
         std::fs::rename(tempdir.path().join("disk.img"), guestos_device.path()).unwrap();
 
         guestos_device
@@ -603,6 +687,7 @@ mod tests {
         metrics_file: NamedTempFile,
         systemd_notifier: Arc<MockSystemdNotifier>,
         termination_token: CancellationToken,
+        _sev_certificate_cache_dir: TempDir,
     }
 
     impl TestServiceInstance {
@@ -671,25 +756,23 @@ mod tests {
         fn get_config_media_path(&self) -> PathBuf {
             let domain = self.get_domain();
             let vm_config = domain.get_xml_desc(0).unwrap();
-            let config_media_path = PathBuf::from(
+            PathBuf::from(
                 &Regex::new("<source file='([^']+)'")
                     .unwrap()
                     .captures(&vm_config)
                     .expect("Config media path not found in VM config")[1],
-            );
-            config_media_path
+            )
         }
 
         fn get_kernel_path(&self) -> PathBuf {
             let domain = self.get_domain();
             let vm_config = domain.get_xml_desc(0).unwrap();
-            let kernel_path = PathBuf::from(
+            PathBuf::from(
                 &Regex::new("<kernel>([^']+)</kernel>")
                     .unwrap()
                     .captures(&vm_config)
                     .expect("Kernel path not found in VM config")[1],
-            );
-            kernel_path
+            )
         }
 
         fn get_kernel_cmdline(&self) -> String {
@@ -734,7 +817,7 @@ mod tests {
                 libvirt_connection,
                 hostos_config,
                 guestos_device: GUESTOS_IMAGE.path().to_path_buf(),
-                mock_mounter: ExtractingFilesystemMounter::new(),
+                mock_mounter: ExtractingFilesystemMounter::default(),
                 _libvirt_definition: libvirt_definition,
             }
         }
@@ -747,12 +830,15 @@ mod tests {
             let metrics_file = NamedTempFile::new().expect("Failed to create metrics file");
             let systemd_notifier = Arc::new(MockSystemdNotifier::new());
             let termination_token = CancellationToken::new();
+            let (sev_certificate_provider, sev_certificate_cache_dir) =
+                mock_host_sev_certificate_provider()
+                    .expect("Failed to create mock SEV cert provider");
             let mut service = GuestVmService {
                 metrics_writer: MetricsWriter::new(metrics_file.path().to_path_buf()),
                 libvirt_connection: self.libvirt_connection.clone(),
                 hostos_config: self.hostos_config.clone(),
                 systemd_notifier: systemd_notifier.clone(),
-                console_tty: Box::new(File::create(console_file.path()).unwrap()),
+                console_ttys: vec![Box::new(File::create(console_file.path()).unwrap())],
                 partition_provider: Box::new(
                     GptPartitionProvider::with_mounter(
                         self.guestos_device.clone(),
@@ -761,6 +847,9 @@ mod tests {
                     .unwrap(),
                 ),
                 guest_vm_type,
+                sev_certificate_provider,
+                disk_device: GUESTOS_DEVICE.into(),
+                _upgrade_mapped_device: None,
             };
 
             // Start the service in the background
@@ -775,6 +864,7 @@ mod tests {
                 termination_token,
                 libvirt_connection: self.libvirt_connection.clone(),
                 vm_domain_name: vm_domain_name(guest_vm_type).to_string(),
+                _sev_certificate_cache_dir: sev_certificate_cache_dir,
             }
         }
     }
@@ -815,7 +905,7 @@ mod tests {
 
     fn invalid_hostos_config() -> HostOSConfig {
         let mut hostos_config = valid_hostos_config();
-        hostos_config.hostos_settings.vm_memory = 0;
+        hostos_config.hostos_settings.vm_nr_of_vcpus = 0;
         hostos_config
     }
 
@@ -884,11 +974,12 @@ mod tests {
         let error = (&mut service.task)
             .await
             .expect("Service should have failed but did not")
-            .unwrap_err()
-            .to_string();
+            .unwrap_err();
         assert!(
-            error.contains("Failed to define GuestOS virtual machine"),
-            "Got unexpected error: \"{error}\""
+            error
+                .to_string()
+                .contains("Failed to define GuestOS virtual machine"),
+            "Got unexpected error: \"{error:?}\""
         );
 
         service.assert_metrics_contains("hostos_guestos_service_start 0");

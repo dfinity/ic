@@ -1,7 +1,8 @@
 #![allow(dead_code)]
 
 use crate::driver::test_env::TestEnv;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
+use regex::Regex;
 use slog::Logger;
 use std::{
     fs,
@@ -23,7 +24,8 @@ pub struct GroupContext {
     pub debug_keepalive: bool,
     pub no_farm_keepalive: bool,
     pub group_base_name: String,
-    pub k8s: bool,
+    pub logs_enabled: bool,
+    pub exclude_logs: Vec<Regex>,
 }
 
 impl GroupContext {
@@ -39,7 +41,8 @@ impl GroupContext {
         debug_keepalive: bool,
         no_farm_keepalive: bool,
         group_base_name: String,
-        k8s: bool,
+        logs_enabled: bool,
+        exclude_logs: Vec<Regex>,
     ) -> Result<Self> {
         let task_id = subproc_info.as_ref().map(|t| t.0.clone());
         let sock_id = subproc_info.map(|t| t.1).unwrap_or_default();
@@ -63,7 +66,8 @@ impl GroupContext {
             debug_keepalive,
             no_farm_keepalive,
             group_base_name,
-            k8s,
+            logs_enabled,
+            exclude_logs,
         })
     }
 

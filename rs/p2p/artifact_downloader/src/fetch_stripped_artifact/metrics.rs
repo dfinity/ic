@@ -1,4 +1,4 @@
-use ic_metrics::{buckets::decimal_buckets_with_zero, MetricsRegistry};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets_with_zero};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
 
 const SOURCE_LABEL: &str = "source";

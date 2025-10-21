@@ -1,9 +1,9 @@
 //! The certification public interface.
 use crate::validation::{ValidationError, ValidationResult};
 use ic_types::{
+    CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
     consensus::certification::{Certification, CertificationMessage, CertificationShare},
     crypto::CryptoError,
-    CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
 };
 use std::collections::HashSet;
 
@@ -33,7 +33,7 @@ pub trait CertificationPool {
 
     /// Returns an iterator over all shares for the given height.
     fn shares_at_height(&self, height: Height)
-        -> Box<dyn Iterator<Item = CertificationShare> + '_>;
+    -> Box<dyn Iterator<Item = CertificationShare> + '_>;
 
     /// Returns all validated certification shares.
     fn validated_shares(&self) -> Box<dyn Iterator<Item = CertificationShare> + '_>;

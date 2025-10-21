@@ -13,6 +13,8 @@ type Action = variant {
   AdvanceSnsTargetVersion : AdvanceSnsTargetVersion;
   RegisterDappCanisters : RegisterDappCanisters;
   RegisterExtension : RegisterExtension;
+  UpgradeExtension : UpgradeExtension;
+  ExecuteExtensionOperation : ExecuteExtensionOperation;
   TransferSnsTreasuryFunds : TransferSnsTreasuryFunds;
   UpgradeSnsControlledCanister : UpgradeSnsControlledCanister;
   DeregisterDappCanisters : DeregisterDappCanisters;
@@ -50,9 +52,21 @@ type By = variant {
   NeuronId : record {};
 };
 
+type MemoryMetrics = record {
+  wasm_memory_size : opt nat;
+  stable_memory_size : opt nat;
+  global_memory_size : opt nat;
+  wasm_binary_size : opt nat;
+  custom_sections_size : opt nat;
+  canister_history_size : opt nat;
+  wasm_chunk_store_size : opt nat;
+  snapshots_size : opt nat;
+};
+
 type CanisterStatusResultV2 = record {
   status : CanisterStatusType;
   memory_size : nat;
+  memory_metrics : opt MemoryMetrics;
   cycles : nat;
   settings : DefiniteCanisterSettingsArgs;
   idle_cycles_burned_per_day : nat;
@@ -274,7 +288,7 @@ type TreasuryMetrics = record {
 };
 
 type VotingPowerMetrics = record {
-  governance_total_potential_voting_power : opt nat64; 
+  governance_total_potential_voting_power : opt nat64;
 
   // When the metrics were last updated.
   timestamp_seconds : opt nat64;
@@ -734,6 +748,54 @@ type RegisterExtension = record {
   extension_init : opt ExtensionInit;
 };
 
+type ExtensionOperationArg = record {
+  value : opt PreciseValue;
+};
+
+type ExtensionUpgradeArg = record {
+  value : opt PreciseValue;
+};
+
+type Wasm = variant {
+  Bytes : blob;
+  Chunked : ChunkedCanisterWasm;
+};
+
+type UpgradeExtension = record {
+  extension_canister_id : opt principal;
+  canister_upgrade_arg : opt ExtensionUpgradeArg;
+  wasm : opt Wasm;
+};
+
+type ExecuteExtensionOperation = record {
+  extension_canister_id : opt principal;
+
+  operation_name : opt text;
+
+  operation_arg : opt ExtensionOperationArg;
+};
+
+type ExtensionOperationSpec = record {
+  operation_type : opt ExtensionOperationType;
+  description : opt text;
+  extension_type : opt ExtensionType;
+  topic : opt Topic;
+};
+
+type ExtensionOperationType = variant {
+  TreasuryManagerDeposit;
+  TreasuryManagerWithdraw;
+};
+
+type ExtensionType = variant {
+  TreasuryManager;
+};
+
+type RegisteredExtensionOperationSpec = record {
+  canister_id : opt principal;
+  spec : opt ExtensionOperationSpec;
+};
+
 type RegisterVote = record {
   vote : int32;
   proposal : opt ProposalId;
@@ -967,6 +1029,7 @@ type TopicInfo = record {
   description : opt text;
   native_functions : opt vec NervousSystemFunction;
   custom_functions : opt vec NervousSystemFunction;
+  extension_operations : opt vec RegisteredExtensionOperationSpec;
   is_critical : opt bool;
 };
 

@@ -3,8 +3,9 @@ use ic_backup::{
     backup_manager::BackupManager,
     cmd::{BackupArgs, SubCommand},
 };
-use slog::{o, Drain};
+use slog::{Drain, o};
 use std::{io::stdin, sync::Arc};
+use tokio_util::sync::CancellationToken;
 
 // Here is an example config file:
 //
@@ -76,7 +77,8 @@ async fn main() {
             BackupManager::get_version(log, args.config_file, subnet_id.0)
         }
         _ => {
-            let bm = BackupManager::new(log, args).await;
+            // TODO(CON-1548): gracefully stop backup tasks on SIGTERM
+            let bm = BackupManager::new(log, args, CancellationToken::new()).await;
             tokio::task::spawn_blocking(|| Arc::new(bm).do_backups())
                 .await
                 .expect("Backup task failed");

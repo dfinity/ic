@@ -3,7 +3,7 @@ use crate::{
     models::seconds::Seconds, request_types::*,
 };
 use candid::Decode;
-use ic_nns_governance_api::manage_neuron::{self, configure, Command, Configure};
+use ic_nns_governance_api::manage_neuron::{self, Command, Configure, configure};
 use ic_types::PrincipalId;
 use icp_ledger::Tokens;
 use std::convert::{TryFrom, TryInto};
@@ -40,6 +40,8 @@ pub enum Request {
     StopDissolve(StopDissolve),
     #[serde(rename = "DISBURSE")]
     Disburse(Disburse),
+    #[serde(rename = "DISBURSE_MATURITY")]
+    DisburseMaturity(DisburseMaturity),
     #[serde(rename = "ADD_HOT_KEY")]
     AddHotKey(AddHotKey),
     #[serde(rename = "REMOVE_HOTKEY")]
@@ -90,6 +92,11 @@ impl Request {
             Request::Disburse(Disburse { neuron_index, .. }) => Ok(RequestType::Disburse {
                 neuron_index: *neuron_index,
             }),
+            Request::DisburseMaturity(DisburseMaturity { neuron_index, .. }) => {
+                Ok(RequestType::DisburseMaturity {
+                    neuron_index: *neuron_index,
+                })
+            }
             Request::AddHotKey(AddHotKey { neuron_index, .. }) => Ok(RequestType::AddHotKey {
                 neuron_index: *neuron_index,
             }),
@@ -185,6 +192,7 @@ impl Request {
                 Request::ListNeurons(o) => builder.list_neurons(o),
                 Request::Follow(o) => builder.follow(o),
                 Request::RefreshVotingPower(o) => builder.refresh_voting_power(o),
+                Request::DisburseMaturity(o) => builder.disburse_maturity(o),
             }?;
         }
         Ok(builder.build())
@@ -212,6 +220,7 @@ impl Request {
                 | Request::NeuronInfo(_) // not neuron management but we need it signed.
                 | Request::RefreshVotingPower(_)
                 | Request::Follow(_)
+                | Request::DisburseMaturity(_)
         )
     }
 }
@@ -229,8 +238,7 @@ impl TryFrom<&models::Request> for Request {
         let pid =
             PrincipalId::try_from(payload.update_content().sender.clone().0).map_err(|e| {
                 ApiError::internal_error(format!(
-                    "Could not parse envelope sender's public key: {}",
-                    e
+                    "Could not parse envelope sender's public key: {e}"
                 ))
             })?;
 
@@ -243,7 +251,7 @@ impl TryFrom<&models::Request> for Request {
                     ic_nns_governance_api::ManageNeuron
                 )
                 .map_err(|e| {
-                    ApiError::invalid_request(format!("Could not parse manage_neuron: {}", e))
+                    ApiError::invalid_request(format!("Could not parse manage_neuron: {e}"))
                 })
             }
             .map(|m| m.command)
@@ -330,8 +338,7 @@ impl TryFrom<&models::Request> for Request {
                     let recipient = if let Some(a) = to_account {
                         Some((&a).try_into().map_err(|e| {
                             ApiError::invalid_request(format!(
-                                "Could not parse recipient account identifier: {}",
-                                e
+                                "Could not parse recipient account identifier: {e}"
                             ))
                         })?)
                     } else {
@@ -341,6 +348,29 @@ impl TryFrom<&models::Request> for Request {
                     Ok(Request::Disburse(Disburse {
                         account,
                         amount: amount.map(|amount| Tokens::from_e8s(amount.e8s)),
+                        recipient,
+                        neuron_index: *neuron_index,
+                    }))
+                } else {
+                    Err(ApiError::invalid_request("Request is missing recipient"))
+                }
+            }
+            RequestType::DisburseMaturity { neuron_index } => {
+                let command = manage_neuron()?;
+                if let Some(Command::DisburseMaturity(manage_neuron::DisburseMaturity {
+                    to_account,
+                    percentage_to_disburse,
+                    to_account_identifier,
+                })) = command
+                {
+                    let recipient = convert::from_account_or_account_identifier(
+                        to_account,
+                        to_account_identifier,
+                    )?;
+
+                    Ok(Request::DisburseMaturity(DisburseMaturity {
+                        account,
+                        percentage_to_disburse,
                         recipient,
                         neuron_index: *neuron_index,
                     }))

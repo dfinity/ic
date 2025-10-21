@@ -1,12 +1,13 @@
 [package]
 name = "grub"
 version = "1.0.0"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
+ic-sys = { path = "../../sys" }
+regex = { workspace = true }
 strum = { workspace = true }
 thiserror = { workspace = true }
-regex = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

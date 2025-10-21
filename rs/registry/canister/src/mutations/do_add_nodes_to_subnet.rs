@@ -17,10 +17,7 @@ impl Registry {
     /// This method is called by the governance canister, after a proposal
     /// for modifying a subnet by adding nodes has been accepted.
     pub fn do_add_nodes_to_subnet(&mut self, payload: AddNodesToSubnetPayload) {
-        println!(
-            "{}do_add_nodes_to_subnet started: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_add_nodes_to_subnet started: {payload:?}");
 
         // Validate payload
         self.validate_add_nodes_to_subnet_payload(&payload);
@@ -46,10 +43,7 @@ impl Registry {
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
 
-        println!(
-            "{}do_add_nodes_to_subnet finished: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_add_nodes_to_subnet finished: {payload:?}");
     }
 
     /// Ensure all nodes for new subnet are not already assigned as ApiBoundaryNode

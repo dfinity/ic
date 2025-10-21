@@ -8,8 +8,8 @@
 //!    one for every type of IDkgMessage (dealing, dealing support, etc)
 
 use crate::{
-    metrics::{IDkgPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
     IntoInner,
+    metrics::{IDkgPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::idkg::{
@@ -20,17 +20,17 @@ use ic_interfaces::p2p::consensus::{
     ArtifactTransmit, ArtifactTransmits, ArtifactWithOpt, MutablePool, UnvalidatedArtifact,
     ValidatedPoolReader,
 };
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::IDkgMessageId,
     consensus::{
+        CatchUpPackage,
         idkg::{
             EcdsaSigShare, IDkgArtifactId, IDkgMessage, IDkgMessageType, IDkgPrefixOf, IDkgStats,
             IterationPattern, SchnorrSigShare, SigShare, SignedIDkgComplaint, SignedIDkgOpening,
             VetKdKeyShare,
         },
-        CatchUpPackage,
     },
     crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
     crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing},
@@ -90,7 +90,7 @@ impl IDkgObjectPool {
     {
         Box::new(self.objects.iter().map(|(key, object)| {
             let inner = T::try_from(object.clone()).unwrap_or_else(|err| {
-                panic!("Failed to convert IDkgMessage to inner type: {:?}", err)
+                panic!("Failed to convert IDkgMessage to inner type: {err:?}")
             });
             (key.clone(), inner)
         }))
@@ -129,7 +129,7 @@ impl IDkgObjectPool {
                 .take_while(move |(key, _)| is_same_pattern_clone(key))
                 .map(|(key, object)| {
                     let inner = T::try_from(object.clone()).unwrap_or_else(|err| {
-                        panic!("Failed to convert IDkgMessage to inner type: {:?}", err)
+                        panic!("Failed to convert IDkgMessage to inner type: {err:?}")
                     });
                     (key.clone(), inner)
                 }),
@@ -532,16 +532,16 @@ mod tests {
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_transcript_id_for_tests;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities_consensus::{fake::*, IDkgStatsNoOp};
+    use ic_test_utilities_consensus::{IDkgStatsNoOp, fake::*};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_5, NODE_6, NODE_7};
     use ic_types::artifact::IdentifiableArtifact;
     use ic_types::consensus::idkg::IDkgComplaintContent;
-    use ic_types::consensus::idkg::{dealing_support_prefix, IDkgObject};
+    use ic_types::consensus::idkg::{IDkgObject, dealing_support_prefix};
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgComplaint;
     use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
-    use ic_types::{signature::BasicSignature, time::UNIX_EPOCH, NodeId};
+    use ic_types::{NodeId, signature::BasicSignature, time::UNIX_EPOCH};
     use std::collections::BTreeSet;
 
     fn create_idkg_pool(config: ArtifactPoolConfig, log: ReplicaLogger) -> IDkgPoolImpl {
@@ -648,10 +648,12 @@ mod tests {
                     IDkgMessage::DealingSupport(support.clone()),
                 )];
                 let result = idkg_pool.apply(change_set);
-                assert!(!result
-                    .transmits
-                    .iter()
-                    .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
+                assert!(
+                    !result
+                        .transmits
+                        .iter()
+                        .any(|x| matches!(x, ArtifactTransmit::Abort(_)))
+                );
                 assert!(matches!(
                     &result.transmits[0], ArtifactTransmit::Deliver(x) if x.artifact.id() == support.message_id()
                 ));
@@ -659,13 +661,11 @@ mod tests {
             }
         }
 
-        let pool_section = if test_unvalidated {
+        (if test_unvalidated {
             idkg_pool.unvalidated()
         } else {
             idkg_pool.validated()
-        };
-
-        pool_section
+        }) as _
     }
 
     // Verifies the prefix based search
@@ -760,15 +760,23 @@ mod tests {
             ]
         );
 
-        assert!(pool_section
-            .dealing_support_by_prefix(dealing_support_prefix(&transcript_50, &NODE_5, &NODE_6))
-            .next()
-            .is_none());
+        assert!(
+            pool_section
+                .dealing_support_by_prefix(dealing_support_prefix(&transcript_50, &NODE_5, &NODE_6))
+                .next()
+                .is_none()
+        );
 
-        assert!(pool_section
-            .dealing_support_by_prefix(dealing_support_prefix(&transcript_2000, &NODE_1, &NODE_2))
-            .next()
-            .is_none());
+        assert!(
+            pool_section
+                .dealing_support_by_prefix(dealing_support_prefix(
+                    &transcript_2000,
+                    &NODE_1,
+                    &NODE_2
+                ))
+                .next()
+                .is_none()
+        );
     }
 
     // Verifies the transcript based search
@@ -870,15 +878,19 @@ mod tests {
             ]
         );
 
-        assert!(pool_section
-            .dealing_support_by_transcript_id(&transcript_50)
-            .next()
-            .is_none());
+        assert!(
+            pool_section
+                .dealing_support_by_transcript_id(&transcript_50)
+                .next()
+                .is_none()
+        );
 
-        assert!(pool_section
-            .dealing_support_by_transcript_id(&transcript_2000)
-            .next()
-            .is_none());
+        assert!(
+            pool_section
+                .dealing_support_by_transcript_id(&transcript_2000)
+                .next()
+                .is_none()
+        );
     }
 
     #[test]
@@ -1075,7 +1087,11 @@ mod tests {
                     });
                     msg
                 };
-                check_state(&idkg_pool, &[msg_id_2.clone()], &[msg_id_1.clone()]);
+                check_state(
+                    &idkg_pool,
+                    std::slice::from_ref(&msg_id_2),
+                    std::slice::from_ref(&msg_id_1),
+                );
 
                 let result = idkg_pool.apply(vec![
                     IDkgChangeAction::MoveToValidated(msg_2),
@@ -1125,7 +1141,7 @@ mod tests {
                 };
                 check_state(
                     &idkg_pool,
-                    &[msg_id_3.clone()],
+                    std::slice::from_ref(&msg_id_3),
                     &[msg_id_1.clone(), msg_id_2.clone()],
                 );
 
@@ -1136,7 +1152,11 @@ mod tests {
                     matches!(&result.transmits[0], ArtifactTransmit::Abort(x) if *x == msg_id_1)
                 );
                 assert!(result.poll_immediately);
-                check_state(&idkg_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
+                check_state(
+                    &idkg_pool,
+                    std::slice::from_ref(&msg_id_3),
+                    std::slice::from_ref(&msg_id_2),
+                );
 
                 let result =
                     idkg_pool.apply(vec![IDkgChangeAction::RemoveValidated(msg_id_2.clone())]);
@@ -1168,7 +1188,7 @@ mod tests {
                     });
                     msg_id
                 };
-                check_state(&idkg_pool, &[msg_id.clone()], &[]);
+                check_state(&idkg_pool, std::slice::from_ref(&msg_id), &[]);
 
                 let result = idkg_pool.apply(vec![IDkgChangeAction::RemoveUnvalidated(msg_id)]);
                 assert!(result.transmits.is_empty());
@@ -1193,7 +1213,7 @@ mod tests {
                     });
                     msg_id
                 };
-                check_state(&idkg_pool, &[msg_id.clone()], &[]);
+                check_state(&idkg_pool, std::slice::from_ref(&msg_id), &[]);
 
                 idkg_pool.apply(vec![IDkgChangeAction::HandleInvalid(
                     msg_id,
@@ -1219,7 +1239,7 @@ mod tests {
                     idkg_pool.apply(change_set);
                     msg_id
                 };
-                check_state(&idkg_pool, &[], &[msg_id.clone()]);
+                check_state(&idkg_pool, &[], std::slice::from_ref(&msg_id));
 
                 idkg_pool.apply(vec![IDkgChangeAction::HandleInvalid(
                     msg_id,

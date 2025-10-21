@@ -1,0 +1,6 @@
+[Unit]
+Description=Collect boot metrics for Prometheus
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/boot-metrics.sh

@@ -1,25 +1,33 @@
-use crate::{
-    payload_builder::IDkgPayloadError, pre_signer::IDkgTranscriptBuilder,
-    utils::algorithm_for_key_id,
-};
-use ic_logger::{debug, error, ReplicaLogger};
+// TODO(CON-1530): Remove this once the new code is called
+#![allow(dead_code)]
+use crate::payload_builder::IDkgPayloadError;
+use ic_interfaces_state_manager::Labeled;
+use ic_logger::{ReplicaLogger, debug, error};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_subnet_features::ChainKeyConfig;
-use ic_replicated_state::metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext;
+use ic_replicated_state::{
+    ReplicatedState, metadata_state::subnet_call_context_manager::IDkgSignWithThresholdContext,
+};
 use ic_types::{
+    Height, NodeId, RegistryVersion,
     consensus::idkg::{
-        self,
+        self, HasIDkgMasterPublicKeyId, IDkgBlockReader, IDkgMasterPublicKeyId, IDkgUIDGenerator,
+        PreSigId, TranscriptAttributes, UnmaskedTranscriptWithAttributes,
         common::{PreSignatureInCreation, PreSignatureRef},
         ecdsa::{PreSignatureQuadrupleRef, QuadrupleInCreation},
         schnorr::{PreSignatureTranscriptRef, TranscriptInCreation},
-        HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgUIDGenerator, PreSigId,
-        TranscriptAttributes, UnmaskedTranscriptWithAttributes,
     },
-    crypto::canister_threshold_sig::idkg::IDkgTranscript,
+    crypto::{
+        AlgorithmId,
+        canister_threshold_sig::idkg::{IDkgTranscript, IDkgTranscriptId},
+    },
     messages::CallbackId,
-    Height, NodeId, RegistryVersion,
 };
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet, BinaryHeap},
+    sync::Arc,
+};
 
 /// Update the pre-signatures in the payload by:
 /// - making new configs when pre-conditions are met;
@@ -29,7 +37,7 @@ use std::collections::{BTreeMap, BTreeSet};
 /// Returns the newly created transcripts.
 pub(super) fn update_pre_signatures_in_creation(
     payload: &mut idkg::IDkgPayload,
-    transcript_cache: &dyn IDkgTranscriptBuilder,
+    mut transcripts: BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     height: Height,
     log: &ReplicaLogger,
 ) -> Result<Vec<IDkgTranscript>, IDkgPayloadError> {
@@ -55,7 +63,7 @@ pub(super) fn update_pre_signatures_in_creation(
                 *pre_signature_id,
                 quadruple,
                 key_transcript,
-                transcript_cache,
+                &mut transcripts,
                 &mut payload.uid_generator,
                 height,
                 log,
@@ -63,7 +71,7 @@ pub(super) fn update_pre_signatures_in_creation(
             PreSignatureInCreation::Schnorr(transcript) => update_schnorr_transcript_in_creation(
                 *pre_signature_id,
                 transcript,
-                transcript_cache,
+                &mut transcripts,
                 height,
                 log,
             )?,
@@ -128,7 +136,7 @@ fn update_ecdsa_quadruple_in_creation(
     pre_signature_id: PreSigId,
     quadruple: &mut QuadrupleInCreation,
     key_transcript: &UnmaskedTranscriptWithAttributes,
-    transcript_cache: &dyn IDkgTranscriptBuilder,
+    transcripts: &mut BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     uid_generator: &mut IDkgUIDGenerator,
     height: Height,
     log: &ReplicaLogger,
@@ -137,67 +145,56 @@ fn update_ecdsa_quadruple_in_creation(
     let registry_version = key_transcript.registry_version();
     let receivers = key_transcript.receivers().clone();
     // Update quadruple with completed transcripts
-    if quadruple.lambda_masked.is_none() {
-        if let Some(transcript) = transcript_cache
-            .get_completed_transcript(quadruple.lambda_config.as_ref().transcript_id)
-        {
-            debug!(
-                log,
-                "update_ecdsa_quadruple_in_creation: {:?} lamdba_masked transcript is made",
-                pre_signature_id
-            );
-            quadruple.lambda_masked =
-                Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
-            new_transcripts.push(transcript);
-        }
+    if quadruple.lambda_masked.is_none()
+        && let Some(transcript) =
+            transcripts.remove(&quadruple.lambda_config.as_ref().transcript_id)
+    {
+        debug!(
+            log,
+            "update_ecdsa_quadruple_in_creation: {:?} lamdba_masked transcript is made",
+            pre_signature_id
+        );
+        quadruple.lambda_masked = Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
-    if quadruple.kappa_unmasked.is_none() {
-        if let Some(transcript) = transcript_cache
-            .get_completed_transcript(quadruple.kappa_unmasked_config.as_ref().transcript_id)
-        {
-            debug!(
-                log,
-                "update_ecdsa_quadruple_in_creation: {:?} kappa_unmasked transcript {:?} is \
+    if quadruple.kappa_unmasked.is_none()
+        && let Some(transcript) =
+            transcripts.remove(&quadruple.kappa_unmasked_config.as_ref().transcript_id)
+    {
+        debug!(
+            log,
+            "update_ecdsa_quadruple_in_creation: {:?} kappa_unmasked transcript {:?} is \
                         made from unmasked config",
-                pre_signature_id,
-                transcript.get_type()
-            );
-            quadruple.kappa_unmasked =
-                Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
-            new_transcripts.push(transcript);
-        }
+            pre_signature_id,
+            transcript.get_type()
+        );
+        quadruple.kappa_unmasked = Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
-    if quadruple.key_times_lambda.is_none() {
-        if let Some(config) = &quadruple.key_times_lambda_config {
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
-                debug!(
-                    log,
-                    "update_ecdsa_quadruple_in_creation: {:?} key_times_lambda transcript is made",
-                    pre_signature_id
-                );
-                quadruple.key_times_lambda =
-                    Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
-                new_transcripts.push(transcript);
-            }
-        }
+    if quadruple.key_times_lambda.is_none()
+        && let Some(config) = &quadruple.key_times_lambda_config
+        && let Some(transcript) = transcripts.remove(&config.as_ref().transcript_id)
+    {
+        debug!(
+            log,
+            "update_ecdsa_quadruple_in_creation: {:?} key_times_lambda transcript is made",
+            pre_signature_id
+        );
+        quadruple.key_times_lambda = Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
-    if quadruple.kappa_times_lambda.is_none() {
-        if let Some(config) = &quadruple.kappa_times_lambda_config {
-            if let Some(transcript) =
-                transcript_cache.get_completed_transcript(config.as_ref().transcript_id)
-            {
-                debug!(
-                    log,
-                    "update_ecdsa_quadruple_in_creation: {:?} kappa_times_lambda transcript is made",
-                    pre_signature_id
-                );
-                quadruple.kappa_times_lambda =
-                    Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
-                new_transcripts.push(transcript);
-            }
-        }
+    if quadruple.kappa_times_lambda.is_none()
+        && let Some(config) = &quadruple.kappa_times_lambda_config
+        && let Some(transcript) = transcripts.remove(&config.as_ref().transcript_id)
+    {
+        debug!(
+            log,
+            "update_ecdsa_quadruple_in_creation: {:?} kappa_times_lambda transcript is made",
+            pre_signature_id
+        );
+        quadruple.kappa_times_lambda =
+            Some(idkg::MaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
     // Check what to do in the next step
     if let (Some(lambda_masked), None) =
@@ -259,25 +256,24 @@ fn update_ecdsa_quadruple_in_creation(
 fn update_schnorr_transcript_in_creation(
     pre_signature_id: PreSigId,
     pre_signature: &mut TranscriptInCreation,
-    transcript_cache: &dyn IDkgTranscriptBuilder,
+    transcripts: &mut BTreeMap<IDkgTranscriptId, IDkgTranscript>,
     height: Height,
     log: &ReplicaLogger,
 ) -> Result<(bool, Vec<IDkgTranscript>), IDkgPayloadError> {
     let mut new_transcripts = Vec::new();
     // Update pre_signature with completed transcripts
-    if pre_signature.blinder_unmasked.is_none() {
-        if let Some(transcript) = transcript_cache
-            .get_completed_transcript(pre_signature.blinder_unmasked_config.as_ref().transcript_id)
-        {
-            debug!(
-                log,
-                "update_schnorr_transcript_in_creation: {:?} blinder_unmasked transcript is made",
-                pre_signature_id
-            );
-            pre_signature.blinder_unmasked =
-                Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
-            new_transcripts.push(transcript);
-        }
+    if pre_signature.blinder_unmasked.is_none()
+        && let Some(transcript) =
+            transcripts.remove(&pre_signature.blinder_unmasked_config.as_ref().transcript_id)
+    {
+        debug!(
+            log,
+            "update_schnorr_transcript_in_creation: {:?} blinder_unmasked transcript is made",
+            pre_signature_id
+        );
+        pre_signature.blinder_unmasked =
+            Some(idkg::UnmaskedTranscript::try_from((height, &transcript))?);
+        new_transcripts.push(transcript);
     }
     Ok((pre_signature.blinder_unmasked.is_some(), new_transcripts))
 }
@@ -409,6 +405,81 @@ fn make_new_pre_signatures_if_needed_helper(
     new_pre_signatures
 }
 
+/// Count the number of pre-signatures for each key ID in the given state,
+/// and all blocks above the state height.
+pub(super) fn count_pre_signatures_total(
+    state: &Labeled<Arc<ReplicatedState>>,
+    block_reader: &dyn IDkgBlockReader,
+) -> BTreeMap<IDkgMasterPublicKeyId, usize> {
+    let mut total = state
+        .get_ref()
+        .pre_signature_stashes()
+        .iter()
+        .map(|(key_id, stash)| (key_id.clone(), stash.pre_signatures.len()))
+        .collect::<BTreeMap<_, _>>();
+
+    block_reader
+        .iter_above(state.height())
+        .flat_map(|idkg| idkg.available_pre_signatures.values())
+        .for_each(|pre_sig| {
+            *total.entry(pre_sig.key_id()).or_default() += 1;
+        });
+
+    total
+}
+
+/// A struct to keep track of the current fill level of a pre-signature stash for a given
+/// key ID and transcript. The [Ord] implementation assigns a higher priority to stashes with
+/// proportionally lower fill level.
+/// Ties between stashes of the same fill level are broken by comparing the key IDs instead.
+#[derive(Clone, Debug, Eq)]
+struct PrioritizedStash<'a> {
+    count: usize,
+    max: usize,
+    key_id: &'a IDkgMasterPublicKeyId,
+    key_transcript: &'a UnmaskedTranscriptWithAttributes,
+}
+
+impl Ord for PrioritizedStash<'_> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Stashes with zero max should receive the least priority
+        if self.max == 0 && other.max == 0 {
+            // Use key_id as a tie breaker
+            return self.key_id.cmp(other.key_id);
+        } else if self.max == 0 {
+            return Ordering::Less;
+        } else if other.max == 0 {
+            return Ordering::Greater;
+        }
+
+        // Compare the fill level by cross-multiplying to avoid floating-point arithmetic
+        let self_level = self.count * other.max;
+        let other_level = other.count * self.max;
+
+        // Reverse the order to make the emptiest stash the greatest priority
+        let res = other_level.cmp(&self_level);
+
+        if res == Ordering::Equal {
+            // Use key_id as a tie breaker
+            return self.key_id.cmp(other.key_id);
+        }
+
+        res
+    }
+}
+
+impl PartialEq for PrioritizedStash<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl PartialOrd for PrioritizedStash<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 /// Create a new masked random transcript config and advance the
 /// next_unused_transcript_id by one.
 fn new_random_config(
@@ -426,7 +497,7 @@ fn new_random_config(
         dealers,
         receivers,
         summary_registry_version,
-        algorithm_for_key_id(key_id),
+        AlgorithmId::from(key_id.inner()),
     )
 }
 
@@ -447,8 +518,141 @@ pub fn new_random_unmasked_config(
         dealers,
         receivers,
         summary_registry_version,
-        algorithm_for_key_id(key_id),
+        AlgorithmId::from(key_id.inner()),
     )
+}
+
+/// Return a new [PreSignatureInCreation] for the given key ID and transcript
+fn start_pre_signature_in_creation(
+    key_id: &IDkgMasterPublicKeyId,
+    key_transcript: &UnmaskedTranscriptWithAttributes,
+    uid_generator: &mut IDkgUIDGenerator,
+) -> PreSignatureInCreation {
+    let registry_version = key_transcript.registry_version();
+    let subnet_nodes: Vec<_> = key_transcript.receivers().iter().copied().collect();
+    match key_id.inner() {
+        MasterPublicKeyId::Ecdsa(ecdsa_key_id) => {
+            let kappa_config =
+                new_random_unmasked_config(key_id, &subnet_nodes, registry_version, uid_generator);
+            let lambda_config =
+                new_random_config(key_id, &subnet_nodes, registry_version, uid_generator);
+            PreSignatureInCreation::Ecdsa(QuadrupleInCreation::new(
+                ecdsa_key_id.clone(),
+                kappa_config,
+                lambda_config,
+            ))
+        }
+        MasterPublicKeyId::Schnorr(schnorr_key_id) => {
+            let blinder_config =
+                new_random_unmasked_config(key_id, &subnet_nodes, registry_version, uid_generator);
+            PreSignatureInCreation::Schnorr(TranscriptInCreation::new(
+                schnorr_key_id.clone(),
+                blinder_config,
+            ))
+        }
+        MasterPublicKeyId::VetKd(_vetkd_key_id) => {
+            // vetKD does not have pre-signatures
+            unreachable!("Not an IDkg Key ID");
+        }
+    }
+}
+
+/// Create new pre-signatures for the emptiest pre-signature stashes
+/// until all stashes are full, or the maximum number of pre-signatures
+/// in creation is reached for this payload.
+pub(super) fn make_new_pre_signatures_by_priority(
+    chain_key_config: &ChainKeyConfig,
+    // The payload that new pre-signatures should be started in
+    idkg_payload: &mut idkg::IDkgPayload,
+    // The total number of existing pre-signatures in the state and
+    // the blockchain up to (including) the parent of this payload
+    total_pre_signatures_up_to_parent: BTreeMap<IDkgMasterPublicKeyId, usize>,
+) {
+    let mut total_pre_signatures = total_pre_signatures_up_to_parent;
+    // Add available and ongoing pre-signatures of this payload to the counter
+    // tracking the stash sizes.
+    idkg_payload
+        .available_pre_signatures
+        .values()
+        .for_each(|pre_sig| {
+            *total_pre_signatures.entry(pre_sig.key_id()).or_default() += 1;
+        });
+    idkg_payload
+        .pre_signatures_in_creation
+        .values()
+        .for_each(|pre_sig| {
+            *total_pre_signatures.entry(pre_sig.key_id()).or_default() += 1;
+        });
+
+    // Initialize the priority queue
+    let mut priority_queue = BinaryHeap::new();
+    for (key_id, key_transcript) in &idkg_payload.key_transcripts {
+        let Some(key_transcript) = key_transcript.current.as_ref() else {
+            continue;
+        };
+        let max_stash_size = chain_key_config
+            .key_config(key_id.inner())
+            .map(|config| config.pre_signatures_to_create_in_advance)
+            .unwrap_or_default();
+        priority_queue.push(PrioritizedStash {
+            count: *total_pre_signatures.get(key_id).unwrap_or(&0),
+            max: max_stash_size as usize,
+            key_id,
+            key_transcript,
+        });
+    }
+
+    loop {
+        // There are no key transcipts to generate pre-signatures for
+        let Some(mut emptiest_stash) = priority_queue.pop() else {
+            return;
+        };
+
+        // The emptiest stash is full -> all stashes are full
+        if emptiest_stash.count >= emptiest_stash.max {
+            return;
+        }
+
+        // The maximum number of transcripts that we want to work on in parallel
+        // in any given payload.
+        let max_capacity = chain_key_config
+            .max_parallel_pre_signature_transcripts_in_creation
+            .unwrap_or(20) as usize;
+
+        // Each ongoing pre-signature in creation consumes some of the maximum capacity.
+        // For instance, Schnorr pre-signatures consist of a single transcript, and
+        // therefore consume 1 transcript in capacity. ECDSA pre-signatures require working
+        // on two transcripts in parallel, and therefore consume 2 capacity points.
+        let available_pre_sig_capacity =
+            max_capacity.saturating_sub(idkg_payload.consumed_pre_sig_capacity());
+
+        // There isn't enough capacity to create a pre-signature of the highest priority
+        // in this payload. Note that the following situation may occur:
+        // The emptiest stash asks for an ECDSA pre-signature, however, there is only
+        // enough capacity to create a Schnorr pre-signature. In that case, we should not
+        // start a new Schnorr pre-signature, and instead wait until enough capacity exists
+        // in the payload to start the creation of a new ECDSA pre-signature, which has
+        // the highest priority. This is to prevent the creation of ECDSA pre-signatures
+        // being starved.
+        if emptiest_stash.key_id.required_pre_sig_capacity() > available_pre_sig_capacity {
+            return;
+        }
+
+        // If there is enough capacity, start the new pre-signature and add it to the payload.
+        let uid_generator = &mut idkg_payload.uid_generator;
+        let pre_signature = start_pre_signature_in_creation(
+            emptiest_stash.key_id,
+            emptiest_stash.key_transcript,
+            uid_generator,
+        );
+        idkg_payload
+            .pre_signatures_in_creation
+            .insert(uid_generator.next_pre_signature_id(), pre_signature);
+
+        // Re-insert the updated stash into the priority queue.
+        emptiest_stash.count += 1;
+        priority_queue.push(emptiest_stash);
+    }
 }
 
 #[cfg(test)]
@@ -456,8 +660,8 @@ pub(super) mod test_utils {
     use super::*;
     use crate::test_utils::IDkgPayloadTestHelper;
     use ic_types::{
-        consensus::idkg::{self, IDkgMasterPublicKeyId, IDkgTranscriptParamsRef},
         NodeId, RegistryVersion,
+        consensus::idkg::{self, IDkgMasterPublicKeyId, IDkgTranscriptParamsRef},
     };
     use std::collections::BTreeMap;
 
@@ -533,30 +737,43 @@ pub(super) mod test_utils {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::{algorithm_for_key_id, test_utils::*, *};
-    use crate::test_utils::{
-        create_available_pre_signature, create_available_pre_signature_with_key_transcript,
-        into_idkg_contexts, set_up_idkg_payload, IDkgPayloadTestHelper, TestIDkgBlockReader,
-        TestIDkgTranscriptBuilder,
+    use super::{test_utils::*, *};
+    use crate::{
+        test_utils::{
+            IDkgPayloadTestHelper, TestIDkgBlockReader, create_available_pre_signature,
+            create_available_pre_signature_with_key_transcript, into_idkg_contexts,
+            set_up_idkg_payload,
+        },
+        utils::block_chain_reader,
     };
     use assert_matches::assert_matches;
+    use ic_consensus_mocks::{Dependencies, dependencies};
+    use ic_consensus_utils::pool_reader::PoolReader;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, CanisterThresholdSigTestEnvironment, IDkgParticipants,
+        CanisterThresholdSigTestEnvironment, IDkgParticipants, generate_key_transcript,
+        mock_transcript, mock_unmasked_transcript_type,
     };
-    use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+    use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::SchnorrAlgorithm;
     use ic_registry_subnet_features::KeyConfig;
     use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::idkg::{
-            common::PreSignatureRef, IDkgMasterPublicKeyId, IDkgPayload, UnmaskedTranscript,
+        SubnetId,
+        batch::BatchPayload,
+        consensus::{
+            BlockPayload, DataPayload, HasHeight, HashedBlock, Payload,
+            dkg::DkgDataPayload,
+            idkg::{
+                IDkgMasterPublicKeyId, IDkgPayload, IDkgTranscriptAttributes, UnmaskedTranscript,
+                common::PreSignatureRef,
+            },
         },
         crypto::canister_threshold_sig::idkg::IDkgTranscriptId,
-        SubnetId,
     };
     use idkg::IDkgTranscriptOperationRef;
+    use rand::prelude::SliceRandom;
     use strum::IntoEnumIterator;
 
     fn set_up(
@@ -579,6 +796,612 @@ pub(super) mod tests {
             .expect("Should successfully update the height");
 
         (idkg_payload, env, block_reader)
+    }
+
+    #[test]
+    fn test_count_pre_signatures_total() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                mut pool,
+                replica_config,
+                ..
+            } = dependencies(pool_config.clone(), 4);
+
+            // Advance 4 rounds without IDkg
+            let mut height = pool.advance_round_normal_operation_n(4);
+            assert_eq!(height.get(), 4);
+
+            // Create an IDkgPayload with available pre-signatures
+            let key_ids = fake_master_public_key_ids_for_all_idkg_algorithms();
+            let (mut idkg_payload, _, _) = set_up(
+                &mut reproducible_rng(),
+                replica_config.subnet_id,
+                key_ids.clone(),
+                height,
+            );
+            // create 3 pre-sigs for the first key, 1 for the second, none for the third
+            for i in 0..3 {
+                create_available_pre_signature(&mut idkg_payload, key_ids[0].clone(), i);
+            }
+            create_available_pre_signature(&mut idkg_payload, key_ids[1].clone(), 3);
+
+            // add this payload 4 times.
+            for _ in 0..4 {
+                let mut block_proposal = pool.make_next_block();
+                let block = block_proposal.content.as_mut();
+                block.payload = Payload::new(
+                    ic_types::crypto::crypto_hash,
+                    BlockPayload::Data(DataPayload {
+                        batch: BatchPayload::default(),
+                        dkg: DkgDataPayload::new_empty(Height::from(0)),
+                        idkg: Some(idkg_payload.clone()),
+                    }),
+                );
+                block_proposal.content =
+                    HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
+                pool.advance_round_with_block(&block_proposal);
+                height = block_proposal.height();
+            }
+            assert_eq!(height.get(), 8);
+
+            // Create the blockchain reader
+            let pool_reader = PoolReader::new(&pool);
+            let block_reader = block_chain_reader(
+                &pool_reader,
+                Height::from(0),
+                pool_reader.get_finalized_tip(),
+                None,
+                &no_op_logger(),
+            )
+            .unwrap();
+
+            // Create two pre-signature stashes, one for the first key, one for a new key
+            let mut stashes = BTreeMap::new();
+            // The first stash has 2 pre-signatures
+            stashes.insert(key_ids[0].clone(), fake_pre_signature_stash(&key_ids[0], 2));
+            let new_key_id = IDkgMasterPublicKeyId::try_from(key_id_with_name(
+                key_ids[0].inner(),
+                "some_new_key",
+            ))
+            .unwrap();
+            // The second stash has 1 pre-signature
+            stashes.insert(new_key_id.clone(), fake_pre_signature_stash(&new_key_id, 1));
+
+            let mut state = ic_test_utilities_state::get_initial_state(0, 0);
+            state
+                .metadata
+                .subnet_call_context_manager
+                .pre_signature_stashes = stashes;
+
+            // Create the certified state at height 6 (there are two more IDkgPayloads above)
+            let certified_state =
+                ic_interfaces_state_manager::Labeled::new(Height::new(6), Arc::new(state));
+
+            // The entire blockchain should now contain pre-signatures for different keys as follows:
+            // [ C ]--[ B1 ]--[ B2 ]--[ B3 ]--[ B4 ]--[   B5   ]---[   B6   ]---[   B7   ]---[   B8   ]
+            //                                        [key0 x 3]   [key0 x 3]   [key0 x 3]   [key0 x 3]
+            //                                        [key1 x 1]   [key1 x 1]   [key1 x 1]   [key1 x 1]
+            //                                                         ||
+            //                                            {State; key0 x 2; key3 x 1}
+
+            // Count the total pre-signatures in and above the state for each key
+            let count = count_pre_signatures_total(&certified_state, &block_reader);
+            assert_eq!(count.len(), 3);
+            // key0: 2 in the stash + 3 at height seven + 3 at height eight = 8
+            assert_eq!(count[&key_ids[0]], 8);
+            // key1: 0 in the stash + 1 at height seven + 1 at height eight = 2
+            assert_eq!(count[&key_ids[1]], 2);
+            // key2: No pre-signatures in the stash or the blockchain
+            assert!(!count.contains_key(&key_ids[2]));
+            // key3: 1 in the stash + 0 at height seven + 0 at height eight = 1
+            assert_eq!(count[&new_key_id], 1);
+        });
+    }
+
+    fn make_stash<'a>(
+        count: usize,
+        max: usize,
+        key_id: &'a IDkgMasterPublicKeyId,
+        key_transcript: &'a UnmaskedTranscriptWithAttributes,
+    ) -> PrioritizedStash<'a> {
+        PrioritizedStash {
+            count,
+            max,
+            key_id,
+            key_transcript,
+        }
+    }
+
+    fn make_key_transcript() -> UnmaskedTranscriptWithAttributes {
+        let mut rng = reproducible_rng();
+        let alg = AlgorithmId::EcdsaSecp256k1;
+        let transcript =
+            mock_transcript(alg, None, mock_unmasked_transcript_type(&mut rng), &mut rng);
+        UnmaskedTranscriptWithAttributes::new(
+            IDkgTranscriptAttributes::new(BTreeSet::new(), alg, RegistryVersion::from(0)),
+            UnmaskedTranscript::try_from((Height::from(0), &transcript)).unwrap(),
+        )
+    }
+
+    #[test]
+    fn test_emptier_stash_has_greater_priority() {
+        let transcript = make_key_transcript();
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+
+        let emptier = make_stash(1, 10, &id1, &transcript);
+        let fuller = make_stash(5, 10, &id2, &transcript);
+
+        // Emptier stash has greater priority
+        assert_eq!(emptier.cmp(&fuller), Ordering::Greater);
+        assert_eq!(fuller.cmp(&emptier), Ordering::Less);
+
+        // switch the key_ids
+        let emptier = make_stash(1, 10, &id2, &transcript);
+        let fuller = make_stash(5, 10, &id1, &transcript);
+        // Emptier stash should still have greater priority
+        assert_eq!(emptier.cmp(&fuller), Ordering::Greater);
+        assert_eq!(fuller.cmp(&emptier), Ordering::Less);
+    }
+
+    #[test]
+    fn test_equal_ratios_uses_key_id_tiebreaker() {
+        let transcript = make_key_transcript();
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+
+        let stash1 = make_stash(2, 10, &id1, &transcript);
+        let stash2 = make_stash(1, 5, &id2, &transcript);
+
+        assert_eq!(id1.cmp(&id2), Ordering::Less);
+        assert_eq!(stash1.cmp(&stash2), Ordering::Less);
+        assert_eq!(stash2.cmp(&stash1), Ordering::Greater);
+
+        // switch the key_ids
+        let stash1 = make_stash(2, 10, &id2, &transcript);
+        let stash2 = make_stash(1, 5, &id1, &transcript);
+        // Order should be reversed
+        assert_eq!(stash1.cmp(&stash2), Ordering::Greater);
+        assert_eq!(stash2.cmp(&stash1), Ordering::Less);
+    }
+
+    #[test]
+    fn test_stash_both_max_zero_orders_by_key_id() {
+        let transcript = make_key_transcript();
+        // both max = 0, order by key_id
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+
+        let stash1 = make_stash(0, 0, &id1, &transcript);
+        // counts shouldn't matter when max = 0
+        let stash2 = make_stash(999, 0, &id2, &transcript);
+
+        assert_eq!(id1.cmp(&id2), Ordering::Less);
+        assert_eq!(stash1.cmp(&stash2), Ordering::Less);
+        assert_eq!(stash2.cmp(&stash1), Ordering::Greater);
+
+        // switch the key_ids
+        let stash1 = make_stash(0, 0, &id2, &transcript);
+        let stash2 = make_stash(999, 0, &id1, &transcript);
+        // Order should be reversed
+        assert_eq!(stash1.cmp(&stash2), Ordering::Greater);
+        assert_eq!(stash2.cmp(&stash1), Ordering::Less);
+    }
+
+    #[test]
+    fn test_zero_count_zero_max_has_lowest_priority() {
+        let transcript = make_key_transcript();
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+        let id3 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Bip340Secp256k1);
+
+        let zero = make_stash(0, 0, &id1, &transcript);
+        let nonzero = make_stash(2, 10, &id2, &transcript);
+        let empty_nonzero = make_stash(0, 10, &id3, &transcript);
+
+        // Stash with a max of zero has the lowest priority
+        assert_eq!(zero.cmp(&nonzero), Ordering::Less);
+        assert_eq!(nonzero.cmp(&zero), Ordering::Greater);
+        assert_eq!(empty_nonzero.cmp(&nonzero), Ordering::Greater);
+        assert_eq!(empty_nonzero.cmp(&zero), Ordering::Greater);
+
+        // switch the key_ids
+        let zero = make_stash(0, 0, &id2, &transcript);
+        let nonzero = make_stash(2, 10, &id3, &transcript);
+        let empty_nonzero = make_stash(0, 10, &id1, &transcript);
+        // Stash with a max of zero should still have the lower priority
+        assert_eq!(zero.cmp(&nonzero), Ordering::Less);
+        assert_eq!(nonzero.cmp(&zero), Ordering::Greater);
+        assert_eq!(empty_nonzero.cmp(&nonzero), Ordering::Greater);
+        assert_eq!(empty_nonzero.cmp(&zero), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_max_zero_has_lowest_priority() {
+        let transcript = make_key_transcript();
+        let id1 = fake_ecdsa_idkg_master_public_key_id();
+        let id2 = fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519);
+
+        // Both stashes are over-filled
+        let zero = make_stash(10, 0, &id1, &transcript);
+        let nonzero = make_stash(15, 5, &id2, &transcript);
+
+        // Stash with a max of zero has the lowest priority
+        assert_eq!(zero.cmp(&nonzero), Ordering::Less);
+        assert_eq!(nonzero.cmp(&zero), Ordering::Greater);
+
+        // switch the key_ids
+        let zero = make_stash(10, 0, &id2, &transcript);
+        let nonzero = make_stash(15, 5, &id1, &transcript);
+        // Stash with a max of zero should still have lower priority
+        assert_eq!(zero.cmp(&nonzero), Ordering::Less);
+        assert_eq!(nonzero.cmp(&zero), Ordering::Greater);
+    }
+
+    #[test]
+    fn test_stash_equality() {
+        let transcript = make_key_transcript();
+        // All stashes have the same id
+        let id = fake_ecdsa_idkg_master_public_key_id();
+
+        // Both stashes have the same ratio
+        let ratio1 = make_stash(1, 5, &id, &transcript);
+        let ratio2 = make_stash(2, 10, &id, &transcript);
+
+        // Both stashes have a count of 0
+        let zero_count1 = make_stash(0, 5, &id, &transcript);
+        let zero_count2 = make_stash(0, 10, &id, &transcript);
+
+        // Both stashes have a max of 0
+        let zero_max1 = make_stash(0, 0, &id, &transcript);
+        let zero_max2 = make_stash(10, 0, &id, &transcript);
+
+        for (a, b) in [
+            (ratio1, ratio2),
+            (zero_count1, zero_count2),
+            (zero_max1, zero_max2),
+        ] {
+            assert_eq!(a.cmp(&b), Ordering::Equal);
+            assert_eq!(b.cmp(&a), Ordering::Equal);
+            assert_eq!(a.cmp(&a), Ordering::Equal);
+            assert_eq!(b.cmp(&b), Ordering::Equal);
+        }
+    }
+
+    #[test]
+    fn sort_orders_as_specified() {
+        fn make_key_id(i: u64) -> IDkgMasterPublicKeyId {
+            let key_id = fake_ecdsa_idkg_master_public_key_id().inner().clone();
+            key_id_with_name(&key_id, &format!("some_key{i}"))
+                .try_into()
+                .unwrap()
+        }
+
+        let ids = (0..6).map(make_key_id).collect::<Vec<_>>();
+        let transcript = make_key_transcript();
+
+        let expected = vec![
+            make_stash(5, 0, &ids[3], &transcript),  // zero max
+            make_stash(0, 0, &ids[4], &transcript),  // zero max but larger key_id than id 3
+            make_stash(5, 10, &ids[2], &transcript), // ratio 0.5
+            make_stash(2, 10, &ids[1], &transcript), // ratio 0.2
+            make_stash(1, 5, &ids[2], &transcript),  // ratio 0.2 tie but larger key_id
+            make_stash(1, 10, &ids[0], &transcript), // ratio 0.1 has highest priority
+        ];
+
+        let mut shuffled = expected.clone();
+
+        shuffled.shuffle(&mut reproducible_rng());
+        shuffled.sort();
+
+        assert_eq!(expected, shuffled);
+    }
+
+    /// Make a [ChainKeyConfig] with the given payload and stash capacities
+    fn make_config(
+        payload_capacity: Option<u32>,
+        stash_capacity: BTreeMap<IDkgMasterPublicKeyId, usize>,
+    ) -> ChainKeyConfig {
+        ChainKeyConfig {
+            key_configs: stash_capacity
+                .into_iter()
+                .map(|(key_id, max)| KeyConfig {
+                    key_id: key_id.inner().clone(),
+                    pre_signatures_to_create_in_advance: max as u32,
+                    max_queue_size: 20,
+                })
+                .collect(),
+            signature_request_timeout_ns: None,
+            idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: payload_capacity,
+        }
+    }
+
+    #[test]
+    fn test_payload_without_key_doesnt_start_pre_signature() {
+        let key_ids = fake_master_public_key_ids_for_all_idkg_algorithms();
+        let stash_capacity = key_ids.iter().cloned().map(|id| (id, 100)).collect();
+        let (mut payload, _, _) = set_up_idkg_payload(
+            &mut reproducible_rng(),
+            subnet_test_id(1),
+            /*nodes_count=*/ 4,
+            key_ids,
+            /*should_create_key_transcript=*/ false,
+        );
+
+        make_new_pre_signatures_by_priority(
+            &make_config(Some(20), stash_capacity),
+            &mut payload,
+            BTreeMap::new(), // There are no pre-signatures in the stash
+        );
+
+        // There are no key transcripts, so no pre-signatures can be created even if there is capacity
+        // in the payload and the stashes.
+        assert!(payload.pre_signatures_in_creation.is_empty());
+    }
+
+    fn count_pre_sigs_in_creation(payload: &IDkgPayload) -> BTreeMap<IDkgMasterPublicKeyId, usize> {
+        let mut map = BTreeMap::new();
+        payload
+            .pre_signatures_in_creation
+            .values()
+            .for_each(|pre_sig| {
+                *map.entry(pre_sig.key_id()).or_default() += 1;
+            });
+        map
+    }
+
+    #[test]
+    fn test_pre_signatures_are_started_up_to_payload_capacity() {
+        let key_ids = fake_master_public_key_ids_for_all_idkg_algorithms();
+        let stash_capacity: BTreeMap<_, _> = key_ids.iter().cloned().map(|id| (id, 100)).collect();
+        let (mut payload, _, _) = set_up_idkg_payload(
+            &mut reproducible_rng(),
+            subnet_test_id(1),
+            /*nodes_count=*/ 4,
+            key_ids.clone(),
+            /*should_create_key_transcript=*/ true,
+        );
+
+        let payload_capacity = 20;
+        make_new_pre_signatures_by_priority(
+            &make_config(Some(payload_capacity), stash_capacity.clone()),
+            &mut payload,
+            BTreeMap::new(), // There are no pre-signatures in the stash
+        );
+
+        // The entire payload capacity should be consumed
+        assert_eq!(
+            payload.consumed_pre_sig_capacity(),
+            payload_capacity as usize
+        );
+        let count = count_pre_sigs_in_creation(&payload);
+        // The same amount of pre-signatures should be started for each key
+        assert_eq!(count.len(), key_ids.len());
+        for key_id in key_ids {
+            assert_eq!(count[&key_id], 5);
+        }
+
+        // The payload capacity was reduced (i.e. via proposal)
+        let reduced_capacity = 10;
+        // No new pre-signatures should be created (consumed capacity exceeds available capacity)
+        let mut payload_2 = payload.clone();
+        make_new_pre_signatures_by_priority(
+            &make_config(Some(reduced_capacity), stash_capacity),
+            &mut payload_2,
+            BTreeMap::new(), // There are no pre-signatures in the stash
+        );
+        assert_eq!(payload, payload_2);
+    }
+
+    #[test]
+    fn test_pre_signatures_are_started_up_to_stash_capacity() {
+        let key_ids = fake_master_public_key_ids_for_all_idkg_algorithms();
+        let stash_capacity: BTreeMap<_, usize> =
+            key_ids.iter().cloned().map(|id| (id, 100)).collect();
+        let (mut payload, _, _) = set_up_idkg_payload(
+            &mut reproducible_rng(),
+            subnet_test_id(1),
+            /*nodes_count=*/ 4,
+            key_ids.clone(),
+            /*should_create_key_transcript=*/ true,
+        );
+
+        let payload_capacity = 20;
+        make_new_pre_signatures_by_priority(
+            &make_config(Some(payload_capacity), stash_capacity.clone()),
+            &mut payload,
+            stash_capacity, // All stashes are already filled to capacity
+        );
+
+        // No pre-signatures should be started
+        assert_eq!(payload.consumed_pre_sig_capacity(), 0);
+    }
+
+    #[test]
+    fn test_no_pre_signatures_are_started_if_stash_capacity_exceeded() {
+        let key_ids = fake_master_public_key_ids_for_all_idkg_algorithms();
+        let stash_capacity = key_ids.iter().cloned().map(|id| (id, 100)).collect();
+        // The stash level is higher than the configured capacity
+        let stash_level = key_ids.iter().cloned().map(|id| (id, 200)).collect();
+        let (mut payload, _, _) = set_up_idkg_payload(
+            &mut reproducible_rng(),
+            subnet_test_id(1),
+            /*nodes_count=*/ 4,
+            key_ids.clone(),
+            /*should_create_key_transcript=*/ true,
+        );
+
+        let payload_capacity = 20;
+        make_new_pre_signatures_by_priority(
+            &make_config(Some(payload_capacity), stash_capacity),
+            &mut payload,
+            stash_level,
+        );
+
+        // No pre-signatures should be started
+        assert_eq!(payload.consumed_pre_sig_capacity(), 0);
+    }
+
+    #[test]
+    fn test_no_pre_signatures_are_started_for_max_zero_stashes() {
+        let key_ids = vec![
+            fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Bip340Secp256k1),
+            fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519),
+        ];
+        let stash_capacity =
+            BTreeMap::from_iter([(key_ids[0].clone(), 100), (key_ids[1].clone(), 0)]);
+        let (mut payload, _, _) = set_up_idkg_payload(
+            &mut reproducible_rng(),
+            subnet_test_id(1),
+            /*nodes_count=*/ 4,
+            key_ids.clone(),
+            /*should_create_key_transcript=*/ true,
+        );
+
+        let payload_capacity = 20;
+        make_new_pre_signatures_by_priority(
+            &make_config(Some(payload_capacity), stash_capacity.clone()),
+            &mut payload,
+            BTreeMap::new(), // There are no pre-signatures in the stash
+        );
+
+        // New pre-signatures should be started up to the payload capacity
+        assert_eq!(
+            payload.consumed_pre_sig_capacity(),
+            payload_capacity as usize
+        );
+        // All pre-signatures should be started for the nonzero stash
+        let count = count_pre_sigs_in_creation(&payload);
+        assert_eq!(count.len(), 1);
+        assert_eq!(count[&key_ids[0]], 20);
+    }
+
+    #[test]
+    fn test_ecdsa_pre_signatures_cannot_be_starved() {
+        let key_ids = vec![
+            fake_ecdsa_idkg_master_public_key_id(),
+            fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519),
+        ];
+        let (mut payload, _, _) = set_up_idkg_payload(
+            &mut reproducible_rng(),
+            subnet_test_id(1),
+            /*nodes_count=*/ 4,
+            key_ids.clone(),
+            /*should_create_key_transcript=*/ true,
+        );
+
+        // Setup: ECDSA stash is full, we should start 19 schnorr pre-signatures in creation
+        let payload_capacity = 19;
+        // Simulate a full ECDSA stash by setting the max size to 0, the Schnorr stash has a capacity of 100
+        let stash_capacity =
+            BTreeMap::from_iter([(key_ids[0].clone(), 0), (key_ids[1].clone(), 100)]);
+        make_new_pre_signatures_by_priority(
+            &make_config(Some(payload_capacity), stash_capacity),
+            &mut payload,
+            BTreeMap::new(), // There are no pre-signatures in the stash
+        );
+
+        // There should now be 19 ongoing Schnorr pre-signatures in the payload
+        assert_eq!(
+            payload.consumed_pre_sig_capacity(),
+            payload_capacity as usize
+        );
+        let count = count_pre_sigs_in_creation(&payload);
+        assert_eq!(count.len(), 1);
+        assert_eq!(count[&key_ids[1]], 19);
+
+        // Test: ECDSA stash has space (highest priority), but there is not enough capacity in the payload
+        let payload_capacity = 20;
+        // Now both stashes have a max size of 100
+        let stash_capacity = key_ids.iter().cloned().map(|id| (id, 100)).collect();
+        make_new_pre_signatures_by_priority(
+            &make_config(Some(payload_capacity), stash_capacity),
+            &mut payload, // The payload still contains the 19 ongoing Schnorr pre-signatures in creation
+            BTreeMap::new(), // There are no pre-signatures in the stash
+        );
+
+        // The open capacity should not have been consumed by another Schnorr pre-signature
+        // since it is lower priority.
+        assert_eq!(
+            payload.consumed_pre_sig_capacity(),
+            (payload_capacity - 1) as usize
+        );
+        let count = count_pre_sigs_in_creation(&payload);
+        assert_eq!(count.len(), 1);
+        assert_eq!(count[&key_ids[1]], 19);
+    }
+
+    #[test]
+    fn test_pre_signatures_are_started_for_the_emptiest_stash() {
+        let key_ids = vec![
+            fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Bip340Secp256k1),
+            fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519),
+        ];
+        let stash_capacity = key_ids.iter().cloned().map(|id| (id, 100)).collect();
+        let (mut payload, _, _) = set_up_idkg_payload(
+            &mut reproducible_rng(),
+            subnet_test_id(1),
+            /*nodes_count=*/ 4,
+            key_ids.clone(),
+            /*should_create_key_transcript=*/ true,
+        );
+
+        make_new_pre_signatures_by_priority(
+            // A capacity of `None` should default to 20
+            &make_config(None, stash_capacity),
+            &mut payload,
+            BTreeMap::from_iter([
+                // The first key already has some pre-signatures
+                (key_ids[0].clone(), 50),
+                (key_ids[1].clone(), 0),
+            ]),
+        );
+
+        assert_eq!(payload.consumed_pre_sig_capacity(), 20);
+        let count = count_pre_sigs_in_creation(&payload);
+        assert_eq!(count.len(), 1);
+        assert_eq!(count[&key_ids[1]], 20);
+    }
+
+    #[test]
+    fn test_available_pre_signatures_are_considered_when_creating_new_ones() {
+        let key_ids = vec![
+            fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Bip340Secp256k1),
+            fake_schnorr_idkg_master_public_key_id(SchnorrAlgorithm::Ed25519),
+        ];
+        let stash_capacity = key_ids.iter().cloned().map(|id| (id, 100)).collect();
+        let (mut payload, _, _) = set_up_idkg_payload(
+            &mut reproducible_rng(),
+            subnet_test_id(1),
+            /*nodes_count=*/ 4,
+            key_ids.clone(),
+            /*should_create_key_transcript=*/ true,
+        );
+
+        // add 4 avaliable pre-signature for the second key into the payload
+        for i in 0..4 {
+            create_available_pre_signature(&mut payload, key_ids[1].clone(), i);
+        }
+
+        let payload_capacity = 20;
+        make_new_pre_signatures_by_priority(
+            &make_config(Some(payload_capacity), stash_capacity),
+            &mut payload,
+            key_ids.iter().cloned().map(|id| (id, 50)).collect(),
+        );
+
+        // We should create a total of 20 pre-signatures
+        assert_eq!(
+            payload.consumed_pre_sig_capacity(),
+            payload_capacity as usize
+        );
+        let count = count_pre_sigs_in_creation(&payload);
+        assert_eq!(count.len(), 2);
+        // There are 4 more available pre-signatures for the second key in the payload already,
+        // So we should create 4 more for the first key
+        assert_eq!(count[&key_ids[0]], 12);
+        assert_eq!(count[&key_ids[1]], 8);
     }
 
     #[test]
@@ -628,7 +1451,7 @@ pub(super) mod tests {
                     MasterPublicKeyId::Schnorr(transcript.key_id.clone())
                 );
                 let config = transcript.blinder_unmasked_config.as_ref();
-                assert_eq!(config.algorithm_id, algorithm_for_key_id(key_id));
+                assert_eq!(config.algorithm_id, AlgorithmId::from(key_id.inner()));
                 assert_eq!(config.registry_version, registry_version);
                 assert_eq!(config.dealers, config.receivers);
                 assert_eq!(config.dealers, BTreeSet::from(*nodes));
@@ -729,7 +1552,7 @@ pub(super) mod tests {
             &mut rng,
         );
         let block_reader = TestIDkgBlockReader::new();
-        let transcript_builder = TestIDkgTranscriptBuilder::new();
+        let mut transcripts = BTreeMap::new();
         let height = Height::from(1);
         let mut uid_generator = IDkgUIDGenerator::new(subnet_test_id(0), height);
 
@@ -749,7 +1572,7 @@ pub(super) mod tests {
             let (finished, new_transcripts) = update_schnorr_transcript_in_creation(
                 PreSigId(0),
                 &mut pre_sig,
-                &transcript_builder,
+                &mut transcripts,
                 height,
                 &no_op_logger(),
             )
@@ -764,12 +1587,12 @@ pub(super) mod tests {
                 &param.translate(&block_reader).unwrap(),
                 &mut rng,
             );
-            transcript_builder.add_transcript(param.transcript_id, blinder_unmasked_transcript);
+            transcripts.insert(param.transcript_id, blinder_unmasked_transcript);
 
             let (finished, new_transcripts) = update_schnorr_transcript_in_creation(
                 PreSigId(0),
                 &mut pre_sig,
-                &transcript_builder,
+                &mut transcripts,
                 height,
                 &no_op_logger(),
             )
@@ -781,7 +1604,7 @@ pub(super) mod tests {
             let (finished, new_transcripts) = update_schnorr_transcript_in_creation(
                 PreSigId(0),
                 &mut pre_sig,
-                &transcript_builder,
+                &mut transcripts,
                 height,
                 &no_op_logger(),
             )
@@ -799,7 +1622,7 @@ pub(super) mod tests {
         let key_id = fake_ecdsa_idkg_master_public_key_id();
         let (mut payload, env, mut block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
-        let transcript_builder = TestIDkgTranscriptBuilder::new();
+        let mut transcripts = BTreeMap::new();
 
         // Start quadruple creation
         let [ref lambda_config_ref, ref kappa_unmasked_config_ref] =
@@ -820,7 +1643,7 @@ pub(super) mod tests {
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            &transcript_builder,
+            transcripts.clone(),
             cur_height,
             &no_op_logger(),
         );
@@ -837,13 +1660,13 @@ pub(super) mod tests {
             &lambda_config_ref.translate(&block_reader).unwrap(),
             &mut rng,
         );
-        transcript_builder.add_transcript(lambda_config_ref.transcript_id, lambda_transcript);
+        transcripts.insert(lambda_config_ref.transcript_id, lambda_transcript);
         let cur_height = Height::new(2000);
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            &transcript_builder,
+            transcripts.clone(),
             cur_height,
             &no_op_logger(),
         )
@@ -868,7 +1691,7 @@ pub(super) mod tests {
             &kappa_unmasked_config_ref.translate(&block_reader).unwrap(),
             &mut rng,
         );
-        transcript_builder.add_transcript(
+        transcripts.insert(
             kappa_unmasked_config_ref.transcript_id,
             kappa_unmasked_transcript,
         );
@@ -877,7 +1700,7 @@ pub(super) mod tests {
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            &transcript_builder,
+            transcripts.clone(),
             cur_height,
             &no_op_logger(),
         )
@@ -909,8 +1732,7 @@ pub(super) mod tests {
                 &mut rng,
             )
         };
-        transcript_builder
-            .add_transcript(kappa_times_lambda_config_id, kappa_times_lambda_transcript);
+        transcripts.insert(kappa_times_lambda_config_id, kappa_times_lambda_transcript);
         let key_times_lambda_transcript = {
             let param = payload
                 .iter_transcript_configs_in_creation()
@@ -922,13 +1744,13 @@ pub(super) mod tests {
                 &mut rng,
             )
         };
-        transcript_builder.add_transcript(key_times_lambda_config_id, key_times_lambda_transcript);
+        transcripts.insert(key_times_lambda_config_id, key_times_lambda_transcript);
         let cur_height = Height::new(5000);
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            &transcript_builder,
+            transcripts,
             cur_height,
             &no_op_logger(),
         )
@@ -969,7 +1791,7 @@ pub(super) mod tests {
         let key_id: IDkgMasterPublicKeyId = fake_schnorr_idkg_master_public_key_id(algorithm);
         let (mut payload, env, mut block_reader) =
             set_up(&mut rng, subnet_id, vec![key_id.clone()], Height::from(100));
-        let transcript_builder = TestIDkgTranscriptBuilder::new();
+        let mut transcripts = BTreeMap::new();
 
         // Start pre-signature creation
         let [ref blinder_config_ref] = create_new_pre_signature_in_creation(
@@ -988,7 +1810,7 @@ pub(super) mod tests {
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            &transcript_builder,
+            transcripts.clone(),
             cur_height,
             &no_op_logger(),
         );
@@ -1005,13 +1827,13 @@ pub(super) mod tests {
             &blinder_config_ref.translate(&block_reader).unwrap(),
             &mut rng,
         );
-        transcript_builder.add_transcript(blinder_config_ref.transcript_id, blinder_transcript);
+        transcripts.insert(blinder_config_ref.transcript_id, blinder_transcript);
         let cur_height = Height::new(2000);
         let update_res = payload.uid_generator.update_height(cur_height);
         assert!(update_res.is_ok());
         let result = update_pre_signatures_in_creation(
             &mut payload,
-            &transcript_builder,
+            transcripts.clone(),
             cur_height,
             &no_op_logger(),
         )
@@ -1043,7 +1865,7 @@ pub(super) mod tests {
             .expect("Translating should succeed");
         assert_eq!(
             translated.blinder_unmasked().algorithm_id,
-            algorithm_for_key_id(&key_id)
+            AlgorithmId::from(key_id.inner())
         );
     }
 
@@ -1078,7 +1900,7 @@ pub(super) mod tests {
             &env,
             &dealers,
             &receivers,
-            algorithm_for_key_id(&key_id),
+            AlgorithmId::from(key_id.inner()),
             &mut rng,
         );
         let key_transcript2 =
@@ -1185,7 +2007,7 @@ pub(super) mod tests {
             &env,
             &dealers,
             &receivers,
-            algorithm_for_key_id(&key_id),
+            AlgorithmId::from(key_id.inner()),
             &mut rng,
         );
         let other_key_transcript =

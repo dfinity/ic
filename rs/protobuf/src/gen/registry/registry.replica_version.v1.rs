@@ -9,9 +9,38 @@ pub struct ReplicaVersionRecord {
     /// that corresponds to this version
     #[prost(string, repeated, tag = "7")]
     pub release_package_urls: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
-    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
-    #[prost(string, optional, tag = "8")]
-    pub guest_launch_measurement_sha256_hex: ::core::option::Option<::prost::alloc::string::String>,
+    /// The SEV-SNP measurements that belong to this release
+    #[prost(message, optional, tag = "9")]
+    pub guest_launch_measurements: ::core::option::Option<GuestLaunchMeasurements>,
+}
+#[derive(
+    serde::Serialize, serde::Deserialize, candid::CandidType, Eq, Clone, PartialEq, ::prost::Message,
+)]
+pub struct GuestLaunchMeasurements {
+    /// A list of valid SEV-SNP measurements. One release can have multiple valid
+    /// measurements, e.g. depending on the kernel command line used to launch the
+    /// guest. Must be non-empty.
+    #[prost(message, repeated, tag = "1")]
+    pub guest_launch_measurements: ::prost::alloc::vec::Vec<GuestLaunchMeasurement>,
+}
+#[derive(
+    serde::Serialize, serde::Deserialize, candid::CandidType, Eq, Clone, PartialEq, ::prost::Message,
+)]
+pub struct GuestLaunchMeasurement {
+    /// SEV-SNP measurement (48 bytes)
+    #[prost(bytes = "vec", tag = "1")]
+    pub measurement: ::prost::alloc::vec::Vec<u8>,
+    /// Metadata about how the measurement was obtained
+    #[prost(message, optional, tag = "2")]
+    pub metadata: ::core::option::Option<GuestLaunchMeasurementMetadata>,
+}
+#[derive(
+    serde::Serialize, serde::Deserialize, candid::CandidType, Eq, Clone, PartialEq, ::prost::Message,
+)]
+pub struct GuestLaunchMeasurementMetadata {
+    /// Kernel command line string used to launch the guest
+    #[prost(string, tag = "1")]
+    pub kernel_cmdline: ::prost::alloc::string::String,
 }
 /// A list of blessed versions of the IC Replica
 ///

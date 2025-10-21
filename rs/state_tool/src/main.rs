@@ -283,7 +283,7 @@ pub(crate) fn main_inner(args: Vec<String>) {
     };
 
     if let Err(e) = result {
-        eprintln!("{}", e);
+        eprintln!("{e}");
         std::process::exit(1);
     }
 }

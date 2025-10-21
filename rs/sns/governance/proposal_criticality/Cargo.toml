@@ -1,6 +1,6 @@
 [package]
 name = "ic-sns-governance-proposal-criticality"
-edition = "2021"
+edition.workspace = true
 version = "0.0.1"
 
 [dependencies]

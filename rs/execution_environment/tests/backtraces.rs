@@ -26,16 +26,17 @@ const IC0_TRAP_ERROR: &str =
 
 const IC0_TRAP_BACKTRACE: &str = r#"
 Canister Backtrace:
-ic_cdk::api::trap
-ic_cdk::printer::set_panic_hook::{{closure}}
+ic_cdk_executor::set_panic_hook::{{closure}}::{{closure}}
 std::panicking::rust_panic_with_hook
 std::panicking::begin_panic_handler::{{closure}}
 std::sys::backtrace::__rust_end_short_backtrace
-rust_begin_unwind
+__rustc::rust_begin_unwind
 core::panicking::panic_fmt
 _wasm_backtrace_canister::ic0_trap::inner_2
 _wasm_backtrace_canister::ic0_trap::inner
 _wasm_backtrace_canister::ic0_trap::outer
+ic_cdk_executor::in_executor_context
+canister_update ic0_trap
 "#;
 
 fn env_with_backtrace_canister_and_visibility(
@@ -97,14 +98,12 @@ fn assert_error(
     let result = env
         .execute_ingress_as(CONTROLLER, canister_id, method, Encode!(&()).unwrap())
         .unwrap_err();
-    result.assert_contains(code, &format!("{}{}", message, backtrace));
+    result.assert_contains(code, &format!("{message}{backtrace}"));
     let logs = env.canister_log(canister_id);
     let last_error = std::str::from_utf8(&logs.records().back().as_ref().unwrap().content).unwrap();
     assert!(
         last_error.contains(backtrace),
-        "Last log: {} doesn't contain backtrace: {}",
-        last_error,
-        backtrace
+        "Last log: {last_error} doesn't contain backtrace: {backtrace}"
     );
 }
 
@@ -146,8 +145,7 @@ fn no_backtrace_without_feature() {
         let log = std::str::from_utf8(&log.content).unwrap();
         assert!(
             !log.contains("Backtrace"),
-            "Canister log: {} cointains unexpected 'Backtrace'",
-            log,
+            "Canister log: {log} cointains unexpected 'Backtrace'",
         );
     }
 }
@@ -181,8 +179,7 @@ fn no_backtrace_without_name_section() {
         let log = std::str::from_utf8(&log.content).unwrap();
         assert!(
             !log.contains("Backtrace"),
-            "Canister log: {} cointains unexpected 'Backtrace'",
-            log,
+            "Canister log: {log} cointains unexpected 'Backtrace'",
         );
     }
 }
@@ -213,7 +210,9 @@ fn backtrace_test_ic0_trap() {
         canister_id,
         "ic0_trap",
         ErrorCode::CanisterCalledTrap,
-        &format!("Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called `ic0.trap` with message: '{}'", IC0_TRAP_ERROR),
+        &format!(
+            "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister called `ic0.trap` with message: '{IC0_TRAP_ERROR}'"
+        ),
         IC0_TRAP_BACKTRACE,
     );
 }
@@ -229,7 +228,7 @@ fn backtrace_test_stable_oob() {
         "Error from Canister rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister trapped: ",
         r#"stable memory out of bounds
 Canister Backtrace:
-ic0::ic0::stable64_write
+stable64_write
 _wasm_backtrace_canister::stable_oob::inner_2
 _wasm_backtrace_canister::stable_oob::inner
 _wasm_backtrace_canister::stable_oob::outer
@@ -286,9 +285,7 @@ mod visibility {
             std::str::from_utf8(&logs.records().back().as_ref().unwrap().content).unwrap();
         assert!(
             last_error.contains(backtrace),
-            "Last log: {} doesn't contain backtrace: {}",
-            last_error,
-            backtrace
+            "Last log: {last_error} doesn't contain backtrace: {backtrace}"
         );
     }
 

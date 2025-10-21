@@ -3,7 +3,7 @@
   <uuid>{{domain_uuid}}</uuid>
   <metadata>
     <libosinfo:libosinfo xmlns:libosinfo="http://libosinfo.org/xmlns/libvirt/domain/1.0">
-      <libosinfo:os id="http://ubuntu.com/ubuntu/20.04"/>
+      <libosinfo:os id="http://ubuntu.com/ubuntu/24.04"/>
     </libosinfo:libosinfo>
   </metadata>
   <memory unit='GiB'>{{vm_memory}}</memory>
@@ -18,6 +18,10 @@
     <topology sockets='2' cores='{{nr_of_vcpus / 4}}' threads='2'/>
     <feature policy='require' name='topoext'/>
   </cpu>
+  <commandline xmlns="http://libvirt.org/schemas/domain/qemu/1.0">
+    <arg value='-cpu'/>
+    <arg value='EPYC-v4,topoext=on,l3-cache=off'/>
+  </commandline>
   {% endif -%}
 
   {%- if enable_sev -%}
@@ -26,19 +30,24 @@
     <reducedPhysBits>1</reducedPhysBits>
     <policy>30000</policy>
   </launchSecurity>
-  <memoryBacking>
-    <locked/>
-  </memoryBacking>
   {% endif -%}
 
   <resource>
     <partition>/machine</partition>
   </resource>
-  <os>
+  <os type='efi'>
     <type arch='x86_64' machine='pc-q35-9.2'>hvm</type>
+    <boot dev='hd'/>
+
+    {#- We must only use the SEV firmware if SEV is enabled, otherwise we must use the non-SEV firmware shipped with
+    the HostOS -#}
+    {% if direct_boot.is_some() && enable_sev %}
+    <loader readonly='yes'>{{direct_boot.as_ref().unwrap().ovmf_sev.display()}}</loader>
+    {%- else %}
     <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE_4M.fd</loader>
     <nvram>/var/lib/libvirt/qemu/nvram/{{domain_name}}_VARS.fd</nvram>
-    <boot dev='hd'/>
+    {%- endif %}
+
     {%- if let Some(direct_boot) = direct_boot %}
     <kernel>{{direct_boot.kernel.display()}}</kernel>
     <initrd>{{direct_boot.initrd.display()}}</initrd>
@@ -66,7 +75,7 @@
     <emulator>/usr/bin/qemu-system-x86_64</emulator>
     <disk type='block' device='disk'>
       <driver name='qemu' type='raw' cache='none' discard='unmap'/>
-      <source dev='{{disk_device}}' index='1'/>
+      <source dev='{{disk_device.display()}}' index='1'/>
       <backingStore/>
       <target dev='vda' bus='virtio'/>
       <alias name='virtio-disk0'/>

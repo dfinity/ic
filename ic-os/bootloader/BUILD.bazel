@@ -10,9 +10,6 @@ exports_files([
     "guestos_boot_args.template",
     "hostos_boot_args.template",
     "setupos_boot_args.template",
-    "guestos_extra_boot_args.template",
-    "hostos_extra_boot_args.template",
-    "setupos_extra_boot_args.template",
 ])
 
 genrule(

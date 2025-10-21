@@ -2,20 +2,20 @@ use canister_test::Canister;
 use dfn_candid::{candid, candid_one};
 use ic_canister_client_sender::Sender;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{i2d, ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
+use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS, i2d};
 use ic_nervous_system_common_test_keys::{
     TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR,
 };
 use ic_sns_governance::{
     pb::v1::{
-        get_proposal_response::Result::{Error, Proposal as ResponseProposal},
-        governance_error::ErrorType::{self, PreconditionFailed},
-        manage_neuron_response::Command,
-        proposal::Action,
         Ballot, GetProposal, GetProposalResponse, ListProposals, ListProposalsResponse,
         ManageNeuronResponse, Motion, NervousSystemParameters, NeuronId, NeuronPermissionList,
         NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
         ProposalRewardStatus, RewardEvent, Vote, VotingRewardsParameters,
+        get_proposal_response::Result::{Error, Proposal as ResponseProposal},
+        governance_error::ErrorType::{self, PreconditionFailed},
+        manage_neuron_response::Command,
+        proposal::Action,
     },
     proposal::{
         PROPOSAL_MOTION_TEXT_BYTES_MAX, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
@@ -25,7 +25,7 @@ use ic_sns_governance::{
 };
 use ic_sns_test_utils::{
     itest_helpers::{
-        state_machine_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo,
+        SnsCanisters, SnsTestsInitPayloadBuilder, UserInfo, state_machine_test_on_sns_subnet,
     },
     now_seconds,
 };
@@ -329,7 +329,7 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
 
             // Inspect the ballots.
             let ballots = &proposal.ballots;
-            assert_eq!(ballots.len(), 3, "{:?}", ballots);
+            assert_eq!(ballots.len(), 3, "{ballots:?}");
             for (neuron_id, accept) in [
                 (user_1_neuron_id, true),
                 (user_2_neuron_id, false),
@@ -343,15 +343,11 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                 let age_seconds = now_seconds() - ballot.cast_timestamp_seconds as f64;
                 assert!(
                     0.0 < age_seconds,
-                    "age_seconds = {}. ballot = {:?}",
-                    age_seconds,
-                    ballot
+                    "age_seconds = {age_seconds}. ballot = {ballot:?}"
                 );
                 assert!(
                     age_seconds < EXPECTED_MAX_BALLOT_AGE,
-                    "age_seconds = {}. ballot = {:?}",
-                    age_seconds,
-                    ballot
+                    "age_seconds = {age_seconds}. ballot = {ballot:?}"
                 );
             }
 
@@ -376,13 +372,11 @@ fn test_voting_with_three_neurons_with_the_same_stake() {
                 let epsilon = 10.0e-9;
                 assert!(
                     (2.0 / 3.0 - approval_rating).abs() < epsilon,
-                    "{:?}",
-                    proposal
+                    "{proposal:?}"
                 );
                 assert!(
                     (1.0 / 3.0 - disapproval_rating).abs() < epsilon,
-                    "{:?}",
-                    proposal
+                    "{proposal:?}"
                 );
             }
 
@@ -439,13 +433,11 @@ fn test_bad_proposal_id_candid_encoding() {
                 .query_("get_proposal", bytes, b"This is not valid candid!".to_vec())
                 .await;
 
-            let expected_error = "failed to decode";
+            let expected_error = "Cannot parse header";
             match res {
                 Err(e) => assert!(
                     e.contains(expected_error),
-                    "Expected error string \"{}\" not present in actual error. Error was: {:?}",
-                    expected_error,
-                    e
+                    "Expected error string \"{expected_error}\" not present in actual error. Error was: {e:?}"
                 ),
                 Ok(_) => panic!("get_proposal should fail to deserialize"),
             };
@@ -519,9 +511,9 @@ fn test_list_proposals_determinism() {
         let mut proposals = vec![];
         for i in 0..10 {
             proposals.push(Proposal {
-                title: format!("Test Motion proposal-{}", i),
+                title: format!("Test Motion proposal-{i}"),
                 action: Some(Action::Motion(Motion {
-                    motion_text: format!("Motion-{}", i),
+                    motion_text: format!("Motion-{i}"),
                 })),
                 ..Default::default()
             });
@@ -947,10 +939,7 @@ fn test_vote_on_non_existent_proposal() {
                 panic!("Registering vote on non-existent proposal should fail")
             }
             Command::Error(err) => err,
-            response => panic!(
-                "Unexpected response when registering a vote: {:?}",
-                response
-            ),
+            response => panic!("Unexpected response when registering a vote: {response:?}"),
         };
 
         assert_eq!(expected_error.error_type, ErrorType::NotFound as i32);
@@ -1597,9 +1586,9 @@ fn test_proposal_garbage_collection() {
         // Create a vector of proposals that can be submitted and then garbage collected
         let proposals: Vec<Proposal> = (0..10)
             .map(|i| Proposal {
-                title: format!("Motion-{}", i),
+                title: format!("Motion-{i}"),
                 action: Some(Action::Motion(Motion {
-                    motion_text: format!("Motion-{}", i),
+                    motion_text: format!("Motion-{i}"),
                 })),
                 ..Default::default()
             })
@@ -1887,18 +1876,16 @@ fn test_change_voting_rewards_round_duration() {
         );
 
         // Step 3.3: Assert that round numbers are as expected.
-        assert_eq!(reward_event_1.round, 1, "{:#?}", reward_events,);
+        assert_eq!(reward_event_1.round, 1, "{reward_events:#?}",);
         assert_eq!(
             reward_event_2.round,
             1 + (critical_proposal_initial_voting_period_seconds / ONE_DAY_SECONDS),
-            "{:#?}",
-            reward_events,
+            "{reward_events:#?}",
         );
         assert_eq!(
             reward_event_3.round,
             2 + (critical_proposal_initial_voting_period_seconds / ONE_DAY_SECONDS),
-            "{:#?}",
-            reward_events,
+            "{reward_events:#?}",
         );
 
         // Step 3.4: Inspect the times of reward_event_(2|3) to see that the new
@@ -1907,16 +1894,14 @@ fn test_change_voting_rewards_round_duration() {
             - reward_event_1.end_timestamp_seconds.unwrap();
         assert_eq!(
             delay_2_seconds, critical_proposal_initial_voting_period_seconds,
-            "{:#?}",
-            reward_events,
+            "{reward_events:#?}",
         );
         let delay_3_seconds = reward_event_3.end_timestamp_seconds.unwrap()
             - reward_event_2.end_timestamp_seconds.unwrap();
         assert_eq!(
             delay_3_seconds,
             original_voting_rewards_round_duration_seconds * 2,
-            "{:#?}",
-            reward_events,
+            "{reward_events:#?}",
         );
 
         // Step 3.5: Verify that all proposals have been marked as
@@ -2092,12 +2077,9 @@ fn test_intermittent_proposal_submission() {
                 assert_eq!(
                     delay_seconds % reward_round_duration_seconds,
                     0,
-                    "current_reward_event = {:#?}\n\
-                 previous_reward_event = {:#?}\n\
-                 reward_round_duration_seconds = {}",
-                    current_reward_event,
-                    previous_reward_event,
-                    reward_round_duration_seconds,
+                    "current_reward_event = {current_reward_event:#?}\n\
+                 previous_reward_event = {previous_reward_event:#?}\n\
+                 reward_round_duration_seconds = {reward_round_duration_seconds}",
                 );
 
                 let delay_rounds = delay_seconds / reward_round_duration_seconds;
@@ -2106,12 +2088,9 @@ fn test_intermittent_proposal_submission() {
                     // nondeterminism in our tests. Therefore, we relax this requirement
                     // to avoid flakes.
                     0 < delay_rounds && delay_rounds <= 3,
-                    "current_reward_event = {:#?}\n
-                 previous_reward_event = {:#?}\n
-                 reward_round_duration_seconds = {}",
-                    current_reward_event,
-                    previous_reward_event,
-                    reward_round_duration_seconds,
+                    "current_reward_event = {current_reward_event:#?}\n
+                 previous_reward_event = {previous_reward_event:#?}\n
+                 reward_round_duration_seconds = {reward_round_duration_seconds}",
                 );
 
                 // Assert that the round field in RewardEvent is consistent with the
@@ -2157,10 +2136,8 @@ fn test_intermittent_proposal_submission() {
                 assert!(
                     current_reward_event.total_available_e8s_equivalent
                         > previous_reward_event.total_available_e8s_equivalent,
-                    "current_reward_event = {:#?}\n
-                     previous_reward_event = {:#?}",
-                    current_reward_event,
-                    previous_reward_event,
+                    "current_reward_event = {current_reward_event:#?}\n
+                     previous_reward_event = {previous_reward_event:#?}",
                 );
             }
 
@@ -2216,9 +2193,7 @@ fn test_intermittent_proposal_submission() {
         assert_eq!(
             proposal.reward_event_end_timestamp_seconds.unwrap(),
             current_reward_event.end_timestamp_seconds.unwrap(),
-            "proposal:\n{:#?}\n***\nRewardEvent:\n{:#?}",
-            proposal,
-            current_reward_event,
+            "proposal:\n{proposal:#?}\n***\nRewardEvent:\n{current_reward_event:#?}",
         );
         assert_eq!(proposal.reward_event_round, current_reward_event.round);
 
@@ -2229,9 +2204,7 @@ fn test_intermittent_proposal_submission() {
             .maturity_e8s_equivalent;
         assert!(
             voter_maturity_e8s_equivalent_after > voter_maturity_e8s_equivalent_before,
-            "{} vs. {}",
-            voter_maturity_e8s_equivalent_after,
-            voter_maturity_e8s_equivalent_before,
+            "{voter_maturity_e8s_equivalent_after} vs. {voter_maturity_e8s_equivalent_before}",
         );
 
         // Chapter 3: Make and pass the third proposal, causing proposal 1 to be

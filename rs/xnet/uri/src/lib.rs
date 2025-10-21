@@ -22,13 +22,13 @@ impl fmt::Display for XNetAuthParseError {
         write!(f, "failed to parse xnet authority")?;
         match self {
             Self::InvalidNodeId { input, reason } => {
-                write!(f, "{}: invalid node id: {}", input, reason)
+                write!(f, "{input}: invalid node id: {reason}")
             }
             Self::InvalidRegistryVersion { input, reason } => {
-                write!(f, "{}: invalid registry version: {}", input, reason)
+                write!(f, "{input}: invalid registry version: {reason}")
             }
             Self::InvalidSocketAddress { input, reason } => {
-                write!(f, "{}: invalid socket address: {}", input, reason)
+                write!(f, "{input}: invalid socket address: {reason}")
             }
         }
     }

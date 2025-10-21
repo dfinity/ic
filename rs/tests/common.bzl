@@ -2,19 +2,12 @@
 Common dependencies for system-tests.
 """
 
-load("@mainnet_icos_versions//:defs.bzl", "mainnet_icos_versions")
+load("//bazel:mainnet-icos-images.bzl", "MAINNET_APP", "MAINNET_NNS")
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
-GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
-
-GUESTOS_RUNTIME_DEPS = [GUESTOS_DEV_VERSION]
-
-MAINNET_NNS_SUBNET_REVISION = mainnet_icos_versions["guestos"]["subnets"]["tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"]
-MAINNET_APPLICATION_SUBNET_REVISION = mainnet_icos_versions["guestos"]["subnets"]["io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe"]
-
 MAINNET_ENV = {
-    "MAINNET_NNS_SUBNET_REVISION_ENV": MAINNET_NNS_SUBNET_REVISION,
-    "MAINNET_APPLICATION_SUBNET_REVISION_ENV": MAINNET_APPLICATION_SUBNET_REVISION,
+    "MAINNET_NNS_GUESTOS_REVISION_ENV": MAINNET_NNS["version"],
+    "MAINNET_APP_GUESTOS_REVISION_ENV": MAINNET_APP["version"],
 }
 
 NNS_CANISTER_WASM_PROVIDERS = {
@@ -26,8 +19,8 @@ NNS_CANISTER_WASM_PROVIDERS = {
         "tip-of-branch": "//rs/nns/governance:governance-canister-test",
         "mainnet": "@mainnet_nns_governance_canister//file",
     },
-    "ledger-canister_notify-method": {
-        "tip-of-branch": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-notify-method",
+    "ledger-canister": {
+        "tip-of-branch": "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
         "mainnet": "@mainnet_icp_ledger_canister//file",
     },
     "root-canister": {
@@ -53,6 +46,10 @@ NNS_CANISTER_WASM_PROVIDERS = {
     "node-rewards": {
         "tip-of-branch": "//rs/node_rewards/canister:node-rewards-canister",
         "mainnet": "@mainnet_node-rewards-canister//file",
+    },
+    "migration-canister": {
+        "tip-of-branch": "//rs/migration_canister:migration-canister",
+        "mainnet": "//rs/test_utilities:empty-wasm",
     },
 }
 
@@ -184,4 +181,12 @@ SIGNER_CANISTER_RUNTIME_DEPS = [
 
 SIGNER_CANISTER_ENV = {
     "SIGNER_CANISTER_WASM_PATH": "$(rootpath //rs/tests/test_canisters/signer:signer.wasm.gz)",
+}
+
+IMPERSONATE_UPSTREAMS_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
+    "//rs/tests:impersonate_upstreams_uvm_config_image",
+]
+
+IMPERSONATE_UPSTREAMS_ENV = {
+    "IMPERSONATE_UPSTREAMS_UVM_CONFIG_PATH": "$(rootpath //rs/tests:impersonate_upstreams_uvm_config_image)",
 }

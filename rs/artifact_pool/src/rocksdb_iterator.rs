@@ -33,7 +33,7 @@
 // similar, though simpler, situation:
 // https://github.com/mobilipia/ibchain/blob/6b1a7f9d54a2bec177d04629f2346759fef2c319\
 // /components/merkledb/src/backends/rocksdb.rs
-use rocksdb::{DBRawIterator, ReadOptions, Snapshot, DB};
+use rocksdb::{DB, DBRawIterator, ReadOptions, Snapshot};
 use std::sync::Arc;
 
 /// A standalone iterator for RocksDB read-only snapshots.

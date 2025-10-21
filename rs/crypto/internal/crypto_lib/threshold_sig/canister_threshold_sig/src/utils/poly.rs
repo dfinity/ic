@@ -244,7 +244,7 @@ impl Polynomial {
 
         // We update `base` so that it is always zero on all previous samples, and
         // `poly` so that it has the correct values on the previous samples.
-        for (ref x, ref y) in &samples[1..] {
+        for (x, y) in &samples[1..] {
             if x.curve_type() != curve || y.curve_type() != curve {
                 return Err(CanisterThresholdError::CurveMismatch);
             }
@@ -312,8 +312,7 @@ impl CommitmentOpening {
     pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
         serde_cbor::to_vec(self).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to serialize CommitmentOpening: {}",
-                e
+                "failed to serialize CommitmentOpening: {e}"
             ))
         })
     }
@@ -321,8 +320,7 @@ impl CommitmentOpening {
     pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes).map_err(|e| {
             CanisterThresholdSerializationError(format!(
-                "failed to deserialize CommitmentOpening: {}",
-                e
+                "failed to deserialize CommitmentOpening: {e}"
             ))
         })
     }
@@ -341,14 +339,14 @@ impl Debug for CommitmentOpening {
                 let c1 = o1.curve_type();
                 let c2 = o2.curve_type();
                 if c1 != c2 {
-                    format!("Unexpected mismatch curve {} {}", c1, c2)
+                    format!("Unexpected mismatch curve {c1} {c2}")
                 } else {
-                    format!("{:?}", c1)
+                    format!("{c1:?}")
                 }
             }
         };
 
-        write!(f, "CommitmentOpening::{}({}(REDACTED))", name, curve)
+        write!(f, "CommitmentOpening::{name}({curve}(REDACTED))")
     }
 }
 
@@ -559,12 +557,12 @@ impl From<PedersenCommitment> for PolynomialCommitment {
 
 impl PolynomialCommitment {
     pub fn serialize(&self) -> CanisterThresholdSerializationResult<Vec<u8>> {
-        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+        serde_cbor::to_vec(self).map_err(|e| CanisterThresholdSerializationError(format!("{e}")))
     }
 
     pub fn deserialize(bytes: &[u8]) -> CanisterThresholdSerializationResult<Self> {
         serde_cbor::from_slice::<Self>(bytes)
-            .map_err(|e| CanisterThresholdSerializationError(format!("{}", e)))
+            .map_err(|e| CanisterThresholdSerializationError(format!("{e}")))
     }
 
     /// This returns a stable serialization of the commitment
@@ -791,7 +789,9 @@ impl LagrangeCoefficients {
             numerator[i] = numerator[i].mul(&tmp)?;
         }
 
-        for (lagrange_i, x_i) in numerator.iter_mut().zip(&samples) {
+        let mut denominator = Vec::with_capacity(numerator.len());
+
+        for x_i in &samples {
             // Compute the value at 0 of the i-th Lagrange polynomial that is `0` at the
             // other data points but `1` at `x_i`.
             let mut denom = EccScalar::one(curve_type);
@@ -800,12 +800,18 @@ impl LagrangeCoefficients {
                 denom = denom.mul(&diff)?;
             }
 
-            let inv = match denom.invert() {
-                Some(s) => s,
-                None => return Err(CanisterThresholdError::InterpolationError),
-            };
+            denominator.push(denom);
+        }
 
-            *lagrange_i = lagrange_i.mul(&inv)?;
+        let denominator_inv = match EccScalar::batch_invert_vartime(&denominator) {
+            Ok(i) => i,
+            // This case should never happen in practice due to how we created denominator
+            // in the loop above
+            Err(_) => return Err(CanisterThresholdError::InterpolationError),
+        };
+
+        for (n, d) in numerator.iter_mut().zip(denominator_inv) {
+            *n = n.mul(&d)?;
         }
         Self::new(numerator)
     }

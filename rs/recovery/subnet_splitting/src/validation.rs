@@ -8,7 +8,7 @@ use ic_base_types::SubnetId;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_recovery::error::{RecoveryError, RecoveryResult};
 use ic_types::{consensus::HasHeight, crypto::threshold_sig::ThresholdSigPublicKey};
-use slog::{error, info, Logger};
+use slog::{Logger, error, info};
 use url::Url;
 
 use std::{fmt::Display, path::Path};
@@ -106,7 +106,7 @@ fn validate_original_source_cup_and_extract_state_hash(
         subnet_public_key,
     )
     .map_err(|err| {
-        RecoveryError::ValidationFailed(format!("Failed to validate the CUP signature: {}", err))
+        RecoveryError::ValidationFailed(format!("Failed to validate the CUP signature: {err}"))
     })?;
 
     Ok(state_hash)
@@ -131,7 +131,7 @@ fn validate_state_tree_and_extract_subnet_public_key(
     let bytes = state_tree.lookup_public_key()?;
 
     parse_threshold_sig_key_from_der(bytes).map_err(|err| {
-        RecoveryError::UnexpectedError(format!("Failed to parse the public key bytes: {}", err))
+        RecoveryError::UnexpectedError(format!("Failed to parse the public key bytes: {err}"))
     })
 }
 

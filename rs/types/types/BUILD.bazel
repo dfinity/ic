@@ -3,57 +3,6 @@ load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-error-types",
-    "//rs/bitcoin/replica_types",
-    "//rs/crypto/internal/crypto_lib/types",
-    "//rs/crypto/sha2",
-    "//rs/crypto/tree_hash",
-    "//rs/limits",
-    "//rs/phantom_newtype",
-    "//rs/protobuf",
-    "//rs/types/base_types",
-    "//rs/types/management_canister_types",
-    "//rs/utils",
-    "//rs/utils/validate_eq",
-    "@crate_index//:base64",
-    "@crate_index//:bincode",
-    "@crate_index//:candid",
-    "@crate_index//:hex",
-    "@crate_index//:maplit",
-    "@crate_index//:once_cell",
-    "@crate_index//:prost",
-    "@crate_index//:rand",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_cbor",
-    "@crate_index//:serde_json",
-    "@crate_index//:serde_with",
-    "@crate_index//:strum",
-    "@crate_index//:thiserror",
-    "@crate_index//:thousands",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/test_utils/canister_threshold_sigs",
-    "//rs/crypto/test_utils/reproducible_rng",
-    "//rs/types/types_test_utils",
-    "@crate_index//:assert_matches",
-    "@crate_index//:hex-literal",
-    "@crate_index//:pretty_assertions",
-    "@crate_index//:proptest",
-    "@crate_index//:rand_chacha",
-    "@crate_index//:rusty-fork",
-]
-
-MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/types/exhaustive_derive",
-    "@crate_index//:proptest-derive",
-]
-
 rust_library(
     name = "types",
     srcs = glob(["src/**"]),
@@ -68,7 +17,38 @@ rust_library(
         "//conditions:default": [],
     }),
     version = "0.9.0",
-    deps = DEPENDENCIES + select({
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//packages/ic-heap-bytes",
+        "//rs/bitcoin/replica_types",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/sha2",
+        "//rs/crypto/tree_hash",
+        "//rs/limits",
+        "//rs/phantom_newtype",
+        "//rs/protobuf",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/utils",
+        "//rs/utils/validate_eq",
+        "@crate_index//:base64",
+        "@crate_index//:bincode",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:maplit",
+        "@crate_index//:once_cell",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:serde_json",
+        "@crate_index//:serde_with",
+        "@crate_index//:strum",
+        "@crate_index//:thiserror",
+        "@crate_index//:thousands",
+    ] + select({
         "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
         "//conditions:default": ["@crate_index//:chrono"],
     }),
@@ -77,8 +57,51 @@ rust_library(
 rust_test(
     name = "types_test",
     crate = ":types",
-    proc_macro_deps = MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/types/exhaustive_derive",
+        "@crate_index//:proptest-derive",
+    ],
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//rs/bitcoin/replica_types",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/sha2",
+        "//rs/crypto/test_utils/canister_threshold_sigs",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/tree_hash",
+        "//rs/limits",
+        "//rs/phantom_newtype",
+        "//rs/protobuf",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types_test_utils",
+        "//rs/utils",
+        "//rs/utils/validate_eq",
+        "@crate_index//:assert_matches",
+        "@crate_index//:base64",
+        "@crate_index//:bincode",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:hex-literal",
+        "@crate_index//:maplit",
+        "@crate_index//:once_cell",
+        "@crate_index//:pretty_assertions",
+        "@crate_index//:proptest",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:rusty-fork",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:serde_json",
+        "@crate_index//:serde_with",
+        "@crate_index//:strum",
+        "@crate_index//:thiserror",
+        "@crate_index//:thousands",
+    ],
 )
 
 rust_doc(

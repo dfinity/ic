@@ -116,7 +116,7 @@ impl Client {
     ) {
         if let Some(msg_for_server) = &self.msg_for_server {
             // Append a newline (end of line, EOL, 0xA) so the peer knows where the msg ends
-            let msg_for_server_with_eol = format!("{}\n", msg_for_server);
+            let msg_for_server_with_eol = format!("{msg_for_server}\n");
             #[allow(clippy::disallowed_methods)]
             let num_bytes_written = wr.write(msg_for_server_with_eol.as_bytes()).await.unwrap();
             assert_eq!(num_bytes_written, msg_for_server_with_eol.len());
@@ -154,9 +154,11 @@ impl Client {
                 .read_to_end(&mut bytes_from_server)
                 .await
                 .expect_err("expected error on read_to_end");
-            assert!(error
-                .to_string()
-                .contains(expected_error_substring_when_reading_stream));
+            assert!(
+                error
+                    .to_string()
+                    .contains(expected_error_substring_when_reading_stream)
+            );
         }
     }
 

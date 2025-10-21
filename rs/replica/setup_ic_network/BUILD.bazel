@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/p2p/quic_transport",
     "//rs/p2p/state_sync_manager",
     "//rs/registry/helpers",
+    "//rs/registry/subnet_type",
     "//rs/replicated_state",
     "//rs/state_manager",
     "//rs/types/types",

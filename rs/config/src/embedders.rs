@@ -3,8 +3,8 @@ use std::time::Duration;
 use ic_base_types::NumBytes;
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    NumInstructions, NumOsPages, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
-    MAX_WASM_MEMORY_IN_BYTES,
+    MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, MAX_WASM64_MEMORY_IN_BYTES,
+    NumInstructions, NumOsPages,
 };
 use serde::{Deserialize, Serialize};
 
@@ -124,10 +124,6 @@ pub struct FeatureFlags {
     /// If this flag is enabled, then the output of the `debug_print` system-api
     /// call will be skipped based on heuristics.
     pub rate_limiting_of_debug_prints: FlagStatus,
-    /// Track dirty pages with a write barrier instead of the signal handler.
-    pub write_barrier: FlagStatus,
-    /// Indicates whether the support for 64 bit main memory is enabled
-    pub wasm64: FlagStatus,
     /// Collect a backtrace from the canister when it panics.
     pub canister_backtrace: FlagStatus,
     /// If this flag is enabled, then the environment variables are supported.
@@ -138,10 +134,8 @@ impl FeatureFlags {
     const fn const_default() -> Self {
         Self {
             rate_limiting_of_debug_prints: FlagStatus::Enabled,
-            write_barrier: FlagStatus::Disabled,
-            wasm64: FlagStatus::Enabled,
             canister_backtrace: FlagStatus::Enabled,
-            environment_variables: FlagStatus::Disabled,
+            environment_variables: FlagStatus::Enabled,
         }
     }
 }

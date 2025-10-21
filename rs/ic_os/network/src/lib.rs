@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use regex::Regex;
 
 use crate::systemd::generate_systemd_config_files;
@@ -22,10 +22,6 @@ pub fn generate_network_config(
     eprintln!("Generating IPv6 address");
 
     match &network_settings.ipv6_config {
-        Ipv6Config::RouterAdvertisement => {
-            Err(anyhow!("IC-OS router advertisement is not yet supported"))
-        }
-        Ipv6Config::Fixed(_) => Err(anyhow!("Fixed IP configuration is not yet supported")),
         Ipv6Config::Deterministic(ipv6_config) => {
             let ipv6_address = generated_mac.calculate_slaac(&ipv6_config.prefix)?;
             eprintln!("Using IPv6 address: {ipv6_address}");
@@ -37,6 +33,11 @@ pub fn generate_network_config(
                 &ipv6_address,
             )
         }
+        Ipv6Config::RouterAdvertisement => {
+            Err(anyhow!("IC-OS router advertisement is not yet supported"))
+        }
+        Ipv6Config::Fixed(_) => Err(anyhow!("Fixed IP configuration is not yet supported")),
+        Ipv6Config::Unknown => Err(anyhow!("Unknown Ipv6Config variant")),
     }
 }
 
@@ -71,12 +72,11 @@ fn parse_mac_address_from_ipmitool_output(output: &str) -> Result<MacAddr6> {
         .lines()
         .find(|line| line.trim().starts_with("MAC Address"))
         .context(format!(
-            "Could not find MAC address line in ipmitool output: {}",
-            output
+            "Could not find MAC address line in ipmitool output: {output}"
         ))?;
 
     // Parse MAC line
-    let error_msg = format!("Could not parse MAC address line: {}", mac_line);
+    let error_msg = format!("Could not parse MAC address line: {mac_line}");
     let re = Regex::new(r"MAC Address\s+:\s+(([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2}))")?;
     let captures = re.captures(mac_line).context(error_msg.clone())?;
     let mac = captures.get(1).context(error_msg.clone())?;

@@ -1,7 +1,7 @@
 use crate::host::command_utilities::handle_command_output;
 use crate::protocol::Response;
 use rusb::{Context, Device, UsbContext};
-use std::io::{Error, ErrorKind, Write};
+use std::io::{Error, Write};
 use tempfile::NamedTempFile;
 
 // nitrokey:
@@ -50,21 +50,19 @@ fn hsm_helper(command: &str) -> Response {
 }
 
 fn create_hsm_xml_file() -> Result<NamedTempFile, String> {
-    let hsm_info = get_hsm_info().map_err(|err| format!("Could not get hsm info: {}", err))?;
+    let hsm_info = get_hsm_info().map_err(|err| format!("Could not get hsm info: {err}"))?;
 
-    println!("HSM found: {}", hsm_info);
+    println!("HSM found: {hsm_info}");
 
     let xml: String = get_hsm_xml_string(&hsm_info);
 
-    write_to_temp_file(&xml).map_err(|err| format!("Could not write to temp file: {}", err))
+    write_to_temp_file(&xml).map_err(|err| format!("Could not write to temp file: {err}"))
 }
 
 fn get_hsm_info() -> Result<HSMInfo, Error> {
-    let context = Context::new().map_err(|e| Error::new(ErrorKind::Other, e))?;
+    let context = Context::new().map_err(Error::other)?;
 
-    let usb_devices = context
-        .devices()
-        .map_err(|e| Error::new(ErrorKind::Other, e))?;
+    let usb_devices = context.devices().map_err(Error::other)?;
 
     fn is_hsm_device(device: &Device<Context>) -> bool {
         match device.device_descriptor() {
@@ -95,7 +93,7 @@ fn get_hsm_info() -> Result<HSMInfo, Error> {
             hsm_bus_num: hsm_device.bus_number(),
             hsm_address: hsm_device.address(),
         })
-        .ok_or_else(|| Error::new(ErrorKind::Other, "No HSM device found"))
+        .ok_or_else(|| Error::other("No HSM device found"))
 }
 
 // HSM_VENDOR and HSM_PRODUCT must be converted to hexadecimal for the attach/detach hsm virsh commands
@@ -116,7 +114,7 @@ fn get_hsm_xml_string(hsm_info: &HSMInfo) -> String {
 }
 
 fn write_to_temp_file(content: &str) -> Result<NamedTempFile, Error> {
-    let mut file: NamedTempFile = NamedTempFile::new()?;
+    let mut file: NamedTempFile = NamedTempFile::with_prefix("hsm")?;
     file.write_all(content.as_bytes())?;
     Ok(file)
 }

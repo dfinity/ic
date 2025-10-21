@@ -1,12 +1,12 @@
 use crate::{
-    sns::archive::ArchiveCanister, sns::governance::GovernanceCanister, sns::index::IndexCanister,
-    sns::ledger::LedgerCanister, sns::swap::SwapCanister, sns::Sns, CallCanisters,
+    CallCanisters, sns::Sns, sns::archive::ArchiveCanister, sns::governance::GovernanceCanister,
+    sns::index::IndexCanister, sns::ledger::LedgerCanister, sns::swap::SwapCanister,
 };
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_clients::canister_status::CanisterStatusResult;
 use ic_sns_root::{
-    pb::v1::{ListSnsCanistersRequest, ListSnsCanistersResponse},
     GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    pb::v1::{ListSnsCanistersRequest, ListSnsCanistersResponse},
 };
 use requests::GetSnsControlledCanisterStatus;
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,7 @@ pub struct RootCanister {
 pub struct SnsCanisters {
     pub sns: Sns,
     pub dapps: Vec<PrincipalId>,
+    pub extensions: Vec<PrincipalId>,
 }
 
 impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
@@ -35,9 +36,10 @@ impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
             index: Some(index_canister_id),
             archives,
             dapps,
+            extensions,
         } = src
         else {
-            return Err(format!("Some SNS canisters were missing: {:?}", src));
+            return Err(format!("Some SNS canisters were missing: {src:?}"));
         };
 
         let sns = Sns {
@@ -49,7 +51,14 @@ impl TryFrom<ListSnsCanistersResponse> for SnsCanisters {
             archive: archives.into_iter().map(ArchiveCanister::new).collect(),
         };
 
-        Ok(Self { sns, dapps })
+        let extensions =
+            extensions.map_or_else(Vec::new, |extensions| extensions.extension_canister_ids);
+
+        Ok(Self {
+            sns,
+            dapps,
+            extensions,
+        })
     }
 }
 

@@ -1,8 +1,8 @@
-use core::convert::Into;
-use core::option::Option::Some;
-
-use crate::pb::v1::{self as pb};
-use crate::topics;
+use crate::{
+    pb::v1::{self as pb},
+    topics,
+};
+use core::{convert::Into, option::Option::Some};
 use ic_sns_governance_api::pb::v1 as pb_api;
 
 impl From<pb::NeuronPermission> for pb_api::NeuronPermission {
@@ -584,27 +584,27 @@ impl From<pb_api::RegisterDappCanisters> for pb::RegisterDappCanisters {
     }
 }
 
-impl From<pb::precise_value::PreciseValue> for pb_api::PreciseValue {
-    fn from(item: pb::precise_value::PreciseValue) -> Self {
+impl From<pb::precise::Value> for pb_api::PreciseValue {
+    fn from(item: pb::precise::Value) -> Self {
         match item {
-            pb::precise_value::PreciseValue::Bool(v) => Self::Bool(v),
-            pb::precise_value::PreciseValue::Blob(v) => Self::Blob(v),
-            pb::precise_value::PreciseValue::Text(v) => Self::Text(v),
-            pb::precise_value::PreciseValue::Nat(v) => Self::Nat(v),
-            pb::precise_value::PreciseValue::Int(v) => Self::Int(v),
-            pb::precise_value::PreciseValue::Array(pb::PreciseArray { array }) => {
+            pb::precise::Value::Bool(v) => Self::Bool(v),
+            pb::precise::Value::Blob(v) => Self::Blob(v),
+            pb::precise::Value::Text(v) => Self::Text(v),
+            pb::precise::Value::Nat(v) => Self::Nat(v),
+            pb::precise::Value::Int(v) => Self::Int(v),
+            pb::precise::Value::Array(pb::PreciseArray { array }) => {
                 let api_array = array
                     .into_iter()
-                    .filter_map(|pb::PreciseValue { precise_value }| precise_value.map(Self::from))
+                    .filter_map(|pb::Precise { value }| value.map(Self::from))
                     .collect();
 
                 Self::Array(api_array)
             }
-            pb::precise_value::PreciseValue::Map(pb::PreciseMap { map }) => {
+            pb::precise::Value::Map(pb::PreciseMap { map }) => {
                 let api_map = map
                     .into_iter()
-                    .filter_map(|(key, pb::PreciseValue { precise_value })| {
-                        precise_value.map(|value| (key, Self::from(value)))
+                    .filter_map(|(key, pb::Precise { value })| {
+                        value.map(|value| (key, Self::from(value)))
                     })
                     .collect();
 
@@ -614,18 +614,18 @@ impl From<pb::precise_value::PreciseValue> for pb_api::PreciseValue {
     }
 }
 
-impl From<pb_api::PreciseValue> for pb::PreciseValue {
+impl From<pb_api::PreciseValue> for pb::Precise {
     fn from(item: pb_api::PreciseValue) -> Self {
-        let precise_value = Some(match item {
-            pb_api::PreciseValue::Bool(v) => pb::precise_value::PreciseValue::Bool(v),
-            pb_api::PreciseValue::Blob(v) => pb::precise_value::PreciseValue::Blob(v),
-            pb_api::PreciseValue::Text(v) => pb::precise_value::PreciseValue::Text(v),
-            pb_api::PreciseValue::Nat(v) => pb::precise_value::PreciseValue::Nat(v),
-            pb_api::PreciseValue::Int(v) => pb::precise_value::PreciseValue::Int(v),
+        let value = Some(match item {
+            pb_api::PreciseValue::Bool(v) => pb::precise::Value::Bool(v),
+            pb_api::PreciseValue::Blob(v) => pb::precise::Value::Blob(v),
+            pb_api::PreciseValue::Text(v) => pb::precise::Value::Text(v),
+            pb_api::PreciseValue::Nat(v) => pb::precise::Value::Nat(v),
+            pb_api::PreciseValue::Int(v) => pb::precise::Value::Int(v),
             pb_api::PreciseValue::Array(array) => {
                 let array = array.into_iter().map(Self::from).collect();
                 let array = pb::PreciseArray { array };
-                pb::precise_value::PreciseValue::Array(array)
+                pb::precise::Value::Array(array)
             }
             pb_api::PreciseValue::Map(map) => {
                 let map = map
@@ -638,11 +638,11 @@ impl From<pb_api::PreciseValue> for pb::PreciseValue {
 
                 let map = pb::PreciseMap { map };
 
-                pb::precise_value::PreciseValue::Map(map)
+                pb::precise::Value::Map(map)
             }
         });
 
-        Self { precise_value }
+        Self { value }
     }
 }
 
@@ -650,9 +650,7 @@ impl From<pb::ExtensionInit> for pb_api::ExtensionInit {
     fn from(item: pb::ExtensionInit) -> Self {
         let pb::ExtensionInit { value } = item;
 
-        let value = value.and_then(|pb::PreciseValue { precise_value }| {
-            precise_value.map(pb_api::PreciseValue::from)
-        });
+        let value = value.and_then(|pb::Precise { value }| value.map(pb_api::PreciseValue::from));
 
         Self { value }
     }
@@ -662,7 +660,27 @@ impl From<pb_api::ExtensionInit> for pb::ExtensionInit {
     fn from(item: pb_api::ExtensionInit) -> Self {
         let pb_api::ExtensionInit { value } = item;
 
-        let value = value.map(pb::PreciseValue::from);
+        let value = value.map(pb::Precise::from);
+
+        Self { value }
+    }
+}
+
+impl From<pb::ExtensionUpgradeArg> for pb_api::ExtensionUpgradeArg {
+    fn from(item: pb::ExtensionUpgradeArg) -> Self {
+        let pb::ExtensionUpgradeArg { value } = item;
+
+        let value = value.and_then(|pb::Precise { value }| value.map(pb_api::PreciseValue::from));
+
+        Self { value }
+    }
+}
+
+impl From<pb_api::ExtensionUpgradeArg> for pb::ExtensionUpgradeArg {
+    fn from(item: pb_api::ExtensionUpgradeArg) -> Self {
+        let pb_api::ExtensionUpgradeArg { value } = item;
+
+        let value = value.map(pb::Precise::from);
 
         Self { value }
     }
@@ -700,6 +718,62 @@ impl From<pb_api::RegisterExtension> for pb::RegisterExtension {
         Self {
             chunked_canister_wasm,
             extension_init,
+        }
+    }
+}
+
+impl From<pb::ExtensionOperationArg> for pb_api::ExtensionOperationArg {
+    fn from(item: pb::ExtensionOperationArg) -> Self {
+        let pb::ExtensionOperationArg { value } = item;
+
+        let value = value.and_then(|pb::Precise { value }| value.map(pb_api::PreciseValue::from));
+
+        Self { value }
+    }
+}
+
+impl From<pb_api::ExtensionOperationArg> for pb::ExtensionOperationArg {
+    fn from(item: pb_api::ExtensionOperationArg) -> Self {
+        let pb_api::ExtensionOperationArg { value } = item;
+
+        let value = value.map(pb::Precise::from);
+
+        Self { value }
+    }
+}
+
+impl From<pb::ExecuteExtensionOperation> for pb_api::ExecuteExtensionOperation {
+    fn from(item: pb::ExecuteExtensionOperation) -> Self {
+        let pb::ExecuteExtensionOperation {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        } = item;
+
+        let operation_arg = operation_arg.map(pb_api::ExtensionOperationArg::from);
+
+        Self {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        }
+    }
+}
+
+impl From<pb_api::ExecuteExtensionOperation> for pb::ExecuteExtensionOperation {
+    fn from(item: pb_api::ExecuteExtensionOperation) -> Self {
+        let pb_api::ExecuteExtensionOperation {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
+        } = item;
+
+        let operation_arg = operation_arg.map(pb::ExtensionOperationArg::from);
+
+        Self {
+            extension_canister_id,
+            operation_name,
+            operation_arg,
         }
     }
 }
@@ -861,6 +935,9 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::ExecuteGenericNervousSystemFunction(v) => {
                 pb_api::proposal::Action::ExecuteGenericNervousSystemFunction(v.into())
             }
+            pb::proposal::Action::ExecuteExtensionOperation(v) => {
+                pb_api::proposal::Action::ExecuteExtensionOperation(v.into())
+            }
             pb::proposal::Action::UpgradeSnsToNextVersion(v) => {
                 pb_api::proposal::Action::UpgradeSnsToNextVersion(v.into())
             }
@@ -873,9 +950,7 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             pb::proposal::Action::RegisterDappCanisters(v) => {
                 pb_api::proposal::Action::RegisterDappCanisters(v.into())
             }
-            pb::proposal::Action::RegisterExtension(v) => {
-                pb_api::proposal::Action::RegisterExtension(v.into())
-            }
+
             pb::proposal::Action::DeregisterDappCanisters(v) => {
                 pb_api::proposal::Action::DeregisterDappCanisters(v.into())
             }
@@ -893,6 +968,12 @@ impl From<pb::proposal::Action> for pb_api::proposal::Action {
             }
             pb::proposal::Action::SetTopicsForCustomProposals(v) => {
                 pb_api::proposal::Action::SetTopicsForCustomProposals(v.into())
+            }
+            pb::proposal::Action::RegisterExtension(v) => {
+                pb_api::proposal::Action::RegisterExtension(v.into())
+            }
+            pb::proposal::Action::UpgradeExtension(v) => {
+                pb_api::proposal::Action::UpgradeExtension(v.into())
             }
         }
     }
@@ -917,6 +998,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::ExecuteGenericNervousSystemFunction(v) => {
                 pb::proposal::Action::ExecuteGenericNervousSystemFunction(v.into())
             }
+            pb_api::proposal::Action::ExecuteExtensionOperation(v) => {
+                pb::proposal::Action::ExecuteExtensionOperation(v.into())
+            }
             pb_api::proposal::Action::UpgradeSnsToNextVersion(v) => {
                 pb::proposal::Action::UpgradeSnsToNextVersion(v.into())
             }
@@ -929,9 +1013,7 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::RegisterDappCanisters(v) => {
                 pb::proposal::Action::RegisterDappCanisters(v.into())
             }
-            pb_api::proposal::Action::RegisterExtension(v) => {
-                pb::proposal::Action::RegisterExtension(v.into())
-            }
+
             pb_api::proposal::Action::DeregisterDappCanisters(v) => {
                 pb::proposal::Action::DeregisterDappCanisters(v.into())
             }
@@ -949,6 +1031,12 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             }
             pb_api::proposal::Action::SetTopicsForCustomProposals(v) => {
                 pb::proposal::Action::SetTopicsForCustomProposals(v.into())
+            }
+            pb_api::proposal::Action::RegisterExtension(v) => {
+                pb::proposal::Action::RegisterExtension(v.into())
+            }
+            pb_api::proposal::Action::UpgradeExtension(v) => {
+                pb::proposal::Action::UpgradeExtension(v.into())
             }
         }
     }
@@ -4352,8 +4440,15 @@ impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics:
                     native_functions,
                     custom_functions,
                 },
+            extension_operations,
             is_critical,
         } = value;
+
+        let extension_operations = extension_operations
+            .into_iter()
+            .map(pb_api::topics::RegisteredExtensionOperationSpec::from)
+            .collect();
+
         pb_api::topics::TopicInfo {
             topic: Some(topic),
             name: Some(name),
@@ -4370,7 +4465,126 @@ impl From<topics::TopicInfo<topics::NervousSystemFunctions>> for pb_api::topics:
                     .map(pb_api::NervousSystemFunction::from)
                     .collect(),
             ),
+            extension_operations: Some(extension_operations),
             is_critical: Some(is_critical),
+        }
+    }
+}
+
+// Conversions for ExtensionOperationType
+impl From<crate::extensions::OperationType> for pb_api::ExtensionOperationType {
+    fn from(value: crate::extensions::OperationType) -> Self {
+        match value {
+            crate::extensions::OperationType::TreasuryManagerDeposit => {
+                pb_api::ExtensionOperationType::TreasuryManagerDeposit
+            }
+            crate::extensions::OperationType::TreasuryManagerWithdraw => {
+                pb_api::ExtensionOperationType::TreasuryManagerWithdraw
+            }
+        }
+    }
+}
+
+// Conversions for ExtensionType
+impl From<crate::extensions::ExtensionType> for pb_api::ExtensionType {
+    fn from(value: crate::extensions::ExtensionType) -> Self {
+        match value {
+            crate::extensions::ExtensionType::TreasuryManager => {
+                pb_api::ExtensionType::TreasuryManager
+            }
+        }
+    }
+}
+
+// Conversions for ExtensionOperationSpec
+impl From<crate::extensions::ExtensionOperationSpec> for pb_api::ExtensionOperationSpec {
+    fn from(value: crate::extensions::ExtensionOperationSpec) -> Self {
+        pb_api::ExtensionOperationSpec {
+            operation_type: Some(pb_api::ExtensionOperationType::from(value.operation_type)),
+            description: Some(value.description),
+            extension_type: Some(pb_api::ExtensionType::from(value.extension_type)),
+            topic: Some(pb_api::topics::Topic::try_from(value.topic).unwrap()),
+        }
+    }
+}
+
+// Conversions for RegisteredExtensionOperationSpec
+impl From<crate::topics::RegisteredExtensionOperationSpec>
+    for pb_api::topics::RegisteredExtensionOperationSpec
+{
+    fn from(value: crate::topics::RegisteredExtensionOperationSpec) -> Self {
+        pb_api::topics::RegisteredExtensionOperationSpec {
+            canister_id: Some(value.canister_id.get()),
+            spec: Some(pb_api::ExtensionOperationSpec::from(value.spec)),
+        }
+    }
+}
+
+// RegisterExtension conversions already exist above - removed duplicates
+
+// Conversions for API Wasm -> internal protobuf Wasm
+impl From<pb_api::Wasm> for crate::pb::v1::Wasm {
+    fn from(value: pb_api::Wasm) -> Self {
+        let wasm = match value {
+            pb_api::Wasm::Bytes(bytes) => crate::pb::v1::wasm::Wasm::Bytes(bytes),
+            pb_api::Wasm::Chunked(chunked) => crate::pb::v1::wasm::Wasm::Chunked(chunked.into()),
+        };
+        crate::pb::v1::Wasm { wasm: Some(wasm) }
+    }
+}
+
+// Conversions for internal protobuf Wasm -> API Wasm
+impl From<crate::pb::v1::Wasm> for pb_api::Wasm {
+    fn from(value: crate::pb::v1::Wasm) -> Self {
+        let wasm = value.wasm.expect("wasm field is required");
+        match wasm {
+            crate::pb::v1::wasm::Wasm::Bytes(bytes) => pb_api::Wasm::Bytes(bytes),
+            crate::pb::v1::wasm::Wasm::Chunked(chunked) => pb_api::Wasm::Chunked(chunked.into()),
+        }
+    }
+}
+
+// Conversions for internal protobuf Wasm -> crate::types::Wasm
+impl From<crate::pb::v1::wasm::Wasm> for crate::types::Wasm {
+    fn from(value: crate::pb::v1::wasm::Wasm) -> Self {
+        match value {
+            crate::pb::v1::wasm::Wasm::Bytes(bytes) => crate::types::Wasm::Bytes(bytes),
+            crate::pb::v1::wasm::Wasm::Chunked(chunked) => {
+                use ic_base_types::CanisterId;
+                let store_canister_id = chunked
+                    .store_canister_id
+                    .expect("store_canister_id is required for chunked WASM");
+                crate::types::Wasm::Chunked {
+                    wasm_module_hash: chunked.wasm_module_hash,
+                    store_canister_id: CanisterId::try_from_principal_id(store_canister_id)
+                        .expect("Invalid store_canister_id"),
+                    chunk_hashes_list: chunked.chunk_hashes_list,
+                }
+            }
+        }
+    }
+}
+
+impl From<pb_api::UpgradeExtension> for crate::pb::v1::UpgradeExtension {
+    fn from(value: pb_api::UpgradeExtension) -> Self {
+        crate::pb::v1::UpgradeExtension {
+            extension_canister_id: value.extension_canister_id,
+            canister_upgrade_arg: value
+                .canister_upgrade_arg
+                .map(crate::pb::v1::ExtensionUpgradeArg::from),
+            wasm: value.wasm.map(crate::pb::v1::Wasm::from),
+        }
+    }
+}
+
+impl From<crate::pb::v1::UpgradeExtension> for pb_api::UpgradeExtension {
+    fn from(value: crate::pb::v1::UpgradeExtension) -> Self {
+        pb_api::UpgradeExtension {
+            extension_canister_id: value.extension_canister_id,
+            wasm: value.wasm.map(pb_api::Wasm::from),
+            canister_upgrade_arg: value
+                .canister_upgrade_arg
+                .map(pb_api::ExtensionUpgradeArg::from),
         }
     }
 }

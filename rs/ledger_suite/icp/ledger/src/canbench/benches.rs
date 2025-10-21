@@ -2,7 +2,7 @@ use crate::{
     balances_len, canister_init, icrc1_send_not_async, icrc2_approve_not_async, query_blocks,
     query_encoded_blocks,
 };
-use canbench_rs::{bench, BenchResult};
+use canbench_rs::{BenchResult, bench};
 use candid::{Nat, Principal};
 use ic_ledger_core::Tokens;
 use icp_ledger::{GetBlocksArgs, LedgerCanisterInitPayload};
@@ -85,7 +85,8 @@ fn bench_endpoints() -> BenchResult {
                     expected_allowance: None,
                     created_at_time: Some(start_time + i + NUM_OPERATIONS),
                 };
-                let result = icrc2_approve_not_async(Principal::from_slice(&approver_id), arg);
+                let result =
+                    icrc2_approve_not_async(Principal::from_slice(&approver_id), arg, None);
                 assert!(result.is_ok());
             }
             assert_eq!(balances_len(), NUM_OPERATIONS + 1);

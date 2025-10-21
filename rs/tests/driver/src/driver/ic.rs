@@ -1,13 +1,13 @@
 use crate::driver::{
     bootstrap::{init_ic, setup_and_start_vms},
     farm::{Farm, HostFeature},
+    nested::UnassignedRecordConfig,
     node_software_version::NodeSoftwareVersion,
-    resource::{allocate_resources, get_resource_request, ResourceGroup},
+    resource::{AllocatedVm, ResourceGroup, allocate_resources, get_resource_request},
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::{HasRegistryLocalStore, HasTopologySnapshot},
-    test_setup::{GroupSetup, InfraProvider},
+    test_setup::GroupSetup,
 };
-use crate::k8s::tnet::TNet;
 use anyhow::Result;
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
 use ic_prep_lib::{node::NodeSecretKeyStore, subnet_configuration::SubnetRunningState};
@@ -15,11 +15,12 @@ use ic_regedit;
 use ic_registry_canister_api::IPv4Config;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::malicious_behaviour::MaliciousBehaviour;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::{Height, NodeId, PrincipalId};
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
 use slog::info;
+use std::collections::BTreeMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::net::{Ipv6Addr, SocketAddr};
@@ -41,12 +42,11 @@ pub struct InternetComputer {
     pub ssh_readonly_access_to_unassigned_nodes: Vec<String>,
     name: String,
     pub bitcoind_addr: Option<SocketAddr>,
+    pub dogecoind_addr: Option<SocketAddr>,
     pub jaeger_addr: Option<SocketAddr>,
     pub socks_proxy: Option<String>,
     use_specified_ids_allocation_range: bool,
-    /// Indicates whether this `InternetComputer` instance should be installed with
-    /// GuestOS disk images of the latest-deployed mainnet version.
-    pub with_mainnet_config: bool,
+    pub unassigned_record_config: Option<UnassignedRecordConfig>,
     pub api_boundary_nodes: Vec<Node>,
 }
 
@@ -62,10 +62,7 @@ pub enum VmAllocationStrategy {
 
 impl InternetComputer {
     pub fn new() -> Self {
-        Self {
-            with_mainnet_config: false,
-            ..Self::default()
-        }
+        Self::default()
     }
 
     /// Set the VM resources (like number of virtual CPUs and memory) of all
@@ -201,6 +198,11 @@ impl InternetComputer {
         self
     }
 
+    pub fn with_dogecoind_addr(mut self, dogecoind_addr: SocketAddr) -> Self {
+        self.dogecoind_addr = Some(dogecoind_addr);
+        self
+    }
+
     pub fn with_jaeger_addr(mut self, jaeger_addr: SocketAddr) -> Self {
         self.jaeger_addr = Some(jaeger_addr);
         self
@@ -216,12 +218,20 @@ impl InternetComputer {
         self
     }
 
-    pub fn with_mainnet_config(mut self) -> Self {
-        self.with_mainnet_config = true;
+    pub fn without_unassigned_config(mut self) -> Self {
+        self.unassigned_record_config = Some(UnassignedRecordConfig::Skip);
         self
     }
 
-    pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
+    pub fn with_unassigned_config(mut self) -> Self {
+        self.unassigned_record_config = Some(UnassignedRecordConfig::Ignore);
+        self
+    }
+
+    pub fn setup_and_start_return_vms(
+        &mut self,
+        env: &TestEnv,
+    ) -> Result<BTreeMap<String, AllocatedVm>> {
         // propagate required host features and resource settings to all vms
         let farm = Farm::from_test_env(env, "Internet Computer");
         for node in self
@@ -246,13 +256,8 @@ impl InternetComputer {
         let group_name: String = group_setup.infra_group_name;
         let res_request = get_resource_request(self, env, &group_name)?;
 
-        if InfraProvider::read_attribute(env) == InfraProvider::K8s {
-            let image_url = res_request.primary_image.url.clone();
-            let image_sha = res_request.primary_image.sha256.clone();
-            let tnet = TNet::read_attribute(env)
-                .image_url(image_url.as_ref())
-                .image_sha(image_sha.as_ref());
-            tnet.write_attribute(env);
+        if let Some(record) = self.unassigned_record_config {
+            record.write_attribute(env);
         }
 
         let res_group = allocate_resources(&farm, &res_request, env)?;
@@ -283,6 +288,11 @@ impl InternetComputer {
         // Emit a json log event, to be consumed by log post-processing tools.
         topology_snapshot.emit_log_event(&env.logger());
         setup_and_start_vms(&init_ic, self, env, &farm, &group_name)?;
+        Ok(res_group.vms)
+    }
+
+    pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
+        self.setup_and_start_return_vms(env)?;
         Ok(())
     }
 
@@ -294,7 +304,7 @@ impl InternetComputer {
             .chain(self.unassigned_nodes.iter_mut())
             .chain(self.api_boundary_nodes.iter_mut())
         {
-            let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{:p}", node)))?;
+            let sks = NodeSecretKeyStore::new(tempdir.join(format!("node-{node:p}")))?;
             node.secret_key_store = Some(sks);
         }
         Ok(())
@@ -318,32 +328,32 @@ impl InternetComputer {
         }
     }
 
-    pub fn has_malicious_behaviours(&self) -> bool {
+    pub fn has_malicious_behaviors(&self) -> bool {
         let has_malicious_nodes: bool = self
             .subnets
             .iter()
-            .any(|s| s.nodes.iter().any(|n| n.malicious_behaviour.is_some()));
+            .any(|s| s.nodes.iter().any(|n| n.malicious_behavior.is_some()));
         let has_malicious_unassigned_nodes = self
             .unassigned_nodes
             .iter()
-            .any(|n| n.malicious_behaviour.is_some());
+            .any(|n| n.malicious_behavior.is_some());
         let has_malicious_api_boundary_nodes = self
             .api_boundary_nodes
             .iter()
-            .any(|n| n.malicious_behaviour.is_some());
+            .any(|n| n.malicious_behavior.is_some());
         has_malicious_nodes || has_malicious_unassigned_nodes || has_malicious_api_boundary_nodes
     }
 
-    pub fn get_malicious_behavior_of_node(&self, node_id: NodeId) -> Option<MaliciousBehaviour> {
+    pub fn get_malicious_behavior_of_node(&self, node_id: NodeId) -> Option<MaliciousBehavior> {
         let node_filter_map = |n: &Node| {
             if n.secret_key_store.as_ref().unwrap().node_id == node_id {
-                Some(n.malicious_behaviour.clone())
+                Some(n.malicious_behavior.clone())
             } else {
                 None
             }
         };
         // extract malicious nodes all subnet nodes
-        let mut malicious_nodes: Vec<Option<MaliciousBehaviour>> = self
+        let mut malicious_nodes: Vec<Option<MaliciousBehavior>> = self
             .subnets
             .iter()
             .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
@@ -421,6 +431,32 @@ impl InternetComputer {
         match nodes.len() {
             0 => None,
             1 => nodes.first().unwrap().clone(),
+            _ => panic!("more than one node has id={node_id}"),
+        }
+    }
+
+    pub fn get_recovery_hash_of_node(&self, node_id: NodeId) -> Option<String> {
+        let node_filter_map = |n: &Node| {
+            if n.secret_key_store.as_ref().unwrap().node_id == node_id {
+                Some(n.recovery_hash.clone())
+            } else {
+                None
+            }
+        };
+        // extract recovery hash from all subnet nodes
+        let mut recovery_hashes: Vec<Option<String>> = self
+            .subnets
+            .iter()
+            .flat_map(|s| s.nodes.iter().filter_map(node_filter_map))
+            .collect();
+        // extract recovery hash from all unassigned nodes
+        recovery_hashes.extend(self.unassigned_nodes.iter().filter_map(node_filter_map));
+        // extract recovery hash from all API boundary nodes
+        recovery_hashes.extend(self.api_boundary_nodes.iter().filter_map(node_filter_map));
+
+        match recovery_hashes.len() {
+            0 => None,
+            1 => recovery_hashes.first().unwrap().clone(),
             _ => panic!("more than one node has id={node_id}"),
         }
     }
@@ -524,8 +560,7 @@ impl Subnet {
     pub fn fast(subnet_type: SubnetType, no_of_nodes: usize) -> Self {
         assert!(
             0 < no_of_nodes,
-            "cannot create subner with {} nodes",
-            no_of_nodes
+            "cannot create subner with {no_of_nodes} nodes"
         );
         Self::new(subnet_type)
             // Shorter block time.
@@ -587,6 +622,26 @@ impl Subnet {
         self
     }
 
+    /// Add the given number of nodes to the subnet.
+    ///
+    /// The nodes will inherit the VM resources of the subnet and extend required host features with the given ones.
+    pub fn add_node_with_required_host_features(
+        self,
+        required_host_features: Vec<HostFeature>,
+    ) -> Self {
+        let default_vm_resources = self.default_vm_resources;
+        let vm_allocation = self.vm_allocation.clone();
+        let required_host_features = required_host_features
+            .into_iter()
+            .chain(self.required_host_features.iter().cloned())
+            .collect();
+        self.add_node(Node::new_with_settings(
+            default_vm_resources,
+            vm_allocation,
+            required_host_features,
+        ))
+    }
+
     pub fn with_max_ingress_message_size(mut self, limit: u64) -> Self {
         self.max_ingress_bytes_per_message = Some(limit);
         self
@@ -644,14 +699,14 @@ impl Subnet {
 
     pub fn with_random_height(mut self) -> Self {
         use rand::Rng;
-        self.initial_height = rand::thread_rng().gen();
+        self.initial_height = rand::thread_rng().r#gen();
         self
     }
 
     pub fn add_malicious_nodes(
         self,
         no_of_nodes: usize,
-        malicious_behaviour: MaliciousBehaviour,
+        malicious_behavior: MaliciousBehavior,
     ) -> Self {
         (0..no_of_nodes).fold(self, |subnet, _| {
             let default_vm_resources = subnet.default_vm_resources;
@@ -663,7 +718,7 @@ impl Subnet {
                     vm_allocation,
                     required_host_features,
                 )
-                .with_malicious_behaviour(malicious_behaviour.clone()),
+                .with_malicious_behavior(malicious_behavior.clone()),
             )
         })
     }
@@ -683,7 +738,7 @@ impl Subnet {
     pub fn summary(&self) -> String {
         let ns = self.nodes.len();
         let mut s = DefaultHasher::new();
-        format!("{:?}", self).hash(&mut s);
+        format!("{self:?}").hash(&mut s);
         let config_hash = format!("{:x}", s.finish());
         format!("S{:02}{}", ns, &config_hash[0..3])
     }
@@ -756,9 +811,10 @@ pub struct Node {
     pub required_host_features: Vec<HostFeature>,
     pub secret_key_store: Option<NodeSecretKeyStore>,
     pub ipv6: Option<Ipv6Addr>,
-    pub malicious_behaviour: Option<MaliciousBehaviour>,
+    pub malicious_behavior: Option<MaliciousBehavior>,
     pub ipv4: Option<IPv4Config>,
     pub domain: Option<String>,
+    pub recovery_hash: Option<String>,
 }
 
 impl Node {
@@ -785,8 +841,8 @@ impl Node {
             .node_id
     }
 
-    pub fn with_malicious_behaviour(mut self, malicious_behaviour: MaliciousBehaviour) -> Self {
-        self.malicious_behaviour = Some(malicious_behaviour);
+    pub fn with_malicious_behavior(mut self, malicious_behavior: MaliciousBehavior) -> Self {
+        self.malicious_behavior = Some(malicious_behavior);
         self
     }
 
@@ -797,6 +853,11 @@ impl Node {
 
     pub fn with_domain(mut self, domain: String) -> Self {
         self.domain = Some(domain);
+        self
+    }
+
+    pub fn with_recovery_hash(mut self, recovery_hash: String) -> Self {
+        self.recovery_hash = Some(recovery_hash);
         self
     }
 }

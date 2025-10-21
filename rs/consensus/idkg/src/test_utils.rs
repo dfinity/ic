@@ -1,17 +1,18 @@
 use crate::{
+    MAX_IDKG_THREADS,
     complaints::{IDkgComplaintHandlerImpl, IDkgTranscriptLoader, TranscriptLoadStatus},
     pre_signer::{IDkgPreSignerImpl, IDkgTranscriptBuilder},
     signer::{ThresholdSignatureBuilder, ThresholdSignerImpl},
-    utils::algorithm_for_key_id,
+    utils::build_thread_pool,
 };
 use ic_artifact_pool::idkg_pool::IDkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus_mocks::{dependencies, Dependencies};
+use ic_consensus_mocks::{Dependencies, dependencies};
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    dummy_values::dummy_idkg_dealing_for_tests, setup_masked_random_params,
     CanisterThresholdSigTestEnvironment, IDkgParticipants, IntoBuilder,
+    dummy_values::dummy_idkg_dealing_for_tests, setup_masked_random_params,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_interfaces::idkg::{IDkgChangeAction, IDkgPool};
@@ -23,36 +24,35 @@ use ic_replicated_state::metadata_state::subnet_call_context_manager::{
 };
 use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
 use ic_test_utilities::state_manager::RefMockStateManager;
-use ic_test_utilities_consensus::{fake::*, idkg::*, IDkgStatsNoOp};
-use ic_test_utilities_types::ids::{node_test_id, NODE_1, NODE_2};
+use ic_test_utilities_consensus::{IDkgStatsNoOp, fake::*, idkg::*};
+use ic_test_utilities_types::ids::{NODE_1, NODE_2, node_test_id};
 use ic_types::{
+    Height, NodeId, RegistryVersion, SubnetId,
     artifact::IDkgMessageId,
     consensus::idkg::{
-        self,
-        common::{CombinedSignature, PreSignatureRef},
-        EcdsaSigShare, IDkgArtifactId, IDkgBlockReader, IDkgComplaintContent,
+        self, EcdsaSigShare, IDkgArtifactId, IDkgBlockReader, IDkgComplaintContent,
         IDkgMasterPublicKeyId, IDkgMessage, IDkgOpeningContent, IDkgPayload, IDkgReshareRequest,
         IDkgTranscriptAttributes, IDkgTranscriptOperationRef, IDkgTranscriptParamsRef,
         MaskedTranscript, MasterKeyTranscript, PreSigId, RequestId, ReshareOfMaskedParams,
         SchnorrSigShare, SignedIDkgComplaint, SignedIDkgOpening, TranscriptAttributes,
         TranscriptLookupError, TranscriptRef, UnmaskedTranscript, VetKdKeyShare,
+        common::{CombinedSignature, PreSignatureRef},
     },
     crypto::{
+        AlgorithmId,
         canister_threshold_sig::{
+            ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
             idkg::{
                 IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin,
                 IDkgOpening, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
                 IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
                 SignedIDkgDealing,
             },
-            ThresholdEcdsaSigShare, ThresholdSchnorrSigShare,
         },
         vetkd::{VetKdEncryptedKeyShare, VetKdEncryptedKeyShareContent},
-        AlgorithmId,
     },
     messages::CallbackId,
     signature::*,
-    Height, NodeId, RegistryVersion, SubnetId,
 };
 use rand::{CryptoRng, Rng};
 use std::{
@@ -68,29 +68,6 @@ pub fn into_idkg_contexts(
         .iter()
         .flat_map(|(id, ctxt)| IDkgSignWithThresholdContext::try_from(ctxt).map(|ctxt| (*id, ctxt)))
         .collect()
-}
-
-pub fn insert_test_sig_inputs<T>(
-    block_reader: &mut TestIDkgBlockReader,
-    idkg_payload: &mut IDkgPayload,
-    inputs: T,
-) where
-    T: IntoIterator<Item = (PreSigId, TestSigInputs)>,
-{
-    for (pre_sig_id, inputs) in inputs {
-        inputs
-            .idkg_transcripts
-            .iter()
-            .for_each(|(transcript_ref, transcript)| {
-                block_reader.add_transcript(*transcript_ref, transcript.clone())
-            });
-        if let Some(pre_signature) = inputs.sig_inputs_ref.pre_signature() {
-            idkg_payload
-                .available_pre_signatures
-                .insert(pre_sig_id, pre_signature.clone());
-            block_reader.add_available_pre_signature(pre_sig_id, pre_signature);
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -144,8 +121,8 @@ pub(crate) struct TestIDkgBlockReader {
     requested_transcripts: Vec<IDkgTranscriptParamsRef>,
     source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
     target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
-    available_pre_signatures: BTreeMap<PreSigId, PreSignatureRef>,
     idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
+    idkg_payloads: BTreeMap<Height, IDkgPayload>,
     fail_to_resolve: bool,
 }
 
@@ -170,29 +147,6 @@ impl TestIDkgBlockReader {
         Self {
             height,
             requested_transcripts,
-            idkg_transcripts,
-            ..Default::default()
-        }
-    }
-
-    pub(crate) fn for_signer_test(
-        height: Height,
-        sig_inputs: Vec<(PreSigId, TestSigInputs)>,
-    ) -> Self {
-        let mut idkg_transcripts = BTreeMap::new();
-        let mut available_pre_signatures = BTreeMap::new();
-        for (pre_sig_id, sig_inputs) in sig_inputs {
-            for (transcript_ref, transcript) in sig_inputs.idkg_transcripts {
-                idkg_transcripts.insert(transcript_ref, transcript);
-            }
-            if let Some(pre_signature) = sig_inputs.sig_inputs_ref.pre_signature() {
-                available_pre_signatures.insert(pre_sig_id, pre_signature);
-            }
-        }
-
-        Self {
-            height,
-            available_pre_signatures,
             idkg_transcripts,
             ..Default::default()
         }
@@ -247,13 +201,8 @@ impl TestIDkgBlockReader {
         self.idkg_transcripts.insert(transcript_ref, transcript);
     }
 
-    pub(crate) fn add_available_pre_signature(
-        &mut self,
-        pre_signature_id: PreSigId,
-        pre_signature: PreSignatureRef,
-    ) {
-        self.available_pre_signatures
-            .insert(pre_signature_id, pre_signature);
+    pub(crate) fn add_payload(&mut self, height: Height, payload: IDkgPayload) {
+        self.idkg_payloads.insert(height, payload);
     }
 }
 
@@ -272,10 +221,6 @@ impl IDkgBlockReader for TestIDkgBlockReader {
         Box::new(std::iter::empty())
     }
 
-    fn available_pre_signature(&self, id: &PreSigId) -> Option<&PreSignatureRef> {
-        self.available_pre_signatures.get(id)
-    }
-
     fn source_subnet_xnet_transcripts(
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
@@ -288,24 +233,34 @@ impl IDkgBlockReader for TestIDkgBlockReader {
         Box::new(self.target_subnet_xnet_transcripts.iter())
     }
 
-    fn transcript(
+    fn transcript_as_ref(
         &self,
         transcript_ref: &TranscriptRef,
-    ) -> Result<IDkgTranscript, TranscriptLookupError> {
+    ) -> Result<&IDkgTranscript, TranscriptLookupError> {
         if self.fail_to_resolve {
             return Err("Test transcript resolve failure".into());
         }
-        self.idkg_transcripts
-            .get(transcript_ref)
-            .cloned()
-            .ok_or(format!(
-                "transcript(): {:?} not found in idkg_transcripts",
-                transcript_ref
-            ))
+
+        if let Some(transcript) = self.idkg_transcripts.get(transcript_ref) {
+            return Ok(transcript);
+        }
+
+        self.idkg_payloads
+            .get(&transcript_ref.height)
+            .and_then(|payload| payload.idkg_transcripts.get(&transcript_ref.transcript_id))
+            .ok_or(format!("transcript(): {transcript_ref:?} not found"))
     }
 
     fn active_transcripts(&self) -> BTreeSet<TranscriptRef> {
         self.idkg_transcripts.keys().cloned().collect()
+    }
+
+    fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_> {
+        Box::new(
+            self.idkg_payloads
+                .range(height.increment()..)
+                .map(|(_, v)| v),
+        )
     }
 }
 
@@ -462,6 +417,21 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
     logger: ReplicaLogger,
     consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
 ) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
+    create_pre_signer_dependencies_with_crypto_and_threads(
+        pool_config,
+        logger,
+        consensus_crypto,
+        MAX_IDKG_THREADS,
+    )
+}
+
+// Sets up the dependencies and creates the pre signer
+pub(crate) fn create_pre_signer_dependencies_with_crypto_and_threads(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
+    threads: usize,
+) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
 
@@ -470,6 +440,7 @@ pub(crate) fn create_pre_signer_dependencies_with_crypto(
         NODE_1,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
+        build_thread_pool(threads),
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -490,6 +461,7 @@ pub(crate) fn create_pre_signer_dependencies_and_pool(
         NODE_1,
         pool.get_block_cache(),
         crypto,
+        build_thread_pool(MAX_IDKG_THREADS),
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -506,6 +478,15 @@ pub(crate) fn create_pre_signer_dependencies(
     create_pre_signer_dependencies_with_crypto(pool_config, logger, None)
 }
 
+// Sets up the dependencies and creates the pre signer
+pub(crate) fn create_pre_signer_dependencies_with_threads(
+    pool_config: ArtifactPoolConfig,
+    logger: ReplicaLogger,
+    threads: usize,
+) -> (IDkgPoolImpl, IDkgPreSignerImpl) {
+    create_pre_signer_dependencies_with_crypto_and_threads(pool_config, logger, None, threads)
+}
+
 // Sets up the dependencies and creates the signer
 pub(crate) fn create_signer_dependencies_with_crypto(
     pool_config: ArtifactPoolConfig,
@@ -514,7 +495,6 @@ pub(crate) fn create_signer_dependencies_with_crypto(
 ) -> (IDkgPoolImpl, ThresholdSignerImpl) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
-        pool,
         crypto,
         state_manager,
         ..
@@ -522,8 +502,8 @@ pub(crate) fn create_signer_dependencies_with_crypto(
 
     let signer = ThresholdSignerImpl::new(
         NODE_1,
-        pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
+        build_thread_pool(MAX_IDKG_THREADS),
         state_manager as Arc<_>,
         metrics_registry.clone(),
         logger.clone(),
@@ -547,7 +527,6 @@ pub(crate) fn create_signer_dependencies_and_state_manager(
 ) -> (IDkgPoolImpl, ThresholdSignerImpl, Arc<RefMockStateManager>) {
     let metrics_registry = MetricsRegistry::new();
     let Dependencies {
-        pool,
         crypto,
         state_manager,
         ..
@@ -555,8 +534,8 @@ pub(crate) fn create_signer_dependencies_and_state_manager(
 
     let signer = ThresholdSignerImpl::new(
         NODE_1,
-        pool.get_block_cache(),
         crypto,
+        build_thread_pool(MAX_IDKG_THREADS),
         state_manager.clone(),
         metrics_registry.clone(),
         logger.clone(),
@@ -574,12 +553,18 @@ pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
     node_id: NodeId,
 ) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
+    let Dependencies {
+        pool,
+        crypto,
+        state_manager,
+        ..
+    } = dependencies(pool_config.clone(), 1);
 
     let complaint_handler = IDkgComplaintHandlerImpl::new(
         node_id,
         pool.get_block_cache(),
         consensus_crypto.unwrap_or(crypto),
+        state_manager,
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -594,12 +579,28 @@ pub(crate) fn create_complaint_dependencies_and_pool(
     logger: ReplicaLogger,
 ) -> (IDkgPoolImpl, IDkgComplaintHandlerImpl, TestConsensusPool) {
     let metrics_registry = MetricsRegistry::new();
-    let Dependencies { pool, crypto, .. } = dependencies(pool_config.clone(), 1);
+    let Dependencies {
+        pool,
+        crypto,
+        state_manager,
+        ..
+    } = dependencies(pool_config.clone(), 1);
+
+    state_manager
+        .get_mut()
+        .expect_get_certified_state_snapshot()
+        .returning(|| {
+            Some(Box::new(fake_state_with_signature_requests(
+                Height::from(0),
+                [],
+            )))
+        });
 
     let complaint_handler = IDkgComplaintHandlerImpl::new(
         NODE_1,
         pool.get_block_cache(),
         crypto,
+        state_manager,
         metrics_registry.clone(),
         logger.clone(),
     );
@@ -637,9 +638,9 @@ pub(crate) fn create_transcript(
         transcript_id,
         receivers: IDkgReceivers::new(receivers).unwrap(),
         registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
+        verified_dealings: Arc::new(BTreeMap::new()),
         transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-        algorithm_id: algorithm_for_key_id(key_id),
+        algorithm_id: AlgorithmId::from(key_id.inner()),
         internal_transcript_raw: vec![],
     }
 }
@@ -685,7 +686,7 @@ pub(crate) fn create_transcript_param_with_registry_version(
     idkg_transcripts.insert(*random_masked.as_ref(), random_transcript);
 
     let attrs =
-        IDkgTranscriptAttributes::new(dealers, algorithm_for_key_id(key_id), registry_version);
+        IDkgTranscriptAttributes::new(dealers, AlgorithmId::from(key_id.inner()), registry_version);
 
     // The transcript that points to the random transcript
     let transcript_params_ref = ReshareOfMaskedParams::new(
@@ -759,7 +760,10 @@ pub(crate) fn create_corrupted_transcript<R: CryptoRng + Rng>(
     let (node_id, params, mut transcript) = create_valid_transcript(env, rng, algorithm);
     let to_corrupt = *transcript.verified_dealings.keys().next().unwrap();
     let complainer_index = params.receiver_index(node_id).unwrap();
-    let signed_dealing = transcript.verified_dealings.get_mut(&to_corrupt).unwrap();
+    let signed_dealing = Arc::get_mut(&mut transcript.verified_dealings)
+        .unwrap()
+        .get_mut(&to_corrupt)
+        .unwrap();
     let mut rng = rand::thread_rng();
     let builder = signed_dealing.content.clone().into_builder();
     signed_dealing.content = builder
@@ -825,7 +829,7 @@ pub(crate) fn create_dealing_with_payload<R: Rng + CryptoRng>(
         env.choose_dealers_and_receivers(&IDkgParticipants::AllNodesAsDealersAndReceivers, rng);
     let params = setup_masked_random_params(
         &env,
-        algorithm_for_key_id(key_id),
+        AlgorithmId::from(key_id.inner()),
         &dealers,
         &receivers,
         rng,
@@ -984,13 +988,12 @@ pub(crate) fn is_dealing_support_added_to_validated(
     dealer_id: &NodeId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support)) = action {
-            if support.transcript_id == *transcript_id
-                && support.dealer_id == *dealer_id
-                && support.sig_share.signer == NODE_1
-            {
-                return true;
-            }
+        if let IDkgChangeAction::AddToValidated(IDkgMessage::DealingSupport(support)) = action
+            && support.transcript_id == *transcript_id
+            && support.dealer_id == *dealer_id
+            && support.sig_share.signer == NODE_1
+        {
+            return true;
         }
     }
     false
@@ -1074,10 +1077,10 @@ pub(crate) fn is_moved_to_validated(
     msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::MoveToValidated(msg) = action {
-            if IDkgArtifactId::from(msg) == *msg_id {
-                return true;
-            }
+        if let IDkgChangeAction::MoveToValidated(msg) = action
+            && IDkgArtifactId::from(msg) == *msg_id
+        {
+            return true;
         }
     }
     false
@@ -1089,10 +1092,10 @@ pub(crate) fn is_removed_from_validated(
     msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::RemoveValidated(id) = action {
-            if *id == *msg_id {
-                return true;
-            }
+        if let IDkgChangeAction::RemoveValidated(id) = action
+            && *id == *msg_id
+        {
+            return true;
         }
     }
     false
@@ -1104,10 +1107,10 @@ pub(crate) fn is_removed_from_unvalidated(
     msg_id: &IDkgMessageId,
 ) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::RemoveUnvalidated(id) = action {
-            if *id == *msg_id {
-                return true;
-            }
+        if let IDkgChangeAction::RemoveUnvalidated(id) = action
+            && *id == *msg_id
+        {
+            return true;
         }
     }
     false
@@ -1116,10 +1119,10 @@ pub(crate) fn is_removed_from_unvalidated(
 // Checks that artifact is being dropped as invalid
 pub(crate) fn is_handle_invalid(change_set: &[IDkgChangeAction], msg_id: &IDkgMessageId) -> bool {
     for action in change_set {
-        if let IDkgChangeAction::HandleInvalid(id, _) = action {
-            if *id == *msg_id {
-                return true;
-            }
+        if let IDkgChangeAction::HandleInvalid(id, _) = action
+            && *id == *msg_id
+        {
+            return true;
         }
     }
     false
@@ -1160,9 +1163,25 @@ pub fn create_available_pre_signature_with_key_transcript(
     key_id: IDkgMasterPublicKeyId,
     key_transcript: Option<UnmaskedTranscript>,
 ) -> PreSigId {
-    let sig_inputs = create_sig_inputs(caller, &key_id);
+    create_available_pre_signature_with_key_transcript_and_height(
+        idkg_payload,
+        caller,
+        key_id,
+        key_transcript,
+        Height::new(0),
+    )
+}
+
+pub fn create_available_pre_signature_with_key_transcript_and_height(
+    idkg_payload: &mut IDkgPayload,
+    caller: u8,
+    key_id: IDkgMasterPublicKeyId,
+    key_transcript: Option<UnmaskedTranscript>,
+    height: Height,
+) -> PreSigId {
+    let inputs = create_pre_sig_ref_with_height(caller, height, &key_id);
     let pre_sig_id = idkg_payload.uid_generator.next_pre_signature_id();
-    let mut pre_signature_ref = sig_inputs.sig_inputs_ref.pre_signature().unwrap();
+    let mut pre_signature_ref = inputs.pre_signature_ref;
     if let Some(transcript) = key_transcript {
         match pre_signature_ref {
             PreSignatureRef::Ecdsa(ref mut pre_sig) => {
@@ -1177,7 +1196,7 @@ pub fn create_available_pre_signature_with_key_transcript(
         .available_pre_signatures
         .insert(pre_sig_id, pre_signature_ref);
 
-    for (t_ref, transcript) in sig_inputs.idkg_transcripts {
+    for (t_ref, transcript) in inputs.idkg_transcripts {
         idkg_payload
             .idkg_transcripts
             .insert(t_ref.transcript_id, transcript);
@@ -1231,7 +1250,7 @@ pub(crate) fn generate_key_transcript(
         env,
         &dealers,
         &receivers,
-        algorithm_for_key_id(key_id),
+        AlgorithmId::from(key_id.inner()),
         rng,
     );
     let key_transcript_ref = idkg::UnmaskedTranscript::try_from((height, &key_transcript)).unwrap();
@@ -1281,7 +1300,7 @@ impl IDkgPayloadTestHelper for IDkgPayload {
         match self.key_transcripts.len() {
             0 => panic!("There are no key transcripts in the payload"),
             1 => self.key_transcripts.values().next().unwrap(),
-            n => panic!("There are multiple ({}) key transcripts in the payload", n),
+            n => panic!("There are multiple ({n}) key transcripts in the payload"),
         }
     }
 
@@ -1289,7 +1308,7 @@ impl IDkgPayloadTestHelper for IDkgPayload {
         match self.key_transcripts.len() {
             0 => panic!("There are no key transcripts in the payload"),
             1 => self.key_transcripts.values_mut().next().unwrap(),
-            n => panic!("There are multiple ({}) key transcripts in the payload", n),
+            n => panic!("There are multiple ({n}) key transcripts in the payload"),
         }
     }
 

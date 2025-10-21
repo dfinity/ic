@@ -50,7 +50,7 @@ pub fn push_response(
                 }
                 Err(err) => Payload::Reject(RejectContext::new(
                     RejectCode::CanisterError,
-                    format!("Received invalid response from adapter: {:?}", err),
+                    format!("Received invalid response from adapter: {err:?}"),
                 )),
             };
 

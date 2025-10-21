@@ -4,9 +4,9 @@ use crate::{
 };
 use candid::Principal;
 use ic_management_canister_types::{CanisterStatusResult, DefiniteCanisterSettings};
+use pocket_ic::ErrorCode;
 use pocket_ic::common::rest::RawEffectivePrincipal;
 use pocket_ic::nonblocking::PocketIc;
-use pocket_ic::ErrorCode;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -28,7 +28,9 @@ impl<'a> PocketIcAgent<'a> {
 pub enum PocketIcCallError {
     #[error("pocket_ic error: {0}")]
     PocketIc(pocket_ic::RejectResponse),
-    #[error("retrieving canister info is not implemented for canister without controllers, such as this one.")]
+    #[error(
+        "retrieving canister info is not implemented for canister without controllers, such as this one."
+    )]
     BlackHole,
     #[error("pocket_ic failed to find the subnet of canister {0}")]
     CanisterSubnetNotFound(Principal),
@@ -195,7 +197,7 @@ impl ProgressNetwork for PocketIc {
         } else {
             // Otherwise, we have to wait for the time to pass "naturally".
             if duration > Duration::from_secs(5) {
-                eprintln!("Warning: waiting for {:?}, this may take a while", duration);
+                eprintln!("Warning: waiting for {duration:?}, this may take a while");
                 eprintln!("Consider using shorter duration in 'progress' method calls");
             }
             std::thread::sleep(duration);

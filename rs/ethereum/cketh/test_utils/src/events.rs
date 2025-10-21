@@ -31,8 +31,7 @@ impl<T> MinterEventAssert<T> {
                     assert_eq!(
                         found_event_indexes.insert(index_expected_event, index_audit_event),
                         None,
-                        "Event {:?} occurs multiple times",
-                        expected_event
+                        "Event {expected_event:?} occurs multiple times"
                     );
                 }
             }
@@ -63,10 +62,7 @@ impl<T> MinterEventAssert<T> {
             .into_iter()
             .find(|event| predicate(&event.payload))
         {
-            panic!(
-                "Found an event satisfying the predicate: {:?}",
-                unexpected_event
-            )
+            panic!("Found an event satisfying the predicate: {unexpected_event:?}")
         }
         self.setup
     }

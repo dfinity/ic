@@ -10,12 +10,12 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::{pb::v1::NeuronId as ProtoNeuronId, types::UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_governance_api::{
-    add_or_remove_node_provider::Change,
-    manage_neuron_response::Command as CommandResponse,
-    reward_node_provider::{RewardMode, RewardToAccount},
     AddOrRemoveNodeProvider, DateRangeFilter, ExecuteNnsFunction, GovernanceError,
     ListNodeProviderRewardsRequest, MakeProposalRequest, NetworkEconomics, NnsFunction,
     NodeProvider, ProposalActionRequest, RewardNodeProvider, RewardNodeProviders,
+    add_or_remove_node_provider::Change,
+    manage_neuron_response::Command as CommandResponse,
+    reward_node_provider::{RewardMode, RewardToAccount},
 };
 use ic_nns_test_utils::state_test_helpers::setup_nns_canisters_with_features;
 use ic_nns_test_utils::{
@@ -34,7 +34,7 @@ use ic_protobuf::registry::{
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::PrincipalId;
-use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, Tokens, TOKEN_SUBDIVIDABLE_BY};
+use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, TOKEN_SUBDIVIDABLE_BY, Tokens};
 use maplit::btreemap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use std::{
@@ -54,7 +54,7 @@ impl NodeInfo {
         operator_id: PrincipalId,
         provider_id: PrincipalId,
         provider_account: AccountIdentifier,
-        reward_account: Option<icp_ledger::protobuf::AccountIdentifier>,
+        reward_account: Option<AccountIdentifier>,
     ) -> Self {
         NodeInfo {
             operator_id,
@@ -62,7 +62,7 @@ impl NodeInfo {
             provider_account,
             provider: NodeProvider {
                 id: Some(provider_id),
-                reward_account,
+                reward_account: reward_account.map(|id| id.into_proto_with_checksum()),
             },
         }
     }
@@ -89,7 +89,7 @@ fn test_list_node_provider_rewards() {
         None,
     );
     let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_1.provider_account.into()),
+        to_account: Some(node_info_1.provider_account.into_proto_with_checksum()),
     }));
     let expected_rewards_e8s_1 = ((10 * 24_000) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
     let expected_node_provider_reward_1 = RewardNodeProvider {
@@ -120,9 +120,11 @@ fn test_list_node_provider_rewards() {
         nns_get_monthly_node_provider_rewards(&state_machine);
 
     let monthly_node_provider_rewards = monthly_node_provider_rewards_result.unwrap();
-    assert!(monthly_node_provider_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_1));
+    assert!(
+        monthly_node_provider_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_1)
+    );
 
     // Assert account balances are 0
     assert_account_balance(&state_machine, node_info_1.provider_account, 0);
@@ -146,9 +148,11 @@ fn test_list_node_provider_rewards() {
         nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
     let this_rewards_timestamp = most_recent_rewards.timestamp;
 
-    assert!(most_recent_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_1));
+    assert!(
+        most_recent_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_1)
+    );
 
     // Assert advancing time less than a month doesn't trigger monthly NP rewards
     let mut rewards_were_triggered = false;
@@ -302,7 +306,7 @@ fn test_automated_node_provider_remuneration() {
         None,
     );
     let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_1.provider_account.into()),
+        to_account: Some(node_info_1.provider_account.into_proto_with_checksum()),
     }));
     let expected_rewards_e8s_1 =
         (((10 * 24_000) + (21 * 68_000) + (6 * 11_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
@@ -319,7 +323,7 @@ fn test_automated_node_provider_remuneration() {
         None,
     );
     let reward_mode_2 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_2.provider_account.into()),
+        to_account: Some(node_info_2.provider_account.into_proto_with_checksum()),
     }));
     let expected_rewards_e8s_2 =
         (((35 * 68_000) + (17 * 11_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
@@ -334,10 +338,10 @@ fn test_automated_node_provider_remuneration() {
         *TEST_USER5_PRINCIPAL,
         *TEST_USER6_PRINCIPAL,
         AccountIdentifier::from(*TEST_USER7_PRINCIPAL),
-        Some(AccountIdentifier::from(*TEST_USER7_PRINCIPAL).into()),
+        Some(AccountIdentifier::from(*TEST_USER7_PRINCIPAL)),
     );
     let reward_mode_3 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_3.provider_account.into()),
+        to_account: Some(node_info_3.provider.reward_account.clone().unwrap()),
     }));
     let expected_rewards_e8s_3 =
         (((19 * 234_000) + (33 * 907_000) + (4 * 103_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
@@ -418,15 +422,24 @@ fn test_automated_node_provider_remuneration() {
 
     let monthly_node_provider_rewards = monthly_node_provider_rewards_result.unwrap();
     assert_eq!(monthly_node_provider_rewards.rewards.len(), 3);
-    assert!(monthly_node_provider_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_1));
-    assert!(monthly_node_provider_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_2));
-    assert!(monthly_node_provider_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_3));
+    assert!(
+        monthly_node_provider_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_1),
+        "Expected reward 1: {expected_node_provider_reward_2:?} not found in monthly rewards: {monthly_node_provider_rewards:?}"
+    );
+    assert!(
+        monthly_node_provider_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_2),
+        "Expected reward 2: {expected_node_provider_reward_1:?} not found in monthly rewards: {monthly_node_provider_rewards:?}"
+    );
+    assert!(
+        monthly_node_provider_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_3),
+        "Expected reward 3: {expected_node_provider_reward_3:?} not found in monthly rewards: {monthly_node_provider_rewards:?}"
+    );
 
     // Assert account balances are 0
     assert_account_balance(&state_machine, node_info_1.provider_account, 0);
@@ -462,15 +475,21 @@ fn test_automated_node_provider_remuneration() {
         nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
     let np_rewards_from_proposal_timestamp = most_recent_rewards.timestamp;
 
-    assert!(most_recent_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_1));
-    assert!(most_recent_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_2));
-    assert!(most_recent_rewards
-        .rewards
-        .contains(&expected_node_provider_reward_3));
+    assert!(
+        most_recent_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_1)
+    );
+    assert!(
+        most_recent_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_2)
+    );
+    assert!(
+        most_recent_rewards
+            .rewards
+            .contains(&expected_node_provider_reward_3)
+    );
 
     // Assert advancing time less than a month doesn't trigger monthly NP rewards
     let mut rewards_were_triggered = false;
@@ -572,17 +591,23 @@ fn test_automated_node_provider_remuneration() {
         reward_mode: reward_mode_3.clone(),
     };
 
-    assert!(most_recent_rewards
-        .rewards
-        .contains(&expected_automated_node_provider_reward_1));
+    assert!(
+        most_recent_rewards
+            .rewards
+            .contains(&expected_automated_node_provider_reward_1)
+    );
 
-    assert!(most_recent_rewards
-        .rewards
-        .contains(&expected_automated_node_provider_reward_2));
+    assert!(
+        most_recent_rewards
+            .rewards
+            .contains(&expected_automated_node_provider_reward_2)
+    );
 
-    assert!(most_recent_rewards
-        .rewards
-        .contains(&expected_automated_node_provider_reward_3));
+    assert!(
+        most_recent_rewards
+            .rewards
+            .contains(&expected_automated_node_provider_reward_3)
+    );
 
     // Assert additional rewards have been transferred to the Node Provider accounts
     assert_account_balance(
@@ -665,17 +690,23 @@ fn test_automated_node_provider_remuneration() {
         reward_mode: reward_mode_3,
     };
 
-    assert!(most_recent_rewards
-        .rewards
-        .contains(&expected_automated_node_provider_reward_1));
+    assert!(
+        most_recent_rewards
+            .rewards
+            .contains(&expected_automated_node_provider_reward_1)
+    );
 
-    assert!(most_recent_rewards
-        .rewards
-        .contains(&expected_automated_node_provider_reward_2));
+    assert!(
+        most_recent_rewards
+            .rewards
+            .contains(&expected_automated_node_provider_reward_2)
+    );
 
-    assert!(most_recent_rewards
-        .rewards
-        .contains(&expected_automated_node_provider_reward_3));
+    assert!(
+        most_recent_rewards
+            .rewards
+            .contains(&expected_automated_node_provider_reward_3)
+    );
 }
 
 /// Helper function for making NNS proposals for this test
@@ -697,10 +728,7 @@ fn submit_nns_proposal(state_machine: &StateMachine, action: ProposalActionReque
 
     let proposal_id = match response.command.unwrap() {
         CommandResponse::MakeProposal(x) => x.proposal_id.unwrap(),
-        response => panic!(
-            "Unexpected response returned from NNS governance: {:?}",
-            response
-        ),
+        response => panic!("Unexpected response returned from NNS governance: {response:?}"),
     };
 
     nns_wait_for_proposal_execution(state_machine, proposal_id.id);

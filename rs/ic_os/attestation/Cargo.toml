@@ -1,0 +1,29 @@
+[package]
+name = "attestation"
+edition.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+candid = { workspace = true }
+der = { workspace = true, features = ["alloc", "derive", "std"] }
+itertools = { workspace = true }
+pem = { workspace = true }
+prost = { workspace = true }
+ring = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+sev = { workspace = true }
+thiserror = { workspace = true }
+tonic = { workspace = true }
+
+config_types = { path = "../config_types" }
+ic_sev = { path = "../sev" }
+ic-interfaces-registry = { path = "../../interfaces/registry" }
+ic-protobuf = { path = "../../protobuf" }
+ic-registry-client-helpers = { path = "../../registry/helpers" }
+ic-types = { path = "../../types/types" }
+
+[dev-dependencies]
+attestation_testing = { path = "testing" }
+
+[build-dependencies]
+prost-build = { workspace = true }

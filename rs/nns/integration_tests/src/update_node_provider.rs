@@ -7,7 +7,7 @@ use ic_nns_governance_api::{GovernanceError, NodeProvider, UpdateNodeProvider};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     governance::add_node_provider,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 use icp_ledger::AccountIdentifier;
 
@@ -47,7 +47,7 @@ fn test_update_node_provider() {
         assert_eq!(get_node_provider_by_caller_result.unwrap(), node_provider_1);
 
         let update = UpdateNodeProvider {
-            reward_account: Some(node_provider_1_account.into()),
+            reward_account: Some(node_provider_1_account.into_proto_with_checksum()),
         };
 
         let update_node_provider_result: Result<(), GovernanceError> = nns_canisters
@@ -78,7 +78,7 @@ fn test_update_node_provider() {
 
         let expected_node_provider = NodeProvider {
             id: Some(node_provider_id_1),
-            reward_account: Some(node_provider_1_account.into()),
+            reward_account: Some(node_provider_1_account.into_proto_with_checksum()),
         };
 
         assert_eq!(

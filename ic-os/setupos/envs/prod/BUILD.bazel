@@ -18,7 +18,7 @@ icos_images = icos_build(
 file_size_check(
     name = "disk_img_size_check",
     file = icos_images.disk_image,
-    max_file_size = 2100 * 1000 * 1000,  # 2.1 GB on 2025-03-21
+    max_file_size = 2200 * 1000 * 1000,  # 2.15 GB on 2025-08-07
 )
 
 launch_bare_metal(

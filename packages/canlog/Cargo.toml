@@ -1,6 +1,6 @@
 [package]
 name = "canlog"
-version = "0.1.1"
+version = "0.2.0"
 description = "Crate for managing canister logs"
 license = "Apache-2.0"
 readme = "README.md"
@@ -14,8 +14,8 @@ documentation = "https://docs.rs/canlog"
 candid = { workspace = true }
 canlog_derive = { version = "=0.1.0", path = "../canlog_derive", optional = true }
 ic-canister-log = "0.2.0"
-ic-cdk = { workspace = true }
-regex = { workspace = true }
+ic0 = { workspace = true }
+regex-lite = "0.1.8"
 serde = { workspace = true }
 serde_json = { workspace = true }
 

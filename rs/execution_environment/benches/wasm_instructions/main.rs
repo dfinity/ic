@@ -12,15 +12,16 @@
 
 use std::time::Duration;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use execution_environment_bench::common;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
-    as_num_instructions, as_round_instructions, ExecuteMessageResult, ExecutionEnvironment,
-    ExecutionResponse, RoundLimits,
+    ExecuteMessageResult, ExecutionEnvironment, ExecutionResponse, RoundLimits,
+    as_num_instructions, as_round_instructions,
 };
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_types::{
+    batch::CanisterCyclesCostSchedule,
     ingress::{IngressState, IngressStatus},
     messages::CanisterMessageOrTask,
 };
@@ -72,6 +73,7 @@ pub fn wasm_instructions_bench(c: &mut Criterion) {
                 network_topology,
                 &mut round_limits,
                 SMALL_APP_SUBNET_MAX_SIZE,
+                CanisterCyclesCostSchedule::Normal,
             );
             // We do not validate the number of executed instructions.
             let _executed_instructions =

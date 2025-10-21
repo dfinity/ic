@@ -2,20 +2,21 @@
 #![cfg_attr(test, allow(clippy::unit_arg))]
 //! HTTP requests that the Internet Computer is prepared to handle.
 
-use super::{query::QuerySource, Blob};
+use super::{Blob, query::QuerySource};
 use crate::{
+    Height, Time, UserId,
     crypto::SignedBytesWithoutDomainSeparator,
     messages::{
-        message_id::hash_of_map, MessageId, Query, ReadState, SignedIngressContent, UserSignature,
+        MessageId, Query, ReadState, SignedIngressContent, UserSignature, message_id::hash_key_val,
     },
-    Height, Time, UserId,
 };
-use ic_base_types::{CanisterId, CanisterIdError, NodeId, PrincipalId};
+use ic_base_types::{CanisterId, CanisterIdError, NodeId, PrincipalId, hash_of_map};
 use ic_crypto_tree_hash::{MixedHashTree, Path};
+use ic_heap_bytes::DeterministicHeapBytes;
 use maplit::btreemap;
 #[cfg(test)]
 use proptest_derive::Arbitrary;
-use serde::{ser::SerializeTuple, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, ser::SerializeTuple};
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
@@ -57,7 +58,7 @@ pub(crate) fn representation_independent_hash_call_or_query(
     if let Some(some_nonce) = nonce {
         map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
     }
-    hash_of_map(&map)
+    hash_of_map(&map, |key, value| hash_key_val(key.as_str(), value))
 }
 
 pub(crate) fn representation_independent_hash_read_state(
@@ -85,7 +86,7 @@ pub(crate) fn representation_independent_hash_read_state(
     if let Some(some_nonce) = nonce {
         map.insert("nonce".to_string(), Bytes(some_nonce.to_vec()));
     }
-    hash_of_map(&map)
+    hash_of_map(&map, |key, value| hash_key_val(key.as_str(), value))
 }
 
 /// Describes the fields of a canister update call as defined in
@@ -426,21 +427,21 @@ pub enum HttpRequestError {
 
 impl From<serde_cbor::Error> for HttpRequestError {
     fn from(err: serde_cbor::Error) -> Self {
-        HttpRequestError::InvalidEncoding(format!("{}", err))
+        HttpRequestError::InvalidEncoding(format!("{err}"))
     }
 }
 
 impl fmt::Display for HttpRequestError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HttpRequestError::InvalidMessageId(msg) => write!(f, "invalid message ID: {}", msg),
-            HttpRequestError::InvalidIngressExpiry(msg) => write!(f, "{}", msg),
-            HttpRequestError::InvalidDelegationExpiry(msg) => write!(f, "{}", msg),
-            HttpRequestError::InvalidPrincipalId(msg) => write!(f, "invalid princial id: {}", msg),
+            HttpRequestError::InvalidMessageId(msg) => write!(f, "invalid message ID: {msg}"),
+            HttpRequestError::InvalidIngressExpiry(msg) => write!(f, "{msg}"),
+            HttpRequestError::InvalidDelegationExpiry(msg) => write!(f, "{msg}"),
+            HttpRequestError::InvalidPrincipalId(msg) => write!(f, "invalid princial id: {msg}"),
             HttpRequestError::MissingPubkeyOrSignature(msg) => {
-                write!(f, "missing pubkey or signature: {}", msg)
+                write!(f, "missing pubkey or signature: {msg}")
             }
-            HttpRequestError::InvalidEncoding(err) => write!(f, "Invalid CBOR encoding: {}", err),
+            HttpRequestError::InvalidEncoding(err) => write!(f, "Invalid CBOR encoding: {err}"),
         }
     }
 }
@@ -449,7 +450,7 @@ impl Error for HttpRequestError {}
 
 impl From<CanisterIdError> for HttpRequestError {
     fn from(err: CanisterIdError) -> Self {
-        Self::InvalidPrincipalId(format!("Converting to canister id failed with {}", err))
+        Self::InvalidPrincipalId(format!("Converting to canister id failed with {err}"))
     }
 }
 
@@ -496,7 +497,7 @@ impl Delegation {
                 for target in targets {
                     target_canister_ids.insert(CanisterId::unchecked_from_principal(
                         PrincipalId::try_from(target.0.as_slice())
-                            .map_err(|e| format!("Error parsing canister ID: {}", e))?,
+                            .map_err(|e| format!("Error parsing canister ID: {e}"))?,
                     ));
                 }
                 Ok(Some(target_canister_ids))
@@ -524,7 +525,7 @@ impl SignedBytesWithoutDomainSeparator for Delegation {
             );
         }
 
-        hash_of_map(&map).to_vec()
+        hash_of_map(&map, |key, value| hash_key_val(key, value)).to_vec()
     }
 }
 
@@ -630,7 +631,9 @@ impl QueryResponseHash {
             }
         };
 
-        let hash = hash_of_map(&self_map_representation);
+        let hash = hash_of_map(&self_map_representation, |key, value| {
+            hash_key_val(key.as_str(), value)
+        });
 
         Self(hash)
     }
@@ -710,6 +713,21 @@ pub struct Certificate {
     pub delegation: Option<CertificateDelegation>,
 }
 
+#[derive(Copy, Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Hash)]
+pub enum CertificateDelegationFormat {
+    /// Delegation with the canister ranges in the `/subnet/{subnet_id}/canister_ranges` path.
+    Flat,
+    /// Delegation with the canister ranges in the `/canister_ranges/{subnet_id}` path.
+    Tree,
+    /// Delegation with the canister ranges pruned out.
+    Pruned,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub struct CertificateDelegationMetadata {
+    pub format: CertificateDelegationFormat,
+}
+
 /// A `CertificateDelegation` as defined in `<https://internetcomputer.org/docs/current/references/ic-interface-spec#certification-delegation>`
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CertificateDelegation {
@@ -777,8 +795,7 @@ fn to_authentication<C>(env: &HttpRequestEnvelope<C>) -> Result<Authentication, 
         }
         (None, None, None) => Ok(Authentication::Anonymous),
         rest => Err(HttpRequestError::MissingPubkeyOrSignature(format!(
-            "Got {:?}",
-            rest
+            "Got {rest:?}"
         ))),
     }
 }

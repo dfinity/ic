@@ -1,14 +1,14 @@
 // The Local Replica is running the binary of a replica of the IC locally and thus allows for local testing
 use candid::{Encode, Principal};
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, LedgerArgument};
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_suite_state_machine_tests::{
+use ic_ledger_suite_state_machine_tests_constants::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE,
     NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE,
     TOKEN_NAME, TOKEN_SYMBOL,
@@ -36,7 +36,7 @@ pub async fn get_testing_agent(port: u16) -> Agent {
 
 pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> Agent {
     // The local replica will be running on the localhost
-    let replica_url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
+    let replica_url = Url::parse(&format!("http://localhost:{port}")).unwrap();
 
     // Setup the agent
     let agent = Agent::builder()

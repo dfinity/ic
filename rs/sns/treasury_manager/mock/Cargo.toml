@@ -6,13 +6,13 @@ edition.workspace = true
 
 [[bin]]
 name = "mock_treasury_manager"
-path = "src/canister.rs"
+path = "src/main.rs"
 
 [dependencies]
 candid = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers.workspace = true
-sns-treasury-manager = { path = "../treasury_manager" }
+sns-treasury-manager = { path = "../../treasury_manager" }
 ic-canister-log = "0.2.0"
 
 [dev-dependencies]

@@ -3,11 +3,11 @@
 use std::time::Duration;
 
 use http::{
-    header::{
-        HeaderName, ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE,
-        COOKIE, DNT, IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
-    },
     Method,
+    header::{
+        ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, COOKIE, DNT,
+        HeaderName, IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
+    },
 };
 use ic_bn_lib::http::headers::X_REQUESTED_WITH;
 use tower_http::cors::{Any, CorsLayer};

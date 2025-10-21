@@ -3,7 +3,7 @@ use ic_config::logger::{Config as LoggingConfig, Level, LogDestination, LogForma
 use time::format_description::well_known::Rfc3339;
 use tracing::Subscriber;
 use tracing_appender::{non_blocking, non_blocking::WorkerGuard};
-use tracing_subscriber::{filter::LevelFilter, fmt, layer::Layer, registry::LookupSpan, Registry};
+use tracing_subscriber::{Registry, filter::LevelFilter, fmt, layer::Layer, registry::LookupSpan};
 
 enum InnerFormat {
     Full(fmt::format::Format<fmt::format::Full, fmt::time::UtcTime<Rfc3339>>),
@@ -66,7 +66,10 @@ pub fn logging_layer(
     config: &LoggingConfig,
     node_id: NodeId,
     subnet_id: SubnetId,
-) -> (impl Layer<Registry> + Send + Sync, Option<WorkerGuard>) {
+) -> (
+    impl Layer<Registry> + Send + Sync + use<>,
+    Option<WorkerGuard>,
+) {
     let formatter = Formatter::new(config.format, node_id, subnet_id);
 
     let log_destination = config.log_destination.clone();

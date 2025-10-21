@@ -47,7 +47,6 @@ def image_deps(mode, _malicious = False):
         "rootfs_size": "3G",
         "bootfs_size": "100M",
         "grub_config": Label("//ic-os/bootloader:hostos_grub.cfg"),
-        "extra_boot_args_template": Label("//ic-os/bootloader:hostos_extra_boot_args.template"),
         "boot_args_template": Label("//ic-os/bootloader:hostos_boot_args.template"),
         "requires_root_signing": False,
 

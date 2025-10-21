@@ -1,8 +1,8 @@
 use super::*;
 use crate::{neuron_store::voting_power, pb::v1::Vote};
 use ic_stable_structures::{
-    memory_manager::{MemoryId, MemoryManager},
     VectorMemory,
+    memory_manager::{MemoryId, MemoryManager},
 };
 
 fn voting_power_map(voting_powers: Vec<u64>) -> HashMap<u64, u64> {
@@ -47,6 +47,22 @@ fn test_record_voting_power_snapshot() {
 
     for i in 0..6 {
         let timestamp_seconds = 2 + i;
+
+        let use_previous_ballots = snapshots
+            .previous_ballots_if_voting_power_spike_detected(u64::MAX, timestamp_seconds)
+            .is_some();
+
+        if cfg!(feature = "test") {
+            // In the test environment, we do not use previous ballots when the snapshots are not full,
+            // since a lot of test setups involve creating a lot of voting power.
+            assert!(!use_previous_ballots);
+        } else {
+            // In the production environment, we use previous ballots as long as there is at least one
+            // snapshot, so that when we recover from a false positive (by removing some snapshots), we
+            // can still have the spike detection mechanism in place.
+            assert!(use_previous_ballots);
+        }
+
         // The minimum voting power in the snapshots is still 100 over the next 6
         snapshots.record_voting_power_snapshot(
             timestamp_seconds,

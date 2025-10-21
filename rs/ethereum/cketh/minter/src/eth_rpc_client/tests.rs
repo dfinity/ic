@@ -1,4 +1,4 @@
-use evm_rpc_client::{EthMainnetService, RpcService as EvmRpcService};
+use evm_rpc_types::{EthMainnetService, RpcService as EvmRpcService};
 
 const BLOCK_PI: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::BlockPi);
 const PUBLIC_NODE: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::PublicNode);
@@ -10,7 +10,7 @@ mod multi_call_results {
         use crate::eth_rpc_client::tests::{BLOCK_PI, PUBLIC_NODE};
         use crate::eth_rpc_client::{MinByKey, ReduceWithStrategy};
         use crate::numeric::TransactionCount;
-        use evm_rpc_client::{MultiRpcResult, Nat256};
+        use evm_rpc_types::{MultiRpcResult, Nat256};
 
         #[test]
         fn should_get_minimum_tx_count() {
@@ -31,8 +31,9 @@ mod multi_call_results {
         use crate::eth_rpc_client::{
             MultiCallError, MultiCallResults, ReduceWithStrategy, StrictMajorityByKey,
         };
-        use evm_rpc_client::{FeeHistory, HttpOutcallError, JsonRpcError, MultiRpcResult};
-        use ic_cdk::api::call::RejectionCode;
+        use evm_rpc_types::{
+            FeeHistory, HttpOutcallError, JsonRpcError, LegacyRejectionCode, MultiRpcResult,
+        };
 
         #[test]
         fn should_get_unanimous_fee_history() {
@@ -55,7 +56,11 @@ mod multi_call_results {
                     fees[index_majority].oldest_block
                 );
                 let majority_fee = fees[index_majority].clone();
-                let [block_pi_fee_history, llama_nodes_fee_history, public_node_fee_history] = fees;
+                let [
+                    block_pi_fee_history,
+                    llama_nodes_fee_history,
+                    public_node_fee_history,
+                ] = fees;
                 let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Inconsistent(vec![
                     (BLOCK_PI, Ok(block_pi_fee_history)),
                     (LLAMA_NODES, Ok(llama_nodes_fee_history)),
@@ -76,7 +81,7 @@ mod multi_call_results {
                 (
                     PUBLIC_NODE,
                     Err(HttpOutcallError::IcError {
-                        code: RejectionCode::SysTransient,
+                        code: LegacyRejectionCode::SysTransient,
                         message: "no consensus".to_string(),
                     }
                     .into()),
@@ -265,8 +270,7 @@ mod multi_call_results {
     mod has_http_outcall_error_matching {
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
         use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
-        use evm_rpc_client::{HttpOutcallError, JsonRpcError, RpcError};
-        use ic_cdk::api::call::RejectionCode;
+        use evm_rpc_types::{HttpOutcallError, JsonRpcError, LegacyRejectionCode, RpcError};
         use proptest::prelude::any;
         use proptest::proptest;
 
@@ -287,7 +291,7 @@ mod multi_call_results {
         fn should_match_when_consistent_http_outcall_error() {
             let error: MultiCallError<String> = MultiCallError::ConsistentError(
                 RpcError::HttpOutcallError(HttpOutcallError::IcError {
-                    code: RejectionCode::SysTransient,
+                    code: LegacyRejectionCode::SysTransient,
                     message: "message".to_string(),
                 }),
             );
@@ -322,7 +326,7 @@ mod multi_call_results {
                     (
                         LLAMA_NODES,
                         Err(HttpOutcallError::IcError {
-                            code: RejectionCode::SysTransient,
+                            code: LegacyRejectionCode::SysTransient,
                             message: "message".to_string(),
                         }
                         .into()),
@@ -414,7 +418,7 @@ mod eth_get_transaction_receipt {
     proptest! {
         #[test]
         fn should_fail_deserializing_wrong_transaction_status(wrong_status in 2_u32..u32::MAX) {
-            let status = format!("\"0x{:x}\"", wrong_status);
+            let status = format!("\"0x{wrong_status:x}\"");
             let error = serde_json::from_str::<TransactionStatus>(&status);
             assert_matches!(error, Err(e) if e.to_string().contains("invalid transaction status"));
         }

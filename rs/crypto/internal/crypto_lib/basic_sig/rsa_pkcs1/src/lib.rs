@@ -11,7 +11,7 @@ use ic_crypto_sha2::Sha256;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use num_traits::{FromPrimitive, Zero};
 use rsa::traits::PublicKeyParts;
-use rsa::{pkcs8, Pkcs1v15Sign};
+use rsa::{Pkcs1v15Sign, pkcs8};
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// The object identifier for RSA public keys
@@ -62,7 +62,7 @@ impl RsaPublicKey {
 
         let pkcs1 =
             to_der(&ASN1Block::Sequence(0, blocks)).map_err(|e| CryptoError::InvalidArgument {
-                message: format!("{:?}", e),
+                message: format!("{e:?}"),
             })?;
 
         let oid = ASN1Block::ObjectIdentifier(0, oid!(1, 2, 840, 113549, 1, 1, 1));
@@ -71,7 +71,7 @@ impl RsaPublicKey {
         let blocks = vec![alg, octet_string];
 
         to_der(&ASN1Block::Sequence(0, blocks)).map_err(|e| CryptoError::InvalidArgument {
-            message: format!("{:?}", e),
+            message: format!("{e:?}"),
         })
     }
 
@@ -101,7 +101,7 @@ impl RsaPublicKey {
             .map_err(|e| CryptoError::MalformedPublicKey {
                 algorithm: AlgorithmId::RsaSha256,
                 key_bytes: Some(bytes.to_vec()),
-                internal_error: format!("Parsing RSA key failed {:?}", e),
+                internal_error: format!("Parsing RSA key failed {e:?}"),
             })?;
 
         let two = BigUint::from_i8(2).expect("Unable to create 2 BigUint");
@@ -171,7 +171,7 @@ impl RsaPublicKey {
                 algorithm: AlgorithmId::RsaSha256,
                 public_key_bytes: self.as_der().to_vec(),
                 sig_bytes: signature.to_vec(),
-                internal_error: format!("{:?}", e),
+                internal_error: format!("{e:?}"),
             }),
         }
     }

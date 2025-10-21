@@ -12,7 +12,7 @@
 //!  - Repeat until state sync reports completed or we hit the state sync timeout or
 //!    this object is dropped.
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{HashMap, hash_map::Entry},
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -23,12 +23,12 @@ use crate::routes::{build_chunk_handler_request, parse_chunk_handler_response};
 use ic_base_types::NodeId;
 use ic_http_endpoints_async_utils::JoinMap;
 use ic_interfaces::p2p::state_sync::{ChunkId, Chunkable, StateSyncArtifactId};
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_quic_transport::{Shutdown, Transport};
 use rand::{
+    SeedableRng,
     distributions::{Distribution, WeightedIndex},
     rngs::SmallRng,
-    SeedableRng,
 };
 use thiserror::Error;
 use tokio::{
@@ -116,23 +116,18 @@ impl OngoingStateSync {
                 () = cancellation.cancelled() => {
                     break
                 },
-                Some(new_peer) = self.new_peers_rx.recv() => {
-                    if let Entry::Vacant(e) = self.active_downloads.entry(new_peer) {
-                        info!(self.log, "Adding peer {} to ongoing state sync of height {}.", new_peer, self.artifact_id.height);
-                        e.insert(0);
-                        self.allowed_downloads += PARALLEL_CHUNK_DOWNLOADS;
-                        self.spawn_chunk_downloads(cancellation.clone(), tracker.clone());
-                    }
-                }
                 Some(download_result) = self.downloading_chunks.join_next() => {
                     match download_result {
                         Ok((result, _)) => {
-                            // We do a saturating sub here because it can happen (in rare cases) that a peer that just joined this sync
-                            // was previously removed from the sync and still had outstanding downloads. As a consequence there is the possibiliy
-                            // of an underflow. In the case where we close old download task while having active downloads we might start to
-                            // undercount active downloads for this peer but this is acceptable since everything will be reset anyway every
-                            // 5-10min when state sync restarts.
-                            self.active_downloads.entry(result.peer_id).and_modify(|v| { *v = v.saturating_sub(1) });
+                            // We do a saturating sub here because it can happen (in rare cases) that a peer that just
+                            // joined this sync was previously removed from the sync and still had outstanding downloads.
+                            // As a consequence there is the possibiliy of an underflow. In the case where we close old
+                            // download task while having active downloads we might start to undercount active downloads
+                            // for this peer but this is acceptable since everything will be reset anyway every 5-10min
+                            // when state sync restarts.
+                            self.active_downloads
+                                .entry(result.peer_id)
+                                .and_modify(|v| *v = v.saturating_sub(1));
                             self.handle_downloaded_chunk_result(result);
                             self.spawn_chunk_downloads(cancellation.clone(), tracker.clone());
                         }
@@ -145,6 +140,19 @@ impl OngoingStateSync {
                                 error!(self.log, "Bug: JoinMap task was cancelled.");
                             }
                         }
+                    }
+                }
+                Some(new_peer) = self.new_peers_rx.recv() => {
+                    if let Entry::Vacant(e) = self.active_downloads.entry(new_peer) {
+                        info!(
+                            self.log,
+                            "Adding peer {} to ongoing state sync of height {}.",
+                            new_peer,
+                            self.artifact_id.height
+                        );
+                        e.insert(0);
+                        self.allowed_downloads += PARALLEL_CHUNK_DOWNLOADS;
+                        self.spawn_chunk_downloads(cancellation.clone(), tracker.clone());
                     }
                 }
             }
@@ -281,7 +289,6 @@ impl OngoingStateSync {
         metrics: OngoingStateSyncMetrics,
     ) -> DownloadResult {
         let _timer = metrics.chunk_download_duration.start_timer();
-
         let response_result = select! {
             () = download_cancel_token.cancelled() => {
                 return DownloadResult {
@@ -289,9 +296,10 @@ impl OngoingStateSync {
                     result: Err(DownloadChunkError::Cancelled)
                 }
             }
-            res = tokio::time::timeout(CHUNK_DOWNLOAD_TIMEOUT,client.rpc(&peer_id, build_chunk_handler_request(artifact_id, chunk_id))) => {
-                res
-            }
+            res = tokio::time::timeout(
+                CHUNK_DOWNLOAD_TIMEOUT,
+                client.rpc(&peer_id, build_chunk_handler_request(artifact_id, chunk_id)),
+            ) => res
         };
 
         let response = match response_result {
@@ -303,13 +311,13 @@ impl OngoingStateSync {
                         chunk_id,
                         err: e.to_string(),
                     }),
-                }
+                };
             }
             Err(_) => {
                 return DownloadResult {
                     peer_id,
                     result: Err(DownloadChunkError::Timeout),
-                }
+                };
             }
         };
 
@@ -364,7 +372,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::mocks::{MockChunkable, MockTransport};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{crypto::CryptoHash, Height};
+    use ic_types::{Height, crypto::CryptoHash};
     use ic_types_test_utils::ids::NODE_1;
     use prost::Message;
     use tokio::runtime::Runtime;

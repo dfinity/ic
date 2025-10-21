@@ -1,4 +1,4 @@
-load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MAINNET_ENV", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "COUNTER_CANISTER_RUNTIME_DEPS", "MAINNET_ENV", "MAINNET_NNS_CANISTER_ENV", "MAINNET_NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS", "XNET_TEST_CANISTER_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -7,13 +7,14 @@ system_test(
     name = "guest_os_qualification",
     env = {
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
+        "ENV_DEPS__IC_VERSION_FILE": "$(rootpath //bazel:version.txt)",
     } | MAINNET_NNS_CANISTER_ENV | MAINNET_ENV,
     tags = [
+        "colocate",
         "manual",
     ],
-    uses_guestos_dev_test = True,
     runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
+        ["//bazel:version.txt"] +
         UNIVERSAL_VM_RUNTIME_DEPS +
         MAINNET_NNS_CANISTER_RUNTIME_DEPS +
         COUNTER_CANISTER_RUNTIME_DEPS +
@@ -24,6 +25,7 @@ system_test(
         "//rs/registry/subnet_type",
         "//rs/tests/dre/utils:os_qualification_utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:tokio",
     ],

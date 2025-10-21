@@ -110,7 +110,7 @@ impl fmt::Display for PopBytesFromProtoError {
                 hex::encode(pop_bytes),
                 internal_error
             ),
-            _ => write!(f, "{:?}", self),
+            _ => write!(f, "{self:?}"),
         }
     }
 }

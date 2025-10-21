@@ -78,10 +78,7 @@ fn assert_malformed_fs_encryption_pubkey_error_containing(
     if let FsNiDkgPubkeyFromPubkeyProtoError::PublicKeyConversion { error } = error {
         assert!(error.contains(substring))
     } else {
-        panic!(
-            "expected MalformedFsEncryptionPublicKey error, but got {}",
-            error
-        )
+        panic!("expected MalformedFsEncryptionPublicKey error, but got {error}")
     }
 }
 
@@ -93,7 +90,7 @@ fn assert_malformed_fs_encryption_pop_error_containing(
     if let FsNiDkgPubkeyFromPubkeyProtoError::PopConversion { error } = error {
         assert!(error.contains(substring))
     } else {
-        panic!("expected MalformedFsEncryptionPop error, but got {}", error)
+        panic!("expected MalformedFsEncryptionPop error, but got {error}")
     }
 }
 
@@ -105,6 +102,6 @@ fn assert_internal_conversion_error(
     if let FsNiDkgPubkeyFromPubkeyProtoError::InternalConversion = error {
         assert!(true)
     } else {
-        panic!("expected InternalConversion error, but got {}", error)
+        panic!("expected InternalConversion error, but got {error}")
     }
 }

@@ -1,7 +1,7 @@
 use tla_instrumentation::{
-    tla_log_label, tla_log_locals, tla_log_request, tla_log_response,
+    Destination, InstrumentationState, tla_log_label, tla_log_locals, tla_log_request,
+    tla_log_response,
     tla_value::{TlaValue, ToTla},
-    Destination, InstrumentationState,
 };
 use tla_instrumentation_proc_macros::{tla_function, tla_update_method};
 
@@ -51,7 +51,7 @@ mod tla_stuff {
     }
 
     macro_rules! snapshotter {
-        ($first_arg:expr $(, $_rest:tt)* ) => {{
+        ($first_arg:expr_2021 $(, $_rest:tt)* ) => {{
             // Use a block to potentially shadow variables and contain the logic
             let raw_ptr = ::tla_instrumentation::UnsafeSendPtr($first_arg as *const _);
             ::std::sync::Arc::new(::std::sync::Mutex::new(move || my_get_globals(&raw_ptr)))
@@ -95,14 +95,14 @@ mod tla_stuff {
                 let incoming = incoming.as_str();
                 for pair in trace {
                     for s in [&mut pair.start, &mut pair.end] {
-                        if !s.0 .0.contains_key(outgoing) {
-                            s.0 .0.insert(
+                        if !s.0.0.contains_key(outgoing) {
+                            s.0.0.insert(
                                 outgoing.to_string(),
                                 Vec::<TlaValue>::new().to_tla_value(),
                             );
                         }
-                        if !s.0 .0.contains_key(incoming) {
-                            s.0 .0.insert(
+                        if !s.0.0.contains_key(incoming) {
+                            s.0.0.insert(
                                 incoming.to_string(),
                                 BTreeSet::<TlaValue>::new().to_tla_value(),
                             );
@@ -116,8 +116,8 @@ mod tla_stuff {
 }
 
 use tla_stuff::{
-    my_f_desc, my_get_globals, CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY,
-    TLA_TRACES_MUTEX,
+    CAN_NAME, PID, TLA_INSTRUMENTATION_STATE, TLA_TRACES_LKEY, TLA_TRACES_MUTEX, my_f_desc,
+    my_get_globals,
 };
 
 struct CallMaker {}

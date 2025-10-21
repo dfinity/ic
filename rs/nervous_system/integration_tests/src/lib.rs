@@ -25,7 +25,7 @@ pub struct SectionTimer {
 impl SectionTimer {
     pub fn new(name: impl Into<String>) -> Self {
         let name = name.into();
-        println!("{}", name);
+        println!("{name}");
         Self {
             name,
             start_time: Instant::now(),

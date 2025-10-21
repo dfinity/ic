@@ -1,7 +1,7 @@
 mod proto;
 
 use candid::CandidType;
-use ic_base_types::{CanisterId, CanisterIdError, PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, CanisterIdError, SubnetId};
 use ic_protobuf::proxy::ProxyDecodeError;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
@@ -20,9 +20,7 @@ pub fn canister_id_into_u64(canister_id: CanisterId) -> u64 {
     assert_eq!(
         bytes.len(),
         LENGTH + 2,
-        "canister_id: {}; raw {:?}",
-        canister_id,
-        canister_id
+        "canister_id: {canister_id}; raw {canister_id:?}"
     );
     let mut array = [0; LENGTH];
     array[..LENGTH].copy_from_slice(&bytes[..LENGTH]);
@@ -94,7 +92,7 @@ pub enum CanisterIdRangeError {
 
 impl Display for CanisterIdRangeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -123,8 +121,7 @@ impl std::str::FromStr for CanisterIdRange {
         let end: CanisterId = CanisterId::from_str(id_pair[1])?;
         if start > end {
             return Err(CanisterIdRangeError::CanisterIdRangeEmpty(format!(
-                "start {} is greater than end {}",
-                start, end,
+                "start {start} is greater than end {end}",
             )));
         }
         Ok(CanisterIdRange { start, end })
@@ -147,7 +144,7 @@ pub enum WellFormedError {
 
 impl From<WellFormedError> for ProxyDecodeError {
     fn from(err: WellFormedError) -> Self {
-        Self::Other(format!("{:?}", err))
+        Self::Other(format!("{err:?}"))
     }
 }
 
@@ -301,8 +298,7 @@ impl RoutingTable {
 
         if !are_disjoint(std::iter::once(&canister_id_range), self.0.keys()) {
             return Err(WellFormedError::RoutingTableNotDisjoint(format!(
-                "Routing table cannot insert an overlapping range: {:?}",
-                canister_id_range
+                "Routing table cannot insert an overlapping range: {canister_id_range:?}"
             )));
         }
 
@@ -398,11 +394,7 @@ impl RoutingTable {
 
             assert!(
                 k_end < r_start || r_end < k_start,
-                "did not handle case k = ({}, {}), r = ({}, {})",
-                k_start,
-                k_end,
-                r_start,
-                r_end
+                "did not handle case k = ({k_start}, {k_end}), r = ({r_start}, {r_end})"
             );
         }
         debug_assert!(to_add.len() <= 2);
@@ -527,30 +519,6 @@ impl RoutingTable {
         Ok(())
     }
 
-    /// Returns the `SubnetId` that the given `principal_id` is assigned to or
-    /// `None` if an assignment cannot be found.
-    pub fn route(&self, principal_id: PrincipalId) -> Option<SubnetId> {
-        // Check if the given `principal_id` is a subnet.
-        // Note that the following assumes that all known subnets are in the routing
-        // table, even if they're empty (i.e. no canister exists on them). In the
-        // future, if this assumption does not hold, the list of existing
-        // subnets should be taken from the rest of the registry (which should
-        // be the absolute source of truth).
-        if let Some(subnet_id) = self.0.values().find(|x| x.get() == principal_id) {
-            return Some(*subnet_id);
-        }
-
-        // If the `principal_id` was not a subnet, it must be a `CanisterId` (otherwise
-        // we can't route to it).
-        match CanisterId::try_from(principal_id) {
-            Ok(canister_id) => {
-                lookup_in_ranges(&self.0, canister_id).map(|(_range, subnet_id)| subnet_id)
-            }
-            // Cannot route to any subnet as we couldn't convert to a `CanisterId`.
-            Err(_) => None,
-        }
-    }
-
     /// Returns the corresponding `CanisterIdRange` and `SubnetId` that the given `canister_id` is assigned to
     /// or `None` if an assignment cannot be found.
     pub fn lookup_entry(&self, canister_id: CanisterId) -> Option<(CanisterIdRange, SubnetId)> {
@@ -652,8 +620,7 @@ impl CanisterMigrations {
             for (from, to) in trace.iter().zip(trace.iter().skip(1)) {
                 if from == to {
                     return Err(CanisterMigrationsInvalidTrace(format!(
-                        "Repeated subnet in canister migration trace: {}",
-                        from
+                        "Repeated subnet in canister migration trace: {from}"
                     )));
                 }
             }
@@ -705,8 +672,7 @@ impl CanisterMigrations {
 
         if !all_matching {
             return Err(format!(
-                "Some ranges do not match the provided trace: {:?} in canister migrations.",
-                trace
+                "Some ranges do not match the provided trace: {trace:?} in canister migrations."
             ));
         }
         for range in ranges_to_remove.iter() {
@@ -930,13 +896,13 @@ where
         }
 
         // Ranges are sorted and disjoint.
-        if let Some(previous_range) = previous_range {
-            if previous_range.end >= range.start {
-                return Err(CanisterIdRangeNotSortedOrNotDisjoint(format!(
-                    "previous_end {} >= current_start {}",
-                    previous_range.end, range.start
-                )));
-            }
+        if let Some(previous_range) = previous_range
+            && previous_range.end >= range.start
+        {
+            return Err(CanisterIdRangeNotSortedOrNotDisjoint(format!(
+                "previous_end {} >= current_start {}",
+                previous_range.end, range.start
+            )));
         }
         previous_range = Some(range)
     }

@@ -8,7 +8,7 @@ use crate::sns::swap::SwapCanister;
 use crate::{CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork};
 use candid::Nat;
 use ic_sns_governance_api::pb::v1::{
-    get_proposal_response, ListNeurons, NeuronId, Proposal, ProposalData, ProposalId,
+    ListNeurons, NeuronId, Proposal, ProposalData, ProposalId, get_proposal_response,
 };
 use ic_sns_swap::{
     pb::v1::{BuyerState, Lifecycle, RefreshBuyerTokensResponse},
@@ -17,7 +17,7 @@ use ic_sns_swap::{
 use icp_ledger::Tokens;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum SnsProposalError {
     #[error("Error submitting proposal: {0}")]
     ProposalSubmissionError(ProposalSubmissionError),
@@ -62,6 +62,7 @@ pub async fn wait_for_proposal_execution<
 ) -> Result<ProposalData, SnsProposalError> {
     // We create some blocks until the proposal has finished executing (`agent.progress(...)`).
     let mut last_proposal_data = None;
+
     for _attempt_count in 1..=50 {
         agent.progress(Duration::from_secs(1)).await;
         let proposal_result = sns_governance_canister
@@ -80,7 +81,7 @@ pub async fn wait_for_proposal_execution<
                 } else {
                     return Err(SnsProposalError::ProposalError(
                         proposal_id,
-                        format!("Error getting proposal: {:#?}", user_error),
+                        format!("Error getting proposal: {user_error:#?}"),
                     ));
                 }
             }
@@ -94,7 +95,7 @@ pub async fn wait_for_proposal_execution<
             get_proposal_response::Result::Error(err) => {
                 return Err(SnsProposalError::ProposalError(
                     proposal_id,
-                    format!("Proposal data cannot be found: {:?}", err),
+                    format!("Proposal data cannot be found: {err:?}"),
                 ));
             }
             get_proposal_response::Result::Proposal(proposal_data) => proposal_data,
@@ -112,8 +113,7 @@ pub async fn wait_for_proposal_execution<
     Err(SnsProposalError::ProposalError(
         proposal_id,
         format!(
-            "Looks like the SNS proposal is never going to be decided: {:#?}",
-            last_proposal_data
+            "Looks like the SNS proposal is never going to be decided: {last_proposal_data:#?}"
         ),
     ))
 }
@@ -172,8 +172,7 @@ pub async fn await_swap_lifecycle<C: CallCanisters + ProgressNetwork>(
         last_lifecycle = Some(lifecycle);
     }
     Err(format!(
-        "Looks like the SNS lifecycle {:?} is never going to be reached: {:?}",
-        expected_lifecycle, last_lifecycle,
+        "Looks like the SNS lifecycle {expected_lifecycle:?} is never going to be reached: {last_lifecycle:?}",
     ))
 }
 

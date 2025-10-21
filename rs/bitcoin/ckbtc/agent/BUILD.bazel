@@ -2,21 +2,19 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-http-types",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/bitcoin/ckbtc/minter",
-    "//rs/ledger_suite/icrc1",
-    "@crate_index//:candid",
-    "@crate_index//:ic-agent",
-    "@crate_index//:num-traits",
-]
-
 rust_library(
     name = "agent",
     srcs = glob(["src/**"]),
     crate_name = "ic_ckbtc_agent",
     version = "0.1.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-http-types",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//rs/bitcoin/ckbtc/minter",
+        "//rs/ledger_suite/icrc1",
+        "@crate_index//:candid",
+        "@crate_index//:ic-agent",
+        "@crate_index//:num-traits",
+    ],
 )

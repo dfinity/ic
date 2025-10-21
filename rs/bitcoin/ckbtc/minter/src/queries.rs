@@ -1,5 +1,5 @@
 use candid::CandidType;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(CandidType, Deserialize)]
 pub struct RetrieveBtcStatusRequest {
@@ -11,7 +11,7 @@ pub struct EstimateFeeArg {
     pub amount: Option<u64>,
 }
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize, Default)]
 pub struct WithdrawalFee {
     pub minter_fee: u64,
     pub bitcoin_fee: u64,

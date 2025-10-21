@@ -1,12 +1,12 @@
 #[cfg(test)]
 mod tests;
 
-use crate::state::eventlog::{Event, EventType};
 use crate::CanisterRuntime;
+use crate::state::eventlog::{Event, EventType};
 use ic_stable_structures::{
+    DefaultMemoryImpl,
     log::{Log as StableLog, NoSuchEntry},
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
-    DefaultMemoryImpl,
 };
 use serde::Deserialize;
 use std::cell::RefCell;
@@ -102,7 +102,10 @@ pub fn decode_event(buf: &[u8]) -> Event {
         Event(Event),
     }
     match ciborium::de::from_reader(buf).expect("failed to decode a minter event") {
-        SerializedEvent::Legacy(payload) => Event::from(payload),
+        SerializedEvent::Legacy(payload) => Event {
+            payload,
+            timestamp: None,
+        },
         SerializedEvent::Event(event) => event,
     }
 }

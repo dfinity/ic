@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, Context, Error};
+use anyhow::{Context, Error, anyhow, bail};
 use futures::future::join_all;
-use ic_agent::{export::Principal, Agent};
+use ic_agent::{Agent, export::Principal};
 use ic_base_types::PrincipalId;
 use ic_system_test_driver::{
     driver::{
@@ -44,7 +44,7 @@ pub async fn create_canister(
         .with_effective_canister_id(effective_canister_id)
         .call_and_wait()
         .await
-        .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
+        .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))?
         .0;
 
     let mut install_code = mgr.install_code(&canister_id, canister_bytes);
@@ -55,7 +55,7 @@ pub async fn create_canister(
     install_code
         .call_and_wait()
         .await
-        .map_err(|err| format!("Couldn't install canister: {}", err))?;
+        .map_err(|err| format!("Couldn't install canister: {err}"))?;
 
     Ok::<_, String>(canister_id)
 }
@@ -84,15 +84,13 @@ pub async fn install_canisters(
                     .with_effective_canister_id(effective_canister_id)
                     .call_and_wait()
                     .await
-                    .map_err(|err| {
-                        format!("Couldn't create canister with provisional API: {}", err)
-                    })
+                    .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))
                     .unwrap();
                 let install_code = mgr.install_code(&canister_id, canister_bytes);
                 install_code
                     .call_and_wait()
                     .await
-                    .map_err(|err| format!("Couldn't install canister: {}", err))
+                    .map_err(|err| format!("Couldn't install canister: {err}"))
                     .unwrap();
                 canister_id
             });

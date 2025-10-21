@@ -11,19 +11,15 @@ name = "ledger-canister"
 path = "src/main.rs"
 
 [dependencies]
-async-trait = { workspace = true }
-canbench-rs = { version = "0.1.7", optional = true }
+canbench-rs = { workspace = true, optional = true }
 candid = { workspace = true }
 candid_parser = { workspace = true }
 ciborium = { workspace = true }
-dfn_candid = { path = "../../../rust_canisters/dfn_candid" }
-dfn_core = { path = "../../../rust_canisters/dfn_core" }
 dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-cdk = { workspace = true }
-ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }
 ic-limits = { path = "../../../limits" }
 ic-icrc1 = { path = "../../icrc1" }
@@ -38,7 +34,6 @@ intmap = { version = "1.1.0", features = ["serde"] }
 lazy_static = { workspace = true }
 minicbor = { workspace = true }
 num-traits = { workspace = true }
-on_wire = { path = "../../../rust_canisters/on_wire" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
@@ -46,15 +41,16 @@ serde_cbor = { workspace = true }
 [dev-dependencies]
 candid_parser = { workspace = true }
 ic-agent = { workspace = true }
-ic-error-types = { path = "../../../../packages/ic-error-types" }
+ic-ledger-suite-state-machine-helpers = { path = "../../test_utils/state_machine_helpers" }
 ic-ledger-suite-state-machine-tests = { path = "../../tests/sm-tests" }
+ic-ledger-suite-state-machine-tests-constants = { path = "../../tests/sm-tests/constants" }
 ic-icrc1-test-utils = { path = "../../icrc1/test_utils" }
 ic-state-machine-tests = { path = "../../../state_machine_tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+on_wire = { path = "../../../rust_canisters/on_wire" }
 proptest = { workspace = true }
 
 [features]
-notify-method = []
 icp-allowance-getter = []
 next-ledger-version = []
 prev-ledger-version = []

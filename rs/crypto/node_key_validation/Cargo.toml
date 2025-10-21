@@ -28,4 +28,3 @@ assert_matches = { workspace = true }
 curve25519-dalek = { workspace = true }
 ic-crypto-test-utils-keys = { path = "../test_utils/keys" }
 ic-crypto-utils-basic-sig = { path = "../utils/basic_sig" }
-ic-test-utilities = { path = "../../test_utilities" }

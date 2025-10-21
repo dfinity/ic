@@ -13,10 +13,7 @@ use serde::Serialize;
 impl Registry {
     /// Remove nodes from their subnets
     pub fn do_remove_nodes_from_subnet(&mut self, payload: RemoveNodesFromSubnetPayload) {
-        println!(
-            "{}do_remove_nodes_from_subnet started: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_remove_nodes_from_subnet started: {payload:?}");
 
         let mutations = get_subnet_ids_from_subnet_list(self.get_subnet_list_record())
             .into_iter()
@@ -45,10 +42,7 @@ impl Registry {
         // Check invariants before applying mutations
         self.maybe_apply_mutation_internal(mutations);
 
-        println!(
-            "{}do_remove_nodes_from_subnet finished: {:?}",
-            LOG_PREFIX, payload
-        );
+        println!("{LOG_PREFIX}do_remove_nodes_from_subnet finished: {payload:?}");
     }
 }
 

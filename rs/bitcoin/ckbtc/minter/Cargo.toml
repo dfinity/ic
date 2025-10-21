@@ -14,14 +14,15 @@ path = "src/main.rs"
 async-trait = { workspace = true }
 bech32 = "0.9.0"
 bs58 = "0.5.0"
-canbench-rs = { version = "0.1.7", optional = true }
+canbench-rs = { workspace = true, optional = true }
 candid = { workspace = true }
+canlog = { path = "../../../../packages/canlog" }
+canlog_derive = { path = "../../../../packages/canlog_derive" }
 ciborium = { workspace = true }
 hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-btc-interface = { workspace = true }
 ic-btc-checker = { path = "../../checker" }
-ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-cdk = { workspace = true }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-dummy-getrandom-for-wasm = { path = "../../../../packages/ic-dummy-getrandom-for-wasm" }
@@ -34,7 +35,7 @@ ic-metrics-encoder = "1"
 ic-secp256k1 = { path = "../../../../packages/ic-secp256k1" }
 ic-stable-structures = { workspace = true }
 ic-utils-ensure = { path = "../../../utils/ensure" }
-ic0 = "0.18.9"
+ic0 = { workspace = true }
 icrc-ledger-client-cdk = { path = "../../../../packages/icrc-ledger-client-cdk" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 lazy_static = { workspace = true }

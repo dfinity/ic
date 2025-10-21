@@ -1,5 +1,4 @@
 use anyhow::Result;
-use bitcoincore_rpc::RpcApi;
 use candid::Principal;
 use ic_agent::identity::Secp256k1Identity;
 use ic_base_types::PrincipalId;
@@ -20,23 +19,23 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
     systest,
-    util::{assert_create_agent, block_on, runtime_from_url, UniversalCanister},
+    util::{UniversalCanister, assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    ckbtc_setup, create_canister, install_bitcoin_canister, install_btc_checker, install_ledger,
-    install_minter, subnet_app, subnet_sys, upgrade_btc_checker,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, ckbtc_setup,
+    create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
+    subnet_app, subnet_sys, upgrade_btc_checker,
     utils::{
-        assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
-        assert_temporarily_unavailable, ensure_wallet, generate_blocks, get_btc_address,
-        get_btc_client, start_canister, stop_canister, update_balance, upgrade_canister,
-        upgrade_canister_with_args, wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
+        BTC_BLOCK_REWARD, assert_mint_transaction, assert_no_new_utxo, assert_no_transaction,
+        assert_temporarily_unavailable, generate_blocks, get_btc_address, get_rpc_client,
+        start_canister, stop_canister, update_balance, upgrade_canister,
+        upgrade_canister_with_args, wait_for_bitcoin_balance,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use k256::elliptic_curve::SecretKey;
-use rand::{rngs::OsRng, SeedableRng};
+use rand::{SeedableRng, rngs::OsRng};
 use rand_chacha::ChaChaRng;
 use slog::{debug, info};
 
@@ -51,22 +50,16 @@ pub fn test_update_balance(env: TestEnv) {
     let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
 
     // Get access to btc replica.
-    let btc_rpc = get_btc_client(&env);
+    let btc_rpc = get_rpc_client::<bitcoin::Network>(&env);
 
-    // Create wallet if required.
-    ensure_wallet(&btc_rpc, &logger);
-
-    let default_btc_address = btc_rpc
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 10 first block to reach the min confirmations of the minter canister.
     debug!(
         &logger,
-        "Generating 10 blocks to default address: {}", &default_btc_address
+        "Generating 10 blocks to default address: {}", default_btc_address
     );
     btc_rpc
-        .generate_to_address(10, &default_btc_address)
+        .generate_to_address(10, default_btc_address)
         .unwrap();
 
     block_on(async {
@@ -176,7 +169,7 @@ pub fn test_update_balance(env: TestEnv) {
                 )
                 .await;
             } else {
-                panic!("expected to have one minted utxo, got: {:?}", update_result);
+                panic!("expected to have one minted utxo, got: {update_result:?}");
             }
         }
 
@@ -232,7 +225,7 @@ pub fn test_update_balance(env: TestEnv) {
                 )
                 .await;
             } else {
-                panic!("expected to have one minted utxo, got {:?}", update_result);
+                panic!("expected to have one minted utxo, got {update_result:?}");
             }
         }
 
@@ -308,13 +301,15 @@ pub fn test_update_balance(env: TestEnv) {
                 )
                 .await;
             } else {
-                panic!("expected to have one minted utxo, got: {:?}", update_result);
+                panic!("expected to have one minted utxo, got: {update_result:?}");
             }
         }
     });
 }
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_timeout_per_test(TIMEOUT_PER_TEST)
+        .with_overall_timeout(OVERALL_TIMEOUT)
         .with_setup(ckbtc_setup)
         .add_test(systest!(test_update_balance))
         .execute_from_args()?;

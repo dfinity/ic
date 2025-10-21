@@ -3,8 +3,8 @@ use std::borrow::Cow;
 use crate::icrc::{
     generic_value::Value,
     generic_value_predicate::{
-        and, element, is, is_array, is_blob, is_equal_to, is_int, is_less_or_equal_to, is_map,
-        is_more_than, is_nat, is_nat64, item, len, or, ItemRequirement, ValuePredicateFailures,
+        ItemRequirement, ValuePredicateFailures, and, element, is, is_array, is_blob, is_equal_to,
+        is_int, is_less_or_equal_to, is_map, is_more_than, is_nat, is_nat64, item, len, or,
     },
 };
 
@@ -43,11 +43,13 @@ pub fn validate(block: &Value) -> Result<(), ValuePredicateFailures> {
         icrc1_common.clone(),
         item("op", Required, is(Value::text("burn"))),
         item("from", Required, is_account.clone()),
+        item("fee", Optional, is_amount.clone()),
     ]);
     let is_icrc1_mint = and(vec![
         icrc1_common.clone(),
         item("op", Required, is(Value::text("mint"))),
         item("to", Required, is_account.clone()),
+        item("fee", Optional, is_amount.clone()),
     ]);
     let is_icrc2_approve = and(vec![
         icrc1_common.clone(),

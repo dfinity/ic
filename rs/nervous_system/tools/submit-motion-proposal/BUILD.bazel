@@ -1,0 +1,25 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:private"])
+
+rust_binary(
+    name = "submit-motion-proposal",
+    srcs = [
+        "src/main.rs",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/nns/common",
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "@crate_index//:candid",
+        "@crate_index//:clap",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-certification",
+        "@crate_index//:ic-identity-hsm",
+        "@crate_index//:serde",
+        "@crate_index//:serde_json",
+        "@crate_index//:serde_yaml",
+        "@crate_index//:tokio",
+    ],
+)

@@ -14,8 +14,8 @@ path = "src/main.rs"
 candid = { workspace = true }
 dfn_core = { path = "../dfn_core" }
 dfn_json = { path = "../dfn_json" }
-dfn_macro = { path = "../dfn_macro" }
 futures = { workspace = true }
+ic-cdk = { workspace = true }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -24,7 +24,6 @@ wat = { workspace = true }
 [dev-dependencies]
 canister-test = { path = "../../rust_canisters/canister_test" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
-ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
 
 [[test]]

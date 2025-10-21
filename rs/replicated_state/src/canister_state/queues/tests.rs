@@ -6,12 +6,13 @@ use crate::testing::FakeDropMessageMetrics;
 use crate::{CanisterState, InputQueueType::*, SchedulerState, SystemState};
 use assert_matches::assert_matches;
 use ic_base_types::NumSeconds;
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_test_utilities_state::arb_num_receivers;
 use ic_test_utilities_types::arbitrary;
 use ic_test_utilities_types::ids::{canister_test_id, message_test_id, user_test_id};
 use ic_test_utilities_types::messages::{IngressBuilder, RequestBuilder, ResponseBuilder};
 use ic_types::messages::{CallbackId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, NO_DEADLINE};
-use ic_types::time::{expiry_time_from_now, CoarseTime, UNIX_EPOCH};
+use ic_types::time::{CoarseTime, UNIX_EPOCH, expiry_time_from_now};
 use ic_types::{Cycles, UserId};
 use maplit::btreemap;
 use proptest::prelude::*;
@@ -53,22 +54,26 @@ impl CanisterQueuesFixture {
     fn push_input_request(
         &mut self,
         deadline: CoarseTime,
-    ) -> Result<bool, (StateError, RequestOrResponse)> {
-        self.queues.push_input(
-            RequestBuilder::default()
-                .sender(self.other)
-                .receiver(self.this)
-                .deadline(deadline)
-                .build()
-                .into(),
-            LocalSubnet,
-        )
+    ) -> Result<(), (StateError, RequestOrResponse)> {
+        self.queues
+            .push_input(
+                RequestBuilder::default()
+                    .sender(self.other)
+                    .receiver(self.this)
+                    .deadline(deadline)
+                    .build()
+                    .into(),
+                LocalSubnet,
+            )
+            .map(|dropped_response| {
+                assert!(dropped_response.is_none());
+            })
     }
 
     fn push_input_response(
         &mut self,
         deadline: CoarseTime,
-    ) -> Result<bool, (StateError, RequestOrResponse)> {
+    ) -> Result<Option<Arc<Response>>, (StateError, RequestOrResponse)> {
         self.last_callback_id += 1;
         self.queues.push_input(
             ResponseBuilder::default()
@@ -156,7 +161,7 @@ impl CanisterQueuesFixture {
 
 fn push_requests(queues: &mut CanisterQueues, input_type: InputQueueType, requests: &Vec<Request>) {
     for req in requests {
-        assert!(queues.push_input(req.clone().into(), input_type).unwrap());
+        assert_eq!(Ok(None), queues.push_input(req.clone().into(), input_type));
     }
 }
 
@@ -193,6 +198,7 @@ fn response_with_payload(payload_size: usize, callback: u64, deadline: CoarseTim
         .response_payload(Payload::Data(vec![13; payload_size]))
         .originator_reply_callback(CallbackId::from(callback))
         .deadline(deadline)
+        .refund(Cycles::new(10))
         .build()
 }
 
@@ -287,7 +293,7 @@ fn cannot_push_output_response_best_effort_without_input_request() {
 fn enqueuing_unexpected_response_does_not_panic() {
     let mut fixture = CanisterQueuesFixture::new();
     // Enqueue a request to create a queue for `other`.
-    assert!(fixture.push_input_request(NO_DEADLINE).unwrap());
+    fixture.push_input_request(NO_DEADLINE).unwrap();
     // Now `other` sends an unexpected `Response`. We should return an error, not
     // panic.
     fixture.push_input_response(NO_DEADLINE).unwrap_err();
@@ -297,7 +303,7 @@ fn enqueuing_unexpected_response_does_not_panic() {
 #[test]
 fn can_push_output_response_after_input_request() {
     let mut fixture = CanisterQueuesFixture::new();
-    assert!(fixture.push_input_request(NO_DEADLINE).unwrap());
+    fixture.push_input_request(NO_DEADLINE).unwrap();
     fixture.pop_input().unwrap();
     fixture.push_output_response(NO_DEADLINE);
 }
@@ -306,7 +312,7 @@ fn can_push_output_response_after_input_request() {
 #[test]
 fn can_push_input_request() {
     let mut fixture = CanisterQueuesFixture::new();
-    assert!(fixture.push_input_request(NO_DEADLINE).unwrap());
+    fixture.push_input_request(NO_DEADLINE).unwrap();
 }
 
 /// Cannot push response to the induction pool without pushing output
@@ -324,7 +330,7 @@ fn can_push_input_response_after_output_request() {
     let mut fixture = CanisterQueuesFixture::new();
     fixture.push_output_request(NO_DEADLINE).unwrap();
     fixture.pop_output().unwrap();
-    assert!(fixture.push_input_response(NO_DEADLINE).unwrap());
+    assert_eq!(Ok(None), fixture.push_input_response(NO_DEADLINE));
 }
 
 #[test]
@@ -346,9 +352,10 @@ fn push_input_response_duplicate_guaranteed_response() {
 
     // Try enqueuing two responses with the same callback ID. The second attempt
     // should fail.
-    assert!(queues
-        .push_input(response(1, NO_DEADLINE).into(), LocalSubnet)
-        .unwrap());
+    assert_eq!(
+        Ok(None),
+        queues.push_input(response(1, NO_DEADLINE).into(), LocalSubnet)
+    );
     queues
         .push_input(response(1, NO_DEADLINE).into(), LocalSubnet)
         .unwrap_err();
@@ -356,9 +363,10 @@ fn push_input_response_duplicate_guaranteed_response() {
     assert_eq!(1, queues.input_queues_response_count());
 
     // But enqueuing a response with a different callback ID succeeds.
-    assert!(queues
-        .push_input(response(2, NO_DEADLINE).into(), LocalSubnet)
-        .unwrap());
+    assert_eq!(
+        Ok(None),
+        queues.push_input(response(2, NO_DEADLINE).into(), LocalSubnet)
+    );
     assert_eq!(0, queues.input_queues_reserved_slots());
     assert_eq!(2, queues.input_queues_response_count());
 }
@@ -382,19 +390,23 @@ fn push_input_response_duplicate_best_effort_response() {
 
     // Try enqueuing two responses with the same callback ID. The second attempt
     // should not return an error, but should be a no-op.
-    assert!(queues
-        .push_input(response(1, SOME_DEADLINE).into(), LocalSubnet)
-        .unwrap());
-    assert!(!queues
-        .push_input(response(1, SOME_DEADLINE).into(), LocalSubnet)
-        .unwrap());
+    let best_effort_response = response(1, SOME_DEADLINE);
+    assert_eq!(
+        Ok(None),
+        queues.push_input(best_effort_response.clone().into(), LocalSubnet)
+    );
+    assert_eq!(
+        Ok(Some(Arc::new(best_effort_response.clone()))),
+        queues.push_input(best_effort_response.into(), LocalSubnet)
+    );
     assert_eq!(1, queues.input_queues_reserved_slots());
     assert_eq!(1, queues.input_queues_response_count());
 
     // But enqueuing a response with a different callback ID succeeds.
-    assert!(queues
-        .push_input(response(2, SOME_DEADLINE).into(), LocalSubnet)
-        .unwrap());
+    assert_eq!(
+        Ok(None),
+        queues.push_input(response(2, SOME_DEADLINE).into(), LocalSubnet)
+    );
     assert_eq!(0, queues.input_queues_reserved_slots());
     assert_eq!(2, queues.input_queues_response_count());
 }
@@ -404,7 +416,7 @@ fn push_input_response_duplicate_best_effort_response() {
 #[test]
 fn test_available_output_request_slots_dont_counts() {
     let mut fixture = CanisterQueuesFixture::new();
-    assert!(fixture.push_input_request(NO_DEADLINE).unwrap());
+    fixture.push_input_request(NO_DEADLINE).unwrap();
     assert_eq!(
         DEFAULT_QUEUE_CAPACITY,
         fixture.available_output_request_slots()
@@ -439,7 +451,7 @@ fn test_available_output_request_slots_counts() {
     );
 
     // Check that input response counts.
-    assert!(fixture.push_input_response(NO_DEADLINE).unwrap());
+    assert_eq!(Ok(None), fixture.push_input_response(NO_DEADLINE));
     assert_eq!(
         DEFAULT_QUEUE_CAPACITY - 1,
         fixture.available_output_request_slots()
@@ -453,7 +465,7 @@ fn test_available_output_request_slots_counts_timed_out_output_requests() {
     let mut fixture = CanisterQueuesFixture::new();
 
     // Need output response to pin timed out request behind.
-    assert!(fixture.push_input_request(NO_DEADLINE).unwrap());
+    fixture.push_input_request(NO_DEADLINE).unwrap();
     fixture.pop_input().unwrap();
     fixture.push_output_response(NO_DEADLINE);
 
@@ -482,7 +494,7 @@ fn test_backpressure_with_timed_out_requests() {
     let mut fixture = CanisterQueuesFixture::new();
 
     // Need output response to pin timed out requests behind.
-    assert!(fixture.push_input_request(NO_DEADLINE).unwrap());
+    fixture.push_input_request(NO_DEADLINE).unwrap();
     fixture.pop_input();
     fixture.push_output_response(NO_DEADLINE);
 
@@ -582,7 +594,7 @@ fn test_try_push_deadline_expired_input_no_reserved_slot() {
     let mut fixture = CanisterQueuesFixture::new();
 
     // Enqueue an input request, to create the input queue.
-    assert!(fixture.push_input_request(NO_DEADLINE).unwrap());
+    fixture.push_input_request(NO_DEADLINE).unwrap();
 
     // Pushing a deadline expired input without a reserved slot signals a bug.
     assert_eq!(
@@ -598,7 +610,7 @@ fn test_try_push_deadline_expired_input_with_same_callback_id() {
     // Push an input response.
     fixture.push_output_request(NO_DEADLINE).unwrap();
     fixture.pop_output().unwrap();
-    assert!(fixture.push_input_response(NO_DEADLINE).unwrap());
+    assert_eq!(Ok(None), fixture.push_input_response(NO_DEADLINE));
 
     // Sanity check.
     assert_eq!(1, fixture.queues.input_queues_message_count());
@@ -645,8 +657,9 @@ fn test_shed_largest_message() {
     let mut queues = CanisterQueues::default();
 
     // Push an input and an output request.
-    assert!(queues
-        .push_input(
+    assert_eq!(
+        Ok(None),
+        queues.push_input(
             RequestBuilder::default()
                 .sender(other)
                 .receiver(this)
@@ -655,7 +668,7 @@ fn test_shed_largest_message() {
                 .into(),
             RemoteSubnet,
         )
-        .unwrap());
+    );
     queues
         .push_output_request(
             Arc::new(
@@ -710,12 +723,13 @@ fn test_shed_inbound_response() {
 
     // Enqueue three inbound responses with increasing payload sizes.
     for callback in 1..=3 {
-        assert!(queues
-            .push_input(
+        assert_eq!(
+            Ok(None),
+            queues.push_input(
                 response_with_payload(1000 * callback as usize, callback, SOME_DEADLINE).into(),
                 LocalSubnet,
             )
-            .unwrap());
+        );
     }
     assert_eq!(0, queues.input_queues_reserved_slots());
     assert_eq!(3, queues.input_queues_response_count());
@@ -726,7 +740,7 @@ fn test_shed_inbound_response() {
     // Shed the largest response (callback ID 3).
     let memory_usage3 = queues.best_effort_message_memory_usage();
     assert_eq!(
-        (true, Cycles::zero()),
+        (true, Cycles::new(10)),
         shed_largest_message(&mut queues, &this, &NO_LOCAL_CANISTERS)
     );
     let memory_usage2 = queues.best_effort_message_memory_usage();
@@ -734,7 +748,7 @@ fn test_shed_inbound_response() {
 
     // Shed the next largest response (callback ID 2).
     assert_eq!(
-        (true, Cycles::zero()),
+        (true, Cycles::new(10)),
         shed_largest_message(&mut queues, &this, &NO_LOCAL_CANISTERS)
     );
     let memory_usage1 = queues.best_effort_message_memory_usage();
@@ -845,13 +859,13 @@ fn test_message_picking_round_robin_on_one_queue() {
     let mut fixture = CanisterQueuesFixture::new();
     assert!(fixture.pop_input().is_none());
     for _ in 0..3 {
-        assert!(fixture.push_input_request(NO_DEADLINE).unwrap());
+        fixture.push_input_request(NO_DEADLINE).unwrap();
     }
 
     for _ in 0..3 {
         match fixture.pop_input().expect("could not pop a message") {
             CanisterInput::Request(msg) => assert_eq!(msg.sender, fixture.other),
-            msg => panic!("unexpected message popped: {:?}", msg),
+            msg => panic!("unexpected message popped: {msg:?}"),
         }
     }
 
@@ -885,7 +899,7 @@ fn test_message_picking_ingress_only() {
             CanisterInput::Ingress(msg) => {
                 assert_eq!(msg.method_payload, vec![expected_byte])
             }
-            msg => panic!("unexpected message popped: {:?}", msg),
+            msg => panic!("unexpected message popped: {msg:?}"),
         }
         expected_byte += 1;
     }
@@ -918,7 +932,7 @@ impl CanisterQueuesMultiFixture {
         &mut self,
         other: CanisterId,
         input_queue_type: InputQueueType,
-    ) -> Result<bool, (StateError, RequestOrResponse)> {
+    ) -> Result<(), (StateError, RequestOrResponse)> {
         self.push_input_request_with_deadline(other, NO_DEADLINE, input_queue_type)
     }
 
@@ -927,23 +941,25 @@ impl CanisterQueuesMultiFixture {
         other: CanisterId,
         deadline: CoarseTime,
         input_queue_type: InputQueueType,
-    ) -> Result<bool, (StateError, RequestOrResponse)> {
-        self.queues.push_input(
-            RequestBuilder::default()
-                .sender(other)
-                .receiver(self.this)
-                .deadline(deadline)
-                .build()
-                .into(),
-            input_queue_type,
-        )
+    ) -> Result<(), (StateError, RequestOrResponse)> {
+        self.queues
+            .push_input(
+                RequestBuilder::default()
+                    .sender(other)
+                    .receiver(self.this)
+                    .deadline(deadline)
+                    .build()
+                    .into(),
+                input_queue_type,
+            )
+            .map(|dropped_response| assert!(dropped_response.is_none()))
     }
 
     fn push_input_response(
         &mut self,
         other: CanisterId,
         input_queue_type: InputQueueType,
-    ) -> Result<bool, (StateError, RequestOrResponse)> {
+    ) -> Result<Option<Arc<Response>>, (StateError, RequestOrResponse)> {
         self.last_callback_id += 1;
         self.queues.push_input(
             ResponseBuilder::default()
@@ -960,7 +976,7 @@ impl CanisterQueuesMultiFixture {
         &mut self,
         other: CanisterId,
         input_queue_type: InputQueueType,
-    ) -> Result<bool, (StateError, RequestOrResponse)> {
+    ) -> Result<Option<Arc<Response>>, (StateError, RequestOrResponse)> {
         self.push_output_request(other)
             .map_err(|(se, req)| (se, (*req).clone().into()))?;
         self.pop_output()
@@ -1051,17 +1067,17 @@ fn test_message_picking_round_robin() {
 
     // 3 remote requests from 2 canisters.
     for id in &[other_1, other_1, other_3] {
-        assert!(fixture.push_input_request(*id, RemoteSubnet).unwrap());
+        fixture.push_input_request(*id, RemoteSubnet).unwrap();
     }
 
     // Local response from `other_2`.
     // First push then pop a request to `other_2`, in order to get a reserved slot.
     fixture.push_output_request(other_2).unwrap();
     fixture.pop_output().unwrap();
-    assert!(fixture.push_input_response(other_2, LocalSubnet).unwrap());
+    assert_eq!(Ok(None), fixture.push_input_response(other_2, LocalSubnet));
 
     // Local request from `other_2`.
-    assert!(fixture.push_input_request(other_2, LocalSubnet).unwrap());
+    fixture.push_input_request(other_2, LocalSubnet).unwrap();
 
     fixture.push_ingress(Ingress {
         source: user_test_id(77),
@@ -1131,7 +1147,7 @@ fn test_input_scheduling() {
     assert!(!fixture.has_input());
 
     let push_input_from = |fixture: &mut CanisterQueuesMultiFixture, sender: CanisterId| {
-        assert!(fixture.push_input_request(sender, RemoteSubnet).unwrap());
+        fixture.push_input_request(sender, RemoteSubnet).unwrap();
     };
 
     let assert_sender = |sender: CanisterId, message: CanisterInput| match message {
@@ -1181,12 +1197,12 @@ fn test_split_input_schedules() {
 
     // 4 local input queues (`other_1`, `other_2`, `this`, `other_3`) and 2 remote
     // ones (`other_4`, `other_5`).
-    assert!(fixture.push_input_request(other_1, LocalSubnet).unwrap());
-    assert!(fixture.push_input_request(other_2, LocalSubnet).unwrap());
-    assert!(fixture.push_input_request(this, LocalSubnet).unwrap());
-    assert!(fixture.push_input_request(other_3, LocalSubnet).unwrap());
-    assert!(fixture.push_input_request(other_4, RemoteSubnet).unwrap());
-    assert!(fixture.push_input_request(other_5, RemoteSubnet).unwrap());
+    fixture.push_input_request(other_1, LocalSubnet).unwrap();
+    fixture.push_input_request(other_2, LocalSubnet).unwrap();
+    fixture.push_input_request(this, LocalSubnet).unwrap();
+    fixture.push_input_request(other_3, LocalSubnet).unwrap();
+    fixture.push_input_request(other_4, RemoteSubnet).unwrap();
+    fixture.push_input_request(other_5, RemoteSubnet).unwrap();
 
     // Schedules before.
     assert_eq!(
@@ -1496,20 +1512,20 @@ fn canister_queues_with_empty_queues_in_input_schedules() -> CanisterQueues {
     // 3 local input queues (from `other_1` through `other_3`) and 3 remote ones
     // (from `other_4` through `other_6`). Queues from `other_2` and `other_5` hold
     // guaranteed response requests; the other queues contain best-effort requests.
-    assert!(fixture
+    fixture
         .push_input_request_with_deadline(other_1, SOME_DEADLINE, LocalSubnet)
-        .unwrap());
-    assert!(fixture.push_input_request(other_2, LocalSubnet).unwrap());
-    assert!(fixture
+        .unwrap();
+    fixture.push_input_request(other_2, LocalSubnet).unwrap();
+    fixture
         .push_input_request_with_deadline(other_3, SOME_DEADLINE, LocalSubnet)
-        .unwrap());
-    assert!(fixture
+        .unwrap();
+    fixture
         .push_input_request_with_deadline(other_4, SOME_DEADLINE, RemoteSubnet)
-        .unwrap());
-    assert!(fixture.push_input_request(other_5, RemoteSubnet).unwrap());
-    assert!(fixture
+        .unwrap();
+    fixture.push_input_request(other_5, RemoteSubnet).unwrap();
+    fixture
         .push_input_request_with_deadline(other_6, SOME_DEADLINE, RemoteSubnet)
-        .unwrap());
+        .unwrap();
     assert_eq!(Ok(()), fixture.schedules_ok());
 
     // Time out the messages from `other_1`, `other_3`, `other_4` and `other_6`.
@@ -1706,12 +1722,12 @@ fn test_push_into_empty_queue_in_input_schedule() {
     let mut fixture = CanisterQueuesMultiFixture::new();
 
     // 1 local and 1 remote input queue holding best-effort requests.
-    assert!(fixture
+    fixture
         .push_input_request_with_deadline(other_1, SOME_DEADLINE, LocalSubnet)
-        .unwrap());
-    assert!(fixture
+        .unwrap();
+    fixture
         .push_input_request_with_deadline(other_2, SOME_DEADLINE, RemoteSubnet)
-        .unwrap());
+        .unwrap();
 
     // Time out all messages.
     assert_eq!(
@@ -1730,12 +1746,12 @@ fn test_push_into_empty_queue_in_input_schedule() {
     assert!(!fixture.has_input());
 
     // Push another round of messages into the 2 queues.
-    assert!(fixture
+    fixture
         .push_input_request_with_deadline(other_1, SOME_DEADLINE, LocalSubnet)
-        .unwrap());
-    assert!(fixture
+        .unwrap();
+    fixture
         .push_input_request_with_deadline(other_2, SOME_DEADLINE, RemoteSubnet)
-        .unwrap());
+        .unwrap();
 
     assert_eq!(Ok(()), fixture.schedules_ok());
     assert!(fixture.has_input());
@@ -1791,7 +1807,7 @@ fn test_output_into_iter() {
                 assert_eq!(*expected[i].0, msg.receiver);
                 assert_eq!(vec![expected[i].1], msg.method_payload)
             }
-            msg => panic!("unexpected message popped: {:?}", msg),
+            msg => panic!("unexpected message popped: {msg:?}"),
         }
     }
 
@@ -1926,18 +1942,20 @@ fn encode_roundtrip() {
 
     let this = canister_test_id(13);
     let other = canister_test_id(14);
-    assert!(queues
-        .push_input(
+    assert_eq!(
+        Ok(None),
+        queues.push_input(
             RequestBuilder::default().sender(this).build().into(),
             LocalSubnet,
         )
-        .unwrap());
-    assert!(queues
-        .push_input(
+    );
+    assert_eq!(
+        Ok(None),
+        queues.push_input(
             RequestBuilder::default().sender(other).build().into(),
             RemoteSubnet,
         )
-        .unwrap());
+    );
     queues.pop_canister_input(RemoteSubnet).unwrap();
 
     let response_callback = CallbackId::from(42);
@@ -1952,8 +1970,9 @@ fn encode_roundtrip() {
         )
         .unwrap();
     queues.output_into_iter().next().unwrap();
-    assert!(queues
-        .push_input(
+    assert_eq!(
+        Ok(None),
+        queues.push_input(
             ResponseBuilder::default()
                 .respondent(other)
                 .originator_reply_callback(response_callback)
@@ -1961,7 +1980,7 @@ fn encode_roundtrip() {
                 .into(),
             RemoteSubnet,
         )
-        .unwrap());
+    );
 
     queues.push_ingress(IngressBuilder::default().receiver(this).build());
 
@@ -1995,18 +2014,20 @@ fn decode_invalid_input_schedule() {
 
     let this = canister_test_id(13);
     let other = canister_test_id(14);
-    assert!(queues
-        .push_input(
+    assert_eq!(
+        Ok(None),
+        queues.push_input(
             RequestBuilder::default().sender(this).build().into(),
             LocalSubnet,
         )
-        .unwrap());
-    assert!(queues
-        .push_input(
+    );
+    assert_eq!(
+        Ok(None),
+        queues.push_input(
             RequestBuilder::default().sender(other).build().into(),
             RemoteSubnet,
         )
-        .unwrap());
+    );
     queues.push_ingress(IngressBuilder::default().receiver(this).build());
 
     let mut encoded: pb_queues::CanisterQueues = (&queues).into();
@@ -2036,12 +2057,13 @@ fn encode_non_default_pool() {
     let mut queues = CanisterQueues::default();
 
     let this = canister_test_id(13);
-    assert!(queues
-        .push_input(
+    assert_eq!(
+        Ok(None),
+        queues.push_input(
             RequestBuilder::default().sender(this).build().into(),
             RemoteSubnet,
         )
-        .unwrap());
+    );
     queues.pop_canister_input(RemoteSubnet).unwrap();
     // Sanity check that the pool is empty but not equal to the default.
     assert!(queues.store.is_empty());
@@ -2080,15 +2102,19 @@ fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
     assert_eq!(4, queues.output_into_iter().count());
 
     // Enqueue 3 inbound responses plus a deadine expired compact reject response.
-    assert!(queues
-        .push_input(response(1, NO_DEADLINE).into(), LocalSubnet)
-        .unwrap());
-    assert!(queues
-        .push_input(response(2, deadline).into(), LocalSubnet)
-        .unwrap());
-    assert!(queues
-        .push_input(response(3, deadline).into(), LocalSubnet)
-        .unwrap());
+    assert_eq!(
+        Ok(None),
+        queues.push_input(response(1, NO_DEADLINE).into(), LocalSubnet)
+    );
+    assert_eq!(
+        Ok(None),
+        queues.push_input(response(2, deadline).into(), LocalSubnet)
+    );
+    let response3 = response(3, deadline);
+    assert_eq!(
+        Ok(None),
+        queues.push_input(response3.clone().into(), LocalSubnet)
+    );
     assert_eq!(
         Ok(true),
         queues.try_push_deadline_expired_input(
@@ -2101,7 +2127,7 @@ fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
 
     // Shed the response for callback 3.
     assert_eq!(
-        (true, Cycles::zero()),
+        (true, Cycles::new(10)),
         shed_largest_message(&mut queues, &canister_id, &BTreeMap::new())
     );
     assert_eq!(
@@ -2129,7 +2155,7 @@ fn decode_with_duplicate_response_callback_in_pool() {
     // Tweak the pool so both responses have the same `CallbackId`.
     for entry in &mut encoded.pool.as_mut().unwrap().messages {
         let message = entry.message.as_mut().unwrap().r.as_mut().unwrap();
-        let pb_queues::request_or_response::R::Response(ref mut response) = message else {
+        let pb_queues::request_or_response::R::Response(response) = message else {
             panic!("Expected only responses");
         };
         response.originator_reply_callback = 1;
@@ -2298,12 +2324,14 @@ fn decode_with_duplicate_inbound_response() {
     assert_eq!(2, queues.output_into_iter().count());
 
     // Enqueue 2 inbound responses.
-    assert!(queues
-        .push_input(response(1, NO_DEADLINE).into(), LocalSubnet)
-        .unwrap());
-    assert!(queues
-        .push_input(response(2, SOME_DEADLINE).into(), LocalSubnet)
-        .unwrap());
+    assert_eq!(
+        Ok(None),
+        queues.push_input(response(1, NO_DEADLINE).into(), LocalSubnet)
+    );
+    assert_eq!(
+        Ok(None),
+        queues.push_input(response(2, SOME_DEADLINE).into(), LocalSubnet)
+    );
 
     // Sanity check: roundtrip encode succeeds.
     let mut encoded: pb_queues::CanisterQueues = (&queues).into();
@@ -2318,7 +2346,7 @@ fn decode_with_duplicate_inbound_response() {
     // Tweak the encoded queues so both responses have the same `CallbackId`.
     for entry in &mut encoded.pool.as_mut().unwrap().messages {
         let message = entry.message.as_mut().unwrap().r.as_mut().unwrap();
-        let pb_queues::request_or_response::R::Response(ref mut response) = message else {
+        let pb_queues::request_or_response::R::Response(response) = message else {
             panic!("Expected only responses");
         };
         response.originator_reply_callback = 1;
@@ -2356,7 +2384,7 @@ fn test_stats_best_effort() {
     assert_eq!(response_size_bytes, response2.count_bytes());
 
     // Make reservations for the responses.
-    assert!(queues.push_input(request1_.into(), LocalSubnet).unwrap());
+    assert_eq!(Ok(None), queues.push_input(request1_.into(), LocalSubnet));
     queues.pop_input().unwrap();
     queues
         .push_output_request(request2_.into(), UNIX_EPOCH)
@@ -2364,12 +2392,14 @@ fn test_stats_best_effort() {
     queues.output_into_iter().next().unwrap();
 
     // Actually enqueue the messages.
-    assert!(queues
-        .push_input(request3.clone().into(), LocalSubnet)
-        .unwrap());
-    assert!(queues
-        .push_input(response2.clone().into(), LocalSubnet)
-        .unwrap());
+    assert_eq!(
+        Ok(None),
+        queues.push_input(request3.clone().into(), LocalSubnet)
+    );
+    assert_eq!(
+        Ok(None),
+        queues.push_input(response2.clone().into(), LocalSubnet)
+    );
     queues.push_output_response(response1.clone().into());
     queues
         .push_output_request(request4.clone().into(), UNIX_EPOCH)
@@ -2395,6 +2425,7 @@ fn test_stats_best_effort() {
             inbound_guaranteed_request_count: 0,
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 2,
+            cycles: Cycles::new(220),
         },
         queues.message_stats()
     );
@@ -2424,6 +2455,7 @@ fn test_stats_best_effort() {
             inbound_guaranteed_request_count: 0,
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 1,
+            cycles: Cycles::new(110),
         },
         queues.message_stats()
     );
@@ -2442,7 +2474,7 @@ fn test_stats_best_effort() {
         *metrics.timed_out_messages.borrow(),
     );
     assert_eq!(
-        (true, Cycles::zero()),
+        (true, Cycles::new(10)),
         shed_largest_message(&mut queues, &response2.respondent, &BTreeMap::new())
     );
 
@@ -2469,6 +2501,7 @@ fn test_stats_best_effort() {
             inbound_guaranteed_request_count: 0,
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 0,
+            cycles: Cycles::new(100),
         },
         queues.message_stats()
     );
@@ -2520,7 +2553,7 @@ fn test_stats_guaranteed_response() {
     assert_eq!(response_size_bytes, response4_.count_bytes());
 
     // Make reservations for the responses.
-    assert!(queues.push_input(request1_.into(), LocalSubnet).unwrap());
+    assert_eq!(Ok(None), queues.push_input(request1_.into(), LocalSubnet));
     queues.pop_input().unwrap();
     queues
         .push_output_request(request2_.into(), UNIX_EPOCH)
@@ -2528,12 +2561,14 @@ fn test_stats_guaranteed_response() {
     queues.output_into_iter().next().unwrap();
 
     // Actually enqueue the messages.
-    assert!(queues
-        .push_input(request3.clone().into(), LocalSubnet)
-        .unwrap());
-    assert!(queues
-        .push_input(response2.clone().into(), LocalSubnet)
-        .unwrap());
+    assert_eq!(
+        Ok(None),
+        queues.push_input(request3.clone().into(), LocalSubnet)
+    );
+    assert_eq!(
+        Ok(None),
+        queues.push_input(response2.clone().into(), LocalSubnet)
+    );
     queues.push_output_response(response1.clone().into());
     queues
         .push_output_request(request4.clone().into(), UNIX_EPOCH)
@@ -2559,6 +2594,7 @@ fn test_stats_guaranteed_response() {
             inbound_guaranteed_request_count: 1,
             inbound_guaranteed_response_count: 1,
             outbound_message_count: 2,
+            cycles: Cycles::new(220),
         },
         queues.message_stats()
     );
@@ -2588,6 +2624,7 @@ fn test_stats_guaranteed_response() {
             inbound_guaranteed_request_count: 0,
             inbound_guaranteed_response_count: 1,
             outbound_message_count: 1,
+            cycles: Cycles::new(110),
         },
         queues.message_stats()
     );
@@ -2662,12 +2699,14 @@ fn test_stats_oversized_requests() {
     // `Response` structs, so better compute it.
     let guaranteed_extra_bytes = guaranteed_size_bytes - MAX_RESPONSE_COUNT_BYTES;
 
-    assert!(queues
-        .push_input(best_effort.clone().into(), LocalSubnet)
-        .unwrap());
-    assert!(queues
-        .push_input(guaranteed.clone().into(), LocalSubnet)
-        .unwrap());
+    assert_eq!(
+        Ok(None),
+        queues.push_input(best_effort.clone().into(), LocalSubnet)
+    );
+    assert_eq!(
+        Ok(None),
+        queues.push_input(guaranteed.clone().into(), LocalSubnet)
+    );
     queues
         .push_output_request(best_effort.clone().into(), UNIX_EPOCH)
         .unwrap();
@@ -2695,6 +2734,7 @@ fn test_stats_oversized_requests() {
             inbound_guaranteed_request_count: 1,
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 2,
+            cycles: Cycles::new(400),
         },
         queues.message_stats()
     );
@@ -2724,6 +2764,7 @@ fn test_stats_oversized_requests() {
             inbound_guaranteed_request_count: 0,
             inbound_guaranteed_response_count: 0,
             outbound_message_count: 2,
+            cycles: Cycles::new(200),
         },
         queues.message_stats()
     );
@@ -2812,7 +2853,7 @@ fn test_garbage_collect() {
     assert_eq!(1, queues.canister_queues.len());
 
     // Push input response.
-    assert!(queues.push_input(response.into(), LocalSubnet).unwrap());
+    assert_eq!(Ok(None), queues.push_input(response.into(), LocalSubnet));
     // Before popping any input, `next_input_source` has default value.
     assert_eq!(InputSource::default(), queues.input_schedule.input_source());
     // No-op.
@@ -3193,7 +3234,13 @@ fn output_into_iter_with_exclude_leaves_excluded_queues_untouched(
     // after dropping `output_iter`.
     while let Some(raw) = excluded_requests.pop_front() {
         if let Some(msg) = canister_queues.pop_canister_output(&raw.receiver()) {
-            prop_assert_eq!(&raw, &msg, "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.", msg, raw);
+            prop_assert_eq!(
+                &raw,
+                &msg,
+                "Popped message does not correspond with expected message. popped: {:?}. expected: {:?}.",
+                msg,
+                raw
+            );
         } else {
             prop_assert!(false, "Not all unconsumed messages left in canister queues");
         }
@@ -3375,15 +3422,17 @@ fn has_expired_deadlines_reports_correctly() {
 
     // Enqueue an inbound best-effort response. No expired deadlines, as inbound
     // responses don't expire.
-    assert!(canister_queues
-        .push_input(response(1, time100).into(), LocalSubnet)
-        .unwrap());
+    assert_eq!(
+        Ok(None),
+        canister_queues.push_input(response(1, time100).into(), LocalSubnet)
+    );
     assert!(!canister_queues.has_expired_deadlines(time101));
 
     // But an inbound best-effort request does expire.
-    assert!(canister_queues
-        .push_input(request(2, time100).into(), LocalSubnet)
-        .unwrap());
+    assert_eq!(
+        Ok(None),
+        canister_queues.push_input(request(2, time100).into(), LocalSubnet)
+    );
     assert!(canister_queues.has_expired_deadlines(time101));
 }
 
@@ -3643,9 +3692,9 @@ mod mainnet_compatibility_tests {
         fn serialize() {
             let mut fixture = CanisterQueuesFixture::new_with_ids(CANISTER_ID, OTHER_CANISTER_ID);
 
-            assert!(fixture.push_input_request(NO_DEADLINE).unwrap());
+            fixture.push_input_request(NO_DEADLINE).unwrap();
             fixture.push_output_request(NO_DEADLINE).unwrap();
-            assert!(fixture.push_input_response(NO_DEADLINE).unwrap());
+            assert_eq!(Ok(None), fixture.push_input_response(NO_DEADLINE));
             fixture.push_output_response(NO_DEADLINE);
 
             let pb_queues: pb_queues::CanisterQueues = (&fixture.queues).into();
@@ -3702,14 +3751,14 @@ mod mainnet_compatibility_tests {
         fn serialize() {
             let mut fixture = CanisterQueuesFixture::new_with_ids(CANISTER_ID, OTHER_CANISTER_ID);
 
-            assert!(fixture.push_input_request(NO_DEADLINE).unwrap());
+            fixture.push_input_request(NO_DEADLINE).unwrap();
             fixture.push_output_request(NO_DEADLINE).unwrap();
-            assert!(fixture.push_input_response(NO_DEADLINE).unwrap());
+            assert_eq!(Ok(None), fixture.push_input_response(NO_DEADLINE));
             fixture.push_output_response(NO_DEADLINE);
 
-            assert!(fixture.push_input_request(SOME_DEADLINE).unwrap());
+            fixture.push_input_request(SOME_DEADLINE).unwrap();
             fixture.push_output_request(SOME_DEADLINE).unwrap();
-            assert!(fixture.push_input_response(SOME_DEADLINE).unwrap());
+            assert_eq!(Ok(None), fixture.push_input_response(SOME_DEADLINE));
             fixture.push_output_response(SOME_DEADLINE);
 
             let pb_queues: pb_queues::CanisterQueues = (&fixture.queues).into();
@@ -3774,23 +3823,25 @@ mod mainnet_compatibility_tests {
             queues.this = CANISTER_ID;
 
             // Put a request and a response from a local canister in the input queues
-            assert!(queues
+            queues
                 .push_input_request(LOCAL_CANISTER_ID, LocalSubnet)
-                .unwrap());
-            assert!(queues
-                .reserve_and_push_input_response(LOCAL_CANISTER_ID, LocalSubnet)
-                .unwrap());
+                .unwrap();
+            assert_eq!(
+                Ok(None),
+                queues.reserve_and_push_input_response(LOCAL_CANISTER_ID, LocalSubnet)
+            );
 
             // Put a request and a response from a remote canister in the input queues
-            assert!(queues
+            queues
                 .push_input_request(REMOTE_CANISTER_ID, RemoteSubnet)
-                .unwrap());
-            assert!(queues
-                .reserve_and_push_input_response(REMOTE_CANISTER_ID, RemoteSubnet)
-                .unwrap());
+                .unwrap();
+            assert_eq!(
+                Ok(None),
+                queues.reserve_and_push_input_response(REMOTE_CANISTER_ID, RemoteSubnet)
+            );
 
             // Put a request from the canister itself in the input queues
-            assert!(queues.push_input_request(CANISTER_ID, LocalSubnet).unwrap());
+            queues.push_input_request(CANISTER_ID, LocalSubnet).unwrap();
 
             // Put an ingress message in the input queues
             queues.push_ingress(

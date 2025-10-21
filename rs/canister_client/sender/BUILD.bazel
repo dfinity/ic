@@ -2,37 +2,32 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-ed25519",
-    "//packages/ic-secp256k1",
-    "//rs/types/base_types",
-    "//rs/types/types",
-    "@crate_index//:rand",
-    "@crate_index//:rand_chacha",
-]
-
-DEV_DEPENDENCIES = []
-
-MACRO_DEPENDENCIES = []
-
-MACRO_DEV_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "sender",
     srcs = glob(["src/**"]),
-    aliases = ALIASES,
     crate_name = "ic_canister_client_sender",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-ed25519",
+        "//packages/ic-secp256k1",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+    ],
 )
 
 rust_test(
     name = "sender_test",
-    aliases = ALIASES,
     crate = ":sender",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-ed25519",
+        "//packages/ic-secp256k1",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+    ],
 )

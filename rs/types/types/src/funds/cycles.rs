@@ -1,6 +1,7 @@
 use candid::{CandidType, Nat};
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
+use ic_heap_bytes::DeterministicHeapBytes;
 use ic_protobuf::state::canister_state_bits::v1::CyclesAccount as pbCyclesAccount;
 use ic_protobuf::state::queues::v1::Cycles as PbCycles;
 use serde::{Deserialize, Serialize};
@@ -19,6 +20,7 @@ use thousands::Separable;
     Copy,
     Clone,
     Eq,
+    DeterministicHeapBytes,
     PartialEq,
     Ord,
     PartialOrd,
@@ -352,19 +354,19 @@ mod test {
     #[test]
     fn test_formatting_with_underscore_saparators_small_number() {
         let cycles = Cycles::new(1_234_567_890);
-        assert_eq!(format!("{}", cycles), "1_234_567_890");
-        assert_eq!(format!("{:?}", cycles), "Cycles(1234567890)");
+        assert_eq!(format!("{cycles}"), "1_234_567_890");
+        assert_eq!(format!("{cycles:?}"), "Cycles(1234567890)");
     }
 
     #[test]
     fn test_formatting_with_underscore_saparators_u128_max() {
         let cycles = Cycles::new(u128::MAX);
         assert_eq!(
-            format!("{}", cycles),
+            format!("{cycles}"),
             "340_282_366_920_938_463_463_374_607_431_768_211_455"
         );
         assert_eq!(
-            format!("{:?}", cycles),
+            format!("{cycles:?}"),
             "Cycles(340282366920938463463374607431768211455)"
         );
     }

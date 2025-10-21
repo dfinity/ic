@@ -1,22 +1,20 @@
+pub mod proto;
 #[cfg(test)]
 mod tests;
 
 use crate::page_map::int_map::{AsInt, MutableIntMap};
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types_private::IC_00;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
-use ic_protobuf::state::canister_state_bits::v1 as pb;
-use ic_protobuf::types::v1 as pb_types;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Request,
-    RequestMetadata, Response, NO_DEADLINE,
+    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, NO_DEADLINE, Request,
+    RequestMetadata, Response,
 };
 use ic_types::methods::Callback;
 use ic_types::time::CoarseTime;
 use ic_types::{
-    user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, NumInstructions,
-    PrincipalId, Time, UserId,
+    CanisterId, Cycles, Funds, NumInstructions, PrincipalId, Time, UserId, user_id_into_protobuf,
+    user_id_try_from_protobuf,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -151,44 +149,6 @@ impl CallContext {
     }
 }
 
-impl From<&CallContext> for pb::CallContext {
-    fn from(item: &CallContext) -> Self {
-        let funds = Funds::new(item.available_cycles);
-        Self {
-            call_origin: Some((&item.call_origin).into()),
-            responded: item.responded,
-            deleted: item.deleted,
-            available_funds: Some((&funds).into()),
-            time_nanos: item.time.as_nanos_since_unix_epoch(),
-            metadata: Some((&item.metadata).into()),
-            instructions_executed: item.instructions_executed.get(),
-        }
-    }
-}
-
-impl TryFrom<pb::CallContext> for CallContext {
-    type Error = ProxyDecodeError;
-    fn try_from(value: pb::CallContext) -> Result<Self, Self::Error> {
-        let funds: Funds =
-            try_from_option_field(value.available_funds, "CallContext::available_funds")?;
-
-        Ok(Self {
-            call_origin: try_from_option_field(value.call_origin, "CallContext::call_origin")?,
-            responded: value.responded,
-            deleted: value.deleted,
-            available_cycles: funds.cycles(),
-            time: Time::from_nanos_since_unix_epoch(value.time_nanos),
-            metadata: value
-                .metadata
-                .map(From::from)
-                .unwrap_or(RequestMetadata::for_new_call_tree(
-                    Time::from_nanos_since_unix_epoch(0),
-                )),
-            instructions_executed: value.instructions_executed.into(),
-        })
-    }
-}
-
 /// The action the caller of `CallContext.on_canister_result` should take.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum CallContextAction {
@@ -237,15 +197,15 @@ impl CallContextManagerStats {
     /// Updates the stats following the creation of a new call context.
     fn on_new_call_context(&mut self, call_origin: &CallOrigin) {
         match call_origin {
-            CallOrigin::CanisterUpdate(_, _, deadline) => {
+            CallOrigin::CanisterUpdate(_, _, deadline, _) => {
                 self.unresponded_canister_update_call_contexts += 1;
                 if *deadline == NO_DEADLINE {
                     self.unresponded_guaranteed_response_call_contexts += 1;
                 }
             }
-            CallOrigin::CanisterQuery(_, _)
-            | CallOrigin::Ingress(_, _)
-            | CallOrigin::Query(_)
+            CallOrigin::CanisterQuery(..)
+            | CallOrigin::Ingress(..)
+            | CallOrigin::Query(..)
             | CallOrigin::SystemTask => {}
         }
     }
@@ -254,15 +214,15 @@ impl CallContextManagerStats {
     /// origin.
     fn on_call_context_response(&mut self, call_origin: &CallOrigin) {
         match call_origin {
-            CallOrigin::CanisterUpdate(_, _, deadline) => {
+            CallOrigin::CanisterUpdate(_, _, deadline, _) => {
                 self.unresponded_canister_update_call_contexts -= 1;
                 if *deadline == NO_DEADLINE {
                     self.unresponded_guaranteed_response_call_contexts -= 1;
                 }
             }
-            CallOrigin::CanisterQuery(_, _)
-            | CallOrigin::Ingress(_, _)
-            | CallOrigin::Query(_)
+            CallOrigin::CanisterQuery(..)
+            | CallOrigin::Ingress(..)
+            | CallOrigin::Query(..)
             | CallOrigin::SystemTask => {}
         }
     }
@@ -292,10 +252,7 @@ impl CallContextManagerStats {
             .values()
             .filter(|call_context| !call_context.responded)
             .filter(|call_context| {
-                matches!(
-                    call_context.call_origin,
-                    CallOrigin::CanisterUpdate(_, _, _)
-                )
+                matches!(call_context.call_origin, CallOrigin::CanisterUpdate(..))
             })
             .count();
         let unresponded_guaranteed_response_call_contexts = call_contexts
@@ -304,7 +261,7 @@ impl CallContextManagerStats {
             .filter(|call_context| {
                 matches!(
                     call_context.call_origin,
-                    CallOrigin::CanisterUpdate(_, _, deadline) if deadline == NO_DEADLINE
+                    CallOrigin::CanisterUpdate(_, _, deadline, _) if deadline == NO_DEADLINE
                 )
             })
             .count();
@@ -358,8 +315,7 @@ impl CallContextManagerStats {
                 Entry::Vacant(_) => {
                     debug_assert!(
                         false,
-                        "Aborted or paused DTS response with no matching callback: {:?}",
-                        response
+                        "Aborted or paused DTS response with no matching callback: {response:?}"
                     )
                 }
             }
@@ -384,7 +340,7 @@ impl CallContextManagerStats {
             .values()
             .filter(|call_context| !call_context.responded)
             .filter_map(|call_context| match call_context.call_origin {
-                CallOrigin::CanisterUpdate(originator, _, _) => Some(originator),
+                CallOrigin::CanisterUpdate(originator, ..) => Some(originator),
                 _ => None,
             })
             .fold(
@@ -449,12 +405,14 @@ pub struct CallContextManager {
     stats: CallContextManagerStats,
 }
 
+type MethodName = String;
+
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CallOrigin {
-    Ingress(UserId, MessageId),
-    CanisterUpdate(CanisterId, CallbackId, CoarseTime),
-    Query(UserId),
-    CanisterQuery(CanisterId, CallbackId),
+    Ingress(UserId, MessageId, MethodName),
+    CanisterUpdate(CanisterId, CallbackId, CoarseTime, MethodName),
+    Query(UserId, MethodName),
+    CanisterQuery(CanisterId, CallbackId, MethodName),
     /// System task is either a `Heartbeat` or a `GlobalTimer`.
     SystemTask,
 }
@@ -463,10 +421,10 @@ impl CallOrigin {
     /// Returns the principal ID associated with this call origin.
     pub fn get_principal(&self) -> PrincipalId {
         match self {
-            CallOrigin::Ingress(user_id, _) => user_id.get(),
-            CallOrigin::CanisterUpdate(canister_id, _, _) => canister_id.get(),
-            CallOrigin::Query(user_id) => user_id.get(),
-            CallOrigin::CanisterQuery(canister_id, _) => canister_id.get(),
+            CallOrigin::Ingress(user_id, ..) => user_id.get(),
+            CallOrigin::CanisterUpdate(canister_id, ..) => canister_id.get(),
+            CallOrigin::Query(user_id, ..) => user_id.get(),
+            CallOrigin::CanisterQuery(canister_id, ..) => canister_id.get(),
             CallOrigin::SystemTask => IC_00.get(),
         }
     }
@@ -475,83 +433,12 @@ impl CallOrigin {
     /// `None` for all other origins.
     pub fn deadline(&self) -> Option<CoarseTime> {
         match self {
-            CallOrigin::CanisterUpdate(_, _, deadline) => Some(*deadline),
+            CallOrigin::CanisterUpdate(_, _, deadline, _) => Some(*deadline),
             CallOrigin::Ingress(..)
             | CallOrigin::Query(..)
             | CallOrigin::CanisterQuery(..)
             | CallOrigin::SystemTask => None,
         }
-    }
-}
-
-impl From<&CallOrigin> for pb::call_context::CallOrigin {
-    fn from(item: &CallOrigin) -> Self {
-        match item {
-            CallOrigin::Ingress(user_id, message_id) => Self::Ingress(pb::call_context::Ingress {
-                user_id: Some(user_id_into_protobuf(*user_id)),
-                message_id: message_id.as_bytes().to_vec(),
-            }),
-            CallOrigin::CanisterUpdate(canister_id, callback_id, deadline) => {
-                Self::CanisterUpdate(pb::call_context::CanisterUpdateOrQuery {
-                    canister_id: Some(pb_types::CanisterId::from(*canister_id)),
-                    callback_id: callback_id.get(),
-                    deadline_seconds: deadline.as_secs_since_unix_epoch(),
-                })
-            }
-            CallOrigin::Query(user_id) => Self::Query(user_id_into_protobuf(*user_id)),
-            CallOrigin::CanisterQuery(canister_id, callback_id) => {
-                Self::CanisterQuery(pb::call_context::CanisterUpdateOrQuery {
-                    canister_id: Some(pb_types::CanisterId::from(*canister_id)),
-                    callback_id: callback_id.get(),
-                    deadline_seconds: NO_DEADLINE.as_secs_since_unix_epoch(),
-                })
-            }
-            CallOrigin::SystemTask => Self::SystemTask(pb::call_context::SystemTask {}),
-        }
-    }
-}
-
-impl TryFrom<pb::call_context::CallOrigin> for CallOrigin {
-    type Error = ProxyDecodeError;
-    fn try_from(value: pb::call_context::CallOrigin) -> Result<Self, Self::Error> {
-        let call_origin = match value {
-            pb::call_context::CallOrigin::Ingress(pb::call_context::Ingress {
-                user_id,
-                message_id,
-            }) => Self::Ingress(
-                user_id_try_from_protobuf(try_from_option_field(
-                    user_id,
-                    "CallOrigin::Ingress::user_id",
-                )?)?,
-                message_id.as_slice().try_into()?,
-            ),
-            pb::call_context::CallOrigin::CanisterUpdate(
-                pb::call_context::CanisterUpdateOrQuery {
-                    canister_id,
-                    callback_id,
-                    deadline_seconds,
-                },
-            ) => Self::CanisterUpdate(
-                try_from_option_field(canister_id, "CallOrigin::CanisterUpdate::canister_id")?,
-                callback_id.into(),
-                CoarseTime::from_secs_since_unix_epoch(deadline_seconds),
-            ),
-            pb::call_context::CallOrigin::Query(user_id) => {
-                Self::Query(user_id_try_from_protobuf(user_id)?)
-            }
-            pb::call_context::CallOrigin::CanisterQuery(
-                pb::call_context::CanisterUpdateOrQuery {
-                    canister_id,
-                    callback_id,
-                    deadline_seconds: _,
-                },
-            ) => Self::CanisterQuery(
-                try_from_option_field(canister_id, "CallOrigin::CanisterQuery::canister_id")?,
-                callback_id.into(),
-            ),
-            pb::call_context::CallOrigin::SystemTask { .. } => Self::SystemTask,
-        };
-        Ok(call_origin)
     }
 }
 
@@ -661,7 +548,7 @@ impl CallContextManager {
         let mut context = self
             .call_contexts
             .remove(&call_context_id)
-            .unwrap_or_else(|| panic!("no call context with ID={}", call_context_id));
+            .unwrap_or_else(|| panic!("no call context with ID={call_context_id}"));
         // Update call context `instructions_executed += instructions_used`
         context.instructions_executed = context
             .instructions_executed
@@ -758,7 +645,7 @@ impl CallContextManager {
         let mut call_context = self
             .call_contexts
             .remove(&call_context_id)
-            .ok_or(format!("Call context not found: {}", call_context_id))?;
+            .ok_or(format!("Call context not found: {call_context_id}"))?;
         if !call_context.responded {
             call_context.mark_responded();
 
@@ -842,7 +729,10 @@ impl CallContextManager {
     /// best-effort callbacks whose deadlines are `< now`.
     ///
     /// Note: A given callback ID will be returned at most once by this function.
-    pub(super) fn expire_callbacks(&mut self, now: CoarseTime) -> impl Iterator<Item = CallbackId> {
+    pub(super) fn expire_callbacks(
+        &mut self,
+        now: CoarseTime,
+    ) -> impl Iterator<Item = CallbackId> + use<> {
         const MIN_CALLBACK_ID: CallbackId = CallbackId::new(0);
 
         // Unfortunate two-step splitting off of the expired callbacks.
@@ -862,13 +752,6 @@ impl CallContextManager {
         self.call_contexts
             .get(&call_context_id)
             .map(|cc| cc.call_origin.clone())
-    }
-
-    /// Returns if a call context was already responded or not.
-    pub fn call_responded(&self, call_context_id: CallContextId) -> Option<bool> {
-        self.call_contexts
-            .get(&call_context_id)
-            .map(|cc| cc.responded)
     }
 
     /// Returns the number of outstanding calls for a given call context.
@@ -1037,10 +920,13 @@ impl From<&CanisterCall> for CallOrigin {
                 request.sender,
                 request.sender_reply_callback,
                 request.deadline,
+                request.method_name.clone(),
             ),
-            CanisterCall::Ingress(ingress) => {
-                CallOrigin::Ingress(ingress.source, ingress.message_id.clone())
-            }
+            CanisterCall::Ingress(ingress) => CallOrigin::Ingress(
+                ingress.source,
+                ingress.message_id.clone(),
+                ingress.method_name.clone(),
+            ),
         }
     }
 }
@@ -1053,96 +939,6 @@ impl From<&CanisterCallOrTask> for CallOrigin {
             }
             CanisterCallOrTask::Task(_) => CallOrigin::SystemTask,
         }
-    }
-}
-
-impl From<&CallContextManager> for pb::CallContextManager {
-    fn from(item: &CallContextManager) -> Self {
-        Self {
-            next_call_context_id: item.next_call_context_id,
-            next_callback_id: item.next_callback_id,
-            call_contexts: item
-                .call_contexts
-                .iter()
-                .map(|(id, context)| pb::CallContextEntry {
-                    call_context_id: id.get(),
-                    call_context: Some(context.into()),
-                })
-                .collect(),
-            callbacks: item
-                .callbacks
-                .iter()
-                .map(|(id, callback)| pb::CallbackEntry {
-                    callback_id: id.get(),
-                    callback: Some(callback.as_ref().into()),
-                })
-                .collect(),
-            unexpired_callbacks: item
-                .unexpired_callbacks
-                .iter()
-                .map(|((_, id), ())| id.get())
-                .collect(),
-        }
-    }
-}
-
-impl TryFrom<pb::CallContextManager> for CallContextManager {
-    type Error = ProxyDecodeError;
-    fn try_from(value: pb::CallContextManager) -> Result<Self, Self::Error> {
-        let mut call_contexts = MutableIntMap::<CallContextId, CallContext>::new();
-        let mut callbacks = MutableIntMap::<CallbackId, Arc<Callback>>::new();
-        for pb::CallContextEntry {
-            call_context_id,
-            call_context,
-        } in value.call_contexts.into_iter()
-        {
-            call_contexts.insert(
-                call_context_id.into(),
-                try_from_option_field(call_context, "CallContextManager::call_contexts::V")?,
-            );
-        }
-        for pb::CallbackEntry {
-            callback_id,
-            callback,
-        } in value.callbacks.into_iter()
-        {
-            callbacks.insert(
-                callback_id.into(),
-                Arc::new(try_from_option_field(
-                    callback,
-                    "CallContextManager::callbacks::V",
-                )?),
-            );
-        }
-        let outstanding_callbacks = calculate_outstanding_callbacks(&callbacks);
-        let unexpired_callbacks = value
-            .unexpired_callbacks
-            .into_iter()
-            .map(CallbackId::from)
-            .map(|callback_id| {
-                let callback = callbacks.get(&callback_id).ok_or_else(|| {
-                    ProxyDecodeError::Other(format!(
-                        "Unexpired callback not found: {}",
-                        callback_id
-                    ))
-                })?;
-                Ok(((callback.deadline, callback_id), ()))
-            })
-            .collect::<Result<_, ProxyDecodeError>>()?;
-        let stats = CallContextManagerStats::calculate_stats(&call_contexts, &callbacks);
-
-        let ccm = Self {
-            next_call_context_id: value.next_call_context_id,
-            next_callback_id: value.next_callback_id,
-            call_contexts,
-            outstanding_callbacks,
-            callbacks,
-            unexpired_callbacks,
-            stats,
-        };
-        debug_assert!(ccm.stats_ok());
-
-        Ok(ccm)
     }
 }
 

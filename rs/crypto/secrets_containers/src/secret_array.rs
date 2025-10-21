@@ -44,7 +44,7 @@ impl<const N: usize> SecretArray<N> {
 
 impl<const N: usize> Debug for SecretArray<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "REDACTED SecretArray<{}>", N)
+        write!(f, "REDACTED SecretArray<{N}>")
     }
 }
 
@@ -60,7 +60,7 @@ impl<const N: usize> serde::de::Visitor<'_> for SecretArrayVisitor<N> {
     type Value = SecretArray<N>;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "a byte array of length {}", N)
+        write!(formatter, "a byte array of length {N}")
     }
 
     fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>

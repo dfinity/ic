@@ -4,13 +4,11 @@ use crate::{
     CLASS_BEST_EFFORT, CLASS_GUARANTEED_RESPONSE, CONTEXT_INBOUND, CONTEXT_OUTBOUND, KIND_REQUEST,
     KIND_RESPONSE,
 };
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
-use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{
-    CallbackId, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE,
+    CallbackId, MAX_RESPONSE_COUNT_BYTES, NO_DEADLINE, Request, RequestOrResponse, Response,
 };
 use ic_types::time::CoarseTime;
-use ic_types::{CountBytes, Time};
+use ic_types::{CountBytes, Cycles, Time};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::BTreeSet;
@@ -19,6 +17,7 @@ use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
 use std::time::Duration;
 
+pub mod proto;
 #[cfg(test)]
 pub(super) mod tests;
 
@@ -174,7 +173,7 @@ impl AsInt for (CoarseTime, Id) {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        ((self.0.as_secs_since_unix_epoch() as u128) << 64) | self.1 .0 as u128
+        ((self.0.as_secs_since_unix_epoch() as u128) << 64) | self.1.0 as u128
     }
 }
 
@@ -183,7 +182,7 @@ impl AsInt for (usize, Id) {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        ((self.0 as u128) << 64) | self.1 .0 as u128
+        ((self.0 as u128) << 64) | self.1.0 as u128
     }
 }
 
@@ -340,56 +339,9 @@ impl From<Id> for SomeReference {
     }
 }
 
-impl<T> TryFrom<u64> for Reference<T>
-where
-    T: ToContext,
-{
-    type Error = ProxyDecodeError;
-    fn try_from(item: u64) -> Result<Self, Self::Error> {
-        let id = Id(item);
-        if id.context() == T::context() {
-            Ok(Reference(item, PhantomData))
-        } else {
-            Err(ProxyDecodeError::Other(format!(
-                "Mismatched reference context: {}",
-                item
-            )))
-        }
-    }
-}
-
-impl<T> From<&Reference<T>> for u64 {
-    fn from(item: &Reference<T>) -> Self {
-        item.0
-    }
-}
-
 /// Helper for encoding / decoding `pb_queues::canister_queues::CallbackReference`.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub(super) struct CallbackReference(pub(super) InboundReference, pub(super) CallbackId);
-
-impl From<CallbackReference> for pb_queues::canister_queues::CallbackReference {
-    fn from(item: CallbackReference) -> Self {
-        Self {
-            id: item.0 .0,
-            callback_id: item.1.get(),
-        }
-    }
-}
-
-impl TryFrom<pb_queues::canister_queues::CallbackReference> for CallbackReference {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb_queues::canister_queues::CallbackReference) -> Result<Self, Self::Error> {
-        let reference = Reference(item.id, PhantomData);
-        if reference.is_inbound_best_effort_response() {
-            Ok(CallbackReference(reference, item.callback_id.into()))
-        } else {
-            Err(ProxyDecodeError::Other(
-                "Not an inbound best-effort response".to_string(),
-            ))
-        }
-    }
-}
 
 /// A pool of canister messages, guaranteed response and best effort, with
 /// built-in support for time-based expiration and load shedding.
@@ -880,80 +832,6 @@ impl MessagePool {
     }
 }
 
-impl From<&MessagePool> for pb_queues::MessagePool {
-    fn from(item: &MessagePool) -> Self {
-        use pb_queues::message_pool::*;
-
-        Self {
-            messages: item
-                .messages
-                .iter()
-                .map(|(id, message)| Entry {
-                    id: id.0,
-                    message: Some(message.into()),
-                })
-                .collect(),
-            outbound_guaranteed_request_deadlines: item
-                .outbound_guaranteed_request_deadlines
-                .iter()
-                .map(|(id, deadline)| MessageDeadline {
-                    deadline_seconds: deadline.as_secs_since_unix_epoch(),
-                    id: id.0,
-                })
-                .collect(),
-            message_id_generator: item.message_id_generator,
-        }
-    }
-}
-
-impl TryFrom<pb_queues::MessagePool> for MessagePool {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb_queues::MessagePool) -> Result<Self, Self::Error> {
-        let message_count = item.messages.len();
-
-        let messages: MutableIntMap<_, _> = item
-            .messages
-            .into_iter()
-            .map(|entry| {
-                let id = Id(entry.id);
-                let message = try_from_option_field(entry.message, "MessagePool::Entry::message")?;
-                Ok((id, message))
-            })
-            .collect::<Result<_, Self::Error>>()?;
-        if messages.len() != message_count {
-            return Err(ProxyDecodeError::Other("Duplicate Id".to_string()));
-        }
-        let message_stats = Self::calculate_message_stats(&messages);
-
-        let outbound_guaranteed_request_deadlines = item
-            .outbound_guaranteed_request_deadlines
-            .into_iter()
-            .map(|entry| {
-                let id = Id(entry.id);
-                let deadline = CoarseTime::from_secs_since_unix_epoch(entry.deadline_seconds);
-                (id, deadline)
-            })
-            .collect();
-
-        let (deadline_queue, size_queue) =
-            Self::calculate_priority_queues(&messages, &outbound_guaranteed_request_deadlines);
-
-        let res = Self {
-            messages,
-            outbound_guaranteed_request_deadlines,
-            message_stats,
-            deadline_queue,
-            size_queue,
-            message_id_generator: item.message_id_generator,
-        };
-
-        // Ensure that we've built a valid `MessagePool`.
-        res.check_invariants().map_err(ProxyDecodeError::Other)?;
-
-        Ok(res)
-    }
-}
-
 /// Running stats for all messages in a `MessagePool`.
 ///
 /// Slot reservations and memory reservations for guaranteed responses, being
@@ -1003,6 +881,9 @@ pub(super) struct MessageStats {
 
     /// Count of messages in output queues.
     pub(super) outbound_message_count: usize,
+
+    /// Amount of cycles attached to all messages in the pool.
+    pub(super) cycles: Cycles,
 }
 
 impl MessageStats {
@@ -1054,6 +935,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count: 1,
                 inbound_guaranteed_response_count,
                 outbound_message_count: 0,
+                cycles: req.payment,
             },
             (Inbound, BestEffort) => MessageStats {
                 size_bytes,
@@ -1066,6 +948,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count: 0,
                 inbound_guaranteed_response_count,
                 outbound_message_count: 0,
+                cycles: req.payment,
             },
             (Outbound, GuaranteedResponse) => MessageStats {
                 size_bytes,
@@ -1079,6 +962,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count: 0,
                 inbound_guaranteed_response_count,
                 outbound_message_count: 1,
+                cycles: req.payment,
             },
             (Outbound, BestEffort) => MessageStats {
                 size_bytes,
@@ -1091,6 +975,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count: 0,
                 inbound_guaranteed_response_count,
                 outbound_message_count: 1,
+                cycles: req.payment,
             },
         }
     }
@@ -1124,6 +1009,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count,
                 inbound_guaranteed_response_count: 1,
                 outbound_message_count: 0,
+                cycles: rep.refund,
             },
             (Inbound, BestEffort) => MessageStats {
                 size_bytes,
@@ -1136,6 +1022,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count,
                 inbound_guaranteed_response_count: 0,
                 outbound_message_count: 0,
+                cycles: rep.refund,
             },
             (Outbound, GuaranteedResponse) => MessageStats {
                 size_bytes,
@@ -1148,6 +1035,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count,
                 inbound_guaranteed_response_count: 0,
                 outbound_message_count: 1,
+                cycles: rep.refund,
             },
             (Outbound, BestEffort) => MessageStats {
                 size_bytes,
@@ -1160,6 +1048,7 @@ impl MessageStats {
                 inbound_guaranteed_request_count,
                 inbound_guaranteed_response_count: 0,
                 outbound_message_count: 1,
+                cycles: rep.refund,
             },
         }
     }
@@ -1178,6 +1067,7 @@ impl AddAssign<MessageStats> for MessageStats {
             inbound_guaranteed_request_count,
             inbound_guaranteed_response_count,
             outbound_message_count,
+            cycles,
         } = rhs;
         self.size_bytes += size_bytes;
         self.best_effort_message_bytes += best_effort_message_bytes;
@@ -1189,6 +1079,7 @@ impl AddAssign<MessageStats> for MessageStats {
         self.inbound_guaranteed_request_count += inbound_guaranteed_request_count;
         self.inbound_guaranteed_response_count += inbound_guaranteed_response_count;
         self.outbound_message_count += outbound_message_count;
+        self.cycles += cycles;
     }
 }
 
@@ -1205,6 +1096,7 @@ impl SubAssign<MessageStats> for MessageStats {
             inbound_guaranteed_request_count,
             inbound_guaranteed_response_count,
             outbound_message_count,
+            cycles,
         } = rhs;
         self.size_bytes -= size_bytes;
         self.best_effort_message_bytes -= best_effort_message_bytes;
@@ -1216,5 +1108,6 @@ impl SubAssign<MessageStats> for MessageStats {
         self.inbound_guaranteed_request_count -= inbound_guaranteed_request_count;
         self.inbound_guaranteed_response_count -= inbound_guaranteed_response_count;
         self.outbound_message_count -= outbound_message_count;
+        self.cycles -= cycles;
     }
 }

@@ -7,7 +7,7 @@ pub use ic_management_canister_types::{
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use std::sync::Arc;
 
 pub struct UniversalCanister {

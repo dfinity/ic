@@ -6,5 +6,3 @@
 //! by the upper layers of the internet computer.
 
 pub mod consensus;
-pub mod cup_utils;
-pub use cup_utils::{make_registry_cup, make_registry_cup_from_cup_contents};

@@ -1,10 +1,13 @@
 //! Metrics for the idkg feature
 
 use ic_metrics::{
-    buckets::{decimal_buckets, linear_buckets},
     MetricsRegistry,
+    buckets::{decimal_buckets, linear_buckets},
 };
-use ic_types::consensus::idkg::{HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId, IDkgPayload};
+use ic_types::consensus::idkg::{
+    CompletedReshareRequest, CompletedSignature, HasIDkgMasterPublicKeyId, IDkgMasterPublicKeyId,
+    IDkgPayload, KeyTranscriptCreation,
+};
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use std::collections::BTreeMap;
 
@@ -436,18 +439,82 @@ impl ThresholdSignatureMetrics {
     }
 }
 
+/// IDkg payload stats
+#[derive(Default)]
+pub struct IDkgPayloadStats {
+    pub signature_agreements: usize,
+    pub key_transcripts_created: CounterPerMasterPublicKeyId,
+    pub available_pre_signatures: CounterPerMasterPublicKeyId,
+    pub pre_signatures_in_creation: CounterPerMasterPublicKeyId,
+    pub ongoing_xnet_reshares: CounterPerMasterPublicKeyId,
+    pub xnet_reshare_agreements: CounterPerMasterPublicKeyId,
+    pub transcript_resolution_errors: usize,
+}
+
+impl From<&IDkgPayload> for IDkgPayloadStats {
+    fn from(payload: &IDkgPayload) -> Self {
+        let mut key_transcripts_created = CounterPerMasterPublicKeyId::new();
+
+        for (key_id, key_transcript) in &payload.key_transcripts {
+            if let KeyTranscriptCreation::Created(transcript) = &key_transcript.next_in_creation {
+                let transcript_id = &transcript.as_ref().transcript_id;
+                let current_transcript_id = key_transcript
+                    .current
+                    .as_ref()
+                    .map(|transcript| &transcript.as_ref().transcript_id);
+                if Some(transcript_id) != current_transcript_id
+                    && payload.idkg_transcripts.contains_key(transcript_id)
+                {
+                    *key_transcripts_created.entry(key_id.clone()).or_default() += 1;
+                }
+            }
+        }
+
+        let keys = expected_keys(payload);
+
+        Self {
+            key_transcripts_created,
+            signature_agreements: payload
+                .signature_agreements
+                .values()
+                .filter(|status| matches!(status, CompletedSignature::Unreported(_)))
+                .count(),
+            available_pre_signatures: count_by_master_public_key_id(
+                payload.available_pre_signatures.values(),
+                &keys,
+            ),
+            pre_signatures_in_creation: count_by_master_public_key_id(
+                payload.pre_signatures_in_creation.values(),
+                &keys,
+            ),
+            ongoing_xnet_reshares: count_by_master_public_key_id(
+                payload.ongoing_xnet_reshares.keys(),
+                &keys,
+            ),
+            xnet_reshare_agreements: count_by_master_public_key_id(
+                payload
+                    .xnet_reshare_agreements
+                    .iter()
+                    .filter(|(_, status)| matches!(status, CompletedReshareRequest::Unreported(_))),
+                &keys,
+            ),
+            transcript_resolution_errors: 0, // These errors may occur during batch delivery
+        }
+    }
+}
+
 /// Returns the key id corresponding to the [`IDkgMasterPublicKeyId`]
 pub fn key_id_label(key_id: Option<&IDkgMasterPublicKeyId>) -> String {
     key_id.map(ToString::to_string).unwrap_or_default()
 }
 
-pub fn expected_keys(payload: &IDkgPayload) -> Vec<IDkgMasterPublicKeyId> {
+fn expected_keys(payload: &IDkgPayload) -> Vec<IDkgMasterPublicKeyId> {
     payload.key_transcripts.keys().cloned().collect()
 }
 
 pub type CounterPerMasterPublicKeyId = BTreeMap<IDkgMasterPublicKeyId, usize>;
 
-pub fn count_by_master_public_key_id<T: HasIDkgMasterPublicKeyId>(
+fn count_by_master_public_key_id<T: HasIDkgMasterPublicKeyId>(
     collection: impl Iterator<Item = T>,
     expected_keys: &[IDkgMasterPublicKeyId],
 ) -> CounterPerMasterPublicKeyId {

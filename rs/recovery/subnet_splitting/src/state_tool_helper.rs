@@ -10,7 +10,7 @@ use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_tool::commands::{manifest::compute_manifest, verify_manifest::verify_manifest};
 use ic_types::{ReplicaVersion, Time};
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 use std::{
     fs::File,
@@ -49,8 +49,7 @@ impl StateToolHelper {
         compute_manifest(dir)
             .map_err(|err| {
                 RecoveryError::StateToolError(format!(
-                    "Failed to compute the state manifest: {}",
-                    err
+                    "Failed to compute the state manifest: {err}"
                 ))
             })
             .and_then(|manifest| write_file(output_path, manifest))
@@ -96,10 +95,7 @@ impl StateToolHelper {
 
         verify_manifest(manifest_file)
             .map_err(|err| {
-                RecoveryError::StateToolError(format!(
-                    "Failed to verify the state manifest: {}",
-                    err
-                ))
+                RecoveryError::StateToolError(format!("Failed to verify the state manifest: {err}"))
             })
             .map(hex::encode)
     }
@@ -117,7 +113,7 @@ impl StateToolHelper {
         info!(self.logger, "Executing {:?}", command);
 
         let output = command.output().map_err(|e| {
-            RecoveryError::StateToolError(format!("Failed executing the command, error: {}", e))
+            RecoveryError::StateToolError(format!("Failed executing the command, error: {e}"))
         })?;
 
         if !output.status.success() {
@@ -151,7 +147,7 @@ impl StateToolHelper {
             return Ok(());
         }
 
-        if let Some(version) = replica_version {
+        if let Some(version) = &replica_version {
             block_on(download_binary(
                 &self.logger,
                 version,

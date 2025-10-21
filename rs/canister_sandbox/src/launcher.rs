@@ -24,12 +24,12 @@ use crate::{
 use ic_types::CanisterId;
 use nix::{
     errno::Errno,
-    sys::wait::{wait, WaitStatus},
+    sys::wait::{WaitStatus, wait},
     unistd::Pid,
 };
 
 /// The `main()` of the launcher binary. This function is called from
-/// binaries such as `ic-replay` and `drun` to run as a sandbox launcher.
+/// binaries such as `ic-replay` to run as a sandbox launcher.
 ///
 pub fn sandbox_launcher_main() {
     let socket = child_process_initialization();
@@ -137,8 +137,7 @@ impl LauncherServer {
                             let mut info_map = watcher_process_info_map.lock().unwrap();
                             let process_info = info_map.remove(&pid);
                             eprintln!(
-                                "Sandbox pid {} for canister {:?} exited unexpectedly with status {:?}",
-                                pid, process_info, status
+                                "Sandbox pid {pid} for canister {process_info:?} exited unexpectedly with status {status:?}"
                             );
 
                             let should_panic = process_info
@@ -210,7 +209,7 @@ impl LauncherService for LauncherServer {
                 rpc::Call::new_resolved(Ok(LaunchSandboxReply { pid }))
             }
             Err(err) => {
-                eprintln!("Error spawning sandbox process: {}", err);
+                eprintln!("Error spawning sandbox process: {err}");
                 rpc::Call::new_resolved(Err(rpc::Error::ServerError))
             }
         }
@@ -254,7 +253,7 @@ impl LauncherService for LauncherServer {
                 rpc::Call::new_resolved(Ok(LaunchCompilerReply { pid }))
             }
             Err(err) => {
-                eprintln!("Error spawning compiler process {}: {}", exec_path, err);
+                eprintln!("Error spawning compiler process {exec_path}: {err}");
                 rpc::Call::new_resolved(Err(rpc::Error::ServerError))
             }
         }

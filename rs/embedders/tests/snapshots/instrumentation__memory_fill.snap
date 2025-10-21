@@ -1,6 +1,6 @@
 ---
 source: rs/embedders/tests/instrumentation.rs
-assertion_line: 63
+assertion_line: 65
 expression: out
 ---
 (module
@@ -16,7 +16,7 @@ expression: out
   (import "__" "try_grow_stable_memory" (func (;2;) (type 2)))
   (import "__" "internal_trap" (func (;3;) (type 3)))
   (import "__" "stable_read_first_access" (func (;4;) (type 4)))
-  (memory (;0;) 1)
+  (memory (;0;) 1 65536)
   (memory (;1;) i64 0 8192000)
   (memory (;2;) 2000 2000)
   (global (;0;) (mut i64) i64.const 0)

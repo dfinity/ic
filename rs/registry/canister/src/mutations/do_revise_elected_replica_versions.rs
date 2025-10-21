@@ -6,6 +6,7 @@ use candid::{CandidType, Deserialize};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{PrincipalId, SubnetId};
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_protobuf::registry::{
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     subnet::v1::{SubnetListRecord, SubnetRecord},
@@ -15,7 +16,7 @@ use ic_registry_keys::{
     make_blessed_replica_versions_key, make_replica_version_key, make_subnet_list_record_key,
     make_subnet_record_key, make_unassigned_nodes_config_record_key,
 };
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
+use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation};
 use prost::Message;
 use serde::Serialize;
 
@@ -74,8 +75,7 @@ impl Registry {
                                 panic!("{LOG_PREFIX}Release package hash has to be provided")
                             }),
                         release_package_urls: payload.release_package_urls,
-                        guest_launch_measurement_sha256_hex: payload
-                            .guest_launch_measurement_sha256_hex,
+                        guest_launch_measurements: payload.guest_launch_measurements,
                     }
                     .encode_to_vec(),
                 },
@@ -154,8 +154,7 @@ impl Registry {
 
         if !in_use.is_empty() {
             panic!(
-                "{}Cannot retire versions {:?}, because they are currently deployed to a subnet!",
-                LOG_PREFIX, in_use
+                "{LOG_PREFIX}Cannot retire versions {in_use:?}, because they are currently deployed to a subnet!"
             );
         }
 
@@ -172,14 +171,12 @@ impl Registry {
 
         if let Some(version) = in_use {
             panic!(
-                "{}Cannot retire version {}, because it is currently deployed to unassigned nodes!",
-                LOG_PREFIX, version
+                "{LOG_PREFIX}Cannot retire version {version}, because it is currently deployed to unassigned nodes!"
             );
         }
 
         println!(
-            "{}Blessed versions before: {:?} and after: {:?}",
-            LOG_PREFIX, before_removal, after_removal
+            "{LOG_PREFIX}Blessed versions before: {before_removal:?} and after: {after_removal:?}"
         );
 
         after_removal
@@ -208,8 +205,8 @@ pub struct ReviseElectedGuestosVersionsPayload {
     /// package that corresponds to this version
     pub release_package_urls: Vec<String>,
 
-    /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
-    pub guest_launch_measurement_sha256_hex: Option<String>,
+    /// The SEV-SNP measurements that belong to this release
+    pub guest_launch_measurements: Option<GuestLaunchMeasurements>,
 
     /// Version IDs. These can be anything, they have no semantics.
     pub replica_versions_to_unelect: Vec<String>,
@@ -239,6 +236,14 @@ impl ReviseElectedGuestosVersionsPayload {
     }
 
     pub fn validate(&self) -> Result<(), String> {
+        if self
+            .guest_launch_measurements
+            .as_ref()
+            .is_some_and(|measurements| measurements.guest_launch_measurements.is_empty())
+        {
+            return Err("guest_launch_measurements must not be an empty vector".into());
+        }
+
         if self.is_electing_a_version()? || self.is_unelecting_a_version() {
             Ok(())
         } else {

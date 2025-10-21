@@ -1,5 +1,3 @@
-use super::constants::SSH_USERNAME;
-use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
 use crate::driver::farm::FarmResult;
 use crate::driver::farm::FileId;
 use crate::driver::farm::ImageLocation;
@@ -12,19 +10,13 @@ use crate::driver::ic::{ImageSizeGiB, VmAllocationStrategy, VmResources};
 use crate::driver::nested::NestedNode;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
-    get_empty_disk_img_sha256, get_empty_disk_img_url, get_ic_os_img_sha256, get_ic_os_img_url,
-    get_mainnet_ic_os_img_url, get_malicious_ic_os_img_sha256, get_malicious_ic_os_img_url,
-    HasIcDependencies,
+    get_empty_disk_img_sha256, get_empty_disk_img_url, get_guestos_img_sha256, get_guestos_img_url,
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
 use crate::driver::universal_vm::UniversalVm;
-use crate::k8s::tnet::TNet;
-use crate::util::block_on;
 use anyhow;
 use serde::{Deserialize, Serialize};
-use slog::{info, warn};
 use std::collections::BTreeMap;
-use std::fs;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use url::Url;
 
@@ -143,6 +135,7 @@ impl ResourceGroup {
 pub struct AllocatedVm {
     pub name: String,
     pub group_name: String,
+    pub hostname: String,
     pub ipv6: Ipv6Addr,
     pub mac6: String,
     pub ipv4: Option<Ipv4Addr>,
@@ -155,33 +148,8 @@ pub fn get_resource_request(
     test_env: &TestEnv,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
-    let (ic_os_img_sha256, ic_os_img_url) = {
-        if config.has_malicious_behaviours() {
-            warn!(
-                test_env.logger(),
-                "Using malicious guestos image for IC config."
-            );
-            (
-                get_malicious_ic_os_img_sha256()?,
-                get_malicious_ic_os_img_url()?,
-            )
-        } else if config.with_mainnet_config {
-            warn!(
-                test_env.logger(),
-                "Using mainnet guestos image for IC config."
-            );
-            (
-                test_env.get_mainnet_ic_os_img_sha256()?,
-                get_mainnet_ic_os_img_url()?,
-            )
-        } else {
-            info!(
-                test_env.logger(),
-                "Using tip-of-branch guestos image for IC config."
-            );
-            (get_ic_os_img_sha256()?, get_ic_os_img_url()?)
-        }
-    };
+    let (ic_os_img_sha256, ic_os_img_url) = (get_guestos_img_sha256(), get_guestos_img_url());
+
     let mut res_req = ResourceRequest::new(ImageType::IcOsImage, ic_os_img_url, ic_os_img_sha256);
     let group_setup = GroupSetup::read_attribute(test_env);
     let default_vm_resources = group_setup.default_vm_resources;
@@ -286,7 +254,6 @@ pub fn allocate_resources(
     let group_name = req.group_name.clone();
 
     let mut threads = vec![];
-    let mut vm_responses = vec![];
     for vm_config in req.vm_configs.iter() {
         let farm_cloned = farm.clone();
         let vm_name = vm_config.name.clone();
@@ -320,22 +287,6 @@ pub fn allocate_resources(
                     )
                 }));
             }
-            InfraProvider::K8s => {
-                let mut tnet = TNet::read_attribute(env);
-                tnet.access_key = fs::read_to_string(
-                    env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR).join(SSH_USERNAME),
-                )
-                .expect("failed to read ssh authorized pub key")
-                .into();
-                vm_responses.push((
-                    vm_name,
-                    block_on(
-                        tnet.vm_create(create_vm_request, req.primary_image.image_type.clone()),
-                    )
-                    .expect("failed to create vm"),
-                ));
-                tnet.write_attribute(env);
-            }
         }
     }
     let mut res_group = ResourceGroup::new(group_name.clone());
@@ -345,25 +296,17 @@ pub fn allocate_resources(
                 let (vm_name, created_vm) = thread
                     .join()
                     .expect("Couldn't join on the associated thread");
-                let VMCreateResponse { ipv6, mac6, .. } = created_vm?;
-                res_group.add_vm(AllocatedVm {
-                    name: vm_name,
-                    group_name: group_name.clone(),
-                    ipv4: None,
+                let VMCreateResponse {
+                    hostname,
                     ipv6,
                     mac6,
-                })
-            }
-        }
-        InfraProvider::K8s => {
-            for (vm_name, created_vm) in vm_responses {
-                let VMCreateResponse {
-                    ipv6, mac6, ipv4, ..
-                } = created_vm;
+                    ..
+                } = created_vm?;
                 res_group.add_vm(AllocatedVm {
                     name: vm_name,
                     group_name: group_name.clone(),
-                    ipv4,
+                    hostname,
+                    ipv4: None,
                     ipv6,
                     mac6,
                 })
@@ -406,14 +349,27 @@ fn vm_spec_from_nested_node(
     node: &NestedNode,
     default_vm_resources: Option<VmResources>,
 ) -> VmSpec {
+    let vm_resources = &node.vm_resources;
     VmSpec {
         name: node.name.clone(),
         // Note that the nested GuestOS VM uses half the vCPUs and memory of this host VM.
-        vcpus: HOSTOS_VCPUS_PER_VM,
-        memory_kibibytes: HOSTOS_MEMORY_KIB_PER_VM,
+        vcpus: vm_resources.vcpus.unwrap_or_else(|| {
+            default_vm_resources
+                .and_then(|vm_resources| vm_resources.vcpus)
+                .unwrap_or(HOSTOS_VCPUS_PER_VM)
+        }),
+        memory_kibibytes: vm_resources.memory_kibibytes.unwrap_or_else(|| {
+            default_vm_resources
+                .and_then(|vm_resources| vm_resources.memory_kibibytes)
+                .unwrap_or(HOSTOS_MEMORY_KIB_PER_VM)
+        }),
         boot_image: BootImage::GroupDefault,
-        boot_image_minimal_size_gibibytes: default_vm_resources
-            .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes),
+        boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
+            || {
+                default_vm_resources
+                    .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
+            },
+        ),
         has_ipv4: false,
         vm_allocation: None,
         required_host_features: Vec::new(),

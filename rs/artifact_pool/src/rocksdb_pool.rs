@@ -10,27 +10,27 @@ use ic_interfaces::consensus_pool::{
     HeightIndexedPool, HeightRange, OnlyError, PoolSection, ValidatedArtifact,
     ValidatedConsensusArtifact,
 };
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::certification::CertificationMessageHash;
 use ic_types::consensus::{BlockPayload, DataPayload, HasHash};
 use ic_types::{
+    Height, Time,
     artifact::{CertificationMessageId, ConsensusMessageId},
     batch::BatchPayload,
     consensus::{
-        certification::{Certification, CertificationMessage, CertificationShare},
-        dkg::DkgDataPayload,
         BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ConsensusMessageHash,
         ConsensusMessageHashable, EquivocationProof, Finalization, FinalizationShare, HasHeight,
         Notarization, NotarizationShare, Payload, RandomBeacon, RandomBeaconShare, RandomTape,
         RandomTapeShare,
+        certification::{Certification, CertificationMessage, CertificationShare},
+        dkg::DkgDataPayload,
     },
     crypto::CryptoHashable,
-    Height, Time,
 };
 use rocksdb::{
+    ColumnFamilyDescriptor, DB, DBCompressionType, Options, WriteBatch,
     compaction_filter::{CompactionFilterFn, Decision},
-    ColumnFamilyDescriptor, DBCompressionType, Options, WriteBatch, DB,
 };
 use std::convert::TryFrom;
 use std::marker::PhantomData;
@@ -397,9 +397,10 @@ impl InitializablePoolSection for PersistentHeightIndexedPool<ConsensusMessage> 
             msg: cup_with_proto,
             timestamp: cup.content.block.as_ref().context.time,
         };
-        check_ok_uw!(self
-            .db
-            .put_cf(cf_handle, key, check_ok_uw!(serialize(&artifact))));
+        check_ok_uw!(
+            self.db
+                .put_cf(cf_handle, key, check_ok_uw!(serialize(&artifact)))
+        );
     }
 }
 
@@ -1064,9 +1065,10 @@ impl PersistentHeightIndexedPool<CertificationMessage> {
             &ic_types::crypto::crypto_hash(value).get().0,
         );
         let cf_handle = check_not_none_uw!(self.db.cf_handle(info.name));
-        check_ok!(self
-            .db
-            .put_cf(cf_handle, key, check_ok_uw!(serialize(value))));
+        check_ok!(
+            self.db
+                .put_cf(cf_handle, key, check_ok_uw!(serialize(value)))
+        );
     }
 
     pub fn iterate<Message: CertificationType + PerTypeCFInfo + 'static>(

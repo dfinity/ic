@@ -1,11 +1,11 @@
 use super::{
+    Buffer, FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocatorRegistry, PageIndex,
+    PageMap, PageMapSerialization, Shard, StorageMetrics, TestPageAllocatorFileDescriptorImpl,
     checkpoint::Checkpoint,
     page_allocator::PageAllocatorSerialization,
     storage::BaseFileSerialization,
     storage::StorageLayout,
-    test_utils::{base_only_storage_layout, ShardedTestStorageLayout},
-    Buffer, FileDescriptor, MemoryInstructions, MemoryMapOrData, PageAllocatorRegistry, PageIndex,
-    PageMap, PageMapSerialization, Shard, StorageMetrics, TestPageAllocatorFileDescriptorImpl,
+    test_utils::{ShardedTestStorageLayout, base_only_storage_layout},
 };
 use ic_config::state_manager::LsmtConfig;
 use ic_metrics::MetricsRegistry;
@@ -64,7 +64,7 @@ fn duplicate_file_descriptors(
 #[test]
 fn can_debug_display_a_page_map() {
     let page_map = PageMap::new_for_testing();
-    assert_eq!(format!("{:?}", page_map), "{}");
+    assert_eq!(format!("{page_map:?}"), "{}");
 }
 
 #[test]
@@ -94,10 +94,12 @@ fn can_update_a_page_map() {
     page_map.update(&delta);
 
     for (num, contents) in &[(1, 1), (2, 2), (3, 0)] {
-        assert!(page_map
-            .get_page(PageIndex::new(*num))
-            .iter()
-            .all(|b| *b == *contents));
+        assert!(
+            page_map
+                .get_page(PageIndex::new(*num))
+                .iter()
+                .all(|b| *b == *contents)
+        );
     }
 }
 
@@ -614,9 +616,11 @@ fn get_memory_instructions_ignores_base_file() {
         .unwrap();
 
     assert!(!storage_layout.base().exists());
-    assert!(storage_layout
-        .overlay(Height::new(0), Shard::new(0))
-        .exists());
+    assert!(
+        storage_layout
+            .overlay(Height::new(0), Shard::new(0))
+            .exists()
+    );
 
     let page_map = PageMap::open(
         Box::new(storage_layout),
@@ -673,12 +677,16 @@ fn get_memory_instructions_stops_at_instructions_outside_min_range() {
         .unwrap();
 
     assert!(!storage_layout.base().exists());
-    assert!(storage_layout
-        .overlay(Height::new(0), Shard::new(0))
-        .exists());
-    assert!(storage_layout
-        .overlay(Height::new(1), Shard::new(0))
-        .exists());
+    assert!(
+        storage_layout
+            .overlay(Height::new(0), Shard::new(0))
+            .exists()
+    );
+    assert!(
+        storage_layout
+            .overlay(Height::new(1), Shard::new(0))
+            .exists()
+    );
 
     let page_map = PageMap::open(
         Box::new(storage_layout),
@@ -743,12 +751,16 @@ fn get_memory_instructions_extends_mmap_past_min_range() {
         .unwrap();
 
     assert!(!storage_layout.base().exists());
-    assert!(storage_layout
-        .overlay(Height::new(0), Shard::new(0))
-        .exists());
-    assert!(storage_layout
-        .overlay(Height::new(1), Shard::new(0))
-        .exists());
+    assert!(
+        storage_layout
+            .overlay(Height::new(0), Shard::new(0))
+            .exists()
+    );
+    assert!(
+        storage_layout
+            .overlay(Height::new(1), Shard::new(0))
+            .exists()
+    );
 
     let page_map = PageMap::open(
         Box::new(storage_layout),

@@ -1,12 +1,11 @@
-use std::fs::read_to_string;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
 
 use config_types::ConfigMap;
 
-use anyhow::{anyhow, bail};
 use anyhow::{Context, Result};
-use regex::Regex;
+use anyhow::{anyhow, bail};
+use ini::Ini;
 
 pub struct ConfigIniSettings {
     pub ipv6_prefix: String,
@@ -73,7 +72,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         .map(|address| {
             address
                 .parse::<Ipv4Addr>()
-                .context(format!("Invalid IPv4 address: {}", address))
+                .context(format!("Invalid IPv4 address: {address}"))
         })
         .transpose()?;
 
@@ -82,7 +81,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         .map(|address| {
             address
                 .parse::<Ipv4Addr>()
-                .context(format!("Invalid IPv4 gateway: {}", address))
+                .context(format!("Invalid IPv4 gateway: {address}"))
         })
         .transpose()?;
 
@@ -91,7 +90,7 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
         .map(|prefix| {
             let prefix = prefix
                 .parse::<u8>()
-                .context(format!("Invalid IPv4 prefix length: {}", prefix))?;
+                .context(format!("Invalid IPv4 prefix length: {prefix}"))?;
             if prefix > 32 {
                 bail!(
                     "IPv4 prefix length must be between 0 and 32, got {}",
@@ -128,56 +127,17 @@ pub fn get_config_ini_settings(config_file_path: &Path) -> Result<ConfigIniSetti
     })
 }
 
-fn parse_config_line(line: &str) -> Option<(String, String)> {
-    // Skip blank lines and comments
-    if line.is_empty() || line.trim().starts_with('#') {
-        return None;
-    }
-
-    let parts: Vec<&str> = line.splitn(2, '=').collect();
-    if parts.len() == 2 {
-        Some((parts[0].trim().into(), parts[1].trim().into()))
-    } else {
-        eprintln!("Warning: skipping config line due to unrecognized format: \"{line}\"");
-        eprintln!("Expected format: \"<key>=<value>\"");
-        None
-    }
-}
-
 fn config_map_from_path(config_file_path: &Path) -> Result<ConfigMap> {
-    let file_contents = read_to_string(config_file_path)
-        .with_context(|| format!("Error reading file: {}", config_file_path.display()))?;
+    let parsed_ini = Ini::load_from_file(config_file_path).context("Failed to parse INI file")?;
 
-    let normalized_file_contents = normalize_contents(&file_contents);
+    // Flatten all sections into a single HashMap
+    let config_map: ConfigMap = parsed_ini
+        .into_iter()
+        .flat_map(|(_, properties)| properties.into_iter())
+        .map(|(key, value)| (key.to_lowercase(), value))
+        .collect();
 
-    Ok(normalized_file_contents
-        .lines()
-        .filter_map(parse_config_line)
-        .collect())
-}
-
-fn normalize_contents(contents: &str) -> String {
-    let mut normalized_contents = contents.replace("\r\n", "\n").replace("\r", "\n");
-
-    let comment_regex = Regex::new(r"#.*$").unwrap();
-    normalized_contents = comment_regex
-        .replace_all(&normalized_contents, "")
-        .to_string();
-
-    normalized_contents = normalized_contents.replace("\"", "").replace("'", "");
-
-    normalized_contents = normalized_contents.to_lowercase();
-
-    let empty_line_regex = Regex::new(r"^\s*$\n?").unwrap();
-    normalized_contents = empty_line_regex
-        .replace_all(&normalized_contents, "")
-        .to_string();
-
-    if !normalized_contents.ends_with('\n') {
-        normalized_contents.push('\n');
-    }
-
-    normalized_contents
+    Ok(config_map)
 }
 
 #[cfg(test)]
@@ -197,25 +157,6 @@ mod tests {
         assert!(!is_valid_ipv6_prefix("2a00:1111:1111:1111:")); // Trailing colon
         assert!(!is_valid_ipv6_prefix("2a00:1111:1111:1111:1111:1111")); // Too long
         assert!(!is_valid_ipv6_prefix("abcd::1234:5678")); // Contains "::"
-    }
-
-    #[test]
-    fn test_parse_config_line() {
-        assert_eq!(
-            parse_config_line("key=value"),
-            Some(("key".to_string(), "value".to_string()))
-        );
-        assert_eq!(
-            parse_config_line("   key   =   value   "),
-            Some(("key".to_string(), "value".to_string()))
-        );
-        assert_eq!(parse_config_line(""), None);
-        assert_eq!(parse_config_line("# this is a comment"), None);
-        assert_eq!(parse_config_line("keywithoutvalue"), None);
-        assert_eq!(
-            parse_config_line("key=value=extra"),
-            Some(("key".to_string(), "value=extra".to_string()))
-        );
     }
 
     #[test]
@@ -261,7 +202,6 @@ mod tests {
         let mut temp_file = NamedTempFile::new()?;
         writeln!(temp_file, "\n\t\r")?;
         writeln!(temp_file, "# COMMENT          ")?;
-        writeln!(temp_file, "BAD INPUT          ")?;
         writeln!(temp_file, "\n\n\n\n")?;
         writeln!(temp_file, "ipv6_prefix=2a00:fb01:400:200")?;
         writeln!(temp_file, "ipv6_gateway=2a00:fb01:400:200::1")?;
@@ -271,9 +211,7 @@ mod tests {
         writeln!(temp_file, "domain=example.com")?;
         writeln!(temp_file, "verbose=false")?;
 
-        let temp_file_path = temp_file.path();
-
-        let config_ini_settings = get_config_ini_settings(temp_file_path)?;
+        let config_ini_settings = get_config_ini_settings(temp_file.path())?;
 
         assert_eq!(
             config_ini_settings.ipv6_prefix,
@@ -305,8 +243,7 @@ mod tests {
         writeln!(temp_file, "ipv4_gateway=212.71.124.177")?;
         writeln!(temp_file, "ipv4_prefix_length=28")?;
 
-        let temp_file_path = temp_file.path();
-        let result = get_config_ini_settings(temp_file_path);
+        let result = get_config_ini_settings(temp_file.path());
         assert!(result.is_err());
 
         // Test invalid IPv6 prefix
@@ -317,14 +254,13 @@ mod tests {
         writeln!(temp_file, "ipv4_gateway=192.168.1.254")?;
         writeln!(temp_file, "ipv4_prefix_length=24")?;
 
-        let temp_file_path = temp_file.path();
-        let result = get_config_ini_settings(temp_file_path);
+        let result = get_config_ini_settings(temp_file.path());
         assert!(result.is_err());
 
         // Test missing prefix
         let mut temp_file = NamedTempFile::new()?;
         writeln!(temp_file, "ipv6_gateway=2001:db8:85a3:0000::1")?;
-        let result = get_config_ini_settings(temp_file_path);
+        let result = get_config_ini_settings(temp_file.path());
         assert!(result.is_err());
 
         Ok(())

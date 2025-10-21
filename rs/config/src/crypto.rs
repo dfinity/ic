@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[cfg(test)]
-use proptest::prelude::{any, prop_oneof, Strategy};
+use proptest::prelude::{Strategy, any, prop_oneof};
 #[cfg(test)]
 use proptest_derive::Arbitrary;
 use std::fs::Permissions;
@@ -234,18 +234,18 @@ mod tests {
             dir.path().to_owned()
         };
         let result = CryptoConfig::check_dir_has_required_permissions(&dir_path);
-        assert!(result.is_err(), "{:?}", result);
+        assert!(result.is_err(), "{result:?}");
     }
 
     #[test]
     fn config_dir_check_should_fail_for_paths_that_are_widely_readable() {
         let dir = mk_temp_dir_with_permissions(0o700);
         let result = CryptoConfig::check_dir_has_required_permissions(dir.as_ref());
-        assert!(result.is_ok(), "{:?}", result);
+        assert!(result.is_ok(), "{result:?}");
         for mode in 0o701..=0o707 {
             let dir = mk_temp_dir_with_permissions(mode);
             let result = CryptoConfig::check_dir_has_required_permissions(dir.as_ref());
-            assert!(result.is_err(), "{:?}", result);
+            assert!(result.is_err(), "{result:?}");
         }
     }
 
@@ -253,11 +253,11 @@ mod tests {
     fn config_dir_check_should_fail_for_paths_that_are_not_accessible_for_owner() {
         let dir = mk_temp_dir_with_permissions(0o700);
         let result = CryptoConfig::check_dir_has_required_permissions(dir.as_ref());
-        assert!(result.is_ok(), "{:?}", result);
+        assert!(result.is_ok(), "{result:?}");
         for mode in [0o000, 0o100, 0o200, 0o300, 0o400, 0o500, 0o600] {
             let dir = mk_temp_dir_with_permissions(mode);
             let result = CryptoConfig::check_dir_has_required_permissions(dir.as_ref());
-            assert!(result.is_err(), "{:?}", result);
+            assert!(result.is_err(), "{result:?}");
         }
     }
 }

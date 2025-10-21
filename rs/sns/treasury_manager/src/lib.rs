@@ -1,4 +1,8 @@
+// Prevents warnings from the Derivative macro.
+#![allow(clippy::needless_lifetimes)]
+
 use candid::{CandidType, Nat, Principal};
+use derivative::Derivative;
 use serde::{Deserialize, Serialize, Serializer};
 use std::{
     collections::BTreeMap,
@@ -91,6 +95,16 @@ impl BalanceBook {
         self
     }
 
+    pub fn with_payees(mut self, account: Option<Account>, name: Option<String>) -> Self {
+        self.payees = Some(Balance::zero(account, name));
+        self
+    }
+
+    pub fn with_payers(mut self, account: Option<Account>, name: Option<String>) -> Self {
+        self.payers = Some(Balance::zero(account, name));
+        self
+    }
+
     pub fn with_suspense(mut self, name: Option<String>) -> Self {
         self.suspense = Some(Balance::zero(None, name));
         self
@@ -123,6 +137,13 @@ impl BalanceBook {
         }
         self
     }
+
+    pub fn suspense(mut self, amount_decimals: u64) -> Self {
+        if let Some(suspense) = self.suspense.as_mut() {
+            suspense.amount_decimals = Nat::from(amount_decimals)
+        }
+        self
+    }
 }
 
 #[derive(CandidType, Clone, Debug, Default, Deserialize, PartialEq)]
@@ -140,7 +161,15 @@ pub struct Error {
     pub kind: ErrorKind,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
+fn fmt_principal_as_string(
+    principal: &Principal,
+    f: &mut std::fmt::Formatter,
+) -> Result<(), std::fmt::Error> {
+    write!(f, "{principal}")
+}
+
+#[derive(CandidType, Clone, Derivative, Deserialize, PartialEq, Serialize)]
+#[derivative(Debug)]
 pub enum ErrorKind {
     /// Prevents the call from being attempted.
     Precondition {},
@@ -151,6 +180,7 @@ pub enum ErrorKind {
     /// An error that occurred while calling a canister.
     Call {
         method: String,
+        #[derivative(Debug(format_with = "fmt_principal_as_string"))]
         canister_id: Principal,
     },
 
@@ -261,8 +291,10 @@ pub struct BalancesRequest {}
 
 pub type Subaccount = [u8; 32];
 
-#[derive(CandidType, Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(CandidType, Clone, Copy, Derivative, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derivative(Debug)]
 pub struct Account {
+    #[derivative(Debug(format_with = "fmt_principal_as_string"))]
     pub owner: Principal,
     pub subaccount: Option<Subaccount>,
 }
@@ -378,9 +410,12 @@ impl From<TreasuryManagerOperation> for Vec<u8> {
 /// However, for generality, any call from the Treasury Manager can be recorded in the audit trail,
 /// even if it is not related to any literal ledger transaction, e.g., adding a token to a DEX
 /// for the first time, or checking the latest ledger metadata.
-#[derive(CandidType, Clone, Deserialize, PartialEq, Serialize)]
+#[derive(CandidType, Clone, Derivative, Deserialize, PartialEq, Serialize)]
+#[derivative(Debug)]
 pub struct Transaction {
     pub timestamp_ns: u64,
+
+    #[derivative(Debug(format_with = "fmt_principal_as_string"))]
     pub canister_id: Principal,
 
     pub result: Result<TransactionWitness, Error>,
@@ -405,33 +440,20 @@ impl Display for Transaction {
     }
 }
 
-impl fmt::Debug for Transaction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Transaction")
-            .field("timestamp_ns", &self.timestamp_ns)
-            // This is the 1st motivation for this hand-crafted Debug impl.
-            .field("canister_id", &self.canister_id.to_string())
-            .field("result", &self.result)
-            .field("purpose", &self.purpose)
-            // This is the 2nd motivation for this hand-crafted Debug impl.
-            .field(
-                "treasury_manager_operation",
-                &self.treasury_manager_operation.to_string(),
-            )
-            .finish()
-    }
-}
-
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq)]
 pub struct AuditTrail {
     pub transactions: Vec<Transaction>,
 }
 
-#[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(CandidType, Clone, Derivative, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derivative(Debug)]
 pub enum Asset {
     Token {
         symbol: String,
+
+        #[derivative(Debug(format_with = "fmt_principal_as_string"))]
         ledger_canister_id: Principal,
+
         #[serde(serialize_with = "serialize_nat_as_u64")]
         ledger_fee_decimals: Nat,
     },
@@ -461,11 +483,13 @@ pub struct Transfer {
     pub receiver: Option<Account>,
 }
 
-/// Most of the time, this just points to the Ledger block index. But for generality, once can
+/// Most of the time, this just points to the Ledger block index. But for generality, one can
 /// also use this structure for representing witnesses of non-ledger transactions, e.g., from adding
 /// a token to a DEX for the first time.
 #[derive(CandidType, Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum TransactionWitness {
+    Pending,
+
     Ledger(Vec<Transfer>),
 
     /// Represents a transaction that is not related to the ledger, e.g., DEX operations.

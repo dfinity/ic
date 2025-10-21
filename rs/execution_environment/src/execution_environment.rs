@@ -1,10 +1,11 @@
 use crate::{
+    canister_logs::fetch_canister_logs,
     canister_manager::{
+        CanisterManager,
         types::{
             CanisterManagerError, CanisterMgrConfig, DtsInstallCodeResult, InstallCodeContext,
             PausedInstallCodeExecution, StopCanisterResult, UploadChunkResult,
         },
-        CanisterManager,
     },
     canister_settings::CanisterSettings,
     execution::{
@@ -24,39 +25,40 @@ use ic_config::execution_environment::Config as ExecutionConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_crypto_utils_canister_threshold_sig::derive_threshold_public_key;
 use ic_cycles_account_manager::{
-    is_delayed_ingress_induction_cost, CyclesAccountManager, IngressInductionCost,
-    ResourceSaturation,
+    CyclesAccountManager, IngressInductionCost, ResourceSaturation,
+    is_delayed_ingress_induction_cost,
 };
 use ic_embedders::wasmtime_embedder::system_api::{ExecutionParameters, InstructionLimits};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
-    ChainKeyData, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
-    SubnetAvailableMemory,
+    ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings, SubnetAvailableMemory,
 };
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_logger::{error, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
-    CanisterInfoResponse, CanisterStatusType, ClearChunkStoreArgs, CreateCanisterArgs,
-    DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EmptyBlob,
-    InstallChunkedCodeArgs, InstallCodeArgsV2, ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method as Ic00Method, NodeMetricsHistoryArgs, Payload as Ic00Payload,
-    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs, RenameCanisterArgs,
-    ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs, SchnorrPublicKeyResponse,
-    SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs, SignWithSchnorrAux,
-    StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse, TakeCanisterSnapshotArgs,
-    UninstallCodeArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
-    UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
-    VetKdDeriveKeyArgs, VetKdPublicKeyArgs, VetKdPublicKeyResult, IC_00,
+    CanisterInfoResponse, CanisterMetadataRequest, CanisterStatusType, ClearChunkStoreArgs,
+    CreateCanisterArgs, DeleteCanisterSnapshotArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse,
+    EmptyBlob, FetchCanisterLogsRequest, IC_00, InstallChunkedCodeArgs, InstallCodeArgsV2,
+    ListCanisterSnapshotArgs, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method as Ic00Method,
+    NodeMetricsHistoryArgs, Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs,
+    ProvisionalTopUpCanisterArgs, ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
+    RenameCanisterArgs, ReshareChainKeyArgs, SchnorrAlgorithm, SchnorrPublicKeyArgs,
+    SchnorrPublicKeyResponse, SetupInitialDKGArgs, SignWithECDSAArgs, SignWithSchnorrArgs,
+    SignWithSchnorrAux, StoredChunksArgs, SubnetInfoArgs, SubnetInfoResponse,
+    TakeCanisterSnapshotArgs, UninstallCodeArgs, UpdateSettingsArgs,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs,
+    UploadCanisterSnapshotMetadataResponse, UploadChunkArgs, VetKdDeriveKeyArgs,
+    VetKdPublicKeyArgs, VetKdPublicKeyResult,
 };
 use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
     canister_state::{
-        system_state::{CyclesUseCase, PausedExecutionId},
         NextExecution,
+        system_state::{CyclesUseCase, PausedExecutionId},
     },
     metadata_state::subnet_call_context_manager::{
         EcdsaArguments, InstallCodeCall, InstallCodeCallId, ReshareChainKeyContext,
@@ -64,26 +66,25 @@ use ic_replicated_state::{
         SubnetCallContext, ThresholdArguments, VetKdArguments,
     },
     page_map::PageAllocatorFileDescriptor,
-    CanisterState, ExecutionTask, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
+    CanisterId, Cycles, ExecutionRound, Height, NumBytes, NumInstructions, RegistryVersion,
+    ReplicaVersion, SubnetId, Time,
+    batch::{CanisterCyclesCostSchedule, ChainKeyData},
     canister_http::{CanisterHttpRequestContext, MAX_CANISTER_HTTP_RESPONSE_BYTES},
     crypto::{
-        canister_threshold_sig::{MasterPublicKey, PublicKey},
-        threshold_sig::ni_dkg::NiDkgTargetId,
         ExtendedDerivationPath,
+        canister_threshold_sig::{MasterPublicKey, PublicKey},
+        threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTargetId},
     },
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
-        extract_effective_canister_id, CanisterCall, CanisterCallOrTask, CanisterMessage,
-        CanisterMessageOrTask, CanisterTask, Payload, RejectContext, Request, Response,
-        SignedIngressContent, StopCanisterCallId, StopCanisterContext,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
+        CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask, CanisterTask,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, RejectContext, Request, Response,
+        SignedIngress, StopCanisterCallId, StopCanisterContext, extract_effective_canister_id,
     },
     methods::SystemMethod,
     nominal_cycles::NominalCycles,
-    CanisterId, Cycles, ExecutionRound, Height, NumBytes, NumInstructions, ReplicaVersion,
-    SubnetId, Time,
 };
 use ic_types::{messages::MessageId, methods::WasmMethod};
 use ic_utils_thread::deallocator_thread::{DeallocationSender, DeallocatorThread};
@@ -188,6 +189,7 @@ pub struct RoundContext<'a> {
     pub counters: RoundCounters<'a>,
     pub log: &'a ReplicaLogger,
     pub time: Time,
+    pub cost_schedule: CanisterCyclesCostSchedule,
 }
 
 /// Keeps track of instruction remaining in the current execution round.
@@ -253,6 +255,7 @@ pub struct RoundLimits {
 
     /// The number of outgoing calls that can still be made across the subnet before
     /// canisters are limited to their own callback quota.
+    /// This is a soft cap which can be exceeded when executing canisters on threads.
     pub subnet_available_callbacks: i64,
 
     // TODO would be nice to change that to available, but this requires
@@ -339,7 +342,7 @@ pub struct ExecutionEnvironment {
     // This scaling factor accounts for the execution threads running in
     // parallel and potentially reserving resources. It should be initialized to
     // the number of scheduler cores.
-    resource_saturation_scaling: usize,
+    scheduler_cores: usize,
     deallocator_thread: DeallocatorThread,
 }
 
@@ -365,7 +368,7 @@ impl fmt::Display for DtsInstallCodeStatus {
 
 impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
@@ -375,7 +378,7 @@ impl ExecutionEnvironment {
         compute_capacity: usize,
         config: ExecutionConfig,
         cycles_account_manager: Arc<CyclesAccountManager>,
-        resource_saturation_scaling: usize,
+        scheduler_cores: usize,
         fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
         heap_delta_rate_limit: NumBytes,
         upload_wasm_chunk_instructions: NumInstructions,
@@ -384,8 +387,7 @@ impl ExecutionEnvironment {
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
         assert!(
-            config.deterministic_time_slicing == FlagStatus::Disabled
-                || config.canister_sandboxing_flag == FlagStatus::Enabled,
+            config.canister_sandboxing_flag == FlagStatus::Enabled,
             "Deterministic time slicing works only with canister sandboxing."
         );
         let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
@@ -406,6 +408,9 @@ impl ExecutionEnvironment {
             canister_snapshot_data_baseline_instructions,
             config.default_wasm_memory_limit,
             config.max_number_of_snapshots_per_canister,
+            config.max_environment_variables,
+            config.max_environment_variable_name_length,
+            config.max_environment_variable_value_length,
         );
         let metrics = ExecutionEnvironmentMetrics::new(metrics_registry);
         let canister_manager = CanisterManager::new(
@@ -436,7 +441,7 @@ impl ExecutionEnvironment {
             own_subnet_id,
             own_subnet_type,
             paused_execution_registry: Default::default(),
-            resource_saturation_scaling,
+            scheduler_cores,
             deallocator_thread,
         }
     }
@@ -449,12 +454,16 @@ impl ExecutionEnvironment {
         &self.metrics.canister_not_found_error
     }
 
-    /// Computes the current amount of memory available on the subnet.
+    /// Computes the current amount of memory available for execution.
     ///
     /// Time complexity: `O(|canisters|)`.
-    pub fn subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
+    pub fn scaled_subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
         let memory_taken = state.memory_taken();
-        SubnetAvailableMemory::new(
+        // We apply the scaling factor `self.scheduler_cores`
+        // consistently with the scaling factor of `ResourceSaturation`
+        // in the function `self.subnet_memory_saturation`.
+        let scaling_factor = self.scheduler_cores as i64;
+        SubnetAvailableMemory::new_scaled(
             self.config.subnet_memory_capacity.get() as i64
                 - self.config.subnet_memory_reservation.get() as i64
                 - memory_taken.execution().get() as i64,
@@ -466,6 +475,7 @@ impl ExecutionEnvironment {
                 .subnet_wasm_custom_sections_memory_capacity
                 .get() as i64
                 - memory_taken.wasm_custom_sections().get() as i64,
+            scaling_factor,
         )
     }
 
@@ -514,6 +524,7 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
     ) -> (ReplicatedState, Option<NumInstructions>) {
         let since = Instant::now(); // Start logging execution time.
+        let cost_schedule = state.get_own_cost_schedule();
 
         let mut msg = match msg {
             CanisterMessage::Response(response) => {
@@ -533,12 +544,14 @@ impl ExecutionEnvironment {
                                 context.variable_parts_size(),
                                 context.max_response_bytes,
                                 registry_settings.subnet_size,
+                                cost_schedule,
                             );
 
                             let new_price = self.cycles_account_manager.http_request_fee_beta(
                                 context.variable_parts_size(),
                                 context.max_response_bytes,
                                 registry_settings.subnet_size,
+                                cost_schedule,
                                 NumBytes::from(response.payload_size_bytes()),
                             );
 
@@ -555,11 +568,13 @@ impl ExecutionEnvironment {
 
                             info!(
                                 self.log,
-                                "Canister Http request with request size {}, payload size {}, max response size {} and subnet size {}",
-                                context.variable_parts_size().get(),
+                                "Canister Http request with payload_size {}, max_response_size {}, subnet_size {}, reply_callback_id {}, sender {}, process_id {}",
                                 response.payload_size_bytes().get(),
                                 max_response_size,
-                                registry_settings.subnet_size
+                                registry_settings.subnet_size,
+                                context.request.sender_reply_callback,
+                                context.request.sender,
+                                std::process::id(),
                             );
                         }
 
@@ -610,20 +625,20 @@ impl ExecutionEnvironment {
         let method = Ic00Method::from_str(msg.method_name());
         let payload = msg.method_payload();
 
-        if let Ok(permissions) = method.map(Ic00MethodPermissions::new) {
-            if let Err(err) = permissions.verify(&msg, &state) {
-                let refund = msg.take_cycles();
-                let state = self.finish_subnet_message_execution(
-                    state,
-                    msg,
-                    ExecuteSubnetMessageResult::Finished {
-                        response: Err(err),
-                        refund,
-                    },
-                    since,
-                );
-                return (state, Some(NumInstructions::from(0)));
-            }
+        if let Ok(permissions) = method.map(Ic00MethodPermissions::new)
+            && let Err(err) = permissions.verify(&msg, &state)
+        {
+            let refund = msg.take_cycles();
+            let state = self.finish_subnet_message_execution(
+                state,
+                msg,
+                ExecuteSubnetMessageResult::Finished {
+                    response: Err(err),
+                    refund,
+                },
+                since,
+            );
+            return (state, Some(NumInstructions::from(0)));
         }
 
         let result: ExecuteSubnetMessageResult = match method {
@@ -770,11 +785,11 @@ impl ExecutionEnvironment {
                                     ),
                                 };
                                 info!(
-                                            self.log,
-                                            "Finished executing create_canister message after {:?} with result: {:?}",
-                                            since.elapsed().as_secs_f64(),
-                                            result
-                                        );
+                                    self.log,
+                                    "Finished executing create_canister message after {:?} with result: {:?}",
+                                    since.elapsed().as_secs_f64(),
+                                    result
+                                );
 
                                 result
                             }
@@ -790,6 +805,7 @@ impl ExecutionEnvironment {
                             msg.canister_change_origin(args.get_sender_canister_version()),
                             args.get_canister_id(),
                             &mut state,
+                            round_limits,
                             &self.metrics.canister_not_found_error,
                         )
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
@@ -830,31 +846,34 @@ impl ExecutionEnvironment {
                         // decrease the freezing threshold if it was set too
                         // high that topping up the canister is not feasible.
                         if let CanisterCall::Ingress(ingress) = &msg {
-                            if let Ok(canister) = get_canister_mut(canister_id, &mut state) {
-                                if is_delayed_ingress_induction_cost(&ingress.method_payload) {
-                                    let bytes_to_charge =
-                                        ingress.method_payload.len() + ingress.method_name.len();
-                                    let induction_cost = self
-                                        .cycles_account_manager
-                                        .ingress_induction_cost_from_bytes(
-                                            NumBytes::from(bytes_to_charge as u64),
-                                            registry_settings.subnet_size,
-                                        );
-                                    let memory_usage = canister.memory_usage();
-                                    let message_memory_usage = canister.message_memory_usage();
-                                    // This call may fail with `CanisterOutOfCyclesError`,
-                                    // which is not actionable at this point.
-                                    let _ignore_error = self.cycles_account_manager.consume_cycles(
-                                        &mut canister.system_state,
-                                        memory_usage,
-                                        message_memory_usage,
-                                        canister.scheduler_state.compute_allocation,
-                                        induction_cost,
+                            let cost_schedule = state.get_own_cost_schedule();
+                            if let Ok(canister) = get_canister_mut(canister_id, &mut state)
+                                && is_delayed_ingress_induction_cost(&ingress.method_payload)
+                            {
+                                let bytes_to_charge =
+                                    ingress.method_payload.len() + ingress.method_name.len();
+                                let induction_cost = self
+                                    .cycles_account_manager
+                                    .ingress_induction_cost_from_bytes(
+                                        NumBytes::from(bytes_to_charge as u64),
                                         registry_settings.subnet_size,
-                                        CyclesUseCase::IngressInduction,
-                                        false, // we ignore the error anyway => no need to reveal top up balance
+                                        cost_schedule,
                                     );
-                                }
+                                let memory_usage = canister.memory_usage();
+                                let message_memory_usage = canister.message_memory_usage();
+                                // This call may fail with `CanisterOutOfCyclesError`,
+                                // which is not actionable at this point.
+                                let _ignore_error = self.cycles_account_manager.consume_cycles(
+                                    &mut canister.system_state,
+                                    memory_usage,
+                                    message_memory_usage,
+                                    canister.scheduler_state.compute_allocation,
+                                    induction_cost,
+                                    registry_settings.subnet_size,
+                                    cost_schedule,
+                                    CyclesUseCase::IngressInduction,
+                                    false, // we ignore the error anyway => no need to reveal top up balance
+                                );
                             }
                         }
                         info!(
@@ -875,11 +894,13 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::CanisterStatus) => {
                 let res = CanisterIdRecord::decode(payload).and_then(|args| {
+                    let ready_for_migration = state.ready_for_migration(&args.get_canister_id());
                     self.get_canister_status(
                         *msg.sender(),
                         args.get_canister_id(),
-                        &mut state,
+                        &state,
                         registry_settings.subnet_size,
+                        ready_for_migration,
                     )
                     .map(|res| (res, Some(args.get_canister_id())))
                 });
@@ -906,6 +927,27 @@ impl ExecutionEnvironment {
                 }
                 CanisterCall::Ingress(_) => {
                     self.reject_unexpected_ingress(Ic00Method::CanisterInfo)
+                }
+            },
+
+            Ok(Ic00Method::CanisterMetadata) => match &msg {
+                CanisterCall::Request(_) => {
+                    let res = CanisterMetadataRequest::decode(payload).and_then(|record| {
+                        self.get_canister_metadata(
+                            *msg.sender(),
+                            record.canister_id(),
+                            &state,
+                            record.name(),
+                        )
+                        .map(|res| (res, Some(record.canister_id())))
+                    });
+                    ExecuteSubnetMessageResult::Finished {
+                        response: res,
+                        refund: msg.take_cycles(),
+                    }
+                }
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::CanisterMetadata)
                 }
             },
 
@@ -1506,8 +1548,9 @@ impl ExecutionEnvironment {
             Ok(Ic00Method::SubnetInfo) => match &msg {
                 CanisterCall::Ingress(_) => self.reject_unexpected_ingress(Ic00Method::SubnetInfo),
                 CanisterCall::Request(_) => {
-                    let res = SubnetInfoArgs::decode(payload)
-                        .and_then(|args| self.subnet_info(replica_version, args));
+                    let res = SubnetInfoArgs::decode(payload).and_then(|args| {
+                        self.subnet_info(replica_version, registry_settings.registry_version, args)
+                    });
                     ExecuteSubnetMessageResult::Finished {
                         response: res.map(|res| (res, None)),
                         refund: msg.take_cycles(),
@@ -1515,16 +1558,77 @@ impl ExecutionEnvironment {
                 }
             },
 
-            Ok(Ic00Method::FetchCanisterLogs) => ExecuteSubnetMessageResult::Finished {
-                response: Err(UserError::new(
-                    ErrorCode::CanisterRejectedMessage,
-                    format!(
-                        "{} API is only accessible in non-replicated mode",
-                        Ic00Method::FetchCanisterLogs
-                    ),
-                )),
-                refund: msg.take_cycles(),
-            },
+            Ok(Ic00Method::FetchCanisterLogs) => {
+                match self.config.replicated_inter_canister_log_fetch {
+                    FlagStatus::Disabled => ExecuteSubnetMessageResult::Finished {
+                        response: Err(UserError::new(
+                            ErrorCode::CanisterRejectedMessage,
+                            format!(
+                                "{} API is only accessible to end users in non-replicated mode",
+                                Ic00Method::FetchCanisterLogs
+                            ),
+                        )),
+                        refund: msg.take_cycles(),
+                    },
+                    FlagStatus::Enabled => {
+                        let sender = *msg.sender();
+                        let payload = payload.to_vec();
+                        match &mut msg {
+                            CanisterCall::Request(request) => {
+                                let max_fetch_canister_logs_fee =
+                                    self.cycles_account_manager.max_fetch_canister_logs_fee(
+                                        registry_settings.subnet_size,
+                                        cost_schedule,
+                                    );
+
+                                // Check there are sufficient cycles to cover the worst-case execution cost.
+                                let response = if request.payment < max_fetch_canister_logs_fee {
+                                    Err(UserError::new(
+                                        ErrorCode::CanisterRejectedMessage,
+                                        format!(
+                                            "{} request sent with {} cycles, but {} cycles are required.",
+                                            Ic00Method::FetchCanisterLogs,
+                                            request.payment,
+                                            max_fetch_canister_logs_fee
+                                        ),
+                                    ))
+                                } else {
+                                    FetchCanisterLogsRequest::decode(&payload)
+                                        .and_then(|args| {
+                                            fetch_canister_logs(
+                                                sender,
+                                                &state,
+                                                args,
+                                                self.config.fetch_canister_logs_filter,
+                                            )
+                                        })
+                                        .map(|resp| {
+                                            let response_bytes = Encode!(&resp).unwrap();
+                                            let actual_fee = self
+                                                .cycles_account_manager
+                                                .fetch_canister_logs_fee(
+                                                    NumBytes::new(response_bytes.len() as u64),
+                                                    registry_settings.subnet_size,
+                                                    cost_schedule,
+                                                );
+                                            // There are enough cycles, deduct the actual fee from paid cycles and refund the rest.
+                                            msg.deduct_cycles(actual_fee);
+                                            (response_bytes, None)
+                                        })
+                                };
+
+                                ExecuteSubnetMessageResult::Finished {
+                                    response,
+                                    refund: msg.take_cycles(),
+                                }
+                            }
+                            CanisterCall::Ingress(_) => {
+                                self.reject_unexpected_ingress(Ic00Method::FetchCanisterLogs)
+                            }
+                        }
+                    }
+                }
+            }
 
             Ok(Ic00Method::TakeCanisterSnapshot) => match TakeCanisterSnapshotArgs::decode(payload)
             {
@@ -1722,7 +1826,7 @@ impl ExecutionEnvironment {
                 let res = RenameCanisterArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
                     let origin = msg.canister_change_origin(args.get_sender_canister_version());
-                    self.rename_canister(*msg.sender(), &mut state, args, origin)
+                    self.rename_canister(*msg.sender(), &mut state, round_limits, args, origin)
                         .map(|res| (res, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
@@ -1767,6 +1871,7 @@ impl ExecutionEnvironment {
             canister_http_request_context.variable_parts_size(),
             canister_http_request_context.max_response_bytes,
             registry_settings.subnet_size,
+            state.get_own_cost_schedule(),
         );
         // Here we make sure that we do not let upper layers open new
         // http calls while the maximum number of calls is in-flight.
@@ -1794,8 +1899,10 @@ impl ExecutionEnvironment {
             Err(UserError::new(
                 ErrorCode::CanisterRejectedMessage,
                 format!(
-                    "http_request request sent with {} cycles, but {} cycles are required.",
-                    request.payment, http_request_fee
+                    "{} request sent with {} cycles, but {} cycles are required.",
+                    Ic00Method::HttpRequest,
+                    request.payment,
+                    http_request_fee
                 ),
             ))
         } else {
@@ -1835,10 +1942,10 @@ impl ExecutionEnvironment {
 
                 let res = match response {
                     Ok((res, canister_id)) => {
-                        if let Some(canister_id) = canister_id {
-                            if let Some(canister_state) = state.canister_state_mut(canister_id) {
-                                canister_state.update_on_low_wasm_memory_hook_condition();
-                            }
+                        if let Some(canister_id) = canister_id
+                            && let Some(canister_state) = state.canister_state_mut(canister_id)
+                        {
+                            canister_state.update_on_low_wasm_memory_hook_condition();
                         }
                         Ok(res)
                     }
@@ -1868,6 +1975,7 @@ impl ExecutionEnvironment {
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> ExecuteMessageResult {
         match canister.next_execution() {
             NextExecution::None | NextExecution::StartNew => {}
@@ -1899,6 +2007,7 @@ impl ExecutionEnvironment {
             counters: round_counters,
             log: &self.log,
             time,
+            cost_schedule,
         };
 
         let req = match input {
@@ -1922,7 +2031,8 @@ impl ExecutionEnvironment {
                     network_topology,
                     round_limits,
                     subnet_size,
-                )
+                    cost_schedule,
+                );
             }
             CanisterMessageOrTask::Message(CanisterMessage::Request(request)) => {
                 CanisterCall::Request(request)
@@ -1952,7 +2062,6 @@ impl ExecutionEnvironment {
         match &method {
             WasmMethod::Query(_) | WasmMethod::CompositeQuery(_) => {
                 let instruction_limits = InstructionLimits::new(
-                    FlagStatus::Enabled,
                     max_instructions_per_message_without_dts,
                     instruction_limits.slice(),
                 );
@@ -2130,6 +2239,7 @@ impl ExecutionEnvironment {
         round_limits: &mut RoundLimits,
         subnet_size: usize,
     ) -> Result<Vec<u8>, UserError> {
+        let cost_schedule = state.get_own_cost_schedule();
         let canister = get_canister_mut(canister_id, state)?;
         self.canister_manager
             .update_settings(
@@ -2140,6 +2250,7 @@ impl ExecutionEnvironment {
                 round_limits,
                 self.subnet_memory_saturation(&round_limits.subnet_available_memory),
                 subnet_size,
+                cost_schedule,
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
@@ -2206,13 +2317,20 @@ impl ExecutionEnvironment {
         &self,
         sender: PrincipalId,
         canister_id: CanisterId,
-        state: &mut ReplicatedState,
+        state: &ReplicatedState,
         subnet_size: usize,
+        ready_for_migration: bool,
     ) -> Result<Vec<u8>, UserError> {
-        let canister = get_canister_mut(canister_id, state)?;
-
+        let cost_schedule = state.get_own_cost_schedule();
+        let canister = get_canister(canister_id, state)?;
         self.canister_manager
-            .get_canister_status(sender, canister, subnet_size)
+            .get_canister_status(
+                sender,
+                canister,
+                subnet_size,
+                cost_schedule,
+                ready_for_migration,
+            )
             .map(|status| status.encode())
             .map_err(|err| err.into())
     }
@@ -2241,6 +2359,20 @@ impl ExecutionEnvironment {
             .collect::<Vec<PrincipalId>>();
         let res = CanisterInfoResponse::new(total_num_changes, changes, module_hash, controllers);
         Ok(res.encode())
+    }
+
+    fn get_canister_metadata(
+        &self,
+        sender: PrincipalId,
+        canister_id: CanisterId,
+        state: &ReplicatedState,
+        name: &str,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(canister_id, state)?;
+        self.canister_manager
+            .get_canister_metadata(sender, canister, name)
+            .map(|res| res.encode())
+            .map_err(|err| err.into())
     }
 
     fn stop_canister(
@@ -2303,6 +2435,7 @@ impl ExecutionEnvironment {
         subnet_size: usize,
         resource_saturation: &ResourceSaturation,
     ) -> Result<Vec<u8>, UserError> {
+        let cost_schedule = state.get_own_cost_schedule();
         let canister = get_canister_mut(args.get_canister_id(), state)?;
         self.canister_manager
             .upload_chunk(
@@ -2311,6 +2444,7 @@ impl ExecutionEnvironment {
                 args.chunk,
                 round_limits,
                 subnet_size,
+                cost_schedule,
                 resource_saturation,
             )
             .map(
@@ -2370,7 +2504,7 @@ impl ExecutionEnvironment {
                         format!("Canister {} not found.", &canister_id),
                     )),
                     NumInstructions::new(0),
-                )
+                );
             }
             Some(canister) => canister,
         };
@@ -2416,7 +2550,7 @@ impl ExecutionEnvironment {
                         format!("Canister {} not found.", &canister_id),
                     )),
                     NumInstructions::new(0),
-                )
+                );
             }
             Some(canister) => canister,
         };
@@ -2434,6 +2568,7 @@ impl ExecutionEnvironment {
             origin,
             &resource_saturation,
             &self.metrics.long_execution_already_in_progress,
+            &self.metrics.snapshot_exists_without_associated_canister,
         );
 
         let result = match result {
@@ -2483,7 +2618,7 @@ impl ExecutionEnvironment {
                 return Err(UserError::new(
                     ErrorCode::CanisterNotFound,
                     format!("Canister {} not found.", &canister_id),
-                ))
+                ));
             }
             Some(canister) => canister,
         };
@@ -2519,7 +2654,7 @@ impl ExecutionEnvironment {
                 return Err(UserError::new(
                     ErrorCode::CanisterNotFound,
                     format!("Canister {} not found.", &canister_id),
-                ))
+                ));
             }
             Some(canister) => canister,
         };
@@ -2546,6 +2681,7 @@ impl ExecutionEnvironment {
         &self,
         sender: PrincipalId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
         args: RenameCanisterArgs,
         origin: CanisterChangeOrigin,
     ) -> Result<Vec<u8>, UserError> {
@@ -2559,8 +2695,8 @@ impl ExecutionEnvironment {
             None => {
                 return Err(UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found.", old_id),
-                ))
+                    format!("Canister {old_id} not found."),
+                ));
             }
             Some(canister) => canister,
         };
@@ -2576,6 +2712,7 @@ impl ExecutionEnvironment {
                 to_version,
                 to_total_num_changes,
                 state,
+                round_limits,
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());
@@ -2617,7 +2754,7 @@ impl ExecutionEnvironment {
                         format!("Canister {} not found.", &canister_id),
                     )),
                     NumInstructions::new(0),
-                )
+                );
             }
             Some(canister) => canister,
         };
@@ -2662,7 +2799,7 @@ impl ExecutionEnvironment {
                         format!("Canister {} not found.", &canister_id),
                     )),
                     NumInstructions::new(0),
-                )
+                );
             }
             Some(canister) => canister,
         };
@@ -2714,6 +2851,7 @@ impl ExecutionEnvironment {
     fn subnet_info(
         &self,
         replica_version: &ReplicaVersion,
+        registry_version: RegistryVersion,
         args: SubnetInfoArgs,
     ) -> Result<Vec<u8>, UserError> {
         if args.subnet_id != self.own_subnet_id.get() {
@@ -2727,6 +2865,7 @@ impl ExecutionEnvironment {
         }
         let res = SubnetInfoResponse {
             replica_version: replica_version.to_string(),
+            registry_version: registry_version.get(),
         };
         Ok(Encode!(&res).unwrap())
     }
@@ -2745,6 +2884,7 @@ impl ExecutionEnvironment {
         network_topology: Arc<NetworkTopology>,
         round_limits: &mut RoundLimits,
         subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
     ) -> ExecuteMessageResult {
         let execution_parameters = self.execution_parameters(
             &canister,
@@ -2771,14 +2911,19 @@ impl ExecutionEnvironment {
             counters: round_counters,
             log: &self.log,
             time,
+            cost_schedule,
         };
         // This function is called on an execution thread with a scaled
         // available memory. We also need to scale the subnet reservation in
         // order to be consistent with the scaling of the available memory.
-        let scaled_subnet_memory_reservation = NumBytes::new(
-            self.config.subnet_memory_reservation.get()
-                / round_limits.subnet_available_memory.get_scaling_factor() as u64,
-        );
+        // We apply the scaling factor `self.scheduler_cores`
+        // consistently with the scaling factor of `SubnetAvailableMemory`
+        // in the function `self.scaled_subnet_available_memory`.
+        // and the scaling factor of `ResourceSaturation`
+        // in the function `self.subnet_memory_saturation`.
+        let scaling_factor = self.scheduler_cores as u64;
+        let scaled_subnet_memory_reservation =
+            NumBytes::new(self.config.subnet_memory_reservation.get() / scaling_factor);
         execute_response(
             canister,
             response,
@@ -2800,7 +2945,7 @@ impl ExecutionEnvironment {
         &self,
         state: Arc<ReplicatedState>,
         provisional_whitelist: &ProvisionalWhitelist,
-        ingress: &SignedIngressContent,
+        ingress: &SignedIngress,
         execution_mode: ExecutionMode,
         metrics: &IngressFilterMetrics,
     ) -> Result<(), UserError> {
@@ -2809,13 +2954,12 @@ impl ExecutionEnvironment {
                 Some(canister) => Ok(canister),
                 None => Err(UserError::new(
                     ErrorCode::CanisterNotFound,
-                    format!("Canister {} not found", canister_id),
+                    format!("Canister {canister_id} not found"),
                 )),
             }
         };
-        let effective_canister_id =
-            extract_effective_canister_id(ingress, state.metadata.own_subnet_id)
-                .map_err(|err| err.into_user_error(ingress.method_name()))?;
+        let effective_canister_id = extract_effective_canister_id(ingress.content())
+            .map_err(|err| err.into_user_error(ingress.content().method_name()))?;
 
         // A first-pass check on the canister's balance to prevent needless gossiping
         // if the canister's balance is too low. A more rigorous check happens later
@@ -2830,6 +2974,7 @@ impl ExecutionEnvironment {
                 ingress,
                 effective_canister_id,
                 subnet_size,
+                state.get_own_cost_schedule(),
             );
 
             if let IngressInductionCost::Fee { payer, cost } = induction_cost {
@@ -2844,6 +2989,7 @@ impl ExecutionEnvironment {
                     paying_canister.message_memory_usage(),
                     paying_canister.scheduler_state.compute_allocation,
                     subnet_size,
+                    state.get_own_cost_schedule(),
                     reveal_top_up,
                 ) {
                     return Err(UserError::new(
@@ -2854,11 +3000,11 @@ impl ExecutionEnvironment {
             }
         }
 
-        if ingress.is_addressed_to_subnet(self.own_subnet_id) {
+        if ingress.content().is_addressed_to_subnet() {
             return self.canister_manager.should_accept_ingress_message(
                 state,
                 provisional_whitelist,
-                ingress,
+                ingress.content(),
                 effective_canister_id,
             );
         }
@@ -2893,14 +3039,13 @@ impl ExecutionEnvironment {
         // An inspect message is expected to finish quickly, so DTS is not
         // supported for it.
         let instruction_limits = InstructionLimits::new(
-            FlagStatus::Disabled,
             self.config.max_instructions_for_message_acceptance_calls,
             self.config.max_instructions_for_message_acceptance_calls,
         );
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
-        let subnet_available_memory = subnet_memory_capacity(&self.config);
+        let subnet_available_memory = full_subnet_memory_capacity(&self.config);
         let execution_parameters = self.execution_parameters(
             canister_state,
             instruction_limits,
@@ -2912,7 +3057,7 @@ impl ExecutionEnvironment {
         inspect_message::execute_inspect_message(
             state.time(),
             canister_state.clone(),
-            ingress,
+            ingress.content(),
             execution_parameters,
             subnet_available_memory,
             &self.hypervisor,
@@ -2920,6 +3065,7 @@ impl ExecutionEnvironment {
             &self.log,
             &self.metrics.state_changes_error,
             metrics,
+            state.get_own_cost_schedule(),
         )
         .1
     }
@@ -2978,10 +3124,12 @@ impl ExecutionEnvironment {
                     if !refund.is_zero() {
                         self.metrics.ingress_with_cycles_error.inc();
                         warn!(
-                                self.log,
-                                "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
-                                ingress.source, ingress.receiver, ingress.message_id
-                            );
+                            self.log,
+                            "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
+                            ingress.source,
+                            ingress.receiver,
+                            ingress.message_id
+                        );
                     }
                     let status = match response {
                         Ok((payload, ..)) => IngressStatus::Known {
@@ -3036,7 +3184,7 @@ impl ExecutionEnvironment {
                             time,
                             state: IngressState::Failed(UserError::new(
                                 ErrorCode::CanisterStoppingCancelled,
-                                format!("Canister {}'s stop request was cancelled.", canister_id),
+                                format!("Canister {canister_id}'s stop request was cancelled."),
                             )),
                         },
                     );
@@ -3059,7 +3207,7 @@ impl ExecutionEnvironment {
                         refund: cycles,
                         response_payload: Payload::Reject(RejectContext::new(
                             RejectCode::CanisterError,
-                            format!("Canister {}'s stop request cancelled", canister_id),
+                            format!("Canister {canister_id}'s stop request cancelled"),
                         )),
                         deadline,
                     };
@@ -3118,7 +3266,7 @@ impl ExecutionEnvironment {
                 derivation_path,
             },
         )
-        .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{}", err)))
+        .map_err(|err| UserError::new(ErrorCode::CanisterRejectedMessage, format!("{err}")))
     }
 
     fn get_vetkd_public_key(
@@ -3138,7 +3286,7 @@ impl ExecutionEnvironment {
             |err| {
                 UserError::new(
                     ErrorCode::CanisterRejectedMessage,
-                    format!("Invalid VetKD subnet key: {:?}", err),
+                    format!("Invalid VetKD subnet key: {err:?}"),
                 )
             },
         )?;
@@ -3160,11 +3308,11 @@ impl ExecutionEnvironment {
         current_round: ExecutionRound,
     ) -> Result<(), UserError> {
         let args = VetKdDeriveKeyArgs::decode(payload)?;
-        let key_id = MasterPublicKeyId::VetKd(args.key_id.clone());
+        let key_id = NiDkgMasterPublicKeyId::VetKd(args.key_id.clone());
         let _master_public_key_exists = get_master_public_key(
             &chain_key_data.master_public_keys,
             self.own_subnet_id,
-            &key_id,
+            &key_id.clone().into(),
         )?;
         let Some(ni_dkg_id) = chain_key_data.nidkg_ids.get(&key_id) else {
             warn!(
@@ -3197,7 +3345,7 @@ impl ExecutionEnvironment {
             vec![args.context],
             registry_settings
                 .chain_key_settings
-                .get(&key_id)
+                .get(&key_id.into())
                 .map(|setting| setting.max_queue_size)
                 .unwrap_or_default(),
             state,
@@ -3206,12 +3354,17 @@ impl ExecutionEnvironment {
         )
     }
 
-    fn calculate_signature_fee(&self, args: &ThresholdArguments, subnet_size: usize) -> Cycles {
+    fn calculate_signature_fee(
+        &self,
+        args: &ThresholdArguments,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
         let cam = &self.cycles_account_manager;
         match args {
-            ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size),
-            ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size),
-            ThresholdArguments::VetKd(_) => cam.vetkd_fee(subnet_size),
+            ThresholdArguments::Ecdsa(_) => cam.ecdsa_signature_fee(subnet_size, cost_schedule),
+            ThresholdArguments::Schnorr(_) => cam.schnorr_signature_fee(subnet_size, cost_schedule),
+            ThresholdArguments::VetKd(_) => cam.vetkd_fee(subnet_size, cost_schedule),
         }
     }
 
@@ -3233,7 +3386,7 @@ impl ExecutionEnvironment {
                     if !aux.is_empty() && aux.len() != 32 {
                         return Err(UserError::new(
                             ErrorCode::CanisterRejectedMessage,
-                            format!("Invalid aux field for {}", alg),
+                            format!("Invalid aux field for {alg}"),
                         ));
                     }
                 }
@@ -3241,7 +3394,7 @@ impl ExecutionEnvironment {
                 (_, Some(_)) => {
                     return Err(UserError::new(
                         ErrorCode::CanisterRejectedMessage,
-                        format!("Schnorr algorithm {} does not support aux input", alg),
+                        format!("Schnorr algorithm {alg} does not support aux input"),
                     ));
                 }
             }
@@ -3249,9 +3402,10 @@ impl ExecutionEnvironment {
 
         let topology = &state.metadata.network_topology;
         // If the request isn't from the NNS, then we need to charge for it.
-        let source_subnet = topology.routing_table.route(request.sender.get());
+        let source_subnet = topology.route(request.sender.get());
         if source_subnet != Some(state.metadata.network_topology.nns_subnet_id) {
-            let signature_fee = self.calculate_signature_fee(&args, subnet_size);
+            let cost_schedule = state.get_own_cost_schedule();
+            let signature_fee = self.calculate_signature_fee(&args, subnet_size, cost_schedule);
             if request.payment < signature_fee {
                 return Err(UserError::new(
                     ErrorCode::CanisterRejectedMessage,
@@ -3411,8 +3565,8 @@ impl ExecutionEnvironment {
             other => {
                 return Err(UserError::new(
                     ErrorCode::UnknownManagementMessage,
-                    format!("Expected an install code message, but found {}", other),
-                ))
+                    format!("Expected an install code message, but found {other}"),
+                ));
             }
         };
 
@@ -3480,8 +3634,7 @@ impl ExecutionEnvironment {
                 debug_assert_eq!(
                     dts_status,
                     DtsInstallCodeStatus::StartingFirstExecution,
-                    "Dts status mismatch: expected StartingFirstExecution, got {}",
-                    dts_status
+                    "Dts status mismatch: expected StartingFirstExecution, got {dts_status}"
                 );
                 // Keep track of all existing long running install code messages.
                 // During a subnet split, the requests are rejected if the target canister moved to a new subnet.
@@ -3501,7 +3654,9 @@ impl ExecutionEnvironment {
         match old_canister.next_execution() {
             NextExecution::None | NextExecution::StartNew => {}
             NextExecution::ContinueLong | NextExecution::ContinueInstallCode => {
-                panic!("Attempt to start a new `install_code` execution while the previous execution is still in progress.");
+                panic!(
+                    "Attempt to start a new `install_code` execution while the previous execution is still in progress."
+                );
             }
         }
 
@@ -3552,6 +3707,7 @@ impl ExecutionEnvironment {
             compilation_cost_handling,
             round_counters,
             subnet_size,
+            state.get_own_cost_schedule(),
             self.config.dirty_page_logging,
         );
         self.process_install_code_result(state, dts_result, dts_status, since)
@@ -3598,7 +3754,8 @@ impl ExecutionEnvironment {
                             execution_duration,
                             result.old_wasm_hash,
                             result.new_wasm_hash,
-                            instructions_used.display());
+                            instructions_used.display()
+                        );
 
                         Ok((EmptyBlob.encode(), Some(canister_id)))
                     }
@@ -3609,7 +3766,8 @@ impl ExecutionEnvironment {
                             canister_id,
                             execution_duration,
                             err,
-                            instructions_used.display());
+                            instructions_used.display()
+                        );
                         Err(err.into())
                     }
                 };
@@ -3700,10 +3858,7 @@ impl ExecutionEnvironment {
             | ExecutionTask::OnLowWasmMemory
             | ExecutionTask::PausedExecution { .. }
             | ExecutionTask::AbortedExecution { .. } => {
-                panic!(
-                    "Unexpected task {:?} in `resume_install_code` (broken precondition).",
-                    task
-                );
+                panic!("Unexpected task {task:?} in `resume_install_code` (broken precondition).");
             }
             ExecutionTask::PausedInstallCode(id) => {
                 let since = Instant::now();
@@ -3726,6 +3881,7 @@ impl ExecutionEnvironment {
                     counters: round_counters,
                     log: &self.log,
                     time: state.metadata.time(),
+                    cost_schedule: state.get_own_cost_schedule(),
                 };
                 let dts_result = paused.resume(canister, round, round_limits);
                 let dts_status = DtsInstallCodeStatus::ResumingPausedOrAbortedExecution;
@@ -4095,37 +4251,35 @@ impl ExecutionEnvironment {
         ExecuteSubnetMessageResult::Finished {
             response: Err(UserError::new(
                 ErrorCode::CanisterContractViolation,
-                format!("{} cannot be called by a user.", method),
+                format!("{method} cannot be called by a user."),
             )),
             refund: Cycles::zero(),
         }
     }
 
-    // Returns the subnet memory saturation based on the given subnet available
-    // memory, which may have been scaled for the current thread.
+    // Returns the subnet memory saturation based on the given subnet available memory
+    // which is assumed to be scaled with the scaling factor `self.scheduler_cores`.
     fn subnet_memory_saturation(
         &self,
         subnet_available_memory: &SubnetAvailableMemory,
     ) -> ResourceSaturation {
-        // Compute the total subnet available memory based on the scaled subnet
-        // available memory. In other words, un-scale the scaled value.
-        let subnet_available_memory = subnet_available_memory
-            .get_execution_memory()
-            .saturating_mul(subnet_available_memory.get_scaling_factor())
-            .max(0) as u64;
+        // We apply the scaling factor `self.scheduler_cores`
+        // consistently with the scaling factor of `SubnetAvailableMemory`
+        // in the function `self.scaled_subnet_available_memory`.
+        let scaling_factor = self.scheduler_cores as u64;
 
-        // Compute the memory usage as the capacity minus the available memory.
-        let subnet_memory_usage = self
-            .config
-            .subnet_memory_capacity
-            .get()
-            .saturating_sub(subnet_available_memory);
+        // Compute the scaled memory usage as the scaled capacity minus the scaled available memory.
+        let scaled_subnet_memory_capacity: u64 =
+            self.config.subnet_memory_capacity.get() / scaling_factor;
+        let scaled_subnet_available_memory =
+            subnet_available_memory.get_execution_memory().max(0) as u64;
+        let scaled_subnet_memory_usage: u64 =
+            scaled_subnet_memory_capacity.saturating_sub(scaled_subnet_available_memory);
 
-        ResourceSaturation::new_scaled(
-            subnet_memory_usage,
-            self.config.subnet_memory_threshold.get(),
-            self.config.subnet_memory_capacity.get(),
-            self.resource_saturation_scaling as u64,
+        ResourceSaturation::new(
+            scaled_subnet_memory_usage,
+            self.config.subnet_memory_threshold.get() / scaling_factor,
+            scaled_subnet_memory_capacity,
         )
     }
 
@@ -4150,6 +4304,18 @@ impl ExecutionEnvironment {
     #[doc(hidden)]
     pub fn own_subnet_type(&self) -> SubnetType {
         self.own_subnet_type
+    }
+
+    // Insert a compiled module in the compilation cache speed up tests by
+    // skipping the Wasmtime compilation step.
+    #[doc(hidden)]
+    pub fn compilation_cache_insert_for_testing(
+        &self,
+        bytes: Vec<u8>,
+        compiled_module: ic_embedders::SerializedModule,
+    ) {
+        self.hypervisor
+            .compilation_cache_insert_for_testing(bytes, compiled_module);
     }
 }
 
@@ -4193,11 +4359,12 @@ impl CompilationCostHandling {
 }
 
 /// Returns the subnet's configured memory capacity (ignoring current usage).
-pub(crate) fn subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAvailableMemory {
-    SubnetAvailableMemory::new(
+pub(crate) fn full_subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAvailableMemory {
+    SubnetAvailableMemory::new_scaled(
         config.subnet_memory_capacity.get() as i64,
         config.guaranteed_response_message_memory_capacity.get() as i64,
         config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
+        1,
     )
 }
 
@@ -4250,6 +4417,7 @@ fn execute_canister_input(
     time: Time,
     round_limits: &mut RoundLimits,
     subnet_size: usize,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) -> ExecuteCanisterResult {
     let info = input.to_string();
     let result = exec_env.execute_canister_input(
@@ -4262,6 +4430,7 @@ fn execute_canister_input(
         network_topology,
         round_limits,
         subnet_size,
+        cost_schedule,
     );
     let (canister, instructions_used, heap_delta, ingress_status) = exec_env.process_result(result);
     ExecuteCanisterResult {
@@ -4284,6 +4453,7 @@ pub fn execute_canister(
     time: Time,
     round_limits: &mut RoundLimits,
     subnet_size: usize,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) -> ExecuteCanisterResult {
     match canister.next_execution() {
         NextExecution::None | NextExecution::ContinueInstallCode => {
@@ -4319,6 +4489,7 @@ pub fn execute_canister(
                     counters: round_counters,
                     log: &exec_env.log,
                     time,
+                    cost_schedule,
                 };
                 let result = paused.resume(
                     canister,
@@ -4360,10 +4531,10 @@ pub fn execute_canister(
         },
         None => {
             let message = canister.pop_input().unwrap();
-            if let CanisterMessage::Request(req) = &message {
-                if req.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES {
-                    exec_env.metrics.oversize_intra_subnet_messages.inc();
-                }
+            if let CanisterMessage::Request(req) = &message
+                && req.payload_size_bytes() > MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
+            {
+                exec_env.metrics.oversize_intra_subnet_messages.inc();
             }
             (CanisterMessageOrTask::Message(message), None)
         }
@@ -4379,6 +4550,7 @@ pub fn execute_canister(
         time,
         round_limits,
         subnet_size,
+        cost_schedule,
     )
 }
 
@@ -4390,10 +4562,7 @@ fn get_master_public_key<'a>(
     match chain_key_subnet_public_keys.get(key_id) {
         None => Err(UserError::new(
             ErrorCode::CanisterRejectedMessage,
-            format!(
-                "Subnet {} does not hold threshold key {}.",
-                subnet_id, key_id
-            ),
+            format!("Subnet {subnet_id} does not hold threshold key {key_id}."),
         )),
         Some(master_key) => Ok(master_key),
     }

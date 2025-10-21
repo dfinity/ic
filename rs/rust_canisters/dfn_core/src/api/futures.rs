@@ -30,14 +30,18 @@ pub(crate) struct TopLevelFuture {
 impl TopLevelFuture {
     /// Increments weak reference count.
     pub unsafe fn acquire(p: *mut TopLevelFuture) {
-        (*p).ref_count += 1;
+        unsafe {
+            (*p).ref_count += 1;
+        }
     }
 
     /// Decrements weak reference count.
     pub unsafe fn release(p: *mut TopLevelFuture) {
-        (*p).ref_count -= 1;
-        if (*p).ref_count == 0 {
-            drop_top_level_future(p);
+        unsafe {
+            (*p).ref_count -= 1;
+            if (*p).ref_count == 0 {
+                drop_top_level_future(p);
+            }
         }
     }
 
@@ -46,8 +50,10 @@ impl TopLevelFuture {
     /// because the future should normally be deleted by the waker when it's
     /// ready.
     pub unsafe fn drop_if_last_reference(p: *mut TopLevelFuture) {
-        if (*p).ref_count == 1 {
-            Self::release(p)
+        unsafe {
+            if (*p).ref_count == 1 {
+                Self::release(p)
+            }
         }
     }
 }
@@ -66,8 +72,10 @@ fn set_top_level_future(ptr: *mut TopLevelFuture) {
 
 /// Deletes a top level-future.
 unsafe fn drop_top_level_future(ptr: *mut TopLevelFuture) {
-    if !ptr.is_null() {
-        let _ = Box::from_raw(ptr);
+    unsafe {
+        if !ptr.is_null() {
+            let _ = Box::from_raw(ptr);
+        }
     }
 }
 
@@ -111,7 +119,7 @@ impl<T> RefCounted<T> {
     }
     #[allow(clippy::missing_safety_doc)]
     pub unsafe fn from_raw(ptr: *const RefCell<T>) -> Self {
-        Self(Rc::from_raw(ptr))
+        unsafe { Self(Rc::from_raw(ptr)) }
     }
     pub fn borrow_mut(&self) -> RefMut<'_, T> {
         self.0.borrow_mut()
@@ -125,7 +133,9 @@ impl<O, T: Future<Output = O>> Future for RefCounted<T> {
     type Output = O;
     #[allow(unused_mut)]
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
-        unsafe { Pin::new_unchecked(&mut *self.0.borrow_mut()) }.poll(ctx)
+        let mut ptr = self.0.borrow_mut();
+        let pin = unsafe { Pin::new_unchecked(&mut *ptr) };
+        pin.poll(ctx)
     }
 }
 
@@ -237,16 +247,18 @@ mod waker {
     // is pending, we leave it on the heap. If it's ready, we deallocate the
     // pointer.
     unsafe fn wake(ptr: *const ()) {
-        let future_ptr = ptr as *mut TopLevelFuture;
-        let _guard = TopLevelFutureGuard::new(future_ptr);
+        unsafe {
+            let future_ptr = ptr as *mut TopLevelFuture;
+            let _guard = TopLevelFutureGuard::new(future_ptr);
 
-        if (*future_ptr)
-            .future
-            .as_mut()
-            .poll(&mut Context::from_waker(&waker::waker(ptr)))
-            .is_ready()
-        {
-            TopLevelFuture::release(future_ptr);
+            if (*future_ptr)
+                .future
+                .as_mut()
+                .poll(&mut Context::from_waker(&waker::waker(ptr)))
+                .is_ready()
+            {
+                TopLevelFuture::release(future_ptr);
+            }
         }
     }
 

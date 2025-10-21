@@ -1,15 +1,20 @@
 use crate::fixtures::environment_fixture::{EnvironmentFixture, EnvironmentFixtureState};
 use async_trait::async_trait;
+use candid::Nat;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_clients::ledger_client::ICRC1Ledger;
-use ic_nervous_system_common::{NervousSystemError, E8};
+use ic_nervous_system_common::{E8, NervousSystemError};
 use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
     pb::v1::{
-        get_neuron_response, get_proposal_response,
+        GetMaturityModulationRequest, GetMaturityModulationResponse, GetNeuron, GetProposal,
+        Governance as GovernanceProto, GovernanceError, ManageNeuron, ManageNeuronResponse,
+        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+        NeuronPermissionType, Proposal, ProposalData, ProposalId, Vote, get_neuron_response,
+        get_proposal_response,
         governance::{GovernanceCachedMetrics, MaturityModulation, Mode, SnsMetadata, Version},
         manage_neuron::{
             self, AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
@@ -20,10 +25,6 @@ use ic_sns_governance::{
         },
         neuron::{DissolveState, Followees},
         proposal::Action,
-        GetMaturityModulationRequest, GetMaturityModulationResponse, GetNeuron, GetProposal,
-        Governance as GovernanceProto, GovernanceError, ManageNeuron, ManageNeuronResponse,
-        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-        NeuronPermissionType, Proposal, ProposalData, ProposalId, Vote,
     },
     types::Environment,
 };
@@ -33,7 +34,7 @@ use icrc_ledger_types::{
     icrc3::blocks::GetBlocksResult,
 };
 use maplit::btreemap;
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{SeedableRng, rngs::StdRng};
 use std::{
     collections::{BTreeMap, BTreeSet},
     convert::TryFrom,
@@ -90,7 +91,9 @@ impl ICRC1Ledger for LedgerFixture {
         println!(
             "Issuing ledger transfer from account {} (subaccount {}) to account {} amount {} fee {}",
             from_account,
-            from_subaccount.as_ref().map_or_else(||"None".to_string(), |a| format!("{:?}", a)),
+            from_subaccount
+                .as_ref()
+                .map_or_else(|| "None".to_string(), |a| format!("{a:?}")),
             to,
             amount_e8s,
             fee_e8s
@@ -129,7 +132,7 @@ impl ICRC1Ledger for LedgerFixture {
     async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
         let accounts = &mut self.ledger_fixture_state.try_lock().unwrap().accounts;
 
-        Ok(Tokens::from_e8s(accounts.iter().map(|(_, y)| y).sum()))
+        Ok(Tokens::from_e8s(accounts.values().sum()))
     }
 
     async fn account_balance(&self, account: Account) -> Result<Tokens, NervousSystemError> {
@@ -143,6 +146,20 @@ impl ICRC1Ledger for LedgerFixture {
             .try_lock()
             .unwrap()
             .target_canister_id
+    }
+
+    async fn icrc2_approve(
+        &self,
+        _spender: Account,
+        _amount: u64,
+        _expires_at: Option<u64>,
+        _fee: u64,
+        _from_subaccount: Option<Subaccount>,
+        _expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
+        Err(NervousSystemError {
+            error_message: "Not Implemented".to_string(),
+        })
     }
 
     async fn icrc3_get_blocks(
@@ -543,7 +560,7 @@ impl GovernanceCanisterFixture {
 
         match result {
             get_neuron_response::Result::Neuron(neuron) => neuron,
-            get_neuron_response::Result::Error(err) => panic!("Expected Neuron to exist: {}", err),
+            get_neuron_response::Result::Error(err) => panic!("Expected Neuron to exist: {err}"),
         }
     }
 
@@ -767,7 +784,7 @@ impl GovernanceCanisterFixture {
             .unwrap()
         {
             get_proposal_response::Result::Error(e) => {
-                panic!("Proposal retrieval failed. Panicking 😬: {:?}", e)
+                panic!("Proposal retrieval failed. Panicking 😬: {e:?}")
             }
             get_proposal_response::Result::Proposal(proposal_data) => proposal_data,
         }
@@ -1113,7 +1130,7 @@ impl GovernanceCanisterFixtureBuilder {
 
 #[macro_export]
 macro_rules! assert_changes {
-    ($sns:expr, $expected:expr) => {{
+    ($sns:expr_2021, $expected:expr_2021) => {{
         let new_state = $sns.get_state();
         comparable::pretty_assert_changes!(
             $sns.initial_state
@@ -1128,7 +1145,7 @@ macro_rules! assert_changes {
 
 #[macro_export]
 macro_rules! prop_assert_changes {
-    ($sns:expr, $expected:expr) => {{
+    ($sns:expr_2021, $expected:expr_2021) => {{
         let new_state = $sns.get_state();
         comparable::prop_pretty_assert_changes!(
             $sns.initial_state

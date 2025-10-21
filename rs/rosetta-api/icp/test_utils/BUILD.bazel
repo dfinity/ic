@@ -4,22 +4,18 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//packages/ic-http-types",
     "//rs/ledger_suite/icp:icp_ledger",
     "//rs/ledger_suite/icrc1/test_utils",
     "//rs/rosetta-api/common/rosetta_core:rosetta-core",
     "//rs/rosetta-api/icp:ic-rosetta-api",
     "//rs/rosetta-api/icp:rosetta-api",
-    "//rs/state_machine_tests",
     "//rs/types/types",
     "@crate_index//:base64",
-    "@crate_index//:candid",
     "@crate_index//:hex",
     "@crate_index//:nix",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
     "@crate_index//:serde_json",
     "@crate_index//:slog",
     "@crate_index//:tempfile",

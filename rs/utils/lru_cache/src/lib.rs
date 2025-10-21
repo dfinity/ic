@@ -1,4 +1,5 @@
-use ic_types::{MemoryDiskBytes, NumBytes};
+use ic_heap_bytes::DeterministicHeapBytes;
+use ic_types::{DiskBytes, NumBytes};
 use std::hash::Hash;
 
 /// The upper bound on cache item size and cache capacity.
@@ -9,11 +10,13 @@ const MAX_SIZE: usize = usize::MAX / 2;
 /// A cache with bounded memory capacity that evicts items using the
 /// least-recently used eviction policy. It guarantees that the sum of
 /// sizes of the cached items does not exceed the pre-configured capacity.
+#[derive(DeterministicHeapBytes)]
 pub struct LruCache<K, V>
 where
-    K: MemoryDiskBytes + Eq + Hash,
-    V: MemoryDiskBytes,
+    K: DeterministicHeapBytes + DiskBytes + Eq + Hash,
+    V: DeterministicHeapBytes + DiskBytes,
 {
+    #[deterministic_heap_bytes(with = |_| self.memory_size)]
     cache: lru::LruCache<K, V>,
     memory_capacity: usize,
     disk_capacity: usize,
@@ -21,15 +24,11 @@ where
     disk_size: usize,
 }
 
-impl<K, V> MemoryDiskBytes for LruCache<K, V>
+impl<K, V> DiskBytes for LruCache<K, V>
 where
-    K: MemoryDiskBytes + Eq + Hash,
-    V: MemoryDiskBytes,
+    K: DeterministicHeapBytes + DiskBytes + Eq + Hash,
+    V: DeterministicHeapBytes + DiskBytes,
 {
-    fn memory_bytes(&self) -> usize {
-        self.memory_size
-    }
-
     fn disk_bytes(&self) -> usize {
         self.disk_size
     }
@@ -37,8 +36,8 @@ where
 
 impl<K, V> LruCache<K, V>
 where
-    K: MemoryDiskBytes + Eq + Hash,
-    V: MemoryDiskBytes,
+    K: DeterministicHeapBytes + DiskBytes + Eq + Hash,
+    V: DeterministicHeapBytes + DiskBytes,
 {
     /// Constructs a new LRU cache with the given memory and disk capacity.  The
     /// capacities must not exceed `MAX_SIZE = (2^63 - 1)`.
@@ -76,7 +75,7 @@ where
     /// the cache or other cache entries are evicted (due to the cache capacity),
     /// then it returns the old entry's key-value pairs. Otherwise, returns an empty vector.
     pub fn push(&mut self, key: K, value: V) -> Vec<(K, V)> {
-        let memory_size = key.memory_bytes() + value.memory_bytes();
+        let memory_size = key.deterministic_heap_bytes() + value.deterministic_heap_bytes();
         assert!(memory_size <= MAX_SIZE);
         let disk_size = key.disk_bytes() + value.disk_bytes();
         assert!(disk_size <= MAX_SIZE);
@@ -101,23 +100,25 @@ where
     /// Removes and returns the value corresponding to the key from the cache or
     /// `None` if it does not exist.
     pub fn pop(&mut self, key: &K) -> Option<V> {
-        if let Some((key, value)) = self.cache.pop_entry(key) {
-            self.pop_inner(&key, &value);
-            self.check_invariants();
-            Some(value)
-        } else {
-            None
+        match self.cache.pop_entry(key) {
+            Some((key, value)) => {
+                self.pop_inner(&key, &value);
+                self.check_invariants();
+                Some(value)
+            }
+            _ => None,
         }
     }
 
     /// Remove the least recently used entry from the cache.
     pub fn pop_lru(&mut self) -> Option<(K, V)> {
-        if let Some((key, value)) = self.cache.pop_lru() {
-            self.pop_inner(&key, &value);
-            self.check_invariants();
-            Some((key, value))
-        } else {
-            None
+        match self.cache.pop_lru() {
+            Some((key, value)) => {
+                self.pop_inner(&key, &value);
+                self.check_invariants();
+                Some((key, value))
+            }
+            _ => None,
         }
     }
 
@@ -157,7 +158,7 @@ where
     }
 
     fn pop_inner(&mut self, key: &K, value: &V) {
-        let memory_size = key.memory_bytes() + value.memory_bytes();
+        let memory_size = key.deterministic_heap_bytes() + value.deterministic_heap_bytes();
         debug_assert!(self.memory_size >= memory_size);
         // This cannot underflow because we know that `self.memory_size` is
         // the sum of memory sizes of all items in the cache.
@@ -179,7 +180,8 @@ where
                 self.memory_size,
                 self.cache
                     .iter()
-                    .map(|(key, value)| key.memory_bytes() + value.memory_bytes())
+                    .map(|(key, value)| key.deterministic_heap_bytes()
+                        + value.deterministic_heap_bytes())
                     .sum::<usize>()
             );
             debug_assert_eq!(
@@ -202,24 +204,24 @@ mod tests {
     #[derive(Eq, PartialEq, Hash, Debug)]
     struct ValueSize(u32, usize);
 
-    impl MemoryDiskBytes for ValueSize {
-        fn memory_bytes(&self) -> usize {
+    impl DeterministicHeapBytes for ValueSize {
+        fn deterministic_heap_bytes(&self) -> usize {
             self.1
         }
-
-        fn disk_bytes(&self) -> usize {
-            0
-        }
     }
+
+    impl DiskBytes for ValueSize {}
 
     #[derive(Clone, Eq, PartialEq, Hash, Debug)]
     struct MemoryDiskValue(u32, usize, usize);
 
-    impl MemoryDiskBytes for MemoryDiskValue {
-        fn memory_bytes(&self) -> usize {
+    impl DeterministicHeapBytes for MemoryDiskValue {
+        fn deterministic_heap_bytes(&self) -> usize {
             self.1
         }
+    }
 
+    impl DiskBytes for MemoryDiskValue {
         fn disk_bytes(&self) -> usize {
             self.2
         }
@@ -228,15 +230,13 @@ mod tests {
     #[derive(Eq, PartialEq, Hash, Debug)]
     struct Key(u32);
 
-    impl MemoryDiskBytes for Key {
-        fn memory_bytes(&self) -> usize {
-            0
-        }
-
-        fn disk_bytes(&self) -> usize {
+    impl DeterministicHeapBytes for Key {
+        fn deterministic_heap_bytes(&self) -> usize {
             0
         }
     }
+
+    impl DiskBytes for Key {}
 
     #[test]
     fn lru_cache_single_entry() {
@@ -442,27 +442,27 @@ mod tests {
     #[test]
     fn lru_cache_count_bytes_and_len() {
         let mut lru = LruCache::<Key, MemoryDiskValue>::new(NumBytes::new(10), NumBytes::new(20));
-        assert_eq!(0, lru.memory_bytes());
+        assert_eq!(0, lru.deterministic_heap_bytes());
         assert_eq!(0, lru.disk_bytes());
         assert_eq!(0, lru.len());
         assert!(lru.is_empty());
         lru.push(Key(0), MemoryDiskValue(0, 4, 10));
-        assert_eq!(4, lru.memory_bytes());
+        assert_eq!(4, lru.deterministic_heap_bytes());
         assert_eq!(10, lru.disk_bytes());
         assert_eq!(1, lru.len());
         assert!(!lru.is_empty());
         lru.push(Key(1), MemoryDiskValue(1, 6, 2));
-        assert_eq!(10, lru.memory_bytes());
+        assert_eq!(10, lru.deterministic_heap_bytes());
         assert_eq!(12, lru.disk_bytes());
         assert_eq!(2, lru.len());
         assert!(!lru.is_empty());
         lru.pop(&Key(0));
-        assert_eq!(6, lru.memory_bytes());
+        assert_eq!(6, lru.deterministic_heap_bytes());
         assert_eq!(2, lru.disk_bytes());
         assert_eq!(1, lru.len());
         assert!(!lru.is_empty());
         lru.pop(&Key(1));
-        assert_eq!(0, lru.memory_bytes());
+        assert_eq!(0, lru.deterministic_heap_bytes());
         assert_eq!(0, lru.disk_bytes());
         assert_eq!(0, lru.len());
         assert!(lru.is_empty());
@@ -591,8 +591,8 @@ mod tests {
                 let mut evicted_disk = 0;
 
                 fn update(memory: &mut usize, disk: &mut usize, k: &MemoryDiskValue, v: &MemoryDiskValue) {
-                    *memory += k.memory_bytes();
-                    *memory += v.memory_bytes();
+                    *memory += k.deterministic_heap_bytes();
+                    *memory += v.deterministic_heap_bytes();
                     *disk += k.disk_bytes();
                     *disk += v.disk_bytes();
                 }
@@ -611,7 +611,7 @@ mod tests {
                         update(&mut evicted_memory, &mut evicted_disk, &k, &v);
                     }
 
-                    assert_eq!(total_memory, evicted_memory + lru.memory_bytes());
+                    assert_eq!(total_memory, evicted_memory + lru.deterministic_heap_bytes());
                     assert_eq!(total_disk, evicted_disk + lru.disk_bytes());
                 }
             }

@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use core::fmt::Write;
-use ic_agent::{agent::RejectResponse, export::Principal, AgentError, RequestId};
+use ic_agent::{AgentError, RequestId, agent::RejectResponse, export::Principal};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
@@ -18,7 +18,7 @@ use ic_system_test_driver::{
     util::*,
 };
 use ic_utils::interfaces::ManagementCanister;
-use slog::{debug, Logger};
+use slog::{Logger, debug};
 use std::{time::Duration, time::Instant};
 use tokio::time::sleep_until;
 
@@ -423,12 +423,12 @@ fn get_request_id_hex(request_id: &RequestId) -> String {
     let request_id_bytes = request_id.as_slice();
     let mut request_id_hex = String::with_capacity(request_id_bytes.len() * 2);
     for b in request_id_bytes {
-        let result = write!(request_id_hex, "{:02x}", b);
+        let result = write!(request_id_hex, "{b:02x}");
         if result.is_err() {
             return String::new();
         }
     }
-    println!("Request Id {}", request_id_hex);
+    println!("Request Id {request_id_hex}");
     request_id_hex
 }
 
@@ -464,7 +464,7 @@ fn print_validate_num_cycles(
     }
     let result = ret_val.as_ref().unwrap_or(&vec![]).clone();
 
-    let num_cycles = if let Some(num_cycles) = convert_bytes_to_number(result.as_slice()) {
+    if let Some(num_cycles) = convert_bytes_to_number(result.as_slice()) {
         // Prints the number of cycles
         if ENABLE_DEBUG_LOG {
             print_cycles(logger, num_cycles, message);
@@ -476,8 +476,7 @@ fn print_validate_num_cycles(
             "{} - Error while converting query result for read_cycles", message
         );
         0
-    };
-    num_cycles
+    }
 }
 
 fn print_result(logger: &Logger, ret_val: &Result<Vec<u8>, AgentError>, msg: &str) {

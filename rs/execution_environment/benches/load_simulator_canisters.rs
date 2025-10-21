@@ -27,7 +27,7 @@
 
 use std::time::Duration;
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use ic_state_machine_tests::StateMachine;
 use ic_types::{Cycles, PrincipalId};
 
@@ -43,7 +43,7 @@ fn bytes_to_str(bytes: &[u8]) -> String {
 
 fn setup_env(total_canisters: usize) -> StateMachine {
     assert!(total_canisters >= CANISTERS_PER_CREATOR);
-    assert!(total_canisters % CANISTERS_PER_CREATOR == 0);
+    assert!(total_canisters.is_multiple_of(CANISTERS_PER_CREATOR));
 
     let env = StateMachine::new();
     let wasm = canister_test::Project::cargo_bin_maybe_from_env("canister_creator_canister", &[]);
@@ -65,7 +65,7 @@ fn setup_env(total_canisters: usize) -> StateMachine {
             PrincipalId::new_anonymous(),
             *canister_id,
             "create_canisters",
-            format!("{}", CANISTERS_PER_CREATOR).as_bytes().to_vec(),
+            format!("{CANISTERS_PER_CREATOR}").as_bytes().to_vec(),
         );
         ingress_ids.push(ingress_id);
     }

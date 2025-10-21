@@ -1,14 +1,14 @@
 use ic_interfaces::batch_payload::PastPayload;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_protobuf::{
     proxy::ProxyDecodeError,
     types::v1 as pb,
-    types::v1::{canister_http_response_message::MessageType, CanisterHttpResponseMessage},
+    types::v1::{CanisterHttpResponseMessage, canister_http_response_message::MessageType},
 };
 use ic_types::{
-    batch::{iterator_to_bytes, slice_to_messages, CanisterHttpPayload},
-    messages::CallbackId,
     NumBytes,
+    batch::{CanisterHttpPayload, iterator_to_bytes, slice_to_messages},
+    messages::CallbackId,
 };
 use std::collections::HashSet;
 

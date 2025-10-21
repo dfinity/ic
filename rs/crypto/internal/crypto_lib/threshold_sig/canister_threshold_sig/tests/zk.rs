@@ -9,7 +9,7 @@ fn should_zk_equal_openings_proof_work() -> CanisterThresholdResult<()> {
 
     for alg in IdkgProtocolAlgorithm::iter() {
         let curve = alg.curve();
-        let ad = rng.gen::<[u8; 32]>();
+        let ad = rng.r#gen::<[u8; 32]>();
 
         let seed = Seed::from_rng(rng);
 
@@ -38,7 +38,7 @@ fn should_zk_mul_proof_work() -> CanisterThresholdResult<()> {
 
     for alg in IdkgProtocolAlgorithm::iter() {
         let curve = alg.curve();
-        let ad = rng.gen::<[u8; 32]>();
+        let ad = rng.r#gen::<[u8; 32]>();
 
         let seed = Seed::from_rng(rng);
 
@@ -80,7 +80,7 @@ fn should_invalid_zk_mul_proof_be_rejected() -> CanisterThresholdResult<()> {
 
     for alg in IdkgProtocolAlgorithm::iter() {
         let curve = alg.curve();
-        let ad = rng.gen::<[u8; 32]>();
+        let ad = rng.r#gen::<[u8; 32]>();
 
         let seed = Seed::from_rng(rng);
 
@@ -118,12 +118,12 @@ fn should_zk_dlog_eq_proof_work() -> CanisterThresholdResult<()> {
 
     for alg in IdkgProtocolAlgorithm::iter() {
         let curve = alg.curve();
-        let ad = rng.gen::<[u8; 32]>();
+        let ad = rng.r#gen::<[u8; 32]>();
 
         let seed = Seed::from_rng(rng);
 
-        let g = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), "g_domain".as_bytes())?;
-        let h = EccPoint::hash_to_point(curve, &rng.gen::<[u8; 32]>(), "h_domain".as_bytes())?;
+        let g = EccPoint::hash_to_point(curve, &rng.r#gen::<[u8; 32]>(), "g_domain".as_bytes())?;
+        let h = EccPoint::hash_to_point(curve, &rng.r#gen::<[u8; 32]>(), "h_domain".as_bytes())?;
 
         let x = EccScalar::random(curve, rng);
         let g_x = g.scalar_mul(&x)?;

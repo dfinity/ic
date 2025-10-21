@@ -41,6 +41,7 @@ reqwest = { workspace = true }
 serde_cbor = { workspace = true }
 serde_json = { workspace = true }
 slog = { workspace = true }
+ssh2 = { workspace = true }
 ic-subnet-splitting = { path = "../../recovery/subnet_splitting" }
 tempfile = { workspace = true }
 tokio = { workspace = true }
@@ -77,6 +78,10 @@ path = "max_ingress_payload_size_test.rs"
 [[bin]]
 name = "ic-systest-max-net-payload-size-test"
 path = "max_xnet_payload_size_test.rs"
+
+[[bin]]
+name = "ic-systest-guestos-recovery-engine-smoke-test"
+path = "guestos_recovery_engine_smoke_test.rs"
 
 [[bin]]
 name = "ic-systest-request-auth-malicious-replica-test"

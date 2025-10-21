@@ -29,3 +29,19 @@ path = "ipv4_integration_test.rs"
 [[bin]]
 name = "reboot_toy"
 path = "reboot_toy.rs"
+
+[[bin]]
+name = "root_tests"
+path = "root_tests.rs"
+
+[[bin]]
+name = "launch_single_guest"
+path = "launch_single_guest.rs"
+
+[[bin]]
+name = "launch_single_host"
+path = "launch_single_host.rs"
+
+[[bin]]
+name = "ic-systest-kill-start"
+path = "kill_start_test.rs"

@@ -1,12 +1,13 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use ic_protobuf::{proxy::ProxyDecodeError, state::canister_state_bits::v1 as pb};
-use ic_sys::{PageBytes, PageIndex, PAGE_SIZE};
+use ic_sys::{PAGE_SIZE, PageBytes, PageIndex};
 use ic_types::{NumBytes, NumOsPages};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 
-use crate::{page_map::PageAllocatorFileDescriptor, PageMap};
+use crate::{PageMap, page_map::PageAllocatorFileDescriptor};
+
+pub mod proto;
 
 /// This is the _maximum_ chunk size. A chunk may take up as little space as
 /// a single OS page. However, the cycles cost of maintaining a chunk in the
@@ -109,7 +110,7 @@ impl WasmChunkStore {
     pub fn get_chunk_data(
         &self,
         chunk_hash: &WasmChunkHash,
-    ) -> Option<impl Iterator<Item = &[u8]>> {
+    ) -> Option<impl Iterator<Item = &[u8]> + use<'_>> {
         self.metadata
             .chunks
             .get(chunk_hash)
@@ -153,7 +154,8 @@ impl WasmChunkStore {
         } else if self.metadata.chunks.len() as u64 * CHUNK_SIZE >= max_size.get() {
             ChunkValidationResult::ValidationError(format!(
                 "Wasm chunk store has already reached maximum capacity of {} bytes or the maximum number of entries, {}",
-                max_size, max_size.get() / CHUNK_SIZE
+                max_size,
+                max_size.get() / CHUNK_SIZE
             ))
         } else {
             ChunkValidationResult::Insert(ValidatedChunk { chunk, hash })
@@ -223,50 +225,6 @@ pub struct WasmChunkStoreMetadata {
     size: NumOsPages,
 }
 
-impl From<&WasmChunkStoreMetadata> for pb::WasmChunkStoreMetadata {
-    fn from(item: &WasmChunkStoreMetadata) -> Self {
-        let chunks = item
-            .chunks
-            .iter()
-            .map(|(hash, ChunkInfo { index, length })| pb::WasmChunkData {
-                hash: hash.to_vec(),
-                index: *index,
-                length: *length,
-            })
-            .collect::<Vec<_>>();
-        let size = item.size.get();
-        pb::WasmChunkStoreMetadata { chunks, size }
-    }
-}
-
-impl TryFrom<pb::WasmChunkStoreMetadata> for WasmChunkStoreMetadata {
-    type Error = ProxyDecodeError;
-
-    fn try_from(value: pb::WasmChunkStoreMetadata) -> Result<Self, Self::Error> {
-        let mut chunks = BTreeMap::new();
-        for chunk in value.chunks {
-            let hash: [u8; 32] =
-                chunk
-                    .hash
-                    .try_into()
-                    .map_err(|e| ProxyDecodeError::ValueOutOfRange {
-                        typ: "[u8; 32]",
-                        err: format!("Failed to convert vector to fixed size arrary: {:?}", e),
-                    })?;
-            chunks.insert(
-                hash,
-                ChunkInfo {
-                    index: chunk.index,
-                    length: chunk.length,
-                },
-            );
-        }
-
-        let size = value.size.into();
-        Ok(Self { chunks, size })
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -300,7 +258,7 @@ mod tests {
     ) -> WasmChunkHash {
         let validated_chunk = match store.can_insert_chunk(max_size, chunk) {
             ChunkValidationResult::Insert(validated_chunk) => validated_chunk,
-            res => panic!("Unexpected chunk validation result: {:?}", res),
+            res => panic!("Unexpected chunk validation result: {res:?}"),
         };
         let hash = validated_chunk.hash;
         store.insert_chunk(validated_chunk);
@@ -335,7 +293,7 @@ mod tests {
                 err,
                 "Wasm chunk size 1048577 exceeds the maximum chunk size of 1048576".to_string()
             ),
-            res => panic!("Unexpected chunk validation result: {:?}", res),
+            res => panic!("Unexpected chunk validation result: {res:?}"),
         };
     }
 
@@ -387,7 +345,7 @@ mod tests {
             ChunkValidationResult::AlreadyExists(hash_from_validation) => {
                 assert_eq!(hash_from_validation, hash)
             }
-            res => panic!("Unexpected chunk validation result: {:?}", res),
+            res => panic!("Unexpected chunk validation result: {res:?}"),
         }
     }
 }

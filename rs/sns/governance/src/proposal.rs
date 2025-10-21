@@ -1,15 +1,25 @@
-use crate::cached_upgrade_steps::render_two_versions_as_markdown_table;
-use crate::pb::v1::{AdvanceSnsTargetVersion, SetTopicsForCustomProposals, Topic};
-use crate::treasury::assess_treasury_balance;
-use crate::types::Wasm;
 use crate::{
+    cached_upgrade_steps::render_two_versions_as_markdown_table,
     canister_control::perform_execute_generic_nervous_system_function_validate_and_render_call,
+    extensions::{
+        ValidatedExecuteExtensionOperation, ValidatedRegisterExtension, ValidatedUpgradeExtension,
+        validate_execute_extension_operation, validate_register_extension,
+        validate_upgrade_extension,
+    },
     governance::{
-        bytes_to_subaccount, log_prefix, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER,
-        TREASURY_SUBACCOUNT_NONCE,
+        NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER, TREASURY_SUBACCOUNT_NONCE, bytes_to_subaccount,
+        log_prefix,
     },
     logs::{ERROR, INFO},
     pb::v1::{
+        AdvanceSnsTargetVersion, DeregisterDappCanisters, ExecuteExtensionOperation,
+        ExecuteGenericNervousSystemFunction, Governance, GovernanceError, LogVisibility,
+        ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata, MintSnsTokens,
+        Motion, NervousSystemFunction, NervousSystemParameters, Proposal, ProposalData,
+        ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters,
+        RegisterExtension, SetTopicsForCustomProposals, SnsVersion, Tally, Topic, Topic as TopicPb,
+        TransferSnsTreasuryFunds, UpgradeExtension, UpgradeSnsControlledCanister,
+        UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
         governance::{SnsMetadata, Version},
         governance_error::ErrorType,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
@@ -20,15 +30,10 @@ use crate::{
             MintSnsTokensActionAuxiliary, TransferSnsTreasuryFundsActionAuxiliary,
         },
         transfer_sns_treasury_funds::TransferFrom,
-        DeregisterDappCanisters, ExecuteGenericNervousSystemFunction, Governance, GovernanceError,
-        LogVisibility, ManageDappCanisterSettings, ManageLedgerParameters, ManageSnsMetadata,
-        MintSnsTokens, Motion, NervousSystemFunction, NervousSystemParameters, Proposal,
-        ProposalData, ProposalDecisionStatus, ProposalId, ProposalRewardStatus,
-        RegisterDappCanisters, SnsVersion, Tally, Topic as TopicPb, TransferSnsTreasuryFunds,
-        UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Valuation as ValuationPb, Vote,
     },
-    sns_upgrade::{get_proposal_id_that_added_wasm, get_upgrade_params, UpgradeSnsParams},
-    types::Environment,
+    sns_upgrade::{UpgradeSnsParams, get_proposal_id_that_added_wasm, get_upgrade_params},
+    treasury::assess_treasury_balance,
+    types::{Environment, Wasm},
     validate_chars_count, validate_len, validate_required_field,
 };
 use candid::Principal;
@@ -36,14 +41,13 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::{
-    denominations_to_tokens, i2d, ledger::compute_distribution_subaccount_bytes, ledger_validation,
-    DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS,
+    DEFAULT_TRANSFER_FEE, E8, ONE_DAY_SECONDS, denominations_to_tokens, i2d,
+    ledger::compute_distribution_subaccount_bytes, ledger_validation,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nervous_system_timestamp::format_timestamp_for_humans;
 use ic_protobuf::types::v1::CanisterInstallMode;
-use ic_sns_governance_api::format_full_hash;
-use ic_sns_governance_api::pb::v1 as pb_api;
+use ic_sns_governance_api::{format_full_hash, pb::v1 as pb_api};
 use ic_sns_governance_proposals_amount_total_limit::{
     // TODO(NNS1-2982): Uncomment. mint_sns_tokens_7_day_total_upper_bound_tokens,
     transfer_sns_treasury_funds_7_day_total_upper_bound_tokens,
@@ -147,11 +151,10 @@ pub(crate) fn get_action_auxiliary(
             return Err(GovernanceError::new_with_message(
                 ErrorType::InconsistentInternalData,
                 format!(
-                    "Unable to find action_auxiliary for proposal {:?}, \
+                    "Unable to find action_auxiliary for proposal {proposal_id:?}, \
                      because proposal not found.",
-                    proposal_id,
                 ),
-            ))
+            ));
         }
     };
 
@@ -163,8 +166,7 @@ pub(crate) fn get_action_auxiliary(
             GovernanceError::new_with_message(
                 ErrorType::InconsistentInternalData,
                 format!(
-                    "Invalid action_auxiliary {:?} in ProposalData (id={:?}): {}",
-                    action_auxiliary, proposal_id, err,
+                    "Invalid action_auxiliary {action_auxiliary:?} in ProposalData (id={proposal_id:?}): {err}",
                 ),
             )
         })
@@ -187,8 +189,7 @@ impl ActionAuxiliary {
                 ErrorType::InconsistentInternalData,
                 format!(
                     "Missing supporting information. Specifically, \
-                     no treasury valuation factors: {:#?}",
-                    wrong,
+                     no treasury valuation factors: {wrong:#?}",
                 ),
             )),
         }
@@ -202,8 +203,7 @@ impl ActionAuxiliary {
                 ErrorType::InconsistentInternalData,
                 format!(
                     "Missing supporting information. Specifically, \
-                     no new target version: {:#?}",
-                    wrong,
+                     no new target version: {wrong:#?}",
                 ),
             )),
         }
@@ -258,7 +258,7 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
                 let TransferSnsTreasuryFundsActionAuxiliary { valuation } = action_auxiliary;
 
                 let valuation = Valuation::try_from(valuation.as_ref().unwrap_or_default())
-                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
+                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {src:?}: {err}"))?;
 
                 ActionAuxiliary::TransferSnsTreasuryFunds(valuation)
             }
@@ -266,7 +266,7 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
                 let MintSnsTokensActionAuxiliary { valuation } = action_auxiliary;
 
                 let valuation = Valuation::try_from(valuation.as_ref().unwrap_or_default())
-                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
+                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {src:?}: {err}"))?;
 
                 ActionAuxiliary::MintSnsTokens(valuation)
             }
@@ -281,7 +281,7 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
                 };
 
                 let target_version = Version::try_from(target_version.clone())
-                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {:?}: {}", src, err))?;
+                    .map_err(|err| format!("Invalid ActionAuxiliaryPb {src:?}: {err}"))?;
 
                 ActionAuxiliary::AdvanceSnsTargetVersion(target_version)
             }
@@ -297,9 +297,8 @@ impl TryFrom<&Option<ActionAuxiliaryPb>> for ActionAuxiliary {
 /// Takes in the GovernanceProto as to be able to validate against the current
 /// state of governance.
 pub(crate) async fn validate_and_render_proposal(
+    governance: &crate::governance::Governance,
     proposal: &Proposal,
-    env: &dyn Environment,
-    governance_proto: &Governance,
     reserved_canister_targets: Vec<CanisterId>,
 ) -> Result<(String, Option<ActionAuxiliaryPb>), String> {
     let mut defects = Vec::new();
@@ -333,13 +332,7 @@ pub(crate) async fn validate_and_render_proposal(
     ));
 
     // Even if we already found defects, still validate as to return all the errors found.
-    match validate_and_render_action(
-        &proposal.action,
-        env,
-        governance_proto,
-        reserved_canister_targets,
-    )
-    .await
+    match validate_and_render_action(&proposal.action, governance, reserved_canister_targets).await
     {
         Err(err) => {
             defects.push(err);
@@ -370,10 +363,11 @@ pub(crate) async fn validate_and_render_proposal(
 /// proposal action.
 pub(crate) async fn validate_and_render_action(
     action: &Option<proposal::Action>,
-    env: &dyn Environment,
-    governance_proto: &Governance,
+    governance: &crate::governance::Governance,
     reserved_canister_targets: Vec<CanisterId>,
 ) -> Result<(String, ActionAuxiliary), String> {
+    let env = &*governance.env;
+    let governance_proto = &governance.proto;
     let current_parameters = governance_proto
         .parameters
         .as_ref()
@@ -401,14 +395,14 @@ pub(crate) async fn validate_and_render_action(
     let proposals = governance_proto.proposals.values();
 
     match action {
-        proposal::Action::Unspecified(_unspecified) => {
+        Action::Unspecified(_unspecified) => {
             Err("`unspecified` was used, but is not a valid Proposal action.".into())
         }
-        proposal::Action::Motion(motion) => validate_and_render_motion(motion),
-        proposal::Action::ManageNervousSystemParameters(manage) => {
+        Action::Motion(motion) => validate_and_render_motion(motion),
+        Action::ManageNervousSystemParameters(manage) => {
             validate_and_render_manage_nervous_system_parameters(manage, current_parameters)
         }
-        proposal::Action::UpgradeSnsControlledCanister(upgrade) => {
+        Action::UpgradeSnsControlledCanister(upgrade) => {
             validate_and_render_upgrade_sns_controlled_canister(upgrade, env, root_canister_id)
                 .await
         }
@@ -426,42 +420,48 @@ pub(crate) async fn validate_and_render_action(
                 Err(err) => Err(err),
             }
         }
-        proposal::Action::AddGenericNervousSystemFunction(function_to_add) => {
+        Action::AddGenericNervousSystemFunction(function_to_add) => {
             validate_and_render_add_generic_nervous_system_function(
                 &disallowed_target_canister_ids,
                 function_to_add,
                 existing_functions,
             )
         }
-        proposal::Action::RemoveGenericNervousSystemFunction(id_to_remove) => {
+        Action::RemoveGenericNervousSystemFunction(id_to_remove) => {
             validate_and_render_remove_nervous_generic_system_function(
                 *id_to_remove,
                 existing_functions,
             )
         }
-        proposal::Action::ExecuteGenericNervousSystemFunction(execute) => {
+        Action::ExecuteGenericNervousSystemFunction(execute) => {
             validate_and_render_execute_nervous_system_function(env, execute, existing_functions)
                 .await
         }
-        proposal::Action::RegisterDappCanisters(register_dapp_canisters) => {
+        Action::ExecuteExtensionOperation(execute) => {
+            validate_and_render_execute_extension_operation(governance, execute).await
+        }
+        Action::RegisterDappCanisters(register_dapp_canisters) => {
             validate_and_render_register_dapp_canisters(
                 register_dapp_canisters,
                 &disallowed_target_canister_ids,
             )
         }
-        proposal::Action::RegisterExtension(_) => {
-            Err("RegisterExtension proposals are not supported yet.".to_string())
+        Action::RegisterExtension(register_extension) => {
+            validate_and_render_register_extension(governance, register_extension).await
         }
-        proposal::Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
+        Action::UpgradeExtension(upgrade_extension) => {
+            validate_and_render_upgrade_extension(governance, upgrade_extension).await
+        }
+        Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
             validate_and_render_deregister_dapp_canisters(
                 deregister_dapp_canisters,
                 &disallowed_target_canister_ids,
             )
         }
-        proposal::Action::ManageSnsMetadata(manage_sns_metadata) => {
+        Action::ManageSnsMetadata(manage_sns_metadata) => {
             validate_and_render_manage_sns_metadata(manage_sns_metadata)
         }
-        proposal::Action::TransferSnsTreasuryFunds(transfer) => {
+        Action::TransferSnsTreasuryFunds(transfer) => {
             return validate_and_render_transfer_sns_treasury_funds(
                 transfer,
                 sns_transfer_fee_e8s,
@@ -472,7 +472,7 @@ pub(crate) async fn validate_and_render_action(
             )
             .await;
         }
-        proposal::Action::MintSnsTokens(mint_sns_tokens) => {
+        Action::MintSnsTokens(mint_sns_tokens) => {
             return validate_and_render_mint_sns_tokens(
                 mint_sns_tokens,
                 sns_transfer_fee_e8s,
@@ -483,20 +483,20 @@ pub(crate) async fn validate_and_render_action(
             )
             .await;
         }
-        proposal::Action::ManageLedgerParameters(manage_ledger_parameters) => {
+        Action::ManageLedgerParameters(manage_ledger_parameters) => {
             validate_and_render_manage_ledger_parameters(manage_ledger_parameters)
         }
-        proposal::Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
+        Action::ManageDappCanisterSettings(manage_dapp_canister_settings) => {
             validate_and_render_manage_dapp_canister_settings(manage_dapp_canister_settings)
         }
-        proposal::Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
+        Action::AdvanceSnsTargetVersion(advance_sns_target_version) => {
             return validate_and_render_advance_sns_target_version_proposal(
                 env.canister_id(),
                 governance_proto,
                 advance_sns_target_version,
             );
         }
-        proposal::Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
+        Action::SetTopicsForCustomProposals(set_topics_for_custom_proposals) => {
             validate_and_render_set_topics_for_custom_proposals(
                 set_topics_for_custom_proposals,
                 &governance_proto.custom_functions_to_topics(),
@@ -644,8 +644,7 @@ fn locally_validate_and_render_transfer_sns_treasury_funds(
     };
     if transfer.amount_e8s < minimum_transaction {
         defects.push(format!(
-            "For transactions from {}, the fee and minimum transaction is {} e8s",
-            from, minimum_transaction
+            "For transactions from {from}, the fee and minimum transaction is {minimum_transaction} e8s"
         ))
     }
 
@@ -794,27 +793,23 @@ where
     let max_tokens = MyTokenProposalAction::recent_amount_total_upper_bound_tokens(&valuation)
         // Err is most likely a bug.
         .map_err(|treasury_limit_error| {
-            format!("Unable to validate amount: {:?}", treasury_limit_error,)
+            format!("Unable to validate amount: {treasury_limit_error:?}",)
         })?;
 
     // Finally, inspect the proposal's amount: it must not exceed max - spent (remainder). Or if
     // you prefer, equivalently, amount + spent must be <= max.
     let allowance_remainder_tokens = max_tokens.checked_sub(spent_tokens).ok_or_else(|| {
-        format!(
-            "Arithmetic error while performing {} - {}",
-            max_tokens, spent_tokens,
-        )
+        format!("Arithmetic error while performing {max_tokens} - {spent_tokens}",)
     })?;
     let proposal_amount_tokens = action.proposal_amount_tokens()?;
     if proposal_amount_tokens > allowance_remainder_tokens {
         // Although it might not be obvious to the user, their proposal is invalid, and we
         // consider it to be "their fault".
         return Err(format!(
-            "Amount is too large. Within the past 7 days, a total of {} tokens has already \
-             been executed in like proposals. Whereas, at most {} is allowed. An additional \
-             {} tokens from this proposal would cause that upper bound to be exceeded. \
-             Maybe, try again in a few days?",
-            spent_tokens, max_tokens, proposal_amount_tokens
+            "Amount is too large. Within the past 7 days, a total of {spent_tokens} tokens has already \
+             been executed in like proposals. Whereas, at most {max_tokens} is allowed. An additional \
+             {proposal_amount_tokens} tokens from this proposal would cause that upper bound to be exceeded. \
+             Maybe, try again in a few days?"
         ));
     }
 
@@ -836,8 +831,7 @@ impl TokenProposalAction for TransferSnsTreasuryFunds {
             TransferFrom::SnsTokenTreasury => Ok(Token::SnsToken),
             TransferFrom::Unspecified => Err(format!(
                 "Invalid TransferSnsTreasuryFunds: \
-                 The `from_treasury` field holds the Unspecified value: {:#?}",
-                self,
+                 The `from_treasury` field holds the Unspecified value: {self:#?}",
             )),
         }
     }
@@ -870,7 +864,7 @@ impl TokenProposalAction for TransferSnsTreasuryFunds {
         transfer_sns_treasury_funds_7_day_total_upper_bound_tokens(*valuation)
             // Err is most likely a bug.
             .map_err(|treasury_limit_error| {
-                format!("Unable to validate amount: {:?}", treasury_limit_error,)
+                format!("Unable to validate amount: {treasury_limit_error:?}",)
             })
     }
 }
@@ -1015,12 +1009,9 @@ impl TokenProposalAction for MintSnsTokens {
         denominations_to_tokens(amount_e8s, E8)
             // This Err will not be generated, because we are dividing a u64 (amount_e8s) by a
             // positive number (E8).
-            .ok_or_else(|| {
-                format!(
-                    "Unable to convert proposal amount {} e8s to tokens.",
-                    amount_e8s,
-                )
-            })
+            .ok_or_else(
+                || format!("Unable to convert proposal amount {amount_e8s} e8s to tokens.",),
+            )
     }
 
     fn recent_amount_total_tokens<'a>(
@@ -1068,10 +1059,10 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
     } = upgrade;
 
     // Make sure `mode` is not None, and not an invalid/unknown value.
-    if let Some(mode) = mode {
-        if let Err(err) = CanisterInstallMode::try_from(*mode) {
-            defects.push(format!("Invalid mode: {}", err));
-        }
+    if let Some(mode) = mode
+        && let Err(err) = CanisterInstallMode::try_from(*mode)
+    {
+        defects.push(format!("Invalid mode: {err}"));
     }
     // Assume mode is the default if it is not set
     let mode = upgrade.mode_or_upgrade();
@@ -1085,10 +1076,8 @@ async fn validate_and_render_upgrade_sns_controlled_canister(
         Ok(principal_id) => match CanisterId::try_from_principal_id(*principal_id) {
             Ok(canister_id) => Some(canister_id),
             Err(err) => {
-                let defect = format!(
-                    "UpgradeSnsControlledCanister.canister_id is invalid: {:?}",
-                    err
-                );
+                let defect =
+                    format!("UpgradeSnsControlledCanister.canister_id is invalid: {err:?}");
                 defects.push(defect);
                 None
             }
@@ -1194,10 +1183,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
     } = get_upgrade_params(env, root_canister_id, &current_version)
         .await
         .map_err(|e| {
-            format!(
-                "UpgradeSnsToNextVersion was invalid for the following reason: {}\n",
-                e
-            )
+            format!("UpgradeSnsToNextVersion was invalid for the following reason: {e}\n")
         })?;
 
     let proposal_id_message = get_proposal_id_that_added_wasm(env, new_wasm_hash.to_vec())
@@ -1208,8 +1194,7 @@ async fn validate_and_render_upgrade_sns_to_next_version(
         .flatten()
         .map(|id| {
             format!(
-                "## Proposal ID of the NNS proposal that blessed this WASM version: NNS Proposal {}",
-                id
+                "## Proposal ID of the NNS proposal that blessed this WASM version: NNS Proposal {id}"
             )
         })
         .unwrap_or_default();
@@ -1259,7 +1244,7 @@ fn validate_canister_id(
 ) -> Option<CanisterId> {
     match canister_id {
         None => {
-            defects.push(format!("{} field was not populated.", field_name));
+            defects.push(format!("{field_name} field was not populated."));
             None
         }
         Some(canister_id) => Some(CanisterId::unchecked_from_principal(*canister_id)),
@@ -1344,7 +1329,7 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
                 }
 
                 let topic = topic.map(|topic| -> Result<pb_api::topics::Topic, String> {
-                    let topic = TopicPb::try_from(topic).map_err(|e| format!("{:?}", e))?;
+                    let topic = TopicPb::try_from(topic).map_err(|e| format!("{e:?}"))?;
                     let topic = pb_api::topics::Topic::try_from(topic)?;
                     Ok(topic)
                 });
@@ -1352,7 +1337,7 @@ impl TryFrom<&NervousSystemFunction> for ValidGenericNervousSystemFunction {
                     None => None,
                     Some(Ok(topic)) => Some(topic),
                     Some(Err(e)) => {
-                        defects.push(format!("topic field is not valid: {:?}", e));
+                        defects.push(format!("topic field is not valid: {e:?}"));
                         None
                     }
                 };
@@ -1422,8 +1407,7 @@ pub fn validate_and_render_add_generic_nervous_system_function(
 
 ## Function:
 
-{:#?}",
-        add
+{add:#?}"
     ))
 }
 
@@ -1433,14 +1417,13 @@ pub fn validate_and_render_remove_nervous_generic_system_function(
     existing_functions: &BTreeMap<u64, NervousSystemFunction>,
 ) -> Result<String, String> {
     match existing_functions.get(&remove) {
-        None => Err(format!("NervousSystemFunction: {} doesn't exist", remove)),
+        None => Err(format!("NervousSystemFunction: {remove} doesn't exist")),
         Some(function) => Ok(format!(
             r"# Proposal to remove existing NervousSystemFunction:
 
 ## Function:
 
-{:#?}",
-            function
+{function:#?}"
         )),
     }
 }
@@ -1454,11 +1437,11 @@ pub async fn validate_and_render_execute_nervous_system_function(
 ) -> Result<String, String> {
     let id = execute.function_id;
     match existing_functions.get(&execute.function_id) {
-        None => Err(format!("There is no NervousSystemFunction with id: {}", id)),
+        None => Err(format!("There is no NervousSystemFunction with id: {id}")),
         Some(function) => {
             // Make sure this isn't a NervousSystemFunction which has been deleted.
             if function == &*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER {
-                Err(format!("There is no NervousSystemFunction with id: {}", id))
+                Err(format!("There is no NervousSystemFunction with id: {id}"))
             } else {
                 // To validate the proposal we try and call the validation method,
                 // which should produce a payload rendering if the proposal is valid
@@ -1498,6 +1481,121 @@ pub async fn validate_and_render_execute_nervous_system_function(
     }
 }
 
+async fn validate_and_render_execute_extension_operation(
+    governance: &crate::governance::Governance,
+    execute: &ExecuteExtensionOperation,
+) -> Result<String, String> {
+    let ValidatedExecuteExtensionOperation {
+        extension_canister_id,
+        operation_name,
+        arg,
+    } = validate_execute_extension_operation(governance, execute.clone())
+        .await
+        .map_err(|err| err.error_message)?;
+
+    Ok(format!(
+        r"# Proposal to execute extension operation:
+
+* Extension canister ID: `{extension_canister_id}`
+* Operation name: `{operation_name}`
+* Operation argument: `{arg}`
+#"
+    ))
+}
+
+async fn validate_and_render_register_extension(
+    governance: &crate::governance::Governance,
+    register_extension: &RegisterExtension,
+) -> Result<String, String> {
+    let validated_register_extension =
+        validate_register_extension(governance, register_extension.clone()).await?;
+
+    // If this is reached, then defects is empty. In that case, it is safe to unwrap the values
+    // required for rendering the proposal.
+
+    let ValidatedRegisterExtension {
+        wasm,
+        extension_canister_id,
+        spec,
+        init,
+    } = validated_register_extension;
+
+    let wasm_info = wasm.description();
+
+    let extension_init = format!("{init:#?}");
+
+    Ok(format!(
+        r"# Proposal to Register {spec}
+
+## Extension canister: {extension_canister_id}
+
+## Wasm Details
+
+{wasm_info}
+
+## Initialization
+
+{extension_init}
+
+## WARNING
+
+Some Decentralized Exchanges lack slippage protection during deposits. Consequently, 
+deposited asset ratios may deviate from those specified in the proposal. 
+This can expose liquidity pool adaptors to mispricing, making them vulnerable to front-running 
+or sandwich attacks. However, any undeposited tokens are automatically returned to the SNS treasury account.
+
+## Extension Configuration
+
+The extension will be deployed and configured according to the provided parameters.",
+    ))
+}
+
+async fn validate_and_render_upgrade_extension(
+    governance: &crate::governance::Governance,
+    upgrade_extension: &UpgradeExtension,
+) -> Result<String, String> {
+    let validated_upgrade_extension =
+        validate_upgrade_extension(governance, upgrade_extension.clone()).await?;
+
+    let validated = validated_upgrade_extension;
+
+    Ok(render_upgrade_extension(validated))
+}
+
+fn render_upgrade_extension(validated: ValidatedUpgradeExtension) -> String {
+    let ValidatedUpgradeExtension {
+        extension_canister_id,
+        wasm,
+        spec,
+        current_version,
+        new_version,
+        upgrade_arg: _,
+    } = validated;
+
+    let wasm_info = wasm.description();
+
+    format!(
+        r"# Proposal to Upgrade {spec}
+
+## Extension canister: {extension_canister_id}
+
+## Version Upgrade
+* Current version: {current_version}
+* New version: {new_version}
+
+## Wasm Details
+
+{wasm_info}
+
+## Upgrade Configuration
+
+The extension canister will be upgraded to the new version with the specified WASM.",
+        spec = spec.name,
+        current_version = current_version.0,
+        new_version = new_version.0,
+    )
+}
+
 fn validate_and_render_register_dapp_canisters(
     register_dapp_canisters: &RegisterDappCanisters,
     disallowed_canister_ids: &HashSet<CanisterId>,
@@ -1508,7 +1606,9 @@ fn validate_and_render_register_dapp_canisters(
 
     let num_canisters_to_register = register_dapp_canisters.canister_ids.len();
     if num_canisters_to_register > MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL {
-        return Err(format!("RegisterDappCanisters cannot specify more than {MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL} canister ids"));
+        return Err(format!(
+            "RegisterDappCanisters cannot specify more than {MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL} canister ids"
+        ));
     }
 
     let canisters_to_register = register_dapp_canisters
@@ -1525,7 +1625,7 @@ fn validate_and_render_register_dapp_canisters(
         let canister_list = register_dapp_canisters.canister_ids.iter().fold(
             String::new(),
             |mut out, canister_id| {
-                let _ = write!(out, "\n- {}", canister_id);
+                let _ = write!(out, "\n- {canister_id}");
                 out
             },
         );
@@ -1540,7 +1640,7 @@ fn validate_and_render_register_dapp_canisters(
             error_canister_ids
                 .iter()
                 .fold(String::new(), |mut out, canister_id| {
-                    let _ = write!(out, "\n- {}", canister_id);
+                    let _ = write!(out, "\n- {canister_id}");
                     out
                 });
 
@@ -1561,7 +1661,9 @@ fn validate_and_render_deregister_dapp_canisters(
     }
 
     if deregister_dapp_canisters.canister_ids.len() > MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL {
-        return Err(format!("DeregisterDappCanisters cannot specify more than {MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL} canister ids"));
+        return Err(format!(
+            "DeregisterDappCanisters cannot specify more than {MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL} canister ids"
+        ));
     }
 
     if deregister_dapp_canisters.new_controllers.is_empty() {
@@ -1591,13 +1693,13 @@ fn validate_and_render_deregister_dapp_canisters(
             deregister_dapp_canisters
                 .new_controllers
                 .iter()
-                .map(|c| format!("{}", c))
+                .map(|c| format!("{c}"))
                 .collect::<Vec<_>>()
                 .join("\n- "),
             deregister_dapp_canisters
                 .canister_ids
                 .iter()
-                .map(|c| format!("{}", c))
+                .map(|c| format!("{c}"))
                 .collect::<Vec<_>>()
                 .join("\n- ")
         );
@@ -1608,7 +1710,7 @@ fn validate_and_render_deregister_dapp_canisters(
             error_canister_ids
                 .iter()
                 .fold(String::new(), |mut out, canister_id| {
-                    let _ = write!(out, "\n- {}", canister_id);
+                    let _ = write!(out, "\n- {canister_id}");
                     out
                 });
 
@@ -1628,22 +1730,22 @@ pub fn validate_and_render_manage_sns_metadata(
     let mut render = "# Proposal to upgrade sns metadata:\n".to_string();
     if let Some(new_url) = &manage_sns_metadata.url {
         SnsMetadata::validate_url(new_url)?;
-        render += &format!("# New url: {} \n", new_url);
+        render += &format!("# New url: {new_url} \n");
         no_change = false;
     }
     if let Some(new_name) = &manage_sns_metadata.name {
         SnsMetadata::validate_name(new_name)?;
-        render += &format!("# New name: {} \n", new_name);
+        render += &format!("# New name: {new_name} \n");
         no_change = false;
     }
     if let Some(new_description) = &manage_sns_metadata.description {
         SnsMetadata::validate_description(new_description)?;
-        render += &format!("# New description: {} \n", new_description);
+        render += &format!("# New description: {new_description} \n");
         no_change = false;
     }
     if let Some(new_logo) = &manage_sns_metadata.logo {
         SnsMetadata::validate_logo(new_logo)?;
-        render += &format!("# New logo (base64 encoding): \n {}", new_logo);
+        render += &format!("# New logo (base64 encoding): \n {new_logo}");
         no_change = false;
     }
     if no_change {
@@ -1727,25 +1829,19 @@ fn validate_and_render_manage_dapp_canister_settings(
 
     let mut no_change = true;
     if let Some(compute_allocation) = &manage_dapp_canister_settings.compute_allocation {
-        render += &format!("# Set compute allocation to: {}%\n", compute_allocation);
+        render += &format!("# Set compute allocation to: {compute_allocation}%\n");
         no_change = false;
     }
     if let Some(memory_allocation) = &manage_dapp_canister_settings.memory_allocation {
-        render += &format!("# Set memory allocation to: {} bytes\n", memory_allocation);
+        render += &format!("# Set memory allocation to: {memory_allocation} bytes\n");
         no_change = false;
     }
     if let Some(freezing_threshold) = &manage_dapp_canister_settings.freezing_threshold {
-        render += &format!(
-            "# Set freezing threshold to: {} seconds\n",
-            freezing_threshold
-        );
+        render += &format!("# Set freezing threshold to: {freezing_threshold} seconds\n");
         no_change = false;
     }
     if let Some(reserved_cycles_limit) = &manage_dapp_canister_settings.reserved_cycles_limit {
-        render += &format!(
-            "# Set reserved cycles limit to: {} \n",
-            reserved_cycles_limit
-        );
+        render += &format!("# Set reserved cycles limit to: {reserved_cycles_limit} \n");
         no_change = false;
     }
     if let Some(log_visibility) = &manage_dapp_canister_settings.log_visibility {
@@ -1756,7 +1852,7 @@ fn validate_and_render_manage_dapp_canister_settings(
         no_change = false;
     }
     if let Some(wasm_memory_limit) = &manage_dapp_canister_settings.wasm_memory_limit {
-        render += &format!("# Set Wasm memory limit to: {}\n", wasm_memory_limit);
+        render += &format!("# Set Wasm memory limit to: {wasm_memory_limit}\n");
         no_change = false;
     }
 
@@ -1798,10 +1894,8 @@ fn validate_and_render_advance_sns_target_version_proposal(
     let current_target_versions_render =
         render_two_versions_as_markdown_table(upgrade_steps.current(), &target_version);
 
-    let upgrade_journal_url_render = format!(
-        "https://{}.raw.icp0.io/journal/json",
-        sns_governance_canister_id,
-    );
+    let upgrade_journal_url_render =
+        format!("https://{sns_governance_canister_id}.raw.icp0.io/journal/json",);
 
     let render = format!(
         "# Proposal to advance SNS target version\n\n\
@@ -2510,8 +2604,7 @@ pub(crate) fn transfer_sns_treasury_funds_amount_is_small_enough_at_execution_ti
                 ErrorType::InconsistentInternalData,
                 format!(
                     "Unable to determined upper bound on the amount of \
-                     TransferSnsTreasuryFunds proposals: {:?}\nvaluation:{:?}",
-                    err, valuation,
+                     TransferSnsTreasuryFunds proposals: {err:?}\nvaluation:{valuation:?}",
                 ),
             )
         })?;
@@ -2546,12 +2639,11 @@ pub(crate) fn transfer_sns_treasury_funds_amount_is_small_enough_at_execution_ti
             ErrorType::PreconditionFailed,
             format!(
                 "Executing this proposal is not allowed at this time, because doing \
-                 so would cause the 7 day upper bound of {} tokens to be exceeded. \
+                 so would cause the 7 day upper bound of {allowance_tokens} tokens to be exceeded. \
                  Maybe, try again later? The total amount transferred in the past \
-                 7 days stands at {} tokens, and the amount in this proposal is {} \
+                 7 days stands at {spent_tokens} tokens, and the amount in this proposal is {transfer_amount_tokens} \
                  tokens. The upper bound is based on treasury valuation factors at \
-                 the time of proposal submission: {:?}",
-                allowance_tokens, spent_tokens, transfer_amount_tokens, valuation,
+                 the time of proposal submission: {valuation:?}",
             ),
         ));
     }
@@ -2597,7 +2689,7 @@ fn total_treasury_transfer_amount_tokens<'a>(
 
     total_proposal_amounts_tokens(
         proposals,
-        &format!("{:?} transfer", filter_from_treasury),
+        &format!("{filter_from_treasury:?} transfer"),
         filter_proposal_action_amount_e8s,
         min_executed_timestamp_seconds,
     )
@@ -2650,8 +2742,7 @@ fn total_proposal_amounts_tokens<'a>(
         // Filter based on action.
         let Some(proposal) = &proposal.proposal else {
             return Err(format!(
-                "ProposalData {:?} is invalid, because its `proposal` field is empty!",
-                proposal_id,
+                "ProposalData {proposal_id:?} is invalid, because its `proposal` field is empty!",
             ));
         };
         let Some(proposal_amount_e8s) = proposal
@@ -2667,9 +2758,8 @@ fn total_proposal_amounts_tokens<'a>(
             // This Err is impossible, because we are dividing a u64 by a positive number.
             .ok_or_else(|| {
                 format!(
-                    "Failed to total amount in recent {} proposals: \
-                     Unable to convert amount {} e8s to whole tokens in proposal {:?}.",
-                    proposal_type_description, proposal_amount_e8s, proposal_id,
+                    "Failed to total amount in recent {proposal_type_description} proposals: \
+                     Unable to convert amount {proposal_amount_e8s} e8s to whole tokens in proposal {proposal_id:?}.",
                 )
             })?;
 
@@ -2681,8 +2771,7 @@ fn total_proposal_amounts_tokens<'a>(
             .ok_or_else(|| {
                 format!(
                     "Failed to total amount in recent TransferSnsTreasuryFunds proposals: \
-                     overflow while performing {} + {}.",
-                    total_tokens, proposal_amount_tokens,
+                     overflow while performing {total_tokens} + {proposal_amount_tokens}.",
                 )
             })?;
     }
@@ -2706,10 +2795,11 @@ mod set_topics_for_custom_proposals;
 mod tests {
     use super::*;
     use crate::{
+        governance::{Governance, ValidGovernanceProto},
         pb::v1::{
-            governance::{self, Version},
             Ballot, ChunkedCanisterWasm, Empty, Governance as GovernanceProto, NeuronId, Proposal,
             ProposalId, Subaccount, Topic, WaitForQuietState,
+            governance::{self, Version},
         },
         sns_upgrade::{
             CanisterSummary, GetNextSnsVersionRequest, GetNextSnsVersionResponse,
@@ -2722,15 +2812,20 @@ mod tests {
     use candid::Encode;
     use futures::FutureExt;
     use ic_base_types::{NumBytes, PrincipalId};
+
     use ic_crypto_sha2::Sha256;
     use ic_management_canister_types_private::{CanisterIdRecord, ChunkHash, StoredChunksReply};
-    use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
+    use ic_nervous_system_canisters::{cmc::MockCMC, ledger::MockICRC1Ledger};
+    use ic_nervous_system_clients::canister_status::{
+        CanisterStatusResultV2, CanisterStatusType, MemoryMetricsFromManagementCanister,
+    };
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
     use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
     use ic_test_utilities_types::ids::canister_test_id;
     use lazy_static::lazy_static;
     use maplit::{btreemap, hashset};
+
     use std::convert::TryFrom;
 
     pub const FORBIDDEN_CANISTER: CanisterId = CanisterId::ic_00();
@@ -2743,8 +2838,6 @@ mod tests {
         static ref SNS_GOVERNANCE_CANISTER_ID: CanisterId = canister_test_id(501);
         static ref SNS_LEDGER_CANISTER_ID: CanisterId = canister_test_id(502);
         static ref SNS_SWAP_CANISTER_ID: CanisterId = canister_test_id(503);
-        static ref FAKE_ENV: Box<dyn Environment> =
-            Box::new(NativeEnvironment::new(Some(*SNS_GOVERNANCE_CANISTER_ID)));
     }
 
     fn governance_proto_for_proposal_tests(deployed_version: Option<Version>) -> GovernanceProto {
@@ -2753,7 +2846,12 @@ mod tests {
             ledger_canister_id: Some(PrincipalId::from(*SNS_LEDGER_CANISTER_ID)),
             swap_canister_id: Some(PrincipalId::from(*SNS_SWAP_CANISTER_ID)),
 
-            sns_metadata: None,
+            sns_metadata: Some(SnsMetadata {
+                logo: None,
+                url: Some("https://example.com".to_string()),
+                name: Some("Example".to_string()),
+                description: Some("Very descriptive description".to_string()),
+            }),
             sns_initialization_parameters: "".to_string(),
             parameters: Some(DEFAULT_PARAMS.clone()),
             id_to_nervous_system_functions: EMPTY_FUNCTIONS.clone(),
@@ -2777,30 +2875,42 @@ mod tests {
         }
     }
 
+    fn governance_for_tests_with_env(
+        governance_proto: GovernanceProto,
+        env: NativeEnvironment,
+    ) -> Governance {
+        Governance::new(
+            ValidGovernanceProto::try_from(governance_proto)
+                .expect("Failed validating governance proto"),
+            Box::new(env),
+            Box::new(MockICRC1Ledger::default()),
+            Box::new(MockICRC1Ledger::default()),
+            Box::new(MockCMC::default()),
+        )
+    }
+
     fn validate_default_proposal(proposal: &Proposal) -> Result<String, String> {
         let governance_proto = governance_proto_for_proposal_tests(None);
-        validate_and_render_proposal(
-            proposal,
-            &**FAKE_ENV,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .map(|(rendering, _action_auxiliary)| rendering)
+        let governance = governance_for_tests_with_env(
+            governance_proto,
+            NativeEnvironment::new(Some(*SNS_GOVERNANCE_CANISTER_ID)),
+        );
+        validate_and_render_proposal(&governance, proposal, vec![FORBIDDEN_CANISTER])
+            .now_or_never()
+            .unwrap()
+            .map(|(rendering, _action_auxiliary)| rendering)
     }
 
     fn validate_default_action(action: &Option<proposal::Action>) -> Result<String, String> {
         let governance_proto = governance_proto_for_proposal_tests(None);
-        validate_and_render_action(
-            action,
-            &**FAKE_ENV,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .map(|(rendering, _action_auxiliary)| rendering)
+        let governance = governance_for_tests_with_env(
+            governance_proto,
+            NativeEnvironment::new(Some(*SNS_GOVERNANCE_CANISTER_ID)),
+        );
+        validate_and_render_action(action, &governance, vec![FORBIDDEN_CANISTER])
+            .now_or_never()
+            .unwrap()
+            .map(|(rendering, _action_auxiliary)| rendering)
     }
 
     fn basic_principal_id() -> PrincipalId {
@@ -3664,6 +3774,7 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
             0,
             0,
             0,
+            MemoryMetricsFromManagementCanister::default(),
         )
     }
 
@@ -3722,8 +3833,8 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
     /// }
     ///
     /// It also is set to only upgrade root.
-    fn setup_for_upgrade_sns_to_next_version_validation_tests(
-    ) -> (NativeEnvironment, GovernanceProto) {
+    fn setup_for_upgrade_sns_to_next_version_validation_tests()
+    -> (NativeEnvironment, GovernanceProto) {
         let expected_wasm_hash_requested = Sha256::hash(&[6]).to_vec();
         let root_canister_id = *SNS_ROOT_CANISTER_ID;
 
@@ -3854,16 +3965,13 @@ Upgrade argument with 8 bytes and SHA256 `0a141e28323c4650`."#
     fn upgrade_sns_to_next_version_renders_correctly() {
         let (env, governance_proto) = setup_for_upgrade_sns_to_next_version_validation_tests();
         let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {});
+        let governance = governance_for_tests_with_env(governance_proto, env);
         // Same id as setup_env_for_upgrade_sns_proposals
-        let (actual_text, _) = validate_and_render_action(
-            &Some(action),
-            &env,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap();
+        let (actual_text, _) =
+            validate_and_render_action(&Some(action), &governance, vec![FORBIDDEN_CANISTER])
+                .now_or_never()
+                .unwrap()
+                .unwrap();
 
         let expected_text = r"# Proposal to upgrade SNS Root to next version:
 
@@ -3922,28 +4030,22 @@ Version {
             .unwrap(),
             Ok(Encode!(&GetNextSnsVersionResponse { next_version: None }).unwrap()),
         );
-        let err = validate_and_render_action(
-            &Some(action),
-            &env,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap_err();
+        let governance = governance_for_tests_with_env(governance_proto, env);
+        let err = validate_and_render_action(&Some(action), &governance, vec![FORBIDDEN_CANISTER])
+            .now_or_never()
+            .unwrap()
+            .unwrap_err();
 
         let target_string = "There is no next version found for the current SNS version: Version {";
         assert!(
             err.contains(target_string),
-            "Test did not contain '{}'.  Actual: {}",
-            target_string,
-            err
+            "Test did not contain '{target_string}'.  Actual: {err}"
         );
     }
 
     #[test]
-    fn fail_validation_for_upgrade_sns_to_next_version_when_more_than_one_canister_change_in_version(
-    ) {
+    fn fail_validation_for_upgrade_sns_to_next_version_when_more_than_one_canister_change_in_version()
+     {
         let action = Action::UpgradeSnsToNextVersion(UpgradeSnsToNextVersion {});
         let (mut env, governance_proto) = setup_for_upgrade_sns_to_next_version_validation_tests();
 
@@ -3983,15 +4085,11 @@ Version {
             })
             .unwrap()),
         );
-        let err = validate_and_render_action(
-            &Some(action),
-            &env,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap_err();
+        let governance = governance_for_tests_with_env(governance_proto, env);
+        let err = validate_and_render_action(&Some(action), &governance, vec![FORBIDDEN_CANISTER])
+            .now_or_never()
+            .unwrap()
+            .unwrap_err();
 
         assert!(err.contains(
             "There is more than one upgrade possible for UpgradeSnsToNextVersion Action.  \
@@ -4024,15 +4122,11 @@ Version {
             .unwrap(),
             Ok(Encode!(&canisters_summary_response).unwrap()),
         );
-        let err = validate_and_render_action(
-            &Some(action),
-            &env,
-            &governance_proto,
-            vec![FORBIDDEN_CANISTER],
-        )
-        .now_or_never()
-        .unwrap()
-        .unwrap_err();
+        let governance = governance_for_tests_with_env(governance_proto, env);
+        let err = validate_and_render_action(&Some(action), &governance, vec![FORBIDDEN_CANISTER])
+            .now_or_never()
+            .unwrap()
+            .unwrap_err();
 
         assert!(err.contains("Did not receive Root CanisterId from list_sns_canisters call"))
     }
@@ -4494,11 +4588,17 @@ Version {
         .unwrap();
 
         for canister_id in register_dapp_canisters.canister_ids {
-            assert!(rendered_proposal.contains(&format!("\n- {canister_id}")), "rendered proposal \"{rendered_proposal}\" does not contain canister id \"- {canister_id}\"");
+            assert!(
+                rendered_proposal.contains(&format!("\n- {canister_id}")),
+                "rendered proposal \"{rendered_proposal}\" does not contain canister id \"- {canister_id}\""
+            );
         }
 
         for line in rendered_proposal.lines() {
-            assert!(!line.starts_with(char::is_whitespace), "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace");
+            assert!(
+                !line.starts_with(char::is_whitespace),
+                "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace"
+            );
         }
     }
 
@@ -4517,13 +4617,19 @@ Version {
         .unwrap();
 
         for canister_id in register_dapp_canisters.canister_ids {
-            assert!(rendered_proposal.contains(&format!("\n- {canister_id}")), "rendered proposal \"{rendered_proposal}\" does not contain canister id \"- {canister_id}\"");
+            assert!(
+                rendered_proposal.contains(&format!("\n- {canister_id}")),
+                "rendered proposal \"{rendered_proposal}\" does not contain canister id \"- {canister_id}\""
+            );
         }
 
         rendered_proposal.contains(&format!("{MAX_NUMBER_OF_DAPPS_TO_MANAGE_PER_PROPOSAL}"));
 
         for line in rendered_proposal.lines() {
-            assert!(!line.starts_with(char::is_whitespace), "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace");
+            assert!(
+                !line.starts_with(char::is_whitespace),
+                "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace"
+            );
         }
     }
 
@@ -4621,11 +4727,17 @@ Version {
         .unwrap();
 
         for canister_id in deregister_dapp_canisters.canister_ids {
-            assert!(rendered_proposal.contains(&format!("\n- {canister_id}")), "rendered proposal \"{rendered_proposal}\" does not contain canister id {canister_id}");
+            assert!(
+                rendered_proposal.contains(&format!("\n- {canister_id}")),
+                "rendered proposal \"{rendered_proposal}\" does not contain canister id {canister_id}"
+            );
         }
 
         for line in rendered_proposal.lines() {
-            assert!(!line.starts_with(char::is_whitespace), "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace");
+            assert!(
+                !line.starts_with(char::is_whitespace),
+                "rendered proposal \"{rendered_proposal}\" contains a line that starts with whitespace"
+            );
         }
     }
 
@@ -4926,7 +5038,9 @@ Version {
         .unwrap();
         assert_eq!(
             render,
-            format!("# Proposal to change ledger parameters:\n# Set token transfer fee: {new_fee} token-quantums. \n")
+            format!(
+                "# Proposal to change ledger parameters:\n# Set token transfer fee: {new_fee} token-quantums. \n"
+            )
         );
     }
 
@@ -5481,9 +5595,52 @@ Payload rendering here"#
         ] {
             assert!(
                 render.contains(keyword),
-                "Proposal render:\n{}\n does not contain expected keyword {}",
-                render,
-                keyword
+                "Proposal render:\n{render}\n does not contain expected keyword {keyword}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_render_upgrade_extension() {
+        use crate::{
+            extensions::{
+                ExtensionSpec, ExtensionType, ExtensionVersion, ValidatedExtensionUpgradeArg,
+                ValidatedUpgradeExtension,
+            },
+            pb::v1::Topic,
+            types::Wasm,
+        };
+        use ic_base_types::CanisterId;
+
+        let extension_canister_id = CanisterId::from_u64(2000);
+        let validated = ValidatedUpgradeExtension {
+            extension_canister_id,
+            wasm: Wasm::Bytes(vec![1, 2, 3, 4]), // Simple test WASM
+            spec: ExtensionSpec {
+                name: "KongSwap Treasury Manager".to_string(),
+                version: ExtensionVersion(2),
+                topic: Topic::TreasuryAssetManagement,
+                extension_type: ExtensionType::TreasuryManager,
+            },
+            current_version: ExtensionVersion(1),
+            new_version: ExtensionVersion(2),
+            upgrade_arg: ValidatedExtensionUpgradeArg::TreasuryManager,
+        };
+
+        let rendered = render_upgrade_extension(validated);
+
+        // Check that the rendered output contains expected elements
+        for expected_content in [
+            "# Proposal to Upgrade KongSwap Treasury Manager",
+            "Extension canister: txegi-kaaaa-aaaaa-aa7ia-cai",
+            "Current version: 1",
+            "New version: 2",
+            "Embedded module with 4 bytes",
+            "The extension canister will be upgraded to the new version",
+        ] {
+            assert!(
+                rendered.contains(expected_content),
+                "Rendered proposal:\n{rendered}\n\ndoes not contain expected content: {expected_content}"
             );
         }
     }

@@ -1,4 +1,4 @@
 # Kernel cmdline parameters for launching the HostOS.
 # BOOT_ARGS_A targets partition set "A" while BOOT_ARGS_B targets partition set "B"
-BOOT_ARGS_A="root=/dev/hostlvm/A_root console=ttyS0,115200 console=tty0 nomodeset video=1024x768 security=selinux selinux=1 enforcing=0"
-BOOT_ARGS_B="root=/dev/hostlvm/B_root console=ttyS0,115200 console=tty0 nomodeset video=1024x768 security=selinux selinux=1 enforcing=0"
+BOOT_ARGS_A="root=/dev/hostlvm/A_root console=ttyS0,115200 console=tty0 nomodeset video=1024x768 dfinity.system=A security=selinux selinux=1 enforcing=0"
+BOOT_ARGS_B="root=/dev/hostlvm/B_root console=ttyS0,115200 console=tty0 nomodeset video=1024x768 dfinity.system=B security=selinux selinux=1 enforcing=0"

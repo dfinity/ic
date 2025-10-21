@@ -5,7 +5,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::LedgerArgument;
 use ic_management_canister_types_private::{CanisterIdRecord, CanisterInstallMode};
 use ic_nervous_system_clients::canister_status::{CanisterStatusResultV2, CanisterStatusType};
-use ic_nervous_system_common::{ledger::compute_neuron_staking_subaccount, DEFAULT_TRANSFER_FEE};
+use ic_nervous_system_common::{DEFAULT_TRANSFER_FEE, ledger::compute_neuron_staking_subaccount};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -15,18 +15,16 @@ use ic_nns_test_utils::{
 };
 use ic_sns_governance::{
     pb::v1::{
-        self as sns_governance_pb,
+        self as sns_governance_pb, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
+        Proposal, ProposalDecisionStatus, UpgradeSnsToNextVersion,
         governance::{Mode, Version},
         proposal::Action,
-        GetRunningSnsVersionRequest, GetRunningSnsVersionResponse, Proposal,
-        ProposalDecisionStatus, UpgradeSnsToNextVersion,
     },
     types::E8S_PER_TOKEN,
 };
 use ic_sns_init::pb::v1::{
-    sns_init_payload::InitialTokenDistribution, DeveloperDistribution,
-    FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
-    TreasuryDistribution,
+    DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload,
+    SwapDistribution, TreasuryDistribution, sns_init_payload::InitialTokenDistribution,
 };
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_wasm::pb::v1::{
@@ -358,9 +356,11 @@ fn run_upgrade_test(canister_type: SnsCanisterType) {
     assert!(!statuses.is_empty());
 
     let new_hash_vec = new_wasm_hash.to_vec();
-    assert!(statuses
-        .iter()
-        .all(|s| s.module_hash().unwrap() == new_hash_vec));
+    assert!(
+        statuses
+            .iter()
+            .all(|s| s.module_hash().unwrap() == new_hash_vec)
+    );
 
     // Now we test the upgrade success logic whereby governance confirms that the upgrade was
     // successful by checking if running system matches what was proposed.
@@ -696,9 +696,11 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
 
     // Our selected module has the new hash.
     let new_hash_vec = new_wasm_hash.to_vec();
-    assert!(statuses
-        .iter()
-        .all(|s| s.module_hash().unwrap() == new_hash_vec));
+    assert!(
+        statuses
+            .iter()
+            .all(|s| s.module_hash().unwrap() == new_hash_vec)
+    );
 }
 
 #[test]
@@ -974,9 +976,11 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
 
     // Ensure we are still mismatched between running archive version and deployed_version.archive_wasm_hash
     let running_archive_statuses = get_canister_statuses(SnsCanisterType::Archive, &machine, root);
-    assert!(running_archive_statuses
-        .iter()
-        .all(|s| { s.module_hash().unwrap() != deployed_version.archive_wasm_hash }));
+    assert!(
+        running_archive_statuses
+            .iter()
+            .all(|s| { s.module_hash().unwrap() != deployed_version.archive_wasm_hash })
+    );
 
     // After checking version stuff, ensure proposal executed (not failed)
     state_test_helpers::sns_wait_for_proposal_execution(&machine, governance, proposal_id);
@@ -1072,7 +1076,7 @@ fn sns_wait_for_upgrade_finished(
             break statuses;
         }
 
-        assert!(attempt_count < 250, "status: {:?}", statuses);
+        assert!(attempt_count < 250, "status: {statuses:?}");
     }
 }
 
@@ -1135,8 +1139,7 @@ fn sns_wait_for_pending_upgrade(machine: &StateMachine, governance: CanisterId) 
 
         assert!(
             attempt_count < 50,
-            "Never found pending upgrade after {} attempts",
-            attempt_count
+            "Never found pending upgrade after {attempt_count} attempts"
         );
 
         std::thread::sleep(std::time::Duration::from_millis(50));

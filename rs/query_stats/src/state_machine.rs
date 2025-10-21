@@ -67,13 +67,13 @@
 //!
 //! We have chosen to exclude the data.
 
-use crate::metrics::{QueryStatsAggregatorMetrics, CRITICAL_ERROR_AGGREGATION_FAILURE};
-use ic_logger::{error, info, ReplicaLogger};
+use crate::metrics::{CRITICAL_ERROR_AGGREGATION_FAILURE, QueryStatsAggregatorMetrics};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    CanisterId, NodeId, QueryStatsEpoch,
     batch::{QueryStats, QueryStatsPayload, RawQueryStats},
     consensus::get_faults_tolerated,
-    CanisterId, NodeId, QueryStatsEpoch,
 };
 use std::{
     cmp::Ordering,
@@ -92,7 +92,7 @@ where
     values.sort_unstable();
     let mid = values.len() / 2;
 
-    if values.len() % 2 == 0 {
+    if values.len().is_multiple_of(2) {
         let left = values
             .get(mid.saturating_sub(1))
             .cloned()
@@ -188,8 +188,10 @@ fn process_payload(
             Ordering::Equal => node.get_mut(&query_stats.epoch).unwrap(),
             // Node is trying to submit a record which should already be fully submitted
             Ordering::Greater => {
-                error!(logger, "QueryStatsAggregator: Trying to add payload for epoch {:?} for proposer {:?}\
-                    after already submitting values for {:?}. This is likely a bug in the payload builder.", 
+                error!(
+                    logger,
+                    "QueryStatsAggregator: Trying to add payload for epoch {:?} for proposer {:?}\
+                    after already submitting values for {:?}. This is likely a bug in the payload builder.",
                     query_stats.epoch,
                     query_stats.proposer,
                     highest_epoch
@@ -455,8 +457,8 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_state::{CanisterStateBuilder, ReplicatedStateBuilder};
     use ic_types::{
-        batch::{CanisterQueryStats, TotalQueryStats},
         NodeId, QueryStatsEpoch,
+        batch::{CanisterQueryStats, TotalQueryStats},
     };
     use ic_types_test_utils::ids::{canister_test_id, node_test_id};
 

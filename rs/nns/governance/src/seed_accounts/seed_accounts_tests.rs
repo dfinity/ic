@@ -1,14 +1,14 @@
 use crate::{
     governance::{Governance, MockEnvironment, ONE_MONTH_SECONDS},
     pb::v1::{
-        governance::{seed_accounts::SeedAccount, SeedAccounts},
         Governance as GovernanceProto, NeuronType,
+        governance::{SeedAccounts, seed_accounts::SeedAccount},
     },
     seed_accounts::{AccountState, SEED_NEURON_DISTRIBUTION_COUNT},
 };
 use candid::Encode;
 use ic_base_types::PrincipalId;
-use ic_nervous_system_common::{cmc::MockCMC, ledger::MockIcpLedger, E8};
+use ic_nervous_system_common::{E8, cmc::MockCMC, ledger::MockIcpLedger};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api as api;
 use icp_ledger::Subaccount;

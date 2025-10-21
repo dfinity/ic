@@ -96,7 +96,33 @@ alias(
     actual = select({
         "@bazel_tools//src/conditions:darwin_arm64": "@bitcoin_core_darwin_arm64//:bitcoind",
         "@bazel_tools//src/conditions:darwin_x86_64": "@bitcoin_core_darwin_x86//:bitcoind",
+        "@bazel_tools//src/conditions:linux_aarch64": "@bitcoin_core_linux_aarch64//:bitcoind",
         "@bazel_tools//src/conditions:linux_x86_64": "@bitcoin_core_linux_x86//:bitcoind",
+    }),
+)
+
+genrule(
+    name = "dogecoind_stub",
+    outs = ["dogecoind_stub.txt"],
+    cmd = "echo 'Not supported on this platform.' > $@",
+)
+
+alias(
+    name = "dogecoind",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@dogecoin_core_linux_x86//:dogecoind",
+        "//conditions:default": "//:dogecoind_stub",
+    }),
+)
+
+### rclone, used for uploading artifacts to S3-compatible storage
+
+alias(
+    name = "rclone",
+    actual = select({
+        "@platforms//os:osx": "@rclone-x86_64-darwin//:rclone",  # No arm64 build for this version, use amd64 for now.
+        "@bazel_tools//src/conditions:linux_x86_64": "@rclone-x86_64-linux//:rclone",
+        "//conditions:default": "@platforms//:incompatible",
     }),
 )
 
@@ -164,8 +190,12 @@ upload_artifacts(
             "//publish/canisters:bundle",
             "//ic-os/guestos/envs/dev:bundle-disk",  # used by icos_deploy testnet script
             "//ic-os/guestos/envs/prod:bundle-update",
+            "//ic-os/guestos/envs/dev:bundle-update",  # used by nested tests
             "//ic-os/hostos/envs/prod:bundle-update",
+            "//ic-os/hostos/envs/dev:bundle-update",  # used by nested tests
             "//ic-os/setupos/envs/prod:bundle",
+            "//ic-os/setupos/envs/dev:bundle",  # used by nested tests
+            "//ic-os/guestos/envs/recovery:bundle-update",  # used for manual recovery
         ],
     }),
     visibility = ["//visibility:public"],
@@ -174,4 +204,13 @@ upload_artifacts(
 # Artifact uploader that can be run with `bazel run ... -- BUNDLE...`
 upload_artifacts(
     name = "artifact-uploader",
+)
+
+# Test suite for super-fast tests (should only take a couple seconds to run).
+test_suite(
+    name = "insta_tests",
+    tests = [
+        "//bazel:buildifier_test",
+        "//bazel:gazelle_test",
+    ],
 )

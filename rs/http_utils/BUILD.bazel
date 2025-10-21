@@ -3,40 +3,36 @@ load("//rs/tests:common.bzl", "MAINNET_ENV")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/sha2",
-    "//rs/monitoring/logger",
-    "@crate_index//:flate2",
-    "@crate_index//:hex",
-    "@crate_index//:http",
-    "@crate_index//:reqwest",
-    "@crate_index//:slog",
-    "@crate_index//:tar",
-    "@crate_index//:tokio",
-    "@crate_index//:zstd",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/test_utilities/in_memory_logger",
-    "@crate_index//:assert_matches",
-    "@crate_index//:mockito",
-    "@crate_index//:tempfile",
-]
-
 rust_library(
     name = "http_utils",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_http_utils",
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/sha2",
+        "//rs/monitoring/logger",
+        "@crate_index//:flate2",
+        "@crate_index//:hex",
+        "@crate_index//:http",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
+        "@crate_index//:tar",
+        "@crate_index//:tokio",
+        "@crate_index//:zstd",
+    ],
 )
 
 rust_test(
     name = "http_utils_test",
     crate = ":http_utils",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/test_utilities/in_memory_logger",
+        "@crate_index//:assert_matches",
+        "@crate_index//:mockito",
+        "@crate_index//:tempfile",
+    ],
 )
 
 rust_test(
@@ -47,5 +43,9 @@ rust_test(
         "long_test",  # this test doesn't necessarily take long but it downloads a big image from download proxy so, to save bandwidth, we don't want to do that for every update to every PR and only run this on pushes to master.
         "requires-network",
     ],
-    deps = DEPENDENCIES + DEV_DEPENDENCIES + [":http_utils"],
+    deps = [
+        ":http_utils",
+        "@crate_index//:assert_matches",
+        "@crate_index//:tokio",
+    ],
 )

@@ -23,14 +23,14 @@ end::catalog[] */
 use anyhow::Result;
 use ic_recovery::file_sync_helper::download_binary;
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, get_mainnet_application_subnet_revision, get_mainnet_nns_revision,
-    READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    READY_WAIT_TIMEOUT, RETRY_BACKOFF, get_dependency_path,
+    get_mainnet_application_subnet_revision, get_mainnet_nns_revision,
 };
 use ic_system_test_driver::driver::{group::SystemTestGroup, test_env::TestEnv};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use ic_types::ReplicaVersion;
-use slog::{error, info, Logger};
+use slog::{Logger, error, info};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -107,34 +107,26 @@ and the custom `ExhaustiveSet` implementation is removed at the same time.
 ///    g-zipped archives, and make them executable.
 /// 2. There is a way to automatically update the version of this dependency,
 ///    Ideally such that it is in sync with mainnet-icos-revisions.json
-fn download_mainnet_binary(version: String, log: &Logger, target_dir: &Path) -> PathBuf {
+fn download_mainnet_binary(version: &ReplicaVersion, log: &Logger, target_dir: &Path) -> PathBuf {
     block_on(ic_system_test_driver::retry_with_msg_async!(
         "download mainnet binary",
         log,
         READY_WAIT_TIMEOUT,
         RETRY_BACKOFF,
-        || async {
-            Ok(download_binary(
-                log,
-                ReplicaVersion::try_from(version.clone()).unwrap(),
-                "types-test".into(),
-                target_dir,
-            )
-            .await?)
-        }
+        || async { Ok(download_binary(log, version, "types-test".into(), target_dir,).await?) }
     ))
     .expect("Failed to Download")
 }
 
 fn nns_version_test(env: TestEnv) {
-    test(env, get_mainnet_nns_revision())
+    test(env, &get_mainnet_nns_revision().unwrap())
 }
 
 fn application_subnet_version_test(env: TestEnv) {
-    test(env, get_mainnet_application_subnet_revision())
+    test(env, &get_mainnet_application_subnet_revision().unwrap())
 }
 
-fn test(env: TestEnv, mainnet_version: String) {
+fn test(env: TestEnv, mainnet_version: &ReplicaVersion) {
     let log = env.logger();
 
     info!(log, "Continuing with mainnet version {mainnet_version}");

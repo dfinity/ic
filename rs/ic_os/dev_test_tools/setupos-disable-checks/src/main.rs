@@ -1,15 +1,15 @@
-use std::fs::Permissions;
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path, PathBuf};
-
 use anyhow::{Context, Error};
 use clap::Parser;
 use linux_kernel_command_line::{ImproperlyQuotedValue, KernelCommandLine};
 use regex::Regex;
+use std::fs::Permissions;
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use tempfile::NamedTempFile;
 use tokio::fs;
 
-use partition_tools::{ext::ExtPartition, Partition};
+use partition_tools::{Partition, ext::ExtPartition};
 
 const CHECK_DISABLER_CMDLINE_ARGS: [&str; 3] = [
     "ic.setupos.check_hardware",
@@ -48,7 +48,7 @@ fn munge(
             (
                 wholematch.start(),
                 prevmatch.as_str().to_string(),
-                KernelCommandLine::try_from(thematch.as_str().trim().trim_matches('"'))?,
+                KernelCommandLine::from_str(thematch.as_str().trim().trim_matches('"'))?,
                 postmatch.as_str().to_string(),
                 wholematch.end(),
             )
@@ -107,7 +107,7 @@ async fn main() -> Result<(), Error> {
     fs::write(
         temp_boot_args.path(),
         munge(
-            bootfs.read_file(boot_args_path).await?.as_str(),
+            std::str::from_utf8(&bootfs.read_file(boot_args_path).await?)?,
             true,
             cli.defeat_installer,
         )

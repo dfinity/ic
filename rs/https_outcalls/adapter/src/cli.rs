@@ -78,7 +78,7 @@ pub mod test {
         let json = r#"{asdf"#;
 
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{json}").expect("Failed to write to tmp file");
 
         // should use the default values
         let cli = Cli {
@@ -103,7 +103,7 @@ pub mod test {
         "#;
 
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{json}").expect("Failed to write to tmp file");
 
         // should use the default values
         let cli = Cli {
@@ -128,7 +128,7 @@ pub mod test {
         "#;
 
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{json}").expect("Failed to write to tmp file");
 
         // should use the default values
         let cli = Cli {
@@ -153,7 +153,7 @@ pub mod test {
         "#;
 
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{json}").expect("Failed to write to tmp file");
 
         // should use the default values
         let cli = Cli {
@@ -175,7 +175,7 @@ pub mod test {
         let json = r#"{}"#;
 
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{json}").expect("Failed to write to tmp file");
 
         // should use the default values
         let cli = Cli {
@@ -195,7 +195,7 @@ pub mod test {
         }"#;
 
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{json}").expect("Failed to write to tmp file");
 
         let cli = Cli {
             config: tmpfile.path().to_owned(),
@@ -220,7 +220,7 @@ pub mod test {
         "#;
 
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{json}").expect("Failed to write to tmp file");
 
         // should use the default values
         let cli = Cli {
@@ -259,7 +259,7 @@ pub mod test {
         }       
         "#;
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
-        writeln!(tmpfile, "{}", json).expect("Failed to write to tmp file");
+        writeln!(tmpfile, "{json}").expect("Failed to write to tmp file");
 
         // should use the default values
         let cli = Cli {

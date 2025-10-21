@@ -104,7 +104,9 @@ fn connection_count_test(env: TestEnv) {
         match stream {
             Ok(stream) => streams.push(stream),
             Err(_) => {
-                panic!("Could not create connection {}#. Connection is below the limit of active connections defined in the firewall, and should be accepted", connection_number);
+                panic!(
+                    "Could not create connection {connection_number}#. Connection is below the limit of active connections defined in the firewall, and should be accepted"
+                );
             }
         }
     }

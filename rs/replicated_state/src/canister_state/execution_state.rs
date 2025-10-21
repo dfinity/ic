@@ -1,11 +1,12 @@
+pub mod proto;
+
 use crate::hash::ic_hashtree_leaf_hash;
-use crate::{canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from, NumWasmPages, PageMap};
+use crate::{NumWasmPages, PageMap, canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from};
 use ic_management_canister_types_private::Global;
-use ic_protobuf::{proxy::ProxyDecodeError, state::canister_state_bits::v1 as pb};
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    methods::{SystemMethod, WasmMethod},
     CountBytes, ExecutionRound, NumBytes,
+    methods::{SystemMethod, WasmMethod},
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -120,24 +121,6 @@ impl FromIterator<WasmMethod> for ExportedFunctions {
     }
 }
 
-impl From<&ExportedFunctions> for Vec<pb::WasmMethod> {
-    fn from(item: &ExportedFunctions) -> Self {
-        item.exported_functions.iter().map(From::from).collect()
-    }
-}
-
-impl TryFrom<Vec<pb::WasmMethod>> for ExportedFunctions {
-    type Error = ProxyDecodeError;
-    fn try_from(value: Vec<pb::WasmMethod>) -> Result<Self, Self::Error> {
-        Ok(ExportedFunctions::new(
-            value
-                .into_iter()
-                .map(TryFrom::try_from)
-                .collect::<Result<_, _>>()?,
-        ))
-    }
-}
-
 /// Represent a wasm binary.
 #[derive(Debug, ValidateEq)]
 pub struct WasmBinary {
@@ -214,8 +197,7 @@ impl Memory {
             Ok(())
         } else {
             Err(format!(
-                "The page map size {} exceeds the memory size {}",
-                page_map_bytes, memory_bytes
+                "The page map size {page_map_bytes} exceeds the memory size {memory_bytes}"
             ))
         }
     }
@@ -293,28 +275,6 @@ pub enum NextScheduledMethod {
     GlobalTimer = 1,
     Heartbeat = 2,
     Message = 3,
-}
-
-impl From<pb::NextScheduledMethod> for NextScheduledMethod {
-    fn from(val: pb::NextScheduledMethod) -> Self {
-        match val {
-            pb::NextScheduledMethod::Unspecified | pb::NextScheduledMethod::GlobalTimer => {
-                NextScheduledMethod::GlobalTimer
-            }
-            pb::NextScheduledMethod::Heartbeat => NextScheduledMethod::Heartbeat,
-            pb::NextScheduledMethod::Message => NextScheduledMethod::Message,
-        }
-    }
-}
-
-impl From<NextScheduledMethod> for pb::NextScheduledMethod {
-    fn from(val: NextScheduledMethod) -> Self {
-        match val {
-            NextScheduledMethod::GlobalTimer => pb::NextScheduledMethod::GlobalTimer,
-            NextScheduledMethod::Heartbeat => pb::NextScheduledMethod::Heartbeat,
-            NextScheduledMethod::Message => pb::NextScheduledMethod::Message,
-        }
-    }
 }
 
 impl NextScheduledMethod {
@@ -485,8 +445,7 @@ impl ExecutionState {
 
     // Returns the global memory currently used by the `ExecutionState`.
     pub fn global_memory_usage(&self) -> NumBytes {
-        // We use 8 bytes per global.
-        let globals_size_bytes = 8 * self.exported_globals.len() as u64;
+        let globals_size_bytes = size_of::<Global>() as u64 * self.exported_globals.len() as u64;
         NumBytes::from(globals_size_bytes)
     }
 
@@ -548,29 +507,6 @@ pub enum CustomSectionType {
     Private = 2,
 }
 
-impl From<&CustomSectionType> for pb::CustomSectionType {
-    fn from(item: &CustomSectionType) -> Self {
-        match item {
-            CustomSectionType::Public => pb::CustomSectionType::Public,
-            CustomSectionType::Private => pb::CustomSectionType::Private,
-        }
-    }
-}
-
-impl TryFrom<pb::CustomSectionType> for CustomSectionType {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb::CustomSectionType) -> Result<Self, Self::Error> {
-        match item {
-            pb::CustomSectionType::Public => Ok(CustomSectionType::Public),
-            pb::CustomSectionType::Private => Ok(CustomSectionType::Private),
-            pb::CustomSectionType::Unspecified => Err(ProxyDecodeError::ValueOutOfRange {
-                typ: "CustomSectionType::Unspecified",
-                err: "Encountered error while decoding CustomSection type".to_string(),
-            }),
-        }
-    }
-}
-
 /// Represents the data a custom section holds.
 #[derive(Clone, Eq, PartialEq, Debug, serde::Deserialize, serde::Serialize)]
 pub struct CustomSection {
@@ -604,38 +540,6 @@ impl CustomSection {
 impl CountBytes for CustomSection {
     fn count_bytes(&self) -> usize {
         size_of_val(&self.visibility) + self.content.len()
-    }
-}
-
-impl From<&CustomSection> for pb::WasmCustomSection {
-    fn from(item: &CustomSection) -> Self {
-        Self {
-            visibility: pb::CustomSectionType::from(&item.visibility).into(),
-            content: item.content.clone(),
-            hash: Some(item.hash.to_vec()),
-        }
-    }
-}
-
-impl TryFrom<pb::WasmCustomSection> for CustomSection {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb::WasmCustomSection) -> Result<Self, Self::Error> {
-        let visibility = CustomSectionType::try_from(
-            pb::CustomSectionType::try_from(item.visibility).unwrap_or_default(),
-        )?;
-        Ok(Self {
-            visibility,
-            hash: match item.hash {
-                Some(hash_bytes) => hash_bytes.try_into().map_err(|h: Vec<u8>| {
-                    ProxyDecodeError::InvalidDigestLength {
-                        expected: 32,
-                        actual: h.len(),
-                    }
-                })?,
-                None => ic_hashtree_leaf_hash(&item.content),
-            },
-            content: item.content,
-        })
     }
 }
 
@@ -703,42 +607,12 @@ impl Default for WasmMetadata {
     }
 }
 
-impl From<&WasmMetadata> for pb::WasmMetadata {
-    fn from(item: &WasmMetadata) -> Self {
-        let custom_sections = item
-            .custom_sections
-            .iter()
-            .map(|(name, custom_section)| {
-                (name.clone(), pb::WasmCustomSection::from(custom_section))
-            })
-            .collect();
-        Self { custom_sections }
-    }
-}
-
 impl FromIterator<(std::string::String, CustomSection)> for WasmMetadata {
     fn from_iter<T>(iter: T) -> WasmMetadata
     where
         T: IntoIterator<Item = (String, CustomSection)>,
     {
         WasmMetadata::new(BTreeMap::from_iter(iter))
-    }
-}
-
-impl TryFrom<pb::WasmMetadata> for WasmMetadata {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb::WasmMetadata) -> Result<Self, Self::Error> {
-        let custom_sections = item
-            .custom_sections
-            .into_iter()
-            .map(
-                |(name, custom_section)| match CustomSection::try_from(custom_section) {
-                    Ok(custom_section) => Ok((name, custom_section)),
-                    Err(err) => Err(err),
-                },
-            )
-            .collect::<Result<_, _>>()?;
-        Ok(WasmMetadata::new(custom_sections))
     }
 }
 

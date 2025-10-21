@@ -15,9 +15,10 @@ Success::
 2. Received failed to connect error from application subnet.
 
 end::catalog[] */
+#![allow(deprecated)]
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use canister_http::*;
 use dfn_candid::candid_one;
 use ic_cdk::api::call::RejectionCode;
@@ -28,7 +29,7 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::{get_dependency_path, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
+    test_env_api::{READY_WAIT_TIMEOUT, RETRY_BACKOFF, get_dependency_path},
     universal_vm::UniversalVm,
 };
 use ic_system_test_driver::systest;

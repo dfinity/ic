@@ -38,7 +38,6 @@ else
 fi
 
 IMAGE="ghcr.io/dfinity/ic-build"
-BUILD_ARGS=(--bazel)
 CTR=0
 while test $# -gt $CTR; do
     case "$1" in
@@ -76,7 +75,7 @@ if ! sudo podman "${PODMAN_ARGS[@]}" image exists $IMAGE; then
             sudo podman "${PODMAN_ARGS[@]}" "$@" --network=host
         }
         export -f docker
-        PODMAN_ARGS="${PODMAN_ARGS[@]}" "$REPO_ROOT"/ci/container/build-image.sh "${BUILD_ARGS[@]}"
+        PODMAN_ARGS="${PODMAN_ARGS[@]}" "$REPO_ROOT"/ci/container/build-image.sh
         unset -f docker
     fi
 fi
@@ -94,6 +93,7 @@ PODMAN_RUN_ARGS=(
 
     -u "$(id -u):$(id -g)"
     -e HOSTUSER="$USER"
+    -e HOSTHOSTNAME="$HOSTNAME"
     -e VERSION="${VERSION:-$(git rev-parse HEAD)}"
     --hostname=devenv-container
     --add-host devenv-container:127.0.0.1

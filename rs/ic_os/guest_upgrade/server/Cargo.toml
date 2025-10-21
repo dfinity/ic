@@ -1,0 +1,29 @@
+[package]
+name = "guest_upgrade_server"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+attestation = { path = "../../attestation" }
+config = { path = "../../config" }
+config_types = { path = "../../config_types" }
+der = { workspace = true }
+guest_upgrade_shared = { path = "../shared" }
+ic-interfaces-registry = { path = "../../../interfaces/registry" }
+ic_sev = { path = "../../sev" }
+rcgen = { workspace = true }
+sev = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tonic = { workspace = true, features = ["default"] }
+vsock_lib = { path = "../../vsock/vsock_lib" }
+x509-parser = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+tokio-rustls = { workspace = true }
+rustls = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true, features = ["add-extension", "util"] }
+http-body-util = { workspace = true }
+

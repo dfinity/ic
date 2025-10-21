@@ -6,8 +6,8 @@ use ic_crypto_sha2::Sha256;
 use ic_crypto_tree_hash::{Digest, LabeledTree};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::{
-    crypto::{AlgorithmId, CryptoError, CryptoResult},
     CanisterId,
+    crypto::{AlgorithmId, CryptoError, CryptoResult},
 };
 use std::convert::TryFrom;
 
@@ -70,7 +70,7 @@ fn parse_pubkey_bytes(pubkey_bytes: &PublicKeyBytes) -> CryptoResult<(CanisterId
     let pk = PublicKey::try_from(pubkey_bytes).map_err(|e| CryptoError::MalformedPublicKey {
         algorithm: AlgorithmId::IcCanisterSignature,
         key_bytes: Some(pubkey_bytes.0.clone()),
-        internal_error: format!("{:?}", e),
+        internal_error: format!("{e:?}"),
     })?;
     Ok((pk.signing_canister_id(), pk.into_seed()))
 }
@@ -89,7 +89,7 @@ fn parse_signature_bytes(sig: &SignatureBytes) -> CryptoResult<Signature> {
     serde_cbor::from_slice::<Signature>(&sig.0).map_err(|err| CryptoError::MalformedSignature {
         algorithm: AlgorithmId::IcCanisterSignature,
         sig_bytes: sig.0.clone(),
-        internal_error: format!("failed to parse signature CBOR: {}", err),
+        internal_error: format!("failed to parse signature CBOR: {err}"),
     })
 }
 
@@ -112,7 +112,7 @@ fn verify_certified_data(
         | CertificateValidationError::MalformedHashTree(_) => CryptoError::MalformedSignature {
             algorithm: AlgorithmId::IcCanisterSignature,
             sig_bytes: sig.0.clone(),
-            internal_error: format!("malformed certificate: {}", err),
+            internal_error: format!("malformed certificate: {err}"),
         },
         CertificateValidationError::InvalidSignature(_)
         | CertificateValidationError::CertifiedDataMismatch { .. }
@@ -125,7 +125,7 @@ fn verify_certified_data(
             algorithm: AlgorithmId::IcCanisterSignature,
             public_key_bytes: pk.0.clone(),
             sig_bytes: sig.0.clone(),
-            internal_error: format!("certificate verification failed: {}", err),
+            internal_error: format!("certificate verification failed: {err}"),
         },
     })?;
     Ok(())
@@ -139,7 +139,7 @@ fn canister_sig_tree(
         CryptoError::MalformedSignature {
             algorithm: AlgorithmId::IcCanisterSignature,
             sig_bytes: sig.0.clone(),
-            internal_error: format!("failed to flatten signature hash tree: {:?}", err),
+            internal_error: format!("failed to flatten signature hash tree: {err:?}"),
         }
     })
 }

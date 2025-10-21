@@ -1,23 +1,23 @@
 use assert_matches::assert_matches;
 use ic_canonical_state::LabelLike;
-use ic_crypto_tree_hash::{flat_map::FlatMap, Label, LabeledTree};
+use ic_crypto_tree_hash::{Label, LabeledTree, flat_map::FlatMap};
 use ic_interfaces_certified_stream_store::DecodeStreamError;
 use ic_interfaces_certified_stream_store_mocks::MockCertifiedStreamStore;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{messaging::xnet::v1, proxy::ProtoProxy};
 use ic_replicated_state::Stream;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_metrics::{metric_vec, HistogramStats};
+use ic_test_utilities_metrics::{HistogramStats, metric_vec};
 use ic_test_utilities_state::arb_stream_slice;
 use ic_test_utilities_types::xnet::StreamSliceBuilder;
 use ic_types::messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT;
 use ic_types::xnet::{CertifiedStreamSlice, StreamIndex};
 use ic_types::{CountBytes, RegistryVersion, SubnetId};
 use ic_xnet_payload_builder::certified_slice_pool::{
-    certified_slice_count_bytes, testing, CertifiedSliceError, CertifiedSlicePool, InvalidAppend,
-    InvalidSlice, UnpackedStreamSlice, LABEL_STATUS, STATUS_NONE, STATUS_SUCCESS,
+    CertifiedSliceError, CertifiedSlicePool, InvalidAppend, InvalidSlice, LABEL_STATUS,
+    STATUS_NONE, STATUS_SUCCESS, UnpackedStreamSlice, certified_slice_count_bytes, testing,
 };
-use ic_xnet_payload_builder::{max_message_index, ExpectedIndices, MAX_SIGNALS};
+use ic_xnet_payload_builder::{ExpectedIndices, MAX_SIGNALS, max_message_index};
 use maplit::btreemap;
 use mockall::predicate::{always, eq};
 use proptest::prelude::*;
@@ -306,8 +306,7 @@ fn invalid_slice(
         match UnpackedStreamSlice::try_from(invalid_slice) {
             Err(CertifiedSliceError::InvalidPayload(reason)) => assert_eq!(expected, reason),
             actual => panic!(
-                "Expected Err(CertifiedSliceError::InvalidPayload((\"{:?}\")), got {:?}",
-                expected, actual
+                "Expected Err(CertifiedSliceError::InvalidPayload((\"{expected:?}\")), got {actual:?}"
             ),
         }
     }
@@ -368,7 +367,7 @@ fn invalid_slice(
                     .map(|(k, v)| (k.clone(), v.clone()))
                     .collect();
                 messages_vec.insert(0, (from.decrement().to_label(), LabeledTree::Leaf(vec![])));
-                std::mem::swap(messages_tree, &mut FlatMap::from_key_values(messages_vec));
+                *messages_tree = FlatMap::from_key_values(messages_vec);
             });
 
             if from > stream_begin {
@@ -385,8 +384,7 @@ fn invalid_slice(
                 }) {
                     Err(CertifiedSliceError::WitnessPruningFailed(_)) => {}
                     actual => panic!(
-                        "Expected Err(CertifiedSliceError::WitnessPruningFailed(_), got {:?}",
-                        actual
+                        "Expected Err(CertifiedSliceError::WitnessPruningFailed(_), got {actual:?}"
                     ),
                 }
 
@@ -395,8 +393,7 @@ fn invalid_slice(
                 match unpacked.take_prefix(Some(1), None) {
                     Err(CertifiedSliceError::WitnessPruningFailed(_)) => {}
                     actual => panic!(
-                        "Expected Err(CertifiedSliceError::WitnessPruningFailed(_), got {:?}",
-                        actual
+                        "Expected Err(CertifiedSliceError::WitnessPruningFailed(_), got {actual:?}"
                     ),
                 }
             } else {
@@ -404,8 +401,7 @@ fn invalid_slice(
                 match UnpackedStreamSlice::try_from(slice_with_extra_message) {
                     Err(CertifiedSliceError::InvalidPayload(InvalidSlice::InvalidBounds)) => {}
                     actual => panic!(
-                        "Expected Err(CertifiedSliceError::InvalidPayload(InvalidBounds), got {:?}",
-                        actual
+                        "Expected Err(CertifiedSliceError::InvalidPayload(InvalidBounds), got {actual:?}"
                     ),
                 }
             }
@@ -442,11 +438,7 @@ fn slice_accurate_count_bytes(
         let expected_max = expected * (100 + error_percent) / 100 + absolute_error;
         assert!(
             expected_min <= actual && actual <= expected_max,
-            "Expecting estimated size to be within {}% + {} of {}, was {}",
-            error_percent,
-            absolute_error,
-            expected,
-            actual,
+            "Expecting estimated size to be within {error_percent}% + {absolute_error} of {expected}, was {actual}",
         );
     }
 

@@ -18,7 +18,7 @@ fn test_chunks() {
     // Step 3.1: Inspect the keys.
     // The expected value is based on the chunk size being a little bit less
     // that 2e6.
-    assert_eq!(keys.len(), 3, "{:#?}", keys);
+    assert_eq!(keys.len(), 3, "{keys:#?}");
     assert_eq!(keys, *MEGA_BLOB_CHUNK_KEYS);
 
     // Step 3.2: Inspect reconstituted blob.

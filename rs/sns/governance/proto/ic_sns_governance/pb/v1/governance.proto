@@ -443,8 +443,8 @@ message RegisterDappCanisters {
   repeated ic_base_types.pb.v1.PrincipalId canister_ids = 1;
 }
 
-message PreciseValue {
-  oneof precise_value {
+message Precise {
+  oneof value {
     bool bool = 1;
     bytes blob = 2;
     string text = 3;
@@ -456,21 +456,76 @@ message PreciseValue {
 }
 
 message PreciseArray {
-  repeated PreciseValue array = 1;
+  repeated Precise array = 1;
 }
 
 message PreciseMap {
-  map<string, PreciseValue> map = 1;
+  map<string, Precise> map = 1;
 }
 
 message ExtensionInit {
-  optional PreciseValue value = 1;
+  optional Precise value = 1;
 }
 
 message RegisterExtension {
   optional ChunkedCanisterWasm chunked_canister_wasm = 1;
 
   optional ExtensionInit extension_init = 2;
+}
+
+// WASM specification that can be either direct bytes or chunked
+message Wasm {
+  oneof wasm {
+    // Use this field if the WASM fits within the proposal size limit.
+    bytes bytes = 1;
+    // If the entire WASM does not fit into the 2 MiB ingress limit, use this instead.
+    ChunkedCanisterWasm chunked = 2;
+  }
+}
+
+message ExtensionUpgradeArg {
+  optional Precise value = 1;
+}
+
+message UpgradeExtension {
+  // The id of the extension canister to upgrade.
+  optional ic_base_types.pb.v1.PrincipalId extension_canister_id = 1;
+
+  // Arguments passed to the post-upgrade method of the new wasm module.
+  optional ExtensionUpgradeArg canister_upgrade_arg = 2;
+
+  // The new wasm module that the extension canister is upgraded to.
+  optional Wasm wasm = 3;
+}
+
+message ExtensionOperationArg {
+  optional Precise value = 1;
+}
+
+message ExecuteExtensionOperation {
+  optional ic_base_types.pb.v1.PrincipalId extension_canister_id = 1;
+
+  optional string operation_name = 2;
+
+  optional ExtensionOperationArg operation_arg = 3;
+}
+
+// Specification for an SNS extension
+message ExtensionSpec {
+  // The name of the extension
+  optional string name = 1;
+  // The version of the extension.
+  optional uint64 version = 2;
+  // The topic that the extension's registration proposal will be under
+  optional Topic topic = 3;
+  // The type of the extension, which determines its standard operations.
+  optional ExtensionType extension_type = 4;
+}
+
+// Types of extensions that can be registered
+enum ExtensionType {
+  EXTENSION_TYPE_UNSPECIFIED = 0;
+  EXTENSION_TYPE_TREASURY_MANAGER = 1;
 }
 
 // A proposal to remove a list of dapps from the SNS and assign them to new controllers
@@ -664,6 +719,16 @@ message Proposal {
     //
     // Id = 17.
     RegisterExtension register_extension = 21;
+
+    // Execute an SNS extension's operation.
+    //
+    // Id = 18.
+    ExecuteExtensionOperation execute_extension_operation = 22;
+
+    // Upgrade an SNS extension canister.
+    //
+    // Id = 19.
+    UpgradeExtension upgrade_extension = 23;
   }
 }
 
@@ -863,6 +928,8 @@ message ProposalData {
   // Id 14 - ManageDappCanisterSettings proposals.
   // Id 15 - AdvanceSnsTargetVersion proposals.
   // Id 16 - SetTopicsForCustomProposals proposals.
+  // Id 17 - RegisterExtension.
+  // Id 18 - ExecuteExtensionOperation.
   uint64 action = 1;
 
   // This is stored here temporarily. It is also stored on the map
@@ -2496,4 +2563,9 @@ enum Topic {
   TOPIC_TREASURY_ASSET_MANAGEMENT = 6;
   // Critical proposals related to dapp operations
   TOPIC_CRITICAL_DAPP_OPERATIONS = 7;
+}
+
+message AddAllowedExtensionRequest {
+  bytes wasm_hash = 1;
+  ExtensionSpec spec = 2;
 }

@@ -3,14 +3,14 @@ use crate::{
     environment::{CanisterClients, CanisterEnvironment},
     logs::{ERROR, INFO},
     pb::v1::{
-        error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
-        set_mode_call_result::SetModeResult,
-        settle_neurons_fund_participation_result,
-        sns_neuron_recipe::{ClaimedStatus, Investor},
         BuyerState, CfInvestment, CfNeuron, CfParticipant, DirectInvestment,
         ErrorRefundIcpResponse, FinalizeSwapResponse, Init, Lifecycle, NeuronId as SwapNeuronId,
         Params, SetDappControllersCallResult, SetModeCallResult,
         SettleNeuronsFundParticipationResult, SnsNeuronRecipe, SweepResult, TransferableAmount,
+        error_refund_icp_response, set_dapp_controllers_call_result, set_mode_call_result,
+        set_mode_call_result::SetModeResult,
+        settle_neurons_fund_participation_result,
+        sns_neuron_recipe::{ClaimedStatus, Investor},
     },
     swap::is_valid_principal,
 };
@@ -20,7 +20,7 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_canisters::ledger::ICRC1Ledger;
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_proto::pb::v1::Principals;
-use ic_nervous_system_runtime::DfnRuntime;
+use ic_nervous_system_runtime::CdkRuntime;
 use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::str::FromStr;
@@ -28,8 +28,7 @@ use std::str::FromStr;
 pub fn validate_principal(p: &str) -> Result<(), String> {
     let _ = PrincipalId::from_str(p).map_err(|x| {
         format!(
-            "Couldn't validate PrincipalId. String \"{}\" could not be converted to PrincipalId: {}",
-            p, x
+            "Couldn't validate PrincipalId. String \"{p}\" could not be converted to PrincipalId: {x}"
         )
     })?;
     Ok(())
@@ -38,8 +37,7 @@ pub fn validate_principal(p: &str) -> Result<(), String> {
 pub fn validate_canister_id(p: &str) -> Result<(), String> {
     let _pp = PrincipalId::from_str(p).map_err(|x| {
         format!(
-            "Couldn't validate CanisterId. String \"{}\" could not be converted to PrincipalId: {}",
-            p, x
+            "Couldn't validate CanisterId. String \"{p}\" could not be converted to PrincipalId: {x}"
         )
     })?;
     Ok(())
@@ -140,7 +138,7 @@ impl Init {
             .expect("could not get canister id of icp ledger")
     }
 
-    pub fn environment(&self) -> Result<impl CanisterEnvironment, String> {
+    pub fn environment(&self) -> Result<impl CanisterEnvironment + use<>, String> {
         use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
         use ic_nervous_system_clients::ledger_client::LedgerCanister;
 
@@ -163,7 +161,7 @@ impl Init {
             let icp_ledger_canister_id = self
                 .icp_ledger()
                 .map_err(|s| format!("unable to get icp ledger canister id: {s}"))?;
-            IcpLedgerCanister::<DfnRuntime>::new(icp_ledger_canister_id)
+            IcpLedgerCanister::<CdkRuntime>::new(icp_ledger_canister_id)
         };
 
         let sns_ledger = {
@@ -402,10 +400,11 @@ impl Params {
         }
 
         // 100 * 1B * E8S should fit in a u64.
-        assert!(self
-            .max_icp_e8s
-            .checked_mul(self.min_participants as u64)
-            .is_some());
+        assert!(
+            self.max_icp_e8s
+                .checked_mul(self.min_participants as u64)
+                .is_some()
+        );
 
         if self.max_icp_e8s
             < (self.min_participants as u64).saturating_mul(self.min_participant_icp_e8s)
@@ -491,7 +490,7 @@ impl TryFrom<&Init> for Params {
     type Error = String;
     fn try_from(init: &Init) -> Result<Self, Self::Error> {
         let e = |field_name: &str| -> String {
-            format!("Type `Params` requires `Swap.init.{}`.", field_name)
+            format!("Type `Params` requires `Swap.init.{field_name}`.")
         };
         let min_participants = init.min_participants.ok_or_else(|| e("min_participants"))?;
         let min_participant_icp_e8s = init
@@ -566,7 +565,7 @@ impl BuyerState {
     }
 
     pub fn set_amount_icp_e8s(&mut self, val: u64) {
-        if let Some(ref mut icp) = &mut self.icp {
+        if let Some(icp) = &mut self.icp {
             icp.amount_e8s = val;
         } else {
             self.icp = Some(TransferableAmount {
@@ -585,13 +584,19 @@ impl TransferableAmount {
         if self.transfer_start_timestamp_seconds == 0 && self.transfer_success_timestamp_seconds > 0
         {
             // Successful transfer without start time.
-            return Err(format!("Invariant violation: transfer_start_timestamp_seconds is zero but transfer_success_timestamp_seconds ({}) is non-zero", self.transfer_success_timestamp_seconds));
+            return Err(format!(
+                "Invariant violation: transfer_start_timestamp_seconds is zero but transfer_success_timestamp_seconds ({}) is non-zero",
+                self.transfer_success_timestamp_seconds
+            ));
         }
         if self.transfer_start_timestamp_seconds > self.transfer_success_timestamp_seconds
             && self.transfer_success_timestamp_seconds > 0
         {
             // Successful transfer before the transfer started.
-            return Err(format!("Invariant violation: transfer_start_timestamp_seconds ({}) > transfer_success_timestamp_seconds ({}) > 0", self.transfer_start_timestamp_seconds, self.transfer_success_timestamp_seconds));
+            return Err(format!(
+                "Invariant violation: transfer_start_timestamp_seconds ({}) > transfer_success_timestamp_seconds ({}) > 0",
+                self.transfer_start_timestamp_seconds, self.transfer_success_timestamp_seconds
+            ));
         }
         Ok(())
     }
@@ -1159,9 +1164,8 @@ impl TryFrom<crate::pb::v1::settle_neurons_fund_participation_response::NeuronsF
                 )
             }
             _ => Err(format!(
-                "Expected all fields to be set. nns_neuron_id({:?}), \
-                amount_icp_e8s({:?}), is_capped({:?})",
-                nns_neuron_id, amount_icp_e8s, is_capped
+                "Expected all fields to be set. nns_neuron_id({nns_neuron_id:?}), \
+                amount_icp_e8s({amount_icp_e8s:?}), is_capped({is_capped:?})"
             )),
         }
     }
@@ -1178,7 +1182,7 @@ mod tests {
         swap::MAX_LIST_DIRECT_PARTICIPANTS_LIMIT,
     };
     use ic_nervous_system_common::{
-        assert_is_err, assert_is_ok, E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS,
+        E8, ONE_DAY_SECONDS, START_OF_2022_TIMESTAMP_SECONDS, assert_is_err, assert_is_ok,
     };
     use lazy_static::lazy_static;
     use std::mem;
@@ -1283,19 +1287,16 @@ mod tests {
         assert!(
             participants_per_message >= MAX_LIST_DIRECT_PARTICIPANTS_LIMIT as usize,
             "The currently compiled MAX_LIST_DIRECT_PARTICIPANTS_LIMIT is greater than what can \
-            fit in a single inter canister message. Calculated participants per message: {}. \
-            Configured limit: {}",
-            participants_per_message,
-            MAX_LIST_DIRECT_PARTICIPANTS_LIMIT
+            fit in a single inter canister message. Calculated participants per message: {participants_per_message}. \
+            Configured limit: {MAX_LIST_DIRECT_PARTICIPANTS_LIMIT}"
         );
 
         let remainder = participants_per_message - MAX_LIST_DIRECT_PARTICIPANTS_LIMIT as usize;
         assert!(
             remainder < 5000,
-            "An increment of more than 5000 participants ({}) can be added to the \
+            "An increment of more than 5000 participants ({remainder}) can be added to the \
             ListDirectParticipantsResponse without reaching the max message size. Update \
-            MAX_LIST_DIRECT_PARTICIPANTS_LIMIT and the corresponding API docs",
-            remainder
+            MAX_LIST_DIRECT_PARTICIPANTS_LIMIT and the corresponding API docs"
         );
     }
 
@@ -1335,9 +1336,11 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS
         };
-        assert!(params
-            .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
-            .is_err());
+        assert!(
+            params
+                .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
+                .is_err()
+        );
     }
 
     #[test]
@@ -1400,9 +1403,11 @@ mod tests {
             sale_delay_seconds: Some(0),
             ..PARAMS
         };
-        assert!(params
-            .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
-            .is_err());
+        assert!(
+            params
+                .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
+                .is_err()
+        );
     }
 
     #[test]
@@ -1443,9 +1448,11 @@ mod tests {
             sale_delay_seconds: Some(1),
             ..PARAMS
         };
-        assert!(params
-            .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
-            .is_err());
+        assert!(
+            params
+                .is_valid_if_initiated_at(START_OF_2022_TIMESTAMP_SECONDS)
+                .is_err()
+        );
     }
 
     #[test]
@@ -1456,13 +1463,13 @@ mod tests {
         let after_open = [Committed, Aborted];
 
         for lifecycle in before_open {
-            assert!(lifecycle.is_before_open(), "{:?}", lifecycle);
-            assert!(!lifecycle.is_after_open(), "{:?}", lifecycle);
+            assert!(lifecycle.is_before_open(), "{lifecycle:?}");
+            assert!(!lifecycle.is_after_open(), "{lifecycle:?}");
         }
 
         for lifecycle in after_open {
-            assert!(lifecycle.is_after_open(), "{:?}", lifecycle);
-            assert!(!lifecycle.is_before_open(), "{:?}", lifecycle);
+            assert!(lifecycle.is_after_open(), "{lifecycle:?}");
+            assert!(!lifecycle.is_before_open(), "{lifecycle:?}");
         }
 
         assert!(!Open.is_before_open());

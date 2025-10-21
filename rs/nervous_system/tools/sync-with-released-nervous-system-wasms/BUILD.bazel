@@ -17,9 +17,11 @@ DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:ic-agent",
     "@crate_index//:ic-wasm__ic-wasm",
+    "@crate_index//:reqwest",
     "@crate_index//:rgb",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
+    "@crate_index//:sha2",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
 ]
