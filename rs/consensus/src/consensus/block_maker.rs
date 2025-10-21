@@ -856,10 +856,10 @@ mod tests {
             pool.insert_validated(next_beacon.clone());
             // Make and insert beacon at height 10
             let summary_beacon = RandomBeacon::from_parent(&next_beacon);
+            pool.insert_validated(summary_beacon.clone());
             // Make summary at height 10
             let summary =
                 pool.make_next_block_from_parent(next_proposal.content.get_value(), Rank(0));
-            pool.insert_validated(summary_beacon.clone());
             let cup = CatchUpPackage {
                 content: CatchUpContent::new(
                     HashedBlock::new(
