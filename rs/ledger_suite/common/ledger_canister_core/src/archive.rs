@@ -20,6 +20,7 @@ pub const DEFAULT_CYCLES_FOR_ARCHIVE_CREATION: u64 = 10_000_000_000_000;
 /// - The subnet finalization rate (blocks per second)
 /// - The transaction rate of the ledger
 /// - The number of instructions per transaction
+///
 /// E.g., for a 37-node subnet, with two rounds per second, 1M instructions per transaction, and 10
 /// transactions per round, 10 trillion cycles would last for about 48 hours.
 pub const MIN_LEDGER_LIQUID_CYCLES_AFTER_ARCHIVE_CREATION: u128 = 10_000_000_000_000;
