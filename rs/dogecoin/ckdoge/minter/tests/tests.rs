@@ -212,6 +212,16 @@ mod deposit {
 }
 
 #[test]
+fn should_estimate_doge_transaction_fee() {
+    let setup = Setup::default();
+    let minter = setup.minter();
+
+    minter
+        .assert_that_metrics()
+        .assert_contains_metric_matching("ckbtc_minter_median_fee_per_vbyte 1");
+}
+
+#[test]
 fn should_get_logs() {
     let setup = Setup::default();
     let minter = setup.minter();
