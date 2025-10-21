@@ -633,12 +633,15 @@ mod tests {
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities_consensus::IDkgStatsNoOp;
+    use ic_test_utilities_consensus::{IDkgStatsNoOp, fake::FromParent};
     use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::{HasHeight, HasVersion, dkg},
-        crypto::CryptoHash,
+        consensus::{
+            CatchUpContent, CatchUpPackage, HasHeight, HasVersion, HashedRandomBeacon, dkg,
+        },
+        crypto::{CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf},
+        signature::ThresholdSignature,
         *,
     };
     use rstest::rstest;
@@ -813,6 +816,148 @@ mod tests {
             // is already available.
             assert!(run_block_maker().is_none());
         })
+    }
+
+    #[test]
+    fn test_build_batch_payload() {
+        let subnet_id = subnet_test_id(0);
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let node_ids: Vec<_> = (0..13).map(node_test_id).collect();
+            let dkg_interval_length = 9;
+            let Dependencies {
+                mut pool,
+                membership,
+                registry,
+                crypto,
+                time_source,
+                replica_config,
+                state_manager,
+                dkg_pool,
+                idkg_pool,
+                ..
+            } = dependencies_with_subnet_params(
+                pool_config,
+                subnet_id,
+                vec![(
+                    1,
+                    SubnetRecordBuilder::from(&node_ids)
+                        .with_dkg_interval_length(dkg_interval_length)
+                        .build(),
+                )],
+            );
+
+            pool.advance_round_normal_operation_n(8);
+
+            // Make block at height 9
+            let next_proposal = pool.make_next_block();
+            assert_eq!(next_proposal.height().get(), 9);
+            // Make and insert beacon at height 9
+            let next_beacon = pool.make_next_beacon();
+            pool.insert_validated(next_beacon.clone());
+            // Make and insert beacon at height 10
+            let summary_beacon = RandomBeacon::from_parent(&next_beacon);
+            // Make summary at height 10
+            let summary =
+                pool.make_next_block_from_parent(next_proposal.content.get_value(), Rank(0));
+            pool.insert_validated(summary_beacon.clone());
+            let cup = CatchUpPackage {
+                content: CatchUpContent::new(
+                    HashedBlock::new(
+                        ic_types::crypto::crypto_hash,
+                        summary.content.get_value().clone(),
+                    ),
+                    HashedRandomBeacon::new(ic_types::crypto::crypto_hash, summary_beacon.clone()),
+                    CryptoHashOf::from(CryptoHash(Vec::new())),
+                    None,
+                ),
+                signature: ThresholdSignature {
+                    signer: summary_beacon.signature.signer.clone(),
+                    signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+                },
+            };
+            // Insert the Summary before the next proposal
+            pool.notarize(&summary);
+            pool.insert_validated(summary);
+
+            // Payload builder always returns a batch payload with some canister HTTP data
+            let mut payload_builder = MockPayloadBuilder::new();
+            let expected_payload = BatchPayload {
+                canister_http: vec![1; 64],
+                ..Default::default()
+            };
+            payload_builder
+                .expect_get_payload()
+                .return_const(expected_payload.clone());
+            let certified_height = Height::from(1);
+            state_manager
+                .get_mut()
+                .expect_latest_certified_height()
+                .return_const(certified_height);
+
+            // Find the rank 0 blockmaker for height 11
+            let replica_config = ReplicaConfig {
+                node_id: (0..13)
+                    .map(node_test_id)
+                    .find(|node_id| {
+                        membership.get_block_maker_rank(
+                            summary_beacon.height().increment(),
+                            &summary_beacon,
+                            *node_id,
+                        ) == Ok(Some(Rank(0)))
+                    })
+                    .unwrap(),
+                subnet_id: replica_config.subnet_id,
+            };
+
+            let block_maker = BlockMaker::new(
+                Arc::clone(&time_source) as Arc<_>,
+                replica_config,
+                Arc::clone(&registry) as Arc<dyn RegistryClient>,
+                membership.clone(),
+                crypto.clone(),
+                Arc::new(payload_builder),
+                dkg_pool.clone(),
+                idkg_pool.clone(),
+                build_thread_pool(MAX_CONSENSUS_THREADS),
+                state_manager.clone(),
+                Duration::from_millis(0),
+                MetricsRegistry::new(),
+                no_op_logger(),
+            );
+
+            // Create the next block, the batch payload should be empty due to the missing past payloads
+            let proposal = {
+                let reader = PoolReader::new(&pool);
+                block_maker.on_state_change(&reader)
+            }
+            .expect("Block creation should succeed");
+            let block = proposal.content.into_inner();
+            let empty_batch_payload = &block.payload.as_ref().as_data().batch;
+            assert!(empty_batch_payload.is_empty());
+
+            // Insert the missing proposal, the batch payload should be created as expected
+            pool.insert_validated(next_proposal);
+            let proposal = {
+                let reader = PoolReader::new(&pool);
+                block_maker.on_state_change(&reader)
+            }
+            .expect("Block creation should succeed");
+            let block = proposal.content.into_inner();
+            let filled_batch_payload = &block.payload.as_ref().as_data().batch;
+            assert_eq!(filled_batch_payload, &expected_payload);
+
+            // Insert the cup at height 10, the batch payload should be empty
+            // Since payloads below the CUP are not returned
+            pool.insert_validated(cup);
+            let proposal = {
+                let reader = PoolReader::new(&pool);
+                block_maker.on_state_change(&reader)
+            }
+            .expect("Block creation should succeed");
+            let block = proposal.content.into_inner();
+            let empty_batch_payload = &block.payload.as_ref().as_data().batch;
+            assert!(empty_batch_payload.is_empty());
+        });
     }
 
     // We expect block maker to correctly detect version change and start making only empty blocks.
