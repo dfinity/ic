@@ -56,7 +56,7 @@ lazy_static! {
     // Has 1 node and one subnet, whose IDs are also lazy_static pseudo-
     // constants.
     static ref REGISTRY: Registry = _FIXTURE.0.clone();
-    static ref NODE_ID: NodeId = _FIXTURE.1.clone();
+    static ref NODE_ID: NodeId = _FIXTURE.1;
     static ref ORIGINAL_NODE_RECORD: NodeRecord = _FIXTURE.2.clone();
     static ref ORIGINAL_SUBNET_RECORD: SubnetRecord = _FIXTURE.3.clone();
 }
@@ -185,7 +185,7 @@ fn test_validate_ssh_node_state_write_access_ok() {
 #[test]
 fn test_validate_ssh_node_state_write_access_not_unique() {
     let mut ssh_node_state_write_access = GENERAL_SSH_NODE_STATE_WRITE_ACCESS.clone();
-    ssh_node_state_write_access.push(ssh_node_state_write_access.get(0).unwrap().clone());
+    ssh_node_state_write_access.push(ssh_node_state_write_access.first().unwrap().clone());
     let result = validate_ssh_node_state_write_access(&Some(ssh_node_state_write_access));
 
     match result {
