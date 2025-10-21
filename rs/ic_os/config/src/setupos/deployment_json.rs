@@ -12,7 +12,7 @@ pub struct DeploymentSettings {
     pub deployment: Deployment,
     pub logging: Logging,
     pub nns: Nns,
-    pub dev_vm_resources: VmResources,
+    pub dev_vm_resources: DevVmResources,
 }
 
 #[serde_as]
@@ -36,7 +36,7 @@ pub struct Nns {
 
 #[serde_as]
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
-pub struct VmResources {
+pub struct DevVmResources {
     #[serde_as(as = "DisplayFromStr")]
     pub memory: u32,
     /// CPU virtualization type: "kvm" or "qemu".
@@ -46,9 +46,11 @@ pub struct VmResources {
     pub nr_of_vcpus: u32,
 }
 
-impl Default for VmResources {
+impl Default for DevVmResources {
+    /// These currently match the defaults for nested tests on Farm:
+    /// (`HOSTOS_VCPUS_PER_VM / 2`, `HOSTOS_MEMORY_KIB_PER_VM / 2`)
     fn default() -> Self {
-        VmResources {
+        DevVmResources {
             memory: 16,
             cpu: "kvm".to_string(),
             nr_of_vcpus: 16,
@@ -116,7 +118,7 @@ mod test {
                 Url::parse("https://ic0.app").unwrap(),
             ],
         },
-        dev_vm_resources: VmResources {
+        dev_vm_resources: DevVmResources {
             memory: 16,
             cpu: "kvm".to_string(),
             nr_of_vcpus: 64,
@@ -139,10 +141,10 @@ mod test {
 
     #[test]
     /// Confirm that the defaults for HostOsDevSettings (the config type) and
-    /// VmResources (the type from deployment.json) are in line.
+    /// DevVmResources (the type from deployment.json) are in line.
     fn defaults_aligned() {
         let dev_settings = HostOSDevSettings::default();
-        let vm_resources = VmResources::default();
+        let vm_resources = DevVmResources::default();
 
         assert_eq!(dev_settings.vm_memory, vm_resources.memory);
         assert_eq!(dev_settings.vm_cpu, vm_resources.cpu);

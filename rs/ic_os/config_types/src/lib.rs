@@ -192,6 +192,8 @@ pub struct HostOSDevSettings {
 }
 
 impl Default for HostOSDevSettings {
+    /// These currently match the defaults for nested tests on Farm:
+    /// (`HOSTOS_VCPUS_PER_VM / 2`, `HOSTOS_MEMORY_KIB_PER_VM / 2`)
     fn default() -> Self {
         HostOSDevSettings {
             vm_memory: 16,
@@ -434,17 +436,17 @@ mod tests {
             guestos_settings: GuestOSSettings::default(),
         };
 
-        fn get_all_field_paths(prefix: &str, value: &Value, field_names: &mut HashSet<String>) {
+        fn get_all_field_paths(prefix: &str, value: &Value, field_paths: &mut HashSet<String>) {
             match value {
                 Value::Object(map) => {
                     for (key, val) in map {
-                        field_names.insert(format!("{prefix}{key}"));
-                        get_all_field_paths(&format!("{prefix}{key}."), val, field_names);
+                        field_paths.insert(format!("{prefix}{key}"));
+                        get_all_field_paths(&format!("{prefix}{key}."), val, field_paths);
                     }
                 }
                 Value::Array(arr) => {
                     for val in arr {
-                        get_all_field_paths(&format!("{prefix}[]."), val, field_names);
+                        get_all_field_paths(&format!("{prefix}[]."), val, field_paths);
                     }
                 }
                 _ => {}

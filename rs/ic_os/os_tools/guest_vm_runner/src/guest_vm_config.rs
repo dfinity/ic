@@ -1,5 +1,5 @@
 use crate::GuestVMType;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use askama::Template;
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config::hostos::guestos_config::generate_guestos_config;
@@ -16,6 +16,12 @@ const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
 
 const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log";
 const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
+
+#[cfg(not(feature = "dev"))]
+const DEFAULT_VM_MEMORY_GB: u32 = 490;
+#[cfg(not(feature = "dev"))]
+const DEFAULT_VM_VCPUS: u32 = 64;
+const UPGRADE_VM_MEMORY_GB: u32 = 4;
 
 #[derive(Debug)]
 pub struct DirectBootConfig {
@@ -103,28 +109,18 @@ pub fn generate_vm_config(
         node_type,
     );
 
-    #[cfg(feature = "dev")]
-    let (cpu_domain, base_vm_memory, nr_of_vcpus) = {
-        let cpu_domain = if config.hostos_settings.hostos_dev_settings.vm_cpu == "qemu" {
-            "qemu".to_string()
-        } else {
-            "kvm".to_string()
-        };
+    let (cpu_domain, total_vm_memory, nr_of_vcpus) = vm_resources(config);
 
-        let base_vm_memory = config.hostos_settings.hostos_dev_settings.vm_memory;
-        let vm_nr_of_vcpus = config.hostos_settings.hostos_dev_settings.vm_nr_of_vcpus;
-
-        (cpu_domain, base_vm_memory, vm_nr_of_vcpus)
-    };
-    #[cfg(not(feature = "dev"))]
-    const DEFAULT_VM_MEMORY_GB: u32 = 486;
-    #[cfg(not(feature = "dev"))]
-    let (cpu_domain, base_vm_memory, nr_of_vcpus) = ("kvm".to_string(), DEFAULT_VM_MEMORY_GB, 64);
-
-    const UPGRADE_VM_MEMORY_GB: u32 = 4;
-
+    // We need 4GB for the upgrade VM. We subtract that from the total memory. This is not
+    // necessary when SEV is disabled (since no upgrade VM is needed) but mixed subnets that
+    // contain nodes with and without SEV should have the same memory settings for consistency
+    // across nodes.
+    ensure!(
+        total_vm_memory >= UPGRADE_VM_MEMORY_GB,
+        "GuestOS VM memory must be at least {UPGRADE_VM_MEMORY_GB}GB but is {total_vm_memory}GB."
+    );
     let vm_memory = match guest_vm_type {
-        GuestVMType::Default => base_vm_memory,
+        GuestVMType::Default => total_vm_memory - UPGRADE_VM_MEMORY_GB,
         GuestVMType::Upgrade => UPGRADE_VM_MEMORY_GB,
     };
 
@@ -143,6 +139,25 @@ pub fn generate_vm_config(
     }
     .render()
     .context("Failed to render GuestOS VM XML template")
+}
+
+#[cfg(feature = "dev")]
+fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
+    let cpu_domain = if config.hostos_settings.hostos_dev_settings.vm_cpu == "qemu" {
+        "qemu".to_string()
+    } else {
+        "kvm".to_string()
+    };
+
+    let total_vm_memory = config.hostos_settings.hostos_dev_settings.vm_memory;
+    let vm_nr_of_vcpus = config.hostos_settings.hostos_dev_settings.vm_nr_of_vcpus;
+
+    (cpu_domain, total_vm_memory, vm_nr_of_vcpus)
+}
+
+#[cfg(not(feature = "dev"))]
+fn vm_resources(_config: &HostOSConfig) -> (String, u32, u32) {
+    ("kvm".to_string(), DEFAULT_VM_MEMORY_GB, DEFAULT_VM_VCPUS)
 }
 
 pub fn vm_domain_name(guest_vm_type: GuestVMType) -> &'static str {

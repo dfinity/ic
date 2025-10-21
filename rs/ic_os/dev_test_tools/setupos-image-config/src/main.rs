@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 use url::Url;
 
-use config::setupos::deployment_json::{Deployment, Logging, Nns, VmResources};
+use config::setupos::deployment_json::{Deployment, DevVmResources, Logging, Nns};
 use config_types::DeploymentEnvironment;
 use partition_tools::{Partition, ext::ExtPartition, fat::FatPartition};
 use setupos_image_config::write_config;
@@ -113,8 +113,8 @@ struct CompatDeploymentSettings {
     pub deployment: Deployment,
     pub logging: Logging,
     pub nns: Nns,
-    pub vm_resources: Option<VmResources>,
-    pub dev_vm_resources: Option<VmResources>,
+    pub vm_resources: Option<DevVmResources>,
+    pub dev_vm_resources: Option<DevVmResources>,
 }
 
 fn update_deployment(path: &Path, cfg: &DeploymentConfig) -> Result<(), Error> {
