@@ -1117,6 +1117,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "regex": crate.spec(
                 version = "^1.11.0",
             ),
+            "regex-lite": crate.spec(
+                version = "^0.1.8",
+            ),
             "reqwest": crate.spec(
                 version = "^0.12.15",
                 default_features = False,
