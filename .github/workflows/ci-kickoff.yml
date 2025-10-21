@@ -13,6 +13,7 @@ on:
 jobs:
   ci-main:
     name: CI Main
+    # run on all events except for forked PRs
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/ci-main.yml
     secrets: inherit
@@ -24,6 +25,7 @@ jobs:
 
   ci-pr-only:
     name: CI PR Only
+    # only run on PRs and not forked PRs
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     uses: ./.github/workflows/ci-pr-only.yml
     secrets: inherit
