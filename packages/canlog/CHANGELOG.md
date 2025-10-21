@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Change the library used to parse regex to reduce the binary size (`regex_lite` instead of `regex`) and introduce a custom error type `InvalidRegex` to avoid leaking error types from the underlying library.
+
 ## [0.2.0] - 2025-08-12
 
 ### Changed
