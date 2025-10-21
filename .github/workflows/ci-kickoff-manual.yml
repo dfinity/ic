@@ -24,7 +24,7 @@ jobs:
     uses: ./.github/workflows/ci-pr-only.yml
     secrets: inherit
     with:
-      commit-sha: ${{ github.sha }}
+      commit-sha: ${{ inputs.commit-sha }}
     permissions:
       contents: read
       pull-requests: write
