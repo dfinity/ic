@@ -210,3 +210,18 @@ mod deposit {
         ]);
     }
 }
+
+#[test]
+fn should_get_logs() {
+    let setup = Setup::default();
+    let minter = setup.minter();
+
+    let logs = minter.get_logs();
+    let init_log = logs.first().unwrap();
+
+    assert!(
+        init_log.message.contains("[init]"),
+        "Expected first log message to be for canister initialization but got: {}",
+        init_log.message
+    );
+}

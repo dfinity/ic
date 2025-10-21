@@ -7473,12 +7473,15 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
+ "canlog 0.2.0",
  "ic-bitcoin-canister-mock",
  "ic-ckdoge-minter",
+ "ic-http-types",
  "ic-icrc1-ledger",
  "ic-management-canister-types",
  "icrc-ledger-types",
  "pocket-ic",
+ "serde_json",
 ]
 
 [[package]]

@@ -1,6 +1,8 @@
 use crate::events::MinterEventAssert;
 use candid::{Decode, Encode, Principal};
+use canlog::LogEntry;
 use ic_ckdoge_minter::Event;
+use ic_ckdoge_minter::Priority;
 use ic_ckdoge_minter::UtxoStatus;
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
 use ic_ckdoge_minter::candid_api::{
@@ -75,6 +77,30 @@ impl MinterCanister {
     ) -> Result<std::vec::Vec<u8>, RejectResponse> {
         self.env
             .update_call(self.id, sender, "update_balance", Encode!(args).unwrap())
+    }
+
+    pub fn get_logs(&self) -> Vec<LogEntry<Priority>> {
+        use ic_http_types::{HttpRequest, HttpResponse};
+
+        let request = HttpRequest {
+            method: "".to_string(),
+            url: "/logs".to_string(),
+            headers: vec![],
+            body: vec![].into(),
+        };
+        let result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "http_request",
+                Encode!(&request).unwrap(),
+            )
+            .expect("BUG: failed to call get_log");
+        let response = Decode!(&result, HttpResponse).unwrap();
+        serde_json::from_slice::<canlog::Log<Priority>>(&response.body)
+            .expect("failed to parse ckBTC minter log")
+            .entries
     }
 
     pub fn assert_that_events(&self) -> MinterEventAssert {
