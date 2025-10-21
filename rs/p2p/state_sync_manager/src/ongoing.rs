@@ -227,7 +227,7 @@ impl OngoingStateSync {
         }
 
         if self.chunks_to_download.is_empty() {
-            self.update_chunks_to_download(tracker.clone());
+            self.update_chunks_to_download(&tracker);
         }
 
         let available_download_capacity = self
