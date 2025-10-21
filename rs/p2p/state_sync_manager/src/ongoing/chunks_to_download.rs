@@ -1,7 +1,7 @@
 use ic_interfaces::p2p::state_sync::ChunkId;
 use std::collections::VecDeque;
 
-/// Maintains a list of chunks that are still be downloaded
+/// Maintains a list of chunks that still need to be downloaded
 pub(crate) struct ChunksToDownload {
     chunks: VecDeque<ChunkId>,
 }
