@@ -24,4 +24,15 @@ impl DogecoinCanister {
     pub fn simulate_transaction(&self, utxo: Utxo, address: String) {
         self.push_utxo_to_address(&PushUtxoToAddress { address, utxo })
     }
+
+    pub fn set_fee_percentiles(&self, fee_percentiles: [u64; 101]) {
+        self.env
+            .update_call(
+                self.id,
+                Principal::anonymous(),
+                "set_fee_percentiles",
+                Encode!(&fee_percentiles).unwrap(),
+            )
+            .expect("failed to set fee percentiles");
+    }
 }

@@ -3,6 +3,8 @@ use ic_ckdoge_minter::candid_api::{RetrieveDogeWithApprovalArgs, RetrieveDogeWit
 use ic_ckdoge_minter_test_utils::{
     DOGECOIN_ADDRESS_1, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap,
 };
+use std::array;
+use std::time::Duration;
 
 #[test]
 fn should_fail_withdrawal() {
@@ -214,11 +216,14 @@ mod deposit {
 #[test]
 fn should_estimate_doge_transaction_fee() {
     let setup = Setup::default();
+    let dogecoin = setup.dogecoin();
     let minter = setup.minter();
+    dogecoin.set_fee_percentiles(array::from_fn(|i| i as u64));
+    setup.env.advance_time(Duration::from_secs(60 * 60));
 
     minter
         .assert_that_metrics()
-        .assert_contains_metric_matching("ckbtc_minter_median_fee_per_vbyte 1");
+        .assert_contains_metric_matching("ckbtc_minter_median_fee_per_vbyte 50");
 }
 
 #[test]
