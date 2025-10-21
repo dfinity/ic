@@ -1,27 +1,17 @@
-pub(crate) mod crypt;
-mod generated_key;
-mod sev;
-
 #[cfg(test)]
 mod tests;
 
-use crate::generated_key::{DEFAULT_GENERATED_KEY_PATH, GeneratedKeyDiskEncryption};
-use crate::sev::SevDiskEncryption;
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 use config::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::GuestOSConfig;
-use guest_disk::DEFAULT_PREVIOUS_SEV_KEY_PATH;
+use guest_disk::generated_key::{DEFAULT_GENERATED_KEY_PATH, GeneratedKeyDiskEncryption};
+use guest_disk::sev::SevDiskEncryption;
+use guest_disk::{DEFAULT_PREVIOUS_SEV_KEY_PATH, DiskEncryption, Partition, crypt_name};
 use ic_sev::guest::firmware::SevGuestFirmware;
-use libcryptsetup_rs::consts::flags::CryptActivate;
 use nix::unistd::getuid;
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
-
-// We depend on the values of these constants in bash scripts and config files so be careful
-// when changing them!
-const VAR_CRYPT_NAME: &str = "var_crypt";
-const STORE_CRYPT_NAME: &str = "vda10-crypt";
 
 #[derive(clap::Parser)]
 pub enum Args {
@@ -37,14 +27,6 @@ pub enum Args {
         partition: Partition,
         device_path: PathBuf,
     },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub enum Partition {
-    /// Encrypted var partition, private to the current GuestOS version.
-    Var,
-    /// Encrypted store partition, shared between GuestOS releases.
-    Store,
 }
 
 #[cfg(target_os = "linux")]
@@ -111,29 +93,6 @@ fn run(
             .format(&device_path, partition)
             .with_context(|| format!("Failed to format device for partition {partition:?}")),
     }
-}
-
-/// Returns the name of the cryptographic device for the given partition.
-/// When opening the encrypted partition, it will be mapped under `/dev/mapper/[crypt_name]`.
-fn crypt_name(partition: Partition) -> &'static str {
-    match partition {
-        Partition::Var => VAR_CRYPT_NAME,
-        Partition::Store => STORE_CRYPT_NAME,
-    }
-}
-
-fn activate_flags(partition: Partition) -> CryptActivate {
-    match partition {
-        Partition::Var => CryptActivate::empty(),
-        Partition::Store => CryptActivate::ALLOW_DISCARDS,
-    }
-}
-
-trait DiskEncryption {
-    /// Opens an encrypted device and activates it under /dev/mapper/`crypt_name`.
-    fn open(&mut self, device_path: &Path, partition: Partition, crypt_name: &str) -> Result<()>;
-    /// Formats the device with LUKS2 and initializes it with a key.
-    fn format(&mut self, device_path: &Path, partition: Partition) -> Result<()>;
 }
 
 unsafe extern "C" fn cryptsetup_log(_level: c_int, msg: *const c_char, _usrptr: *mut c_void) {

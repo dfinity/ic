@@ -80,6 +80,7 @@ go_deps.bzl               @dfinity/idx
 /.github/workflows/                                                      @dfinity/idx
 /.github/workflows/rosetta-release.yml                                   @dfinity/finint @dfinity/idx
 /.github/CODEOWNERS                                                      @dfinity/ic-owners-owners
+.github/repo_policies/EXTERNAL_CONTRIB_BLACKLIST                         @dfinity/idx @dfinity/infrasec
 /ci/                                                                     @dfinity/idx
 /ci/actions/dependencies/                                                @dfinity/product-security
 /ci/src/dependencies/                                                    @dfinity/product-security
@@ -150,6 +151,7 @@ go_deps.bzl               @dfinity/idx
 /rs/interfaces/                                         @dfinity/ic-interface-owners
 /rs/interfaces/adapter_client/                          @dfinity/consensus
 /rs/interfaces/certified_stream_store/                  @dfinity/ic-message-routing-owners
+/rs/interfaces/mocks/src/payload_builder                @dfinity/consensus
 /rs/interfaces/registry/                                @dfinity/governance-team
 /rs/interfaces/src/canister_http.rs                     @dfinity/consensus
 /rs/interfaces/src/consensus.rs                         @dfinity/consensus
@@ -274,7 +276,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/src/ledger_tests/                             @dfinity/finint
 /rs/tests/src/rosetta_test.rs                           @dfinity/finint
 /rs/tests/src/rosetta_tests/                            @dfinity/finint
-/rs/tests/k8s/                                          @dfinity/idx @dfinity/node
 /rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/finint

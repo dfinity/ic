@@ -5,6 +5,8 @@ use hyper::{
 };
 use hyper_util::rt::TokioIo;
 use ic_config::http_handler::Config;
+use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
+use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
@@ -43,7 +45,6 @@ use ic_replicated_state::{
     CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
     canister_snapshots::CanisterSnapshots,
 };
-use ic_test_utilities::crypto::{CryptoReturningOk, temp_crypto_component_with_fake_registry};
 use ic_test_utilities_state::ReplicatedStateBuilder;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{

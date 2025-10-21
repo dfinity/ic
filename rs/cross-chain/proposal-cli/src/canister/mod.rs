@@ -34,6 +34,7 @@ pub enum TargetCanister {
     SolRpc,
     Bitcoin,
     BtcWatchdog,
+    Dogecoin,
 }
 
 impl TargetCanister {
@@ -65,6 +66,7 @@ impl TargetCanister {
             TargetCanister::Bitcoin | TargetCanister::BtcWatchdog => {
                 "https://github.com/dfinity/bitcoin-canister.git"
             }
+            TargetCanister::Dogecoin => "https://github.com/dfinity/dogecoin-canister.git",
         }
     }
 
@@ -107,6 +109,7 @@ impl TargetCanister {
             TargetCanister::SolRpc => PathBuf::from("canister/sol_rpc_canister.did"),
             TargetCanister::Bitcoin => PathBuf::from("canister/candid.did"),
             TargetCanister::BtcWatchdog => PathBuf::from("watchdog/candid.did"),
+            TargetCanister::Dogecoin => PathBuf::from("canister/candid.did"),
         }
     }
 
@@ -136,7 +139,8 @@ impl TargetCanister {
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::SolRpc
             | TargetCanister::Bitcoin
-            | TargetCanister::BtcWatchdog => None,
+            | TargetCanister::BtcWatchdog
+            | TargetCanister::Dogecoin => None,
         }
     }
 
@@ -199,6 +203,7 @@ impl TargetCanister {
             | TargetCanister::SolRpc => self.repo_dir().into_iter().collect(),
             TargetCanister::Bitcoin => vec![PathBuf::from("canister")],
             TargetCanister::BtcWatchdog => vec![PathBuf::from("watchdog")],
+            TargetCanister::Dogecoin => vec![PathBuf::from("canister")],
         }
     }
 
@@ -227,7 +232,8 @@ impl TargetCanister {
             | TargetCanister::CyclesLedger
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::Bitcoin
-            | TargetCanister::BtcWatchdog => PathBuf::from(self.artifact_file_name()),
+            | TargetCanister::BtcWatchdog
+            | TargetCanister::Dogecoin => PathBuf::from(self.artifact_file_name()),
             TargetCanister::SolRpc => PathBuf::from("wasms").join(self.artifact_file_name()),
         }
     }
@@ -260,6 +266,7 @@ impl TargetCanister {
             TargetCanister::SolRpc => "sol_rpc_canister.wasm.gz",
             TargetCanister::Bitcoin => "ic-btc-canister.wasm.gz",
             TargetCanister::BtcWatchdog => "watchdog.wasm.gz",
+            TargetCanister::Dogecoin => "ic-doge-canister.wasm.gz",
         }
     }
 
@@ -299,6 +306,11 @@ impl TargetCanister {
                 cmd.arg("watchdog");
                 cmd
             }
+            TargetCanister::Dogecoin => {
+                let mut cmd = Command::new("./scripts/docker-build");
+                cmd.arg("ic-doge-canister");
+                cmd
+            }
             TargetCanister::ExchangeRateCanister => {
                 let mut cmd = Command::new("./scripts/docker-build");
                 cmd.env("IP_SUPPORT", "ipv4");
@@ -336,6 +348,7 @@ impl TargetCanister {
             TargetCanister::SolRpc => "tghme-zyaaa-aaaar-qarca-cai",
             TargetCanister::Bitcoin => "ghsi2-tqaaa-aaaan-aaaca-cai",
             TargetCanister::BtcWatchdog => "gatoo-6iaaa-aaaan-aaacq-cai",
+            TargetCanister::Dogecoin => "gordg-fyaaa-aaaan-aaadq-cai",
         };
         Principal::from_text(principal).unwrap()
     }
@@ -369,7 +382,8 @@ impl TargetCanister {
             | TargetCanister::ExchangeRateCanister
             | TargetCanister::SolRpc
             | TargetCanister::Bitcoin
-            | TargetCanister::BtcWatchdog => "",
+            | TargetCanister::BtcWatchdog
+            | TargetCanister::Dogecoin => "",
             TargetCanister::CyclesLedger
             | TargetCanister::CyclesIndex
             | TargetCanister::IcpArchive1
@@ -412,6 +426,7 @@ impl FromStr for TargetCanister {
             ["sol", "rpc"] => Ok(TargetCanister::SolRpc),
             ["bitcoin"] => Ok(TargetCanister::Bitcoin),
             ["btc", "watchdog"] => Ok(TargetCanister::BtcWatchdog),
+            ["dogecoin"] => Ok(TargetCanister::Dogecoin),
             _ => Err(format!("Unknown canister name: {canister}")),
         }
     }
@@ -443,6 +458,7 @@ impl Display for TargetCanister {
             TargetCanister::SolRpc => write!(f, "SOL RPC"),
             TargetCanister::Bitcoin => write!(f, "Bitcoin canister"),
             TargetCanister::BtcWatchdog => write!(f, "Bitcoin watchdog"),
+            TargetCanister::Dogecoin => write!(f, "Dogecoin canister"),
         }
     }
 }

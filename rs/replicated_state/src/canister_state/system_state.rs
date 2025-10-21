@@ -37,7 +37,7 @@ use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, Time,
+    PrincipalId, Time, default_log_memory_limit,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -187,9 +187,9 @@ impl CanisterHistory {
     }
 
     /// Adds a canister change to the history, updating the memory usage
-    /// and total number of changes. It also makes sure that the number
-    /// of canister changes does not exceed `MAX_CANISTER_HISTORY_CHANGES`
-    /// by dropping the oldest entry if necessary.
+    /// of canister history tracked internally and the total number of changes.
+    /// It also makes sure that the number of canister changes does not exceed
+    /// `MAX_CANISTER_HISTORY_CHANGES` by dropping the oldest entry if necessary.
     pub fn add_canister_change(&mut self, canister_change: CanisterChange) {
         let changes = Arc::make_mut(&mut self.changes);
         if changes.len() >= MAX_CANISTER_HISTORY_CHANGES as usize {
@@ -331,6 +331,9 @@ pub struct SystemState {
 
     /// Log visibility of the canister.
     pub log_visibility: LogVisibilityV2,
+
+    /// The capacity of the canister log in bytes.
+    pub log_memory_limit: NumBytes,
 
     /// Log records of the canister.
     #[validate_eq(CompareWithValidateEq)]
@@ -513,6 +516,7 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
+            log_memory_limit: default_log_memory_limit(),
             canister_log: Default::default(),
             wasm_memory_limit: None,
             next_snapshot_id: 0,
@@ -542,6 +546,7 @@ impl SystemState {
         wasm_chunk_store_data: PageMap,
         wasm_chunk_store_metadata: WasmChunkStoreMetadata,
         log_visibility: LogVisibilityV2,
+        log_memory_limit: NumBytes,
         canister_log: CanisterLog,
         wasm_memory_limit: Option<NumBytes>,
         next_snapshot_id: u64,
@@ -572,6 +577,7 @@ impl SystemState {
                 wasm_chunk_store_metadata,
             ),
             log_visibility,
+            log_memory_limit,
             canister_log,
             wasm_memory_limit,
             next_snapshot_id,
@@ -989,7 +995,7 @@ impl SystemState {
     ///
     /// If the message is a `Request`, reserves a slot in the corresponding output
     /// queue for the eventual response; and guaranteed response memory for the
-    /// maximum `Response` size if it's guaranteed response. If it is a `Response`,
+    /// maximum `Response` size if it's a guaranteed response. If it is a `Response`,
     /// the protocol should have already reserved a slot and memory for it.
     ///
     /// Updates `subnet_available_guaranteed_response_memory` to reflect any change
@@ -1097,7 +1103,7 @@ impl SystemState {
                 },
             ) => {
                 if let RequestOrResponse::Response(response) = &msg
-                    && !look_up_callback(
+                    && !has_callback(
                         response,
                         call_context_manager,
                         self.aborted_or_paused_response(),
@@ -1427,7 +1433,7 @@ impl SystemState {
 
             // Protect against enqueuing duplicate responses.
             if let RequestOrResponse::Response(response) = &msg {
-                match look_up_callback(
+                match has_callback(
                     response,
                     call_context_manager,
                     self.aborted_or_paused_response(),
@@ -1932,8 +1938,7 @@ impl SystemState {
 
     /// Validates that the canister's total cycle balance including cycles attached
     /// to messages in queues; pooled refunds, plus any cycles being returned is the
-    /// same as `balance_before` (computed at the top of the function being
-    /// validated).
+    /// same as `balance_before` (computed at the top of the caller function).
     #[cfg(debug_assertions)]
     fn assert_balance_with_messages(
         &self,
@@ -1991,9 +1996,9 @@ pub(crate) fn push_input(
     res
 }
 
-/// Looks up the `Callback` associated with the given response's `callback_id`.
-/// Verifies that the `Callback`'s respondent and originator, as well as its
-/// deadline match those of the response.
+/// Looks up the `Callback` associated with the given response's `callback_id`
+/// and verifies that its respondent, originator and deadline match those of the
+/// response.
 ///
 /// Returns:
 ///
@@ -2005,7 +2010,7 @@ pub(crate) fn push_input(
 ///    not found for a guaranteed response.
 ///  * `Err(StateError::NonMatchingResponse)` when a matching `callback_id` was
 ///    found, but the response details do not match those of the callback.
-pub(crate) fn look_up_callback(
+fn has_callback(
     response: &Response,
     call_context_manager: &CallContextManager,
     aborted_or_paused_response: Option<&Response>,
@@ -2224,6 +2229,7 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
+            log_memory_limit: default_log_memory_limit(),
             canister_log: Default::default(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),

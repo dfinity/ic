@@ -145,7 +145,7 @@ type UpdateCanisterSettingsResponse = variant {
   Err : UpdateCanisterSettingsError;
 };
 
-service : {
+service : () -> {
   add_nns_canister : (AddCanisterRequest) -> ();
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
   change_canister_controllers : (ChangeCanisterControllersRequest) -> (

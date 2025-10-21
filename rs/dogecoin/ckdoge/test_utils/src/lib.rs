@@ -1,38 +1,71 @@
+mod dogecoin;
+mod ledger;
 mod minter;
 
+use crate::dogecoin::DogecoinCanister;
+use crate::ledger::LedgerCanister;
+pub use crate::minter::MinterCanister;
 use candid::{Encode, Principal};
-use ic_ckdoge_minter::lifecycle::init::Mode;
-use ic_ckdoge_minter::lifecycle::init::{InitArgs, MinterArg, Network};
+use ic_ckdoge_minter::{
+    Txid, get_dogecoin_canister_id,
+    lifecycle::init::{InitArgs, MinterArg, Mode, Network},
+};
 use ic_icrc1_ledger::ArchiveOptions;
 use ic_management_canister_types::{CanisterId, CanisterSettings};
 use icrc_ledger_types::icrc1::account::Account;
-use pocket_ic::{PocketIc, PocketIcBuilder};
+use pocket_ic::ErrorCode;
+use pocket_ic::RejectCode;
+use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
+use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub use crate::minter::MinterCanister;
-
 pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
-pub const DOGECOIN_CANISTER: Principal =
-    Principal::from_slice(&[0_u8, 0, 0, 0, 1, 160, 0, 7, 1, 1]);
 pub const USER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 42]);
 pub const DOGECOIN_ADDRESS_1: &str = "DJfU2p6woQ9GiBdiXsWZWJnJ9uDdZfSSNC";
 pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 100_000_000;
+pub const MIN_CONFIRMATIONS: u32 = 60;
 
 pub struct Setup {
     env: Arc<PocketIc>,
+    dogecoin: CanisterId,
     minter: CanisterId,
-    _ledger: CanisterId,
+    ledger: CanisterId,
 }
 
 impl Setup {
-    pub fn new() -> Self {
+    pub fn new(doge_network: Network) -> Self {
         let env = Arc::new(
             PocketIcBuilder::new()
                 .with_bitcoin_subnet()
                 .with_fiduciary_subnet()
                 .build(),
         );
+
+        let dogecoin = env
+            .create_canister_with_id(
+                None,
+                Some(CanisterSettings {
+                    controllers: Some(vec![NNS_ROOT_PRINCIPAL]),
+                    ..Default::default()
+                }),
+                get_dogecoin_canister_id(&doge_network),
+            )
+            .unwrap();
+        env.install_canister(
+            dogecoin,
+            bitcoin_canister_mock_wasm(),
+            Encode!(&ic_bitcoin_canister_mock::Network::Mainnet).unwrap(),
+            Some(NNS_ROOT_PRINCIPAL),
+        );
+        env.update_call(
+            dogecoin,
+            NNS_ROOT_PRINCIPAL,
+            "set_tip_height",
+            Encode!(&MIN_CONFIRMATIONS).unwrap(),
+        )
+        .unwrap();
+
         let fiduciary_subnet = env.topology().get_fiduciary().unwrap();
 
         let minter = env.create_canister_on_subnet(
@@ -57,12 +90,12 @@ impl Setup {
 
         {
             let minter_init_args = MinterArg::Init(InitArgs {
-                doge_network: Network::Mainnet,
+                doge_network,
                 ecdsa_key_name: "key_1".into(),
                 retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
                 ledger_id: ledger,
                 max_time_in_queue_nanos: Duration::from_secs(10).as_nanos() as u64,
-                min_confirmations: Some(60),
+                min_confirmations: Some(MIN_CONFIRMATIONS),
                 mode: Mode::GeneralAvailability,
                 get_utxos_cache_expiration_seconds: Some(Duration::from_secs(60).as_secs()),
             });
@@ -78,7 +111,7 @@ impl Setup {
             let ledger_init_args = ic_icrc1_ledger::InitArgs {
                 minting_account: minter.into(),
                 fee_collector_account: Some(Account {
-                    owner: DOGECOIN_CANISTER,
+                    owner: minter,
                     subaccount: Some([
                         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         0, 0, 0, 0, 0, 0x0f, 0xee,
@@ -101,7 +134,7 @@ impl Setup {
                     cycles_for_archive_creation: Some(100_000_000_000_000),
                     max_transactions_per_response: None,
                 },
-                max_memo_length: None,
+                max_memo_length: Some(80),
                 feature_flags: None,
                 index_principal: None,
             };
@@ -115,8 +148,16 @@ impl Setup {
 
         Self {
             env,
+            dogecoin,
             minter,
-            _ledger: ledger,
+            ledger,
+        }
+    }
+
+    pub fn dogecoin(&self) -> DogecoinCanister {
+        DogecoinCanister {
+            env: self.env.clone(),
+            id: self.dogecoin,
         }
     }
 
@@ -126,11 +167,18 @@ impl Setup {
             id: self.minter,
         }
     }
+
+    pub fn ledger(&self) -> LedgerCanister {
+        LedgerCanister {
+            env: self.env.clone(),
+            id: self.ledger,
+        }
+    }
 }
 
 impl Default for Setup {
     fn default() -> Self {
-        Self::new()
+        Self::new(Network::Mainnet)
     }
 }
 
@@ -144,12 +192,21 @@ fn ledger_wasm() -> Vec<u8> {
     std::fs::read(wasm_path).unwrap()
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::DOGECOIN_CANISTER;
+fn bitcoin_canister_mock_wasm() -> Vec<u8> {
+    let wasm_path = std::env::var("IC_BITCOIN_CANISTER_MOCK_WASM_PATH").unwrap();
+    std::fs::read(wasm_path).unwrap()
+}
 
-    #[test]
-    fn should_have_correct_principal() {
-        assert_eq!(DOGECOIN_CANISTER.to_string(), "gordg-fyaaa-aaaan-aaadq-cai");
-    }
+pub fn assert_trap<T: Debug>(result: Result<T, RejectResponse>, message: &str) {
+    assert_matches::assert_matches!(
+        result,
+        Err(RejectResponse {reject_code, reject_message, error_code, ..}) if
+            reject_code == RejectCode::CanisterError &&
+            reject_message.contains(message) &&
+            error_code == ErrorCode::CanisterCalledTrap
+    );
+}
+
+pub fn txid() -> Txid {
+    Txid::from([42u8; 32])
 }

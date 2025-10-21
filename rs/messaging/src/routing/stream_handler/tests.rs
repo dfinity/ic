@@ -1247,15 +1247,9 @@ fn garbage_collect_local_state_with_reject_signals_for_request_from_absent_canis
             });
             expected_state.with_streams(btreemap![REMOTE_SUBNET => expected_stream]);
             // Cycles attached to the request / reject response are lost.
-            expected_state
-                .metadata
-                .subnet_metrics
-                .observe_consumed_cycles_with_use_case(
-                    DroppedMessages,
-                    message_in_stream(state.get_stream(&REMOTE_SUBNET), 21)
-                        .cycles()
-                        .into(),
-                );
+            expected_state.observe_lost_cycles_due_to_dropped_messages(
+                message_in_stream(state.get_stream(&REMOTE_SUBNET), 21).cycles(),
+            );
 
             // Act and compare to expected.
             let mut available_guaranteed_response_memory =
@@ -1340,11 +1334,8 @@ fn garbage_collect_local_state_with_reject_signals_for_misrouted_request() {
                 (LABEL_VALUE_TYPE_REQUEST, LABEL_VALUE_REQUEST_MISROUTED, 1),
             ]);
 
-            // One critical errors raised.
-            metrics.assert_eq_critical_errors(CriticalErrorCounts {
-                request_misrouted: 1,
-                ..CriticalErrorCounts::default()
-            });
+            // No critical errors raised.
+            metrics.assert_eq_critical_errors(CriticalErrorCounts::default());
         },
     );
 }
@@ -1553,10 +1544,7 @@ fn induct_stream_slices_reject_response_from_old_host_subnet_is_accepted() {
 
             // Cycles attached to the dropped reply are lost.
             let cycles_lost = message_in_slice(slices.get(&CANISTER_MIGRATION_SUBNET), 1).cycles();
-            expected_state
-                .metadata
-                .subnet_metrics
-                .observe_consumed_cycles_with_use_case(DroppedMessages, cycles_lost.into());
+            expected_state.observe_lost_cycles_due_to_dropped_messages(cycles_lost);
 
             let mut available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
@@ -2150,10 +2138,7 @@ fn induct_stream_slices_partial_success() {
             let cycles_lost = message_in_slice(slices.get(&REMOTE_SUBNET), 48).cycles()
                 + message_in_slice(slices.get(&REMOTE_SUBNET), 49).cycles()
                 + message_in_slice(slices.get(&REMOTE_SUBNET), 51).cycles();
-            expected_state
-                .metadata
-                .subnet_metrics
-                .observe_consumed_cycles_with_use_case(DroppedMessages, cycles_lost.into());
+            expected_state.observe_lost_cycles_due_to_dropped_messages(cycles_lost);
 
             let initial_available_guaranteed_response_memory =
                 stream_handler.available_guaranteed_response_memory(&state);
@@ -2219,7 +2204,8 @@ fn induct_stream_slices_partial_success() {
 /// and its known host:
 ///  * requests are rejected as they are likely to be coming from a manually
 ///    migrated canister; and
-///  * responses are rejected as likely to be from a malicious subnet.
+///  * responses are rejected, to guarantee delivery (of themselves or any
+///    refund they carry).
 #[test]
 fn induct_stream_slices_receiver_subnet_mismatch() {
     with_test_setup(
@@ -2737,10 +2723,7 @@ fn induct_stream_slices_with_refunds() {
 
             // Cycles in refund @44 are lost
             let refund44 = refund_in_slice(slices.get(&REMOTE_SUBNET), 44);
-            expected_state
-                .metadata
-                .subnet_metrics
-                .observe_consumed_cycles_with_use_case(DroppedMessages, refund44.amount().into());
+            expected_state.observe_lost_cycles_due_to_dropped_messages(refund44.amount());
 
             // Act.
             let mut available_guaranteed_response_memory =
@@ -3791,10 +3774,6 @@ impl MetricsFixture {
                     counts.sender_subnet_mismatch
                 ),
                 (
-                    &[("error", &CRITICAL_ERROR_REQUEST_MISROUTED.to_string())],
-                    counts.request_misrouted
-                ),
-                (
                     &[(
                         "error",
                         &CRITICAL_ERROR_RECEIVER_SUBNET_MISMATCH.to_string()
@@ -3813,7 +3792,6 @@ struct CriticalErrorCounts {
     pub bad_reject_signal_for_response: u64,
     pub sender_subnet_mismatch: u64,
     pub receiver_subnet_mismatch: u64,
-    pub request_misrouted: u64,
 }
 
 /// Populates the given `state`'s canister migrations with a single entry,

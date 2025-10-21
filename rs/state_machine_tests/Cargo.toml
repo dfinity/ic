@@ -25,6 +25,7 @@ ic-consensus-utils = { path = "../consensus/utils" }
 ic-limits = { path = "../limits" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
+ic-crypto-test-utils-crypto-returning-ok = { path = "../crypto/test_utils/crypto_returning_ok" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-vetkd = { path = "../crypto/test_utils/vetkd" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
@@ -58,7 +59,6 @@ ic-secp256k1 = { path = "../../packages/ic-secp256k1" }
 ic-state-layout = { path = "../state_layout" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-state-machine-client = "3.0"
-ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
@@ -83,7 +83,6 @@ wat = { workspace = true }
 
 [dev-dependencies]
 ic-base-types = { path = "../types/base_types" }
-ic-test-utilities = { path = "../test_utilities" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 proptest = { workspace = true }
 test-strategy = "0.4.0"

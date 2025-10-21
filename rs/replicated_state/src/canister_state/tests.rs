@@ -106,7 +106,12 @@ impl CanisterStateFixture {
             .canister_state
             .system_state
             .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
+                CallOrigin::CanisterUpdate(
+                    CANISTER_ID,
+                    CallbackId::from(1),
+                    NO_DEADLINE,
+                    String::from(""),
+                ),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
                 Default::default(),
@@ -1262,7 +1267,7 @@ fn reverts_stopping_status_after_split() {
     let mut canister_state = CanisterStateFixture::new().canister_state;
     let mut call_context_manager = CallContextManager::default();
     call_context_manager.with_call_context(CallContext::new(
-        CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         false,
         false,
         Cycles::from(0u128),

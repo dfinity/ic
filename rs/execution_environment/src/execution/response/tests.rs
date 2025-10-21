@@ -35,8 +35,8 @@ fn execute_response_when_stopping_status() {
     let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     test.execute_message(a_id);
     test.stop_canister(a_id);
 
@@ -96,8 +96,8 @@ fn execute_response_refunds_cycles() {
         .build();
 
     // Enqueue ingress message to canister A and execute it.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     test.execute_message(a_id);
 
     // Create response from canister B to canister A.
@@ -152,8 +152,8 @@ fn execute_response_when_call_context_deleted() {
     let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     test.execute_message(a_id);
 
     // Create response from canister B to canister A.
@@ -200,8 +200,8 @@ fn execute_response_successfully() {
     let wasm_payload = wasm().inter_update(b_id, call_args()).build();
 
     // Enqueue ingress message to canister A and execute it.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     test.execute_message(a_id);
 
     // Create response from canister B to canister A.
@@ -259,8 +259,8 @@ fn execute_response_traps() {
         .build();
 
     // Enqueue ingress message to canister A and execute it.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     test.execute_message(a_id);
 
     // Create response from canister B to canister A.
@@ -316,8 +316,8 @@ fn execute_response_with_trapping_cleanup() {
         .build();
 
     // Enqueue ingress message to canister A and execute it.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_eq!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     test.execute_message(a_id);
 
     // Create response from canister B to canister A.
@@ -609,11 +609,16 @@ fn dts_works_in_cleanup_callback() {
 
 #[test]
 fn dts_out_of_subnet_memory_in_response_callback() {
+    let scaling_factor = 4;
+    let subnet_execution_memory_per_thread = 100 * 1024 * 1024;
+    let subnet_memory_reservation_per_thread = 40 * 1024 * 1024;
+
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(100 * 1024 * 1024)
-        .with_subnet_memory_reservation(40 * 1024 * 1024)
+        .with_subnet_execution_memory(scaling_factor * subnet_execution_memory_per_thread)
+        .with_subnet_memory_reservation(scaling_factor * subnet_memory_reservation_per_thread)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
+        .with_resource_saturation_scaling(scaling_factor as usize)
         .with_manual_execution()
         .build();
 
@@ -713,11 +718,16 @@ fn dts_out_of_subnet_memory_in_response_callback() {
 
 #[test]
 fn dts_out_of_subnet_memory_in_cleanup_callback() {
+    let scaling_factor = 4;
+    let subnet_execution_memory_per_thread = 100 * 1024 * 1024;
+    let subnet_memory_reservation_per_thread = 40 * 1024 * 1024;
+
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(100 * 1024 * 1024)
-        .with_subnet_memory_reservation(40 * 1024 * 1024)
+        .with_subnet_execution_memory(scaling_factor * subnet_execution_memory_per_thread)
+        .with_subnet_memory_reservation(scaling_factor * subnet_memory_reservation_per_thread)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
+        .with_resource_saturation_scaling(scaling_factor as usize)
         .with_manual_execution()
         .build();
 
@@ -1951,11 +1961,16 @@ fn reserve_instructions_for_cleanup_callback_with_dts() {
 
 #[test]
 fn response_callback_succeeds_with_memory_reservation() {
+    let scaling_factor = 4;
+    let subnet_execution_memory_per_thread = 100 * 1024 * 1024;
+    let subnet_memory_reservation_per_thread = 80 * 1024 * 1024;
+
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(100 * 1024 * 1024)
-        .with_subnet_memory_reservation(80 * 1024 * 1024)
+        .with_subnet_execution_memory(scaling_factor * subnet_execution_memory_per_thread)
+        .with_subnet_memory_reservation(scaling_factor * subnet_memory_reservation_per_thread)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
+        .with_resource_saturation_scaling(scaling_factor as usize)
         .with_manual_execution()
         .build();
 
@@ -2074,11 +2089,16 @@ fn response_callback_succeeds_with_memory_reservation() {
 
 #[test]
 fn cleanup_callback_succeeds_with_memory_reservation() {
+    let scaling_factor = 4;
+    let subnet_execution_memory_per_thread = 100 * 1024 * 1024;
+    let subnet_memory_reservation_per_thread = 80 * 1024 * 1024;
+
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(100 * 1024 * 1024)
-        .with_subnet_memory_reservation(80 * 1024 * 1024)
+        .with_subnet_execution_memory(scaling_factor * subnet_execution_memory_per_thread)
+        .with_subnet_memory_reservation(scaling_factor * subnet_memory_reservation_per_thread)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
+        .with_resource_saturation_scaling(scaling_factor as usize)
         .with_manual_execution()
         .build();
 
@@ -2199,11 +2219,16 @@ fn cleanup_callback_succeeds_with_memory_reservation() {
 
 #[test]
 fn subnet_available_memory_does_not_change_on_response_abort() {
+    let scaling_factor = 4;
+    let subnet_execution_memory_per_thread = 100 * 1024 * 1024;
+    let subnet_memory_reservation_per_thread = 80 * 1024 * 1024;
+
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(100 * 1024 * 1024)
-        .with_subnet_memory_reservation(80 * 1024 * 1024)
+        .with_subnet_execution_memory(scaling_factor * subnet_execution_memory_per_thread)
+        .with_subnet_memory_reservation(scaling_factor * subnet_memory_reservation_per_thread)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
+        .with_resource_saturation_scaling(scaling_factor as usize)
         .with_manual_execution()
         .build();
 
@@ -2275,11 +2300,16 @@ fn subnet_available_memory_does_not_change_on_response_abort() {
 
 #[test]
 fn subnet_available_memory_does_not_change_on_cleanup_abort() {
+    let scaling_factor = 4;
+    let subnet_execution_memory_per_thread = 100 * 1024 * 1024;
+    let subnet_memory_reservation_per_thread = 80 * 1024 * 1024;
+
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(100 * 1024 * 1024)
-        .with_subnet_memory_reservation(80 * 1024 * 1024)
+        .with_subnet_execution_memory(scaling_factor * subnet_execution_memory_per_thread)
+        .with_subnet_memory_reservation(scaling_factor * subnet_memory_reservation_per_thread)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
+        .with_resource_saturation_scaling(scaling_factor as usize)
         .with_manual_execution()
         .build();
 
@@ -2422,11 +2452,16 @@ fn subnet_available_memory_does_not_change_on_response_validation_failure() {
 
 #[test]
 fn subnet_available_memory_does_not_change_on_response_resume_failure() {
+    let scaling_factor = 4;
+    let subnet_execution_memory_per_thread = 100 * 1024 * 1024;
+    let subnet_memory_reservation_per_thread = 80 * 1024 * 1024;
+
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(100 * 1024 * 1024)
-        .with_subnet_memory_reservation(80 * 1024 * 1024)
+        .with_subnet_execution_memory(scaling_factor * subnet_execution_memory_per_thread)
+        .with_subnet_memory_reservation(scaling_factor * subnet_memory_reservation_per_thread)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
+        .with_resource_saturation_scaling(scaling_factor as usize)
         .with_manual_execution()
         .build();
 
@@ -2507,11 +2542,16 @@ fn subnet_available_memory_does_not_change_on_response_resume_failure() {
 
 #[test]
 fn subnet_available_memory_does_not_change_on_cleanup_resume_failure() {
+    let scaling_factor = 4;
+    let subnet_execution_memory_per_thread = 100 * 1024 * 1024;
+    let subnet_memory_reservation_per_thread = 80 * 1024 * 1024;
+
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(100 * 1024 * 1024)
-        .with_subnet_memory_reservation(80 * 1024 * 1024)
+        .with_subnet_execution_memory(scaling_factor * subnet_execution_memory_per_thread)
+        .with_subnet_memory_reservation(scaling_factor * subnet_memory_reservation_per_thread)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
+        .with_resource_saturation_scaling(scaling_factor as usize)
         .with_manual_execution()
         .build();
 
@@ -2727,8 +2767,8 @@ fn test_call_context_instructions_executed_is_updated_on_ok_response() {
         .build();
 
     // Enqueue ingress message to canister A.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_matches!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
 
     // Execute canister A ingress.
@@ -2776,8 +2816,8 @@ fn test_call_context_instructions_executed_is_updated_on_err_response() {
         .build();
 
     // Enqueue ingress message to canister A.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_matches!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
 
     // Execute canister A ingress.
@@ -2825,8 +2865,8 @@ fn test_call_context_instructions_executed_is_updated_on_ok_cleanup() {
         .build();
 
     // Enqueue ingress message to canister A.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_matches!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
 
     // Execute canister A ingress.
@@ -2880,8 +2920,8 @@ fn test_call_context_instructions_executed_is_updated_on_err_cleanup() {
         .build();
 
     // Enqueue ingress message to canister A.
-    let ingress_status = test.ingress_raw(a_id, "update", wasm_payload).1;
-    assert_matches!(ingress_status, IngressStatus::Unknown);
+    let msg_id = test.ingress_raw(a_id, "update", wasm_payload).0;
+    assert_matches!(test.ingress_state(&msg_id), IngressState::Received);
     assert_eq!(test.canister_state(a_id).system_state.canister_version, 1);
 
     // Execute canister A ingress.

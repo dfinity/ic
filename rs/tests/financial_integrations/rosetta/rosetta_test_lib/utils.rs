@@ -5,7 +5,7 @@ use ic_icrc1_test_utils::KeyPairGenerator;
 use ic_ledger_core::{Tokens, block::BlockIndex};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::{Neuron, neuron::DissolveState};
+use ic_nns_governance_api::{Neuron, Visibility, neuron::DissolveState};
 use ic_rosetta_api::{
     DEFAULT_TOKEN_SYMBOL,
     convert::{
@@ -683,6 +683,7 @@ pub fn create_neuron(
         dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
         cached_neuron_stake_e8s: Tokens::new(10, 0).unwrap().get_e8s(),
         kyc_verified: true,
+        visibility: Some(Visibility::Public as i32),
         ..Default::default()
     };
 

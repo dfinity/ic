@@ -41,6 +41,7 @@ service : (network: Network) -> {
       vec nat64,
     );
   bitcoin_get_utxos : (GetUtxosRequest) -> (GetUtxosResponse);
+  dogecoin_get_utxos : (GetUtxosRequest) -> (GetUtxosResponse);
   bitcoin_send_transaction : (SendTransactionRequest) -> ();
   change_availability : (bool) -> ();
   get_mempool : () -> (vec vec nat8);

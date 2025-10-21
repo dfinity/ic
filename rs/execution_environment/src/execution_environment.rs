@@ -368,7 +368,7 @@ impl fmt::Display for DtsInstallCodeStatus {
 
 impl ExecutionEnvironment {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub(crate) fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
         ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
@@ -387,8 +387,7 @@ impl ExecutionEnvironment {
     ) -> Self {
         // Assert the flag implication: DTS => sandboxing.
         assert!(
-            config.deterministic_time_slicing == FlagStatus::Disabled
-                || config.canister_sandboxing_flag == FlagStatus::Enabled,
+            config.canister_sandboxing_flag == FlagStatus::Enabled,
             "Deterministic time slicing works only with canister sandboxing."
         );
         let canister_manager_config: CanisterMgrConfig = CanisterMgrConfig::new(
@@ -806,6 +805,7 @@ impl ExecutionEnvironment {
                             msg.canister_change_origin(args.get_sender_canister_version()),
                             args.get_canister_id(),
                             &mut state,
+                            round_limits,
                             &self.metrics.canister_not_found_error,
                         )
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
@@ -1570,42 +1570,63 @@ impl ExecutionEnvironment {
                         )),
                         refund: msg.take_cycles(),
                     },
-                    FlagStatus::Enabled => match &msg {
-                        CanisterCall::Request(request) => {
-                            let fetch_canister_logs_fee = Cycles::new(1_000_000); // TODO(EXC-2112): fix placeholder fees.
+                    FlagStatus::Enabled => {
+                        let sender = *msg.sender();
+                        let payload = payload.to_vec();
+                        match &mut msg {
+                            CanisterCall::Request(request) => {
+                                let max_fetch_canister_logs_fee =
+                                    self.cycles_account_manager.max_fetch_canister_logs_fee(
+                                        registry_settings.subnet_size,
+                                        cost_schedule,
+                                    );
 
-                            let response = if request.payment < fetch_canister_logs_fee {
-                                Err(UserError::new(
-                                    ErrorCode::CanisterRejectedMessage,
-                                    format!(
-                                        "{} request sent with {} cycles, but {} cycles are required.",
-                                        Ic00Method::FetchCanisterLogs,
-                                        request.payment,
-                                        fetch_canister_logs_fee
-                                    ),
-                                ))
-                            } else {
-                                FetchCanisterLogsRequest::decode(payload)
-                                    .and_then(|args| {
-                                        fetch_canister_logs(
-                                            *msg.sender(),
-                                            &state,
-                                            args,
-                                            self.config.fetch_canister_logs_filter,
-                                        )
-                                    })
-                                    .map(|resp| (Encode!(&resp).unwrap(), None))
-                            };
+                                // Check there are sufficient cycles to cover the worst-case execution cost.
+                                let response = if request.payment < max_fetch_canister_logs_fee {
+                                    Err(UserError::new(
+                                        ErrorCode::CanisterRejectedMessage,
+                                        format!(
+                                            "{} request sent with {} cycles, but {} cycles are required.",
+                                            Ic00Method::FetchCanisterLogs,
+                                            request.payment,
+                                            max_fetch_canister_logs_fee
+                                        ),
+                                    ))
+                                } else {
+                                    FetchCanisterLogsRequest::decode(&payload)
+                                        .and_then(|args| {
+                                            fetch_canister_logs(
+                                                sender,
+                                                &state,
+                                                args,
+                                                self.config.fetch_canister_logs_filter,
+                                            )
+                                        })
+                                        .map(|resp| {
+                                            let response_bytes = Encode!(&resp).unwrap();
+                                            let actual_fee = self
+                                                .cycles_account_manager
+                                                .fetch_canister_logs_fee(
+                                                    NumBytes::new(response_bytes.len() as u64),
+                                                    registry_settings.subnet_size,
+                                                    cost_schedule,
+                                                );
+                                            // There are enough cycles, deduct the actual fee from paid cycles and refund the rest.
+                                            msg.deduct_cycles(actual_fee);
+                                            (response_bytes, None)
+                                        })
+                                };
 
-                            ExecuteSubnetMessageResult::Finished {
-                                response,
-                                refund: msg.take_cycles(),
+                                ExecuteSubnetMessageResult::Finished {
+                                    response,
+                                    refund: msg.take_cycles(),
+                                }
+                            }
+                            CanisterCall::Ingress(_) => {
+                                self.reject_unexpected_ingress(Ic00Method::FetchCanisterLogs)
                             }
                         }
-                        CanisterCall::Ingress(_) => {
-                            self.reject_unexpected_ingress(Ic00Method::FetchCanisterLogs)
-                        }
-                    },
+                    }
                 }
             }
 
@@ -1805,7 +1826,7 @@ impl ExecutionEnvironment {
                 let res = RenameCanisterArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
                     let origin = msg.canister_change_origin(args.get_sender_canister_version());
-                    self.rename_canister(*msg.sender(), &mut state, args, origin)
+                    self.rename_canister(*msg.sender(), &mut state, round_limits, args, origin)
                         .map(|res| (res, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
@@ -2041,7 +2062,6 @@ impl ExecutionEnvironment {
         match &method {
             WasmMethod::Query(_) | WasmMethod::CompositeQuery(_) => {
                 let instruction_limits = InstructionLimits::new(
-                    FlagStatus::Enabled,
                     max_instructions_per_message_without_dts,
                     instruction_limits.slice(),
                 );
@@ -2661,6 +2681,7 @@ impl ExecutionEnvironment {
         &self,
         sender: PrincipalId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
         args: RenameCanisterArgs,
         origin: CanisterChangeOrigin,
     ) -> Result<Vec<u8>, UserError> {
@@ -2691,6 +2712,7 @@ impl ExecutionEnvironment {
                 to_version,
                 to_total_num_changes,
                 state,
+                round_limits,
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());
@@ -3017,7 +3039,6 @@ impl ExecutionEnvironment {
         // An inspect message is expected to finish quickly, so DTS is not
         // supported for it.
         let instruction_limits = InstructionLimits::new(
-            FlagStatus::Disabled,
             self.config.max_instructions_for_message_acceptance_calls,
             self.config.max_instructions_for_message_acceptance_calls,
         );
@@ -4283,6 +4304,18 @@ impl ExecutionEnvironment {
     #[doc(hidden)]
     pub fn own_subnet_type(&self) -> SubnetType {
         self.own_subnet_type
+    }
+
+    // Insert a compiled module in the compilation cache speed up tests by
+    // skipping the Wasmtime compilation step.
+    #[doc(hidden)]
+    pub fn compilation_cache_insert_for_testing(
+        &self,
+        bytes: Vec<u8>,
+        compiled_module: ic_embedders::SerializedModule,
+    ) {
+        self.hypervisor
+            .compilation_cache_insert_for_testing(bytes, compiled_module);
     }
 }
 

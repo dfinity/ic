@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
 
+## [2.1.8] - 2025-10-09
+### Added
+- Added explicit timeout in ic-agent initialization to improve initial sync performance ([#7131](https://github.com/dfinity/ic/pull/7131))
+
 ## [2.1.7] - 2025-08-12
 ### Added
 - Environment presets to configure ICP Rosetta API with `--environment` flag ([#5982](https://github.com/dfinity/ic/pull/5982))
