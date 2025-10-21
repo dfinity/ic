@@ -4,6 +4,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
     setup_unmasked_random_params,
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_test_utils_vetkd::VetKdArgsOwned;
 use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_interfaces_state_manager::{CertifiedStateSnapshot, Labeled};
 use ic_management_canister_types_private::{
@@ -48,7 +49,6 @@ use ic_types::{
         threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
-        vetkd::VetKdArgsOwned,
     },
     messages::{CallbackId, Payload},
     time::UNIX_EPOCH,

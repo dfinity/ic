@@ -9,13 +9,14 @@ use ic_crypto_test_utils_ni_dkg::{
     NiDkgTestEnvironment, RandomNiDkgConfig, run_ni_dkg_and_create_single_transcript,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_crypto_test_utils_vetkd::VetKdArgsOwned;
 use ic_interfaces::crypto::LoadTranscriptResult;
 use ic_interfaces::crypto::NiDkgAlgorithm;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTranscript};
-use ic_types::crypto::vetkd::{VetKdArgs, VetKdArgsOwned, VetKdEncryptedKeyShare};
+use ic_types::crypto::vetkd::{VetKdArgs, VetKdEncryptedKeyShare};
 use ic_types::{NodeId, NumberOfNodes};
 use ic_types_test_utils::ids::canister_test_id;
 use ic_vetkeys::TransportSecretKey;

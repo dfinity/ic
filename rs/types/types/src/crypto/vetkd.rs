@@ -25,7 +25,8 @@ impl fmt::Debug for VetKdArgs<'_> {
         fmt.debug_struct("VetKdArgs")
             .field("ni_dkg_id", &self.ni_dkg_id)
             .field("input", &HexEncoding::from(self.input))
-            .field("context", &self.context)
+            .field("caller", &self.caller)
+            .field("context", &HexEncoding::from(self.context))
             .field(
                 "transport_public_key",
                 &HexEncoding::from(self.transport_public_key),
@@ -148,24 +149,3 @@ pub enum VetKdKeyVerificationError {
     VerificationError,
 }
 impl_display_using_debug!(VetKdKeyVerificationError);
-
-#[derive(Clone, Eq, PartialEq, Hash)]
-pub struct VetKdArgsOwned {
-    pub ni_dkg_id: NiDkgId,
-    pub input: Vec<u8>,
-    pub caller: PrincipalId,
-    pub context: Vec<u8>,
-    pub transport_public_key: Vec<u8>,
-}
-
-impl VetKdArgsOwned {
-    pub fn as_ref<'a>(&'a self) -> VetKdArgs<'a> {
-        VetKdArgs {
-            ni_dkg_id: &self.ni_dkg_id,
-            input: &self.input,
-            caller: &self.caller,
-            context: &self.context,
-            transport_public_key: &self.transport_public_key,
-        }
-    }
-}

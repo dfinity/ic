@@ -3,6 +3,9 @@ use ic_crypto_internal_bls12_381_vetkd::{
     DerivationContext, EncryptedKey, EncryptedKeyShare, TransportPublicKey,
 };
 use rand_chacha::rand_core::SeedableRng;
+use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
+use ic_base_types::PrincipalId;
+use ic_types::crypto::vetkd::VetKdArgs;
 
 pub fn dummy_transport_public_key() -> [u8; 48] {
     G1Affine::generator().serialize()
@@ -65,5 +68,26 @@ impl PrivateKey {
             .expect("Failed to combine single EncryptedKeyShare to an EncryptedKey");
 
         ek.serialize().to_vec()
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct VetKdArgsOwned {
+    pub ni_dkg_id: NiDkgId,
+    pub input: Vec<u8>,
+    pub caller: PrincipalId,
+    pub context: Vec<u8>,
+    pub transport_public_key: Vec<u8>,
+}
+
+impl VetKdArgsOwned {
+    pub fn as_ref<'a>(&'a self) -> VetKdArgs<'a> {
+        VetKdArgs {
+            ni_dkg_id: &self.ni_dkg_id,
+            input: &self.input,
+            caller: &self.caller,
+            context: &self.context,
+            transport_public_key: &self.transport_public_key,
+        }
     }
 }
