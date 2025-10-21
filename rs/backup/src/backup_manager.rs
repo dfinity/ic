@@ -84,7 +84,6 @@ impl BackupManager {
         info!(log, "Starting the registry replicator");
         let registry_replicator_future = registry_replicator
             .start_polling(cancellation_token)
-            .await
             .expect("Failed to start registry replicator");
 
         info!(log, "Spawning the registry replicator background thread.");

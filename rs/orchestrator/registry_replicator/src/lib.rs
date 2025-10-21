@@ -339,7 +339,7 @@ impl RegistryReplicator {
 
     /// Initializes the registry local store asynchronously and returns a future that
     /// continuously polls for registry updates.
-    pub async fn start_polling(
+    pub fn start_polling(
         &self,
         cancellation_token: CancellationToken,
     ) -> Result<impl Future<Output = ()> + use<>, Error> {

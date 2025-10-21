@@ -23,7 +23,6 @@ async fn main() {
     info!(logger, "Initializing registry replicator.");
     let future = registry_replicator
         .start_polling(cancellation_token.clone())
-        .await
         .expect("Failed to start registry replicator");
 
     info!(logger, "Start polling registry.");

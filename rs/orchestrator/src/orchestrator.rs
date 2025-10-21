@@ -164,7 +164,7 @@ impl Orchestrator {
             RegistryReplicator::new_from_config(logger.clone(), Some(node_id), config).await,
         );
 
-        match registry_replicator.start_polling(cancellation_token).await {
+        match registry_replicator.start_polling(cancellation_token) {
             Ok(future) => task_tracker.spawn("registry_replicator", future),
             Err(err) => {
                 metrics

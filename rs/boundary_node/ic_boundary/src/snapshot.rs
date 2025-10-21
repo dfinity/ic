@@ -572,7 +572,6 @@ impl Run for RegistryReplicatorRunner {
     async fn run(&self, token: CancellationToken) -> Result<(), Error> {
         self.0
             .start_polling(token)
-            .await
             .context("unable to start polling Registry")?
             .await; // This terminates when `token` is cancelled
 
