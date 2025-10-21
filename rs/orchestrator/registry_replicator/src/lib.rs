@@ -78,7 +78,8 @@ impl PollableRegistryClient for RegistryClientImpl {
 pub struct RegistryReplicator {
     logger: ReplicaLogger,
     node_id: Option<NodeId>,
-    nns_urls: Vec<Url>,
+    fallback_nns_urls: Vec<Url>,
+    fallback_nns_pub_key: Option<ThresholdSigPublicKey>,
     registry_client: Arc<dyn PollableRegistryClient>,
     local_store: Arc<dyn LocalStore>,
     started: Arc<AtomicBool>,
@@ -126,7 +127,8 @@ impl RegistryReplicator {
         Self {
             logger,
             node_id,
-            nns_urls,
+            fallback_nns_urls: nns_urls,
+            fallback_nns_pub_key: nns_pub_key,
             registry_client,
             local_store,
             started: Arc::new(AtomicBool::new(false)),
@@ -355,7 +357,8 @@ impl RegistryReplicator {
             self.node_id,
             self.registry_client.clone(),
             self.local_store.clone(),
-            self.nns_urls.clone(),
+            self.fallback_nns_urls.clone(),
+            self.fallback_nns_pub_key,
             self.poll_delay,
         );
 
@@ -415,7 +418,8 @@ impl RegistryReplicator {
             self.node_id,
             self.registry_client.clone(),
             self.local_store.clone(),
-            self.nns_urls.clone(),
+            self.fallback_nns_urls.clone(),
+            self.fallback_nns_pub_key,
             self.poll_delay,
         )
         .poll()

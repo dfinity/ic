@@ -65,6 +65,7 @@ impl InternalState {
         registry_client: Arc<dyn RegistryClient>,
         local_store: Arc<dyn LocalStore>,
         config_urls: Vec<Url>,
+        maybe_config_pub_key: Option<ThresholdSigPublicKey>,
         poll_delay: Duration,
     ) -> Self {
         let registry_canister_fallback = if !config_urls.is_empty() {
@@ -81,7 +82,7 @@ impl InternalState {
             registry_client,
             local_store,
             latest_version: ZERO_REGISTRY_VERSION,
-            nns_pub_key: None,
+            nns_pub_key: maybe_config_pub_key,
             nns_urls: vec![],
             registry_canister: None,
             registry_canister_fallback,
@@ -113,74 +114,82 @@ impl InternalState {
             }
         }
 
-        let registry_canister = if self.failed_poll_count >= MAX_CONSECUTIVE_FAILURES
-            && self.registry_canister_fallback.is_some()
-        {
-            info!(
-                self.logger,
-                "Polling NNS failed {} times consecutively, trying config urls once...",
-                self.failed_poll_count
-            );
-            self.failed_poll_count = -1;
-            self.registry_canister_fallback.as_ref()
-        } else {
-            self.registry_canister.as_ref()
+        let Some(nns_pub_key) = self.nns_pub_key else {
+            return Err("NNS public key not set in the registry and not configured.".to_string());
+        };
+
+        let registry_canister = match (
+            self.registry_canister.as_ref(),
+            self.registry_canister_fallback.as_ref(),
+        ) {
+            (_, Some(fallback)) if self.failed_poll_count >= MAX_CONSECUTIVE_FAILURES => {
+                info!(
+                    self.logger,
+                    "Polling NNS failed {} times consecutively, trying config urls once...",
+                    self.failed_poll_count
+                );
+                self.failed_poll_count = -1;
+                Arc::clone(fallback)
+            }
+            (None, Some(fallback)) => {
+                info!(
+                    self.logger,
+                    "Remote registry canister not initialized, probably due to missing NNS config data in the registry, trying config urls..."
+                );
+                Arc::clone(fallback)
+            }
+            (Some(canister), _) => Arc::clone(canister),
+            (None, None) => return Err("No remote registry canister configured.".to_string()),
         };
 
         // Poll registry canister and apply changes to local changelog
-        if let Some(registry_canister_ref) = registry_canister {
-            let registry_canister = Arc::clone(registry_canister_ref);
-            let nns_pub_key = self
-                .nns_pub_key
-                .expect("registry canister is set => pub key is set");
-            // Note, code duplicate in registry_replicator.rs initialize_local_store()
-            let mut resp = match registry_canister
-                .get_certified_changes_since(latest_version.get(), &nns_pub_key)
-                .await
-            {
-                Ok((records, _, _)) => {
-                    self.failed_poll_count = 0;
-                    records
-                }
-                Err(e) => {
-                    self.failed_poll_count += 1;
-                    return Err(format!(
-                        "Error when trying to fetch updates from NNS: {e:?}"
-                    ));
-                }
-            };
-
-            resp.sort_by_key(|tr| tr.version);
-            let changelog = resp.iter().fold(Changelog::default(), |mut cl, r| {
-                let rel_version = (r.version - latest_version).get();
-                if cl.len() < rel_version as usize {
-                    cl.push(ChangelogEntry::default());
-                }
-                cl.last_mut().unwrap().push(KeyMutation {
-                    key: r.key.clone(),
-                    value: r.value.clone(),
-                });
-                cl
-            });
-
-            let entries = changelog.len();
-
-            changelog
-                .into_iter()
-                .enumerate()
-                .try_for_each(|(i, cle)| {
-                    let v = latest_version + RegistryVersion::from(i as u64 + 1);
-                    self.local_store.store(v, cle)
-                })
-                .expect("Writing to the FS failed: Stop.");
-
-            if entries > 0 {
-                info!(
-                    self.logger,
-                    "Stored registry versions up to: {}",
-                    latest_version + RegistryVersion::from(entries as u64)
-                );
+        // Note, code duplicate in registry_replicator.rs initialize_local_store()
+        let mut resp = match registry_canister
+            .get_certified_changes_since(latest_version.get(), &nns_pub_key)
+            .await
+        {
+            Ok((records, _, _)) => {
+                self.failed_poll_count = 0;
+                records
             }
+            Err(e) => {
+                self.failed_poll_count += 1;
+                return Err(format!(
+                    "Error when trying to fetch updates from NNS: {e:?}",
+                ));
+            }
+        };
+
+        resp.sort_by_key(|tr| tr.version);
+        let changelog = resp.iter().fold(Changelog::default(), |mut cl, r| {
+            let rel_version = (r.version - latest_version).get();
+            if cl.len() < rel_version as usize {
+                cl.push(ChangelogEntry::default());
+            }
+            cl.last_mut().unwrap().push(KeyMutation {
+                key: r.key.clone(),
+                value: r.value.clone(),
+            });
+            cl
+        });
+
+        let entries = changelog.len();
+
+        changelog
+            .into_iter()
+            .enumerate()
+            .try_for_each(|(i, cle)| {
+                let v = latest_version + RegistryVersion::from(i as u64 + 1);
+                self.local_store.store(v, cle)
+            })
+            .expect("Writing to the FS failed: Stop.");
+
+        if entries > 0 {
+            info!(
+                self.logger,
+                "Stored registry versions up to: {}",
+                latest_version + RegistryVersion::from(entries as u64)
+            );
         }
 
         Ok(())
