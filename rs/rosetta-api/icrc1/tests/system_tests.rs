@@ -886,7 +886,7 @@ const NUM_BLOCKS: u64 = 6;
 async fn verify_unrecognized_block_handling(setup: &Setup, bad_block_index: u64) {
     let mut log_file = NamedTempFile::new().expect("failed to create a temp file");
 
-    let env = RosettaTestingEnvironmentBuilder::new(&setup)
+    let env = RosettaTestingEnvironmentBuilder::new(setup)
         .with_log_file_path(log_file.path().to_str().unwrap().to_string())
         .build()
         .await;
@@ -895,9 +895,9 @@ async fn verify_unrecognized_block_handling(setup: &Setup, bad_block_index: u64)
 
     let mut parent_hash = None;
     for i in 0..NUM_BLOCKS {
-        let block = if parent_hash.is_some() {
+        let block = if let Some(parent_hash) = parent_hash {
             BlockBuilder::new(i, i)
-                .with_parent_hash(parent_hash.unwrap())
+                .with_parent_hash(parent_hash)
                 .mint(*TEST_ACCOUNT, Tokens::from(1u64))
                 .build()
         } else {
