@@ -1,5 +1,5 @@
 use candid::CandidType;
-use regex::Regex;
+use regex_lite::Regex;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
@@ -17,14 +17,14 @@ impl RegexString {
     /// Compile the string into a regular expression.
     ///
     /// This is a relatively expensive operation that's currently not cached.
-    pub fn compile(&self) -> Result<Regex, regex::Error> {
+    pub fn compile(&self) -> Result<Regex, regex_lite::Error> {
         Regex::new(&self.0)
     }
 
     /// Checks if the given string matches the compiled regex pattern.
     ///
     /// Returns `Ok(true)` if `value` matches, `Ok(false)` if not, or an error if the regex is invalid.
-    pub fn try_is_valid(&self, value: &str) -> Result<bool, regex::Error> {
+    pub fn try_is_valid(&self, value: &str) -> Result<bool, regex_lite::Error> {
         Ok(self.compile()?.is_match(value))
     }
 }
