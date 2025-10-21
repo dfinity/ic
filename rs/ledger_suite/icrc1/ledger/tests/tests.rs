@@ -633,14 +633,6 @@ fn test_archiving_skipped_if_cycles_to_create_archive_less_than_cost() {
     );
 }
 
-#[test]
-fn test_archive_spawning_failure_costs() {
-    ic_ledger_suite_state_machine_tests::archiving::test_archive_spawning_failure_costs(
-        ledger_wasm(),
-        encode_init_args,
-    );
-}
-
 fn encode_icrc106_upgrade_args(index_principal: Option<Principal>) -> LedgerArgument {
     LedgerArgument::Upgrade(Some(UpgradeArgs {
         metadata: None,

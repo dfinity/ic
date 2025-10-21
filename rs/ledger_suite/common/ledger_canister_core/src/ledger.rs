@@ -434,7 +434,6 @@ pub async fn archive_blocks<LA: LedgerAccess>(sink: impl Sink + Clone, max_messa
     .await;
 
     if let Err((_num, err)) = &result {
-        ic_cdk::println!("Ledger archive blocks error: {:?}", err.0);
         LA::with_ledger_mut(|ledger| ledger.increment_archiving_failure_metric());
     }
 

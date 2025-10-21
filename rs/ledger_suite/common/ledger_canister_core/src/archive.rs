@@ -382,46 +382,26 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         .ok_or(FailedToArchiveBlocks(
             "Overflow when calculating canister creation and installation cost".to_string(),
         ))?;
-    ic_cdk::println!("cost_create_canister: {}", cost_create_canister);
-    ic_cdk::println!(
-        "cycles_for_archive_creation: {}",
-        cycles_for_archive_creation
-    );
     let ledger_liquid_cycles_balance = ic_cdk::api::canister_liquid_cycle_balance();
-    ic_cdk::println!(
-        "ledger_liquid_cycles_balance: {}",
-        ledger_liquid_cycles_balance
-    );
 
     match cost_create_canister {
         0u128 => {
             // Assume system subnet.
-            ic_cdk::println!("system subnet detected (cost_create_canister == 0)");
             if (cycles_for_archive_creation as u128) > ledger_liquid_cycles_balance {
                 // Assume that this is an erroneous configuration, and send 0 cycles to create the
                 // canister. Since the created canister is on the same subnet as the ledger, it does
                 // not need any cycles attached to the call. If this were to change in the future,
                 // i.e., if the ledger could spawn archive canisters on a different subnet,
                 // potentially with different costs, we would need to revisit this logic.
-                ic_cdk::println!(
-                    "sending 0 cycles to create_canister call instead of {cycles_for_archive_creation}"
-                );
                 log!(
                     log_sink,
                     "cycles_for_archive_creation ({cycles_for_archive_creation}) is less than ledger_liquid_cycles_balance ({ledger_liquid_cycles_balance})- attaching 0 cycles to create_canister call since canister creation is free."
                 );
                 cycles_for_archive_creation = 0;
-            } else {
-                ic_cdk::println!(
-                    "sending the configured cycles to create_canister call ({cycles_for_archive_creation})"
-                );
             }
         }
         _ => {
             // Application subnet.
-            ic_cdk::println!(
-                "application subnet detected (cost_create_canister == {cost_create_canister})"
-            );
             if (cycles_for_archive_creation as u128) < cost_create_and_install_canister {
                 return Err(FailedToArchiveBlocks(format!(
                     "Archiving options do not provide enough cycles to create archive canister. \
@@ -464,17 +444,9 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
     // Panicking leads to the rolling back of the transaction that triggered the archiving, and no
     // more transactions will be processed by the ledger until it has been topped up with enough
     // cycles to spawn the archive canister.
-    ic_cdk::println!(
-        "possibly adapted cycles_for_archive_creation: {}",
-        cycles_for_archive_creation
-    );
     let node_canister_id: CanisterId = spawn::create_canister::<Rt>(cycles_for_archive_creation)
         .await
-        .map_err(|(code, msg)| {
-            ic_cdk::println!("create_canister call failed: code: {}, msg: {}", code, &msg);
-            FailedToArchiveBlocks(format!("{code} {msg}"))
-        })?;
-    ic_cdk::println!("create_canister call succeeded");
+        .map_err(|(code, msg)| FailedToArchiveBlocks(format!("{code} {msg}")))?;
 
     log!(log_sink, "[archive] calling install_code()");
 

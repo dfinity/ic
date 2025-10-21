@@ -327,7 +327,6 @@ impl LedgerData for Ledger {
     }
 
     fn increment_archiving_failure_metric(&mut self) {
-        // Increment the archiving failures metric.
         ARCHIVING_FAILURES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
 

@@ -878,7 +878,6 @@ impl LedgerData for Ledger {
     }
 
     fn increment_archiving_failure_metric(&mut self) {
-        ic_cdk::println!("increment_archiving_failure_metric");
         ARCHIVING_FAILURES.with(|failures| {
             failures
                 .borrow()
