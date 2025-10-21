@@ -110,7 +110,7 @@ impl<MakeFut, Fut> Debug for UdpPollHelper<MakeFut, Fut> {
 //
 
 impl AsyncUdpSocket for CustomUdp {
-    fn create_io_poller(self: Arc<Self>) -> Pin<Box<(dyn UdpPoller + 'static)>> {
+    fn create_io_poller(self: Arc<Self>) -> Pin<Box<dyn UdpPoller + 'static>> {
         Box::pin(UdpPollHelper::new(move || {
             let socket = self.clone();
             async move { socket.inner.writable().await }

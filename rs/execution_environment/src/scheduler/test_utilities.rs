@@ -26,8 +26,8 @@ use ic_embedders::{
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionRoundSummary, ExecutionRoundType, HypervisorError, HypervisorResult,
-    IngressHistoryWriter, InstanceStats, RegistryExecutionSettings, Scheduler,
-    SystemApiCallCounters, WasmExecutionOutput,
+    InstanceStats, RegistryExecutionSettings, Scheduler, SystemApiCallCounters,
+    WasmExecutionOutput,
 };
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_management_canister_types_private::{
@@ -67,11 +67,9 @@ use ic_wasm_types::CanisterModule;
 use maplit::btreemap;
 use std::time::Duration;
 
-use crate::{
-    ExecutionEnvironment, Hypervisor, IngressHistoryWriterImpl, RoundLimits, as_round_instructions,
-};
+use crate::{ExecutionServicesForTesting, RoundLimits, as_round_instructions};
 
-use super::{RoundSchedule, SchedulerImpl};
+use super::SchedulerImpl;
 use crate::metrics::MeasurementScope;
 use ic_crypto_prng::{Csprng, RandomnessPurpose::ExecutionThread};
 use ic_types::time::UNIX_EPOCH;
@@ -850,7 +848,7 @@ impl SchedulerTestBuilder {
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
         state.metadata.batch_time = self.batch_time;
 
-        let config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
+        let subnet_config = SubnetConfig::new(self.subnet_type);
         for key_id in &self.master_public_key_ids {
             state
                 .metadata
@@ -892,7 +890,7 @@ impl SchedulerTestBuilder {
             self.scheduler_config.max_instructions_per_message,
             self.subnet_type,
             self.own_subnet_id,
-            config,
+            subnet_config.cycles_account_manager_config,
         );
         let cycles_account_manager = Arc::new(cycles_account_manager);
         let rate_limiting_of_instructions = if self.rate_limiting_of_instructions {
@@ -920,61 +918,37 @@ impl SchedulerTestBuilder {
             Arc::clone(&cycles_account_manager),
             registry_settings.subnet_size,
         ));
-        let hypervisor = Hypervisor::new_for_testing(
-            &self.metrics_registry,
-            self.own_subnet_id,
-            self.log.clone(),
-            Arc::clone(&cycles_account_manager),
-            Arc::<TestWasmExecutor>::clone(&wasm_executor),
-            config.embedders_config.cost_to_compile_wasm_instruction,
-            SchedulerConfig::application_subnet().dirty_page_overhead,
-            self.canister_guaranteed_callback_quota,
-        );
-        let hypervisor = Arc::new(hypervisor);
         let (completed_execution_messages_tx, _) = tokio::sync::mpsc::channel(1);
-        let state_reader = Arc::new(FakeStateManager::new());
-        let ingress_history_writer = IngressHistoryWriterImpl::new(
-            config.clone(),
-            self.log.clone(),
-            &self.metrics_registry,
-            completed_execution_messages_tx,
-            state_reader,
-        );
-        let ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>> =
-            Arc::new(ingress_history_writer);
+        let state_manager = Arc::new(FakeStateManager::new());
 
-        let exec_env = ExecutionEnvironment::new(
+        let execution_services = ExecutionServicesForTesting::setup_execution(
             self.log.clone(),
-            hypervisor,
-            Arc::clone(&ingress_history_writer),
             &self.metrics_registry,
             self.own_subnet_id,
             self.subnet_type,
-            RoundSchedule::compute_capacity_percent(self.scheduler_config.scheduler_cores),
-            config,
-            Arc::clone(&cycles_account_manager),
-            self.scheduler_config.scheduler_cores,
-            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-            self.scheduler_config.heap_delta_rate_limit,
-            self.scheduler_config.upload_wasm_chunk_instructions,
-            self.scheduler_config
-                .canister_snapshot_baseline_instructions,
-            self.scheduler_config
-                .canister_snapshot_data_baseline_instructions,
+            config.clone(),
+            subnet_config.clone(),
+            state_manager.clone(),
+            state_manager.get_fd_factory(),
+            completed_execution_messages_tx,
+            state_manager.tmp(),
+            Some(wasm_executor.clone()),
         );
+
         let scheduler = SchedulerImpl::new(
             self.scheduler_config,
             self.hypervisor_config,
             self.own_subnet_id,
-            ingress_history_writer,
-            Arc::new(exec_env),
-            Arc::clone(&cycles_account_manager),
+            execution_services.ingress_history_writer,
+            execution_services.execution_environment,
+            execution_services.cycles_account_manager,
             &self.metrics_registry,
             self.log,
             rate_limiting_of_heap_delta,
             rate_limiting_of_instructions,
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
         );
+
         SchedulerTest {
             state: Some(state),
             next_canister_id: 0,

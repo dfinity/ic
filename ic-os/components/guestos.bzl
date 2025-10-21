@@ -69,6 +69,7 @@ component_files = {
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
+    Label("misc/sev/99-sev.rules"): "/etc/udev/rules.d/99-sev.rules",
     Label("guestos/misc/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("guestos/misc/sudoers"): "/etc/sudoers",
     Label("guestos/misc/crypttab"): "/etc/crypttab",
