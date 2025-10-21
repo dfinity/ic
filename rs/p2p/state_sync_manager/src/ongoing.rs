@@ -208,8 +208,9 @@ impl OngoingStateSync {
             }
             Err(err) => {
                 info!(
+                    every_n_seconds => 15,
                     self.log,
-                    "Failed to download chunk {} from {}: {} ", chunk_id, peer_id, err
+                    "Failed to download chunk from {}: {} ", peer_id, err
                 );
                 self.chunks_to_download.download_failed(chunk_id);
             }
