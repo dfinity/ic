@@ -732,12 +732,14 @@ impl ReplicatedState {
         message_id: MessageId,
         status: IngressStatus,
         ingress_memory_capacity: NumBytes,
+        observe_time_in_terminal_state: impl Fn(u64),
     ) -> (Arc<IngressStatus>, BTreeMap<u64, u64>) {
         self.metadata.ingress_history.insert(
             message_id,
             status,
             self.time(),
             ingress_memory_capacity,
+            observe_time_in_terminal_state,
         )
     }
 
