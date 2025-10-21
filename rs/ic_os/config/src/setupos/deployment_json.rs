@@ -140,7 +140,7 @@ mod test {
     #[test]
     /// Confirm that the defaults for HostOsDevSettings (the config type) and
     /// VmResources (the type from deployment.json) are in line.
-    fn defaults_alligned() {
+    fn defaults_aligned() {
         let dev_settings = HostOSDevSettings::default();
         let vm_resources = VmResources::default();
 
