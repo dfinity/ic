@@ -8,7 +8,6 @@ anyhow = { workspace = true }
 clap = { workspace = true }
 partition_tools = { path = "../../build_tools/partition_tools" }
 serde_json = { workspace = true }
-serde = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 url = { workspace = true }

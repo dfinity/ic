@@ -9,7 +9,6 @@ use std::{
 use anyhow::{Context, Error};
 use clap::{Args, Parser};
 use config::setupos::config_ini::ConfigIniSettings;
-use serde::{Deserialize, Serialize};
 use tempfile::NamedTempFile;
 use url::Url;
 

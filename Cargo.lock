@@ -22171,7 +22171,6 @@ dependencies = [
  "config",
  "config_types",
  "partition_tools",
- "serde",
  "serde_json",
  "tempfile",
  "tokio",
