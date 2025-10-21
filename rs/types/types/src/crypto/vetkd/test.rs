@@ -7,27 +7,27 @@ use ic_base_types::PrincipalId;
 use ic_base_types::SubnetId;
 
 mod display_and_debug {
-    use crate::crypto::vetkd::VetKdDerivationContext;
-
     use super::*;
 
     #[test]
     fn should_correctly_print_vetkd_args() {
+        let ni_dkg_id = NiDkgId {
+            start_block_height: Height::new(7),
+            dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(42)),
+            dkg_tag: NiDkgTag::HighThreshold,
+            target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new([42; NiDkgTargetId::SIZE])),
+        };
+        let caller = PrincipalId::new_node_test_id(17);
+        let context = b"context-123".to_vec();
+        let input = b"input".to_vec();
+        let transport_public_key = b"tpk".to_vec();
+
         let input = VetKdArgs {
-            ni_dkg_id: NiDkgId {
-                start_block_height: Height::new(7),
-                dealer_subnet: SubnetId::from(PrincipalId::new_subnet_test_id(42)),
-                dkg_tag: NiDkgTag::HighThreshold,
-                target_subnet: NiDkgTargetSubnet::Remote(NiDkgTargetId::new(
-                    [42; NiDkgTargetId::SIZE],
-                )),
-            },
-            context: VetKdDerivationContext {
-                caller: PrincipalId::new_node_test_id(17),
-                context: b"context-123".to_vec(),
-            },
-            input: b"input".to_vec(),
-            transport_public_key: b"tpk".to_vec(),
+            ni_dkg_id: &ni_dkg_id,
+            caller: &caller,
+            context: &context,
+            input: &input,
+            transport_public_key: &transport_public_key,
         };
         let output = "VetKdArgs { \
             ni_dkg_id: NiDkgId { start_block_height: 7, dealer_subnet: ot5wk-sbkaa-aaaaa-aaaap-yai, dkg_tag: HighThreshold, target_subnet: Remote(0x2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a) }, \

@@ -48,7 +48,7 @@ use ic_types::{
         threshold_sig::ni_dkg::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
-        vetkd::VetKdArgs,
+        vetkd::VetKdArgsOwned,
     },
     messages::{CallbackId, Payload},
     time::UNIX_EPOCH,
@@ -787,7 +787,7 @@ pub fn create_pre_sig_ref(caller: u8, key_id: &IDkgMasterPublicKeyId) -> TestPre
 pub enum ThresholdSigInputsOwned {
     Ecdsa(ThresholdEcdsaSigInputsOwned),
     Schnorr(ThresholdSchnorrSigInputsOwned),
-    VetKd(VetKdArgs),
+    VetKd(VetKdArgsOwned),
 }
 
 impl ThresholdSigInputsOwned {
@@ -795,7 +795,7 @@ impl ThresholdSigInputsOwned {
         match self {
             ThresholdSigInputsOwned::Ecdsa(i) => ThresholdSigInputs::Ecdsa(i.as_ref()),
             ThresholdSigInputsOwned::Schnorr(i) => ThresholdSigInputs::Schnorr(i.as_ref()),
-            ThresholdSigInputsOwned::VetKd(i) => ThresholdSigInputs::VetKd(i.clone()),
+            ThresholdSigInputsOwned::VetKd(i) => ThresholdSigInputs::VetKd(i.as_ref()),
         }
     }
 }

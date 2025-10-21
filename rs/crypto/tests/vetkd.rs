@@ -11,7 +11,6 @@ use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTranscript};
 use ic_types::crypto::vetkd::VetKdArgs;
-use ic_types::crypto::vetkd::VetKdDerivationContext;
 use ic_types::crypto::vetkd::VetKdEncryptedKey;
 use ic_types::crypto::vetkd::VetKdEncryptedKeyShare;
 use ic_types::{NodeId, NumberOfNodes};
@@ -30,7 +29,8 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
     let transcript = run_ni_dkg_and_load_transcript_for_receivers(&config, &crypto_components);
 
     let caller = canister_test_id(234).get();
-    let context = b"context-123";
+    let context = b"context-123".to_vec();
+    let input = b"some-input".to_vec();
 
     let transcript_key = ThresholdSigPublicKey::try_from(&transcript)
         .expect("invalid transcript")
@@ -41,20 +41,19 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
 
     let derived_public_key = transcript_key
         .derive_canister_key(caller.as_slice())
-        .derive_sub_key(context)
+        .derive_sub_key(&context)
         .serialize();
 
     let transport_secret_key =
         ic_vetkeys::TransportSecretKey::from_seed(rng.r#gen::<[u8; 32]>().to_vec())
             .expect("failed to create transport secret key");
+    let transport_public_key = transport_secret_key.public_key();
     let vetkd_args = VetKdArgs {
-        ni_dkg_id: dkg_id,
-        context: VetKdDerivationContext {
-            caller,
-            context: context.to_vec(),
-        },
-        input: b"some-input".to_vec(),
-        transport_public_key: transport_secret_key.public_key(),
+        ni_dkg_id: &dkg_id,
+        caller: &caller,
+        context: &context,
+        input: &input,
+        transport_public_key: &transport_public_key,
     };
 
     let mut expected_decrypted_key: Option<Vec<u8>> = None;
@@ -85,11 +84,7 @@ fn should_consistently_derive_the_same_vetkey_given_sufficient_shares() {
         let derived_public_key = ic_vetkeys::DerivedPublicKey::deserialize(&derived_public_key)
             .expect("failed to deserialize derived public key");
         let decrypted_key = encrypted_key
-            .decrypt_and_verify(
-                &transport_secret_key,
-                &derived_public_key,
-                &vetkd_args.input,
-            )
+            .decrypt_and_verify(&transport_secret_key, &derived_public_key, vetkd_args.input)
             .expect("failed to decrypt vetKey")
             .signature_bytes()
             .to_vec();
