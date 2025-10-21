@@ -20,8 +20,13 @@ use crate::{
     validation::validate_request,
 };
 
+#[derive(CandidType, Deserialize)]
+struct MigrationCanisterInitArgs {
+    allowlist: Vec<Principal>,
+}
+
 #[init]
-fn init() {
+fn init(args: Option<MigrationCanisterInitArgs>) {
     start_timers();
 }
 
