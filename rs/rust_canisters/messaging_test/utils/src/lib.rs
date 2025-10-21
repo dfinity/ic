@@ -1,7 +1,7 @@
 use ic_types::{CanisterId, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
 use messaging_test::{Call, Message, Reply, Response, decode, encode};
 use proptest::prelude::*;
-use std::ops::RangeInclusive;
+use std::ops::{AddAssign, RangeInclusive};
 
 const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 
@@ -141,11 +141,101 @@ pub fn to_encoded_ingress(call: Call) -> (CanisterId, Vec<u8>) {
 }
 
 /// Decodes a blob into a `Response`.
-pub fn from_blob(blob: Vec<u8>) -> Response {
+pub fn from_blob(respondent: CanisterId, blob: Vec<u8>) -> Response {
     let (reply, bytes_sent_on_reply, _) = decode::<Reply>(blob);
     Response::Success {
+        respondent,
         bytes_received_on_call: reply.bytes_received_on_call,
         bytes_sent_on_reply,
         downstream_responses: reply.downstream_responses,
     }
+}
+
+/// Stats when comparing a `Call` made to the canister vs the `Response` obtained from it.
+#[derive(Default, Debug, Eq, PartialEq)]
+pub struct Stats {
+    /// Number of calls performed successfully.
+    pub successful_calls_count: usize,
+    /// Number of times the requested call payload size was matched exactly.
+    pub call_bytes_match_count: usize,
+    /// Number of times the requested reply payload size was matched exactly.
+    pub reply_bytes_match_count: usize,
+    /// Number of calls that were rejected.
+    pub rejected_calls_count: usize,
+    /// Number of downstream calls that were not performed due to calls getting rejected.
+    pub missed_downstream_calls_count: usize,
+}
+
+impl AddAssign for Stats {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = Self {
+            successful_calls_count: self.successful_calls_count + rhs.successful_calls_count,
+            call_bytes_match_count: self.call_bytes_match_count + rhs.call_bytes_match_count,
+            reply_bytes_match_count: self.reply_bytes_match_count + rhs.reply_bytes_match_count,
+            rejected_calls_count: self.rejected_calls_count + rhs.rejected_calls_count,
+            missed_downstream_calls_count: self.missed_downstream_calls_count
+                + rhs.missed_downstream_calls_count,
+        };
+    }
+}
+
+pub fn stats_call_vs_response(call: Call, response: Response) -> Stats {
+    match response {
+        Response::Success {
+            respondent,
+            bytes_received_on_call,
+            bytes_sent_on_reply,
+            downstream_responses,
+        } => {
+            // These asserts can only happen if the call and the response do not originate from the same invocation.
+            assert_eq!(call.receiver, respondent);
+            assert_eq!(call.downstream_calls.len(), downstream_responses.len());
+            // These must always hold because of the added padding.
+            assert!(
+                call.call_bytes <= bytes_received_on_call,
+                "call_bytes: {} > bytes_received_on_call: {}",
+                call.call_bytes,
+                bytes_received_on_call,
+            );
+            assert!(
+                call.reply_bytes <= bytes_sent_on_reply,
+                "reply_bytes: {} > bytes_sent_on_reply: {}",
+                call.reply_bytes,
+                bytes_sent_on_reply,
+            );
+
+            call.downstream_calls
+                .into_iter()
+                .zip(downstream_responses.into_iter())
+                .fold(
+                    Stats {
+                        successful_calls_count: 1,
+                        call_bytes_match_count: (call.call_bytes == bytes_received_on_call)
+                            as usize,
+                        reply_bytes_match_count: (call.reply_bytes == bytes_sent_on_reply) as usize,
+                        rejected_calls_count: 0,
+                        missed_downstream_calls_count: 0,
+                    },
+                    |mut acc, (call, response)| {
+                        acc += stats_call_vs_response(call, response);
+                        acc
+                    },
+                )
+        }
+        Response::SyncReject { call } | Response::AsyncReject { call, .. } => Stats {
+            successful_calls_count: 0,
+            call_bytes_match_count: 0,
+            reply_bytes_match_count: 0,
+            rejected_calls_count: 1,
+            missed_downstream_calls_count: recursive_count_calls(call),
+        },
+    }
+}
+
+/// Recursively counts all the downstream calls attached to this `call`, i.e. downstream calls to downstream calls and so forth.
+fn recursive_count_calls(call: Call) -> usize {
+    let len = call.downstream_calls.len();
+    call.downstream_calls
+        .into_iter()
+        .fold(len, |acc, call| acc + recursive_count_calls(call))
 }

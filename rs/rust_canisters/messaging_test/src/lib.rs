@@ -33,14 +33,16 @@ pub struct Message {
 pub enum Response {
     /// The call to `respondent` was successful.
     Success {
+        respondent: CanisterId,
         bytes_received_on_call: u32,
         bytes_sent_on_reply: u32,
-        downstream_responses: Vec<(CanisterId, Response)>,
+        downstream_responses: Vec<Response>,
     },
     /// A synchronous reject occurred, i.e. perform call failed.
-    SyncReject,
+    SyncReject { call: Call },
     /// An asynchronous reject occurred, e.g. queue full.
     AsyncReject {
+        call: Call,
         reject_code: u32,
         reject_message: String,
     },
@@ -50,7 +52,7 @@ pub enum Response {
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
 pub struct Reply {
     pub bytes_received_on_call: u32,
-    pub downstream_responses: Vec<(CanisterId, Response)>,
+    pub downstream_responses: Vec<Response>,
 }
 
 /// Encodes a message of type `T` using Candid and appropriate padding

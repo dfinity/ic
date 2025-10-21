@@ -3,9 +3,10 @@ use ic_state_machine_tests::two_subnets_simple;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types_test_utils::ids::canister_test_id;
 use messaging_test::{Call, Message, decode, encode};
-use messaging_test_utils::{arb_call, from_blob, to_encoded_ingress};
+use messaging_test_utils::{
+    Stats, arb_call, from_blob, stats_call_vs_response, to_encoded_ingress,
+};
 use proptest::prop_assert_eq;
-use std::collections::{BTreeMap, VecDeque};
 
 // Tests payloads can be encoded and decoded into the same message again while producing
 /// payloads of the requested size (or larger where the target is too small).
@@ -57,11 +58,9 @@ fn smoke_test() {
         .install_canister_with_cycles(wasm.clone(), Vec::new(), None, Cycles::new(u128::MAX / 2))
         .expect("Installing messaging-test-canister failed");
 
-    let mut msg_ids = VecDeque::new();
-
     // A call to be sent to `canister1` as an ingress that then calls `canister3`
     // as a XNet inter canister call; that then makes a call to self.
-    let (receiver, payload) = to_encoded_ingress(Call {
+    let call1 = Call {
         receiver: canister1,
         call_bytes: 456,
         reply_bytes: 789,
@@ -79,15 +78,15 @@ fn smoke_test() {
                 downstream_calls: vec![],
             }],
         }],
-    });
-    msg_ids.push_back(
-        env1.submit_ingress_as(PrincipalId::new_anonymous(), receiver, "pulse", payload)
-            .unwrap(),
-    );
+    };
+    let (receiver1, payload) = to_encoded_ingress(call1.clone());
+    let msg_id1 = env1
+        .submit_ingress_as(PrincipalId::new_anonymous(), receiver1, "pulse", payload)
+        .unwrap();
 
     // A call to be sent to `canister2` as an ingress that then calls `canister1`
     // on the same subnet.
-    let (receiver, payload) = to_encoded_ingress(Call {
+    let call2 = Call {
         receiver: canister2,
         call_bytes: 312,
         reply_bytes: 546,
@@ -99,37 +98,57 @@ fn smoke_test() {
             timeout_secs: None,
             downstream_calls: vec![],
         }],
-    });
-    msg_ids.push_back(
-        env1.submit_ingress_as(PrincipalId::new_anonymous(), receiver, "pulse", payload)
-            .unwrap(),
-    );
+    };
+    let (receiver2, payload) = to_encoded_ingress(call2.clone());
+    let msg_id2 = env1
+        .submit_ingress_as(PrincipalId::new_anonymous(), receiver2, "pulse", payload)
+        .unwrap();
 
-    // Execute rounds and advance time until the results of both calls are in the ingress history.
-    let mut responses = BTreeMap::new();
-    for _ in 0..100 {
+    // Executing 20 rounds should plenty for these two calls to conclude.
+    for _ in 0..20 {
         env1.execute_round();
         env1.advance_time(std::time::Duration::from_secs(1));
         env2.execute_round();
         env2.advance_time(std::time::Duration::from_secs(1));
-
-        let len = msg_ids.len();
-        if len == 0 {
-            break;
-        }
-
-        for _ in 0..len {
-            let msg_id = msg_ids.pop_front().unwrap();
-            match env1.ingress_status(&msg_id) {
-                IngressStatus::Known {
-                    state: IngressState::Completed(WasmResult::Reply(blob)),
-                    ..
-                } => assert!(responses.insert(msg_id, from_blob(blob)).is_none()),
-                _ => msg_ids.push_back(msg_id),
-            }
-        }
     }
 
-    // No hanging or unsuccessful calls after 100 rounds.
-    assert_eq!(0, msg_ids.len());
+    // Check the response to the first call.
+    match env1.ingress_status(&msg_id1) {
+        IngressStatus::Known {
+            state: IngressState::Completed(WasmResult::Reply(blob)),
+            ..
+        } => {
+            assert_eq!(
+                Stats {
+                    successful_calls_count: 3,
+                    call_bytes_match_count: 3,
+                    reply_bytes_match_count: 3,
+                    rejected_calls_count: 0,
+                    missed_downstream_calls_count: 0
+                },
+                stats_call_vs_response(call1, from_blob(receiver1, blob)),
+            );
+        }
+        _ => unreachable!("the first call did not conclude successfully"),
+    }
+
+    // Check the response to the second call.
+    match env1.ingress_status(&msg_id2) {
+        IngressStatus::Known {
+            state: IngressState::Completed(WasmResult::Reply(blob)),
+            ..
+        } => {
+            assert_eq!(
+                Stats {
+                    successful_calls_count: 2,
+                    call_bytes_match_count: 2,
+                    reply_bytes_match_count: 1,
+                    rejected_calls_count: 0,
+                    missed_downstream_calls_count: 0
+                },
+                stats_call_vs_response(call2, from_blob(receiver2, blob)),
+            );
+        }
+        _ => unreachable!("the first call did not conclude successfully"),
+    }
 }

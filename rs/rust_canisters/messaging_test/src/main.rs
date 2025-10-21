@@ -18,7 +18,7 @@ fn no_op(bytes: Vec<u8>) -> Vec<u8> {
 }
 
 #[ic_cdk::update(decode_with = "decode", encode_with = "no_op")]
-async fn pulse((msg, bytes_received, _): (Message, u32, u32)) -> Vec<u8> {
+async fn pulse((msg, bytes_received_on_call, _): (Message, u32, u32)) -> Vec<u8> {
     // Check for sequence errors if this is an inter canister call.
     if let Ok(caller) = CanisterId::try_from_principal_id(PrincipalId(ic_cdk::api::msg_caller())) {
         INCOMING_CALL_INDICES.with_borrow_mut(|incoming_call_indices| {
@@ -34,12 +34,8 @@ async fn pulse((msg, bytes_received, _): (Message, u32, u32)) -> Vec<u8> {
         });
     }
 
-    // Keep the receivers to collect the responses after making all the calls.
-    let respondents = msg
-        .downstream_calls
-        .iter()
-        .map(|call| call.receiver)
-        .collect::<Vec<_>>();
+    // Clone the calls for pairing them with the responses further down.
+    let calls = msg.downstream_calls.clone();
 
     // Generate futures for all downstream calls.
     let futures = msg.downstream_calls.into_iter().map(|call| {
@@ -60,14 +56,16 @@ async fn pulse((msg, bytes_received, _): (Message, u32, u32)) -> Vec<u8> {
         .into_future()
     });
 
-    // Perform and await the downstream calls.
-    let results = (futures::future::join_all(futures).await)
+    // Perform and await the downstream calls; collect the responses.
+    let downstream_responses = (futures::future::join_all(futures).await)
         .into_iter()
-        .map(|reply| match reply {
+        .zip(calls.into_iter())
+        .map(|(reply, call)| match reply {
             Ok(reply) => {
                 let (reply, bytes_sent_on_reply, _) = decode::<Reply>(reply.into_bytes());
                 Response::Success {
-                    bytes_received_on_call: bytes_received,
+                    respondent: call.receiver,
+                    bytes_received_on_call: reply.bytes_received_on_call,
                     bytes_sent_on_reply,
                     downstream_responses: reply.downstream_responses,
                 }
@@ -75,18 +73,20 @@ async fn pulse((msg, bytes_received, _): (Message, u32, u32)) -> Vec<u8> {
             Err(ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)) => {
                 unreachable!("not doing anything with cycles for now");
             }
-            Err(ic_cdk::call::CallFailed::CallPerformFailed(_)) => Response::SyncReject,
+            Err(ic_cdk::call::CallFailed::CallPerformFailed(_)) => Response::SyncReject { call },
             Err(ic_cdk::call::CallFailed::CallRejected(rejection)) => Response::AsyncReject {
+                call,
                 reject_code: rejection.raw_reject_code(),
                 reject_message: rejection.reject_message().to_string(),
             },
-        });
+        })
+        .collect();
 
     // Collect the respondents together with the responses; encode them.
     let (payload, _) = encode(
         &Reply {
-            bytes_received_on_call: bytes_received,
-            downstream_responses: respondents.into_iter().zip(results).collect::<Vec<_>>(),
+            bytes_received_on_call,
+            downstream_responses,
         },
         msg.reply_bytes as usize,
     );
