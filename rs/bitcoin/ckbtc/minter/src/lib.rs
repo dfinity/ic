@@ -282,6 +282,10 @@ pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
             if btc_network == Network::Regtest {
                 return state::read_state(|s| s.estimate_median_fee_per_vbyte());
             }
+            log!(
+                Priority::Debug,
+                "[estimate_fee_per_vbyte]: update median fee per vbyte with {fees:?}"
+            );
             state::mutate_state(|s| s.update_median_fee_per_vbyte(fees))
         }
         Err(err) => {

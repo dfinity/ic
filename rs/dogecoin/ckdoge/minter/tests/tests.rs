@@ -218,12 +218,18 @@ fn should_estimate_doge_transaction_fee() {
     let setup = Setup::default();
     let dogecoin = setup.dogecoin();
     let minter = setup.minter();
-    dogecoin.set_fee_percentiles(array::from_fn(|i| i as u64));
-    setup.env.advance_time(Duration::from_secs(60 * 60));
+    let fee_percentiles = array::from_fn(|i| i as u64);
+    let median_fee = fee_percentiles[50];
+    assert_eq!(median_fee, 50);
+    dogecoin.set_fee_percentiles(fee_percentiles);
+    setup.env.advance_time(Duration::from_secs(60 * 60 + 1));
+    setup.env.tick();
+    setup.env.tick();
+    setup.env.tick();
 
     minter
         .assert_that_metrics()
-        .assert_contains_metric_matching("ckbtc_minter_median_fee_per_vbyte 50");
+        .assert_contains_metric_matching(format!("ckbtc_minter_median_fee_per_vbyte {median_fee}"));
 }
 
 #[test]
