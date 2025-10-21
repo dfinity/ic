@@ -339,13 +339,13 @@ impl<'a> Default for Conf<'a> {
 impl<T: RpcClientType> Daemon<T> {
     /// Create a new daemon by running the executable at the given path, network and
     /// configration.
-    pub fn new(daemon_path: &str, network: T, conf: Conf) -> Result<Daemon<T>, RpcError> {
+    pub fn new(daemon_path: &str, network: T, conf: Conf) -> Daemon<T> {
         let work_dir = match conf.work_dir {
             Some(dir) => {
-                fs::create_dir_all(dir.clone())?;
+                fs::create_dir_all(dir.clone()).unwrap();
                 WorkDir::Persisted(dir)
             }
-            None => WorkDir::Temporary(tempdir()?),
+            None => WorkDir::Temporary(tempdir().unwrap()),
         };
 
         let conf_path = work_dir.path().join("bitcoin.conf");
@@ -357,12 +357,12 @@ impl<T: RpcClientType> Daemon<T> {
             Some(Auth::UserPass(_, _)) => panic!("Auth::UserPass is not supported"),
             Some(auth) => auth,
         };
-        fs::write(conf_path.clone(), "")?;
-        let (rpc_listener, rpc_port) = get_available_port()?;
+        fs::write(conf_path.clone(), "").unwrap();
+        let (rpc_listener, rpc_port) = get_available_port().unwrap();
         let rpc_socket = net::SocketAddrV4::new(LOCAL_IP, rpc_port);
         let rpc_url = format!("http://{rpc_socket}");
         let (p2p_listener, p2p_args, p2p_socket) = if conf.p2p {
-            let (listener, p2p_port) = get_available_port()?;
+            let (listener, p2p_port) = get_available_port().unwrap();
             let p2p_socket = net::SocketAddrV4::new(LOCAL_IP, p2p_port);
             let p2p_arg = format!("-port={p2p_port}");
             let args = vec![p2p_arg];
@@ -383,12 +383,12 @@ impl<T: RpcClientType> Daemon<T> {
 
         println!("Spawning daemon: {cmd:?}");
 
-        let mut process = cmd.spawn()?;
+        let mut process = cmd.spawn().unwrap();
 
         drop(rpc_listener);
         drop(p2p_listener);
 
-        if let Some(status) = process.try_wait()? {
+        if let Some(status) = process.try_wait().unwrap() {
             panic!("early exit with: {status:?}");
         }
         assert!(process.stderr.is_none());
@@ -425,14 +425,15 @@ impl<T: RpcClientType> Daemon<T> {
             .recv_timeout(timeout)
             .expect("expected {cmd:?} to be done loading within {timeout:?}");
 
-        let rpc_client = RpcClient::new(network, &rpc_url, auth.clone())?.ensure_wallet()?;
+        let rpc_client = RpcClient::new(network, &rpc_url, auth.clone()).unwrap();
+        let rpc_client = rpc_client.ensure_wallet().unwrap();
 
-        Ok(Self {
+        Self {
             _work_dir: work_dir,
             p2p_socket,
             rpc_client,
             process,
-        })
+        }
     }
 
     /// Stop the daemon process and return its [ExitStatus].
