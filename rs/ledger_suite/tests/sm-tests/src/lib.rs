@@ -6452,7 +6452,7 @@ pub mod archiving {
     /// Parse ledger logs into a Log struct.
     /// Example log line:
     /// 1620328630000000031 rs/ledger_suite/common/ledger_canister_core/src/ledger.rs:456 [ledger] archiving 1000 blocks
-    pub fn parse_ledger_logs(logs: &Vec<u8>) -> Log {
+    pub fn parse_ledger_logs(logs: &[u8]) -> Log {
         let logs_as_single_string = String::from_utf8_lossy(logs).to_string();
         let mut entries = vec![];
         for line in logs_as_single_string.lines() {
