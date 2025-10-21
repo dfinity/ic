@@ -290,7 +290,7 @@ fn archive_get_all_blocks(
     res
 }
 
-fn parse_index_logs(logs: &[u8]) -> Log {
+pub(crate) fn parse_index_logs(logs: &[u8]) -> Log {
     serde_json::from_slice(logs).expect("failed to parse index-ng log")
 }
 
