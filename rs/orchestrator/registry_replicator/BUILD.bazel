@@ -31,9 +31,32 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
+    "//packages/pocket-ic",
+    "//rs/certification/test-utils",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/tree_hash",
+    "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
+    "//rs/nns/constants",
+    "//rs/nns/test_utils",
     "//rs/registry/fake",
     "//rs/registry/proto_data_provider",
+    "//rs/registry/transport",
+    "//rs/test_utilities/logger",
+    "@crate_index//:candid",
+    "@crate_index//:rand",
 ]
+
+DEV_DATA = [
+    # Keep sorted.
+    "//rs/pocket_ic_server:pocket-ic-server",
+    "//rs/registry/canister:registry-canister-test",
+]
+
+DEV_ENV = {
+    # Keep sorted.
+    "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+    "REGISTRY_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister-test)",
+}
 
 MACRO_DEPENDENCIES = []
 
@@ -58,5 +81,7 @@ rust_binary(
 rust_test(
     name = "registry_replicator_test",
     crate = ":registry_replicator",
+    data = DEV_DATA,
+    env = DEV_ENV,
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
