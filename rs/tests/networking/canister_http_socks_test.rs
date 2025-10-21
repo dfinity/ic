@@ -137,7 +137,8 @@ pub fn test(env: TestEnv) {
     let logger = env.logger();
     info!(logger, "API boundary node IP address: {}", apibn_ip);
     let webserver_ipv6 = get_universal_vm_address(&env).to_string();
-    let webserver_url = format!("https://[{webserver_ipv6}]:443/ip");
+    let nip_io_hostname = webserver_ipv6.replace(':', "-") + ".ipv6.nip.io";
+    let webserver_url = format!("https://{}/ip", nip_io_hostname);
 
     let mut system_nodes = get_system_subnet_node_snapshots(&env);
     let system_node = system_nodes.next().expect("there is no system subnet node");

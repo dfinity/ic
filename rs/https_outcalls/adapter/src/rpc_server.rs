@@ -212,7 +212,7 @@ impl HttpsOutcallsService for CanisterHttp {
         info!(self.logger, "--- RUNNING MINIMAL RUNTIME SOCKS TEST ---");
 
         // 1. Extract the necessary runtime values from the incoming request.
-        let use_real_destination = false;
+        let use_real_destination = true;
         let destination_url = if use_real_destination {
             req.url
         } else {
