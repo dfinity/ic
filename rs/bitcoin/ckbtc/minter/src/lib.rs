@@ -116,6 +116,7 @@ pub struct ECDSAPublicKey {
 }
 
 pub type GetUtxosRequest = bitcoin_canister::GetUtxosRequest;
+pub type GetCurrentFeePercentilesRequest = bitcoin_canister::GetCurrentFeePercentilesRequest;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetUtxosResponse {
@@ -268,10 +269,15 @@ fn compute_min_withdrawal_amount(
 /// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
 pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
-    _runtime: &R,
+    runtime: &R,
 ) -> Option<MillisatoshiPerByte> {
     let btc_network = state::read_state(|s| s.btc_network);
-    match management::get_current_fees(btc_network).await {
+    match runtime
+        .get_current_fee_percentiles(&bitcoin_canister::GetCurrentFeePercentilesRequest {
+            network: btc_network.into(),
+        })
+        .await
+    {
         Ok(fees) => {
             if btc_network == Network::Regtest {
                 return state::read_state(|s| s.estimate_median_fee_per_vbyte());
@@ -1429,6 +1435,12 @@ pub trait CanisterRuntime {
     /// Address controlled by the minter (via threshold ECDSA) for a given user.
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
 
+    /// Retrieves the current transaction fee percentiles.
+    async fn get_current_fee_percentiles(
+        &self,
+        request: &GetCurrentFeePercentilesRequest,
+    ) -> Result<Vec<u64>, CallError>;
+
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified network.
     async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
 
@@ -1472,6 +1484,13 @@ pub struct IcCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
+    async fn get_current_fee_percentiles(
+        &self,
+        request: &GetCurrentFeePercentilesRequest,
+    ) -> Result<Vec<u64>, CallError> {
+        management::bitcoin_get_current_fee_percentiles(request).await
+    }
+
     async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
         management::bitcoin_get_utxos(request).await
     }
