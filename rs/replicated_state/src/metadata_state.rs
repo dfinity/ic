@@ -1141,8 +1141,7 @@ impl IngressHistoryState {
     /// status (`completed`, `failed`, or `done`) the entry will also be enrolled
     /// to be pruned at `time + MAX_INGRESS_TTL`.
     ///
-    /// Returns the previous status associated with `message_id` and a histogram
-    /// of times spent in ingress history.
+    /// Returns the previous status associated with `message_id`.
     pub fn insert(
         &mut self,
         message_id: MessageId,
@@ -1150,7 +1149,7 @@ impl IngressHistoryState {
         time: Time,
         ingress_memory_capacity: NumBytes,
         observe_time_in_terminal_state: impl Fn(u64),
-    ) -> (Arc<IngressStatus>, BTreeMap<u64, u64>) {
+    ) -> Arc<IngressStatus> {
         // Store the associated expiry time for the given message id only for a
         // "terminal" ingress status. This way we are not risking deleting any status
         // for a message that is still not in a terminal status.
@@ -1175,10 +1174,8 @@ impl IngressHistoryState {
             self.memory_usage -= old.payload_bytes();
         }
 
-        // Metrics for time spent in ingress history.
-        let mut pruned_times: BTreeMap<u64, u64> = BTreeMap::new();
         if self.memory_usage > ingress_memory_capacity.get() as usize {
-            pruned_times = self.forget_terminal_statuses(
+            self.forget_terminal_statuses(
                 ingress_memory_capacity,
                 time,
                 observe_time_in_terminal_state,
@@ -1190,10 +1187,7 @@ impl IngressHistoryState {
             self.memory_usage
         );
 
-        (
-            old_status.unwrap_or_else(|| IngressStatus::Unknown.into()),
-            pruned_times,
-        )
+        old_status.unwrap_or_else(|| IngressStatus::Unknown.into())
     }
 
     /// Returns an iterator over response statuses, sorted lexicographically by
@@ -1252,9 +1246,6 @@ impl IngressHistoryState {
     /// usage is below `target_size` for the first time. To handle repeated calls
     /// efficiently it remembers the pruning time it stopped at.
     ///
-    /// Returns a histogram of times spent in the ingress history represented
-    /// as a Map<time_in_ingress_history_seconds, count>.
-    ///
     /// Note that this function must remain private and should only be
     /// called from within `insert` to ensure that `next_terminal_time`
     /// is consistently updated and we don't miss any completed statuses.
@@ -1263,14 +1254,11 @@ impl IngressHistoryState {
         target_size: NumBytes,
         now: Time,
         observe_time_in_terminal_state: impl Fn(u64),
-    ) -> BTreeMap<u64, u64> {
+    ) {
         // In debug builds we store the length of the statuses map here so that
         // we can later debug_assert that no status disappeared.
         #[cfg(debug_assertions)]
         let statuses_len_before = self.statuses.len();
-
-        // Return an age histogram for metrics: (seconds, count)
-        let mut pruned_ages: BTreeMap<u64, u64> = BTreeMap::new();
 
         let target_size = target_size.get() as usize;
         let statuses = Arc::make_mut(&mut self.statuses);
@@ -1289,7 +1277,6 @@ impl IngressHistoryState {
             let time_until_pruning = time.saturating_duration_since(now);
             let time_in_ingress_history_secs =
                 MAX_INGRESS_TTL.saturating_sub(time_until_pruning).as_secs();
-            *pruned_ages.entry(time_in_ingress_history_secs).or_default() += ids.len() as u64;
 
             for id in ids.iter() {
                 observe_time_in_terminal_state(time_in_ingress_history_secs);
@@ -1325,7 +1312,6 @@ impl IngressHistoryState {
             Self::compute_memory_usage(&self.statuses),
             self.memory_usage
         );
-        pruned_ages
     }
 
     /// Returns the memory usage of the statuses in the ingress history. See the

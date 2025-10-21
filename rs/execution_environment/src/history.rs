@@ -328,21 +328,12 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
                 .time_in_ingress_history_seconds
                 .observe(time as f64);
         };
-        let (ingress_status, _pruned_times) = state.set_ingress_status(
+        state.set_ingress_status(
             message_id,
             status,
             self.config.ingress_history_memory_capacity,
             observe_time_in_terminal_state,
-        );
-        // for (time, count) in pruned_times.iter() {
-        //     for _ in 0..*count {
-        //         self.metrics
-        //             .time_in_ingress_history_seconds
-        //             .observe(*time as f64);
-        //     }
-        // }
-
-        ingress_status
+        )
     }
 }
 
