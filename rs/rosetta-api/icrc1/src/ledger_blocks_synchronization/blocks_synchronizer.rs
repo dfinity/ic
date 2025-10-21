@@ -697,7 +697,11 @@ pub mod blocks_verifier {
         // The first element cannot be verified so we start at element 2.
         for block in blockchain.iter().skip(1) {
             if block.get_parent_hash() != parent_hash {
-                return Err(format!("Invalid block at index {}", block.index - 1));
+                if block.index == 0 {
+                    return Err(format!("Block with index 0 found at different location"));
+                } else {
+                    return Err(format!("Invalid block at index {}", block.index - 1));
+                }
             }
             parent_hash = Some(block.clone().get_block_hash());
         }
