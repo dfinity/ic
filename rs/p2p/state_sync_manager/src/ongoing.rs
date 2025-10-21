@@ -280,7 +280,7 @@ impl OngoingStateSync {
 
     fn update_chunks_to_download<T: 'static + Send>(
         &mut self,
-        tracker: Arc<Mutex<Box<dyn Chunkable<T> + Send>>>,
+        tracker: &Mutex<Box<dyn Chunkable<T> + Send>>,
     ) {
         // If we store chunks in self.chunks_to_download we will eventually initiate  and
         // by filtering with the current in flight request we avoid double download.
