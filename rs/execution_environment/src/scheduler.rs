@@ -2027,7 +2027,10 @@ fn observe_replicated_state_metrics(
             let old_call_contexts =
                 manager.call_contexts_older_than(state.time(), OLD_CALL_CONTEXT_CUTOFF_ONE_DAY);
             // Log all old call contexts, but not (nearly) every round.
-            if current_round.get() % SPAMMY_LOG_INTERVAL_ROUNDS == 0 {
+            if current_round
+                .get()
+                .is_multiple_of(SPAMMY_LOG_INTERVAL_ROUNDS)
+            {
                 for (origin, origin_time) in &old_call_contexts {
                     warn!(
                         logger,

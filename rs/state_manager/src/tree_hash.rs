@@ -201,7 +201,7 @@ mod tests {
                 StreamIndex::new(10),
             );
             let maybe_deadline = |i: u64| {
-                if i % 2 != 0 {
+                if !i.is_multiple_of(2) {
                     CoarseTime::from_secs_since_unix_epoch(i as u32)
                 } else {
                     NO_DEADLINE

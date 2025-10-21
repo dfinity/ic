@@ -567,7 +567,7 @@ mod tests {
 
             mock_transport
                 .expect_rpc()
-                .returning(move |_, _| (Ok(fake_response.clone())));
+                .returning(move |_, _| Ok(fake_response.clone()));
         }
 
         let consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
