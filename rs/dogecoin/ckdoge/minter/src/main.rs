@@ -36,6 +36,19 @@ fn setup_tasks() {
     schedule_now(TaskType::RefreshFeePercentiles, &DOGECOIN_CANISTER_RUNTIME);
 }
 
+#[unsafe(export_name = "canister_global_timer")]
+fn timer() {
+    // ic_ckbtc_minter::timer invokes ic_cdk::spawn
+    // which must be wrapped in in_executor_context
+    // as required by the new ic-cdk-executor.
+    ic_cdk::futures::in_executor_context(|| {
+        #[cfg(feature = "self_check")]
+        ok_or_die(check_invariants());
+
+        ic_ckbtc_minter::timer(DOGECOIN_CANISTER_RUNTIME);
+    });
+}
+
 #[post_upgrade]
 fn post_upgrade() {
     todo!("XC-495")
