@@ -162,7 +162,7 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
                 Some(guard) => guard,
                 None => return,
             };
-            let _ = estimate_fee_per_vbyte().await;
+            let _ = estimate_fee_per_vbyte(&runtime).await;
         }
     }
 }

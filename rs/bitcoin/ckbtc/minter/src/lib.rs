@@ -267,7 +267,9 @@ fn compute_min_withdrawal_amount(
 /// Returns an estimate for transaction fees in millisatoshi per vbyte. Returns
 /// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
-pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
+pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
+    _runtime: &R,
+) -> Option<MillisatoshiPerByte> {
     let btc_network = state::read_state(|s| s.btc_network);
     match management::get_current_fees(btc_network).await {
         Ok(fees) => {
@@ -358,7 +360,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
     let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
     let main_address = address::account_to_bitcoin_address(&ecdsa_public_key, &main_account);
 
-    let fee_millisatoshi_per_vbyte = match estimate_fee_per_vbyte().await {
+    let fee_millisatoshi_per_vbyte = match estimate_fee_per_vbyte(runtime).await {
         Some(fee) => fee,
         None => return,
     };
@@ -747,7 +749,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
     );
 
     // We shall use the latest fee estimate for replacement transactions.
-    let fee_per_vbyte = match estimate_fee_per_vbyte().await {
+    let fee_per_vbyte = match estimate_fee_per_vbyte(runtime).await {
         Some(fee) => fee,
         None => return,
     };
