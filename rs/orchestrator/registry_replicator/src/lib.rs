@@ -50,7 +50,7 @@ use std::{
     future::Future,
     io::{Error, ErrorKind},
     net::SocketAddr,
-    path::PathBuf,
+    path::Path,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -90,16 +90,16 @@ pub struct RegistryReplicator {
 impl RegistryReplicator {
     /// Creates a new instance of the registry replicator.
     /// This function will not return until the local store is initialized.
-    async fn new_impl(
+    async fn new_impl<P: AsRef<Path>>(
         logger: ReplicaLogger,
         node_id: Option<NodeId>,
-        local_store_path: &PathBuf,
+        local_store_path: P,
         poll_delay: Duration,
         metrics_registry: MetricsRegistry,
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
     ) -> Self {
-        let local_store = Arc::new(LocalStoreImpl::new(local_store_path));
+        let local_store = Arc::new(LocalStoreImpl::new(&local_store_path));
         std::fs::create_dir_all(local_store_path)
             .expect("Could not create directory for registry local store.");
 
@@ -139,9 +139,9 @@ impl RegistryReplicator {
     /// Creates a new instance of the registry replicator from the local store path, NNS URLs and
     /// root public key.
     /// This function will not return until the local store is initialized.
-    pub async fn new(
+    pub async fn new<P: AsRef<Path>>(
         logger: ReplicaLogger,
-        local_store_path: &PathBuf,
+        local_store_path: P,
         poll_delay: Duration,
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
@@ -171,7 +171,7 @@ impl RegistryReplicator {
             logger,
             node_id,
             &config.registry_client.local_store,
-            std::time::Duration::from_millis(config.nns_registry_replicator.poll_delay_duration_ms),
+            Duration::from_millis(config.nns_registry_replicator.poll_delay_duration_ms),
             MetricsRegistry::global(),
             nns_urls,
             nns_pub_key,
@@ -360,8 +360,8 @@ impl RegistryReplicator {
         );
 
         let logger = self.logger.clone();
-        let metrics = self.metrics.clone();
-        let registry_client = self.registry_client.clone();
+        let metrics = Arc::clone(&self.metrics);
+        let registry_client = Arc::clone(&self.registry_client);
         let cancelled = Arc::clone(&self.cancelled);
         let poll_delay = self.poll_delay;
 
