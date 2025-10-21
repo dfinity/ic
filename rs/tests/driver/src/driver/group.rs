@@ -777,8 +777,8 @@ impl SystemTestGroup {
         };
 
         let teardown_plan = {
+            let logger = group_ctx.logger().clone();
             if let Some(teardown_fn) = self.teardown {
-                let logger = group_ctx.logger().clone();
                 let group_ctx = group_ctx.clone();
                 let teardown_task = subproc(
                     TaskId::Test(String::from(TEARDOWN_TASK_NAME)),
@@ -799,9 +799,13 @@ impl SystemTestGroup {
                 )
             } else {
                 Plan::Leaf {
-                    task: Box::new(EmptyTask::new(TaskId::Test(String::from(
-                        TEARDOWN_TASK_NAME,
-                    )))) as _,
+                    task: Box::new(subproc(
+                        TaskId::Test(String::from(TEARDOWN_TASK_NAME)),
+                        move || {
+                            debug!(logger, "No teardown task was specified, skipping.");
+                        },
+                        &mut compose_ctx,
+                    )) as _,
                 }
             }
         };
