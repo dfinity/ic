@@ -1,5 +1,5 @@
 {
-  "checksum": "f1b0af45bddf65c6b36755211456ff55e266ef0e6b5cf3fe6de79526454e5d8d",
+  "checksum": "13b99896364f3827afcd29b7c6c206bd16e4ed188739c63dd6d84b36f285b066",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -533,7 +533,7 @@
               "target": "regex"
             },
             {
-              "id": "regex-lite 0.1.6",
+              "id": "regex-lite 0.1.8",
               "target": "regex_lite"
             },
             {
@@ -969,7 +969,7 @@
               "target": "regex"
             },
             {
-              "id": "regex-lite 0.1.6",
+              "id": "regex-lite 0.1.8",
               "target": "regex_lite"
             },
             {
@@ -21565,6 +21565,10 @@
             {
               "id": "regex 1.11.1",
               "target": "regex"
+            },
+            {
+              "id": "regex-lite 0.1.8",
+              "target": "regex_lite"
             },
             {
               "id": "reqwest 0.12.23",
@@ -62565,14 +62569,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "regex-lite 0.1.6": {
+    "regex-lite 0.1.8": {
       "name": "regex-lite",
-      "version": "0.1.6",
-      "package_url": "https://github.com/rust-lang/regex/tree/master/regex-lite",
+      "version": "0.1.8",
+      "package_url": "https://github.com/rust-lang/regex",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/regex-lite/0.1.6/download",
-          "sha256": "53a49587ad06b26609c52e423de037e7f57f20d53535d66e08c695f347df952a"
+          "url": "https://static.crates.io/crates/regex-lite/0.1.8/download",
+          "sha256": "8d942b98df5e658f56f20d592c7f868833fe38115e65c33003d8cd224b0155da"
         }
       },
       "targets": [
@@ -62603,7 +62607,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.6"
+        "version": "0.1.8"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -94262,6 +94266,7 @@
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.1",
+    "regex-lite 0.1.8",
     "reqwest 0.12.23",
     "rgb 0.8.37",
     "ring 0.17.14",
