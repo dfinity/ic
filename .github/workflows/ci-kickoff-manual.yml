@@ -34,6 +34,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ci-main, ci-pr-only]
     if: success() || failure()
+    permissions:
+      contents: read
+      statuses: write
     steps:
       - uses: actions/checkout@v4
         with:
