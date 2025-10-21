@@ -106,7 +106,7 @@ struct IngressHistoryMetrics {
     pub message_state_transition_completed_wall_clock_duration_seconds: Histogram,
     pub message_state_transition_failed_ic_duration_seconds: HistogramVec,
     pub message_state_transition_failed_wall_clock_duration_seconds: HistogramVec,
-    pub time_in_ingress_history_seconds: Histogram,
+    pub message_state_time_in_terminal_state_seconds: Histogram,
 }
 
 impl IngressHistoryWriterImpl {
@@ -174,9 +174,9 @@ impl IngressHistoryWriterImpl {
                     // detail about the reason for rejection.
                     &["reject_code", "user_error_code"],
                 ),
-                time_in_ingress_history_seconds: metrics_registry.histogram(
-                    "time_in_ingress_history_seconds",
-                    "The time an entry is present in the ingress history before being pruned.",
+                message_state_time_in_terminal_state_seconds: metrics_registry.histogram(
+                    "message_state_time_in_terminal_state_seconds",
+                    "The time a message spent in a terminal state before being forced to transition to `Done` due to memory pressure.",
                     linear_buckets(0.0, 10.0, 30),
                 )
             },
@@ -325,7 +325,7 @@ impl IngressHistoryWriter for IngressHistoryWriterImpl {
         };
         let observe_time_in_terminal_state = |time: u64| {
             self.metrics
-                .time_in_ingress_history_seconds
+                .message_state_time_in_terminal_state_seconds
                 .observe(time as f64);
         };
         state.set_ingress_status(
