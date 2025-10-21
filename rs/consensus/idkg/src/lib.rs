@@ -295,6 +295,7 @@ impl IDkgImpl {
             node_id,
             consensus_block_cache.clone(),
             crypto.clone(),
+            state_reader.clone(),
             metrics_registry.clone(),
             logger.clone(),
         ));

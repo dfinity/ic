@@ -30,6 +30,7 @@ def canister_test_did(name, canister_did, canister_test_did_patch, output_path =
         name = name,
         srcs = [canister_did, canister_test_did_patch],
         outs = [canister_test_did],
+        testonly = True,
         cmd = r"""
             # The --follow-symlinks option is needed for Linux, as it doesn't follow symlinks by default, and for `bazel build` the input files are symlinks to the original files.
             if [ "$$(uname)" == "Linux" ]; then

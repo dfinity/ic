@@ -124,3 +124,79 @@ mod get_doge_address {
         );
     }
 }
+
+mod deposit {
+    use candid::Principal;
+    use ic_ckdoge_minter::{
+        MintMemo, OutPoint, UpdateBalanceArgs, Utxo, UtxoStatus, candid_api::GetDogeAddressArgs,
+        memo_encode,
+    };
+    use ic_ckdoge_minter_test_utils::{Setup, USER_PRINCIPAL, txid};
+    use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::icrc1::transfer::Memo;
+    use icrc_ledger_types::icrc3::transactions::Mint;
+
+    #[test]
+    fn should_mint_ckdoge() {
+        let setup = Setup::default();
+        let minter = setup.minter();
+        let ledger = setup.ledger();
+        let dogecoin = setup.dogecoin();
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+
+        let deposit_address = minter.get_doge_address(
+            Principal::anonymous(),
+            &GetDogeAddressArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+        );
+
+        let utxo = Utxo {
+            height: 0,
+            outpoint: OutPoint {
+                txid: txid(),
+                vout: 1,
+            },
+            value: 1_000_000_000,
+        };
+        dogecoin.simulate_transaction(utxo.clone(), deposit_address);
+
+        let utxo_status = minter
+            .update_balance(
+                account.owner,
+                &UpdateBalanceArgs {
+                    owner: Some(account.owner),
+                    subaccount: account.subaccount,
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            utxo_status,
+            vec![UtxoStatus::Minted {
+                block_index: 0,
+                minted_amount: utxo.value,
+                utxo: utxo.clone(),
+            }]
+        );
+
+        ledger
+            .assert_that_transaction(0_u64)
+            .equals_mint_ignoring_timestamp(Mint {
+                amount: utxo.value.into(),
+                to: account,
+                memo: Some(Memo::from(memo_encode(&MintMemo::Convert {
+                    txid: Some(utxo.outpoint.txid.as_ref()),
+                    vout: Some(utxo.outpoint.vout),
+                    kyt_fee: Some(0),
+                }))),
+                created_at_time: None,
+                fee: None,
+            });
+
+        // TODO XC-495: retrieve and assert on expected events
+    }
+}

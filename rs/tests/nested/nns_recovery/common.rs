@@ -1,10 +1,9 @@
 use std::path::Path;
-use std::time::Duration;
 
 use anyhow::bail;
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
-    node::await_subnet_earliest_topology_version,
+    node::await_subnet_earliest_topology_version_with_retries,
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
     },
@@ -78,6 +77,7 @@ pub struct TestConfig {
     pub local_recovery: bool,
     pub break_dfinity_owned_node: bool,
     pub add_and_bless_upgrade_version: bool,
+    pub fix_dfinity_owned_node_like_np: bool,
 }
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
@@ -105,11 +105,9 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
         logger,
         "Waiting for new nodes to take over the NNS subnet..."
     );
-    let new_topology = block_on(topology.block_for_newer_registry_version_within_duration(
-        Duration::from_secs(60),
-        Duration::from_secs(2),
-    ))
-    .unwrap();
+    let new_topology =
+        block_on(topology.block_for_newer_registry_version_within_duration(secs(60), secs(2)))
+            .unwrap();
 
     let nns_subnet = new_topology.root_subnet();
     let num_nns_nodes = nns_subnet.nodes().count();
@@ -125,10 +123,12 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
     for node in nns_subnet.nodes() {
         node.await_status_is_healthy().unwrap();
     }
-    await_subnet_earliest_topology_version(
+    await_subnet_earliest_topology_version_with_retries(
         &nns_subnet,
         new_topology.get_registry_version(),
         &logger,
+        secs(15 * 60),
+        secs(15),
     );
     info!(logger, "Success: New nodes have taken over the NNS subnet");
 }
@@ -395,7 +395,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         keep_downloaded_state: Some(false),
-        wait_for_cup_node: Some(dfinity_owned_node.get_ip_addr()),
+        wait_for_cup_node: (!cfg.fix_dfinity_owned_node_like_np)
+            .then_some(dfinity_owned_node.get_ip_addr()),
         backup_key_file: Some(ssh_backup_priv_key_path),
         output_dir: Some(output_dir.clone()),
         next_step: None,
@@ -435,23 +436,38 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     )
     .unwrap();
 
-    // The DFINITY-owned node is already recovered as part of the recovery tool, so we only need to
-    // trigger the recovery on 2f other nodes.
-    info!(logger, "Simulate node provider action on 2f nodes");
+    // If we fix the DFINITY-owned node like the other NPs, we include it in the nodes to fix. If we
+    // do not, it has already been fixed as part of the recovery tool. We thus fix 2f other nodes to
+    // reach 2f+1 in total.
+    let (dfinity_owned_host, other_hosts): (Vec<NestedVm>, Vec<NestedVm>) = env
+        .get_all_nested_vms()
+        .unwrap()
+        .iter()
+        .cloned()
+        .partition(|vm| {
+            vm.get_nested_network().unwrap().guest_ip == dfinity_owned_node.get_ip_addr()
+        });
+    let mut hosts_to_fix = other_hosts
+        .choose_multiple(&mut rand::thread_rng(), 2 * f)
+        .collect::<Vec<_>>();
+    if cfg.fix_dfinity_owned_node_like_np {
+        hosts_to_fix.push(dfinity_owned_host.first().unwrap());
+    }
+
+    info!(
+        logger,
+        "Simulate node provider action on {} nodes{}",
+        hosts_to_fix.len(),
+        if cfg.fix_dfinity_owned_node_like_np {
+            ", including the DFINITY-owned node"
+        } else {
+            ""
+        }
+    );
     block_on(async {
         let mut handles = JoinSet::new();
 
-        for vm in env
-            .get_all_nested_vms()
-            .unwrap()
-            .iter()
-            .filter(|&vm| {
-                vm.get_nested_network().unwrap().guest_ip != dfinity_owned_node.get_ip_addr()
-            })
-            .cloned()
-            .collect::<Vec<_>>()
-            .choose_multiple(&mut rand::thread_rng(), 2 * f)
-        {
+        for vm in hosts_to_fix {
             let logger = logger.clone();
             let env = env.clone();
             let vm = vm.clone();
@@ -560,8 +576,8 @@ async fn simulate_node_provider_action(
             host_boot_id_pre_reboot
         ),
         &logger,
-        Duration::from_secs(5 * 60),
-        Duration::from_secs(5),
+        secs(5 * 60),
+        secs(5),
         || async {
             let host_boot_id = get_host_boot_id_async(host).await;
             if host_boot_id != host_boot_id_pre_reboot {

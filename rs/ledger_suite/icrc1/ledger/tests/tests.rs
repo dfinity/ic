@@ -315,6 +315,14 @@ fn test_mint_burn() {
 }
 
 #[test]
+fn test_mint_burn_fee_rejected() {
+    ic_ledger_suite_state_machine_tests::test_mint_burn_fee_rejected(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_anonymous_transfers() {
     ic_ledger_suite_state_machine_tests::test_anonymous_transfers(ledger_wasm(), encode_init_args);
 }
@@ -1199,6 +1207,7 @@ fn test_icrc3_get_archives() {
             operation: Operation::Mint {
                 to: minting_account,
                 amount: Tokens::from(1_000_000u64),
+                fee: None,
             },
             created_at_time: None,
             memo: None,
@@ -1945,6 +1954,7 @@ mod verify_written_blocks {
             to: mint_args.to,
             memo: mint_args.memo,
             created_at_time: mint_args.created_at_time,
+            fee: None,
         });
     }
 
@@ -2059,6 +2069,7 @@ mod verify_written_blocks {
                 spender: Some(spender_account),
                 memo: burn_args.memo,
                 created_at_time: burn_args.created_at_time,
+                fee: None,
             });
     }
 

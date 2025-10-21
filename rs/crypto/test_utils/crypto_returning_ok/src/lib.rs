@@ -1,6 +1,5 @@
 use ic_crypto_interfaces_sig_verification::{BasicSigVerifierByPublicKey, CanisterSigVerifier};
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgDealing;
-use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils_canister_threshold_sigs::dummy_values;
 use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
 use ic_interfaces::crypto::{
@@ -11,9 +10,6 @@ use ic_interfaces::crypto::{
     ThresholdSigVerifierByPublicKey, ThresholdSigner, VetKdProtocol,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
-use ic_interfaces_registry::RegistryClient;
-use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_types::ids::node_test_id;
 use ic_types::crypto::canister_threshold_sig::error::*;
 use ic_types::crypto::canister_threshold_sig::idkg::*;
@@ -35,32 +31,8 @@ use ic_types::crypto::{
 use ic_types::signature::{BasicSignature, BasicSignatureBatch};
 use ic_types::*;
 use ic_types::{NodeId, RegistryVersion};
-use rand::{RngCore, SeedableRng, rngs::StdRng};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
-
-pub fn empty_fake_registry() -> Arc<dyn RegistryClient> {
-    Arc::new(FakeRegistryClient::new(Arc::new(
-        ProtoRegistryDataProvider::new(),
-    )))
-}
-
-pub fn temp_crypto_component_with_fake_registry(node_id: NodeId) -> TempCryptoComponent {
-    TempCryptoComponent::builder()
-        .with_registry(empty_fake_registry())
-        .with_node_id(node_id)
-        .build()
-}
-
-fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
-    ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing(0)
-}
-
-fn empty_ni_dkg_dealing() -> NiDkgDealing {
-    NiDkgDealing {
-        internal_dealing: empty_ni_dkg_csp_dealing(),
-    }
-}
 
 pub use ic_crypto_test_utils_ni_dkg::empty_ni_dkg_transcripts_with_committee;
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
@@ -562,6 +534,12 @@ impl VetKdProtocol for CryptoReturningOk {
     }
 }
 
-pub fn mock_random_number_generator() -> Box<dyn RngCore> {
-    Box::new(StdRng::from_seed([0u8; 32]))
+fn empty_ni_dkg_csp_dealing() -> CspNiDkgDealing {
+    ic_crypto_test_utils_ni_dkg::ni_dkg_csp_dealing(0)
+}
+
+fn empty_ni_dkg_dealing() -> NiDkgDealing {
+    NiDkgDealing {
+        internal_dealing: empty_ni_dkg_csp_dealing(),
+    }
 }
