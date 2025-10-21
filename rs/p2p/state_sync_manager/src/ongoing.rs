@@ -301,7 +301,7 @@ impl OngoingStateSync {
         } else {
             info!(
                 self.log,
-                " Requesting new chunks, no more chunks to be added"
+                "Requesting new chunks, no more chunks to be added"
             );
         }
 
