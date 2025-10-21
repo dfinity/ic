@@ -82,7 +82,7 @@ pub(crate) const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
 pub(crate) const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 130;
 
 /// The maximum number of threads used to create & validate block payloads in parallel.
-pub(crate) const MAX_CONSENSUS_THREADS: usize = 8;
+pub(crate) const MAX_CONSENSUS_THREADS: usize = 16;
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]

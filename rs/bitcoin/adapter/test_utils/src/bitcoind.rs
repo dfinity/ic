@@ -358,17 +358,17 @@ impl<T: RpcClientType> Daemon<T> {
             Some(auth) => auth,
         };
         fs::write(conf_path.clone(), "")?;
-        let rpc_port = get_available_port()?;
+        let (rpc_listener, rpc_port) = get_available_port()?;
         let rpc_socket = net::SocketAddrV4::new(LOCAL_IP, rpc_port);
         let rpc_url = format!("http://{rpc_socket}");
-        let (p2p_args, p2p_socket) = if conf.p2p {
-            let p2p_port = get_available_port()?;
+        let (p2p_listener, p2p_args, p2p_socket) = if conf.p2p {
+            let (listener, p2p_port) = get_available_port()?;
             let p2p_socket = net::SocketAddrV4::new(LOCAL_IP, p2p_port);
             let p2p_arg = format!("-port={p2p_port}");
             let args = vec![p2p_arg];
-            (args, Some(p2p_socket))
+            (Some(listener), args, Some(p2p_socket))
         } else {
-            (vec!["-listen=0".to_string()], None)
+            (None, vec!["-listen=0".to_string()], None)
         };
 
         let mut cmd = process::Command::new(daemon_path);
@@ -384,6 +384,9 @@ impl<T: RpcClientType> Daemon<T> {
         println!("Spawning daemon: {cmd:?}");
 
         let mut process = cmd.spawn()?;
+
+        drop(rpc_listener);
+        drop(p2p_listener);
 
         if let Some(status) = process.try_wait()? {
             panic!("early exit with: {status:?}");
@@ -444,8 +447,8 @@ impl<T: RpcClientType> Daemon<T> {
     }
 }
 
-fn get_available_port() -> Result<u16, std::io::Error> {
+fn get_available_port() -> Result<(net::TcpListener, u16), std::io::Error> {
     // using 0 as port let the system assign a port available
     let t = net::TcpListener::bind(("127.0.0.1", 0))?; // 0 means the OS choose a free port
-    t.local_addr().map(|s| s.port())
+    t.local_addr().map(|s| (t, s.port()))
 }
