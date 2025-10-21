@@ -507,6 +507,11 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
                 / 1_000_000_000) as f64,
             "IC timestamp of the most recent block.",
         )?;
+        w.encode_counter(
+            "ledger_archiving_failures",
+            ledger.get_archiving_failure_metric() as f64,
+            "Number of archiving failures since canister initialization.",
+        )?;
         match ledger.blockchain().archive.read() {
             Ok(archive_guard) => {
                 let num_archives = archive_guard

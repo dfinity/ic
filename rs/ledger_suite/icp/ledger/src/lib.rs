@@ -32,6 +32,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::RwLock;
+use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 
 #[cfg(test)]
@@ -41,6 +42,8 @@ lazy_static! {
     pub static ref LEDGER: RwLock<Ledger> = RwLock::new(Ledger::default());
     // Maximum inter-canister message size in bytes.
     pub static ref MAX_MESSAGE_SIZE_BYTES: RwLock<usize> = RwLock::new(1024 * 1024);
+
+    static ref ARCHIVING_FAILURES: AtomicU64 = AtomicU64::new(0);
 }
 
 // Wasm bytecode of an Archive Node.
@@ -321,6 +324,15 @@ impl LedgerData for Ledger {
         &mut self,
     ) -> Option<&mut ic_ledger_core::block::FeeCollector<Self::AccountId>> {
         None
+    }
+
+    fn increment_archiving_failure_metric(&mut self) {
+        // Increment the archiving failures metric.
+        ARCHIVING_FAILURES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn get_archiving_failure_metric(&self) -> u64 {
+        ARCHIVING_FAILURES.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 

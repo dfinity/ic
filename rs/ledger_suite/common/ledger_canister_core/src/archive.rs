@@ -14,8 +14,15 @@ use ic_ledger_core::block::EncodedBlock;
 
 /// 10 trillion cycles.
 pub const DEFAULT_CYCLES_FOR_ARCHIVE_CREATION: u64 = 10_000_000_000_000;
-/// The minimum cycles that the ledger must have left after creating an archive canister.
-pub const MIN_CYCLES_AFTER_ARCHIVE_CREATION: u128 = 10_000_000_000_000;
+/// The minimum amount of liquid cycles that the ledger must have left after creating an archive
+/// canister. How long the ledger can continue operating with the amount of cycles depends on:
+/// - The subnet size
+/// - The subnet finalization rate (blocks per second)
+/// - The transaction rate of the ledger
+/// - The number of instructions per transaction
+/// E.g., for a 37-node subnet, with two rounds per second, 1M instructions per transaction, and 10
+/// transactions per round, 10 trillion cycles would last for about 48 hours.
+pub const MIN_LEDGER_LIQUID_CYCLES_AFTER_ARCHIVE_CREATION: u128 = 10_000_000_000_000;
 
 fn default_cycles_for_archive_creation() -> u64 {
     0
@@ -333,7 +340,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
     log!(log_sink, "[archive] calling create_canister()");
 
     let (
-        cycles_for_archive_creation,
+        mut cycles_for_archive_creation,
         node_block_height_offset,
         node_max_memory_size_bytes,
         controller_ids,
@@ -357,45 +364,97 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
     });
 
     // The [cost of creating a canister](https://internetcomputer.org/docs/references/cycles-cost-formulas#cycles-price-breakdown)
-    // can change over time, and depends on the subnet size. At the time of writing, the cost is
-    // 500_000_000_000 for a subnet of size 13, and 1_307_692_307_692 for a subnet of size 34.
+    // on the current subnet. Note that this cost can change over time, and depends on the subnet
+    // size. At the time of writing, the cost is 500_000_000_000 for a subnet of size 13, and
+    // 1_307_692_307_692 for a subnet of size 34.
     let cost_create_canister = ic_cdk::api::cost_create_canister();
+    // The cycles sent to the archive also need to cover the installation of the canister. This
+    // depends on the subnet size, and the instruction required for installing the canister. Here,
+    // we conservatively estimate the installation cost as 10% of the canister creation cost.
+    let cost_install_canister =
+        cost_create_canister
+            .checked_div(10u128)
+            .ok_or(FailedToArchiveBlocks(
+                "Error calculating canister installation cost".to_string(),
+            ))?;
+    let cost_create_and_install_canister = cost_create_canister
+        .checked_add(cost_install_canister)
+        .ok_or(FailedToArchiveBlocks(
+            "Overflow when calculating canister creation and installation cost".to_string(),
+        ))?;
+    ic_cdk::println!("cost_create_canister: {}", cost_create_canister);
+    ic_cdk::println!(
+        "cycles_for_archive_creation: {}",
+        cycles_for_archive_creation
+    );
+    let ledger_liquid_cycles_balance = ic_cdk::api::canister_liquid_cycle_balance();
+    ic_cdk::println!(
+        "ledger_liquid_cycles_balance: {}",
+        ledger_liquid_cycles_balance
+    );
 
-    // If the cost to create a canister is 0, assume we are running on a system subnet, in which
-    // case subsequent checks are unnecessary.
-    if cost_create_canister != 0u128 {
-        let ledger_liquid_cycles_balance = ic_cdk::api::canister_liquid_cycle_balance();
-
-        if (cycles_for_archive_creation as u128) < cost_create_canister {
-            return Err(FailedToArchiveBlocks(format!(
-                "Archiving options do not provide enough cycles to create archive canister. \
-            Needed at least {} cycles to create the canister, \
-            but only {} cycles were provided.",
-                cost_create_canister, cycles_for_archive_creation
-            )));
+    match cost_create_canister {
+        0u128 => {
+            // Assume system subnet.
+            ic_cdk::println!("system subnet detected (cost_create_canister == 0)");
+            if (cycles_for_archive_creation as u128) > ledger_liquid_cycles_balance {
+                // Assume that this is an erroneous configuration, and send 0 cycles to create the
+                // canister. Since the created canister is on the same subnet as the ledger, it does
+                // not need any cycles attached to the call. If this were to change in the future,
+                // i.e., if the ledger could spawn archive canisters on a different subnet,
+                // potentially with different costs, we would need to revisit this logic.
+                ic_cdk::println!(
+                    "sending 0 cycles to create_canister call instead of {cycles_for_archive_creation}"
+                );
+                log!(
+                    log_sink,
+                    "cycles_for_archive_creation ({cycles_for_archive_creation}) is less than ledger_liquid_cycles_balance ({ledger_liquid_cycles_balance})- attaching 0 cycles to create_canister call since canister creation is free."
+                );
+                cycles_for_archive_creation = 0;
+            } else {
+                ic_cdk::println!(
+                    "sending the configured cycles to create_canister call ({cycles_for_archive_creation})"
+                );
+            }
         }
+        _ => {
+            // Application subnet.
+            ic_cdk::println!(
+                "application subnet detected (cost_create_canister == {cost_create_canister})"
+            );
+            if (cycles_for_archive_creation as u128) < cost_create_and_install_canister {
+                return Err(FailedToArchiveBlocks(format!(
+                    "Archiving options do not provide enough cycles to create archive canister. \
+                    Needed at least {} cycles to create and install the canister, \
+                    but only {} cycles were provided.",
+                    cost_create_and_install_canister, cycles_for_archive_creation
+                )));
+            }
 
-        if ledger_liquid_cycles_balance < cost_create_canister {
-            return Err(FailedToArchiveBlocks(format!(
-                "Not enough liquid cycles in the ledger to create archive canister. \
-            Needed at least {} cycles to create the canister, \
-            but only have {} cycles.",
-                cost_create_canister, ledger_liquid_cycles_balance
-            )));
-        }
+            if ledger_liquid_cycles_balance < cost_create_canister {
+                return Err(FailedToArchiveBlocks(format!(
+                    "Not enough liquid cycles in the ledger to create archive canister. \
+                    Needed at least {} cycles to create the canister, \
+                    but only have {} cycles.",
+                    cost_create_canister, ledger_liquid_cycles_balance
+                )));
+            }
 
-        let ledger_liquid_cycles_after_archive_creation =
-            ledger_liquid_cycles_balance.saturating_sub(cycles_for_archive_creation as u128);
-        if ledger_liquid_cycles_after_archive_creation < MIN_CYCLES_AFTER_ARCHIVE_CREATION {
-            return Err(FailedToArchiveBlocks(format!(
-                "Not enough liquid cycles in the ledger to create archive canister. \
-            Needed at least {} cycles remaining after creation, \
-            but only have {} cycles (cycles for archive creation: {}, canister creation cost: {}).",
-                MIN_CYCLES_AFTER_ARCHIVE_CREATION,
-                ledger_liquid_cycles_balance,
-                cycles_for_archive_creation,
-                cost_create_canister
-            )));
+            let ledger_liquid_cycles_after_archive_creation =
+                ledger_liquid_cycles_balance.saturating_sub(cycles_for_archive_creation as u128);
+            if ledger_liquid_cycles_after_archive_creation
+                < MIN_LEDGER_LIQUID_CYCLES_AFTER_ARCHIVE_CREATION
+            {
+                return Err(FailedToArchiveBlocks(format!(
+                    "Not enough liquid cycles in the ledger to create archive canister. \
+                    Needed at least {} cycles remaining after creation, \
+                    but only have {} cycles (cycles for archive creation: {}, canister creation cost: {}).",
+                    MIN_LEDGER_LIQUID_CYCLES_AFTER_ARCHIVE_CREATION,
+                    ledger_liquid_cycles_balance,
+                    cycles_for_archive_creation,
+                    cost_create_canister
+                )));
+            }
         }
     }
 
@@ -405,9 +464,17 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
     // Panicking leads to the rolling back of the transaction that triggered the archiving, and no
     // more transactions will be processed by the ledger until it has been topped up with enough
     // cycles to spawn the archive canister.
+    ic_cdk::println!(
+        "possibly adapted cycles_for_archive_creation: {}",
+        cycles_for_archive_creation
+    );
     let node_canister_id: CanisterId = spawn::create_canister::<Rt>(cycles_for_archive_creation)
         .await
-        .map_err(|(code, msg)| FailedToArchiveBlocks(format!("{code} {msg}")))?;
+        .map_err(|(code, msg)| {
+            ic_cdk::println!("create_canister call failed: code: {}, msg: {}", code, &msg);
+            FailedToArchiveBlocks(format!("{code} {msg}"))
+        })?;
+    ic_cdk::println!("create_canister call succeeded");
 
     log!(log_sink, "[archive] calling install_code()");
 

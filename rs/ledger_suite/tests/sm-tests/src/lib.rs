@@ -5142,7 +5142,95 @@ pub mod archiving {
     // ----- Tests -----
 
     /// Verify that archiving fails if the ledger does not have enough cycles to spawn the archive.
-    pub fn test_archiving_fails_if_ledger_does_not_have_enough_cycles_to_attach<T, B>(
+    pub fn test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles<T, B>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+        get_archives: fn(&StateMachine, CanisterId) -> Vec<Principal>,
+        get_blocks_fn: fn(&StateMachine, CanisterId, u64, usize) -> GenericGetBlocksResponse<B>,
+    ) where
+        T: CandidType,
+        B: Eq + Debug,
+    {
+        const NUM_BLOCKS_TO_ARCHIVE: usize = 1_000;
+        const NUM_INITIAL_BALANCES: u64 = 70_000;
+        const TRIGGER_THRESHOLD: usize = 2_000;
+        let p1 = PrincipalId::new_user_test_id(1);
+        let p2 = PrincipalId::new_user_test_id(2);
+        let archive_controller = PrincipalId::new_user_test_id(1_000_000);
+        let mut initial_balances = vec![];
+        for i in 0..NUM_INITIAL_BALANCES {
+            initial_balances.push((
+                Account::from(PrincipalId::new_user_test_id(i).0),
+                10_000_000,
+            ));
+        }
+
+        let env = StateMachineBuilder::new()
+            .with_subnet_type(SubnetType::Application)
+            .build();
+        let args = encode_init_args(InitArgs {
+            archive_options: ArchiveOptions {
+                trigger_threshold: TRIGGER_THRESHOLD,
+                num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: None,
+                controller_id: archive_controller,
+                more_controller_ids: None,
+                cycles_for_archive_creation: Some(
+                    ic_ledger_canister_core::archive::DEFAULT_CYCLES_FOR_ARCHIVE_CREATION,
+                ),
+                max_transactions_per_response: None,
+            },
+            ..init_args(initial_balances)
+        });
+        let args = Encode!(&args).unwrap();
+        let ledger_id = env
+            .install_canister_with_cycles(
+                ledger_wasm.clone(),
+                args,
+                None,
+                Cycles::new((0.9 * DEFAULT_CYCLES_FOR_ARCHIVE_CREATION as f64) as u128),
+            )
+            .unwrap();
+
+        // Assert no archives exist.
+        assert!(get_archives(&env, ledger_id).is_empty());
+        let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+        assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES);
+        // Verify that the ledger response contained no archive info.
+        assert!(get_blocks_res.archived_ranges.is_empty());
+        // Verify that the archiving failure metric is zero.
+        assert_archiving_failure_metric(&env, ledger_id, 0u64);
+
+        // Send a transfer that should trigger an attempt to spawn an archive.
+        send_transfer(
+            &env,
+            ledger_id,
+            p1.0,
+            &TransferArg {
+                from_subaccount: None,
+                to: p2.0.into(),
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: Nat::from(10_000u64),
+            },
+        )
+        .expect("transfer should succeed");
+
+        // Assert no archives exist, as the spawning failed.
+        assert!(get_archives(&env, ledger_id).is_empty());
+        // Verify that no new block was created, since the transfer failed (the ledger panicked).
+        let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
+        assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES + 1);
+        // Verify that the ledger response contained no archive info.
+        assert!(get_blocks_res.archived_ranges.is_empty());
+        // Verify that the archiving failure metric was incremented.
+        assert_archiving_failure_metric(&env, ledger_id, 1u64);
+    }
+
+    /// Verify that archiving succeeds even if the ledger does not have enough cycles to spawn the archive.
+    pub fn test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_enough_cycles<T, B>(
         ledger_wasm: Vec<u8>,
         encode_init_args: fn(InitArgs) -> T,
         get_archives: fn(&StateMachine, CanisterId) -> Vec<Principal>,
@@ -5192,37 +5280,37 @@ pub mod archiving {
         assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES);
         // Verify that the ledger response contained no archive info.
         assert!(get_blocks_res.archived_ranges.is_empty());
+        // Verify that the archiving failure metric is zero.
+        assert_archiving_failure_metric(&env, ledger_id, 0u64);
 
-        // Send a transfer that should trigger spawning of an archive.
-        let response = env
-            .execute_ingress_as(
-                p1,
-                ledger_id,
-                "icrc1_transfer",
-                Encode!(&TransferArg {
-                    from_subaccount: None,
-                    to: p2.0.into(),
-                    fee: None,
-                    created_at_time: None,
-                    memo: None,
-                    amount: Nat::from(10_000u64),
-                })
-                .unwrap(),
-            )
-            .expect_err("transfer should fail");
-        response.assert_contains(ErrorCode::CanisterContractViolation, "out of cycles");
+        // Send a transfer that should trigger an attempt to spawn an archive.
+        send_transfer(
+            &env,
+            ledger_id,
+            p1.0,
+            &TransferArg {
+                from_subaccount: None,
+                to: p2.0.into(),
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: Nat::from(10_000u64),
+            },
+        )
+        .expect("transfer should succeed");
 
-        // Assert no archives exist, as the spawning failed.
-        assert!(get_archives(&env, ledger_id).is_empty());
-        // Verify that no new block was created, since the transfer failed (the ledger panicked).
+        // Assert an archive was spawned.
+        assert!(!get_archives(&env, ledger_id).is_empty());
         let get_blocks_res = get_blocks_fn(&env, ledger_id, 0, 1);
-        assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES);
-        // Verify that the ledger response contained no archive info.
-        assert!(get_blocks_res.archived_ranges.is_empty());
+        assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES + 1);
+        // Verify that the ledger response contained archive info.
+        assert!(!get_blocks_res.archived_ranges.is_empty());
+        // Verify that the archiving failure metric is zero.
+        assert_archiving_failure_metric(&env, ledger_id, 0u64);
     }
 
-    /// Verify that archiving is skipped but transactions succeed if cycles_to_create_archive is
-    /// less than the cost of creating a canister.
+    /// Verify that archiving is skipped but transactions succeed on an application subnet if
+    /// `cycles_to_create_archive` is less than the cost of creating a canister.
     pub fn test_archiving_skipped_if_cycles_to_create_archive_less_than_cost<T, B>(
         ledger_wasm: Vec<u8>,
         encode_init_args: fn(InitArgs) -> T,
@@ -5283,6 +5371,8 @@ pub mod archiving {
         assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES);
         // Verify that the ledger response contained no archive info.
         assert!(get_blocks_res.archived_ranges.is_empty());
+        // Verify that the archiving failure metric is zero.
+        assert_archiving_failure_metric(&env, ledger_id, 0u64);
 
         // Send a transfer that should trigger an attempt to spawn an archive.
         send_transfer(
@@ -5325,9 +5415,11 @@ pub mod archiving {
             EXPECTED_CREATE_CANISTER_ERROR,
             logs.entries.len()
         );
+        // Verify that the archiving failure metric was incremented.
+        assert_archiving_failure_metric(&env, ledger_id, 1u64);
     }
 
-    /// Verify that archiving fails if the ledger does not have enough cycles to spawn the archive.
+    /// Verify that archiving succeeds if the ledger has enough cycles to spawn the archive.
     pub fn test_archiving_succeeds_if_ledger_has_enough_cycles_to_attach<T, B>(
         ledger_wasm: Vec<u8>,
         encode_init_args: fn(InitArgs) -> T,
@@ -5382,6 +5474,8 @@ pub mod archiving {
         assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES);
         // Verify that the ledger response contained no archive info.
         assert!(get_blocks_res.archived_ranges.is_empty());
+        // Verify that the archiving failure metric is zero.
+        assert_archiving_failure_metric(&env, ledger_id, 0u64);
 
         // Send a transfer that should trigger spawning of an archive.
         send_transfer(
@@ -5406,6 +5500,135 @@ pub mod archiving {
         assert_eq!(get_blocks_res.chain_length, NUM_INITIAL_BALANCES + 1);
         // Verify that the ledger response contained an archive info.
         assert!(!get_blocks_res.archived_ranges.is_empty());
+        // Verify that the archiving failure metric is still 0.
+        assert_archiving_failure_metric(&env, ledger_id, 0u64);
+    }
+
+    /// Verify that archiving fails if the ledger does not have enough cycles to spawn the archive.
+    pub fn test_archive_spawning_failure_costs<T>(
+        ledger_wasm: Vec<u8>,
+        encode_init_args: fn(InitArgs) -> T,
+    ) where
+        T: CandidType,
+    {
+        fn calculate_cost<T>(
+            ledger_wasm: Vec<u8>,
+            encode_init_args: fn(InitArgs) -> T,
+            spawning_failure: bool,
+        ) -> u128
+        where
+            T: CandidType,
+        {
+            const NUM_BLOCKS_TO_ARCHIVE: usize = 100;
+            const NUM_INITIAL_BALANCES: u64 = 70_000;
+            const TRIGGER_THRESHOLD: usize = 2_000;
+            let ledger_cycle_balance_multiplier = match spawning_failure {
+                true => 0.9,
+                false => 5.0,
+            };
+            let p1 = PrincipalId::new_user_test_id(1);
+            let p2 = PrincipalId::new_user_test_id(2);
+            let archive_controller = PrincipalId::new_user_test_id(1_000_000);
+            let mut initial_balances = vec![];
+            for i in 0..NUM_INITIAL_BALANCES {
+                initial_balances.push((
+                    Account::from(PrincipalId::new_user_test_id(i).0),
+                    10_000_000_000,
+                ));
+            }
+
+            let env = StateMachineBuilder::new()
+                .with_subnet_type(SubnetType::Application)
+                .build();
+            let args = encode_init_args(InitArgs {
+                archive_options: ArchiveOptions {
+                    trigger_threshold: TRIGGER_THRESHOLD,
+                    num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE,
+                    node_max_memory_size_bytes: None,
+                    max_message_size_bytes: None,
+                    controller_id: archive_controller,
+                    more_controller_ids: None,
+                    cycles_for_archive_creation: Some(
+                        ic_ledger_canister_core::archive::DEFAULT_CYCLES_FOR_ARCHIVE_CREATION,
+                    ),
+                    max_transactions_per_response: None,
+                },
+                ..init_args(initial_balances)
+            });
+            let args = Encode!(&args).unwrap();
+            let ledger_id = env
+                .install_canister_with_cycles(
+                    ledger_wasm.clone(),
+                    args,
+                    None,
+                    Cycles::new(
+                        (ledger_cycle_balance_multiplier
+                            * DEFAULT_CYCLES_FOR_ARCHIVE_CREATION as f64)
+                            as u128,
+                    ),
+                )
+                .unwrap();
+
+            // Send a transfer that should trigger an attempt to spawn an archive.
+            send_transfer(
+                &env,
+                ledger_id,
+                p1.0,
+                &TransferArg {
+                    from_subaccount: None,
+                    to: p2.0.into(),
+                    fee: None,
+                    created_at_time: None,
+                    memo: None,
+                    amount: Nat::from(10_000u64),
+                },
+            )
+            .expect("transfer should succeed");
+
+            // Either the archive spawning failed or succeeded. Even if the archive spawning
+            // succeeded, the next `NUM_BLOCKS_TO_ARCHIVE` transactions should not trigger any
+            // further archiving, so we use the current state as the initial state for the cost
+            // calculation.
+            let initial_ledger_cycle_balance = env.cycle_balance(ledger_id);
+
+            // Perform another `NUM_BLOCKS_TO_ARCHIVE` transfers to measure the cost of the archive
+            // spawning-related checks.
+            for i in 0..NUM_BLOCKS_TO_ARCHIVE {
+                send_transfer(
+                    &env,
+                    ledger_id,
+                    p1.0,
+                    &TransferArg {
+                        from_subaccount: None,
+                        to: p2.0.into(),
+                        fee: None,
+                        created_at_time: None,
+                        memo: Some(Memo::from(i as u64)),
+                        amount: Nat::from(10_000u64),
+                    },
+                )
+                .expect("transfer should succeed");
+            }
+
+            let end_cycle_balance = env.cycle_balance(ledger_id);
+            initial_ledger_cycle_balance - end_cycle_balance
+        }
+        let cost_without_check_due_to_successful_archive_spawning =
+            calculate_cost(ledger_wasm.clone(), encode_init_args, false);
+        let cost_with_check_due_to_failed_archive_spawning =
+            calculate_cost(ledger_wasm, encode_init_args, true);
+        println!(
+            "Cost without check due to successful archive spawning: {}",
+            cost_without_check_due_to_successful_archive_spawning
+        );
+        println!(
+            "Cost with check due to failed archive spawning:        {}",
+            cost_with_check_due_to_failed_archive_spawning
+        );
+        assert!(
+            cost_with_check_due_to_failed_archive_spawning
+                < cost_without_check_due_to_successful_archive_spawning
+        );
     }
 
     /// Test that while archiving blocks in chunks, the ledger never reports a block to be present
@@ -6085,6 +6308,19 @@ pub mod archiving {
     }
 
     // ----- Private utility functions -----
+
+    #[track_caller]
+    fn assert_archiving_failure_metric(
+        env: &StateMachine,
+        ledger_id: CanisterId,
+        expected_value: u64,
+    ) {
+        let archiving_failure_metric = parse_metric(env, ledger_id, "ledger_archiving_failures");
+        assert_eq!(
+            archiving_failure_metric, expected_value,
+            "expected archiving failure metric to be {expected_value}, got {archiving_failure_metric}"
+        );
+    }
 
     fn assert_query_encoded_blocks_response<B>(
         req_start: u64,
