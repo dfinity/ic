@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode};
+use candid::{CandidType, Decode, Encode};
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
@@ -8855,6 +8855,55 @@ fn invoke_cost_http_request() {
     let expected_cost = test.cycles_account_manager().http_request_fee(
         request_size.into(),
         Some(max_res_bytes.into()),
+        subnet_size,
+        CanisterCyclesCostSchedule::Normal,
+    );
+    let Ok(WasmResult::Reply(bytes)) = res else {
+        panic!("Expected reply, got {res:?}");
+    };
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn invoke_cost_http_request_v2() {
+    #[derive(CandidType)]
+    struct CostHttpRequestV2Params {
+        request_bytes: u64,
+        http_roundtrip_time_ms: u64,
+        raw_response_bytes: u64,
+        transformed_response_bytes: u64,
+        transform_instructions: u64,
+    }
+    let mut test = ExecutionTestBuilder::new().build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let request_bytes = 1000;
+    let http_roundtrip_time_ms = 2_000;
+    let raw_response_bytes = 1_000_000;
+    let transformed_response_bytes = 800_000;
+    let transform_instructions = 500_000_000;
+    let params = CostHttpRequestV2Params {
+        request_bytes,
+        http_roundtrip_time_ms,
+        raw_response_bytes,
+        transformed_response_bytes,
+        transform_instructions,
+    };
+    let params_blob = Encode!(&params).unwrap();
+
+    let payload = wasm()
+        .cost_http_request_v2(&params_blob)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test.cycles_account_manager().http_request_fee_v2(
+        request_bytes.into(),
+        Duration::from_millis(http_roundtrip_time_ms),
+        raw_response_bytes.into(),
+        transform_instructions.into(),
+        transformed_response_bytes.into(),
         subnet_size,
         CanisterCyclesCostSchedule::Normal,
     );

@@ -1335,6 +1335,34 @@ impl CyclesAccountManager {
         }
     }
 
+    pub fn http_request_fee_v2(
+        &self,
+        request_size: NumBytes,
+        http_roundtrip_time: Duration,
+        raw_response_size: NumBytes,
+        transform: NumInstructions,
+        transformed_response_size: NumBytes,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::new(0),
+            //  return N * (1_000_000 + 50 * request_bytes + 140_000 * N + 800 * N * N + 50 * downloaded_bytes + 300 * request_ms + transform_instruction / 13 + transformed_response_bytes * (10 * N  + 650))
+            CanisterCyclesCostSchedule::Normal => {
+                let n = subnet_size as u64;
+                (Cycles::new(1_000_000)
+                    + Cycles::new(50) * request_size.get()
+                    + Cycles::new(140_000) * n
+                    + Cycles::new(800) * n * n
+                    + Cycles::new(50) * raw_response_size.get()
+                    + Cycles::new(300) * http_roundtrip_time.as_millis() as u64
+                    + Cycles::new(transform.get() as u128 / 13)
+                    + (Cycles::new(10) * n + Cycles::new(650)) * transformed_response_size.get())
+                    * n
+            }
+        }
+    }
+
     pub fn http_request_fee_beta(
         &self,
         request_size: NumBytes,
