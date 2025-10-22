@@ -2,10 +2,7 @@
 end::catalog[] */
 use anyhow::Result;
 use ic_agent::export::Principal;
-use ic_agent::{
-    Identity,
-    identity::{Secp256k1Identity},
-};
+use ic_agent::{Identity, identity::Secp256k1Identity};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -75,10 +72,7 @@ pub fn query_request_no_delegations(env: TestEnv) {
             };
 
             for delegations in 0..=0 {
-                info!(
-                    logger,
-                    "Testing request with {} delegations", delegations
-                );
+                info!(logger, "Testing request with {} delegations", delegations);
 
                 let identity = random_ecdsa_identity(rng);
                 let (delegations, sender) = gen_delegation_chain(rng, delegations, &identity);
