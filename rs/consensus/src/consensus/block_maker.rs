@@ -428,7 +428,6 @@ impl BlockMaker {
         let start_height = context.certified_height.increment();
         let past_payloads = pool.get_payloads_from_height(start_height, parent.clone());
 
-        // If there are some past payloads missing, propose an empty payload instead
         let expected_len = range_len(start_height, parent.height);
         if past_payloads.len() != expected_len {
             self.metrics
@@ -438,7 +437,8 @@ impl BlockMaker {
             error!(
                 self.log,
                 "Missing past payloads when attempting to build new batch payload at height {}. \
-                Certified height: {}, expected past payloads len: {}, real past payloads len: {}",
+                Certified height: {}, expected past payloads len: {}, real past payloads len: {}. \
+                Proposing an empty payload",
                 height,
                 context.certified_height,
                 expected_len,
