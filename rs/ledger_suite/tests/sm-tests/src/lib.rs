@@ -5342,8 +5342,8 @@ pub mod archiving {
         assert_archiving_failure_metric(&env, ledger_id, 1u64);
     }
 
-    /// Verify that archiving succeeds even if the ledger does not have enough cycles to spawn the archive.
-    pub fn test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_enough_cycles<T, B>(
+    /// Verify that archiving succeeds on a system subnet even if the ledger does not have any cycles.
+    pub fn test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_any_cycles<T, B>(
         ledger_wasm: Vec<u8>,
         encode_init_args: fn(InitArgs) -> T,
         get_archives: fn(&StateMachine, CanisterId) -> Vec<Principal>,
@@ -5375,9 +5375,7 @@ pub mod archiving {
                 max_message_size_bytes: None,
                 controller_id: archive_controller,
                 more_controller_ids: None,
-                cycles_for_archive_creation: Some(
-                    ic_ledger_canister_core::archive::DEFAULT_CYCLES_FOR_ARCHIVE_CREATION,
-                ),
+                cycles_for_archive_creation: Some(0),
                 max_transactions_per_response: None,
             },
             ..init_args(initial_balances)
@@ -5890,6 +5888,7 @@ pub mod archiving {
         T: CandidType,
         B: Eq + Debug,
     {
+        const MAX_RETRIES_WAITING_FOR_ARCHIVE_CREATION: usize = 100;
         const NUM_BLOCKS_TO_ARCHIVE: usize = 10;
         const NUM_INITIAL_BALANCES: usize = 20;
         const TRIGGER_THRESHOLD: usize = 20;
@@ -5937,9 +5936,15 @@ pub mod archiving {
         // Keep listing the archives and calling env.tick() until the ledger reports that an
         // archive has been created.
         let mut archive_count = get_archive_count(&env, ledger_id);
+        let mut retries = 0;
         while archive_count.is_empty() {
             env.tick();
             archive_count = get_archive_count(&env, ledger_id);
+            retries += 1;
+            assert!(
+                retries < MAX_RETRIES_WAITING_FOR_ARCHIVE_CREATION,
+                "timed out waiting for archive creation"
+            );
         }
         assert_eq!(
             archive_count.len(),

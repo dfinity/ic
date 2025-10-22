@@ -612,8 +612,8 @@ fn test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles() {
 }
 
 #[test]
-fn test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_enough_cycles() {
-    ic_ledger_suite_state_machine_tests::archiving::test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_enough_cycles(
+fn test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_any_cycles() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_any_cycles(
         ledger_wasm(),
         encode_init_args,
         icrc_archives,

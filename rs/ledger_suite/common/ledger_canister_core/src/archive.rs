@@ -341,7 +341,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
     log!(log_sink, "[archive] calling create_canister()");
 
     let (
-        mut cycles_for_archive_creation,
+        cycles_for_archive_creation,
         node_block_height_offset,
         node_max_memory_size_bytes,
         controller_ids,
@@ -389,16 +389,13 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         0u128 => {
             // Assume system subnet.
             if (cycles_for_archive_creation as u128) > ledger_liquid_cycles_balance {
-                // Assume that this is an erroneous configuration, and send 0 cycles to create the
-                // canister. Since the created canister is on the same subnet as the ledger, it does
-                // not need any cycles attached to the call. If this were to change in the future,
-                // i.e., if the ledger could spawn archive canisters on a different subnet,
-                // potentially with different costs, we would need to revisit this logic.
-                log!(
-                    log_sink,
-                    "cycles_for_archive_creation ({cycles_for_archive_creation}) is less than ledger_liquid_cycles_balance ({ledger_liquid_cycles_balance})- attaching 0 cycles to create_canister call since canister creation is free."
-                );
-                cycles_for_archive_creation = 0;
+                // Even though no cycles would be needed to spawn an archive canister, some were
+                // still configured, and they exceed the ledger's balance of liquid cycles.
+                return Err(FailedToArchiveBlocks(format!(
+                    "cycles_for_archive_creation set to {}, but only {} liquid cycles available. \
+                    Since the ledger is running on a system subnet, cycles_for_archive_creation could be set to 0.",
+                    cycles_for_archive_creation, ledger_liquid_cycles_balance
+                )));
             }
         }
         _ => {
@@ -412,12 +409,14 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
                 )));
             }
 
-            if ledger_liquid_cycles_balance < cost_create_canister {
+            if ledger_liquid_cycles_balance < cost_create_and_install_canister {
                 return Err(FailedToArchiveBlocks(format!(
                     "Not enough liquid cycles in the ledger to create archive canister. \
-                    Needed at least {} cycles to create the canister, \
-                    but only have {} cycles.",
-                    cost_create_canister, ledger_liquid_cycles_balance
+                    Needed at least {} cycles to create the canister, plus some more to install the \
+                    canister (estimated total {}), but only have {} cycles.",
+                    cost_create_canister,
+                    cost_create_and_install_canister,
+                    ledger_liquid_cycles_balance
                 )));
             }
 
