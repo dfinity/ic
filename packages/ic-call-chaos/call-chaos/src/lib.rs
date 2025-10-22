@@ -201,7 +201,7 @@ lazy_static! {
     static ref POLICY: Mutex<Box<dyn Policy>> = Mutex::new(Box::new(AllowAll::default()));
 }
 
-pub fn set_policy<P: Policy + 'static>(policy: P) -> () {
+pub fn set_policy<P: Policy + 'static>(policy: P) {
     let mut guard = POLICY
         .lock()
         .expect("Couldn't lock the policy mutex when setting the policy");
@@ -345,7 +345,7 @@ impl std::future::Future for CallFuture<'_, '_> {
                 let mut policy = POLICY
                     .lock()
                     .expect("Couldn't lock the policy mutex when sending a call");
-                match policy.allow(&call) {
+                match policy.allow(call) {
                     Ok(()) => {
                         let call = call.clone();
                         (call.call.into_future(), None)
