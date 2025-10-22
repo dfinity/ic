@@ -4175,6 +4175,10 @@ fn can_recover_from_corruption_on_state_sync() {
             let hash_dst_1 = wait_for_checkpoint(&*dst_state_manager, height(1));
             assert_eq!(hash_1, hash_dst_1);
 
+            // Ensure all tip requests are completed before corrupting the checkpoint,
+            // otherwise `reset_tip_to` may fail due to writable checkpoint files.
+            dst_state_manager.flush_tip_channel();
+
             // Corrupt some files in the destination checkpoint.
             let state_layout = dst_state_manager.state_layout();
             let mutable_cp_layout = CheckpointLayout::<RwPolicy<()>>::new_untracked(
@@ -4186,7 +4190,6 @@ fn can_recover_from_corruption_on_state_sync() {
                 height(1),
             )
             .unwrap();
-            dst_state_manager.flush_tip_channel();
 
             // There are 5 types of ways to trigger corruption recovery:
             //
@@ -4346,6 +4349,9 @@ fn state_sync_can_handle_corrupted_base_checkpoint_after_restart() {
 
                 let dst_hash_1 = wait_for_checkpoint(&*dst_state_manager, height(1));
                 assert_eq!(hash_1, dst_hash_1);
+                // Ensure all tip requests are completed before corrupting the checkpoint,
+                // otherwise `reset_tip_to` may fail due to writable checkpoint files.
+                dst_state_manager.flush_tip_channel();
 
                 // Corrupt some data
                 let state_layout = dst_state_manager.state_layout();
@@ -4482,6 +4488,8 @@ fn can_detect_divergence_with_rehash() {
         }
 
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full, None);
+        // Ensure all tip requests are completed before corrupting the checkpoint,
+        // otherwise `reset_tip_to` may fail due to writable checkpoint files.
         state_manager.flush_tip_channel();
 
         // Corrupt some data

@@ -141,7 +141,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
             Ok(res)
         } else {
             crate::metrics::GET_UTXOS_CACHE_MISSES.with(|cell| cell.set(cell.get() + 1));
-            runtime.bitcoin_get_utxos(&req).await.inspect(|res| {
+            runtime.get_utxos(&req).await.inspect(|res| {
                 *now = runtime.time();
                 crate::state::mutate_state(|s| s.get_utxos_cache.insert(req, res.clone(), *now))
             })

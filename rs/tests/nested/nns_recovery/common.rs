@@ -1,10 +1,9 @@
 use std::path::Path;
-use std::time::Duration;
 
 use anyhow::bail;
 use ic_consensus_system_test_utils::{
     impersonate_upstreams,
-    node::await_subnet_earliest_topology_version,
+    node::await_subnet_earliest_topology_version_with_retries,
     rw_message::{
         can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
     },
@@ -52,7 +51,7 @@ pub const SUBNET_SIZE: usize = 4;
 /// test runtime low
 pub const DKG_INTERVAL: u64 = 9;
 
-/// 40 nodes and DKG interval of 199 are the production values for the NNS but 49 was chosen for
+/// 40 nodes and DKG interval of 499 are the production values for the NNS but 49 was chosen for
 /// the DKG interval to make the test faster
 pub const LARGE_SUBNET_SIZE: usize = 40;
 pub const LARGE_DKG_INTERVAL: u64 = 49;
@@ -61,7 +60,7 @@ pub const LARGE_DKG_INTERVAL: u64 = 49;
 /// GuestOS image, that Node Providers would use as input to guestos-recovery-upgrader.
 pub const RECOVERY_GUESTOS_IMG_VERSION: &str = "RECOVERY_VERSION";
 
-const BACKUP_USERNAME: &str = "backup";
+pub const BACKUP_USERNAME: &str = "backup";
 
 const ADMIN_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/admin_key";
 const BACKUP_KEY_FILE_REMOTE_PATH: &str = "/var/lib/admin/backup_key";
@@ -78,6 +77,7 @@ pub struct TestConfig {
     pub local_recovery: bool,
     pub break_dfinity_owned_node: bool,
     pub add_and_bless_upgrade_version: bool,
+    pub fix_dfinity_owned_node_like_np: bool,
 }
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
@@ -105,11 +105,9 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
         logger,
         "Waiting for new nodes to take over the NNS subnet..."
     );
-    let new_topology = block_on(topology.block_for_newer_registry_version_within_duration(
-        Duration::from_secs(60),
-        Duration::from_secs(2),
-    ))
-    .unwrap();
+    let new_topology =
+        block_on(topology.block_for_newer_registry_version_within_duration(secs(60), secs(2)))
+            .unwrap();
 
     let nns_subnet = new_topology.root_subnet();
     let num_nns_nodes = nns_subnet.nodes().count();
@@ -125,12 +123,56 @@ pub fn replace_nns_with_unassigned_nodes(env: &TestEnv) {
     for node in nns_subnet.nodes() {
         node.await_status_is_healthy().unwrap();
     }
-    await_subnet_earliest_topology_version(
+    await_subnet_earliest_topology_version_with_retries(
         &nns_subnet,
         new_topology.get_registry_version(),
         &logger,
+        secs(15 * 60),
+        secs(15),
     );
     info!(logger, "Success: New nodes have taken over the NNS subnet");
+}
+
+// Mirror production setup by granting backup access to all NNS nodes to a specific SSH key.
+// This is necessary as part of the `DownloadCertifications` step of the recovery to determine
+// the latest certified height of the subnet.
+pub fn grant_backup_access_to_all_nns_nodes(
+    env: &TestEnv,
+    ssh_priv_key_path: &Path,
+    ssh_pub_key_path: &Path,
+) {
+    let logger = env.logger();
+    let topology = env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
+    let nns_node = nns_subnet.nodes().next().unwrap();
+
+    let ssh_priv_key =
+        std::fs::read_to_string(ssh_priv_key_path).expect("Failed to read SSH private key");
+    let backup_auth = AuthMean::PrivateKey(ssh_priv_key);
+    let ssh_pub_key =
+        std::fs::read_to_string(ssh_pub_key_path).expect("Failed to read SSH public key");
+
+    info!(logger, "Update the registry with the backup key");
+    let payload =
+        get_updatesubnetpayload_with_keys(nns_subnet.subnet_id, None, Some(vec![ssh_pub_key]));
+    block_on(update_subnet_record(nns_node.get_public_url(), payload));
+
+    for node in nns_subnet.nodes() {
+        info!(
+            logger,
+            "Waiting for authentication to be granted on node {} ({:?})",
+            node.node_id,
+            node.get_ip_addr()
+        );
+        wait_until_authentication_is_granted(
+            &logger,
+            &node.get_ip_addr(),
+            BACKUP_USERNAME,
+            &backup_auth,
+        );
+    }
+
+    info!(logger, "Success: Backup access granted to all NNS nodes");
 }
 
 pub fn setup(env: TestEnv, cfg: SetupConfig) {
@@ -157,14 +199,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .map(|b| format!("{b:02x}"))
         .collect::<String>();
 
-    nested::registration(env.clone());
-    replace_nns_with_unassigned_nodes(&env);
-
-    let topology = env.topology_snapshot();
-    let nns_subnet = topology.root_subnet();
-    let subnet_size = nns_subnet.nodes().count();
-    let nns_node = nns_subnet.nodes().next().unwrap();
-
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
@@ -177,37 +211,16 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     env.ssh_keygen_for_user(BACKUP_USERNAME)
         .expect("ssh-keygen failed for backup key");
     let ssh_backup_priv_key_path = ssh_authorized_priv_keys_dir.join(BACKUP_USERNAME);
-    let ssh_backup_priv_key = std::fs::read_to_string(&ssh_backup_priv_key_path)
-        .expect("Failed to read backup SSH private key");
-    let backup_auth = AuthMean::PrivateKey(ssh_backup_priv_key);
     let ssh_backup_pub_key_path = ssh_authorized_pub_keys_dir.join(BACKUP_USERNAME);
-    let ssh_backup_pub_key = std::fs::read_to_string(&ssh_backup_pub_key_path)
-        .expect("Failed to read backup SSH public key");
 
-    // Mirror production setup by granting backup SSH access to all NNS nodes to a specific SSH key.
-    // This is necessary as part of the `DownloadCertifications` step of the recovery to determine
-    // the latest certified height of the subnet.
-    info!(logger, "Update the registry with the backup key");
-    let payload = get_updatesubnetpayload_with_keys(
-        nns_subnet.subnet_id,
-        None,
-        Some(vec![ssh_backup_pub_key]),
-    );
-    block_on(update_subnet_record(nns_node.get_public_url(), payload));
-    for node in nns_subnet.nodes() {
-        info!(
-            logger,
-            "Waiting for authentication to be granted on node {} ({:?})",
-            node.node_id,
-            node.get_ip_addr()
-        );
-        wait_until_authentication_is_granted(
-            &logger,
-            &node.get_ip_addr(),
-            BACKUP_USERNAME,
-            &backup_auth,
-        );
-    }
+    nested::registration(env.clone());
+    replace_nns_with_unassigned_nodes(&env);
+    grant_backup_access_to_all_nns_nodes(&env, &ssh_backup_priv_key_path, &ssh_backup_pub_key_path);
+
+    let topology = env.topology_snapshot();
+    let nns_subnet = topology.root_subnet();
+    let subnet_size = nns_subnet.nodes().count();
+    let nns_node = nns_subnet.nodes().next().unwrap();
 
     info!(logger, "Ensure NNS subnet is functional");
     let msg = "subnet recovery works!";
@@ -382,7 +395,8 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         download_pool_node: Some(download_pool_node.get_ip_addr()),
         admin_access_location: Some(DataLocation::Remote(dfinity_owned_node.get_ip_addr())),
         keep_downloaded_state: Some(false),
-        wait_for_cup_node: Some(dfinity_owned_node.get_ip_addr()),
+        wait_for_cup_node: (!cfg.fix_dfinity_owned_node_like_np)
+            .then_some(dfinity_owned_node.get_ip_addr()),
         backup_key_file: Some(ssh_backup_priv_key_path),
         output_dir: Some(output_dir.clone()),
         next_step: None,
@@ -422,23 +436,38 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     )
     .unwrap();
 
-    // The DFINITY-owned node is already recovered as part of the recovery tool, so we only need to
-    // trigger the recovery on 2f other nodes.
-    info!(logger, "Simulate node provider action on 2f nodes");
+    // If we fix the DFINITY-owned node like the other NPs, we include it in the nodes to fix. If we
+    // do not, it has already been fixed as part of the recovery tool. We thus fix 2f other nodes to
+    // reach 2f+1 in total.
+    let (dfinity_owned_host, other_hosts): (Vec<NestedVm>, Vec<NestedVm>) = env
+        .get_all_nested_vms()
+        .unwrap()
+        .iter()
+        .cloned()
+        .partition(|vm| {
+            vm.get_nested_network().unwrap().guest_ip == dfinity_owned_node.get_ip_addr()
+        });
+    let mut hosts_to_fix = other_hosts
+        .choose_multiple(&mut rand::thread_rng(), 2 * f)
+        .collect::<Vec<_>>();
+    if cfg.fix_dfinity_owned_node_like_np {
+        hosts_to_fix.push(dfinity_owned_host.first().unwrap());
+    }
+
+    info!(
+        logger,
+        "Simulate node provider action on {} nodes{}",
+        hosts_to_fix.len(),
+        if cfg.fix_dfinity_owned_node_like_np {
+            ", including the DFINITY-owned node"
+        } else {
+            ""
+        }
+    );
     block_on(async {
         let mut handles = JoinSet::new();
 
-        for vm in env
-            .get_all_nested_vms()
-            .unwrap()
-            .iter()
-            .filter(|&vm| {
-                vm.get_nested_network().unwrap().guest_ip != dfinity_owned_node.get_ip_addr()
-            })
-            .cloned()
-            .collect::<Vec<_>>()
-            .choose_multiple(&mut rand::thread_rng(), 2 * f)
-        {
+        for vm in hosts_to_fix {
             let logger = logger.clone();
             let env = env.clone();
             let vm = vm.clone();
@@ -547,8 +576,8 @@ async fn simulate_node_provider_action(
             host_boot_id_pre_reboot
         ),
         &logger,
-        Duration::from_secs(5 * 60),
-        Duration::from_secs(5),
+        secs(5 * 60),
+        secs(5),
         || async {
             let host_boot_id = get_host_boot_id_async(host).await;
             if host_boot_id != host_boot_id_pre_reboot {

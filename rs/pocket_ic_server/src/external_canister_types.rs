@@ -135,5 +135,4 @@ pub struct InternetIdentityInit {
     pub is_production: Option<bool>,
     pub dummy_auth: Option<Option<DummyAuthConfig>>,
     pub feature_flag_continue_from_another_device: Option<bool>,
-    pub feature_flag_enable_generic_open_id_fe: Option<bool>,
 }

@@ -16,6 +16,7 @@ use ic_config::{
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_cup_utils::{make_registry_cup, make_registry_cup_from_cup_contents};
 use ic_consensus_utils::crypto::SignVerify;
+use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_test_utils_ni_dkg::{
     SecretKeyBytes, dummy_initial_dkg_transcript_with_master_key, sign_message,
 };
@@ -114,7 +115,6 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::{FakeConsensusPoolCache, batch::MockBatchPayloadBuilder};
 use ic_test_utilities_metrics::{
     Labels, fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
@@ -2659,8 +2659,9 @@ impl StateMachine {
             next_checkpoint_height: next_checkpoint_height.into(),
             current_interval_length: checkpoint_interval_length.into(),
         }));
-        let requires_full_state_hash =
-            batch_number.get() % checkpoint_interval_length_plus_one == 0;
+        let requires_full_state_hash = batch_number
+            .get()
+            .is_multiple_of(checkpoint_interval_length_plus_one);
 
         let current_time = self.get_time();
         let time_of_next_round = if current_time == *self.time_of_last_round.read().unwrap() {
@@ -3133,7 +3134,6 @@ impl StateMachine {
             )
             .with_subnet_size(self.nodes.len())
             .with_subnet_seed(seed)
-            .with_subnet_id(ic_test_utilities_types::ids::subnet_test_id(1221))
             .with_registry_data_provider(self.registry_data_provider.clone())
             .build_with_subnets(
                 (*self.pocket_xnet.read().unwrap())
@@ -4804,11 +4804,9 @@ impl Subnets for SubnetsImpl {
 fn multi_subnet_setup(
     subnets: Arc<dyn Subnets>,
     subnet_seed: u8,
-    subnet_type: SubnetType,
+    config: StateMachineConfig,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) -> Arc<StateMachine> {
-    let config =
-        StateMachineConfig::new(SubnetConfig::new(subnet_type), HypervisorConfig::default());
     StateMachineBuilder::new()
         .with_config(Some(config))
         .with_subnet_seed([subnet_seed; 32])
@@ -4816,25 +4814,18 @@ fn multi_subnet_setup(
         .build_with_subnets(subnets)
 }
 
-/// Sets up two `StateMachine` that can communicate with each other.
-pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
+/// Sets up two `StateMachine` configured with a `StateMachineConfig` that can communicate with each other.
+pub fn two_subnets_with_config(
+    config1: StateMachineConfig,
+    config2: StateMachineConfig,
+) -> (Arc<StateMachine>, Arc<StateMachine>) {
     // Set up registry data provider.
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
 
     // Set up the two state machines for the two (app) subnets.
     let subnets = Arc::new(SubnetsImpl::new());
-    let env1 = multi_subnet_setup(
-        subnets.clone(),
-        1,
-        SubnetType::Application,
-        registry_data_provider.clone(),
-    );
-    let env2 = multi_subnet_setup(
-        subnets.clone(),
-        2,
-        SubnetType::Application,
-        registry_data_provider.clone(),
-    );
+    let env1 = multi_subnet_setup(subnets.clone(), 1, config1, registry_data_provider.clone());
+    let env2 = multi_subnet_setup(subnets.clone(), 2, config2, registry_data_provider.clone());
 
     // Set up routing table with two subnets.
     let subnet_id1 = env1.get_subnet_id();
@@ -4863,6 +4854,15 @@ pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
     env2.reload_registry();
 
     (env1, env2)
+}
+
+/// Sets up two `StateMachine` that can communicate with each other.
+pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
+    let config = StateMachineConfig::new(
+        SubnetConfig::new(SubnetType::Application),
+        HypervisorConfig::default(),
+    );
+    two_subnets_with_config(config.clone(), config)
 }
 
 /// Generates the subnet ID from `seed`.

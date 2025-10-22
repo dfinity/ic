@@ -50,7 +50,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
@@ -70,7 +69,6 @@ system_test_nns(
     flaky = True,  # flakiness rate of over 3.33% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
-        "k8s",
         "long_test",
         "subnet_recovery",
     ],
@@ -89,7 +87,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",
         "subnet_recovery",
     ],
@@ -108,7 +105,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
@@ -128,7 +124,6 @@ system_test_nns(
     flaky = True,  # flakiness rate of over 1.67% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
-        "k8s",
         "long_test",
         "subnet_recovery",
     ],
@@ -149,7 +144,6 @@ system_test_nns(
     flaky = True,  # flakiness rate of 3.33% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
-        "k8s",
         "long_test",
         "subnet_recovery",
     ],
@@ -169,7 +163,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
@@ -190,7 +183,6 @@ system_test_nns(
     },
     tags = [
         "colocate",
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],
@@ -211,7 +203,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",
         "subnet_recovery",
     ],
@@ -232,7 +223,6 @@ system_test_nns(
     flaky = True,  # flakiness rate of over 6% over the month from 2025-02-11 till 2025-03-11 (only for //rs/tests/consensus/subnet_recovery:sr_app_no_upgrade_with_chain_keys_test_head_nns_colocate).
     tags = [
         "colocate",
-        "k8s",
         "long_test",
         "subnet_recovery",
     ],
@@ -273,7 +263,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     tags = [
         "colocate",
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
         "subnet_recovery",
     ],

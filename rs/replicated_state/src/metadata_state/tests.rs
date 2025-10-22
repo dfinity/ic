@@ -954,7 +954,7 @@ fn test_status_terminal(i: u64) -> IngressStatus {
         state: IngressState::Failed(UserError::new(ErrorCode::SubnetOversubscribed, "Error")),
     };
 
-    if i % 2 == 0 {
+    if i.is_multiple_of(2) {
         test_status_completed(i)
     } else {
         test_status_failed(i)

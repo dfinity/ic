@@ -12,7 +12,7 @@ use crate::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
-    is_known_neuron_voting_history_enabled,
+    is_neuron_follow_restrictions_enabled, is_set_subnet_operational_level_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -595,6 +595,9 @@ impl NnsFunction {
             }
             NnsFunction::PauseCanisterMigrations => (MIGRATION_CANISTER_ID, "disable_api"),
             NnsFunction::UnpauseCanisterMigrations => (MIGRATION_CANISTER_ID, "enable_api"),
+            NnsFunction::SetSubnetOperationalLevel => {
+                (REGISTRY_CANISTER_ID, "set_subnet_operational_level")
+            }
             NnsFunction::BlessReplicaVersion
             | NnsFunction::RetireReplicaVersion
             | NnsFunction::UpdateElectedHostosVersions
@@ -656,7 +659,8 @@ impl NnsFunction {
             | NnsFunction::RecoverSubnet
             | NnsFunction::RemoveNodesFromSubnet
             | NnsFunction::ChangeSubnetMembership
-            | NnsFunction::UpdateConfigOfSubnet => Topic::SubnetManagement,
+            | NnsFunction::UpdateConfigOfSubnet
+            | NnsFunction::SetSubnetOperationalLevel => Topic::SubnetManagement,
             NnsFunction::ReviseElectedGuestosVersions
             | NnsFunction::ReviseElectedHostosVersions => Topic::IcOsVersionElection,
             NnsFunction::DeployHostosToSomeNodes
@@ -3400,12 +3404,12 @@ impl Governance {
         set_following: &manage_neuron::SetFollowing,
     ) -> Result<(), GovernanceError> {
         // Start with original following of the neuron.
-        let mut new_followees = self.with_neuron(
+        let (neuron, mut topic_to_followees) = self.with_neuron(
             id,
-            |neuron| -> Result<HashMap</* topic */ i32, Followees>, GovernanceError> {
+            |neuron| -> Result<(Neuron, HashMap</* topic */ i32, Followees>), GovernanceError> {
                 set_following.validate(caller, neuron)?;
 
-                Ok(neuron.followees.clone())
+                Ok((neuron.clone(), neuron.followees.clone()))
             },
         )??;
 
@@ -3415,17 +3419,19 @@ impl Governance {
             let topic = topic.unwrap_or_default();
             let followees = followees.clone();
 
-            if followees.is_empty() {
-                new_followees.remove(&topic);
-            } else {
-                new_followees.insert(topic, Followees { followees });
-            }
+            topic_to_followees = modify_followees(
+                &self.neuron_store,
+                &neuron,
+                &topic_to_followees,
+                topic,
+                Followees { followees },
+            )?;
         }
 
         // Commit new_followees to the neuron.
         let now_seconds = self.env.now();
         self.with_neuron_mut(id, |neuron| {
-            neuron.followees = new_followees;
+            neuron.followees = topic_to_followees;
             neuron.refresh_voting_power(now_seconds);
         })?;
 
@@ -5120,6 +5126,15 @@ impl Governance {
             )
         })?;
 
+        if !is_set_subnet_operational_level_enabled()
+            && nns_function == NnsFunction::SetSubnetOperationalLevel
+        {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "SetSubnetOperationalLevel proposals are not enabled yet.".to_string(),
+            ));
+        }
+
         let invalid_proposal_error = |error_message: String| -> GovernanceError {
             GovernanceError::new_with_message(ErrorType::InvalidProposal, error_message)
         };
@@ -5995,18 +6010,22 @@ impl Governance {
         })?;
 
         let now_seconds = self.env.now();
-        self.with_neuron_mut(id, |neuron| {
-            if follow_request.followees.is_empty() {
-                neuron.followees.remove(&(topic as i32));
-            } else {
-                neuron.followees.insert(
-                    topic as i32,
-                    Followees {
-                        followees: follow_request.followees.clone(),
-                    },
-                );
-            }
+        let new_neuron_followees = self.with_neuron(id, |neuron| {
+            modify_followees(
+                &self.neuron_store,
+                neuron,
+                &neuron.followees,
+                topic as i32,
+                Followees {
+                    followees: follow_request.followees.clone(),
+                },
+            )
+        })??;
 
+        self.with_neuron_mut(id, |neuron| {
+            neuron.followees = new_neuron_followees;
+
+            // Changing followees may change the voting power, so refresh it.
             neuron.refresh_voting_power(now_seconds);
         })?;
 
@@ -7051,12 +7070,7 @@ impl Governance {
                     };
                     p.reward_event_round = new_reward_event.day_after_genesis;
                     let ballots = std::mem::take(&mut p.ballots);
-                    record_known_neuron_abstentions(
-                        &known_neuron_ids,
-                        *pid,
-                        ballots,
-                        self.heap_data.first_proposal_id_to_record_voting_history,
-                    );
+                    record_known_neuron_abstentions(&known_neuron_ids, *pid, ballots);
                 }
             };
         }
@@ -8362,25 +8376,14 @@ fn record_known_neuron_abstentions(
     known_neuron_ids: &[NeuronId],
     proposal_id: ProposalId,
     ballots: HashMap<u64, Ballot>,
-    first_proposal_id_to_record_voting_history: ProposalId,
 ) {
-    // TODO(NNS1-4227): clean up `first_proposal_id_to_record_voting_history` after all proposals
-    // before this id have votes finalized.
-    if is_known_neuron_voting_history_enabled()
-        && proposal_id >= first_proposal_id_to_record_voting_history
-    {
-        for known_neuron_id in known_neuron_ids {
-            if let Some(ballot) = ballots.get(&known_neuron_id.id)
-                && ballot.vote() == Vote::Unspecified
-            {
-                with_voting_history_store_mut(|voting_history_store| {
-                    voting_history_store.record_vote(
-                        *known_neuron_id,
-                        proposal_id,
-                        Vote::Unspecified,
-                    );
-                });
-            }
+    for known_neuron_id in known_neuron_ids {
+        if let Some(ballot) = ballots.get(&known_neuron_id.id)
+            && ballot.vote() == Vote::Unspecified
+        {
+            with_voting_history_store_mut(|voting_history_store| {
+                voting_history_store.record_vote(*known_neuron_id, proposal_id, Vote::Unspecified);
+            });
         }
     }
 }
@@ -8400,4 +8403,112 @@ impl TimeWarp {
             timestamp_s - ((-self.delta_s) as u64)
         }
     }
+}
+
+fn modify_followees(
+    neuron_store: &NeuronStore,
+    neuron: &Neuron,
+    topic_to_followees: &HashMap<i32, Followees>,
+    topic: i32,
+    new_followees: Followees,
+) -> Result<HashMap<i32, Followees>, GovernanceError> {
+    let controller = neuron.controller();
+    let mut updated_followees = topic_to_followees.clone();
+    if new_followees.followees.is_empty() {
+        // If the new followees list is empty, remove the entry for the topic.
+        updated_followees.remove(&topic);
+        return Ok(updated_followees);
+    }
+
+    if !is_neuron_follow_restrictions_enabled() {
+        // If the neuron follow restrictions are not enabled, we can directly update the entry.
+        updated_followees.insert(topic, new_followees);
+        return Ok(updated_followees);
+    }
+
+    if topic == Topic::NeuronManagement as i32 {
+        // Neuron management followees are not subject to the follow restrictions.
+        // This exception doesn't expose any security issue, as it doesn't reveal
+        // any ballots regardging non-neuron-management proposals of the followees.
+        updated_followees.insert(topic, new_followees);
+        return Ok(updated_followees);
+    }
+
+    // Otherwise, update the entry with the new followees list.
+    // A new can follow another neuron if:
+    // 1. the followee neuron is a public neuron
+    // 2. or if the followee neuron is a private neuron, either
+    //      * they share a controller or
+    //      * the controller of the follower neuron is in the hot keys of the followee neuron.
+    // If in the list of followees, there are any follow relationships
+    // that don't adhere to the aforementioned rules, return a GovernanceError
+    // including all the invalid followees.
+    let mut invalid_followees = 0_u32;
+    let mut error_message = String::new();
+
+    // To avoid looking up the already existing followees of the neuron
+    // (which are not changing) we only validate the new followees.
+    let old_followees = topic_to_followees
+        .get(&topic)
+        .map(|f| f.followees.iter().collect::<HashSet<&NeuronId>>())
+        .unwrap_or_default();
+
+    for followee in &new_followees.followees {
+        if old_followees.contains(followee) {
+            // An already existing follow relationship is either
+            // grandfathered in, or it was already validated when it was created.
+            // Hence, we don't need to validate it again.
+            continue;
+        }
+
+        if let Ok((followee_visibility, followee_controller, followee_hot_keys)) = neuron_store
+            .with_neuron(followee, |neuron| {
+                (
+                    neuron.visibility(),
+                    neuron.controller(),
+                    neuron.hot_keys.clone(),
+                )
+            })
+        {
+            let allowed_to_follow = followee_visibility == Visibility::Public
+                || followee_controller == controller
+                || followee_hot_keys.contains(&controller);
+
+            if !allowed_to_follow {
+                invalid_followees = invalid_followees.saturating_add(1);
+                error_message.push_str(&format!(
+                                "{}: Neuron {} is a private neuron.\n\
+                                If you control neuron {}, you can follow it after adding your principal {} to its list of hotkeys or setting the neuron to public.",
+                                invalid_followees,
+                                followee.id,
+                                followee.id,
+                                controller
+                            ));
+            }
+        } else {
+            invalid_followees = invalid_followees.saturating_add(1);
+            error_message.push_str(&format!(
+                            "{}: The neuron with ID {} does not exist. Make sure that you copied the neuron ID correctly.\n",
+                            invalid_followees,
+                            followee.id
+                        ));
+        }
+    }
+
+    if invalid_followees > 0 {
+        // Note: These error messages are matched in the nns-dapp. In case of changes, please sync with the nns dev team.
+        error_message = format!(
+            "The {} followee(s) listed below is(are) invalid:\n{}",
+            invalid_followees, error_message
+        );
+
+        return Err(GovernanceError::new_with_message(
+            ErrorType::PreconditionFailed,
+            error_message,
+        ));
+    }
+
+    updated_followees.insert(topic, new_followees);
+
+    Ok(updated_followees)
 }
