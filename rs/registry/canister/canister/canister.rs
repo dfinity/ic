@@ -186,19 +186,31 @@ fn canister_init() {
         println!("{LOG_PREFIX}canister_init: Overriding swapping flags");
         println!(
             "{LOG_PREFIX}canister_intt: Swapping enabled: {}",
-            init_payload.is_swapping_feature_enabled
+            init_payload.is_swapping_feature_enabled.unwrap_or(false)
         );
-        test_set_swapping_status(init_payload.is_swapping_feature_enabled);
+        test_set_swapping_status(init_payload.is_swapping_feature_enabled.unwrap_or(false));
         println!(
             "{LOG_PREFIX}canister_init: Swapping whietlisted callers: {:?}",
-            init_payload.swapping_whitelisted_callers
+            init_payload
+                .swapping_whitelisted_callers
+                .clone()
+                .unwrap_or(Vec::new()),
         );
-        test_set_swapping_whitelisted_callers(init_payload.swapping_whitelisted_callers);
+        test_set_swapping_whitelisted_callers(
+            init_payload
+                .swapping_whitelisted_callers
+                .unwrap_or(Vec::new()),
+        );
         println!(
             "{LOG_PREFIX}canister_init: Swapping enabled on subnets: {:?}",
-            init_payload.swapping_enabled_subnets
+            init_payload
+                .swapping_enabled_subnets
+                .clone()
+                .unwrap_or(Vec::new()),
         );
-        test_set_swapping_enabled_subnets(init_payload.swapping_enabled_subnets);
+        test_set_swapping_enabled_subnets(
+            init_payload.swapping_enabled_subnets.unwrap_or(Vec::new()),
+        );
     }
 }
 
