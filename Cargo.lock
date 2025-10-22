@@ -7911,6 +7911,7 @@ dependencies = [
  "num-traits",
  "prometheus 0.13.4",
  "prost 0.13.4",
+ "rayon",
  "slog",
  "strum 0.26.3",
  "strum_macros 0.26.4",
