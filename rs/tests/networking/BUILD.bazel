@@ -120,7 +120,6 @@ system_test_nns(
     },
     tags = [
         "long_test",
-        "manual",
     ],
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +
