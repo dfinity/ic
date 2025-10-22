@@ -2,22 +2,19 @@ use candid::{Principal, decode_one, encode_args, encode_one};
 use once_cell::sync::Lazy;
 use pocket_ic::PocketIc;
 
-#[allow(clippy::declare_interior_mutable_const)]
 static TARGET_V1_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
     let wasm_path =
         std::env::var_os("TARGET_TEST_CANISTER_V1").expect("Missing test canister v1 wasm file");
     std::fs::read(wasm_path).unwrap()
 });
 
-#[allow(clippy::declare_interior_mutable_const)]
-const TARGET_V2_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
+static TARGET_V2_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
     let wasm_path =
         std::env::var_os("TARGET_TEST_CANISTER_V2").expect("Missing test canister v2 wasm file");
     std::fs::read(wasm_path).unwrap()
 });
 
-#[allow(clippy::declare_interior_mutable_const)]
-const UPGRADER_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
+static UPGRADER_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
     let wasm_path =
         std::env::var_os("UPGRADER_TEST_CANISTER").expect("Missing upgrader canister wasm file");
     std::fs::read(wasm_path).unwrap()

@@ -24,7 +24,7 @@ fn call_ping(
             canister_id,
             Principal::anonymous(),
             "call_ping",
-            encode_one(&times).expect("Couldn't encode times"),
+            encode_one(times).expect("Couldn't encode times"),
         )
         .expect("Failed to call counter canister");
 

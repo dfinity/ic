@@ -241,13 +241,14 @@ where
     let args = StopCanisterArgs {
         canister_id: target_id,
     };
-    Ok(call_idempotent_method_with_retry(
+    let _: () = call_idempotent_method_with_retry(
         Call::bounded_wait(Principal::management_canister(), "stop_canister").with_arg(&args),
         stop_trying,
     )
     .await?
     .candid()
-    .unwrap())
+    .unwrap();
+    Ok(())
 }
 
 /// Start a canister with best-effort calls until success or timeout.
@@ -258,13 +259,14 @@ where
     let args = StartCanisterArgs {
         canister_id: target_id,
     };
-    Ok(call_idempotent_method_with_retry(
+    let _: () = call_idempotent_method_with_retry(
         Call::bounded_wait(Principal::management_canister(), "start_canister").with_arg(&args),
         stop_trying,
     )
     .await?
     .candid()
-    .unwrap())
+    .unwrap();
+    Ok(())
 }
 
 /// Retrieve canister info (including module hash) with best-effort calls.
@@ -309,14 +311,15 @@ where
         arg: arg.to_vec(),
     };
 
-    Ok(call_nonidempotent_method_with_retry(
+    let _: () = call_nonidempotent_method_with_retry(
         Call::bounded_wait(Principal::management_canister(), "install_code")
             .with_arg(&install_args),
         stop_trying,
     )
     .await?
     .candid()
-    .expect("Candid decoding failed"))
+    .expect("Candid decoding failed");
+    Ok(())
 }
 
 /// Clears the chunk store and upload chunks to a chunk store canister.

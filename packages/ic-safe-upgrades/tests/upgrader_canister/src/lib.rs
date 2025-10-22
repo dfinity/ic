@@ -14,7 +14,7 @@ pub async fn try_upgrading_target(
     chunked: bool,
 ) -> Result<(), String> {
     let deadline = &Deadline::TimeOrStopping(deadline);
-    let stopping_condition = &mut when_out_of_time_or_stopping(&deadline);
+    let stopping_condition = &mut when_out_of_time_or_stopping(deadline);
     if chunked {
         let chunks: Vec<_> = new_wasm.chunks(1024 * 50).map(|c| c.to_vec()).collect();
         let hashes = chunks.iter().map(|c| Sha256::digest(c).to_vec()).collect();
@@ -102,5 +102,3 @@ pub async fn set_call_chaos_policy(policy: String) {
 pub async fn set_fail_at_stage_policy(step: u32) {
     cc_set_policy(FailAtStagePolicy::new(step));
 }
-
-fn main() {}

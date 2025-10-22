@@ -1,6 +1,9 @@
 use ic_cdk::management_canister::{CanisterInfoArgs, ChangeDetails, canister_info};
 use ic_cdk::update;
 
+// Clippy always evaluates with all features on so it complains that the code below is
+// unreachable
+#[allow(unreachable_code)]
 #[update]
 fn version() -> u32 {
     #[cfg(feature = "v1")]
@@ -31,5 +34,3 @@ async fn self_history() -> Vec<Vec<u8>> {
         })
         .collect()
 }
-
-fn main() {}

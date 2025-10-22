@@ -135,5 +135,3 @@ fn get_counter() -> u64 {
         .expect("Couldn't obtain the lock on the counter");
     *counter
 }
-
-fn main() {}

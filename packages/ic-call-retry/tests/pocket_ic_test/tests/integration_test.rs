@@ -2,7 +2,7 @@ use candid::{Principal, decode_one, encode_args, encode_one};
 use once_cell::sync::Lazy;
 use pocket_ic::PocketIc;
 
-static PIC: Lazy<PocketIc> = Lazy::new(|| PocketIc::new());
+static PIC: Lazy<PocketIc> = Lazy::new(PocketIc::new);
 
 static WASM_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
     let wasm_path = std::env::var_os("TEST_CANISTER").expect("Missing test canister wasm file");
@@ -22,7 +22,7 @@ fn set_policy(pic: &PocketIc, canister_id: Principal, policy: &str) {
         canister_id,
         Principal::anonymous(),
         "set_policy",
-        encode_one(&policy).expect("Couldn't encode policy"),
+        encode_one(policy).expect("Couldn't encode policy"),
     )
     .expect("Failed to set the policy");
 }
