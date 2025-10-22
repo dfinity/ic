@@ -238,8 +238,9 @@ pub mod local {
     };
 
     use ic_recovery::{
-        RecoveryArgs, app_subnet_recovery::AppSubnetRecovery,
-        nns_recovery_same_nodes::NNSRecoverySameNodes,
+        RecoveryArgs,
+        app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
+        nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
     };
     use ic_system_test_driver::driver::constants::SSH_USERNAME;
     use ic_types::NodeId;
@@ -287,7 +288,7 @@ pub mod local {
         ($expr:expr) => {{
             let flag = extract_flag_name!($expr);
 
-            if $expr {
+            if *$expr {
                 format!(r#"{flag}"#)
             } else {
                 String::new()
@@ -373,20 +374,30 @@ pub mod local {
         logger: &Logger,
         recovery_args: &RecoveryArgs,
     ) -> String {
+        let RecoveryArgs {
+            dir: _, // ignored to choose the default directory in local recoveries
+            nns_url,
+            replica_version,
+            admin_key_file,
+            test_mode,
+            skip_prompts,
+            use_local_binaries,
+        } = recovery_args;
+
         // Iterate through all fields of RecoveryArgs and generate the CLI arg for each
-        let nns_url_cli = cli_arg!(recovery_args.nns_url);
-        let replica_version_cli = opt_cli_arg!(recovery_args.replica_version);
+        let nns_url_cli = cli_arg!(nns_url);
+        let replica_version_cli = opt_cli_arg!(replica_version);
         let admin_key_file_cli = upload_ssh_key_and_return_cli_arg(
             session,
             node_id,
             node_ip,
             SSH_USERNAME,
-            recovery_args.admin_key_file.as_deref(),
+            admin_key_file.as_deref(),
             logger,
         );
-        let test_mode_cli = bool_cli_arg!(recovery_args.test_mode);
-        let skip_prompts_cli = bool_cli_arg!(recovery_args.skip_prompts);
-        let use_local_binaries_cli = bool_cli_arg!(recovery_args.use_local_binaries);
+        let test_mode_cli = bool_cli_arg!(test_mode);
+        let skip_prompts_cli = bool_cli_arg!(skip_prompts);
+        let use_local_binaries_cli = bool_cli_arg!(use_local_binaries);
 
         format!(
             r#"{nns_url_cli} \
@@ -420,31 +431,49 @@ pub mod local {
 
         let subcommand_cli = "app-subnet-recovery";
 
+        let AppSubnetRecoveryArgs {
+            subnet_id,
+            upgrade_version,
+            upgrade_image_url,
+            upgrade_image_hash,
+            replacement_nodes,
+            replay_until_height,
+            readonly_pub_key,
+            readonly_key_file,
+            download_method: _, // ignored to choose "local" in local recoveries, see below
+            keep_downloaded_state,
+            upload_method: _, // ignored to choose "local" in local recoveries, see below
+            wait_for_cup_node,
+            chain_key_subnet_id,
+            next_step,
+            skip,
+        } = &subnet_recovery.params;
+
         // Iterate through all fields of AppSubnetRecoveryArgs and generate the CLI arg for each
-        let subnet_id_cli = cli_arg!(subnet_recovery.params.subnet_id);
-        let upgrade_version_cli = opt_cli_arg!(subnet_recovery.params.upgrade_version);
-        let upgrade_image_url_cli = opt_cli_arg!(subnet_recovery.params.upgrade_image_url);
-        let upgrade_image_hash_cli = opt_cli_arg!(subnet_recovery.params.upgrade_image_hash);
-        let replacement_nodes_cli = opt_vec_cli_arg!(subnet_recovery.params.replacement_nodes);
-        let replay_until_height_cli = opt_cli_arg!(subnet_recovery.params.replay_until_height);
-        let readonly_pub_key_cli = opt_cli_arg!(subnet_recovery.params.readonly_pub_key);
+        let subnet_id_cli = cli_arg!(subnet_id);
+        let upgrade_version_cli = opt_cli_arg!(upgrade_version);
+        let upgrade_image_url_cli = opt_cli_arg!(upgrade_image_url);
+        let upgrade_image_hash_cli = opt_cli_arg!(upgrade_image_hash);
+        let replacement_nodes_cli = opt_vec_cli_arg!(replacement_nodes);
+        let replay_until_height_cli = opt_cli_arg!(replay_until_height);
+        let readonly_pub_key_cli = opt_cli_arg!(readonly_pub_key);
         let readonly_key_file_cli = upload_ssh_key_and_return_cli_arg(
             session,
             &node_id,
             &node_ip,
             READONLY_USERNAME,
-            subnet_recovery.params.readonly_key_file.as_deref(),
+            readonly_key_file.as_deref(),
             logger,
         );
         // We are doing a local recovery, so we override the download method to "local"
         let download_method_cli = r#"--download-method "local" "#.to_string();
-        let keep_downloaded_state_cli = opt_cli_arg!(subnet_recovery.params.keep_downloaded_state);
+        let keep_downloaded_state_cli = opt_cli_arg!(keep_downloaded_state);
         // We are doing a local recovery, so we override the upload method to "local"
         let upload_method_cli = r#"--upload-method "local" "#.to_string();
-        let wait_for_cup_node_cli = opt_cli_arg!(subnet_recovery.params.wait_for_cup_node);
-        let chain_key_subnet_id_cli = opt_cli_arg!(subnet_recovery.params.chain_key_subnet_id);
-        let next_step_cli = opt_cli_arg!(subnet_recovery.params.next_step);
-        let skip_cli = opt_vec_cli_arg!(subnet_recovery.params.skip);
+        let wait_for_cup_node_cli = opt_cli_arg!(wait_for_cup_node);
+        let chain_key_subnet_id_cli = opt_cli_arg!(chain_key_subnet_id);
+        let next_step_cli = opt_cli_arg!(next_step);
+        let skip_cli = opt_vec_cli_arg!(skip);
 
         format!(
             r#"{recovery_args_cli} \
@@ -489,31 +518,47 @@ pub mod local {
 
         let subcommand_cli = "nns-recovery-same-nodes";
 
+        let NNSRecoverySameNodesArgs {
+            subnet_id,
+            upgrade_version,
+            upgrade_image_url,
+            upgrade_image_hash,
+            add_and_bless_upgrade_version,
+            replay_until_height,
+            download_pool_node,
+            admin_access_location: _, // ignored to choose "local" in local recoveries, see below
+            keep_downloaded_state,
+            wait_for_cup_node,
+            backup_key_file,
+            output_dir: _, // ignored to choose a different directory in local recoveries, see below
+            next_step,
+            skip,
+        } = &subnet_recovery.params;
+
         // Iterate through all fields of NNSRecoverySameNodesArgs and generate the CLI arg for each
-        let subnet_id_cli = cli_arg!(subnet_recovery.params.subnet_id);
-        let upgrade_version_cli = opt_cli_arg!(subnet_recovery.params.upgrade_version);
-        let upgrade_image_url_cli = opt_cli_arg!(subnet_recovery.params.upgrade_image_url);
-        let upgrade_image_hash_cli = opt_cli_arg!(subnet_recovery.params.upgrade_image_hash);
-        let add_and_bless_upgrade_version_cli =
-            opt_cli_arg!(subnet_recovery.params.add_and_bless_upgrade_version);
-        let replay_until_height_cli = opt_cli_arg!(subnet_recovery.params.replay_until_height);
-        let download_pool_node_cli = opt_cli_arg!(subnet_recovery.params.download_pool_node);
+        let subnet_id_cli = cli_arg!(subnet_id);
+        let upgrade_version_cli = opt_cli_arg!(upgrade_version);
+        let upgrade_image_url_cli = opt_cli_arg!(upgrade_image_url);
+        let upgrade_image_hash_cli = opt_cli_arg!(upgrade_image_hash);
+        let add_and_bless_upgrade_version_cli = opt_cli_arg!(add_and_bless_upgrade_version);
+        let replay_until_height_cli = opt_cli_arg!(replay_until_height);
+        let download_pool_node_cli = opt_cli_arg!(download_pool_node);
         // We are doing a local recovery, so we override the admin access location to "local"
         let admin_access_location_cli = r#"--admin-access-location "local" "#.to_string();
-        let keep_downloaded_state_cli = opt_cli_arg!(subnet_recovery.params.keep_downloaded_state);
-        let wait_for_cup_node_cli = opt_cli_arg!(subnet_recovery.params.wait_for_cup_node);
+        let keep_downloaded_state_cli = opt_cli_arg!(keep_downloaded_state);
+        let wait_for_cup_node_cli = opt_cli_arg!(wait_for_cup_node);
         let backup_key_file_cli = upload_ssh_key_and_return_cli_arg(
             session,
             &node_id,
             &node_ip,
             BACKUP_USERNAME,
-            subnet_recovery.params.backup_key_file.as_deref(),
+            backup_key_file.as_deref(),
             logger,
         );
         // We are doing a local recovery, so we override the output directory
         let output_dir_cli = format!(r#"--output-dir "{NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH}""#);
-        let next_step_cli = opt_cli_arg!(subnet_recovery.params.next_step);
-        let skip_cli = opt_vec_cli_arg!(subnet_recovery.params.skip);
+        let next_step_cli = opt_cli_arg!(next_step);
+        let skip_cli = opt_vec_cli_arg!(skip);
 
         format!(
             r#"{recovery_args_cli} \
