@@ -31,7 +31,7 @@ pub enum StepType {
     /// download the subnet state from the most up to date node.
     Halt,
     /// In order to determine whether we had a possible state divergence during the subnet failure,
-    /// we need to pull all certification pools from all nodes.
+    /// we need to pull the certification pools from as many nodes as possible.
     DownloadCertifications,
     /// In this step we will merge all found certifications and determine whether it is safe to
     /// continue without a manual intervention. In most cases, when a subnet happened due to a
