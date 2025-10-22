@@ -1,5 +1,5 @@
 {
-  "checksum": "40d27b88ecb7adf9ae7293997faed384e2a3ec227491118c215bf44f8f527394",
+  "checksum": "e6c16f7df3d4f6bf03a3bad364c2dfcd98522e7c09eb5a135332496813f35626",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -533,7 +533,7 @@
               "target": "regex"
             },
             {
-              "id": "regex-lite 0.1.6",
+              "id": "regex-lite 0.1.8",
               "target": "regex_lite"
             },
             {
@@ -969,7 +969,7 @@
               "target": "regex"
             },
             {
-              "id": "regex-lite 0.1.6",
+              "id": "regex-lite 0.1.8",
               "target": "regex_lite"
             },
             {
@@ -21567,6 +21567,10 @@
               "target": "regex"
             },
             {
+              "id": "regex-lite 0.1.8",
+              "target": "regex_lite"
+            },
+            {
               "id": "reqwest 0.12.23",
               "target": "reqwest"
             },
@@ -39981,8 +39985,6 @@
           "common": [
             "base64",
             "default",
-            "minreq",
-            "minreq_http",
             "simple_http",
             "simple_tcp"
           ],
@@ -39993,10 +39995,6 @@
             {
               "id": "base64 0.13.1",
               "target": "base64"
-            },
-            {
-              "id": "minreq 2.13.2",
-              "target": "minreq"
             },
             {
               "id": "serde 1.0.219",
@@ -46387,96 +46385,6 @@
         "Zlib"
       ],
       "license_file": "LICENSE"
-    },
-    "minreq 2.13.2": {
-      "name": "minreq",
-      "version": "2.13.2",
-      "package_url": "https://github.com/neonmoe/minreq",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/minreq/2.13.2/download",
-          "sha256": "da0c420feb01b9fb5061f8c8f452534361dd783756dcf38ec45191ce55e7a161"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "minreq",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "minreq",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "json-using-serde",
-            "serde",
-            "serde_json"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "log 0.4.27",
-              "target": "log"
-            },
-            {
-              "id": "minreq 2.13.2",
-              "target": "build_script_build"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde_json 1.0.132",
-              "target": "serde_json"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "2.13.2"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
-      },
-      "license": "ISC",
-      "license_ids": [
-        "ISC"
-      ],
-      "license_file": null
     },
     "mio 0.8.10": {
       "name": "mio",
@@ -62565,14 +62473,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "regex-lite 0.1.6": {
+    "regex-lite 0.1.8": {
       "name": "regex-lite",
-      "version": "0.1.6",
-      "package_url": "https://github.com/rust-lang/regex/tree/master/regex-lite",
+      "version": "0.1.8",
+      "package_url": "https://github.com/rust-lang/regex",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/regex-lite/0.1.6/download",
-          "sha256": "53a49587ad06b26609c52e423de037e7f57f20d53535d66e08c695f347df952a"
+          "url": "https://static.crates.io/crates/regex-lite/0.1.8/download",
+          "sha256": "8d942b98df5e658f56f20d592c7f868833fe38115e65c33003d8cd224b0155da"
         }
       },
       "targets": [
@@ -62603,7 +62511,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.6"
+        "version": "0.1.8"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -94262,6 +94170,7 @@
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.1",
+    "regex-lite 0.1.8",
     "reqwest 0.12.23",
     "rgb 0.8.37",
     "ring 0.17.14",

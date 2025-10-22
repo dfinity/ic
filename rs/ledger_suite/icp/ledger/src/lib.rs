@@ -466,7 +466,7 @@ impl Ledger {
                 None,
                 timestamp,
             )
-            .expect(&format!("Creating account {to:?} failed")[..]);
+            .unwrap_or_else(|_| panic!("Creating account {to:?} failed"));
         }
 
         self.send_whitelist = send_whitelist;

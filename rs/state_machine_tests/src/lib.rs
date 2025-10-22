@@ -2659,8 +2659,9 @@ impl StateMachine {
             next_checkpoint_height: next_checkpoint_height.into(),
             current_interval_length: checkpoint_interval_length.into(),
         }));
-        let requires_full_state_hash =
-            batch_number.get() % checkpoint_interval_length_plus_one == 0;
+        let requires_full_state_hash = batch_number
+            .get()
+            .is_multiple_of(checkpoint_interval_length_plus_one);
 
         let current_time = self.get_time();
         let time_of_next_round = if current_time == *self.time_of_last_round.read().unwrap() {
