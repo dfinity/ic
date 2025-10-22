@@ -2,6 +2,8 @@ pub mod monthly_rewards;
 pub mod provider_rewards_calculation;
 pub mod providers_rewards;
 
+mod api_native_conversion;
+
 use chrono::{DateTime, Datelike, NaiveDate};
 use std::fmt::Display;
 

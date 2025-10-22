@@ -725,18 +725,21 @@ impl ReplicatedState {
     /// oldest to newest in case inserting `status` pushes the memory
     /// consumption over the bound.
     ///
-    /// Returns the previous status associated with `message_id`.
+    /// Returns the previous status associated with `message_id` and a histogram
+    /// of times spent in ingress history.
     pub fn set_ingress_status(
         &mut self,
         message_id: MessageId,
         status: IngressStatus,
         ingress_memory_capacity: NumBytes,
+        observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
         self.metadata.ingress_history.insert(
             message_id,
             status,
             self.time(),
             ingress_memory_capacity,
+            observe_time_in_terminal_state,
         )
     }
 
@@ -964,7 +967,9 @@ impl ReplicatedState {
                             subnet_available_guaranteed_response_memory,
                             own_subnet_type,
                             input_queue_type,
-                        ),
+                        )
+                        // Requests are never silently dropped.
+                        .map(|_| true),
 
                         RequestOrResponse::Response(response) => Err((
                             StateError::non_matching_response(
@@ -978,6 +983,9 @@ impl ReplicatedState {
                     match msg {
                         // Best-effort responses are silently dropped if the canister is not found.
                         RequestOrResponse::Response(response) if response.is_best_effort() => {
+                            if !response.refund.is_zero() {
+                                self.observe_lost_cycles_due_to_dropped_messages(response.refund);
+                            }
                             Ok(false)
                         }
                         // For all other messages this is an error.
@@ -1506,6 +1514,14 @@ impl ReplicatedState {
             |canister_id| canister_states.contains_key(&canister_id),
             subnet_queues,
         );
+    }
+
+    /// Records the loss of `cycles` due to dropping messages (e.g. late best-effort
+    /// responses to deleted canisters).
+    pub fn observe_lost_cycles_due_to_dropped_messages(&mut self, cycles: Cycles) {
+        self.metadata
+            .subnet_metrics
+            .observe_consumed_cycles_with_use_case(CyclesUseCase::DroppedMessages, cycles.into());
     }
 }
 

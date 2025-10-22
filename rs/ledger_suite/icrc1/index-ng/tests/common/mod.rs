@@ -97,6 +97,29 @@ pub fn install_ledger(
     .unwrap()
 }
 
+fn icrc3_test_ledger() -> Vec<u8> {
+    let ledger_wasm_path = std::env::var("IC_ICRC3_TEST_LEDGER_WASM_PATH").expect(
+        "The Ledger wasm path must be set using the env variable IC_ICRC3_TEST_LEDGER_WASM_PATH",
+    );
+    std::fs::read(&ledger_wasm_path).unwrap_or_else(|e| {
+        panic!(
+            "failed to load Wasm file from path {} (env var IC_ICRC3_TEST_LEDGER_WASM_PATH): {}",
+            ledger_wasm_path, e
+        )
+    })
+}
+
+#[allow(dead_code)]
+pub fn install_icrc3_test_ledger(env: &StateMachine) -> CanisterId {
+    env.install_canister_with_cycles(
+        icrc3_test_ledger(),
+        Encode!(&()).unwrap(),
+        None,
+        ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
+    )
+    .unwrap()
+}
+
 #[allow(dead_code)]
 pub fn install_index_ng(env: &StateMachine, init_arg: IndexInitArg) -> CanisterId {
     let args = IndexArg::Init(init_arg);
@@ -276,7 +299,7 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     }
 }
 
-fn get_logs(env: &StateMachine, index_id: CanisterId) -> Log {
+pub fn get_logs(env: &StateMachine, index_id: CanisterId) -> Log {
     let request = HttpRequest {
         method: "".to_string(),
         url: "/logs".to_string(),

@@ -1,7 +1,6 @@
 use crate::{
     CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS, Clock, IcClock,
     governance::{LOG_PREFIX, TimeWarp},
-    is_known_neuron_voting_history_enabled,
     neuron::types::Neuron,
     neurons_fund::neurons_fund_neuron::pick_most_important_hotkeys,
     pb::v1::{GovernanceError, Topic, VotingPowerEconomics, governance_error::ErrorType},
@@ -719,8 +718,7 @@ impl NeuronStore {
                     proposal_id,
                     vote,
                 )?;
-                let should_record_voting_history = is_known_neuron_voting_history_enabled()
-                    && stable_neuron_store.is_known_neuron(neuron_id);
+                let should_record_voting_history = stable_neuron_store.is_known_neuron(neuron_id);
                 Ok(should_record_voting_history)
             },
         )?;
@@ -812,6 +810,13 @@ impl NeuronStore {
             indexes
                 .known_neuron()
                 .known_neuron_id_by_name(known_neuron_name)
+        })
+    }
+
+    /// Returns if the neuron is a known neuron.
+    pub fn is_known_neuron(&self, neuron_id: NeuronId) -> bool {
+        with_stable_neuron_store(|stable_neuron_store| {
+            stable_neuron_store.is_known_neuron(neuron_id)
         })
     }
 

@@ -1,4 +1,5 @@
 //! Canister threshold transcripts and references related defininitions.
+use crate::consensus::get_faults_tolerated;
 use crate::{Height, RegistryVersion};
 use crate::{
     consensus::idkg::{
@@ -667,11 +668,19 @@ pub trait IDkgBlockReader: Send + Sync {
         &self,
     ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_>;
 
-    /// Looks up the transcript for the given transcript ref.
+    /// Looks up and clones the transcript for the given transcript ref.
     fn transcript(
         &self,
         transcript_ref: &TranscriptRef,
-    ) -> Result<IDkgTranscript, TranscriptLookupError>;
+    ) -> Result<IDkgTranscript, TranscriptLookupError> {
+        self.transcript_as_ref(transcript_ref).cloned()
+    }
+
+    /// Looks up the transcript for the given transcript ref.
+    fn transcript_as_ref(
+        &self,
+        transcript_ref: &TranscriptRef,
+    ) -> Result<&IDkgTranscript, TranscriptLookupError>;
 
     /// Iterate over all IDkgPayloads above the given height.
     fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_>;
@@ -962,6 +971,19 @@ impl IDkgTranscriptParamsRef {
     pub fn update(&mut self, height: Height) {
         self.operation_type_ref.update(height);
     }
+
+    /// Number of contributions needed to reconstruct a sharing.
+    pub fn reconstruction_threshold(&self) -> usize {
+        let faulty = get_faults_tolerated(self.receivers.len());
+        faulty + 1
+    }
+
+    /// Number of multi-signature shares needed to include a dealing in a
+    /// transcript.
+    pub fn verification_threshold(&self) -> usize {
+        let faulty = get_faults_tolerated(self.receivers.len());
+        self.reconstruction_threshold() + faulty
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
@@ -1147,18 +1169,18 @@ impl BuildSignatureInputsError {
 // This warning is suppressed because Clippy incorrectly reports the size of the
 // `ThresholdEcdsaSigInputs` and `ThresholdSchnorrSigInputs` variants to be "at least 0 bytes".
 #[allow(clippy::large_enum_variant)]
-pub enum ThresholdSigInputs {
-    Ecdsa(ThresholdEcdsaSigInputs),
-    Schnorr(ThresholdSchnorrSigInputs),
+pub enum ThresholdSigInputs<'a> {
+    Ecdsa(ThresholdEcdsaSigInputs<'a>),
+    Schnorr(ThresholdSchnorrSigInputs<'a>),
     VetKd(VetKdArgs),
 }
 
-impl ThresholdSigInputs {
-    pub fn caller(&self) -> PrincipalId {
+impl ThresholdSigInputs<'_> {
+    pub fn caller(&self) -> &PrincipalId {
         match self {
-            ThresholdSigInputs::Ecdsa(inputs) => inputs.derivation_path().caller,
-            ThresholdSigInputs::Schnorr(inputs) => inputs.derivation_path().caller,
-            ThresholdSigInputs::VetKd(inputs) => inputs.context.caller,
+            ThresholdSigInputs::Ecdsa(inputs) => inputs.caller(),
+            ThresholdSigInputs::Schnorr(inputs) => inputs.caller(),
+            ThresholdSigInputs::VetKd(inputs) => &inputs.context.caller,
         }
     }
 
@@ -1217,6 +1239,20 @@ impl PreSignature {
             PreSignature::Ecdsa(_) => None,
             PreSignature::Schnorr(schnorr) => Some(schnorr.clone()),
         }
+    }
+
+    /// Return all IDkgTranscripts included in this pre-signature.
+    pub fn iter_idkg_transcripts(&self) -> impl Iterator<Item = &IDkgTranscript> {
+        let refs = match self {
+            PreSignature::Ecdsa(pre_sig) => vec![
+                pre_sig.kappa_unmasked(),
+                pre_sig.lambda_masked(),
+                pre_sig.kappa_times_lambda(),
+                pre_sig.key_times_lambda(),
+            ],
+            PreSignature::Schnorr(pre_sig) => vec![pre_sig.blinder_unmasked()],
+        };
+        refs.into_iter()
     }
 }
 

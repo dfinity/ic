@@ -10,6 +10,7 @@ Wants=cryptsetup-pre.target
 Before=cryptsetup.target
 Conflicts=umount.target
 Before=umount.target
+ConditionPathExists=/run/config/guest_vm_type/default
 
 [Install]
 WantedBy=local-fs.target

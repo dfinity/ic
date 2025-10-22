@@ -249,7 +249,7 @@ impl BabyStepGiantStep {
     /// Set up a table for Baby-Step Giant-step to solve the discrete logarithm
     /// problem in the range `[lo..lo+range)` with respect to base element `base`.
     ///
-    /// To reduce the cost of the online search phase of the algorith, this
+    /// To reduce the cost of the online search phase of the algorithm, this
     /// implementation supports using a larger table than the typical `sqrt(n)`.
     /// The parameters `max_mbytes` and `max_table_mul` control how large a
     /// table is created. We always create at least a `sqrt(n)` sized table, but

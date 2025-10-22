@@ -13,7 +13,6 @@ system_test(
     name = "single_large_node",
     tags = [
         "dynamic_testnet",
-        "k8s",
         "manual",
     ],
     visibility = ["//visibility:public"],  # public because part of top-level manual test suite
@@ -30,7 +29,6 @@ system_test(
     name = "single_app_large_node",
     tags = [
         "dynamic_testnet",
-        "k8s",
         "manual",
     ],
     runtime_deps = GRAFANA_RUNTIME_DEPS,
@@ -46,7 +44,6 @@ system_test_nns(
     name = "single_app_large_node_with_nns",
     tags = [
         "dynamic_testnet",
-        "k8s",
         "manual",
     ],
     runtime_deps = GRAFANA_RUNTIME_DEPS,
@@ -63,7 +60,6 @@ system_test(
     name = "single_app_small_node",
     tags = [
         "dynamic_testnet",
-        "k8s",
         "manual",
     ],
     runtime_deps = GRAFANA_RUNTIME_DEPS,
@@ -328,10 +324,13 @@ system_test_nns(
         "dynamic_testnet",
         "manual",
     ],
+    uses_guestos_test_update = True,
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//rs/limits",
+        "//rs/tests/consensus/subnet_recovery:lib",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
         "//rs/tests/nested/nns_recovery:common",

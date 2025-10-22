@@ -10,6 +10,7 @@ This macro defines the overall build process for ICOS images, including:
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("//bazel:defs.bzl", "zstd_compress")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:defs.bzl", "tree_hash")
@@ -378,7 +379,7 @@ def icos_build(
     # -------------------- Vulnerability Scanning Tool ------------
 
     if vuln_scan:
-        native.sh_binary(
+        sh_binary(
             name = "vuln-scan",
             srcs = ["//ic-os:vuln-scan/vuln-scan.sh"],
             data = [

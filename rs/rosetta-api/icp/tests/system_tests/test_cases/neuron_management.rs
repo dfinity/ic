@@ -38,6 +38,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tokio::runtime::Runtime;
+use tokio::time::sleep;
 
 lazy_static! {
     pub static ref TEST_IDENTITY: Arc<BasicIdentity> = Arc::new(test_identity());
@@ -697,6 +698,7 @@ fn test_list_known_neurons() {
             name: "KnownNeuron 0".to_owned(),
             description: Some("This is a known neuron".to_owned()),
             links: Some(vec![]),
+            committed_topics: Some(vec![]),
         });
         update_neuron(&agent, neuron).await;
 
@@ -723,6 +725,7 @@ fn test_list_known_neurons() {
                 name: "KnownNeuron 0".to_owned(),
                 description: Some("This is a known neuron".to_owned()),
                 links: Some(vec![]),
+                committed_topics: Some(vec![]),
             }
         );
     });
@@ -1432,7 +1435,7 @@ fn test_refresh_voting_power() {
                         neuron.voting_power_refreshed_timestamp_seconds.unwrap();
 
                     // Wait for a second before updating the voting power. This is done so the timestamp is sure to have a different value when refreshed
-                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    sleep(std::time::Duration::from_secs(1)).await;
 
                     let hotkey_caller_identity = Arc::new(hot_key_identity);
                     TransactionOperationResults::try_from(
@@ -1461,7 +1464,7 @@ fn test_refresh_voting_power() {
                         neuron.voting_power_refreshed_timestamp_seconds.unwrap();
 
                     // Wait for a second before updating the voting power. This is done so the timestamp is sure to have a different value when refreshed
-                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    sleep(std::time::Duration::from_secs(1)).await;
                     TransactionOperationResults::try_from(
                         env.rosetta_client
                             .refresh_voting_power(

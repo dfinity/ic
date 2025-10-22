@@ -25,7 +25,6 @@ use ic_types::{Height, ReplicaVersion, SubnetId, messages::HttpStatusResponse};
 use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info, warn};
-use ssh_helper::SshHelper;
 use std::{env, io::ErrorKind};
 use std::{
     net::IpAddr,
@@ -274,22 +273,6 @@ impl Recovery {
         }
     }
 
-    /// Executes the given SSH command.
-    pub fn execute_admin_ssh_command(
-        &self,
-        node_ip: IpAddr,
-        commands: &str,
-    ) -> RecoveryResult<Option<String>> {
-        let ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            SshUser::Admin.to_string(),
-            node_ip,
-            self.ssh_confirmation,
-            self.admin_key_file.clone(),
-        );
-        ssh_helper.ssh(commands.to_string())
-    }
-
     // Execute an `ic-admin` command, log the output.
     fn exec_admin_cmd(logger: &Logger, ic_admin_cmd: &IcAdmin) -> RecoveryResult<()> {
         let mut cmd = AdminHelper::to_system_command(ic_admin_cmd);
@@ -416,7 +399,7 @@ impl Recovery {
                 descr: format!(
                     r#" upgrade-subnet-to-replica-version{} "{upgrade_version}" {version_record}"#,
                     if add_and_bless_replica_version {
-                        " --and-and-bless-replica-version"
+                        " --add-and-bless-replica-version"
                     } else {
                         ""
                     },
@@ -553,7 +536,7 @@ impl Recovery {
         // split the content into lines, then split each line into a pair (<hash>, <image_name>)
         let hashes = output
             .split('\n')
-            .map(|line| line.split(" *").collect::<Vec<_>>())
+            .map(|line| line.split(' ').collect::<Vec<_>>())
             .collect::<Vec<_>>();
 
         // return the hash for the selected image name

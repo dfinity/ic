@@ -711,10 +711,10 @@ fn sigsegv_memory_tracker<S>(
             // For both SIGSEGV and in the future UFFD memory tracking we need
             // the base address of the heap and its size
             let base = base as *mut libc::c_void;
-            if base as usize % PAGE_SIZE != 0 {
+            if !(base as usize).is_multiple_of(PAGE_SIZE) {
                 fatal!(log, "[EXC-BUG] Memory tracker - Heap must be page aligned.");
             }
-            if size % PAGE_SIZE != 0 {
+            if !size.is_multiple_of(PAGE_SIZE) {
                 fatal!(
                     log,
                     "[EXC-BUG] Memory tracker - Heap size must be a multiple of page size."

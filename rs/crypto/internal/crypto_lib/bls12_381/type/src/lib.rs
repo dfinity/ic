@@ -432,7 +432,7 @@ impl Scalar {
         let t_bits = std::mem::size_of::<u64>() * 8;
         let n_bits = std::cmp::min(255, t_bits - n.leading_zeros() as usize);
         let n_bytes = n_bits.div_ceil(8);
-        let n_mask = if n_bits % 8 == 0 {
+        let n_mask = if n_bits.is_multiple_of(8) {
             0xFF
         } else {
             0xFF >> (8 - n_bits % 8)
@@ -2342,7 +2342,7 @@ pub fn verify_bls_signature_batch_distinct<R: RngCore + CryptoRng>(
 /// and thus reduces the number of required pairings 2n to 2.
 ///
 /// For details, see Section 5.2 in "Short Signatures from the Weil Pairing"
-/// by Dan Boneh, Ben Lynn, and Hovav Shacham. In Jounal of Cryptology'04.
+/// by Dan Boneh, Ben Lynn, and Hovav Shacham. In Journal of Cryptology'04.
 /// https://link.springer.com/content/pdf/10.1007/s00145-004-0314-9.pdf.
 pub fn verify_bls_signature_batch_same_pk<R: RngCore + CryptoRng>(
     sigs_msgs: &[(&G1Affine, &G1Affine)],
@@ -2374,7 +2374,7 @@ pub fn verify_bls_signature_batch_same_pk<R: RngCore + CryptoRng>(
 /// and thus reduces the number of required pairings 2n to 2.
 ///
 /// For details, see Section 5.2 in "Short Signatures from the Weil Pairing"
-/// by Dan Boneh, Ben Lynn, and Hovav Shacham. In Jounal of Cryptology'04.
+/// by Dan Boneh, Ben Lynn, and Hovav Shacham. In Journal of Cryptology'04.
 /// https://link.springer.com/content/pdf/10.1007/s00145-004-0314-9.pdf.
 pub fn verify_bls_signature_batch_same_msg<R: RngCore + CryptoRng>(
     sigs_pks: &[(&G1Affine, &G2Affine)],
