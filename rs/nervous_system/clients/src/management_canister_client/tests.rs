@@ -58,6 +58,15 @@ async fn test_limit_outstanding_calls() {
             ) -> Result<(), (i32, String)> {
                 unimplemented!();
             }
+
+            async fn canister_metadata(
+                &self,
+                _canister_id: PrincipalId,
+                _name: String,
+            ) -> Result<Vec<u8>, (i32, String)> {
+                unimplemented!();
+            }
+
             fn canister_version(&self) -> Option<u64> {
                 unimplemented!();
             }

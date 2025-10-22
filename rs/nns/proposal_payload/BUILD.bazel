@@ -1,0 +1,41 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:defs.bzl", "rust_ic_test_suite")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:candid",
+    "@crate_index//:candid_parser",
+    "@crate_index//:hex",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+    "@crate_index//:maplit",
+    "//rs/crypto/sha2",
+]
+
+DEV_DEPENDENCIES = DEPENDENCIES
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+LIB_SRCS = glob(
+    ["src/**"],
+    exclude = ["src/**/*tests.rs"],
+)
+
+rust_library(
+    name = "proposal_payload",
+    srcs = LIB_SRCS,
+    crate_name = "ic_nns_proposal_payload",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_ic_test_suite(
+    name = "proposal_payload_test",
+    srcs = glob(["tests/**/*.rs"]),
+    deps = DEV_DEPENDENCIES + [":proposal_payload"],
+)

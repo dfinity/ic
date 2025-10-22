@@ -82,6 +82,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::println;
 #[cfg(target_arch = "wasm32")]
 use ic_cdk::spawn;
+use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::{
@@ -106,6 +107,7 @@ use ic_nns_governance_api::{
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
 };
+use ic_nns_proposal_payload::candid_to_json;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
@@ -5115,6 +5117,52 @@ impl Governance {
         Ok(action.clone())
     }
 
+    async fn render_proposal_action(&self, action: &Action) -> Result<String, GovernanceError> {
+        match action {
+            Action::ExecuteNnsFunction(execute_nns_function) => {
+                self.validate_and_render_execute_nns_function(execute_nns_function)
+                    .await
+            }
+            _ => Ok("not implemented".to_string()),
+        }
+    }
+
+    async fn validate_and_render_execute_nns_function(
+        &self,
+        update: &ExecuteNnsFunction,
+    ) -> Result<String, GovernanceError> {
+        let nns_function = update.nns_function();
+        let (canister_id, method_name) = nns_function.canister_and_function()?;
+        let request = CanisterMetadataRequest::new(canister_id, "candid:service".to_string());
+        let encoded_request = Encode!(&request).expect("Failed to encode payload");
+        let response = self
+            .env
+            .call_canister_method(CanisterId::ic_00(), "canister_metadata", encoded_request)
+            .await
+            .map_err(|(code, msg)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Failed to call canister_metadata. Error code: {:?}, message: {}",
+                        code, msg
+                    ),
+                )
+            })?;
+        let decoded_response = Decode!([decoder_config()]; &response, CanisterMetadataResponse)
+            .expect("Failed to decode response");
+        let candid_source = String::from_utf8(decoded_response.value().to_vec()).unwrap();
+        candid_to_json(&candid_source, method_name, &update.payload)
+            .map(|json_value| {
+                serde_json::to_string_pretty(&json_value).expect("Failed to serialize to json")
+            })
+            .map_err(|e| {
+                GovernanceError::new_with_message(
+                    ErrorType::InvalidProposal,
+                    format!("Failed to convert candid to json: {}", e),
+                )
+            })
+    }
+
     fn validate_execute_nns_function(
         &self,
         update: &ExecuteNnsFunction,
@@ -5431,6 +5479,9 @@ impl Governance {
                 "Topic is unspecified. This should never happen.",
             ));
         }
+
+        let rendered = self.render_proposal_action(&action).await?;
+        println!("Proposal rendered: {:?}", rendered);
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the
@@ -8525,4 +8576,10 @@ fn modify_followees(
     updated_followees.insert(topic, new_followees);
 
     Ok(updated_followees)
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, candid::CandidType, serde::Deserialize)]
+struct ValidateAndRenderNnsFunctionPayload {
+    name: String,
+    args: Vec<u8>,
 }

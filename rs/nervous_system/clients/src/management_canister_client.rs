@@ -1,10 +1,12 @@
 use crate::{
     canister_id_record::CanisterIdRecord,
+    canister_metadata::canister_metadata,
     canister_status::{CanisterStatusResultFromManagementCanister, canister_status},
     update_settings::{UpdateSettings, update_settings},
 };
 use async_trait::async_trait;
 use candid::Encode;
+use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::IC_00;
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
@@ -31,6 +33,13 @@ pub trait ManagementCanisterClient {
 
     /// A call to the `update_settings` management canister endpoint.
     async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (i32, String)>;
+
+    /// A call to the `canister_metadata` management canister endpoint.
+    async fn canister_metadata(
+        &self,
+        canister_id: PrincipalId,
+        name: String,
+    ) -> Result<Vec<u8>, (i32, String)>;
 
     fn canister_version(&self) -> Option<u64>;
 }
@@ -90,6 +99,25 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
         });
 
         update_settings::<Rt>(settings).await
+    }
+
+    async fn canister_metadata(
+        &self,
+        canister_id: PrincipalId,
+        name: String,
+    ) -> Result<Vec<u8>, (i32, String)> {
+        let _tracker = self.proxied_canister_calls_tracker.map(|tracker| {
+            let args = Encode!(&(canister_id, &name)).unwrap_or_default();
+            ProxiedCanisterCallsTracker::start_tracking(
+                tracker,
+                dfn_core::api::caller(),
+                IC_00,
+                "canister_metadata",
+                &args,
+            )
+        });
+
+        canister_metadata::<Rt>(canister_id, name).await
     }
 
     fn canister_version(&self) -> Option<u64> {
@@ -179,6 +207,15 @@ where
         self.inner.update_settings(settings).await
     }
 
+    async fn canister_metadata(
+        &self,
+        canister_id: PrincipalId,
+        name: String,
+    ) -> Result<Vec<u8>, (i32, String)> {
+        let _loan = self.try_borrow_slot()?;
+        self.inner.canister_metadata(canister_id, name).await
+    }
+
     fn canister_version(&self) -> Option<u64> {
         // This does not actually call the management canister. This implies a few things:
         //
@@ -237,6 +274,7 @@ impl MockManagementCanisterClient {
 pub enum MockManagementCanisterClientCall {
     CanisterStatus(CanisterIdRecord),
     UpdateSettings(UpdateSettings),
+    CanisterMetadata(PrincipalId, String),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -244,6 +282,7 @@ pub enum MockManagementCanisterClientCall {
 pub enum MockManagementCanisterClientReply {
     CanisterStatus(Result<CanisterStatusResultFromManagementCanister, (i32, String)>),
     UpdateSettings(Result<(), (i32, String)>),
+    CanisterMetadata(Result<Vec<u8>, (i32, String)>),
 }
 
 #[async_trait]
@@ -293,6 +332,36 @@ impl ManagementCanisterClient for MockManagementCanisterClient {
             err => panic!(
                 "Expected MockManagementCanisterClientReply::UpdateSettings to be at \
                 the front of the queue. Had {err:?}"
+            ),
+        }
+    }
+
+    async fn canister_metadata(
+        &self,
+        canister_id: PrincipalId,
+        name: String,
+    ) -> Result<Vec<u8>, (i32, String)> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push_back(MockManagementCanisterClientCall::CanisterMetadata(
+                canister_id,
+                name,
+            ));
+
+        let reply = self
+            .replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("Expected a MockManagementCanisterClientCall to be on the queue.");
+
+        match reply {
+            MockManagementCanisterClientReply::CanisterMetadata(response) => response,
+            err => panic!(
+                "Expected MockManagementCanisterClientReply::CanisterMetadata to be at \
+                the front of the queue. Had {:?}",
+                err
             ),
         }
     }
