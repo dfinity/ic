@@ -34,3 +34,5 @@ async fn self_history() -> Vec<Vec<u8>> {
         })
         .collect()
 }
+
+pub fn main() {}

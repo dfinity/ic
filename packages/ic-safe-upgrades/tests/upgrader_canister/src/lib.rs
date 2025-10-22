@@ -102,3 +102,5 @@ pub async fn set_call_chaos_policy(policy: String) {
 pub async fn set_fail_at_stage_policy(step: u32) {
     cc_set_policy(FailAtStagePolicy::new(step));
 }
+
+pub fn main() {}
