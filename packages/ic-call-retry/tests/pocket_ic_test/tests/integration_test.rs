@@ -1,4 +1,4 @@
-use candid::{decode_one, encode_args, encode_one, Principal};
+use candid::{Principal, decode_one, encode_args, encode_one};
 use once_cell::sync::Lazy;
 use pocket_ic::PocketIc;
 
@@ -266,11 +266,15 @@ fn nonidempotent_not_retried_on_sys_unknown() -> Result<(), String> {
     );
 
     // Check that the call wasn't retried under the hood
-    let response = PIC.query_call(canister_id, Principal::anonymous(), "get_counter", vec![])
+    let response = PIC
+        .query_call(canister_id, Principal::anonymous(), "get_counter", vec![])
         .expect("Failed to call get_counter");
     let counter: u64 = decode_one(&response).expect("Failed to decode the counter");
 
-    assert_eq!(counter, 0, "The counter should not have been increased beyond once");
+    assert_eq!(
+        counter, 0,
+        "The counter should not have been increased beyond once"
+    );
 
     Ok(())
 }

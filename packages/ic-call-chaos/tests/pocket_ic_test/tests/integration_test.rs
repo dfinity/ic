@@ -1,17 +1,18 @@
-use candid::{decode_args, encode_one, Principal};
+use candid::{Principal, decode_args, encode_one};
 use once_cell::sync::Lazy;
 use pocket_ic::PocketIc;
 
 static WASM_NO_FEATURE: Lazy<Vec<u8>> = Lazy::new(|| {
-    let wasm_path = std::env::var_os("TEST_CANISTER_NO_CALL_CHAOS").expect("Missing test canister wasm file");
+    let wasm_path =
+        std::env::var_os("TEST_CANISTER_NO_CALL_CHAOS").expect("Missing test canister wasm file");
     std::fs::read(wasm_path).unwrap()
 });
 
 static WASM_WITH_FEATURE: Lazy<Vec<u8>> = Lazy::new(|| {
-    let wasm_path = std::env::var_os("TEST_CANISTER_WITH_CALL_CHAOS").expect("Missing test canister wasm file");
+    let wasm_path =
+        std::env::var_os("TEST_CANISTER_WITH_CALL_CHAOS").expect("Missing test canister wasm file");
     std::fs::read(wasm_path).unwrap()
 });
-
 
 fn call_ping(
     pic: &PocketIc,
@@ -111,7 +112,10 @@ fn test_with_call_chaos() -> Result<(), String> {
     // Can't assert the exact number of succeeded and failed calls, but we can assert that
     // the sum of succeeded and failed is equal to times
     assert_eq!(succeeded + failed, times);
-    assert!(succeeded <= nr_pings, "Calls that are known to have succeeded shouldn't be more than the calls that actually succeeded");
+    assert!(
+        succeeded <= nr_pings,
+        "Calls that are known to have succeeded shouldn't be more than the calls that actually succeeded"
+    );
     assert!(nr_pings <= times);
 
     Ok(())

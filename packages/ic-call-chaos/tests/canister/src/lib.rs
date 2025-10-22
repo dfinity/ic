@@ -1,6 +1,6 @@
 #[cfg(feature = "use_call_chaos")]
 use ic_call_chaos::{
-    set_policy as call_chaos_set_policy, AllowAll, AllowEveryOther, Call, DenyAll, WithProbability,
+    AllowAll, AllowEveryOther, Call, DenyAll, WithProbability, set_policy as call_chaos_set_policy,
 };
 use ic_cdk::api::canister_self;
 #[cfg(not(feature = "use_call_chaos"))]

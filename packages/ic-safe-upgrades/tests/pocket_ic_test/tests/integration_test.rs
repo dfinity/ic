@@ -1,22 +1,24 @@
-use candid::{decode_one, encode_args, encode_one, Principal};
+use candid::{Principal, decode_one, encode_args, encode_one};
 use once_cell::sync::Lazy;
 use pocket_ic::PocketIc;
 
 static TARGET_V1_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
-    let wasm_path = std::env::var_os("TARGET_TEST_CANISTER_V1").expect("Missing test canister v1 wasm file");
+    let wasm_path =
+        std::env::var_os("TARGET_TEST_CANISTER_V1").expect("Missing test canister v1 wasm file");
     std::fs::read(wasm_path).unwrap()
 });
 
 const TARGET_V2_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
-    let wasm_path = std::env::var_os("TARGET_TEST_CANISTER_V2").expect("Missing test canister v2 wasm file");
+    let wasm_path =
+        std::env::var_os("TARGET_TEST_CANISTER_V2").expect("Missing test canister v2 wasm file");
     std::fs::read(wasm_path).unwrap()
 });
 
 const UPGRADER_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
-    let wasm_path = std::env::var_os("UPGRADER_TEST_CANISTER").expect("Missing upgrader canister wasm file");
+    let wasm_path =
+        std::env::var_os("UPGRADER_TEST_CANISTER").expect("Missing upgrader canister wasm file");
     std::fs::read(wasm_path).unwrap()
 });
-
 
 fn install_canisters(pic: &PocketIc) -> (Principal, Principal) {
     let upgrader_canister_id = pic.create_canister();
@@ -29,8 +31,13 @@ fn install_canisters(pic: &PocketIc) -> (Principal, Principal) {
     pic.set_controllers(
         target_canister_id,
         None,
-        vec![upgrader_canister_id, target_canister_id, Principal::anonymous()],
-    ).expect("Couldn't set controllers");
+        vec![
+            upgrader_canister_id,
+            target_canister_id,
+            Principal::anonymous(),
+        ],
+    )
+    .expect("Couldn't set controllers");
 
     (upgrader_canister_id, target_canister_id)
 }
@@ -64,7 +71,9 @@ fn try_upgrading_target(
         )
         .expect("Failed to call try_upgrading_canister");
 
-    while pic.get_time().as_nanos_since_unix_epoch() < deadline && pic.ingress_status(message_id.clone()).is_none() {
+    while pic.get_time().as_nanos_since_unix_epoch() < deadline
+        && pic.ingress_status(message_id.clone()).is_none()
+    {
         pic.tick();
     }
 
@@ -91,19 +100,20 @@ fn version_check(
     let version: u32 = decode_one(&response).expect("Failed to decode response");
     assert_eq!(version, expected_version, "Version mismatch");
 
-    let response = pic.update_call(
-        canister_id,
-        Principal::anonymous(),
-        "self_history",
-        encode_one(&()).expect("Couldn't encode args"),
-    ).map_err(|e| format!("Failed to call self_history: {}", e))?;
+    let response = pic
+        .update_call(
+            canister_id,
+            Principal::anonymous(),
+            "self_history",
+            encode_one(&()).expect("Couldn't encode args"),
+        )
+        .map_err(|e| format!("Failed to call self_history: {}", e))?;
 
     let history: Vec<Vec<u8>> = decode_one(&response).expect("Failed to decode response");
 
     assert_eq!(history.len(), expected_total_versions);
 
     Ok(())
-
 }
 
 fn upgrade_works_when_no_failures(chunked: bool) -> Result<(), String> {
@@ -113,7 +123,13 @@ fn upgrade_works_when_no_failures(chunked: bool) -> Result<(), String> {
 
     let curr_time = pic.get_time().as_nanos_since_unix_epoch();
     let deadline = curr_time + 50; // 50 rounds to have some breathing room
-    let res = try_upgrading_target(pic, upgrader_canister_id, target_canister_id, deadline, chunked);
+    let res = try_upgrading_target(
+        pic,
+        upgrader_canister_id,
+        target_canister_id,
+        deadline,
+        chunked,
+    );
     assert!(res.is_ok(), "Upgrade failed: {:?}", res);
 
     version_check(pic, target_canister_id, 2, 2)?;
@@ -127,7 +143,7 @@ fn upgrade_nonchunked_works_when_no_failures() -> Result<(), String> {
 }
 
 #[test]
-fn upgrade_chunked_works_when_no_failures() -> Result<(), String>  {
+fn upgrade_chunked_works_when_no_failures() -> Result<(), String> {
     upgrade_works_when_no_failures(true)
 }
 
@@ -138,7 +154,13 @@ fn upgrade_works_with_allow_every_other_policy(chunked: bool) -> Result<(), Stri
 
     let curr_time = pic.get_time().as_nanos_since_unix_epoch();
     let deadline = curr_time + 50; // 50 rounds, to allow for some failures
-    let res = try_upgrading_target(pic, upgrader_canister_id, target_canister_id, deadline, chunked);
+    let res = try_upgrading_target(
+        pic,
+        upgrader_canister_id,
+        target_canister_id,
+        deadline,
+        chunked,
+    );
     assert!(res.is_ok(), "Upgrade failed: {:?}", res);
 
     version_check(pic, target_canister_id, 2, 2)?;
@@ -168,11 +190,18 @@ fn upgrade_works_with_probability_policy(chunked: bool) -> Result<(), String> {
     for i in 0..5 {
         let curr_time = pic.get_time().as_nanos_since_unix_epoch();
         let deadline = curr_time + 5_000; // 5000 rounds to make sure we get lucky enough to get the 5-6 messages through
-        let res = try_upgrading_target(pic, upgrader_canister_id, target_canister_id, deadline, chunked);
+        let res = try_upgrading_target(
+            pic,
+            upgrader_canister_id,
+            target_canister_id,
+            deadline,
+            chunked,
+        );
         assert!(res.is_ok(), "Upgrade failed: {:?}", res);
 
-        version_check(pic, target_canister_id, 2, 2*(i+1))?;
-        pic.reinstall_canister(target_canister_id, TARGET_V1_BYTES.clone(), vec![], None).expect("Could not reinstall canister");
+        version_check(pic, target_canister_id, 2, 2 * (i + 1))?;
+        pic.reinstall_canister(target_canister_id, TARGET_V1_BYTES.clone(), vec![], None)
+            .expect("Could not reinstall canister");
     }
 
     Ok(())
@@ -211,33 +240,41 @@ fn upgrade_respects_stopping(chunked: bool) -> Result<(), String> {
 
         // Start the upgrade
         let target_v2_wasm_bytes = TARGET_V2_BYTES.clone();
-        let request_id = pic.submit_call(
-            upgrader_canister_id,
-            Principal::anonymous(),
-            "try_upgrading_target",
-            encode_args((target_canister_id, target_v2_wasm_bytes, deadline, chunked))
-                .expect("Couldn't encode args"),
-        ).expect("Failed to submit upgrade call");
+        let request_id = pic
+            .submit_call(
+                upgrader_canister_id,
+                Principal::anonymous(),
+                "try_upgrading_target",
+                encode_args((target_canister_id, target_v2_wasm_bytes, deadline, chunked))
+                    .expect("Couldn't encode args"),
+            )
+            .expect("Failed to submit upgrade call");
 
         pic.tick();
 
         // Stop the canister
-        pic.stop_canister(upgrader_canister_id, None).expect("Failed to stop canister");
+        pic.stop_canister(upgrader_canister_id, None)
+            .expect("Failed to stop canister");
 
         while pic.get_time().as_nanos_since_unix_epoch() < deadline {
             pic.tick();
         }
 
         // Wait for the call to finish
-        let response: Result<(), String> = decode_one(&pic.await_call(request_id).expect("Failed to await call"))
-            .expect("Failed to decode response");
+        let response: Result<(), String> =
+            decode_one(&pic.await_call(request_id).expect("Failed to await call"))
+                .expect("Failed to decode response");
 
         // The upgrade should fail due to stopping
-        assert!(response.is_err(), "Upgrade should fail when canister is stopped");
+        assert!(
+            response.is_err(),
+            "Upgrade should fail when canister is stopped"
+        );
 
         // Start the canister again if needed to check the version
         if stage > 0 {
-            pic.start_canister(target_canister_id, None).expect("Failed to start target canister");
+            pic.start_canister(target_canister_id, None)
+                .expect("Failed to start target canister");
         }
 
         // Verify version hasn't changed
@@ -271,13 +308,15 @@ fn upgrade_respects_deadline(chunked: bool) -> Result<(), String> {
 
         // Start the upgrade
         let target_v2_wasm_bytes = TARGET_V2_BYTES.clone();
-        let request_id = pic.submit_call(
-            upgrader_canister_id,
-            Principal::anonymous(),
-            "try_upgrading_target",
-            encode_args((target_canister_id, target_v2_wasm_bytes, deadline, chunked))
-                .expect("Couldn't encode args"),
-        ).expect("Failed to submit upgrade call");
+        let request_id = pic
+            .submit_call(
+                upgrader_canister_id,
+                Principal::anonymous(),
+                "try_upgrading_target",
+                encode_args((target_canister_id, target_v2_wasm_bytes, deadline, chunked))
+                    .expect("Couldn't encode args"),
+            )
+            .expect("Failed to submit upgrade call");
 
         while pic.get_time().as_nanos_since_unix_epoch() <= deadline {
             pic.tick();
@@ -286,22 +325,23 @@ fn upgrade_respects_deadline(chunked: bool) -> Result<(), String> {
         pic.tick();
 
         // Wait for the call to finish
-        let response: Result<(), String> = decode_one(&pic.await_call(request_id).expect("Failed to await call"))
-            .expect("Failed to decode response");
+        let response: Result<(), String> =
+            decode_one(&pic.await_call(request_id).expect("Failed to await call"))
+                .expect("Failed to decode response");
 
         // The upgrade should fail due to deadline
-        assert!(response.is_err(), "Upgrade should fail when deadline is reached");
+        assert!(
+            response.is_err(),
+            "Upgrade should fail when deadline is reached"
+        );
 
         // If we're not failing calls at the first stage, we'll have to restart the canister
         // before checking the version
         if stage > 0 {
-            pic.start_canister(target_canister_id, None).expect("Failed to start target canister");
+            pic.start_canister(target_canister_id, None)
+                .expect("Failed to start target canister");
         }
-        let (expected_version, total_versions) = if stage < 3 {
-            (1, 1)
-        } else {
-            (2, 2)
-        };
+        let (expected_version, total_versions) = if stage < 3 { (1, 1) } else { (2, 2) };
         // Verify version hasn't changed
         println!("Failing in stage {}", stage);
         version_check(pic, target_canister_id, expected_version, total_versions)?;
@@ -319,6 +359,3 @@ fn upgrade_nonchunked_respects_deadline() -> Result<(), String> {
 fn upgrade_chunked_respects_deadline() -> Result<(), String> {
     upgrade_respects_deadline(true)
 }
-
-
-

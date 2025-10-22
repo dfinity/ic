@@ -1,5 +1,5 @@
+use ic_cdk::management_canister::{CanisterInfoArgs, ChangeDetails, canister_info};
 use ic_cdk::update;
-use ic_cdk::management_canister::{canister_info, CanisterInfoArgs, ChangeDetails};
 
 #[update]
 fn version() -> u32 {
@@ -16,15 +16,16 @@ async fn self_history() -> Vec<Vec<u8>> {
         canister_id: ic_cdk::api::canister_self(),
         num_requested_changes: Some(20),
     };
-    let info = canister_info(&args).await.expect("Failed to get canister info");
-    info.recent_changes.iter().filter_map(|change| {
-        match &change.details {
-            ChangeDetails::CodeDeployment(deployment) => {
-                Some(deployment.module_hash.clone())
-            },
+    let info = canister_info(&args)
+        .await
+        .expect("Failed to get canister info");
+    info.recent_changes
+        .iter()
+        .filter_map(|change| match &change.details {
+            ChangeDetails::CodeDeployment(deployment) => Some(deployment.module_hash.clone()),
             _ => None,
-        }
-   }).collect()
+        })
+        .collect()
 }
 
-fn main() { }
+fn main() {}

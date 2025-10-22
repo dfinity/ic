@@ -1,9 +1,9 @@
 use candid::Principal;
+use ic_call_chaos::{Call, Policy, set_policy as cc_set_policy};
+use ic_call_retry::{Deadline, when_out_of_time_or_stopping};
 use ic_cdk::call::{CallFailed, CallRejected, OnewayError};
-use ic_call_chaos::{set_policy as cc_set_policy, Call, Policy};
-use ic_call_retry::{when_out_of_time_or_stopping, Deadline};
 use ic_cdk::update;
-use ic_safe_upgrades::{upgrade_canister, upload_chunks, WasmModule, UpgradeStage, ChunkedModule};
+use ic_safe_upgrades::{ChunkedModule, UpgradeStage, WasmModule, upgrade_canister, upload_chunks};
 use sha2::{Digest, Sha256};
 
 #[update]
@@ -18,11 +18,8 @@ pub async fn try_upgrading_target(
     if chunked {
         let chunks: Vec<_> = new_wasm.chunks(1024 * 50).map(|c| c.to_vec()).collect();
         let hashes = chunks.iter().map(|c| Sha256::digest(c).to_vec()).collect();
-        upload_chunks(
-            target_canister,
-            chunks,
-            stopping_condition,
-        ).await
+        upload_chunks(target_canister, chunks, stopping_condition)
+            .await
             .map_err(|e| format!("Failed to upload chunks: {:?}", e))?;
 
         let module = WasmModule::ChunkedModule(ChunkedModule {
@@ -30,12 +27,7 @@ pub async fn try_upgrading_target(
             store_canister_id: target_canister,
             chunk_hashes_list: hashes,
         });
-        upgrade_canister(
-            target_canister,
-            module,
-            vec![],
-            stopping_condition,
-        )
+        upgrade_canister(target_canister, module, vec![], stopping_condition)
             .await
             .map_err(|e| format!("Failed to upgrade canister: {:?}", e))
     } else {
@@ -46,12 +38,12 @@ pub async fn try_upgrading_target(
             stopping_condition,
         )
         .await
-            .map_err(|e| format!("Failed to upgrade canister: {:?}", e))
+        .map_err(|e| format!("Failed to upgrade canister: {:?}", e))
     }
 }
 
 struct FailAtStagePolicy {
-    stage: UpgradeStage
+    stage: UpgradeStage,
 }
 
 impl FailAtStagePolicy {
@@ -63,14 +55,14 @@ impl FailAtStagePolicy {
                 2 => UpgradeStage::Installing,
                 3 => UpgradeStage::Starting,
                 _ => panic!("Invalid step {}", step),
-            }
+            },
         }
     }
 }
 
 impl Policy for FailAtStagePolicy {
     fn allow(&mut self, call: &Call) -> Result<(), CallFailed> {
-        let call_stage  = match call.method {
+        let call_stage = match call.method {
             "stop_canister" => Some(UpgradeStage::Stopping),
             "canister_info" => Some(UpgradeStage::ObtainingInfo),
             "install_code" => Some(UpgradeStage::Installing),
@@ -81,18 +73,19 @@ impl Policy for FailAtStagePolicy {
             _ => panic!("Unknown method: {}", call.method),
         };
         if call_stage == Some(self.stage) {
-            Err(CallFailed::CallRejected(CallRejected::with_rejection(2, "Simulate a transient failure".to_string())))
+            Err(CallFailed::CallRejected(CallRejected::with_rejection(
+                2,
+                "Simulate a transient failure".to_string(),
+            )))
         } else {
             Ok(())
         }
-
     }
 
     fn allow_oneway(&mut self, _call: &Call) -> Result<(), Option<OnewayError>> {
         todo!()
     }
 }
-
 
 #[update]
 pub async fn set_call_chaos_policy(policy: String) {

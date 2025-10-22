@@ -1,5 +1,5 @@
-use ic_call_chaos::{set_policy as call_chaos_set_policy, Call};
-use ic_call_retry::{call_idempotent_method_with_retry, when_out_of_time_or_stopping, Deadline};
+use ic_call_chaos::{Call, set_policy as call_chaos_set_policy};
+use ic_call_retry::{Deadline, call_idempotent_method_with_retry, when_out_of_time_or_stopping};
 use ic_cdk::api::canister_self;
 use ic_cdk::call::{CallFailed, CallPerformFailed, CallRejected, OnewayError};
 use ic_cdk::{query, update};

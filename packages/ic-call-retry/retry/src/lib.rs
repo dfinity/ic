@@ -57,7 +57,7 @@
 
 #[cfg(feature = "use_call_chaos")]
 use ic_call_chaos::Call;
-use ic_cdk::api::{canister_status, time, CanisterStatusCode};
+use ic_cdk::api::{CanisterStatusCode, canister_status, time};
 #[cfg(not(feature = "use_call_chaos"))]
 use ic_cdk::call::Call;
 use ic_cdk::call::{CallErrorExt, CallFailed, Response};
@@ -187,15 +187,13 @@ where
         match call.clone().await {
             Ok(res) => return Ok(res),
             Err(e) if !e.is_immediately_retryable() => {
-                return Err(RetryError::CallFailed(ErrorCause::CallFailed(e)))
+                return Err(RetryError::CallFailed(ErrorCause::CallFailed(e)));
             }
             Err(e) if !e.is_clean_reject() => {
-                return Err(RetryError::StatusUnknown(ErrorCause::CallFailed(e)))
+                return Err(RetryError::StatusUnknown(ErrorCause::CallFailed(e)));
             }
             // Non-sync SysTransient => retry
-            Err(_e) => {
-                continue
-            },
+            Err(_e) => continue,
         }
     }
 }

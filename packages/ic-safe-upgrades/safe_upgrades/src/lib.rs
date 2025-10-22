@@ -1,7 +1,6 @@
 use candid::Principal;
 use ic_call_retry::{
-    call_idempotent_method_with_retry, call_nonidempotent_method_with_retry,
-    ErrorCause, RetryError,
+    ErrorCause, RetryError, call_idempotent_method_with_retry, call_nonidempotent_method_with_retry,
 };
 use ic_cdk::api::canister_self;
 use ic_cdk::call::CallErrorExt;
@@ -9,7 +8,10 @@ use ic_cdk::management_canister::{
     CanisterInfoArgs, CanisterInfoResult, CanisterInstallMode, ChunkHash, ClearChunkStoreArgs,
     InstallCodeArgs, UploadChunkArgs,
 };
-use ic_cdk::management_canister::{ChangeDetails, ChangeOrigin, StartCanisterArgs, StopCanisterArgs, UploadChunkResult, InstallChunkedCodeArgs};
+use ic_cdk::management_canister::{
+    ChangeDetails, ChangeOrigin, InstallChunkedCodeArgs, StartCanisterArgs, StopCanisterArgs,
+    UploadChunkResult,
+};
 use sha2::{Digest, Sha256};
 
 #[cfg(feature = "use_call_chaos")]
@@ -391,6 +393,9 @@ where
 
     let install_call = Call::bounded_wait(Principal::management_canister(), "install_chunked_code")
         .with_arg(&install_args);
-    let res: () = call_nonidempotent_method_with_retry(install_call, stop_trying).await?.candid().expect("Couldn't decode response from install_chunked_code");
+    let res: () = call_nonidempotent_method_with_retry(install_call, stop_trying)
+        .await?
+        .candid()
+        .expect("Couldn't decode response from install_chunked_code");
     Ok(res)
 }
