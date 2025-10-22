@@ -170,6 +170,17 @@ pub struct DeterministicState {
     non_deterministic_metrics: NonDeterministicMetrics,
 }
 
+/// Prints the digest when dropped (for debugging purposes).
+impl Drop for DeterministicState {
+    fn drop(&mut self) {
+        println!(
+            "XXX accessed_wasm_pages_digest:{} dirty_wasm_pages_digest:{}",
+            self.accessed_wasm_pages_digest.get(),
+            self.dirty_wasm_pages_digest.get()
+        );
+    }
+}
+
 impl DeterministicState {
     /// Creates a new `DeterministicState` for tracking memory accesses
     /// over the specified number of OS pages.
