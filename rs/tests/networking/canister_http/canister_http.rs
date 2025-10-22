@@ -21,7 +21,7 @@ use ic_system_test_driver::util::{self, create_and_install, create_and_install_w
 pub use ic_types::{CanisterId, Cycles, PrincipalId};
 use slog::info;
 use std::env;
-use std::net::{Ipv4Addr, Ipv6Addr, IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
@@ -175,7 +175,7 @@ pub fn get_universal_vm_ipv4_address(env: &TestEnv) -> Ipv4Addr {
     }
 }
 
-// This function starts the httpbin service on the universal VM and creates firewall rules on all nodes to 
+// This function starts the httpbin service on the universal VM and creates firewall rules on all nodes to
 // allow access to it. This means that this must only be called after all nodes are up and healthy.
 pub fn start_httpbin_on_uvm(env: &TestEnv) {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
@@ -259,15 +259,9 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
         .unwrap_or_else(|e| panic!("Could not start httpbin on {UNIVERSAL_VM_NAME} because {e:?}"));
 
     // Allow list all nodes to access the UVM httpbin service.
-    create_accept_fw_rules(env, SocketAddr::new(
-        IpAddr::V6(vm.ipv6),
-        http_bin_port,
-    ));
+    create_accept_fw_rules(env, SocketAddr::new(IpAddr::V6(vm.ipv6), http_bin_port));
 
-    info!(
-        &env.logger(),
-        "httpbin service started on UVM"
-    );
+    info!(&env.logger(), "httpbin service started on UVM");
 }
 
 // Create firewall rules on all nodes to allow connections from canister http adapter to the target socket address.
@@ -281,9 +275,8 @@ fn create_accept_fw_rules(env: &TestEnv, target_socket_addr: SocketAddr) {
         .collect();
 
     for node in all_nodes {
-        node.insert_egress_accept_rule_for_outcalls_adapter(target_socket_addr).expect(
-            "Failed to add accept firewall rule to allow access to UVM httpbin service",
-        );
+        node.insert_egress_accept_rule_for_outcalls_adapter(target_socket_addr)
+            .expect("Failed to add accept firewall rule to allow access to UVM httpbin service");
     }
 }
 
