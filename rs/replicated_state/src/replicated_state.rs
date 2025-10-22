@@ -1634,6 +1634,9 @@ pub mod testing {
         /// subnet output queues.
         fn output_message_count(&self) -> usize;
 
+        /// Testing only: Adds the given refund to the subnet-wide refund pool.
+        fn add_refund(&mut self, receiver: CanisterId, amount: Cycles);
+
         /// Testing only: Consumes and returns the contents of the refund pool, in
         /// priority order.
         fn take_all_refunds(&mut self) -> Vec<(CanisterId, Cycles)>;
@@ -1668,6 +1671,10 @@ pub mod testing {
                 .map(|canister| canister.system_state.queues().output_queues_message_count())
                 .sum::<usize>()
                 + self.subnet_queues.output_queues_message_count()
+        }
+
+        fn add_refund(&mut self, receiver: CanisterId, amount: Cycles) {
+            self.refunds.add(receiver, amount);
         }
 
         fn take_all_refunds(&mut self) -> Vec<(CanisterId, Cycles)> {

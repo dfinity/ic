@@ -1,7 +1,9 @@
+use super::refunds::RefundPool;
 use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::queues::v1::canister_queues::CanisterQueuePair;
 use ic_protobuf::types::v1 as pb_types;
+use ic_types::messages::Refund;
 
 impl From<&CanisterQueues> for pb_queues::CanisterQueues {
     fn from(item: &CanisterQueues) -> Self {
@@ -155,11 +157,9 @@ impl From<&RefundPool> for pb_queues::Refunds {
     fn from(item: &RefundPool) -> Self {
         let mut refunds = Self::default();
         item.clone().retain(|recipient, amount| {
-            refunds.refunds.push(pb_queues::Refund {
-                recipient: Some(pb_types::CanisterId::from(*recipient)),
-                amount: Some((*amount).into()),
-                refund_id: None, // Unused
-            });
+            refunds
+                .refunds
+                .push((&Refund::anonymous(*recipient, *amount)).into());
             true
         });
         refunds
@@ -174,15 +174,16 @@ impl TryFrom<(pb_queues::Refunds, &dyn CheckpointLoadingMetrics)> for RefundPool
     ) -> Result<Self, Self::Error> {
         let mut pool = RefundPool::new();
         for refund in item.refunds {
-            let recipient: CanisterId =
-                try_from_option_field(refund.recipient, "Refund::recipient")?;
-            let amount: ic_types::Cycles = try_from_option_field(refund.amount, "Refund::amount")?;
             let pool_size_before = pool.len();
-            pool.add(recipient, amount);
+
+            let refund = Refund::try_from(refund)?;
+            pool.add(refund.recipient(), refund.amount());
 
             if pool.len() <= pool_size_before {
                 metrics.observe_broken_soft_invariant(format!(
-                    "RefundPool: Duplicate recipient ({recipient}) or zero amount ({amount})"
+                    "RefundPool: Duplicate recipient ({}) or zero amount ({})",
+                    refund.recipient(),
+                    refund.amount()
                 ));
             }
         }
