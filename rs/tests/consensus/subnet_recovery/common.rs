@@ -29,9 +29,10 @@ Success::
 end::catalog[] */
 
 use crate::utils::{
-    Cursor, assert_subnet_is_broken, break_nodes, get_admin_keys_and_generate_readonly_keys,
-    halt_subnet, local::app_subnet_recovery_local_cli_args,
-    node_with_highest_certification_share_height, remote_recovery, unhalt_subnet,
+    AdminAndUserKeys, Cursor, assert_subnet_is_broken, break_nodes,
+    get_admin_keys_and_generate_readonly_keys, halt_subnet,
+    local::app_subnet_recovery_local_cli_args, node_with_highest_certification_share_height,
+    remote_recovery, unhalt_subnet,
 };
 use anyhow::bail;
 use canister_test::Canister;
@@ -313,14 +314,13 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         };
     }
 
-    let (
+    let AdminAndUserKeys {
         ssh_admin_priv_key_path,
         admin_auth,
-        ssh_readonly_priv_key_path,
-        _,
-        _,
-        ssh_readonly_pub_key,
-    ) = get_admin_keys_and_generate_readonly_keys(&env);
+        ssh_user_priv_key_path: ssh_readonly_priv_key_path,
+        ssh_user_pub_key: ssh_readonly_pub_key,
+        ..
+    } = get_admin_keys_and_generate_readonly_keys(&env);
     // If the latest CUP is corrupted we can't deploy read-only access
     let ssh_readonly_pub_key_deployed = (!cfg.corrupt_cup).then_some(ssh_readonly_pub_key);
 

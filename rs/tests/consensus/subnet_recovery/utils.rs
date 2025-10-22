@@ -29,22 +29,24 @@ use url::Url;
 pub const READONLY_USERNAME: &str = "readonly";
 pub const BACKUP_USERNAME: &str = "backup";
 
-pub fn get_admin_keys_and_generate_readonly_keys(
-    env: &TestEnv,
-) -> (PathBuf, AuthMean, PathBuf, AuthMean, PathBuf, String) {
+pub struct AdminAndUserKeys {
+    pub ssh_admin_priv_key_path: PathBuf,
+    pub admin_auth: AuthMean,
+    pub ssh_user_priv_key_path: PathBuf,
+    pub user_auth: AuthMean,
+    pub ssh_user_pub_key_path: PathBuf,
+    pub ssh_user_pub_key: String,
+}
+
+pub fn get_admin_keys_and_generate_readonly_keys(env: &TestEnv) -> AdminAndUserKeys {
     get_admin_keys_and_generate_keys_for_user(env, READONLY_USERNAME)
 }
 
-pub fn get_admin_keys_and_generate_backup_keys(
-    env: &TestEnv,
-) -> (PathBuf, AuthMean, PathBuf, AuthMean, PathBuf, String) {
+pub fn get_admin_keys_and_generate_backup_keys(env: &TestEnv) -> AdminAndUserKeys {
     get_admin_keys_and_generate_keys_for_user(env, BACKUP_USERNAME)
 }
 
-fn get_admin_keys_and_generate_keys_for_user(
-    env: &TestEnv,
-    username: &str,
-) -> (PathBuf, AuthMean, PathBuf, AuthMean, PathBuf, String) {
+fn get_admin_keys_and_generate_keys_for_user(env: &TestEnv, username: &str) -> AdminAndUserKeys {
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
@@ -63,16 +65,18 @@ fn get_admin_keys_and_generate_keys_for_user(
 
     let ssh_user_pub_key_path = ssh_authorized_pub_keys_dir.join(username);
     let ssh_user_pub_key = std::fs::read_to_string(&ssh_user_pub_key_path)
-        .unwrap_or_else(|_| panic!("Failed to read {username} SSH public key"));
+        .unwrap_or_else(|_| panic!("Failed to read {username} SSH public key"))
+        .trim()
+        .to_string();
 
-    (
+    AdminAndUserKeys {
         ssh_admin_priv_key_path,
         admin_auth,
         ssh_user_priv_key_path,
         user_auth,
         ssh_user_pub_key_path,
-        ssh_user_pub_key.trim().to_string(),
-    )
+        ssh_user_pub_key,
+    }
 }
 
 /// Break the replica binary on the given nodes

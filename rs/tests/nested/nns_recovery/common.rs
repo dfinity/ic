@@ -2,7 +2,8 @@ use std::path::Path;
 
 use anyhow::bail;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    BACKUP_USERNAME, assert_subnet_is_broken, break_nodes, get_admin_keys_and_generate_backup_keys,
+    AdminAndUserKeys, BACKUP_USERNAME, assert_subnet_is_broken, break_nodes,
+    get_admin_keys_and_generate_backup_keys,
     local::{NNS_RECOVERY_OUTPUT_DIR_REMOTE_PATH, nns_subnet_recovery_same_nodes_local_cli_args},
     node_with_highest_certification_share_height, remote_recovery,
 };
@@ -192,14 +193,14 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         .map(|b| format!("{b:02x}"))
         .collect::<String>();
 
-    let (
+    let AdminAndUserKeys {
         ssh_admin_priv_key_path,
         admin_auth,
-        ssh_backup_priv_key_path,
-        backup_auth,
-        _,
-        ssh_backup_pub_key,
-    ) = get_admin_keys_and_generate_backup_keys(&env);
+        ssh_user_priv_key_path: ssh_backup_priv_key_path,
+        user_auth: backup_auth,
+        ssh_user_pub_key: ssh_backup_pub_key,
+        ..
+    } = get_admin_keys_and_generate_backup_keys(&env);
 
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);
