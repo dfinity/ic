@@ -176,7 +176,7 @@ impl IngressHistoryWriterImpl {
                 ),
                 message_state_time_in_terminal_state_seconds: metrics_registry.histogram(
                     "message_state_time_in_terminal_state_seconds",
-                    "The time a message spent in a terminal state before being forced to transition to `Done` due to memory pressure.",
+                    "The time a message spent in a terminal state before being forced to transition to `Done` due to memory pressure. Excludes messages that never transition to `Done`.",
                     linear_buckets(0.0, 10.0, 30),
                 )
             },
