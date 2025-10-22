@@ -889,34 +889,36 @@ async fn failure_controllers_restored() {
     assert_eq!(target_controllers, target_controllers_after);
 }
 
-// TODO: Depends on a PocketIC change
-
-// #[tokio::test]
-// async fn success_controllers_restored() {
-//     let Setup {
-//         pic,
-//         source,
-//         target,
-//         mut source_controllers,
-//         ..
-//     } = setup(Settings::default()).await;
-//     let sender = source_controllers[0];
-//     let args = MigrateCanisterArgs { source, target };
-//     migrate_canister(&pic, sender, &args).await.unwrap();
-//     for _ in 0..10 {
-//         advance(&pic).await;
-//     }
-//     let status = get_status(&pic, sender, &args).await;
-//     let MigrationStatus::Succeeded { .. } = status[0] else {
-//         panic!()
-//     };
-//     let mut source_controllers_after = pic.get_controllers(source).await;
-//     source_controllers_after.sort();
-//     // On success, the MC should have removed itself from the controllers.
-//     source_controllers.retain(|x| x != &MIGRATION_CANISTER_ID.get().0);
-//     source_controllers.sort();
-//     assert_eq!(source_controllers, source_controllers_after);
-// }
+#[tokio::test]
+async fn success_controllers_restored() {
+    let Setup {
+        pic,
+        source,
+        target,
+        mut source_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    let args = MigrateCanisterArgs { source, target };
+    migrate_canister(&pic, sender, &args).await.unwrap();
+    for _ in 0..10 {
+        advance(&pic).await;
+    }
+    pic.advance_time(Duration::from_secs(300)).await;
+    for _ in 0..10 {
+        advance(&pic).await;
+    }
+    let status = get_status(&pic, sender, &args).await;
+    let MigrationStatus::Succeeded { .. } = status[0] else {
+        panic!("status: {:?}", status[0]);
+    };
+    let mut source_controllers_after = pic.get_controllers(source).await;
+    source_controllers_after.sort();
+    // On success, the MC should have removed itself from the controllers.
+    source_controllers.retain(|x| x != &MIGRATION_CANISTER_ID.get().0);
+    source_controllers.sort();
+    assert_eq!(source_controllers, source_controllers_after);
+}
 
 // parallel processing
 
