@@ -29,4 +29,8 @@ root	ALL=(ALL:ALL) NOPASSWD:ALL
 # Allow members of group sudo to execute any command
 %sudo	ALL=(ALL:ALL) NOPASSWD:ALL
 
+# Limited console user - restricted sudo access
+limited-console ALL=(ALL) NOPASSWD: /usr/bin/journalctl
+limited-console ALL=(ALL) NOPASSWD: /usr/bin/systemctl
+
 # See sudoers(5) for more information on "#include" directives:

@@ -11,7 +11,7 @@ copy_ssh_keys() {
     fi
 }
 
-for ACCOUNT in backup readonly admin; do
+for ACCOUNT in backup readonly admin limited-console; do
     HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
     GROUP=$(id -ng "${ACCOUNT}")
 
