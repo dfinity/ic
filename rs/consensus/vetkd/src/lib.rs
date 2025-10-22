@@ -40,6 +40,9 @@ use ic_types::{
     messages::{CallbackId, Payload as ResponsePayload, RejectContext},
 };
 use num_traits::ops::saturating::SaturatingSub;
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::{ThreadPool, ThreadPoolBuilder};
+use std::sync::Mutex;
 use std::time::Duration;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -76,6 +79,7 @@ pub struct VetKdPayloadBuilderImpl {
     cache: Arc<dyn ConsensusPoolCache>,
     crypto: Arc<dyn ConsensusCrypto>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+    thread_pool: Arc<ThreadPool>,
     subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient>,
     metrics: VetKdPayloadBuilderMetrics,
@@ -99,6 +103,7 @@ impl VetKdPayloadBuilderImpl {
             cache,
             crypto,
             state_reader,
+            thread_pool: Arc::new(ThreadPoolBuilder::new().num_threads(16).build().unwrap()),
             subnet_id,
             registry,
             metrics: VetKdPayloadBuilderMetrics::new(metrics_registry),
@@ -204,78 +209,93 @@ impl VetKdPayloadBuilderImpl {
             )
         };
 
-        // Iterate over all outstanding VetKD requests
-        let mut candidates = BTreeMap::new();
-        let mut accumulated_size = 0;
-        for (callback_id, context) in state.signature_request_contexts() {
-            if !context.is_vetkd() {
-                // Skip non-vetkd contexts.
-                continue;
-            }
+        let accumulated_size = RwLock::new(0);
+        let candidates = self.thread_pool.install(|| {
+            state
+                .signature_request_contexts()
+                .par_iter()
+                .flat_map(|(callback_id, context)| {
+                    if NumBytes::new(*accumulated_size.read().unwrap()) >= max_payload_size {
+                        // Stop if the payload is full
+                        return None;
+                    }
 
-            if delivered_ids.contains(callback_id) {
-                // Skip contexts for which we already delivered a response.
-                continue;
-            }
+                    if !context.is_vetkd() {
+                        // Skip non-vetkd contexts.
+                        return None;
+                    }
 
-            let candidate = if let Some(reject) =
-                reject_if_invalid(&valid_keys, context, &request_expiry, Some(&self.metrics))
-            {
-                reject
-            } else {
-                let Some(shares) = grouped_shares.get(callback_id) else {
-                    continue;
-                };
-                let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
-                    continue;
-                };
-                let args = VetKdArgs {
-                    context: VetKdDerivationContext {
-                        caller: context.request.sender.into(),
-                        context: context.derivation_path.iter().flatten().cloned().collect(),
-                    },
-                    ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
-                    input: ctxt_args.input.to_vec(),
-                    transport_public_key: ctxt_args.transport_public_key.clone(),
-                };
-                let key_id = context.key_id();
-                match self.crypto.combine_encrypted_key_shares(shares, &args) {
-                    Ok(key) => {
-                        self.metrics
-                            .payload_metrics_inc("vetkd_agreement_completed", &key_id);
-                        let result = VetKdDeriveKeyResult {
-                            encrypted_key: key.encrypted_key,
+                    if delivered_ids.contains(callback_id) {
+                        // Skip contexts for which we already delivered a response.
+                        return None;
+                    }
+
+                    let candidate = if let Some(reject) = reject_if_invalid(
+                        &valid_keys,
+                        context,
+                        &request_expiry,
+                        Some(&self.metrics),
+                    ) {
+                        reject
+                    } else {
+                        let Some(shares) = grouped_shares.get(callback_id) else {
+                            return None;
                         };
-                        VetKdAgreement::Success(result.encode())
-                    }
-                    Err(VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
-                        ..
-                    }) => {
-                        continue;
-                    }
-                    Err(err) => {
-                        warn!(
-                            self.log,
-                            "Failed to combine vetKD key shares: callback_id = {:?}, {:?}",
-                            callback_id,
-                            err
-                        );
-                        self.metrics
-                            .payload_errors_inc("combine_key_shares", &key_id);
-                        continue;
-                    }
-                }
-            };
+                        let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
+                            return None;
+                        };
+                        let args = VetKdArgs {
+                            context: VetKdDerivationContext {
+                                caller: context.request.sender.into(),
+                                context: context
+                                    .derivation_path
+                                    .iter()
+                                    .flatten()
+                                    .cloned()
+                                    .collect(),
+                            },
+                            ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
+                            input: ctxt_args.input.to_vec(),
+                            transport_public_key: ctxt_args.transport_public_key.clone(),
+                        };
+                        let key_id = context.key_id();
+                        match self.crypto.combine_encrypted_key_shares(shares, &args) {
+                            Ok(key) => {
+                                self.metrics
+                                    .payload_metrics_inc("vetkd_agreement_completed", &key_id);
+                                let result = VetKdDeriveKeyResult {
+                                    encrypted_key: key.encrypted_key,
+                                };
+                                VetKdAgreement::Success(result.encode())
+                            }
+                            Err(
+                                VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
+                                    ..
+                                },
+                            ) => {
+                                return None;
+                            }
+                            Err(err) => {
+                                warn!(
+                                    self.log,
+                                    "Failed to combine vetKD key shares: callback_id = {:?}, {:?}",
+                                    callback_id,
+                                    err
+                                );
+                                self.metrics
+                                    .payload_errors_inc("combine_key_shares", &key_id);
+                                return None;
+                            }
+                        }
+                    };
 
-            let candidate_size = callback_id.count_bytes() + candidate.count_bytes();
-            let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-            if size >= max_payload_size {
-                break;
-            } else {
-                accumulated_size += candidate_size;
-                candidates.insert(*callback_id, candidate);
-            }
-        }
+                    let candidate_size = callback_id.count_bytes() + candidate.count_bytes();
+                    let mut accumulated_size = accumulated_size.write().unwrap();
+                    *accumulated_size += candidate_size as u64;
+                    Some((*callback_id, candidate))
+                })
+                .collect::<BTreeMap<_, _>>()
+        });
 
         VetKdPayload {
             vetkd_agreements: candidates,
@@ -292,46 +312,59 @@ impl VetKdPayloadBuilderImpl {
     ) -> Result<(), PayloadValidationError> {
         let contexts = state.signature_request_contexts();
 
-        for (id, agreement) in payload.vetkd_agreements {
-            if delivered_ids.contains(&id) {
-                return invalid_artifact_err(InvalidVetKdPayloadReason::DuplicateResponse(id));
-            }
-
-            let Some(context) = contexts.get(&id) else {
-                return invalid_artifact_err(InvalidVetKdPayloadReason::MissingContext(id));
-            };
-
-            if !context.is_vetkd() {
-                return invalid_artifact_err(InvalidVetKdPayloadReason::UnexpectedIDkgContext(id));
-            }
-
-            let expected_reject = reject_if_invalid(&valid_keys, context, &request_expiry, None);
-
-            match agreement {
-                VetKdAgreement::Success(data) => {
-                    if expected_reject.is_some() {
-                        return invalid_artifact_err(
-                            InvalidVetKdPayloadReason::MismatchedAgreement {
-                                expected: expected_reject,
-                                received: None,
-                            },
-                        );
-                    } else {
-                        self.validate_vetkd_agreement(id, context, data)?
+        self.thread_pool.install(|| {
+            payload
+                .vetkd_agreements
+                .into_par_iter()
+                .map(|(id, agreement)| {
+                    if delivered_ids.contains(&id) {
+                        return invalid_artifact_err(InvalidVetKdPayloadReason::DuplicateResponse(
+                            id,
+                        ));
                     }
-                }
-                reject => {
-                    if Some(&reject) != expected_reject.as_ref() {
+
+                    let Some(context) = contexts.get(&id) else {
+                        return invalid_artifact_err(InvalidVetKdPayloadReason::MissingContext(id));
+                    };
+
+                    if !context.is_vetkd() {
                         return invalid_artifact_err(
-                            InvalidVetKdPayloadReason::MismatchedAgreement {
-                                expected: expected_reject,
-                                received: Some(reject),
-                            },
+                            InvalidVetKdPayloadReason::UnexpectedIDkgContext(id),
                         );
                     }
-                }
-            }
-        }
+
+                    let expected_reject =
+                        reject_if_invalid(&valid_keys, context, &request_expiry, None);
+
+                    match agreement {
+                        VetKdAgreement::Success(data) => {
+                            if expected_reject.is_some() {
+                                return invalid_artifact_err(
+                                    InvalidVetKdPayloadReason::MismatchedAgreement {
+                                        expected: expected_reject,
+                                        received: None,
+                                    },
+                                );
+                            } else {
+                                self.validate_vetkd_agreement(id, context, data)?
+                            }
+                        }
+                        reject => {
+                            if Some(&reject) != expected_reject.as_ref() {
+                                return invalid_artifact_err(
+                                    InvalidVetKdPayloadReason::MismatchedAgreement {
+                                        expected: expected_reject,
+                                        received: Some(reject),
+                                    },
+                                );
+                            }
+                        }
+                    }
+
+                    Ok(())
+                })
+                .collect::<Result<Vec<()>, _>>()
+        })?;
 
         Ok(())
     }
