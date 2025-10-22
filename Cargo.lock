@@ -4693,6 +4693,7 @@ dependencies = [
  "serde_cbor",
  "slog",
  "tokio",
+ "tokio-util",
  "wat",
 ]
 
