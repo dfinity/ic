@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import time
 import typing
 from html import unescape
 from pathlib import Path
@@ -317,8 +318,9 @@ class TrivyExecutor:
             if i >= TRIVY_SCAN_RETRIES:
                 logging.error(error_msg)
                 raise RuntimeError(error_msg)
-            else:
-                logging.debug(error_msg)
+
+            logging.debug(error_msg)
+            time.sleep(i)
 
         file_to_hash: typing.Dict[str, str] = {}
         with open(hash_file_path, "r") as file:
