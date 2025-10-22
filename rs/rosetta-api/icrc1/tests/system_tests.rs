@@ -933,7 +933,7 @@ async fn verify_unrecognized_block_handling(setup: &Setup, bad_block_index: u64)
             found_backoff_message = true;
             break;
         }
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
     assert!(found_backoff_message);
 }
