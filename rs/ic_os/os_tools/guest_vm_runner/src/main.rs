@@ -911,7 +911,10 @@ mod tests {
 
     fn invalid_hostos_config() -> HostOSConfig {
         let mut hostos_config = valid_hostos_config();
-        hostos_config.hostos_settings.vm_nr_of_vcpus = 0;
+        hostos_config
+            .hostos_settings
+            .hostos_dev_settings
+            .vm_nr_of_vcpus = 0;
         hostos_config
     }
 
