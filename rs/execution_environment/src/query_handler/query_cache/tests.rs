@@ -1529,6 +1529,7 @@ fn query_cache_future_proof_test() {
         | SystemApiCallId::CostCall
         | SystemApiCallId::CostCreateCanister
         | SystemApiCallId::CostHttpRequest
+        | SystemApiCallId::CostHttpRequestV2
         | SystemApiCallId::CostSignWithEcdsa
         | SystemApiCallId::CostSignWithSchnorr
         | SystemApiCallId::CostVetkdDeriveKey
