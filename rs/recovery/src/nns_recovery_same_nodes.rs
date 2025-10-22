@@ -22,7 +22,16 @@ use url::Url;
 use crate::{Recovery, Step};
 
 #[derive(
-    Copy, Clone, PartialEq, Debug, Deserialize, EnumIter, EnumMessage, EnumString, Serialize,
+    Copy,
+    Clone,
+    PartialEq,
+    Debug,
+    Deserialize,
+    EnumIter,
+    EnumMessage,
+    EnumString,
+    Serialize,
+    strum_macros::Display,
 )]
 pub enum StepType {
     /// Before we can start the recovery process, we need to prevent the subnet from attempting to
@@ -207,10 +216,6 @@ impl NNSRecoverySameNodes {
             recovery,
             logger,
         }
-    }
-
-    pub fn get_recovery_api(&self) -> &Recovery {
-        &self.recovery
     }
 }
 
