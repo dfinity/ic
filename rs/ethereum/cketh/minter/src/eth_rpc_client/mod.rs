@@ -270,16 +270,14 @@ pub enum MultiCallError<T> {
     InconsistentResults(MultiCallResults<T>),
 }
 
-pub type ReducedMultiCallResult<T> = Result<T, MultiCallError<T>>;
-
 pub trait ReductionStrategy<T> {
-    fn reduce(&self, results: MultiCallResults<T>) -> ReducedMultiCallResult<T>;
+    fn reduce(&self, results: MultiCallResults<T>) -> Result<T, MultiCallError<T>>;
 }
 
 pub struct NoReduction;
 
 impl<T> ReductionStrategy<T> for NoReduction {
-    fn reduce(&self, results: MultiCallResults<T>) -> ReducedMultiCallResult<T> {
+    fn reduce(&self, results: MultiCallResults<T>) -> Result<T, MultiCallError<T>> {
         Err(MultiCallError::InconsistentResults(results))
     }
 }
@@ -290,7 +288,7 @@ impl<T> ReductionStrategy<T> for AnyOf
 where
     T: PartialEq,
 {
-    fn reduce(&self, results: MultiCallResults<T>) -> ReducedMultiCallResult<T> {
+    fn reduce(&self, results: MultiCallResults<T>) -> Result<T, MultiCallError<T>> {
         results.at_least_one_ok().map(|(_, result)| result)
     }
 }
@@ -311,7 +309,7 @@ where
     F: Fn(&T) -> K,
     K: Ord,
 {
-    fn reduce(&self, results: MultiCallResults<T>) -> ReducedMultiCallResult<T> {
+    fn reduce(&self, results: MultiCallResults<T>) -> Result<T, MultiCallError<T>> {
         results.reduce_with_min_by_key(|result| (self.get_key)(result))
     }
 }
@@ -332,21 +330,23 @@ where
     F: Fn(&T) -> K,
     K: Ord,
 {
-    fn reduce(&self, results: MultiCallResults<T>) -> ReducedMultiCallResult<T> {
+    fn reduce(&self, results: MultiCallResults<T>) -> Result<T, MultiCallError<T>> {
         results.reduce_with_strict_majority_by_key(|result| (self.get_key)(result))
     }
 }
 
 pub trait ToReducedWithStrategy<T> {
-    fn reduce_with_strategy(self, strategy: impl ReductionStrategy<T>)
-    -> ReducedMultiCallResult<T>;
+    fn reduce_with_strategy(
+        self,
+        strategy: impl ReductionStrategy<T>,
+    ) -> Result<T, MultiCallError<T>>;
 }
 
 impl<T> ToReducedWithStrategy<T> for EvmMultiRpcResult<T> {
     fn reduce_with_strategy(
         self,
         strategy: impl ReductionStrategy<T>,
-    ) -> ReducedMultiCallResult<T> {
+    ) -> Result<T, MultiCallError<T>> {
         match self {
             EvmMultiRpcResult::Consistent(result) => {
                 result.map_err(MultiCallError::ConsistentError)
