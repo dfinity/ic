@@ -59,7 +59,7 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
         return Err(ValidationError::RateLimited);
     }
     let caller = msg_caller();
-    // For demo purposes
+    // For soft rollout purposes
     if !caller_allowed(&caller) {
         return Err(ValidationError::MigrationsDisabled);
     }
