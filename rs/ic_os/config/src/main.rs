@@ -1,8 +1,9 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use config::guestos::bootstrap_ic_node::populate_nns_public_key;
 use config::guestos::{bootstrap_ic_node::bootstrap_ic_node, generate_ic_config};
 use config::serialize_and_write_config;
-use config::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
+use config::setupos::config_ini::{get_config_ini_settings, ConfigIniSettings};
 use config::setupos::deployment_json::get_deployment_settings;
 use config_types::*;
 use network::resolve_mgmt_mac;
@@ -32,8 +33,8 @@ pub enum Commands {
     },
     /// Bootstrap IC Node from a bootstrap package
     BootstrapICNode {
-        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_TAR_PATH, value_name = "bootstrap.tar")]
-        bootstrap_tar_path: PathBuf,
+        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_DIR, value_name = "bootstrap_dir")]
+        bootstrap_dir: PathBuf,
     },
     /// Generate IC configuration from template and guestos config
     GenerateICConfig {
@@ -41,6 +42,10 @@ pub enum Commands {
         guestos_config_json_path: PathBuf,
         #[arg(long, default_value = config::DEFAULT_IC_JSON5_OUTPUT_PATH, value_name = "ic.json5")]
         output_path: PathBuf,
+    },
+    PopulateNnsPublicKey {
+        #[arg(long, default_value = config::DEFAULT_BOOTSTRAP_DIR, value_name = "bootstrap_dir")]
+        bootstrap_dir: PathBuf,
     },
 }
 
@@ -192,9 +197,13 @@ pub fn main() -> Result<()> {
 
             Ok(())
         }
-        Some(Commands::BootstrapICNode { bootstrap_tar_path }) => {
-            println!("Bootstrap IC Node from: {}", bootstrap_tar_path.display());
-            bootstrap_ic_node(&bootstrap_tar_path)
+        Some(Commands::BootstrapICNode { bootstrap_dir }) => {
+            println!("Bootstrap IC Node from: {}", bootstrap_dir.display());
+            bootstrap_ic_node(&bootstrap_dir)
+        }
+        Some(Commands::PopulateNnsPublicKey { bootstrap_dir }) => {
+            println!("Populating NNS key from: {}", bootstrap_dir.display());
+            populate_nns_public_key(&bootstrap_dir)
         }
         Some(Commands::GenerateICConfig {
             guestos_config_json_path,

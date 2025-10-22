@@ -49,8 +49,6 @@ component_files = {
 
     # init
     Label("guestos/init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
-    Label("guestos/init/mount-config/mount-config.sh"): "/opt/ic/bin/mount-config.sh",
-    Label("guestos/init/mount-config/mount-config.service"): "/etc/systemd/system/mount-config.service",
     Label("guestos/init/init-config/init-config.sh"): "/opt/ic/bin/init-config.sh",
     Label("guestos/init/init-config/init-config.service"): "/etc/systemd/system/init-config.service",
     Label("guestos/init/setup-encryption/setup-data-encryption.sh"): "/opt/ic/bin/setup-data-encryption.sh",
