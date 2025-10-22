@@ -2,18 +2,21 @@ use candid::{Principal, decode_one, encode_args, encode_one};
 use once_cell::sync::Lazy;
 use pocket_ic::PocketIc;
 
+#[allow(clippy::declare_interior_mutable_const)]
 static TARGET_V1_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
     let wasm_path =
         std::env::var_os("TARGET_TEST_CANISTER_V1").expect("Missing test canister v1 wasm file");
     std::fs::read(wasm_path).unwrap()
 });
 
+#[allow(clippy::declare_interior_mutable_const)]
 const TARGET_V2_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
     let wasm_path =
         std::env::var_os("TARGET_TEST_CANISTER_V2").expect("Missing test canister v2 wasm file");
     std::fs::read(wasm_path).unwrap()
 });
 
+#[allow(clippy::declare_interior_mutable_const)]
 const UPGRADER_BYTES: Lazy<Vec<u8>> = Lazy::new(|| {
     let wasm_path =
         std::env::var_os("UPGRADER_TEST_CANISTER").expect("Missing upgrader canister wasm file");
@@ -47,7 +50,7 @@ fn set_policy(pic: &PocketIc, canister_id: Principal, policy: &str) {
         canister_id,
         Principal::anonymous(),
         "set_call_chaos_policy",
-        encode_one(&policy).expect("Couldn't encode policy"),
+        encode_one(policy).expect("Couldn't encode policy"),
     )
     .expect("Failed to set the policy");
 }
@@ -93,7 +96,7 @@ fn version_check(
             canister_id,
             Principal::anonymous(),
             "version",
-            encode_one(&()).expect("Couldn't encode args"),
+            encode_one(()).expect("Couldn't encode args"),
         )
         .map_err(|e| format!("Failed to call version check: {}", e))?;
 
@@ -105,7 +108,7 @@ fn version_check(
             canister_id,
             Principal::anonymous(),
             "self_history",
-            encode_one(&()).expect("Couldn't encode args"),
+            encode_one(()).expect("Couldn't encode args"),
         )
         .map_err(|e| format!("Failed to call self_history: {}", e))?;
 
@@ -217,12 +220,12 @@ fn upgrade_chunked_works_with_probability_policy() -> Result<(), String> {
     upgrade_works_with_probability_policy(true)
 }
 
-fn set_fail_at_stage_policy(pic: &PocketIc, canister_id: Principal, stage: u32) -> () {
+fn set_fail_at_stage_policy(pic: &PocketIc, canister_id: Principal, stage: u32) {
     pic.update_call(
         canister_id,
         Principal::anonymous(),
         "set_fail_at_stage_policy",
-        encode_one(&stage).expect("Couldn't encode policy number"),
+        encode_one(stage).expect("Couldn't encode policy number"),
     )
     .expect("Failed to set the policy");
 }
