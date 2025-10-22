@@ -461,10 +461,13 @@ pub fn get_oldest_idkg_state_registry_version(state: &ReplicatedState) -> Option
 
 // Calculate the number of heights in the given range (inclusive)
 pub fn range_len(start: Height, end: Height) -> usize {
-    end.get()
-        .saturating_sub(start.get())
-        .checked_add((start <= end) as u64)
-        .expect("We should never reach the maximum number of heights") as usize
+    if end >= start {
+        (end.get() - start.get())
+            .checked_add(1)
+            .expect("We should never reach the maximum number of heights") as usize
+    } else {
+        0
+    }
 }
 
 #[cfg(test)]
