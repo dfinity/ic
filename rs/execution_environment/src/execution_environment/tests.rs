@@ -54,7 +54,7 @@ mod canister_snapshots;
 mod compilation;
 
 const BALANCE_EPSILON: Cycles = Cycles::new(12_000_000);
-const ONE_GIB: i64 = 1 << 30;
+const ONE_GIB: u64 = 1 << 30;
 
 // A Wasm module calling call_perform
 const CALL_SIMPLE_WAT: &str = r#"(module
@@ -285,21 +285,18 @@ fn ingress_can_reject() {
 
 #[test]
 fn output_requests_on_system_subnet_ignore_memory_limits() {
-    let canister_memory: i64 = 1 << 30;
+    let canister_memory: u64 = 1 << 30;
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_subnet_execution_memory(canister_memory)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(13)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .build();
 
     let canister_id = test
-        .create_canister_with_allocation(
-            Cycles::new(1_000_000_000),
-            None,
-            Some(canister_memory as u64),
-        )
+        .create_canister_with_allocation(Cycles::new(1_000_000_000), None, Some(canister_memory))
         .unwrap();
     test.install_canister(canister_id, wat::parse_str(CALL_SIMPLE_WAT).unwrap())
         .unwrap();
@@ -328,13 +325,14 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(13)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
     let available_memory_after_create = test.subnet_available_memory().get_execution_memory();
     assert_eq!(
         available_memory_after_create + test.state().memory_taken().execution().get() as i64,
-        ONE_GIB
+        ONE_GIB as i64,
     );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
@@ -357,13 +355,14 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_SIMPLE_WAT).unwrap();
     let available_memory_after_create = test.subnet_available_memory().get_execution_memory();
     assert_eq!(
         available_memory_after_create + test.state().memory_taken().execution().get() as i64,
-        ONE_GIB
+        ONE_GIB as i64
     );
     test.ingress_raw(canister_id, "test", vec![]);
     test.execute_message(canister_id);
@@ -382,7 +381,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory() {
     // Subnet available memory should have decreased by `MAX_RESPONSE_COUNT_BYTES`.
     assert_eq!(available_memory_after_create, subnet_total_memory);
     assert_eq!(
-        ONE_GIB - MAX_RESPONSE_COUNT_BYTES as i64,
+        (ONE_GIB - MAX_RESPONSE_COUNT_BYTES as u64) as i64,
         subnet_message_memory
     );
     assert_correct_request(system_state, canister_id);
@@ -394,6 +393,7 @@ fn output_best_effort_requests_on_application_subnets_update_subnet_available_me
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .build();
     let canister_id = test.canister_from_wat(CALL_BEST_EFFORT_WAT).unwrap();
@@ -416,7 +416,7 @@ fn output_best_effort_requests_on_application_subnets_update_subnet_available_me
     assert_eq!(1, system_state.queues().input_queues_reserved_slots());
     // Subnet available memory and message memory should be unchanged.
     assert_eq!(initia_available_memory, subnet_total_memory);
-    assert_eq!(ONE_GIB, subnet_message_memory);
+    assert_eq!(ONE_GIB as i64, subnet_message_memory);
     assert_correct_request(system_state, canister_id);
 }
 
@@ -2695,18 +2695,25 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
     let memory_after_create = test.state().memory_taken().execution().get() as i64;
     assert_eq!(
         test.subnet_available_memory().get_execution_memory() + memory_after_create,
-        ONE_GIB
+        ONE_GIB as i64,
     );
     let err = test.ingress(id, "test_with_trap", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterCalledTrap, err.code());
     let memory = test.subnet_available_memory();
-    assert_eq!(memory.get_execution_memory() + memory_after_create, ONE_GIB);
-    assert_eq!(memory.get_guaranteed_response_message_memory(), ONE_GIB);
+    assert_eq!(
+        memory.get_execution_memory() + memory_after_create,
+        ONE_GIB as i64
+    );
+    assert_eq!(
+        memory.get_guaranteed_response_message_memory(),
+        ONE_GIB as i64
+    );
 }
 
 #[test]
@@ -2715,12 +2722,13 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
     let memory_after_create = test.state().memory_taken().execution().get() as i64;
     assert_eq!(
         test.subnet_available_memory().get_execution_memory() + memory_after_create,
-        ONE_GIB
+        ONE_GIB as i64,
     );
     let result = test.ingress(id, "test_without_trap", vec![]);
     expect_canister_did_not_reply(result);
@@ -2729,9 +2737,12 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
     let memory = test.subnet_available_memory();
     assert_eq!(
         memory.get_execution_memory() + new_memory_allocated + memory_after_create,
-        ONE_GIB
+        ONE_GIB as i64,
     );
-    assert_eq!(ONE_GIB, memory.get_guaranteed_response_message_memory());
+    assert_eq!(
+        ONE_GIB as i64,
+        memory.get_guaranteed_response_message_memory()
+    );
 }
 
 #[test]
@@ -3829,6 +3840,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
         .with_subnet_execution_memory(ONE_GIB)
         .with_subnet_memory_reservation(0)
         .with_subnet_guaranteed_response_message_memory(ONE_GIB)
+        .with_resource_saturation_scaling(1)
         .with_manual_execution()
         .with_initial_canister_cycles(1_000_000_000_000_000)
         .build();
@@ -3849,7 +3861,7 @@ fn output_requests_on_application_subnets_update_subnet_available_memory_reserve
             .guaranteed_response_memory_reservations()
     );
     assert_eq!(
-        ONE_GIB - MAX_RESPONSE_COUNT_BYTES as i64,
+        (ONE_GIB - MAX_RESPONSE_COUNT_BYTES as u64) as i64,
         subnet_message_memory
     );
     assert_correct_request(system_state, canister_id);

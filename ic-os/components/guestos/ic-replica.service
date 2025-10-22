@@ -6,6 +6,7 @@ Wants=generate-ic-config.service
 # Replica & orchestrator need ic-crypto-csp service running.
 After=ic-crypto-csp.service
 Wants=ic-crypto-csp.service
+ConditionPathExists=/run/config/guest_vm_type/default
 
 [Service]
 UMask=026

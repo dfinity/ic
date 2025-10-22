@@ -1,22 +1,21 @@
-use candid::Encode;
+use candid::{Encode, Nat};
 use ic_base_types::PrincipalId;
 use ic_crypto_sha2::Sha256;
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::Tokens;
 use ic_ledger_core::block::BlockIndex;
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_test_utils::pocket_ic_helpers::index::{
-    LEDGER_INDEX_CANISTER_ID, get_blocks, wait_until_sync_is_completed,
-};
+use ic_ledger_test_utils::pocket_ic_helpers::index::{get_blocks, wait_until_sync_is_completed};
 use ic_ledger_test_utils::pocket_ic_helpers::install_canister;
 use ic_ledger_test_utils::pocket_ic_helpers::ledger::{
     account_balance, archives, query_blocks, query_encoded_blocks, transfer,
 };
-use ic_nns_constants::LEDGER_CANISTER_ID;
+use ic_management_canister_types::CanisterSettings;
 use icp_ledger::CandidOperation::Mint;
 use icp_ledger::{
-    AccountIdentifier, CandidBlock, CandidTransaction, DEFAULT_TRANSFER_FEE,
-    LedgerCanisterInitPayload, LedgerCanisterUpgradePayload, Memo, Subaccount, TransferArgs,
+    AccountIdentifier, CandidBlock, CandidTransaction, DEFAULT_TRANSFER_FEE, LEDGER_CANISTER_ID,
+    LEDGER_INDEX_CANISTER_ID, LedgerCanisterInitPayload, LedgerCanisterUpgradePayload, Memo,
+    Subaccount, TransferArgs,
 };
 use maplit::hashmap;
 use pocket_ic::{PocketIc, PocketIcBuilder};
@@ -298,6 +297,10 @@ impl SetupBuilder {
         let ledger_wasm_bytes =
             std::fs::read(std::env::var("MAINNET_ICP_LEDGER_CANISTER_WASM_PATH").unwrap())
                 .expect("Could not read mainnet ledger wasm");
+        let canister_settings = Some(CanisterSettings {
+            memory_allocation: Some(Nat::from(4 * 1024 * 1024 * 1024u64)), // 4 GiB
+            ..Default::default()
+        });
         install_canister(
             &pocket_ic,
             "ICP Ledger",
@@ -305,6 +308,7 @@ impl SetupBuilder {
             Encode!(&ledger_canister_init_payload).unwrap(),
             ledger_wasm_bytes,
             None,
+            canister_settings,
         );
 
         let index_wasm_bytes =
@@ -316,6 +320,7 @@ impl SetupBuilder {
             LEDGER_INDEX_CANISTER_ID,
             Encode!(&index_canister_init_args).unwrap(),
             index_wasm_bytes,
+            None,
             None,
         );
 

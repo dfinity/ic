@@ -194,13 +194,13 @@ pub type OldIndex = usize;
 /// A script describing how to turn an old state into a new state.
 #[derive(Eq, PartialEq, Debug)]
 pub struct DiffScript {
-    /// Copy some files from the old state.
+    /// Hardlink some files from the old state.
     /// Keys are indices of the file table in the new manifest file,
     /// values are indices of the file table in the old manifest file.
-    pub(crate) copy_files: HashMap<NewIndex, OldIndex>,
+    pub(crate) hardlink_files: HashMap<NewIndex, OldIndex>,
 
     /// Re-use existing chunks from the old state.
-    /// Chunks that belong to the `copy_files` key space are excluded.
+    /// Chunks that belong to the `hardlink_files` key space are excluded.
     /// Keys are indices of the chunk table in the new manifest file,
     /// values are indices of the chunk table in the old manifest file.
     pub(crate) copy_chunks: HashMap<NewIndex, OldIndex>,
@@ -1330,7 +1330,7 @@ pub fn diff_manifest(
             || *missing_chunks_old.iter().max().unwrap() < manifest_old.chunk_table.len()
     );
 
-    let mut copy_files: HashMap<NewIndex, OldIndex> = Default::default();
+    let mut hardlink_files: HashMap<NewIndex, OldIndex> = Default::default();
     let mut copy_chunks: HashMap<NewIndex, OldIndex> = Default::default();
     let mut fetch_chunks: HashSet<NewIndex> = Default::default();
 
@@ -1362,7 +1362,7 @@ pub fn diff_manifest(
 
     for (file_index, file_info) in manifest_new.file_table.iter().enumerate() {
         if let Some(index) = file_hash_to_index.get(&file_info.hash) {
-            copy_files.insert(file_index, *index);
+            hardlink_files.insert(file_index, *index);
         }
     }
 
@@ -1375,7 +1375,7 @@ pub fn diff_manifest(
         .collect();
 
     for (chunk_index, chunk_info) in manifest_new.chunk_table.iter().enumerate() {
-        if copy_files.contains_key(&(chunk_info.file_index as usize)) {
+        if hardlink_files.contains_key(&(chunk_info.file_index as usize)) {
             continue;
         }
 
@@ -1394,7 +1394,7 @@ pub fn diff_manifest(
     }
 
     DiffScript {
-        copy_files,
+        hardlink_files,
         copy_chunks,
         fetch_chunks,
         zeros_chunks,

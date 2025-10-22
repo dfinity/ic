@@ -22,20 +22,13 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:9cfd9ecc6f751d631b74058643233aecc75a6d4b18501ae0c9fd0f2c1a110ac4
+      image: ghcr.io/dfinity/ic-build@sha256:19aa596f49db34ece26a1a2903e6fabcd8766025b3dc543546fbef341ef910a2
       options: >-
         -e NODE_NAME --privileged --cgroupns host
     steps:
       - &checkout
         name: Checkout
         uses: actions/checkout@v4
-      - &generate-bazel-invocation-ids
-      - name: Generate Bazel invocation IDs
-        run: |
-          build_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link: 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
-          echo "[BuildBuddy link](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
-          echo "BUILD_UUIDS=$build_uuid" >> "$GITHUB_ENV"
       - &backup-pod-access
         name: Set up backup pod access
         run: |
@@ -60,22 +53,6 @@ jobs:
     environment: Nightly Tests
     steps:
       - *checkout
-      - name: Generate Bazel invocation IDs
-        id: gen-uuids
-        uses: ./.github/actions/generate-invocation-ids
-        with:
-          targets: |
-            [{
-              "name": "HSM Test",
-              "output_id": "hsm_test_id",
-            }, {
-              "name": "Benchmark",
-              "output_id": "benchmark_id",
-            }, {
-              "name": "HostOS metrics",
-              "output_id": "hostos_metrics_id",
-            }]
-
       - name: Run Bazel Launch Bare Metal
         shell: bash
         run: |
@@ -119,8 +96,6 @@ jobs:
     steps:
       - *checkout
       - *backup-pod-access
-      - *generate-bazel-invocation-ids
-
       - name: Run FI Tests Nightly
         uses: ./.github/actions/bazel
         with:
@@ -142,8 +117,6 @@ jobs:
     steps:
       - *checkout
       - *backup-pod-access
-      - *generate-bazel-invocation-ids
-
       - name: Run NNS Tests Nightly
         uses: ./.github/actions/bazel
         with:
@@ -171,8 +144,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - *checkout
-      - *generate-bazel-invocation-ids
-
       - name: Run PocketIC Tests Nightly
         uses: ./.github/actions/bazel
         with:
@@ -200,8 +171,6 @@ jobs:
     timeout-minutes: 480
     steps:
       - *checkout
-      - *generate-bazel-invocation-ids
-
       - name: Test System Test Benchmarks
         id: bazel-system-test-benchmarks
         uses: ./.github/actions/bazel

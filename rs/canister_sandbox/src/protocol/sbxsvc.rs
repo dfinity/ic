@@ -318,7 +318,7 @@ mod tests {
     use std::time::Duration;
 
     use ic_base_types::NumSeconds;
-    use ic_config::{flag_status::FlagStatus, subnet_config::CyclesAccountManagerConfig};
+    use ic_config::subnet_config::CyclesAccountManagerConfig;
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
     use ic_embedders::wasmtime_embedder::system_api::{
         ApiType, ExecutionParameters, InstructionLimits,
@@ -464,7 +464,6 @@ mod tests {
                 },
                 execution_parameters: ExecutionParameters {
                     instruction_limits: InstructionLimits::new(
-                        FlagStatus::Enabled,
                         NumInstructions::new(123),
                         NumInstructions::new(12),
                     ),

@@ -97,6 +97,7 @@ rust_ic_test(
         "//rs/types/types_test_utils",
         "//rs/universal_canister/lib",
         "@crate_index//:assert_matches",
+        "@crate_index//:flate2",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:maplit",
         "@crate_index//:proptest",
@@ -345,6 +346,7 @@ rust_ic_bench(
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:criterion",
+        "@crate_index//:lazy_static",
     ],
 )
 
