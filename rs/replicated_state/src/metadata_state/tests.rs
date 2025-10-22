@@ -1826,6 +1826,15 @@ fn compatibility_for_reject_reason() {
 }
 
 #[test]
+fn refund_proto_roundtrip() {
+    let initial = Refund::anonymous(*LOCAL_CANISTER, Cycles::new(1_000_000));
+    let encoded = pb_queues::Refund::from(&initial);
+    let round_trip = Refund::try_from(encoded).unwrap();
+
+    assert_eq!(initial, round_trip);
+}
+
+#[test]
 fn stream_responses_tracking() {
     let mut stream = Stream::new(StreamIndexedQueue::with_begin(0.into()), 0.into());
     assert!(stream.guaranteed_response_counts().is_empty());
