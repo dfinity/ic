@@ -595,6 +595,7 @@ fn read_before_write_stats() {
                 )
             )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(direct_wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,
@@ -623,6 +624,7 @@ fn read_before_write_stats() {
                 )
             )"#;
     let mut instance = WasmtimeInstanceBuilder::new()
+        .with_deterministic_memory_tracker_enabled(false)
         .with_wat(read_then_write_wat)
         .with_api_type(ApiType::update(
             UNIX_EPOCH,

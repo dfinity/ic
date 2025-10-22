@@ -125,6 +125,15 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
+    pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
+        if enabled {
+            self.config.feature_flags.deterministic_memory_tracker = FlagStatus::Enabled;
+        } else {
+            self.config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
+        }
+        self
+    }
+
     #[allow(clippy::result_large_err)]
     pub fn try_build(self) -> Result<WasmtimeInstance, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
