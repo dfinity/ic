@@ -6,7 +6,7 @@ fn test_add_single_refund() {
     let canister_id = CanisterId::from(1);
     let cycles = Cycles::new(1000);
 
-    assert_eq!(pool.len(), 0);
+    assert!(pool.is_empty());
 
     pool.add(canister_id, cycles);
 
@@ -20,7 +20,7 @@ fn test_add_multiple_refunds() {
     let canister_id = CanisterId::from(1);
     let cycles = Cycles::new(1000);
 
-    assert_eq!(pool.len(), 0);
+    assert!(pool.is_empty());
 
     pool.add(canister_id, cycles);
     pool.add(canister_id, cycles);
@@ -59,6 +59,7 @@ fn test_add_zero_cycles() {
     let mut pool = RefundPool::new();
     pool.add(CanisterId::from(1), Cycles::new(0));
     assert_eq!(pool.len(), 0);
+    assert!(pool.is_empty());
 }
 
 #[test]
@@ -123,6 +124,6 @@ fn flush_pool(mut pool: RefundPool) -> Vec<(CanisterId, Cycles)> {
         contents.push((*receiver, *amount));
         false
     });
-    assert_eq!(pool.len(), 0);
+    assert!(pool.is_empty());
     contents
 }

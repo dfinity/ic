@@ -9,27 +9,11 @@ use std::collections::{
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RefundPriority(Cycles, CanisterId);
-
-impl PartialOrd for RefundPriority {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for RefundPriority {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.0.cmp(&other.0) {
-            // Break ties by canister ID: smaller IDs have higher priority.
-            std::cmp::Ordering::Equal => self.1.cmp(&other.1),
-
-            // Reverse order for different amounts: larger amounts have higher priority.
-            ord => ord.reverse(),
-        }
-    }
-}
-
+/// A prioritized pool of refunds to canisters. Used for accumulating outbound
+/// refunds at the subnet level, before routing into streams.
+///
+/// Refunds are prioritized by amount (larger amounts first). Ties are broken by
+/// canister ID (smaller IDs first).
 #[derive(Debug, Clone, Default, PartialEq, Eq, ValidateEq)]
 pub struct RefundPool {
     // Pool contents.
@@ -93,10 +77,12 @@ impl RefundPool {
         debug_assert_eq!(self.refunds.len(), self.priority_queue.len());
     }
 
+    /// Returns the size of the pool.
     pub fn len(&self) -> usize {
         self.refunds.len()
     }
 
+    /// Returns `true` if the pool is empty.
     pub fn is_empty(&self) -> bool {
         self.refunds.is_empty()
     }
@@ -110,6 +96,25 @@ impl RefundPool {
     }
 }
 
-// struct Iter {
-//     inner: std::collections::btree_set::Iter<'static, (Cycles, CanisterId)>,
-// }
+/// Helper struct for ordering refunds by amount, with ties broken by canister
+/// ID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RefundPriority(Cycles, CanisterId);
+
+impl PartialOrd for RefundPriority {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for RefundPriority {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.0.cmp(&other.0) {
+            // Break ties by canister ID: smaller IDs have higher priority.
+            std::cmp::Ordering::Equal => self.1.cmp(&other.1),
+
+            // Reverse order for different amounts: larger amounts have higher priority.
+            ord => ord.reverse(),
+        }
+    }
+}
