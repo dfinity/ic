@@ -29,7 +29,7 @@ Success::
 end::catalog[] */
 
 use crate::utils::{
-    Cursor, admin_keys_and_generate_readonly_keys, assert_subnet_is_broken, break_nodes,
+    Cursor, assert_subnet_is_broken, break_nodes, get_admin_keys_and_generate_readonly_keys,
     halt_subnet, local::app_subnet_recovery_local_cli_args,
     node_with_highest_certification_share_height, remote_recovery, unhalt_subnet,
 };
@@ -320,7 +320,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         _,
         _,
         ssh_readonly_pub_key,
-    ) = admin_keys_and_generate_readonly_keys(&env);
+    ) = get_admin_keys_and_generate_readonly_keys(&env);
     // If the latest CUP is corrupted we can't deploy read-only access
     let ssh_readonly_pub_key_deployed = (!cfg.corrupt_cup).then_some(ssh_readonly_pub_key);
 

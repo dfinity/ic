@@ -29,19 +29,19 @@ use url::Url;
 pub const READONLY_USERNAME: &str = "readonly";
 pub const BACKUP_USERNAME: &str = "backup";
 
-pub fn admin_keys_and_generate_readonly_keys(
+pub fn get_admin_keys_and_generate_readonly_keys(
     env: &TestEnv,
 ) -> (PathBuf, AuthMean, PathBuf, AuthMean, PathBuf, String) {
-    admin_keys_and_generate_keys(env, READONLY_USERNAME)
+    get_admin_keys_and_generate_keys_for_user(env, READONLY_USERNAME)
 }
 
-pub fn admin_keys_and_generate_backup_keys(
+pub fn get_admin_keys_and_generate_backup_keys(
     env: &TestEnv,
 ) -> (PathBuf, AuthMean, PathBuf, AuthMean, PathBuf, String) {
-    admin_keys_and_generate_keys(env, BACKUP_USERNAME)
+    get_admin_keys_and_generate_keys_for_user(env, BACKUP_USERNAME)
 }
 
-fn admin_keys_and_generate_keys(
+fn get_admin_keys_and_generate_keys_for_user(
     env: &TestEnv,
     username: &str,
 ) -> (PathBuf, AuthMean, PathBuf, AuthMean, PathBuf, String) {

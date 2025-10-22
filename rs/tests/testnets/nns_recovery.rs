@@ -31,7 +31,8 @@
 
 use anyhow::Result;
 use ic_consensus_system_test_subnet_recovery::utils::{
-    admin_keys_and_generate_backup_keys, break_nodes, node_with_highest_certification_share_height,
+    break_nodes, get_admin_keys_and_generate_backup_keys,
+    node_with_highest_certification_share_height,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nested_nns_recovery_common::{
@@ -93,7 +94,8 @@ fn log_instructions(env: TestEnv) {
         );
     }
 
-    let (_, _, _, backup_auth, _, ssh_backup_pub_key) = admin_keys_and_generate_backup_keys(&env);
+    let (_, _, _, backup_auth, _, ssh_backup_pub_key) =
+        get_admin_keys_and_generate_backup_keys(&env);
 
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);
