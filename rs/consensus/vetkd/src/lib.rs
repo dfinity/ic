@@ -42,7 +42,6 @@ use ic_types::{
 use num_traits::ops::saturating::SaturatingSub;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rayon::{ThreadPool, ThreadPoolBuilder};
-use std::sync::Mutex;
 use std::time::Duration;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -238,9 +237,7 @@ impl VetKdPayloadBuilderImpl {
                     ) {
                         reject
                     } else {
-                        let Some(shares) = grouped_shares.get(callback_id) else {
-                            return None;
-                        };
+                        let shares = grouped_shares.get(callback_id)?;
                         let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
                             return None;
                         };
