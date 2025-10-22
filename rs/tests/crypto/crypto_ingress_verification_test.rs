@@ -46,6 +46,48 @@ struct TestInformation {
     canister_id: Principal,
 }
 
+#[derive(Copy, Clone, Debug)]
+enum GenericIdentityType {
+    Ed25519,
+    EcdsaSecp256k1,
+    // TODO ECDSA secp256r1
+    // TODO webauthn
+}
+
+struct GenericIdentity {
+    identity: Box<dyn Identity>,
+    principal: Principal,
+}
+
+impl GenericIdentity {
+    fn new<R: Rng + CryptoRng>(typ: GenericIdentityType, rng: &mut R) -> Self {
+        let identity: Box<dyn Identity> = match typ {
+            GenericIdentityType::Ed25519 => {
+                Box::new(random_ed25519_identity())
+            },
+            GenericIdentityType::EcdsaSecp256k1 => {
+                Box::new(Secp256k1Identity::from_private_key(k256::SecretKey::random(rng)))
+            }
+        };
+
+        let principal = identity.sender().expect("Identity somehow has no principal");
+
+        Self { identity, principal }
+    }
+
+    fn identity(&self) -> &dyn Identity {
+        &self.identity
+    }
+
+    fn principal(&self) -> &Principal {
+        &self.principal
+    }
+
+    fn public_key(&self) -> Vec<u8> {
+        self.identity.public_key().expect("Public key missing from identity")
+    }
+}
+
 pub fn query_request_no_delegations(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
@@ -71,10 +113,10 @@ pub fn query_request_no_delegations(env: TestEnv) {
                 canister_id: canister.canister_id(),
             };
 
-            for delegations in 0..=0 {
+            for delegations in 0..=1 {
                 info!(logger, "Testing request with {} delegations", delegations);
 
-                let identity = random_ecdsa_identity(rng);
+                let identity = GenericIdentity::new(GenericIdentityType::EcdsaSecp256k1, rng);
                 let (delegations, sender) = gen_delegation_chain(rng, delegations, &identity);
 
                 test_accepted_sender_delegation(&test_info, &delegations, &sender, &identity).await;
@@ -87,10 +129,10 @@ pub fn random_ecdsa_identity<R: Rng + CryptoRng>(rng: &mut R) -> Secp256k1Identi
     Secp256k1Identity::from_private_key(k256::SecretKey::random(rng))
 }
 
-fn sign_delegation(delegation: Delegation, identity: &impl Identity) -> SignedDelegation {
+fn sign_delegation(delegation: Delegation, identity: &GenericIdentity) -> SignedDelegation {
     let mut msg = b"\x1Aic-request-auth-delegation".to_vec();
     msg.extend(&delegation.as_signed_bytes_without_domain_separator());
-    let signature = identity.sign_arbitrary(&msg).unwrap();
+    let signature = identity.identity().sign_arbitrary(&msg).unwrap();
 
     SignedDelegation::new(delegation, signature.signature.unwrap())
 }
@@ -98,10 +140,10 @@ fn sign_delegation(delegation: Delegation, identity: &impl Identity) -> SignedDe
 fn gen_delegation_chain<R: Rng + CryptoRng>(
     rng: &mut R,
     cnt: usize,
-    identity: &dyn Identity,
+    identity: &GenericIdentity,
 ) -> (Vec<SignedDelegation>, Principal) {
     if cnt == 0 {
-        return (vec![], identity.sender().expect("Principal not available"));
+        return (vec![], *identity.principal());
     }
 
     let delegation_expiry = Time::from_nanos_since_unix_epoch(expiry_time().as_nanos() as u64);
@@ -109,12 +151,11 @@ fn gen_delegation_chain<R: Rng + CryptoRng>(
     assert!(cnt == 1);
     let mut delegations = Vec::with_capacity(cnt);
 
-    let delegating_id = random_ed25519_identity();
+    let delegating_id = GenericIdentity::new(GenericIdentityType::Ed25519, rng);
 
     let delegation = Delegation::new(
         identity
-            .public_key()
-            .expect("Public key missing from identity"),
+            .public_key(),
         delegation_expiry,
     );
 
@@ -124,18 +165,18 @@ fn gen_delegation_chain<R: Rng + CryptoRng>(
 
     (
         delegations,
-        delegating_id.sender().expect("Principal not available"),
+        *delegating_id.principal()
     )
 
     /*
         let mut public_keys = Vec::with_capacity(cnt);
         let mut identities = Vec::with_capacity(cnt);
 
-        public_keys.push(identity.public_key().expect("Public key missing from identity"));
+        public_keys.push(identity.public_key());
 
         for i in 0..cnt {
             identities.push(random_ed25519_identity());
-            public_keys.push(identities[i].public_key().expect("Public key missing from identity"));
+            public_keys.push(identities[i].public_key());
 
             let delegation = Delegation::new(
                 public_keys[i].clone(),
@@ -151,7 +192,7 @@ fn gen_delegation_chain<R: Rng + CryptoRng>(
 async fn query_delegation(
     test: &TestInformation,
     sender: &Principal,
-    identity: &dyn Identity,
+    identity: &GenericIdentity,
     delegations: &[SignedDelegation],
 ) -> StatusCode {
     let content = HttpQueryContent::Query {
@@ -165,7 +206,7 @@ async fn query_delegation(
         },
     };
 
-    let signature = sign_query(&content, &identity);
+    let signature = sign_query(&content, &identity.identity());
 
     // Add the public key but not the signature to the envelope. Should fail.
     let envelope = HttpRequestEnvelope {
@@ -197,7 +238,7 @@ async fn query_delegation(
 async fn update_delegation(
     test: &TestInformation,
     sender: &Principal,
-    identity: &dyn Identity,
+    identity: &GenericIdentity,
     delegations: &[SignedDelegation],
 ) -> StatusCode {
     let content = HttpCallContent::Call {
@@ -211,7 +252,7 @@ async fn update_delegation(
         },
     };
 
-    let signature = sign_update(&content, &identity);
+    let signature = sign_update(&content, &identity.identity());
 
     // Add the public key but not the signature to the envelope. Should fail.
     let envelope = HttpRequestEnvelope {
@@ -244,7 +285,7 @@ async fn test_accepted_sender_delegation(
     test: &TestInformation,
     delegations: &[SignedDelegation],
     sender: &Principal,
-    identity: &dyn Identity,
+    identity: &GenericIdentity,
 ) {
     assert_eq!(
         query_delegation(test, sender, &identity, &delegations).await,
