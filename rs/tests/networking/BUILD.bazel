@@ -119,11 +119,8 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     tags = [
-        # TODO(NET-1710): enable on CI again when the problematic firewall rule in the IC node has been removed.
-        #"long_test",
-        #"system_test_large",
+        "long_test",
         "manual",
-        "dynamic_testnet",
     ],
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +

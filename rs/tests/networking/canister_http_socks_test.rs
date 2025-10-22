@@ -96,8 +96,6 @@ pub fn setup(env: TestEnv) {
     canister_http::whitelist_nodes_access_to_apibns(&env);
 }
 
-//TODO(urgent): remove the dynamic_testnet tab.
-//TODO(urgent): add this on CI somewhere (nightly maybe)
 pub fn test(env: TestEnv) {
     // This test verifies that outcalls are routed through the correct API Boundary nodes when necessary.
     //
