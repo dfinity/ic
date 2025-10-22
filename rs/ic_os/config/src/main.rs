@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use config::guestos::{bootstrap_ic_node::bootstrap_ic_node, generate_ic_config};
 use config::serialize_and_write_config;
 use config::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
-use config::setupos::deployment_json::{DevVmResources, get_deployment_settings};
+use config::setupos::deployment_json::{VmResources, get_deployment_settings};
 use config_types::*;
 use macaddr::MacAddr6;
 use network::resolve_mgmt_mac;
@@ -205,7 +205,7 @@ pub fn assemble_setupos_config(
     mgmt_mac: MacAddr6,
     deployment_environment: DeploymentEnvironment,
     nns_urls: &[Url],
-    dev_vm_resources: DevVmResources,
+    dev_vm_resources: VmResources,
     enable_trusted_execution_environment: bool,
     use_node_operator_private_key: bool,
     use_ssh_authorized_keys: bool,

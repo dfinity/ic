@@ -12,7 +12,7 @@ pub struct DeploymentSettings {
     pub deployment: Deployment,
     pub logging: Logging,
     pub nns: Nns,
-    pub dev_vm_resources: DevVmResources,
+    pub dev_vm_resources: VmResources,
 }
 
 // NOTE #7037: We should always use DeploymentSettings directly, but we need to
@@ -22,8 +22,8 @@ pub struct CompatDeploymentSettings {
     pub deployment: Deployment,
     pub logging: Logging,
     pub nns: Nns,
-    pub vm_resources: Option<DevVmResources>,
-    pub dev_vm_resources: Option<DevVmResources>,
+    pub vm_resources: Option<VmResources>,
+    pub dev_vm_resources: Option<VmResources>,
 }
 
 #[serde_as]
@@ -47,7 +47,7 @@ pub struct Nns {
 
 #[serde_as]
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
-pub struct DevVmResources {
+pub struct VmResources {
     #[serde_as(as = "DisplayFromStr")]
     pub memory: u32,
     /// CPU virtualization type: "kvm" or "qemu".
@@ -57,11 +57,11 @@ pub struct DevVmResources {
     pub nr_of_vcpus: u32,
 }
 
-impl Default for DevVmResources {
+impl Default for VmResources {
     /// These currently match the defaults for nested tests on Farm:
     /// (`HOSTOS_VCPUS_PER_VM / 2`, `HOSTOS_MEMORY_KIB_PER_VM / 2`)
     fn default() -> Self {
-        DevVmResources {
+        VmResources {
             memory: 16,
             cpu: "kvm".to_string(),
             nr_of_vcpus: 16,
@@ -129,7 +129,7 @@ mod test {
                 Url::parse("https://ic0.app").unwrap(),
             ],
         },
-        dev_vm_resources: DevVmResources {
+        dev_vm_resources: VmResources {
             memory: 16,
             cpu: "kvm".to_string(),
             nr_of_vcpus: 64,
@@ -152,10 +152,10 @@ mod test {
 
     #[test]
     /// Confirm that the defaults for HostOsDevSettings (the config type) and
-    /// DevVmResources (the type from deployment.json) are in line.
+    /// VmResources (the type from deployment.json) are in line.
     fn defaults_aligned() {
         let dev_settings = HostOSDevSettings::default();
-        let vm_resources = DevVmResources::default();
+        let vm_resources = VmResources::default();
 
         assert_eq!(dev_settings.vm_memory, vm_resources.memory);
         assert_eq!(dev_settings.vm_cpu, vm_resources.cpu);
