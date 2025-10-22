@@ -228,9 +228,6 @@ impl DeterministicState {
         self.accessed_wasm_pages_digest.hash(wasm_page_idx);
 
         // Avoid growing the list beyond the limits set in capacity.
-        debug_assert!(
-            self.accessed_wasm_pages_list.len() < self.accessed_wasm_pages_list.capacity()
-        );
         if self.accessed_wasm_pages_list.len() < self.accessed_wasm_pages_list.capacity() {
             self.accessed_wasm_pages_list.push(wasm_page_idx);
         }
@@ -251,7 +248,6 @@ impl DeterministicState {
         self.dirty_wasm_pages_digest.hash(wasm_page_idx);
 
         // Avoid growing the list beyond the limits set in capacity.
-        debug_assert!(self.dirty_wasm_pages_list.len() < self.dirty_wasm_pages_list.capacity());
         if self.dirty_wasm_pages_list.len() < self.dirty_wasm_pages_list.capacity() {
             self.dirty_wasm_pages_list.push(wasm_page_idx);
         }
