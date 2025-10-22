@@ -99,7 +99,9 @@ def image_deps(mode, malicious = False):
     # Update dev rootfs
     if "dev" in mode:
         # Allow console access
-        deps["rootfs"].update({"//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644"})
+        deps["component_files"].update({
+            Label("//ic-os/components:misc/serial-getty@/guestos-dev/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
+        })
 
         # Dev config tool
         deps["rootfs"].pop("//rs/ic_os/release:config", None)
