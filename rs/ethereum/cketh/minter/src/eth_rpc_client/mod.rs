@@ -271,14 +271,16 @@ pub enum MultiCallError<T> {
 }
 
 pub trait ReductionStrategy<T> {
-    fn reduce(&self, results: MultiCallResults<T>) -> Result<T, MultiCallError<T>>;
+    fn reduce(&self, results: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>>;
 }
 
 pub struct NoReduction;
 
 impl<T> ReductionStrategy<T> for NoReduction {
-    fn reduce(&self, results: MultiCallResults<T>) -> Result<T, MultiCallError<T>> {
-        Err(MultiCallError::InconsistentResults(results))
+    fn reduce(&self, results: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>> {
+        consistent_result_or_reduce(results, |inconsistent| {
+            Err(MultiCallError::InconsistentResults(inconsistent))
+        })
     }
 }
 
@@ -288,8 +290,10 @@ impl<T> ReductionStrategy<T> for AnyOf
 where
     T: PartialEq,
 {
-    fn reduce(&self, results: MultiCallResults<T>) -> Result<T, MultiCallError<T>> {
-        results.at_least_one_ok().map(|(_, result)| result)
+    fn reduce(&self, results: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>> {
+        consistent_result_or_reduce(results, |inconsistent| {
+            inconsistent.at_least_one_ok().map(|(_, result)| result)
+        })
     }
 }
 
@@ -309,8 +313,10 @@ where
     F: Fn(&T) -> K,
     K: Ord,
 {
-    fn reduce(&self, results: MultiCallResults<T>) -> Result<T, MultiCallError<T>> {
-        results.reduce_with_min_by_key(|result| (self.get_key)(result))
+    fn reduce(&self, results: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>> {
+        consistent_result_or_reduce(results, |inconsistent| {
+            inconsistent.reduce_with_min_by_key(|result| (self.get_key)(result))
+        })
     }
 }
 
@@ -330,8 +336,25 @@ where
     F: Fn(&T) -> K,
     K: Ord,
 {
-    fn reduce(&self, results: MultiCallResults<T>) -> Result<T, MultiCallError<T>> {
-        results.reduce_with_strict_majority_by_key(|result| (self.get_key)(result))
+    fn reduce(&self, results: EvmMultiRpcResult<T>) -> Result<T, MultiCallError<T>> {
+        consistent_result_or_reduce(results, |inconsistent| {
+            inconsistent.reduce_with_strict_majority_by_key(|result| (self.get_key)(result))
+        })
+    }
+}
+
+fn consistent_result_or_reduce<T, F>(
+    result: EvmMultiRpcResult<T>,
+    reduce: F,
+) -> Result<T, MultiCallError<T>>
+where
+    F: Fn(MultiCallResults<T>) -> Result<T, MultiCallError<T>>,
+{
+    match result {
+        EvmMultiRpcResult::Consistent(result) => result.map_err(MultiCallError::ConsistentError),
+        EvmMultiRpcResult::Inconsistent(results) => {
+            reduce(MultiCallResults::from_non_empty_iter(results))
+        }
     }
 }
 
@@ -347,14 +370,7 @@ impl<T> ToReducedWithStrategy<T> for EvmMultiRpcResult<T> {
         self,
         strategy: impl ReductionStrategy<T>,
     ) -> Result<T, MultiCallError<T>> {
-        match self {
-            EvmMultiRpcResult::Consistent(result) => {
-                result.map_err(MultiCallError::ConsistentError)
-            }
-            EvmMultiRpcResult::Inconsistent(results) => {
-                strategy.reduce(MultiCallResults::from_non_empty_iter(results))
-            }
-        }
+        strategy.reduce(self)
     }
 }
 
