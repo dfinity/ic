@@ -6,7 +6,7 @@ use crate::{
     governance::{submit_external_update_proposal, wait_for_final_state},
     state_test_helpers::state_machine_builder_for_nns_tests,
 };
-use candid::Encode;
+use candid::{Encode, Principal};
 use canister_test::{
     Canister, Project, Runtime, Wasm, local_test_with_config_e,
     local_test_with_config_with_mutations_on_system_subnet,
@@ -790,7 +790,13 @@ pub async fn set_up_sns_wasm_canister(
 
 /// Compiles the migration canister and installs it.
 pub async fn install_migration_canister(canister: &mut Canister<'_>) {
-    install_rust_canister(canister, "migration-canister", &[], None).await;
+    install_rust_canister(
+        canister,
+        "migration-canister",
+        &[],
+        Some(Encode!(&None::<Option<Vec<Principal>>>).unwrap()),
+    )
+    .await;
 }
 
 /// Creates and installs the migration canister.
