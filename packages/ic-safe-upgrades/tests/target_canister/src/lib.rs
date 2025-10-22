@@ -3,10 +3,12 @@ use ic_cdk::update;
 
 #[update]
 fn version() -> u32 {
-    #[cfg(feature = "v1")] {
+    #[cfg(feature = "v1")]
+    {
         return 1;
     }
-    #[cfg(feature = "v2")] {
+    #[cfg(feature = "v2")]
+    {
         return 2;
     }
     0
