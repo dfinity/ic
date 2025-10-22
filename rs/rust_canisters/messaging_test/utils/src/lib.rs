@@ -206,7 +206,7 @@ pub fn stats_call_vs_response(call: Call, response: Response) -> Stats {
 
             call.downstream_calls
                 .into_iter()
-                .zip(downstream_responses.into_iter())
+                .zip(downstream_responses)
                 .fold(
                     Stats {
                         successful_calls_count: 1,
