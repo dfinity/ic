@@ -26,7 +26,7 @@ use crate::{Recovery, Step};
 )]
 pub enum StepType {
     /// Before we can start the recovery process, we need to prevent the subnet from attempting to
-    /// finalize new blocks. There are no way of halting the NNS subnet like we do for application
+    /// finalize new blocks. There is no way of halting the NNS subnet like we do for application
     /// subnets (by issuing a proposal), so this is a requirement before starting the recovery. As a
     /// fail-safe, this first step will stop the replica process on the given admin node.
     StopReplica,
