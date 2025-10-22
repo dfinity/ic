@@ -13,6 +13,7 @@ use crate::{
     core::{MAX_REQUEST_BODY_SIZE, decoder_config},
     errors::{ApiError, ErrorCause},
     http::{RequestType, middleware::retry::RetryResult},
+    metrics::MAX_METHOD_NAME_LENGTH,
     routes::{HttpRequest, RequestContext},
     snapshot::{Node, Subnet},
 };
@@ -46,7 +47,7 @@ where
 {
     let s: Option<String> = Option::<String>::deserialize(deserializer)?;
     Ok(s.map(|mut val| {
-        val.truncate(100);
+        val.truncate(20_000);
         val
     }))
 }
@@ -214,9 +215,10 @@ pub async fn postprocess_response(request: Request, next: Next) -> impl IntoResp
         });
 
         ctx.method_name.as_ref().and_then(|v| {
+            let truncated = &v[..v.len().min(MAX_METHOD_NAME_LENGTH)];
             response.headers_mut().insert(
                 X_IC_METHOD_NAME,
-                HeaderValue::from_maybe_shared(Bytes::from(v.clone())).unwrap(),
+                HeaderValue::from_maybe_shared(Bytes::from(truncated.to_string())).unwrap(),
             )
         });
     }
