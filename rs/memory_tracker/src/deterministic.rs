@@ -170,6 +170,21 @@ pub struct DeterministicState {
     non_deterministic_metrics: NonDeterministicMetrics,
 }
 
+/// Prints the digest when dropped (for debugging purposes).
+impl Drop for DeterministicState {
+    fn drop(&mut self) {
+        // use std::io::Write;
+
+        // let msg = format!(
+        //     "XXX_accessed_wasm_pages_digest:{}_dirty_wasm_pages_digest:{}_ZZZ\n",
+        //     self.accessed_wasm_pages_digest.get(),
+        //     self.dirty_wasm_pages_digest.get()
+        // );
+
+        // std::io::stderr().write_all(msg.as_bytes()).unwrap();
+    }
+}
+
 impl DeterministicState {
     /// Creates a new `DeterministicState` for tracking memory accesses
     /// over the specified number of OS pages.
@@ -355,6 +370,16 @@ pub fn num_accessed_os_pages(tracker: &SigsegvMemoryTracker) -> NumOsPages {
 pub fn take_dirty_os_pages(tracker: &SigsegvMemoryTracker) -> Vec<PageIndex> {
     // SAFETY: The caller must ensure that the tracker has a deterministic state.
     let state = &mut *tracker.deterministic_state.as_ref().unwrap().borrow_mut();
+
+    use std::io::Write;
+
+    let msg = format!(
+        "XXX_accessed_wasm_pages_digest:{}_dirty_wasm_pages_digest:{}_ZZZ\n",
+        state.accessed_wasm_pages_digest.get(),
+        state.dirty_wasm_pages_digest.get()
+    );
+
+    std::io::stderr().write_all(msg.as_bytes()).unwrap();
 
     state.dirty_wasm_pages_list.sort_unstable();
     let res = state
