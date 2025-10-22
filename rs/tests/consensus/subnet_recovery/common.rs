@@ -399,14 +399,9 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     let download_state_node = app_nodes.next().expect("there is no application node");
     info!(
         logger,
-        "Selected random application subnet node: {} ({:?})",
+        "Selected random application subnet node to download the state from: {} ({:?})",
         download_state_node.node_id,
         download_state_node.get_ip_addr()
-    );
-    info!(
-        logger,
-        "app node URL: {}",
-        download_state_node.get_public_url()
     );
 
     info!(logger, "Ensure app subnet is functional");
@@ -454,10 +449,7 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
     if cfg.upgrade {
         // Break f+1 nodes
         let f = (cfg.subnet_size - 1) / 3;
-        break_nodes(
-            &Iterator::take(&mut app_nodes, f + 1).collect::<Vec<_>>(),
-            &logger,
-        );
+        break_nodes(&app_nodes.take(f + 1).collect::<Vec<_>>(), &logger);
     } else {
         halt_subnet(
             &admin_helper,
