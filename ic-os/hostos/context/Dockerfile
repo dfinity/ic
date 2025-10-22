@@ -200,9 +200,7 @@ RUN mkdir -p /etc/systemd/system/serial-getty@.service.d
 
 # The "limited-console" user account for restricted console access
 RUN adduser --system --disabled-password --home /var/lib/limited-console --shell /opt/ic/bin/limited-console-shell limited-console && \
-    chown limited-console:nogroup /var/lib/limited-console && \
-    adduser limited-console systemd-journal && \
-    adduser limited-console sudo
+    chown limited-console:nogroup /var/lib/limited-console
 
 # Update POSIX permissions in /opt/ic/
 RUN chown root:root /opt

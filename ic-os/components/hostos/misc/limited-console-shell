@@ -9,18 +9,13 @@ show_menu() {
     echo "=== HostOS Limited Console ==="
     echo "Available commands:"
     echo "1. system-status      - Show system status"
-    echo "2. service-status     - Show service status" 
-    echo "3. restart-service    - Restart a service"
-    echo "4. view-logs          - View service logs"
-    echo "5. network-interfaces - Show network interfaces"
-    echo "6. network-routing    - Show routing table"
-    echo "7. network-connectivity - Test network connectivity"
-    echo "8. network-settings   - Show network settings from config"
-    echo "9. guestos-logs      - Show last 50 lines of guestos serial log"
-    echo "10. config-json       - Show /boot/config/config.json"
-    echo "11. failed-services   - Show failed services"
-    echo "12. clear             - Clear the console"
-    echo "13. exit              - Exit console"
+    echo "2. service-status     - Show service status (usage: service-status <service-name>)" 
+    echo "3. view-logs          - View service logs (usage: view-logs <service-name>)"
+    echo "4. config-json        - Show /boot/config/config.json"
+    echo "5. network-config-settings   - Show network settings from config"
+    echo "6. rbash-console      - Drop into restricted bash console"
+    echo "7. clear              - Clear the console"
+    echo "8. exit              - Exit console"
     echo ""
 }
 
@@ -35,39 +30,26 @@ execute_command() {
             echo "Disk Usage: $(df -h / | tail -1)"
             ;;
         "service-status")
-            echo "Enter service name (e.g., guestos, vsock-agent): "
-            read service
-            sudo systemctl status "$service"
-            ;;
-        "restart-service")
-            echo "Enter service name (e.g., guestos, vsock-agent): "
-            read service
-            sudo systemctl restart "$service"
+            if [ -n "$2" ]; then
+                sudo systemctl status "$2"
+            else
+                echo "Usage: service-status <service-name>"
+                echo "Example: service-status guestos"
+            fi
             ;;
         "view-logs")
-            echo "Enter service name (e.g., guestos, vsock-agent): "
-            read service
-            sudo journalctl -u "$service" --no-pager -n 50
+            if [ -n "$2" ]; then
+                sudo journalctl -u "$2" --no-pager -n 50
+            else
+                echo "Usage: view-logs <service-name>"
+                echo "Example: view-logs guestos"
+            fi
             ;;
-        "network-interfaces")
-            echo "=== Network Interfaces ==="
-            ip addr show
+        "config-json")
+            echo "=== /boot/config/config.json ==="
+            cat /boot/config/config.json 
             ;;
-        "network-routing")
-            echo "=== Routing Table ==="
-            ip route show
-            ;;
-        "network-connectivity")
-            echo "=== Network Connectivity Tests ==="
-            echo "Testing connectivity to 8.8.8.8..."
-            ping -c 3 8.8.8.8 2>/dev/null || echo "Ping to 8.8.8.8 failed"
-            echo ""
-            # TODO: add traceroute to HostOS
-            echo "Traceroute to 8.8.8.8 (first 10 hops):"
-            traceroute -m 10 8.8.8.8 2>/dev/null || echo "Traceroute not available"
-            echo ""
-            ;;
-        "network-settings")
+                "network-config-settings")
             echo "=== Network Settings from Config ==="
             local network_settings=$(get_config_value '.network_settings' 2>/dev/null)
             if [ -n "$network_settings" ]; then
@@ -76,25 +58,13 @@ execute_command() {
                 echo "No network settings found in config"
             fi
             ;;
-        "guestos-logs")
-            echo "=== GuestOS Serial Log (Last 50 lines) ==="
-            if [ -f "/var/log/libvirt/qemu/guestos-serial.log" ]; then
-                tail -n 50 /var/log/libvirt/qemu/guestos-serial.log
-            else
-                echo "GuestOS serial log not found at /var/log/libvirt/qemu/guestos-serial.log"
-            fi
-            ;;
-        "config-json")
-            echo "=== /boot/config/config.json ==="
-            cat /boot/config/config.json 
-            ;;
-        "failed-services")
-            echo "=== Failed Services ==="
-            echo "Services in failed state:"
-            systemctl --failed --no-pager
+        "rbash-console")
+            echo "=== Dropping into Restricted Bash Console ==="
+            echo "You are now in a restricted bash shell with limited commands."
+            echo "Type 'exit' to return to the limited console menu."
             echo ""
-            echo "Services with errors in the last 24 hours:"
-            journalctl --since "24 hours ago" --priority=err --no-pager | head -20
+            # Start rbash with restricted environment and PATH
+            PATH="/bin:/usr/bin:/opt/ic/bin" /bin/rbash
             ;;
         "clear")
             clear
@@ -119,9 +89,16 @@ while true; do
     echo -n "limited-console> "
     read -r command
 
+    # Skip empty input
+    if [ -z "$command" ]; then
+        continue
+    fi
+
     if [ "$command" = "help" ]; then
         show_menu
     else
-        execute_command "$command"
+        # Parse command and arguments
+        set -- $command
+        execute_command "$@"
     fi
 done
