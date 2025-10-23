@@ -776,39 +776,27 @@ impl SystemTestGroup {
             )
         };
 
-        let teardown_plan = {
+        let teardown_plan = self.teardown.map(|teardown_fn| {
             let logger = group_ctx.logger().clone();
-            if let Some(teardown_fn) = self.teardown {
-                let group_ctx = group_ctx.clone();
-                let teardown_task = subproc(
-                    TaskId::Test(String::from(TEARDOWN_TASK_NAME)),
-                    move || {
-                        debug!(logger, ">>> teardown_fn");
-                        let env = ensure_setup_env(group_ctx);
-                        teardown_fn(env);
-                    },
-                    &mut compose_ctx,
-                );
-                timed(
-                    Plan::Leaf {
-                        task: Box::from(teardown_task),
-                    },
-                    compose_ctx.timeout_per_test,
-                    None,
-                    &mut compose_ctx,
-                )
-            } else {
+            let group_ctx = group_ctx.clone();
+            let teardown_task = subproc(
+                TaskId::Test(String::from(TEARDOWN_TASK_NAME)),
+                move || {
+                    debug!(logger, ">>> teardown_fn");
+                    let env = ensure_setup_env(group_ctx);
+                    teardown_fn(env);
+                },
+                &mut compose_ctx,
+            );
+            timed(
                 Plan::Leaf {
-                    task: Box::new(subproc(
-                        TaskId::Test(String::from(TEARDOWN_TASK_NAME)),
-                        move || {
-                            debug!(logger, "No teardown task was specified, skipping.");
-                        },
-                        &mut compose_ctx,
-                    )) as _,
-                }
-            }
-        };
+                    task: Box::from(teardown_task),
+                },
+                compose_ctx.timeout_per_test,
+                None,
+                &mut compose_ctx,
+            )
+        });
 
         // normal case: no debugkeepalive, overall timeout is active
         if !group_ctx.debug_keepalive {
@@ -824,7 +812,7 @@ impl SystemTestGroup {
                                 .into_iter()
                                 .map(|sub_group| sub_group.into_plan(&mut compose_ctx)),
                         )
-                        .chain(std::iter::once(teardown_plan))
+                        .chain(teardown_plan)
                         .collect(),
                     &mut compose_ctx,
                 )],
@@ -902,7 +890,7 @@ impl SystemTestGroup {
                             .into_iter()
                             .map(|sub_group| sub_group.into_plan(&mut compose_ctx)),
                     )
-                    .chain(std::iter::once(teardown_plan))
+                    .chain(teardown_plan)
                     .collect(),
                 &mut compose_ctx,
             )],
