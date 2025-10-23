@@ -22,16 +22,21 @@ use crate::{
     validation::validate_request,
 };
 
+#[derive(CandidType, Deserialize)]
+struct MigrationCanisterInitArgs {
+    allowlist: Option<Vec<Principal>>,
+}
+
 #[init]
-fn init(args: Option<Vec<Principal>>) {
+fn init(args: MigrationCanisterInitArgs) {
     start_timers();
-    set_allowlist(args);
+    set_allowlist(args.allowlist);
 }
 
 #[post_upgrade]
-fn post_upgrade(args: Option<Vec<Principal>>) {
+fn post_upgrade(args: MigrationCanisterInitArgs) {
     start_timers();
-    set_allowlist(args);
+    set_allowlist(args.allowlist);
 }
 
 #[derive(Clone, CandidType, Deserialize)]

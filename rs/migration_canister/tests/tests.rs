@@ -24,6 +24,11 @@ struct MigrateCanisterArgs {
     pub target: Principal,
 }
 
+#[derive(CandidType, Deserialize, Default)]
+struct MigrationCanisterInitArgs {
+    allowlist: Option<Vec<Principal>>,
+}
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum ValidationError {
     MigrationsDisabled,
@@ -134,7 +139,10 @@ async fn setup(
     pic.install_canister(
         MIGRATION_CANISTER_ID.into(),
         migration_canister_wasm.bytes(),
-        Encode!(&allowlist).unwrap(),
+        Encode!(&MigrationCanisterInitArgs {
+            allowlist: allowlist.clone()
+        })
+        .unwrap(),
         Some(system_controller),
     )
     .await;
@@ -1009,7 +1017,7 @@ async fn parallel_migrations() {
     pic.install_canister(
         MIGRATION_CANISTER_ID.into(),
         migration_canister_wasm.bytes(),
-        Encode!().unwrap(),
+        Encode!(&MigrationCanisterInitArgs::default()).unwrap(),
         Some(system_controller),
     )
     .await;
