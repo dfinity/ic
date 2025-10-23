@@ -1,5 +1,25 @@
 use super::*;
 
+/// Returns the contents of the pool as a vector, in priority order.
+fn collect_iter(pool: &RefundPool) -> Vec<Refund> {
+    pool.iter().cloned().collect()
+}
+
+/// Consumes and returns the contents of the pool, in priority order.
+fn consume(mut pool: RefundPool) -> Vec<Refund> {
+    let mut contents = Vec::with_capacity(pool.len());
+    pool.retain(|refund| {
+        contents.push(*refund);
+        false
+    });
+    assert!(pool.is_empty());
+    contents
+}
+
+fn refund(recipient: CanisterId, amount: Cycles) -> Refund {
+    Refund::anonymous(recipient, amount)
+}
+
 #[test]
 fn test_add_single_refund() {
     let mut pool = RefundPool::new();
@@ -11,7 +31,10 @@ fn test_add_single_refund() {
     pool.add(canister_id, cycles);
 
     assert_eq!(pool.len(), 1);
-    assert_eq!(&[refund(canister_id, cycles)], iter(&pool).as_slice());
+    assert_eq!(
+        &[refund(canister_id, cycles)],
+        collect_iter(&pool).as_slice()
+    );
 }
 
 #[test]
@@ -29,7 +52,7 @@ fn test_add_multiple_refunds() {
     assert_eq!(pool.len(), 1);
     assert_eq!(
         &[refund(canister_id, cycles * 3u64)],
-        iter(&pool).as_slice()
+        collect_iter(&pool).as_slice()
     );
 }
 
@@ -53,7 +76,7 @@ fn test_add_multiple_refunds_with_same_amount() {
             refund(canister_id2, Cycles::new(1000)),
             refund(canister_id3, Cycles::new(1000))
         ],
-        iter(&pool).as_slice()
+        collect_iter(&pool).as_slice()
     );
     assert_eq!(
         &[
@@ -61,7 +84,7 @@ fn test_add_multiple_refunds_with_same_amount() {
             refund(canister_id2, Cycles::new(1000)),
             refund(canister_id3, Cycles::new(1000))
         ],
-        flush_pool(pool).as_slice()
+        consume(pool).as_slice()
     );
 }
 
@@ -90,7 +113,7 @@ fn test_add_changes_priority() {
             refund(canister_id2, Cycles::new(1000)),
             refund(canister_id1, Cycles::new(500))
         ],
-        iter(&pool).as_slice()
+        collect_iter(&pool).as_slice()
     );
 
     // Refund more cycles to canister 1, giving it the largest amount.
@@ -103,14 +126,14 @@ fn test_add_changes_priority() {
             refund(canister_id1, Cycles::new(1500)),
             refund(canister_id2, Cycles::new(1000))
         ],
-        iter(&pool).as_slice()
+        collect_iter(&pool).as_slice()
     );
     assert_eq!(
         &[
             refund(canister_id1, Cycles::new(1500)),
             refund(canister_id2, Cycles::new(1000))
         ],
-        flush_pool(pool).as_slice()
+        consume(pool).as_slice()
     );
 }
 
@@ -131,26 +154,6 @@ fn test_retain() {
     assert_eq!(pool.len(), 1);
     assert_eq!(
         &[refund(canister_id1, Cycles::new(1000))],
-        iter(&pool).as_slice()
+        collect_iter(&pool).as_slice()
     );
-}
-
-fn refund(recipient: CanisterId, amount: Cycles) -> Refund {
-    Refund::anonymous(recipient, amount)
-}
-
-/// Returns the contents of the pool as a vector, in priority order.
-fn iter(pool: &RefundPool) -> Vec<Refund> {
-    pool.iter().cloned().collect()
-}
-
-/// Consumes and returns the contents of the pool, in priority order.
-fn flush_pool(mut pool: RefundPool) -> Vec<Refund> {
-    let mut contents = Vec::with_capacity(pool.len());
-    pool.retain(|refund| {
-        contents.push(*refund);
-        false
-    });
-    assert!(pool.is_empty());
-    contents
 }
