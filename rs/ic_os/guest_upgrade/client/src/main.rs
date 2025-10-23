@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use attestation::verification::SevRootCertificateVerification;
 use config::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{GuestOSConfig, GuestVMType};
@@ -26,11 +26,9 @@ pub async fn main() -> Result<()> {
         shutdown();
         Err(err)
     } else {
+        println!("Key exchange successful. Requesting shutdown.");
         shutdown();
-        bail!(
-            "Key exchange successful. VM shutting down. Returning error so that dependent systemd \
-            services are no longer started."
-        )
+        Ok(())
     }
 }
 

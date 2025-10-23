@@ -1031,6 +1031,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1042,6 +1043,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1112,6 +1114,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (1_073_741_824 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1123,6 +1126,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1280,6 +1284,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (4_294_967_296 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1291,6 +1296,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1359,6 +1365,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1370,6 +1377,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1422,6 +1430,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1433,6 +1442,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1484,6 +1494,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1495,6 +1506,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1549,6 +1561,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (4_294_967_296 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1560,6 +1573,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(4_294_967_296_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1624,6 +1638,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "rno2w-sqaaa-aaaaa-aaacq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (1_073_741_824 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1635,6 +1650,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1689,6 +1705,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1700,6 +1717,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1782,6 +1800,7 @@ impl PocketIcSubnets {
             //       };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1796,6 +1815,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -1856,6 +1876,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -1867,6 +1888,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -2002,6 +2024,7 @@ impl PocketIcSubnets {
             //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
             //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
             //       log_visibility = opt variant { controllers };
+            //       log_memory_limit = opt (4_096 : nat);
             //       wasm_memory_limit = opt (3_221_225_472 : nat);
             //       memory_allocation = opt (0 : nat);
             //       compute_allocation = opt (0 : nat);
@@ -2013,6 +2036,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(3_221_225_472_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -2107,6 +2131,7 @@ impl PocketIcSubnets {
                 freezing_threshold: Some(2_592_000_u64.into()),
                 reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
                 log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
                 wasm_memory_limit: Some(2_000_000_000_u64.into()),
                 wasm_memory_threshold: Some(0_u64.into()),
                 environment_variables: None,
@@ -2354,7 +2379,7 @@ impl PocketIc {
     pub(crate) fn try_new(
         runtime: Arc<Runtime>,
         seed: u64,
-        mut subnet_configs: ExtendedSubnetConfigSet,
+        subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
         icp_config: IcpConfig,
         log_level: Option<Level>,
@@ -2441,9 +2466,6 @@ impl PocketIc {
                 })
                 .collect()
         } else {
-            if let Some(ref icp_features) = icp_features {
-                subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
-            }
             let fixed_range_subnets = subnet_configs.get_named();
             let flexible_subnets = {
                 let sys = subnet_configs.system.iter().map(|spec| {
