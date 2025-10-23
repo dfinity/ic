@@ -55,6 +55,8 @@ class DependencyScanner:
         command = f"git clone --depth=1 {checkout_url}"
         logging.info(f"Performing git clone {url}")
         _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment, log_command=False)
+        ls = ProcessExecutor.execute_command("ls -la", cwd.resolve(), environment)
+        logging.debug(f"ls output:\n{ls}")
         return
 
     def do_periodic_scan(self, repositories: typing.List[Repository]):
