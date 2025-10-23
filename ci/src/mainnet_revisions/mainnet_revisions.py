@@ -2,9 +2,9 @@
 import argparse
 import hashlib
 import json
-import re
 import logging
 import pathlib
+import re
 import subprocess
 import tempfile
 import urllib.request
@@ -448,10 +448,10 @@ This PR is created automatically using [`mainnet_revisions.py`](https://github.c
 def collapse_simple_lists(contents):
     return re.sub(
         # Capture simple lists (single level, only digits)
-        r'\[[\d\s,]*\]',
+        r"\[[\d\s,]*\]",
         # Format onto a single line
-        lambda m: ' '.join([v.strip() for v in m.group(0).splitlines()]),
-        contents
+        lambda m: " ".join([v.strip() for v in m.group(0).splitlines()]),
+        contents,
     )
 
 
