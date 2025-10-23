@@ -31,10 +31,10 @@ jobs:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
       - name: Build PocketIC server
         run: |
-          bazel build //rs/pocket_ic_server:pocket-ic-server
+          bazel build //rs/pocket_ic_server:pocket-ic-server-head-nns
       - name: Compute PocketIC server path
         id: pocket-ic-server-path
-        run: echo "pocket_ic_server_path=$(bazel cquery //rs/pocket_ic_server:pocket-ic-server --output=files)" >> $GITHUB_OUTPUT
+        run: echo "pocket_ic_server_path=$(bazel cquery //rs/pocket_ic_server:pocket-ic-server-head-nns --output=files)" >> $GITHUB_OUTPUT
       - name: Upload PocketIC server
         uses: actions/upload-artifact@v4
         with:

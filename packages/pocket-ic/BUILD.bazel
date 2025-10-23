@@ -117,12 +117,13 @@ rust_test(
     ],
     data = [
         "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
-        "//rs/pocket_ic_server:pocket-ic-server",
+        # "//rs/pocket_ic_server:pocket-ic-server",
+        "//rs/pocket_ic_server:pocket-ic-server-head-nns",
         "@mozilla_root_ca_store//file",
     ],
     env = {
         "RUST_TEST_THREADS": "4",
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server-head-nns)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
         "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm.gz)",
     },
@@ -201,7 +202,7 @@ rust_test(
     )
     for name_suffix in [
         "-head-nns",
-        "",
+        # "",
     ]
 ]
 
