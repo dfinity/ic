@@ -208,7 +208,7 @@ thread_local! {
         = const { Cell::new(true) };
 
     static ENABLE_SET_SUBNET_OPERATIONAL_LEVEL: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+        = const { Cell::new(true) };
 }
 
 thread_local! {

@@ -1239,7 +1239,7 @@ impl ExecutionTest {
 
         let query = Query {
             source: QuerySource::User {
-                user_id: user_test_id(0),
+                user_id: self.user_id,
                 ingress_expiry: 0,
                 nonce: None,
             },
