@@ -163,12 +163,6 @@ load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
 
 rules_motoko_dependencies()
 
-# Rosetta CLI
-
-load("//bazel:rosetta_cli.bzl", "rosetta_cli_repository")
-
-rosetta_cli_repository(name = "rosetta-cli")
-
 # trivy binary for vulnerability scanning
 load("//bazel:trivy.bzl", "trivy_scan")
 
