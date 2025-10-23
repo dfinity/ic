@@ -12,13 +12,9 @@ impl ChunksToDownload {
 
     // Add chunks to the chunks to download list
     pub(crate) fn add_chunks(&mut self, chunks: impl Iterator<Item = ChunkId>) -> usize {
-        let mut added = 0;
-        for chunk_id in chunks {
-            self.chunks.push(chunk_id);
-            added += 1;
-        }
-
-        added
+        let initial_len = self.chunks.len();
+        self.chunks.extend(chunks);
+        self.chunks.len() - initial_len
     }
 
     /// Pick the next chunk to download
