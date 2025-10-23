@@ -189,11 +189,6 @@ load("//pre-commit:ormolu.bzl", "ormolu")
 
 ormolu(name = "ormolu")
 
-# buf binary for protobuf linting
-load("//pre-commit:buf.bzl", "buf")
-
-buf(name = "buf")
-
 # candid binary
 load("//pre-commit:candid.bzl", "candid")
 
