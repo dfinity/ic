@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import re
 import logging
 import pathlib
 import subprocess
@@ -251,7 +252,8 @@ def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger
         "launch_measurements_dev": replica_info.dev_measurements,
     }
     with open(full_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        contents = collapse_simple_lists(json.dumps(data, indent=2))
+        f.write(contents)
 
     logger.info(
         "Updated subnet %s revision to version %s with image hash %s", subnet, replica_info.version, replica_info.hash
@@ -281,7 +283,8 @@ def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logge
         "launch_measurements_dev": replica_info.dev_measurements,
     }
     with open(full_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        contents = collapse_simple_lists(json.dumps(data, indent=2))
+        f.write(contents)
 
     logger.info("Updated latest revision to version %s with image hash %s", replica_info.version, replica_info.hash)
 
@@ -312,7 +315,8 @@ def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger
     }
 
     with open(full_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
+        contents = collapse_simple_lists(json.dumps(data, indent=2))
+        f.write(contents)
 
     logger.info("Updated hostos revision to version %s with image hash %s", replica_info.version, replica_info.hash)
 
@@ -439,6 +443,16 @@ This PR is created automatically using [`mainnet_revisions.py`](https://github.c
             )
     else:
         raise Exception("This shouldn't happen")
+
+
+def collapse_simple_lists(contents):
+    return re.sub(
+        # Capture simple lists (single level, only digits)
+        r'\[[\d\s,]*\]',
+        # Format onto a single line
+        lambda m: ' '.join([v.strip() for v in m.group(0).splitlines()]),
+        contents
+    )
 
 
 if __name__ == "__main__":
