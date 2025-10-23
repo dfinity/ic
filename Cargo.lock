@@ -10871,6 +10871,8 @@ dependencies = [
  "ic-utils-thread",
  "lazy_static",
  "maplit",
+ "messaging-test",
+ "messaging-test-utils",
  "mockall",
  "pretty_assertions",
  "prometheus 0.13.4",

@@ -1,3 +1,227 @@
+use canister_test::Project;
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_config::execution_environment::Config as HypervisorConfig;
+use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
+use ic_state_machine_tests::{StateMachine, StateMachineConfig, SubmitIngressError, UserError};
+use ic_types::{
+    Cycles,
+    ingress::{IngressState, IngressStatus, WasmResult},
+    messages::MessageId,
+};
+use messaging_test::{Call, Message, Reply, decode_reply, encode_message};
+use messaging_test_utils::to_encoded_ingress;
+use proptest::prelude::*;
+use std::ops::RangeInclusive;
+use std::sync::Arc;
+
+pub const KB: u32 = 1024;
+pub const MB: u32 = KB * KB;
+
+#[derive(Debug)]
+pub enum PulseStatus {
+    /// The pulse has been submitted; the outcome is not known yet.
+    Submitted(Call, MessageId),
+    /// The pulse has been processed successfully.
+    Completed(Call, Reply),
+    /// The pulse was rejected by the destination canister.
+    Rejected(Call, String),
+    /// The pulse triggered an error during execution, i.e. the destination canister trapped.
+    Failed(Call, UserError),
+}
+
+impl PulseStatus {
+    /// Queries `env` for an update on the pulse and updates it accordingly.
+    fn update(self, env: &StateMachine) -> Self {
+        if let Self::Submitted(call, msg_id) = self {
+            match env.ingress_status(&msg_id) {
+                // The pulse has been processed successfully.
+                IngressStatus::Known {
+                    state: IngressState::Completed(WasmResult::Reply(blob)),
+                    ..
+                } => Self::Completed(call, decode_reply(blob)),
+                // The pulse was rejected by the `receiver`.
+                IngressStatus::Known {
+                    state: IngressState::Completed(WasmResult::Reject(reject_msg)),
+                    ..
+                } => Self::Rejected(call, reject_msg),
+                // The pulse triggered an error during execution.
+                IngressStatus::Known {
+                    state: IngressState::Failed(user_error),
+                    ..
+                } => Self::Failed(call, user_error),
+                // There is no update for the pulse yet.
+                _ => Self::Submitted(call, msg_id),
+            }
+        } else {
+            self
+        }
+    }
+}
+
+pub struct TestSubnet {
+    pub env: Arc<StateMachine>,
+    pulses: Vec<PulseStatus>,
+}
+
+impl TestSubnet {
+    pub fn new(env: Arc<StateMachine>, canisters_count: u64) -> Self {
+        let wasm = Project::cargo_bin_maybe_from_env("messaging-test-canister", &[]).bytes();
+        for _ in 0..canisters_count {
+            env.install_canister_with_cycles(
+                wasm.clone(),
+                Vec::new(),
+                None,
+                Cycles::new(u128::MAX / 2),
+            )
+            .expect("Installing messaging-test-canister failed");
+        }
+        Self {
+            env,
+            pulses: Vec::new(),
+        }
+    }
+
+    /// Executes a round on this state machine and advances time by one second.
+    pub fn execute_round(&self) {
+        self.env.execute_round();
+        self.env.advance_time(std::time::Duration::from_secs(1));
+    }
+
+    /// Attempts to submit a new pulse.
+    pub fn pulse(&mut self, call: Call) -> Result<(), (Call, SubmitIngressError)> {
+        let (receiver, payload) = to_encoded_ingress(call.clone());
+
+        // Try signing up a new pulse.
+        let pulse = match self.env.submit_ingress_as(
+            PrincipalId::new_anonymous(),
+            receiver,
+            "pulse",
+            payload,
+        ) {
+            Ok(msg_id) => PulseStatus::Submitted(call, msg_id),
+            Err(err) => {
+                return Err((call, err));
+            }
+        };
+        self.pulses.push(pulse);
+        Ok(())
+    }
+
+    /// Iterates through all the pulses and attempts to update their status.
+    pub fn update_submitted_pulses(&mut self) {
+        self.pulses = std::mem::take(&mut self.pulses)
+            .into_iter()
+            .map(|status| status.update(&self.env))
+            .collect::<Vec<_>>();
+    }
+
+    /// Returns a reference to the pulses made on this test subnet.
+    pub fn pulses(&self) -> &Vec<PulseStatus> {
+        &self.pulses
+    }
+
+    /// Returns the number of pulses whose outcome is not known yet.
+    pub fn awaiting_pulses_count(&self) -> u64 {
+        self.pulses
+            .iter()
+            .map(|status| matches!(status, PulseStatus::Submitted(..)) as u64)
+            .sum()
+    }
+
+    /// Returns the IDs of the canisters installed at the latest state height.
+    pub fn canisters(&self) -> Vec<CanisterId> {
+        self.env
+            .get_latest_state()
+            .canister_states
+            .keys()
+            .cloned()
+            .collect()
+    }
+}
+
+/// Config for two `TestSubnet` including message memory limits
+/// and number of canisters for each subnet.
+///
+/// Note: low values for `*_max_instructions_per_round` can lead to continuous resets during
+/// execution, leading to the canister apparently doing nothing at all.
+#[derive(Debug)]
+pub struct TestSubnetsConfig {
+    pub local_canisters_count: u64,
+    pub local_max_instructions_per_round: u64,
+    pub local_message_memory_capacity: u64,
+    pub remote_canisters_count: u64,
+    pub remote_max_instructions_per_round: u64,
+    pub remote_message_memory_capacity: u64,
+}
+
+impl Default for TestSubnetsConfig {
+    fn default() -> Self {
+        Self {
+            local_canisters_count: 2,
+            local_max_instructions_per_round: 3_000_000_000,
+            local_message_memory_capacity: 100 * MB as u64,
+            remote_canisters_count: 1,
+            remote_max_instructions_per_round: 3_000_000_000,
+            remote_message_memory_capacity: 50 * MB as u64,
+        }
+    }
+}
+
+impl TestSubnetsConfig {
+    /// Generates a `StateMachineConfig` using defaults for an application subnet, except for the
+    /// subnet message memory capacity and the maximum number of instructions per round.
+    fn state_machine_config(
+        subnet_message_memory_capacity: u64,
+        max_instructions_per_round: u64,
+    ) -> StateMachineConfig {
+        StateMachineConfig::new(
+            SubnetConfig {
+                scheduler_config: SchedulerConfig {
+                    scheduler_cores: 4,
+                    max_instructions_per_round: max_instructions_per_round.into(),
+                    max_instructions_per_message_without_dts: max_instructions_per_round.into(),
+                    max_instructions_per_slice: max_instructions_per_round.into(),
+                    ..SchedulerConfig::application_subnet()
+                },
+                cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),
+            },
+            HypervisorConfig {
+                guaranteed_response_message_memory_capacity: subnet_message_memory_capacity.into(),
+                best_effort_message_memory_capacity: subnet_message_memory_capacity.into(),
+                ..HypervisorConfig::default()
+            },
+        )
+    }
+
+    /// Generates a `StateMachineConfig` for the `local_env`.
+    pub fn local_state_machine_config(&self) -> StateMachineConfig {
+        Self::state_machine_config(
+            self.local_message_memory_capacity,
+            self.local_max_instructions_per_round,
+        )
+    }
+
+    /// Generates a `StateMachineConfig` for the `remote_env`.
+    pub fn remote_state_machine_config(&self) -> StateMachineConfig {
+        Self::state_machine_config(
+            self.remote_message_memory_capacity,
+            self.remote_max_instructions_per_round,
+        )
+    }
+}
+
+pub fn two_test_subnets(config: TestSubnetsConfig) -> (TestSubnet, TestSubnet) {
+    let (local_env, remote_env) = ic_state_machine_tests::two_subnets_with_config(
+        config.local_state_machine_config(),
+        config.remote_state_machine_config(),
+    );
+    (
+        TestSubnet::new(local_env, config.local_canisters_count),
+        TestSubnet::new(remote_env, config.remote_canisters_count),
+    )
+}
+
+/*
 use candid::{Decode, Encode};
 use canister_test::Project;
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
@@ -664,3 +888,4 @@ pub fn induct_from_head_of_stream(
     into_env.execute_block_with_xnet_payload(xnet_payload);
     Ok(())
 }
+*/
