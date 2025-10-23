@@ -576,34 +576,43 @@ pub enum IcpFeaturesConfig {
 /// Specifies ICP features enabled by deploying their corresponding system canisters
 /// when creating a PocketIC instance and keeping them up to date
 /// during the PocketIC instance lifetime.
-/// The subnets to which the corresponding system canisters are deployed must be empty.
+/// The subnets to which the corresponding system canisters are deployed must be empty,
+/// i.e., their corresponding field in `ExtendedSubnetConfigSet` must be `None`
+/// or `Some(config)` with `config.state_config = SubnetStateConfig::New`.
 /// An ICP feature is enabled if its `IcpFeaturesConfig` is provided, i.e.,
 /// if the corresponding field is not `None`.
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, Default, JsonSchema)]
 pub struct IcpFeatures {
     /// Deploys the NNS registry canister and keeps its content in sync with registry used internally by PocketIC.
-    /// Note. The registry used internally by PocketIC is not updated after changing the registry stored in the registry canister
-    /// (e.g., after executing an NNS proposal mutating the registry).
+    /// Subnets: NNS.
     pub registry: Option<IcpFeaturesConfig>,
     /// Deploys the NNS cycles minting canister, sets ICP/XDR conversion rate, and keeps its subnet lists in sync with PocketIC topology.
     /// If the `cycles_minting` feature is enabled, then the default timestamp of a PocketIC instance is set to 10 May 2021 10:00:01 AM CEST (the smallest value that is strictly larger than the default timestamp hard-coded in the CMC state).
+    /// Subnets: NNS.
     pub cycles_minting: Option<IcpFeaturesConfig>,
     /// Deploys the ICP ledger and index canisters and initializes the ICP account of the anonymous principal with 1,000,000,000 ICP.
+    /// Subnets: NNS.
     pub icp_token: Option<IcpFeaturesConfig>,
     /// Deploys the cycles ledger and index canisters and initializes the cycles account of the anonymous principal with 2^127 cycles.
+    /// Subnets: II.
     pub cycles_token: Option<IcpFeaturesConfig>,
     /// Deploys the NNS governance and root canisters and sets up an initial NNS neuron with 1 ICP stake.
     /// The initial NNS neuron is controlled by the anonymous principal.
+    /// Subnets: NNS.
     pub nns_governance: Option<IcpFeaturesConfig>,
     /// Deploys the SNS-W and aggregator canisters, sets up the SNS subnet list in the SNS-W canister according to PocketIC topology,
     /// and uploads the SNS canister WASMs to the SNS-W canister.
+    /// Subnets: NNS, SNS.
     pub sns: Option<IcpFeaturesConfig>,
     /// Deploys the Internet Identity canister.
+    /// Subnets: II.
     pub ii: Option<IcpFeaturesConfig>,
     /// Deploys the NNS frontend dapp. The HTTP gateway must be specified via `http_gateway_config` in `InstanceConfig`
     /// and the ICP features `cycles_minting`, `icp_token`, `nns_governance`, `sns`, `ii` must all be enabled.
+    /// Subnets: NNS.
     pub nns_ui: Option<IcpFeaturesConfig>,
     /// Deploys the bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
+    /// Subnets: Bitcoin.
     pub bitcoin: Option<IcpFeaturesConfig>,
 }
 
