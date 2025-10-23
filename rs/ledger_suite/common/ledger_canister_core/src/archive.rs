@@ -24,13 +24,14 @@ pub const DEFAULT_CYCLES_FOR_ARCHIVE_CREATION: u64 = 10_000_000_000_000;
 /// E.g., for a 37-node subnet, with two rounds per second, 1M instructions per transaction, and 10
 /// transactions per round, 10 trillion cycles would last for about 48 hours.
 const MIN_LEDGER_LIQUID_CYCLES_AFTER_ARCHIVE_CREATION: u128 = 10_000_000_000_000;
-/// The minimum amount of cycles that should be sent to the spawned archive canister, in addition
-/// to the cycles needed for creation. These cycles will be used for the initial installation and
-/// first archiving operations. The actual number of cycles needed will depend on the subnet size,
-/// the freezing threshold, compute and storage allocation, etc. The sum of the canister creation
-/// cost and `MIN_ARCHIVE_INSTALL_AND_OPERATION_CYCLES` should be less than or equal to
-/// `DEFAULT_CYCLES_FOR_ARCHIVE_CREATION`.
-const MIN_ARCHIVE_INSTALL_AND_OPERATION_CYCLES: u64 = 3_000_000_000_000;
+/// The minimum amount of cycles that should be sent to the spawned archive canister, as a
+/// multiplier of the canister creation cost. The additional cycles, compare to canister creation,
+/// will be used for the initial installation and first archiving operations. The actual number of
+/// cycles needed will depend on the subnet size, the freezing threshold, compute and storage
+/// allocation, etc. The product of the canister creation cost and
+/// `MIN_ARCHIVE_INSTALL_AND_OPERATION_CYCLES_CREATION_COST_MULTIPLIER` should be less than or
+/// equal to `DEFAULT_CYCLES_FOR_ARCHIVE_CREATION`.
+const MIN_ARCHIVE_INSTALL_AND_OPERATION_CYCLES_CREATION_COST_MULTIPLIER: u64 = 3;
 
 fn default_cycles_for_archive_creation() -> u64 {
     0
@@ -379,7 +380,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
     // The cycles sent to the archive also need to cover the installation of the canister, and
     // some initial operation.
     let cost_install_and_operate_archive = cost_create_canister
-        .checked_add(MIN_ARCHIVE_INSTALL_AND_OPERATION_CYCLES as u128)
+        .checked_mul(MIN_ARCHIVE_INSTALL_AND_OPERATION_CYCLES_CREATION_COST_MULTIPLIER as u128)
         .ok_or(FailedToArchiveBlocks(
             "Overflow when calculating archive canister creation, installation, and initial operation cost".to_string(),
         ))?;
