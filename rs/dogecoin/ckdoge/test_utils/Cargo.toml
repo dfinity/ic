@@ -9,9 +9,12 @@ documentation.workspace = true
 [dependencies]
 assert_matches = { workspace = true }
 candid = { workspace = true }
+canlog = { path = "../../../../packages/canlog" }
 ic-bitcoin-canister-mock = { path = "../../../bitcoin/mock" }
 ic-icrc1-ledger = { path = "../../../ledger_suite/icrc1/ledger" }
 ic-ckdoge-minter = { path = "../minter" }
+ic-http-types = { path = "../../../../packages/ic-http-types" }
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 ic-management-canister-types = { workspace = true }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
+serde_json = { workspace = true }

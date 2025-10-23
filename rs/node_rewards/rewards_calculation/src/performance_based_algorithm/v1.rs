@@ -1,5 +1,7 @@
 use crate::performance_based_algorithm::results::RewardsCalculatorResults;
-use crate::performance_based_algorithm::{DataProvider, PerformanceBasedAlgorithm};
+use crate::performance_based_algorithm::{
+    PerformanceBasedAlgorithm, PerformanceBasedAlgorithmInputProvider,
+};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -35,14 +37,14 @@ impl PerformanceBasedAlgorithm for RewardsCalculationV1 {
 
 impl RewardsCalculationV1 {
     pub fn calculate_rewards(
-        from_date: &NaiveDate,
-        to_date: &NaiveDate,
-        data_provider: impl DataProvider,
+        from_date: NaiveDate,
+        to_date: NaiveDate,
+        input_provider: impl PerformanceBasedAlgorithmInputProvider,
     ) -> Result<RewardsCalculatorResults, String> {
         <RewardsCalculationV1 as PerformanceBasedAlgorithm>::calculate_rewards(
             from_date,
             to_date,
-            data_provider,
+            input_provider,
         )
     }
 }
@@ -103,16 +105,16 @@ mod tests {
 
         // --- Execution ---
         let result = RewardsCalculationV1::calculate_failure_rates(daily_metrics_by_subnet);
-        let subnets_fr = result.subnets_fr;
+        let subnets_fr = result.subnets_failure_rate;
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.original_fr_percent))
+            .map(|(k, v)| (*k, v.original_failure_rate))
             .collect();
         let relative_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.relative_fr_percent))
+            .map(|(k, v)| (*k, v.relative_failure_rate))
             .collect();
 
         // --- Assertions for Day 1, Subnet 1 ---
@@ -144,16 +146,16 @@ mod tests {
             ],
         )]);
         let result = RewardsCalculationV1::calculate_failure_rates(daily_metrics_by_subnet);
-        let subnets_fr = result.subnets_fr;
+        let subnets_fr = result.subnets_failure_rate;
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.original_fr_percent))
+            .map(|(k, v)| (*k, v.original_failure_rate))
             .collect();
         let relative_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
-            .map(|(k, v)| (*k, v.relative_fr_percent))
+            .map(|(k, v)| (*k, v.relative_failure_rate))
             .collect();
 
         // --- Assertions for Day 2, Subnet 1 ---
@@ -320,3 +322,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod e2e_tests;

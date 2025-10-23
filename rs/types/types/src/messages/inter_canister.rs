@@ -615,6 +615,7 @@ impl PartialOrd for Refund {
 
 impl Ord for Refund {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Order by amount decreasing, then by recipient increasing, then by.refund ID.
         (Reverse(self.amount), &self.recipient, self.refund_id).cmp(&(
             Reverse(other.amount),
             &other.recipient,
