@@ -382,6 +382,7 @@ fn new_state_layout(log: ReplicaLogger) -> (TempDir, Time) {
         },
         UNIX_EPOCH,
         (1u64 << 30).into(),
+        |_| {},
     );
     state.metadata.batch_time = Time::from_secs_since_unix_epoch(1234567890).unwrap();
     state.add_refund(CANISTER_0, Cycles::new(1 << 20));

@@ -740,18 +740,21 @@ impl ReplicatedState {
     /// oldest to newest in case inserting `status` pushes the memory
     /// consumption over the bound.
     ///
-    /// Returns the previous status associated with `message_id`.
+    /// Returns the previous status associated with `message_id` and a histogram
+    /// of times spent in ingress history.
     pub fn set_ingress_status(
         &mut self,
         message_id: MessageId,
         status: IngressStatus,
         ingress_memory_capacity: NumBytes,
+        observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
         self.metadata.ingress_history.insert(
             message_id,
             status,
             self.time(),
             ingress_memory_capacity,
+            observe_time_in_terminal_state,
         )
     }
 

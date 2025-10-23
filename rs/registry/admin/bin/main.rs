@@ -135,6 +135,9 @@ use registry_canister::mutations::{
     do_remove_node_operators::RemoveNodeOperatorsPayload,
     do_revise_elected_replica_versions::ReviseElectedGuestosVersionsPayload,
     do_set_firewall_config::SetFirewallConfigPayload,
+    do_set_subnet_operational_level::{
+        NodeSshAccess, SetSubnetOperationalLevelPayload, operational_level,
+    },
     do_swap_node_in_subnet_directly::SwapNodeInSubnetDirectlyPayload,
     do_update_api_boundary_nodes_version::DeployGuestosToSomeApiBoundaryNodes,
     do_update_elected_hostos_versions::ReviseElectedHostosVersionsPayload,
@@ -481,6 +484,20 @@ enum SubCommand {
     /// Propose to stop a canister managed by the governance.
     ProposeToStopCanister(StopCanisterCmd),
 
+    /// Sets three things:
+    ///
+    ///     1. is_halted = true
+    ///     2. ssh_readonly_access
+    ///     3. ssh_node_state_write_access
+    ///
+    /// This is the first step of subnet recovery. Previously the first step was
+    /// done using propose-to-update-subnet. However, that does not support
+    /// changing ssn_node_state_write_access, which is needed when a subnet has
+    /// SEV enabled everywhere (or the subnet has no DFINITY node).
+    ///
+    /// At the end of subnet recovery, run propose-to-bring-subnet-back-online.
+    ProposeToTakeSubnetOfflineForRepairs(ProposeToTakeSubnetOfflineForRepairsCmd),
+
     /// Submits a proposal to uninstall code of a canister.
     ProposeToUninstallCode(ProposeToUninstallCodeCmd),
 
@@ -774,6 +791,124 @@ impl ProposalPayload<DeployGuestosToAllUnassignedNodesPayload>
     async fn payload(&self, _: &Agent) -> DeployGuestosToAllUnassignedNodesPayload {
         DeployGuestosToAllUnassignedNodesPayload {
             elected_replica_version: self.guestos_version_id.clone(),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to take a subnet offline for repairs.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToTakeSubnetOfflineForRepairsCmd {
+    /// Which subnet is being taken offline.
+    #[clap(long)]
+    pub subnet: PrincipalId,
+
+    /// List of public keys who (will) have ssh "readonly" access to VMs of the
+    /// subnet. Note that this overwrites the entire list. Therefore, be aware
+    /// of who is currently in the list to make sure you are not clobbering
+    /// anything you don't want to clobber.
+    ///
+    /// This usually isn't a problem, because the list is typically empty when
+    /// this proposal is used as part of subnet recovery.
+    #[clap(long, num_args(1..))]
+    pub ssh_readonly_access: Vec<String>,
+
+    /// Similar to the --ssh-readonly-access flag, but there are some important
+    /// differences:
+    ///
+    ///     1. This gives different privileges to the VM(s). As the name
+    ///        suggests, this allows private key holders to (read and) write
+    ///        files to where node state (which primarily consists of the memory
+    ///        contents of canisters in the subnet) is kept in the VM.
+    ///
+    ///     2. This only targets ONE node VM at a time. Therefore, you have to
+    ///        ALSO specify which node you want to affect. Therefore, the format
+    ///        here is similar but different: "${NODE_ID}":"${SSH_PUBLIC_KEY}".
+    ///        That is, you must prefix with node ID and a semicolon to
+    ///        separate.
+    ///
+    /// Note that this clobbers the entire ssh_node_state_write_access field of
+    /// whatever node is specified, similar to --ssh-readonly-access. Therefore,
+    /// similarly be aware of what the field holds prior to this proposal to
+    /// make sure that you are not clobbering anything that you do not want to
+    /// clobber. However, in practice, it would probably be empty to begin with,
+    /// so most likely, this won't be an issue.
+    #[clap(long, value_parser, num_args(1..))]
+    pub ssh_node_state_write_access: Vec<NodeSshAccessFlagValue>,
+}
+
+impl ProposalTitle for ProposeToTakeSubnetOfflineForRepairsCmd {
+    fn title(&self) -> String {
+        let subnet_id = self.subnet.to_string();
+        let subnet_id = subnet_id.split('-').next().unwrap();
+        format!("Take Subnet {subnet_id} Offline for Repairs")
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<SetSubnetOperationalLevelPayload> for ProposeToTakeSubnetOfflineForRepairsCmd {
+    async fn payload(&self, _agent: &Agent) -> SetSubnetOperationalLevelPayload {
+        let ssh_node_state_write_access = self
+            .ssh_node_state_write_access
+            .clone()
+            .into_iter()
+            .map(NodeSshAccess::from)
+            .collect();
+
+        SetSubnetOperationalLevelPayload {
+            subnet_id: Some(SubnetId::from(self.subnet)),
+            operational_level: Some(operational_level::DOWN_FOR_REPAIRS),
+            ssh_readonly_access: Some(self.ssh_readonly_access.clone()),
+            ssh_node_state_write_access: Some(ssh_node_state_write_access),
+        }
+    }
+}
+
+#[derive(Clone)]
+struct NodeSshAccessFlagValue {
+    pub node_id: NodeId,
+    pub public_keys: Vec<String>,
+}
+
+impl FromStr for NodeSshAccessFlagValue {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, String> {
+        // Split s into two pieces using ':'.
+        let mut parts = s.splitn(2, ':');
+        let node_id = parts.next().ok_or("Missing node ID.")?;
+        let public_keys = parts
+            .next()
+            .ok_or("Missing semicolon separating node ID and SSH public key.")?
+            .to_string();
+
+        // Parse node_id.
+        let node_id = PrincipalId::from_str(node_id).map_err(|err| format!("{err}"))?;
+        let node_id = NodeId::from(node_id);
+
+        // Parse public_keys, by simply splitting on ','.<
+        let public_keys = public_keys
+            .split(',')
+            .map(|public_key| public_key.to_string())
+            .collect();
+
+        Ok(Self {
+            node_id,
+            public_keys,
+        })
+    }
+}
+
+impl From<NodeSshAccessFlagValue> for NodeSshAccess {
+    fn from(src: NodeSshAccessFlagValue) -> Self {
+        let NodeSshAccessFlagValue {
+            node_id,
+            public_keys,
+        } = src;
+
+        Self {
+            node_id: Some(node_id),
+            public_keys: Some(public_keys),
         }
     }
 }
@@ -3780,6 +3915,7 @@ async fn main() {
             SubCommand::ProposeToSetFirewallConfig(_) => (),
             SubCommand::ProposeToStartCanister(_) => (),
             SubCommand::ProposeToStopCanister(_) => (),
+            SubCommand::ProposeToTakeSubnetOfflineForRepairs(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToUpdateCanisterSettings(_) => (),
             SubCommand::ProposeToUpdateFirewallRules(_) => (),
@@ -5025,6 +5161,21 @@ async fn main() {
                 sender,
             );
             propose_action_from_command(cmd, canister_client, proposer).await;
+        }
+        SubCommand::ProposeToTakeSubnetOfflineForRepairs(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::SetSubnetOperationalLevel,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
         }
     }
 }

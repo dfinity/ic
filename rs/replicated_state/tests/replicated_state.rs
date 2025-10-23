@@ -1087,6 +1087,7 @@ fn split() {
                     },
                     UNIX_EPOCH,
                     NumBytes::from(u64::MAX),
+                    |_| {},
                 );
             }
         }
