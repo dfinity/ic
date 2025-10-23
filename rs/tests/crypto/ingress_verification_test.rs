@@ -189,7 +189,7 @@ async fn query_delegation(
         query: HttpUserQuery {
             canister_id: Blob(test.canister_id.as_slice().to_vec()),
             method_name: "query".to_string(),
-            arg: Blob(wasm().caller().reply_data_append().reply().build()),
+            arg: Blob(vec![]),
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
@@ -234,7 +234,7 @@ async fn update_delegation(
         update: HttpCanisterUpdate {
             canister_id: Blob(test.canister_id.as_slice().to_vec()),
             method_name: "update".to_string(),
-            arg: Blob(wasm().caller().reply_data_append().reply().build()),
+            arg: Blob(vec![]),
             sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
