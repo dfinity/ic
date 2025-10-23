@@ -7,7 +7,7 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "backend_lib",
     srcs = glob(["src/**/*.rs"]),
-    crate_features = select({
+    crate_features = ["sigsegv_handler_checksum"] + select({
         "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
         "//conditions:default": [],
     }),

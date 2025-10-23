@@ -20,7 +20,7 @@ nix = { workspace = true }
 slog = { workspace = true }
 
 [features]
-default = []
+default = ["sigsegv_handler_checksum"]
 sigsegv_handler_checksum = []
 
 [dev-dependencies]
