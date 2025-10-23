@@ -599,10 +599,7 @@ fn can_recover_refunds() {
         )
         .unwrap();
 
-        assert_eq!(
-            original_state.subnet_queues(),
-            recovered_state.subnet_queues()
-        );
+        assert_eq!(original_state.refunds(), recovered_state.refunds());
     });
 }
 
