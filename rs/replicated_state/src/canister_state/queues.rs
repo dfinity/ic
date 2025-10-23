@@ -15,10 +15,11 @@ use crate::page_map::int_map::MutableIntMap;
 use crate::replicated_state::MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN;
 use crate::{
     CanisterState, CheckpointLoadingMetrics, DroppedMessageMetrics, InputQueueType, InputSource,
-    MessageMemoryUsage, StateError,
+    StateError,
 };
 use ic_base_types::PrincipalId;
 use ic_error_types::RejectCode;
+use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::IC_00;
 use ic_protobuf::state::queues::v1 as pb_queues;
 use ic_types::messages::{

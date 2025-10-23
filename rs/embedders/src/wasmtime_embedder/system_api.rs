@@ -6,8 +6,8 @@ use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     ExecutionMode,
     HypervisorError::{self, *},
-    HypervisorResult, OutOfInstructionsHandler, PerformanceCounterType, StableGrowOutcome,
-    StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallCounters,
+    HypervisorResult, MessageMemoryUsage, OutOfInstructionsHandler, PerformanceCounterType,
+    StableGrowOutcome, StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallCounters,
     TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
 use ic_logger::{ReplicaLogger, error};
@@ -18,8 +18,7 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
-    Memory, MessageMemoryUsage, NumWasmPages, canister_state::WASM_PAGE_SIZE_IN_BYTES,
-    memory_usage_of_request,
+    Memory, NumWasmPages, canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request,
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
@@ -1340,10 +1339,12 @@ impl SystemApiImpl {
         }
     }
 
-    /// Note that this function is made public only for the tests
-    #[doc(hidden)]
     pub fn get_current_memory_usage(&self) -> NumBytes {
         self.memory_usage.current_usage
+    }
+
+    pub fn get_current_message_memory_usage(&self) -> MessageMemoryUsage {
+        self.memory_usage.current_message_usage
     }
 
     /// Bytes allocated in the Wasm/stable memory.

@@ -9,7 +9,7 @@ use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, MessageMemoryUsage};
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
@@ -24,7 +24,7 @@ use ic_replicated_state::canister_state::system_state::{
     CyclesUseCase, is_low_wasm_memory_hook_condition_satisfied,
 };
 use ic_replicated_state::{
-    CallOrigin, ExecutionTask, MessageMemoryUsage, NetworkTopology, SystemState,
+    CallOrigin, ExecutionTask, NetworkTopology, SystemState,
     canister_state::DEFAULT_QUEUE_CAPACITY, canister_state::execution_state::WasmExecutionMode,
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
