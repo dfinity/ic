@@ -105,7 +105,7 @@ mod tests {
 
         // --- Execution ---
         let result = RewardsCalculationV1::calculate_failure_rates(daily_metrics_by_subnet);
-        let subnets_fr = result.subnets_failure_rate_percent;
+        let subnets_fr = result.subnets_failure_rate;
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
@@ -146,7 +146,7 @@ mod tests {
             ],
         )]);
         let result = RewardsCalculationV1::calculate_failure_rates(daily_metrics_by_subnet);
-        let subnets_fr = result.subnets_failure_rate_percent;
+        let subnets_fr = result.subnets_failure_rate;
         let original_nodes_fr: BTreeMap<_, _> = result
             .nodes_metrics_daily
             .iter()
