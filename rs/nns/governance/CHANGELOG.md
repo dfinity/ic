@@ -10,6 +10,21 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+# 2025-10-17: Proposal 138991
+
+https://dashboard.internetcomputer.org/proposal/138991
+
+## Added
+
+* `PauseCanisterMigrations` & `UnpauseCanisterMigrations`
+
+## Changed
+
+* Following private neurons is now generally disallowed. There are some exceptions to this though: 
+    * A private neuron P can be followed by another neuron N, if either they share a controller or N's controller is listed as P's hotkey.
+    * Following private neurons on the topic `NeuronManagement` is not a subject of this limitation. Furthermore, following public neurons is always allowed.
+
+* Following non-existing Neuron IDs is disallowed as well.
 
 # 2025-10-10: Proposal 138913
 

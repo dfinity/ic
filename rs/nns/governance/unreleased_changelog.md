@@ -24,13 +24,9 @@ on the process that this file is part of, see
         * Motivation: This will be used in a slightly enhanced subnet recovery
           procedure. This is needed before we can fully enable SEV.
 
+* A new API function `get_neuron_index` is added. It accepts an exclusive lower bound on the neuron ID and a page size, and returns all neurons whose IDs are greater than the specified lower bound.
+
 ## Changed
-
-* Following private neurons is now generally disallowed. There are some exceptions to this though: 
-    * A private neuron P can be followed by another neuron N, if either they share a controller or N's controller is listed as P's hotkey.
-    * Following private neurons on the topic `NeuronManagement` is not a subject of this limitation. Furthermore, following public neurons is always allowed.
-
-* Following non-existing Neuron IDs is disallowed as well.
 
 ## Deprecated
 
