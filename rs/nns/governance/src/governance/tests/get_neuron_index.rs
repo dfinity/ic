@@ -50,7 +50,7 @@ fn make_governance_for_neuron_index() -> Governance {
 // This user doesn't control any neurons.
 static NEURONLESS_USER_ID: PrincipalId = PrincipalId::new_user_test_id(1001);
 
-fn assert_neuron_index(neurons: &Vec<NeuronInfo>, start_id: u64, size: usize) {
+fn assert_neuron_index(neurons: &[NeuronInfo], start_id: u64, size: usize) {
     assert_eq!(neurons.len(), size);
     for (i, neuron) in neurons.iter().enumerate() {
         let expected_id = start_id + i as u64;
