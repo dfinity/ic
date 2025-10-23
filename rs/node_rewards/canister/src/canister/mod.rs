@@ -131,14 +131,14 @@ impl NodeRewardsCanister {
 
     fn validate_reward_period(
         &self,
-        from_date: &NaiveDate,
-        to_date: &NaiveDate,
+        from_date: NaiveDate,
+        to_date: NaiveDate,
     ) -> Result<(), String> {
         let last_day_synced = self
             .get_last_day_synced()
             .ok_or("Metrics and registry are not synced up")?;
 
-        if last_day_synced < *to_date {
+        if last_day_synced < to_date {
             return Err("Metrics and registry are not synced up to to_date".to_string());
         }
 
@@ -150,7 +150,7 @@ impl NodeRewardsCanister {
             DateTime::from_timestamp_nanos(current_time().as_nanos_since_unix_epoch() as i64)
                 .date_naive();
 
-        if to_date >= &today {
+        if to_date >= today {
             return Err("to_date must be earlier than today".to_string());
         }
 
@@ -163,14 +163,16 @@ impl NodeRewardsCanister {
     ) -> Result<RewardsCalculatorResults, String> {
         let start_day = NaiveDate::try_from(request.from_day)?;
         let end_day = NaiveDate::try_from(request.to_day)?;
-        self.validate_reward_period(&start_day, &end_day)?;
+        self.validate_reward_period(start_day, end_day)?;
 
-        RewardsCalculationV1::calculate_rewards(&start_day, &end_day, self)
+        RewardsCalculationV1::calculate_rewards(start_day, end_day, self)
             .map_err(|e| format!("Could not calculate rewards: {e:?}"))
     }
 }
 
-impl rewards_calculation::performance_based_algorithm::DataProvider for &NodeRewardsCanister {
+impl rewards_calculation::performance_based_algorithm::PerformanceBasedAlgorithmInputProvider
+    for &NodeRewardsCanister
+{
     fn get_rewards_table(&self, date: &NaiveDate) -> Result<NodeRewardsTable, String> {
         let registry_querier = RegistryQuerier::new(self.registry_client.clone());
 
