@@ -931,7 +931,7 @@ fn time_out_messages_generates_refunds() {
 
     // Check that a refund to `remote_canister_id` was generated.
     assert_eq!(
-        [(remote_canister_id, Cycles::new(13))],
+        [Refund::anonymous(remote_canister_id, Cycles::new(13))],
         *fixture.state.take_all_refunds()
     );
 }
@@ -955,7 +955,7 @@ fn time_out_messages_in_subnet_queues() {
     fixture.state.metadata.batch_time = second_request_deadline.into();
     assert_eq!(1, fixture.time_out_messages());
     assert_eq!(
-        [(CANISTER_ID, Cycles::new(13))],
+        [Refund::anonymous(CANISTER_ID, Cycles::new(13))],
         *fixture.state.take_all_refunds()
     );
 
@@ -1008,7 +1008,10 @@ fn enforce_best_effort_message_limit() {
         (3, message_sizes[1] + message_sizes[2] + message_sizes[3]),
         fixture.enforce_best_effort_message_limit(mean_message_size),
     );
-    let expected_refunds = [(CANISTER_ID, Cycles::new((1 << 1) + (1 << 2) + (1 << 3)))];
+    let expected_refunds = [Refund::anonymous(
+        CANISTER_ID,
+        Cycles::new((1 << 1) + (1 << 2) + (1 << 3)),
+    )];
     assert_eq!(expected_refunds, *fixture.state.take_all_refunds());
 
     // A second identical call should be a no-op.

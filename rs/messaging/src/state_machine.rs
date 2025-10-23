@@ -211,8 +211,8 @@ impl StateMachine for StateMachineImpl {
         // Take out any refunds in the refund pool and observe them as lost cycles.
         if !state_after_stream_builder.refunds().is_empty() {
             let mut lost_cycles = Cycles::new(0);
-            state_after_stream_builder.take_refunds(|_, amount| {
-                lost_cycles += *amount;
+            state_after_stream_builder.take_refunds(|refund| {
+                lost_cycles += refund.amount();
                 true
             });
             state_after_stream_builder.observe_lost_cycles_due_to_dropped_messages(lost_cycles);

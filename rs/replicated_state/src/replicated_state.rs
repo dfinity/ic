@@ -1116,8 +1116,8 @@ impl ReplicatedState {
 
     /// Iterates over all refunds in priority order, removing all refunds for which
     /// `f` returns true.
-    pub fn take_refunds(&mut self, mut f: impl FnMut(&CanisterId, &ic_types::Cycles) -> bool) {
-        self.refunds.retain(|receiver, amount| !f(receiver, amount));
+    pub fn take_refunds(&mut self, mut f: impl FnMut(&Refund) -> bool) {
+        self.refunds.retain(|refund| !f(refund));
     }
 
     /// See `IngressQueue::filter_messages()` for documentation.
@@ -1639,7 +1639,7 @@ pub mod testing {
 
         /// Testing only: Consumes and returns the contents of the refund pool, in
         /// priority order.
-        fn take_all_refunds(&mut self) -> Vec<(CanisterId, Cycles)>;
+        fn take_all_refunds(&mut self) -> Vec<Refund>;
     }
 
     impl ReplicatedStateTesting for ReplicatedState {
@@ -1677,10 +1677,10 @@ pub mod testing {
             self.refunds.add(receiver, amount);
         }
 
-        fn take_all_refunds(&mut self) -> Vec<(CanisterId, Cycles)> {
+        fn take_all_refunds(&mut self) -> Vec<Refund> {
             let mut contents = Vec::with_capacity(self.refunds.len());
-            self.refunds.retain(|receiver, amount| {
-                contents.push((*receiver, *amount));
+            self.refunds.retain(|refund| {
+                contents.push(*refund);
                 false
             });
             assert_eq!(self.refunds.len(), 0);

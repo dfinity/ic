@@ -25,6 +25,7 @@ use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{
+    cmp::Reverse,
     convert::{From, TryFrom, TryInto},
     hash::{Hash, Hasher},
     mem::size_of,
@@ -548,7 +549,10 @@ impl Hash for Response {
 ///
 /// Represents either an _anonymous refund_ (when `refund_id` is `None`) or a
 /// _refund notification_ (when `refund_id` is `Some(_)`).
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
+///
+/// Refunds are ordered by amount (larger amounts first). Ties are broken by
+/// canister ID (smaller IDs first) and refund ID (smaller IDs first).
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Refund {
     /// Whom this refund is to be delivered to.
@@ -600,6 +604,22 @@ impl Refund {
 
     pub fn refund_id(&self) -> Option<u64> {
         self.refund_id
+    }
+}
+
+impl PartialOrd for Refund {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Refund {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (Reverse(self.amount), &self.recipient, self.refund_id).cmp(&(
+            Reverse(other.amount),
+            &other.recipient,
+            other.refund_id,
+        ))
     }
 }
 
