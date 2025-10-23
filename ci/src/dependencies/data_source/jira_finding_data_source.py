@@ -645,6 +645,7 @@ class JiraFindingDataSource(FindingDataSource):
 
     def create_or_update_open_finding(self, finding: Finding):
         logging.debug(f"create_or_update_open_finding({finding})")
+        return
         self.__load_findings_for_scanner(finding.scanner)
         finding_new: Finding = deepcopy(finding)
         if finding.id() in self.findings:
@@ -685,6 +686,7 @@ class JiraFindingDataSource(FindingDataSource):
 
     def delete_finding(self, finding: Finding):
         logging.debug(f"delete_finding({finding})")
+        return
         self.__load_findings_for_scanner(finding.scanner)
 
         if finding.id() in self.findings:
@@ -695,6 +697,7 @@ class JiraFindingDataSource(FindingDataSource):
 
     def link_findings(self, finding_a: Finding, finding_b: Finding):
         logging.debug(f"link_findings({finding_a}, {finding_b})")
+        return
 
         # finding_a might be a deleted finding or an existing finding
         deleted_finding_cache_key = (finding_a.repository, finding_a.scanner, finding_a.vulnerable_dependency.id)
