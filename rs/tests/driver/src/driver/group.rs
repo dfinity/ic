@@ -69,6 +69,7 @@ const KEEPALIVE_TASK_NAME: &str = "keepalive";
 const UVMS_LOGS_STREAM_TASK_NAME: &str = "uvms_logs_stream";
 const VECTOR_TASK_NAME: &str = "vector_logging";
 const SETUP_TASK_NAME: &str = "setup";
+const TEARDOWN_TASK_NAME: &str = "teardown";
 const LIFETIME_GUARD_TASK_PREFIX: &str = "lifetime_guard_";
 pub const COLOCATE_CONTAINER_NAME: &str = "system_test";
 
@@ -405,6 +406,7 @@ impl SystemTestSubGroup {
 
 pub struct SystemTestGroup {
     setup: Option<Box<dyn PotSetupFn>>,
+    teardown: Option<Box<dyn PotSetupFn>>,
     tests: Vec<SystemTestSubGroup>,
     timeout_per_test: Option<Duration>,
     overall_timeout: Option<Duration>,
@@ -442,6 +444,7 @@ impl SystemTestGroup {
     pub fn new() -> Self {
         Self {
             setup: Default::default(),
+            teardown: Default::default(),
             tests: Default::default(),
             timeout_per_test: None,
             overall_timeout: None,
@@ -465,6 +468,11 @@ impl SystemTestGroup {
 
     pub fn with_setup<F: PotSetupFn>(mut self, setup: F) -> Self {
         self.setup = Some(Box::new(setup));
+        self
+    }
+
+    pub fn with_teardown<F: PotSetupFn>(mut self, teardown: F) -> Self {
+        self.teardown = Some(Box::new(teardown));
         self
     }
 
@@ -617,15 +625,15 @@ impl SystemTestGroup {
                                     }
 
                                     streamed_uvms.entry(key.clone()).or_insert_with(|| {
-                                                let logger = logger.clone();
-                                                info!(
+                                            let logger = logger.clone();
+                                            info!(
                                                     logger,
                                                     "Streaming Journald for newly discovered [uvm={key}] with ipv6={value}"
                                                 );
-                                                // The task starts, but the handle is never joined.
-                                                rt.spawn(stream_journald_with_retries(logger, key.clone(), value));
-                                                value
-                                            });
+                                            // The task starts, but the handle is never joined.
+                                            rt.spawn(stream_journald_with_retries(logger, key.clone(), value));
+                                            value
+                                        });
                                 }
                             }
                             Err(err) => {
@@ -768,6 +776,28 @@ impl SystemTestGroup {
             )
         };
 
+        let teardown_plan = self.teardown.map(|teardown_fn| {
+            let logger = group_ctx.logger().clone();
+            let group_ctx = group_ctx.clone();
+            let teardown_task = subproc(
+                TaskId::Test(String::from(TEARDOWN_TASK_NAME)),
+                move || {
+                    debug!(logger, ">>> teardown_fn");
+                    let env = ensure_setup_env(group_ctx);
+                    teardown_fn(env);
+                },
+                &mut compose_ctx,
+            );
+            timed(
+                Plan::Leaf {
+                    task: Box::from(teardown_task),
+                },
+                compose_ctx.timeout_per_test,
+                None,
+                &mut compose_ctx,
+            )
+        });
+
         // normal case: no debugkeepalive, overall timeout is active
         if !group_ctx.debug_keepalive {
             let keepalive_plan = compose(
@@ -782,6 +812,7 @@ impl SystemTestGroup {
                                 .into_iter()
                                 .map(|sub_group| sub_group.into_plan(&mut compose_ctx)),
                         )
+                        .chain(teardown_plan)
                         .collect(),
                     &mut compose_ctx,
                 )],
@@ -859,6 +890,7 @@ impl SystemTestGroup {
                             .into_iter()
                             .map(|sub_group| sub_group.into_plan(&mut compose_ctx)),
                     )
+                    .chain(teardown_plan)
                     .collect(),
                 &mut compose_ctx,
             )],
