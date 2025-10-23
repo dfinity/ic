@@ -475,49 +475,56 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         .next()
         .unwrap_or_else(|| download_state_node.clone());
 
-    let (download_pool_node, replay_height, admin_nodes) =
-        if ssh_readonly_pub_key_deployed.is_some() {
-            // If we can deploy read-only access to the subnet, then we can download the consensus
-            // poll from the node with highest certification, and we only need admin access on the
-            // upload node to upload the state
+    let (download_pool_node, replay_height, admin_nodes) = if ssh_readonly_pub_key_deployed
+        .is_some()
+    {
+        // If we can deploy read-only access to the subnet, then we can download the consensus
+        // poll from the node with highest certification, and we only need admin access on the
+        // upload node to upload the state
 
-            let (download_pool_node, highest_cert_share) =
-                node_with_highest_certification_share_height(&app_subnet, &logger);
-            info!(
-                logger,
-                "Selected node {} ({:?}) as download pool with certification share height {}",
-                download_pool_node.node_id,
-                download_pool_node.get_ip_addr(),
-                highest_cert_share,
-            );
-            let admins = vec![&upload_node];
+        let (download_pool_node, highest_cert_share) =
+            node_with_highest_certification_share_height(&app_subnet, &logger);
+        info!(
+            logger,
+            "Selected node {} ({:?}) as download pool with certification share height {}",
+            download_pool_node.node_id,
+            download_pool_node.get_ip_addr(),
+            highest_cert_share,
+        );
+        let admins = vec![&upload_node];
 
-            (download_pool_node, highest_cert_share, admins)
-        } else {
-            // If we cannot deploy read-only access to the subnet, this would mean that the CUP is
-            // corrupted on enough nodes to stall the subnet which, in practice, should happen only
-            // during upgrades. In that case, all nodes stalled at the same height (the upgrade height)
-            // and the node with admin access should have the highest certification height, which
-            // can be used to download both the consensus pool and the state. We would then replay
-            // until the highest certification height that this node has seen. Though, this also
-            // means that this node requires admin access.
-            //
-            // Note: inside this system test, it is not the case that all nodes stalled at the same
-            // height. But since we do not break `download_state_node`, we know that it will have the
-            // highest certification height available in the subnet.
+        (download_pool_node, highest_cert_share, admins)
+    } else {
+        // If we cannot deploy read-only access to the subnet, this would mean that the CUP is
+        // corrupted on enough nodes to stall the subnet which, in practice, should happen only
+        // during upgrades. In that case, all nodes stalled at the same height (the upgrade height)
+        // and the node with admin access should have the highest certification height, which
+        // can be used to download both the consensus pool and the state. We would then replay
+        // until the highest certification height that this node has seen. Though, this also
+        // means that this node requires admin access.
+        //
+        // Note: inside this system test, it is not the case that all nodes stalled at the same
+        // height. But since we do not break `download_state_node`, we know that it will have the
+        // highest certification height available in the subnet.
 
-            let download_pool_node = download_state_node.clone();
-            let node_cert_share = block_on(get_node_metrics(
-                &logger,
-                &download_state_node.get_ip_addr(),
-            ))
-            .unwrap()
-            .certification_share_height
-            .get();
-            let admins = vec![&upload_node, &download_state_node];
+        let download_pool_node = download_state_node.clone();
+        info!(
+            logger,
+            "Using node {} ({:?}) both as download pool and download state node as read-only access cannot be deployed",
+            download_pool_node.node_id,
+            download_pool_node.get_ip_addr(),
+        );
+        let node_cert_share = block_on(get_node_metrics(
+            &logger,
+            &download_state_node.get_ip_addr(),
+        ))
+        .unwrap()
+        .certification_share_height
+        .get();
+        let admins = vec![&upload_node, &download_state_node];
 
-            (download_pool_node, node_cert_share, admins)
-        };
+        (download_pool_node, node_cert_share, admins)
+    };
 
     if cfg.corrupt_cup {
         info!(logger, "Corrupting the latest CUP on all nodes");
