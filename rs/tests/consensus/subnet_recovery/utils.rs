@@ -216,8 +216,8 @@ pub fn node_with_highest_certification_share_height(
 ) -> (IcNodeSnapshot, u64) {
     subnet
         .nodes()
-        .map(|n| (n, get_node_certification_share_height(&n, logger)))
-        .max_by_key(|&(_, cert_height)| cert_height) // Option's Ord: None < Some(_)
+        .filter_map(|n| get_node_certification_share_height(&n, logger).map(|h| (n, h)))
+        .max_by_key(|&(_, cert_height)| cert_height)
         .expect("No healthy node found")
 }
 
