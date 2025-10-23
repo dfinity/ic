@@ -40,8 +40,8 @@ use ic_types::{
     messages::{CallbackId, Payload as ResponsePayload, RejectContext},
 };
 use num_traits::ops::saturating::SaturatingSub;
+use rayon::ThreadPool;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::time::Duration;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -92,6 +92,7 @@ impl VetKdPayloadBuilderImpl {
         cache: Arc<dyn ConsensusPoolCache>,
         crypto: Arc<dyn ConsensusCrypto>,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
+        thread_pool: Arc<ThreadPool>,
         subnet_id: SubnetId,
         registry: Arc<dyn RegistryClient>,
         metrics_registry: &MetricsRegistry,
@@ -102,7 +103,7 @@ impl VetKdPayloadBuilderImpl {
             cache,
             crypto,
             state_reader,
-            thread_pool: Arc::new(ThreadPoolBuilder::new().num_threads(16).build().unwrap()),
+            thread_pool,
             subnet_id,
             registry,
             metrics: VetKdPayloadBuilderMetrics::new(metrics_registry),
@@ -597,6 +598,7 @@ mod tests {
     use ic_types::time::UNIX_EPOCH;
     use ic_types::time::current_time;
     use ic_types_test_utils::ids::{node_test_id, subnet_test_id};
+    use rayon::ThreadPoolBuilder;
     use std::str::FromStr;
 
     use super::*;
@@ -764,6 +766,7 @@ mod tests {
                 pool.get_cache(),
                 crypto,
                 state_manager,
+                Arc::new(ThreadPoolBuilder::new().num_threads(16).build().unwrap()),
                 subnet_id,
                 registry,
                 &MetricsRegistry::new(),

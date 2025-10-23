@@ -82,7 +82,7 @@ pub(crate) const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
 pub(crate) const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 130;
 
 /// The maximum number of threads used to create & validate block payloads in parallel.
-pub(crate) const MAX_CONSENSUS_THREADS: usize = 16;
+pub const MAX_CONSENSUS_THREADS: usize = 16;
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
@@ -116,7 +116,7 @@ pub(crate) fn check_protocol_version(
 }
 
 /// Builds a rayon thread pool with the given number of threads.
-pub(crate) fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
+pub fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
     Arc::new(
         ThreadPoolBuilder::new()
             .num_threads(num_threads)
@@ -173,6 +173,7 @@ impl ConsensusImpl {
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
         message_routing: Arc<dyn MessageRouting>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        thread_pool: Arc<ThreadPool>,
         time_source: Arc<dyn TimeSource>,
         registry_poll_delay_duration_ms: u64,
         malicious_flags: MaliciousFlags,
@@ -212,8 +213,6 @@ impl ConsensusImpl {
         last_invoked.insert(ConsensusSubcomponent::Validator, current_time);
         last_invoked.insert(ConsensusSubcomponent::Aggregator, current_time);
         last_invoked.insert(ConsensusSubcomponent::Purger, current_time);
-
-        let thread_pool = build_thread_pool(MAX_CONSENSUS_THREADS);
 
         ConsensusImpl {
             dkg_key_manager,
@@ -723,6 +722,7 @@ mod tests {
             ))),
             Arc::new(FakeMessageRouting::new()),
             state_manager,
+            build_thread_pool(MAX_CONSENSUS_THREADS),
             time_source.clone(),
             0,
             MaliciousFlags::default(),
