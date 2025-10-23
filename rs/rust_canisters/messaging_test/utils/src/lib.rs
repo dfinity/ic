@@ -11,48 +11,55 @@ const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize
  * are defined here.
  */
 
-/// Generates an arbitrary `Call` using reasonable default input ranges.
-pub fn arb_call(receivers: Vec<CanisterId>) -> impl Strategy<Value = Call> {
-    arb_call_with_config(
-        receivers,
-        0..=MAX_PAYLOAD_SIZE, // call_bytes_range
-        0..=MAX_PAYLOAD_SIZE, // reply_bytes_range
-        50,                   // best_effort_percentage
-        1..=300,              // timeout_secs_range
-        33,                   // make_calls_percentage
-        50,                   // max_total_calls
-        1..=3,                // calls_count_range
-    )
+/// Parameters for generating arbitrary `Calls`.
+pub struct CallConfig {
+    pub receivers: Vec<CanisterId>,
+    pub call_bytes_range: RangeInclusive<usize>,
+    pub reply_bytes_range: RangeInclusive<usize>,
+    pub best_effort_percentage: usize,
+    pub timeout_secs_range: RangeInclusive<usize>,
+    pub make_calls_percentage: usize,
+    pub max_total_calls: usize,
+    pub calls_count_range: RangeInclusive<usize>,
+}
+
+impl Default for CallConfig {
+    fn default() -> Self {
+        Self {
+            receivers: Vec::new(),
+            call_bytes_range: 0..=MAX_PAYLOAD_SIZE,
+            reply_bytes_range: 0..=MAX_PAYLOAD_SIZE,
+            best_effort_percentage: 50,
+            timeout_secs_range: 1..=300,
+            make_calls_percentage: 33,
+            max_total_calls: 50,
+            calls_count_range: 1..=3,
+        }
+    }
 }
 
 /// Generates an arbitrary `Call` including downstream calls.
 ///
 /// Starts with a list of `counts` and a correspondingly sized list of simple calls,
 /// then recursively generates one call with nested downstream calls from them.
-pub fn arb_call_with_config(
-    receivers: Vec<CanisterId>,
-    call_bytes_range: RangeInclusive<usize>,
-    reply_bytes_range: RangeInclusive<usize>,
-    best_effort_percentage: usize,
-    timeout_secs_range: RangeInclusive<usize>,
-    make_calls_percentage: usize,
-    max_total_calls: usize,
-    calls_count_range: RangeInclusive<usize>,
-) -> impl Strategy<Value = Call> {
+pub fn arb_call(config: CallConfig) -> impl Strategy<Value = Call> {
     proptest::collection::vec(
-        arb_call_count(make_calls_percentage, calls_count_range.clone()),
-        max_total_calls,
+        arb_call_count(
+            config.make_calls_percentage,
+            config.calls_count_range.clone(),
+        ),
+        config.max_total_calls,
     )
     .prop_flat_map(move |counts| {
         let s: usize = counts.iter().sum();
         (
             proptest::collection::vec(
                 arb_simple_call(
-                    receivers.clone(),
-                    call_bytes_range.clone(),
-                    reply_bytes_range.clone(),
-                    best_effort_percentage,
-                    timeout_secs_range.clone(),
+                    config.receivers.clone(),
+                    config.call_bytes_range.clone(),
+                    config.reply_bytes_range.clone(),
+                    config.best_effort_percentage,
+                    config.timeout_secs_range.clone(),
                 ),
                 s + 1, // + 1 to make sure there is at least one call we can return.
             ),
