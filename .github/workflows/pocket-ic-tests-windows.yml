@@ -49,7 +49,8 @@ jobs:
     needs: [run-pocket-ic-tests]
     if: ${{ needs.run-pocket-ic-tests.outputs.run-pocket-ic-tests == 'true' }}
     steps:
-      - name: Checkout
+      - &checkout
+        name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
@@ -82,10 +83,7 @@ jobs:
     needs: [run-pocket-ic-tests]
     if: ${{ needs.run-pocket-ic-tests.outputs.run-pocket-ic-tests == 'true' }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - *checkout
       - name: Linting
         run: |
           cargo clippy -p pocket-ic --locked --all-features --all-targets -- -D warnings -D clippy::all -D clippy::mem_forget -C debug-assertions=off -A clippy::uninlined_format_args
@@ -95,10 +93,7 @@ jobs:
     needs: [bazel-build-pocket-ic]
     runs-on: windows-2022
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+      - *checkout
       - name: Download PocketIC server
         uses: actions/download-artifact@v4
         with:
