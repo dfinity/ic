@@ -115,6 +115,39 @@ alias(
     }),
 )
 
+### rclone, used for uploading artifacts to S3-compatible storage
+
+alias(
+    name = "rclone",
+    actual = select({
+        "@platforms//os:osx": "@rclone-x86_64-darwin//:rclone",  # No arm64 build for this version, use amd64 for now.
+        "@bazel_tools//src/conditions:linux_x86_64": "@rclone-x86_64-linux//:rclone",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### dfx
+
+alias(
+    name = "dfx",
+    actual = select({
+        "@platforms//os:osx": "@dfx-x86_64-darwin//:dfx",  # No arm64 build for this version, use amd64 for now.
+        "@bazel_tools//src/conditions:linux_x86_64": "@dfx-x86_64-linux//:dfx",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### didc, used in fuzz testing
+
+alias(
+    name = "didc",
+    actual = select({
+        "@platforms//os:osx": "@didc-x86_64-darwin//file:didc",  # No arm64 build for this version, use amd64 for now.
+        "@bazel_tools//src/conditions:linux_x86_64": "@didc-x86_64-linux//file:didc",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
 ### Pocket IC
 
 # The pocket-ic server binary. Use this as a test dependency if the test

@@ -10,6 +10,7 @@ mod tests;
 
 use crate::execution_environment::full_subnet_memory_capacity;
 use crate::{
+    CanisterManager,
     canister_logs::fetch_canister_logs,
     hypervisor::Hypervisor,
     metrics::{MeasurementScope, QueryHandlerMetrics},
@@ -102,6 +103,7 @@ fn label<T: Into<Label>>(t: T) -> Label {
 pub struct InternalHttpQueryHandler {
     log: ReplicaLogger,
     hypervisor: Arc<Hypervisor>,
+    canister_manager: Arc<CanisterManager>,
     own_subnet_type: SubnetType,
     config: Config,
     metrics: QueryHandlerMetrics,
@@ -112,9 +114,10 @@ pub struct InternalHttpQueryHandler {
 }
 
 impl InternalHttpQueryHandler {
-    pub fn new(
+    pub(crate) fn new(
         log: ReplicaLogger,
         hypervisor: Arc<Hypervisor>,
+        canister_manager: Arc<CanisterManager>,
         own_subnet_type: SubnetType,
         config: Config,
         metrics_registry: &MetricsRegistry,
@@ -128,6 +131,7 @@ impl InternalHttpQueryHandler {
         Self {
             log,
             hypervisor,
+            canister_manager,
             own_subnet_type,
             config,
             metrics: QueryHandlerMetrics::new(metrics_registry),
@@ -169,6 +173,7 @@ impl InternalHttpQueryHandler {
         state: Labeled<Arc<ReplicatedState>>,
         data_certificate: Vec<u8>,
         certificate_delegation_metadata: Option<CertificateDelegationMetadata>,
+        enable_query_stats_tracking: bool,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
 
@@ -206,8 +211,7 @@ impl InternalHttpQueryHandler {
                                 )
                             })?;
                     let since = Instant::now(); // Start logging execution time.
-                    let response = crate::canister_manager::get_canister_status(
-                        Arc::clone(&self.cycles_account_manager),
+                    let response = self.canister_manager.get_canister_status(
                         query.source(),
                         canister,
                         state
@@ -236,7 +240,9 @@ impl InternalHttpQueryHandler {
             };
         }
 
-        let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled {
+        let query_stats_collector = if self.config.query_stats_aggregation == FlagStatus::Enabled
+            && enable_query_stats_tracking
+        {
             Some(&self.local_query_execution_stats)
         } else {
             None
@@ -336,6 +342,7 @@ pub(crate) struct HttpQueryHandler {
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     query_scheduler: QueryScheduler,
     metrics: Arc<HttpQueryHandlerMetrics>,
+    enable_query_stats_tracking: bool,
 }
 
 impl HttpQueryHandler {
@@ -345,12 +352,14 @@ impl HttpQueryHandler {
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
         namespace: &str,
+        enable_query_stats_tracking: bool,
     ) -> QueryExecutionService {
         BoxCloneService::new(Self {
             internal,
             state_reader,
             query_scheduler,
             metrics: Arc::new(HttpQueryHandlerMetrics::new(metrics_registry, namespace)),
+            enable_query_stats_tracking,
         })
     }
 }
@@ -378,6 +387,7 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
         let canister_id = query.receiver;
         let latest_certified_height_pre_schedule = state_reader.latest_certified_height();
         let http_query_handler_metrics = Arc::clone(&self.metrics);
+        let enable_query_stats_tracking = self.enable_query_stats_tracking;
         self.query_scheduler.push(canister_id, move || {
             let start = std::time::Instant::now();
             if !tx.is_closed() {
@@ -411,8 +421,13 @@ impl Service<QueryExecutionInput> for HttpQueryHandler {
                             .height_diff_during_query_scheduling
                             .observe(height_diff as f64);
 
-                        let response =
-                            internal.query(query, state, cert, certificate_delegation_metadata);
+                        let response = internal.query(
+                            query,
+                            state,
+                            cert,
+                            certificate_delegation_metadata,
+                            enable_query_stats_tracking,
+                        );
 
                         Ok((response, time))
                     }

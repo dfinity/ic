@@ -3,7 +3,8 @@ pub mod types;
 
 use super::StateManagerImpl;
 use crate::{
-    EXTRA_CHECKPOINTS_TO_KEEP, NUMBER_OF_CHECKPOINT_THREADS, StateSyncRefs,
+    EXTRA_CHECKPOINTS_TO_KEEP, LABEL_LOAD_AND_VALIDATE_CHECKPOINT, LABEL_ON_SYNCED_CHECKPOINT,
+    NUMBER_OF_CHECKPOINT_THREADS, StateSyncRefs,
     manifest::build_file_group_chunks,
     state_sync::types::{FileGroupChunks, Manifest, MetaManifest, StateSyncMessage},
 };
@@ -84,7 +85,16 @@ impl StateSync {
         manifest: Manifest,
         meta_manifest: Arc<MetaManifest>,
     ) {
-        info!(self.log, "Received state {} at height", height);
+        info!(
+            self.log,
+            "Starting to deliver the synced state at height {}", height
+        );
+        let state_sync_metrics = &self.state_manager.metrics.state_sync_metrics;
+
+        let timer = state_sync_metrics
+            .step_duration
+            .with_label_values(&[LABEL_LOAD_AND_VALIDATE_CHECKPOINT])
+            .start_timer();
         let ro_layout = self
             .state_manager
             .state_layout
@@ -107,6 +117,12 @@ impl StateSync {
                 );
             }
         };
+        drop(timer);
+
+        let _timer = state_sync_metrics
+            .step_duration
+            .with_label_values(&[LABEL_ON_SYNCED_CHECKPOINT])
+            .start_timer();
         self.state_manager.on_synced_checkpoint(
             state,
             ro_layout,

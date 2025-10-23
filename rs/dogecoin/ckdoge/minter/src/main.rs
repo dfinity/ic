@@ -1,13 +1,14 @@
-use ic_cdk::{init, post_upgrade, update};
-use ic_ckbtc_minter::state::eventlog::EventType;
+use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
+use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
 use ic_ckdoge_minter::{
-    DOGECOIN_CANISTER_RUNTIME,
+    DOGECOIN_CANISTER_RUNTIME, Event, EventType, GetEventsArg,
     candid_api::{RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError},
     lifecycle::init::MinterArg,
     updates,
 };
+use ic_http_types::{HttpRequest, HttpResponse};
 
 #[init]
 fn init(args: MinterArg) {
@@ -39,7 +40,16 @@ fn post_upgrade() {
 
 #[update]
 async fn get_doge_address(args: GetDogeAddressArgs) -> String {
-    updates::get_doge_address(args).await.unwrap()
+    updates::get_doge_address(args).await
+}
+
+#[update]
+async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
+    check_anonymous_caller();
+    check_postcondition(
+        ic_ckbtc_minter::updates::update_balance::update_balance(args, &DOGECOIN_CANISTER_RUNTIME)
+            .await,
+    )
 }
 
 #[update]
@@ -101,6 +111,30 @@ fn check_invariants() -> Result<(), String> {
 
         Ok(())
     })
+}
+
+// TODO XC-495: Currently events from ckBTC are re-used and it might be worthwhile to split
+// both types of events:
+// 1) ckBTC has some deprecated events only for backwards-compatibility purposes
+// 2) Some events, related to KYT are not applicable to Dogecoin.
+// 3) Some fundamental types like BitcoinAddress are also misused to fit in a Dogecoin address.
+#[query(hidden = true)]
+fn get_events(args: GetEventsArg) -> Vec<Event> {
+    const MAX_EVENTS_PER_QUERY: usize = 2000;
+
+    ic_ckbtc_minter::storage::events()
+        .skip(args.start as usize)
+        .take(MAX_EVENTS_PER_QUERY.min(args.length as usize))
+        .collect()
+}
+
+#[query(hidden = true)]
+fn http_request(req: HttpRequest) -> HttpResponse {
+    if ic_cdk::api::in_replicated_execution() {
+        ic_cdk::trap("update call rejected");
+    }
+
+    ic_ckbtc_minter::queries::http_request(req)
 }
 
 fn main() {}

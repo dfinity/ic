@@ -22,7 +22,7 @@ mod tls;
 pub type SevFirmwareFactory =
     Arc<dyn Fn() -> anyhow::Result<Box<dyn SevGuestFirmware>> + Send + Sync>;
 
-const DEFAULT_SUCCESS_TIMEOUT: Duration = Duration::from_secs(300);
+const DEFAULT_SUCCESS_TIMEOUT: Duration = Duration::from_secs(600);
 
 #[derive(Error, Debug)]
 pub enum DiskEncryptionKeyExchangeError {

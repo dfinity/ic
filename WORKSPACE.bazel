@@ -5,13 +5,15 @@ workspace(
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//bazel:mainnet-canisters.bzl", "canisters")
 load("//bazel:mainnet-icos-images.bzl", "get_mainnet_guestos_images", "get_mainnet_setupos_images")
-load("//third_party/jemalloc:repository.bzl", "jemalloc_repository")
-load("//third_party/lmdb:repository.bzl", "lmdb_repository")
 
 # We cannot derive the Bazel repository names (e.g. @mainnet_nns_registry_canister) directly
 # from the canister names because we use inconsistent repo names. Same goes for filenames.
 # For each new canister defined in the source JSON file (see `path`) a mapping can be added
 # from canister name (as per JSON) to filename (and to repo name, resp.).
+#
+# Additionally the `repositories` list GitHub repositories for canisters. If a canister has an
+# entry in `repositories`, then the source JSON file must specify a `tag` and the canister
+# artifact will be fetched from the tag's release page.
 canisters(
     name = "canisters",
     filenames = {
@@ -111,25 +113,9 @@ load("@canisters//:defs.bzl", "canister_deps")
 canister_deps()
 
 http_archive(
-    name = "aspect_rules_sol",
-    sha256 = "4e98a4572cd2c5f9e0a4118be3b8d2f0be148c80779ea9da646d0afabe2d609c",
-    strip_prefix = "rules_sol-0.1.0",
-    url = "https://github.com/aspect-build/rules_sol/releases/download/v0.1.0/rules_sol-v0.1.0.tar.gz",
-)
-
-load("@aspect_rules_sol//sol:repositories.bzl", "rules_sol_dependencies", "sol_register_toolchains")
-
-rules_sol_dependencies()
-
-sol_register_toolchains(
-    name = "solc",
-    sol_version = "0.8.18",
-)
-
-http_archive(
     name = "rules_rust",
-    integrity = "sha256-2GH766nwQzOgrmnkSO6D1pF/JC3bt/41xo/CEqarpUY=",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.64.0/rules_rust-0.64.0.tar.gz"],
+    integrity = "sha256-5Kgp+5cZcrJoTOUq9CF6KJdNsB2zNzvYM9UnYMoY5lc=",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.66.0/rules_rust-0.66.0.tar.gz"],
 )
 
 load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
@@ -144,20 +130,12 @@ crate_universe_dependencies()
 
 rust_register_toolchains(
     edition = "2024",
-    extra_rustc_flags = {
-        # We need to use lld on aarch64-linux because the default gold linker runs into the following bug when linking pocket-ic-server:
-        # /usr/bin/ld.gold: internal error in update_erratum_insn, at ../../gold/aarch64.cc:1003
-        "aarch64-unknown-linux-gnu": [
-            "-C",
-            "link-arg=-fuse-ld=lld",
-        ],
-    },
     strip_level = {"x86_64-unknown-linux-gnu": {
         "dbg": "none",
         "fastbuild": "none",
         "opt": "none",
     }},
-    versions = ["1.89.0"],
+    versions = ["1.90.0"],
 )
 
 load("//bazel:external_crates.bzl", "external_crates_repository")
@@ -185,22 +163,11 @@ load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
 
 rules_motoko_dependencies()
 
-# Third party dependencies that require special treatment
-
-lmdb_repository()
-
-jemalloc_repository()
-
 # Rosetta CLI
 
 load("//bazel:rosetta_cli.bzl", "rosetta_cli_repository")
 
 rosetta_cli_repository(name = "rosetta-cli")
-
-# rclone binary for upload_artifacts
-load("//bazel:rclone.bzl", "rclone_repository")
-
-rclone_repository(name = "rclone")
 
 # trivy binary for vulnerability scanning
 load("//bazel:trivy.bzl", "trivy_scan")
@@ -221,31 +188,6 @@ ruff(name = "ruff")
 load("//pre-commit:ormolu.bzl", "ormolu")
 
 ormolu(name = "ormolu")
-
-# buf binary for protobuf linting
-load("//pre-commit:buf.bzl", "buf")
-
-buf(name = "buf")
-
-# candid binary
-load("//pre-commit:candid.bzl", "candid")
-
-candid(name = "candid")
-
-# dfx binary for haskell linting
-load("//bazel:dfx.bzl", "dfx")
-
-dfx(name = "dfx")
-
-# sns-quill for SNS testing
-load("//bazel:sns_quill.bzl", "sns_quill")
-
-sns_quill(name = "sns_quill")
-
-# idl2json for SNS testing
-load("//bazel:idl2json.bzl", "idl_to_json")
-
-idl_to_json(name = "idl2json")
 
 # Mainnet ICOS image support
 get_mainnet_setupos_images()

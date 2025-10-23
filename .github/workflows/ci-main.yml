@@ -40,7 +40,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:9cfd9ecc6f751d631b74058643233aecc75a6d4b18501ae0c9fd0f2c1a110ac4
+      image: ghcr.io/dfinity/ic-build@sha256:19aa596f49db34ece26a1a2903e6fabcd8766025b3dc543546fbef341ef910a2
       options: >-
          -e NODE_NAME --privileged --cgroupns host
     steps:
@@ -339,14 +339,7 @@ jobs:
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
-      # We need to use lld on aarch64-linux because the default gold linker runs into the following linker bug:
-      # /usr/bin/ld.gold: internal error in update_erratum_insn, at ../../gold/aarch64.cc:1003
-      - name: Install lld
-        if: ${{ matrix.os == 'linux' }}
-        run: |
-          sudo apt install lld
-
-      - name: Build PocketIC server to publish
+      - name: Build and Test
         run: |
           bazel \
             --noworkspace_rc \

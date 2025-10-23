@@ -71,7 +71,7 @@ fn random_bit_indices_works_correctly() {
 
             // check that all indices are unique
             random_indices.sort_unstable();
-            let all_unique = random_indices.windows(2).all(|x| (x[0] != x[1]));
+            let all_unique = random_indices.windows(2).all(|x| x[0] != x[1]);
             assert!(all_unique);
         }
     }

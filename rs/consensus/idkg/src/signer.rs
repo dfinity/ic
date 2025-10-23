@@ -864,6 +864,7 @@ mod tests {
         generate_tecdsa_protocol_inputs, generate_tschnorr_protocol_inputs, run_tecdsa_protocol,
         run_tschnorr_protocol,
     };
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_management_canister_types_private::{MasterPublicKeyId, SchnorrAlgorithm};
@@ -871,7 +872,6 @@ mod tests {
         EcdsaArguments, EcdsaMatchedPreSignature, SchnorrArguments, SchnorrMatchedPreSignature,
         ThresholdArguments, VetKdArguments,
     };
-    use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_consensus::{IDkgStatsNoOp, idkg::*};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_types::{
@@ -1376,7 +1376,7 @@ mod tests {
                             logger,
                             &env,
                             &inputs.receivers().clone(),
-                            &ThresholdSigInputs::Schnorr(inputs),
+                            &ThresholdSigInputs::Schnorr(inputs.as_ref()),
                         );
                     }
                     MasterPublicKeyId::VetKd(_) => panic!("not applicable to vetKD"),
@@ -2091,9 +2091,12 @@ mod tests {
                     .nodes
                     .filter_by_receivers(&sig_inputs)
                     .map(|receiver| {
-                        receiver.load_tschnorr_sig_transcripts(&sig_inputs);
-                        let share = ThresholdSchnorrSigner::create_sig_share(receiver, &sig_inputs)
-                            .expect("failed to create sig share");
+                        receiver.load_tschnorr_sig_transcripts(&sig_inputs.as_ref());
+                        let share = ThresholdSchnorrSigner::create_sig_share(
+                            receiver,
+                            &sig_inputs.as_ref(),
+                        )
+                        .expect("failed to create sig share");
                         SchnorrSigShare {
                             signer_id: receiver.id(),
                             request_id: req_id,
@@ -2116,8 +2119,11 @@ mod tests {
                 // Signature completion should succeed now.
                 let r1 = sig_builder.get_completed_signature(callback_id, &context);
                 // Compare to combined signature returned by crypto environment
-                let r2 =
-                    CombinedSignature::Schnorr(run_tschnorr_protocol(&env, &sig_inputs, &mut rng));
+                let r2 = CombinedSignature::Schnorr(run_tschnorr_protocol(
+                    &env,
+                    &sig_inputs.as_ref(),
+                    &mut rng,
+                ));
                 assert_matches!(r1, Some(ref s) if s == &r2);
 
                 // If the context's nonce hasn't been set yet, no signature should be completed
