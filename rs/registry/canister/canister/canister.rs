@@ -194,22 +194,22 @@ fn canister_init() {
             init_payload
                 .swapping_whitelisted_callers
                 .clone()
-                .unwrap_or(Vec::new()),
+                .unwrap_or_default(),
         );
         test_set_swapping_whitelisted_callers(
             init_payload
                 .swapping_whitelisted_callers
-                .unwrap_or(Vec::new()),
+                .unwrap_or_default(),
         );
         println!(
             "{LOG_PREFIX}canister_init: Swapping enabled on subnets: {:?}",
             init_payload
                 .swapping_enabled_subnets
                 .clone()
-                .unwrap_or(Vec::new()),
+                .unwrap_or_default(),
         );
         test_set_swapping_enabled_subnets(
-            init_payload.swapping_enabled_subnets.unwrap_or(Vec::new()),
+            init_payload.swapping_enabled_subnets.unwrap_or_default(),
         );
     }
 }
