@@ -209,14 +209,15 @@ impl VetKdPayloadBuilderImpl {
             )
         };
 
-        let accumulated_size = RwLock::new(0);
+        let accumulated_size_estimate = RwLock::new(0);
         let candidates = self.thread_pool.install(|| {
             state
                 .signature_request_contexts()
                 .par_iter()
                 .flat_map(|(callback_id, context)| {
-                    if NumBytes::new(*accumulated_size.read().unwrap()) >= max_payload_size {
-                        // Stop if the payload is full
+                    if NumBytes::new(*accumulated_size_estimate.read().unwrap()) >= max_payload_size
+                    {
+                        // Stop if the payload is full according to the accumulated estimate
                         return None;
                     }
 
@@ -287,9 +288,18 @@ impl VetKdPayloadBuilderImpl {
                         }
                     };
 
+                    // Estimate the canidate size by counting bytes, which is a lower bound compared
+                    // to actual serialization.
                     let candidate_size = callback_id.count_bytes() + candidate.count_bytes();
-                    let mut accumulated_size = accumulated_size.write().unwrap();
-                    *accumulated_size += candidate_size as u64;
+                    let mut accumulated_size_estimate = accumulated_size_estimate.write().unwrap();
+                    // We always include the created candidate, even if at this point the payload
+                    // may already be full (i.e. due to inaccurate size estimates, or other threads
+                    // filling up the payload in the meantime).
+                    // Returning a payload that is "too large" here is fine, since the hard limit
+                    // is enforced after all candidates are serialized in `vetkd_payload_to_bytes`.
+                    // The size estimate in this function exists primarily to avoid computing
+                    // significantly more candidates than necessary.
+                    *accumulated_size_estimate += candidate_size as u64;
                     Some((*callback_id, candidate))
                 })
                 .collect::<BTreeMap<_, _>>()
