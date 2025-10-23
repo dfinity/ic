@@ -71,6 +71,13 @@ pub struct InitArgs {
 }
 
 pub fn init<R: CanisterRuntime>(args: InitArgs, runtime: &R) {
+    use crate::logs::Priority;
+    use canlog::log;
+
+    log!(
+        Priority::Info,
+        "[init]: Initializing canister with args {args:?}"
+    );
     let state: CkBtcMinterState = CkBtcMinterState::from(args);
     runtime.validate_config(&state);
     replace_state(state);

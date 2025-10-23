@@ -1,4 +1,5 @@
 mod dogecoin;
+mod events;
 mod ledger;
 mod minter;
 
