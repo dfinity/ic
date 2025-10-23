@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use config::guestos::bootstrap_ic_node::populate_nns_public_key;
 use config::guestos::{bootstrap_ic_node::bootstrap_ic_node, generate_ic_config};
 use config::serialize_and_write_config;
-use config::setupos::config_ini::{get_config_ini_settings, ConfigIniSettings};
+use config::setupos::config_ini::{ConfigIniSettings, get_config_ini_settings};
 use config::setupos::deployment_json::get_deployment_settings;
 use config_types::*;
 use network::resolve_mgmt_mac;
