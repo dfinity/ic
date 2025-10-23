@@ -6,6 +6,11 @@ module(
     name = "ic",
 )
 
+ext = use_extension("@rules_buf//buf:extensions.bzl", "buf")
+use_repo(ext, "rules_buf_toolchains")
+
+register_toolchains("@rules_buf_toolchains//:all")
+
 # General Bazel helpers
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
@@ -74,6 +79,9 @@ bazel_dep(
     # We rename it to keep the legacy name used throughout our bazel files
     repo_name = "com_google_protobuf",
 )
+
+# protobuf linter
+bazel_dep(name = "rules_buf", version = "0.5.2")
 
 # Go dependencies
 
