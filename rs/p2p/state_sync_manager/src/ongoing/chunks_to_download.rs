@@ -10,7 +10,7 @@ impl ChunksToDownload {
         Self { chunks: vec![] }
     }
 
-    // Add chunks to the chunks to download list
+    /// Add chunks to the chunks to download list
     pub(crate) fn add_chunks(&mut self, chunks: impl Iterator<Item = ChunkId>) -> usize {
         let initial_len = self.chunks.len();
         self.chunks.extend(chunks);
