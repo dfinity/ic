@@ -1,0 +1,8 @@
+{
+  "type_name": "Insert SNS-W Upgrade Path Entries",
+  "type_description": "Insert custom upgrade path entries into SNS-W for all SNSs, or for an SNS specified by its governance canister ID.",
+  "value": {
+    "sns_governance_canister_id": [],
+    "upgrade_path": ""
+  }
+}

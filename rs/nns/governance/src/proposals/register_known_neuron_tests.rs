@@ -1,11 +1,9 @@
-use super::*;
-
 use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_store::NeuronStore,
     pb::v1::{KnownNeuron, KnownNeuronData, Topic, governance_error::ErrorType},
     proposals::register_known_neuron::{
-        KNOWN_NEURON_DESCRIPTION_MAX_LEN, KNOWN_NEURON_NAME_MAX_LEN,
+        KNOWN_NEURON_DESCRIPTION_MAX_LEN, KNOWN_NEURON_NAME_MAX_LEN, ValidRegisterKnownNeuron,
     },
 };
 use assert_matches::assert_matches;
@@ -67,12 +65,12 @@ fn test_validate_success() {
         }),
     };
 
-    assert_eq!(request.validate(&neuron_store), Ok(()));
+    let valid_request = ValidRegisterKnownNeuron::try_from(request).unwrap();
+    assert_eq!(valid_request.validate(&neuron_store), Ok(()));
 }
 
 #[test]
 fn test_validate_missing_neuron_id() {
-    let neuron_store = create_test_neuron_store();
     let request = KnownNeuron {
         id: None,
         known_neuron_data: Some(KnownNeuronData {
@@ -83,27 +81,24 @@ fn test_validate_missing_neuron_id() {
         }),
     };
 
-    let result = request.validate(&neuron_store);
+    let result = ValidRegisterKnownNeuron::try_from(request);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
-            && error.error_message.contains("No neuron ID specified")
+        Err(error) if error.contains("No neuron ID specified")
     );
 }
 
 #[test]
 fn test_validate_missing_known_neuron_data() {
-    let neuron_store = create_test_neuron_store();
     let request = KnownNeuron {
         id: Some(NeuronId { id: 1 }),
         known_neuron_data: None,
     };
 
-    let result = request.validate(&neuron_store);
+    let result = ValidRegisterKnownNeuron::try_from(request);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
-            && error.error_message.contains("No known neuron data specified")
+        Err(error) if error.contains("No known neuron data specified")
     );
 }
 
@@ -120,7 +115,8 @@ fn test_validate_nonexistent_neuron() {
         }),
     };
 
-    let result = request.validate(&neuron_store);
+    let valid_request = ValidRegisterKnownNeuron::try_from(request).unwrap();
+    let result = valid_request.validate(&neuron_store);
     assert_matches!(
         result,
         Err(error) if error.error_type == ErrorType::NotFound as i32
@@ -130,7 +126,6 @@ fn test_validate_nonexistent_neuron() {
 
 #[test]
 fn test_validate_name_empty() {
-    let neuron_store = create_test_neuron_store();
     let request = KnownNeuron {
         id: Some(NeuronId { id: 1 }),
         known_neuron_data: Some(KnownNeuronData {
@@ -141,17 +136,15 @@ fn test_validate_name_empty() {
         }),
     };
 
-    let result = request.validate(&neuron_store);
+    let result = ValidRegisterKnownNeuron::try_from(request);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
-            && error.error_message.contains("The neuron's name is empty.")
+        Err(error) if error.contains("The neuron's name is empty.")
     );
 }
 
 #[test]
 fn test_validate_name_too_long() {
-    let neuron_store = create_test_neuron_store();
     let long_name = "a".repeat(KNOWN_NEURON_NAME_MAX_LEN + 1);
     let request = KnownNeuron {
         id: Some(NeuronId { id: 1 }),
@@ -163,18 +156,16 @@ fn test_validate_name_too_long() {
         }),
     };
 
-    let result = request.validate(&neuron_store);
+    let result = ValidRegisterKnownNeuron::try_from(request);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
-            && error.error_message.contains("maximum number of bytes for a neuron's name")
-            && error.error_message.contains(&format!("{}", KNOWN_NEURON_NAME_MAX_LEN))
+        Err(error) if error.contains("maximum number of bytes for a neuron's name")
+            && error.contains(&format!("{}", KNOWN_NEURON_NAME_MAX_LEN))
     );
 }
 
 #[test]
 fn test_validate_description_too_long() {
-    let neuron_store = create_test_neuron_store();
     let long_description = "a".repeat(KNOWN_NEURON_DESCRIPTION_MAX_LEN + 1);
     let request = KnownNeuron {
         id: Some(NeuronId { id: 1 }),
@@ -186,18 +177,16 @@ fn test_validate_description_too_long() {
         }),
     };
 
-    let result = request.validate(&neuron_store);
+    let result = ValidRegisterKnownNeuron::try_from(request);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
-            && error.error_message.contains("maximum number of bytes for a neuron's description")
-            && error.error_message.contains(&format!("{}", KNOWN_NEURON_DESCRIPTION_MAX_LEN))
+        Err(error) if error.contains("maximum number of bytes for a neuron's description")
+            && error.contains(&format!("{}", KNOWN_NEURON_DESCRIPTION_MAX_LEN))
     );
 }
 
 #[test]
 fn test_validate_too_many_links() {
-    let neuron_store = create_test_neuron_store();
     let too_many_links: Vec<String> = (0..11)
         .map(|i| format!("https://example{}.com", i))
         .collect();
@@ -212,18 +201,15 @@ fn test_validate_too_many_links() {
         }),
     };
 
-    let result = request.validate(&neuron_store);
+    let result = ValidRegisterKnownNeuron::try_from(request);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
-            && error.error_message.contains("The maximum number of links")
-            && error.error_message.contains(&format!("{}", MAX_KNOWN_NEURON_LINKS))
+        Err(error) if error.contains("The maximum number of links")
     );
 }
 
 #[test]
 fn test_validate_link_too_long() {
-    let neuron_store = create_test_neuron_store();
     let long_link = format!("https://{}.com", "a".repeat(89)); // 101 characters total
 
     let request = KnownNeuron {
@@ -236,19 +222,17 @@ fn test_validate_link_too_long() {
         }),
     };
 
-    let result = request.validate(&neuron_store);
+    let result = ValidRegisterKnownNeuron::try_from(request);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
-            && error.error_message.contains("Link at index 0 is not valid")
-            && error.error_message.contains("100 characters long")
-            && error.error_message.contains("but it is 101 characters long")
+        Err(error) if error.contains("Link at index 0 is not valid")
+            && error.contains("100 characters long")
+            && error.contains("but it is 101 characters long")
     );
 }
 
 #[test]
 fn test_validate_link_invalid() {
-    let neuron_store = create_test_neuron_store();
     let invalid_link = "http://not-secure.com".to_string();
 
     let request = KnownNeuron {
@@ -261,12 +245,11 @@ fn test_validate_link_invalid() {
         }),
     };
 
-    let result = request.validate(&neuron_store);
+    let result = ValidRegisterKnownNeuron::try_from(request);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
-            && error.error_message.contains("Link at index 0 is not valid")
-            && error.error_message.contains("https://")
+        Err(error) if error.contains("Link at index 0 is not valid")
+            && error.contains("https://")
     );
 }
 
@@ -283,7 +266,8 @@ fn test_validate_name_already_exists() {
         }),
     };
 
-    let result = request.validate(&neuron_store);
+    let valid_request = ValidRegisterKnownNeuron::try_from(request).unwrap();
+    let result = valid_request.validate(&neuron_store);
     assert_matches!(
         result,
         Err(error) if error.error_type == ErrorType::PreconditionFailed as i32
@@ -309,7 +293,8 @@ fn test_validate_maximum_valid_links() {
         }),
     };
 
-    let result = request.validate(&neuron_store);
+    let valid_request = ValidRegisterKnownNeuron::try_from(request).unwrap();
+    let result = valid_request.validate(&neuron_store);
     assert_eq!(
         result,
         Ok(()),
@@ -332,7 +317,8 @@ fn test_validate_maximum_valid_link_size() {
         }),
     };
 
-    let result = request.validate(&neuron_store);
+    let valid_request = ValidRegisterKnownNeuron::try_from(request).unwrap();
+    let result = valid_request.validate(&neuron_store);
     assert_eq!(
         result,
         Ok(()),
@@ -368,7 +354,8 @@ fn test_execute_success() {
     );
 
     // Execute the registration
-    assert_eq!(request.execute(&mut neuron_store), Ok(()));
+    let valid_request = ValidRegisterKnownNeuron::try_from(request).unwrap();
+    assert_eq!(valid_request.execute(&mut neuron_store), Ok(()));
 
     // Verify the known neuron data has been added
     let known_data_after = neuron_store
@@ -402,7 +389,8 @@ fn test_execute_validation_failure() {
         }),
     };
 
-    let result = request.execute(&mut neuron_store);
+    let valid_request = ValidRegisterKnownNeuron::try_from(request).unwrap();
+    let result = valid_request.execute(&mut neuron_store);
     assert_matches!(
         result,
         Err(error) if error.error_type == ErrorType::NotFound as i32
@@ -423,7 +411,8 @@ fn test_execute_name_conflict() {
         }),
     };
 
-    let result = request.execute(&mut neuron_store);
+    let valid_request = ValidRegisterKnownNeuron::try_from(request).unwrap();
+    let result = valid_request.execute(&mut neuron_store);
     assert_matches!(
         result,
         Err(error) if error.error_type == ErrorType::PreconditionFailed as i32
@@ -452,7 +441,8 @@ fn test_clobbering_same_neuron_allowed() {
     };
 
     // Execute the registration - should succeed
-    let result = request.execute(&mut neuron_store);
+    let valid_request = ValidRegisterKnownNeuron::try_from(request).unwrap();
+    let result = valid_request.execute(&mut neuron_store);
     assert_eq!(
         result,
         Ok(()),
@@ -474,7 +464,6 @@ fn test_clobbering_same_neuron_allowed() {
 
 #[test]
 fn test_validate_duplicate_committed_topics() {
-    let neuron_store = create_test_neuron_store();
     let request = KnownNeuron {
         id: Some(NeuronId { id: 1 }),
         known_neuron_data: Some(KnownNeuronData {
@@ -489,11 +478,10 @@ fn test_validate_duplicate_committed_topics() {
         }),
     };
 
-    let result = request.validate(&neuron_store);
+    let result = ValidRegisterKnownNeuron::try_from(request);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
-            && error.error_message.contains("Duplicate topic found in committed_topics")
-            && error.error_message.contains("3")
+        Err(error) if error.contains("Duplicate topic found in committed_topics")
+            && error.contains("2")
     );
 }

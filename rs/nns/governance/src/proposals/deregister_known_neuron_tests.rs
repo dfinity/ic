@@ -2,6 +2,7 @@ use crate::{
     neuron::{DissolveStateAndAge, NeuronBuilder},
     neuron_store::NeuronStore,
     pb::v1::{DeregisterKnownNeuron, KnownNeuronData, governance_error::ErrorType},
+    proposals::deregister_known_neuron::ValidDeregisterKnownNeuron,
 };
 use assert_matches::assert_matches;
 use ic_nns_common::pb::v1::NeuronId;
@@ -51,7 +52,8 @@ fn test_validate_success_with_known_neuron() {
         id: Some(NeuronId { id: 1 }),
     };
 
-    let result = request.validate(&neuron_store);
+    let valid_request = ValidDeregisterKnownNeuron::try_from(request).unwrap();
+    let result = valid_request.validate(&neuron_store);
     assert!(
         result.is_ok(),
         "Expected validation to succeed for known neuron"
@@ -60,14 +62,12 @@ fn test_validate_success_with_known_neuron() {
 
 #[test]
 fn test_validate_missing_neuron_id() {
-    let neuron_store = create_test_neuron_store();
     let request = DeregisterKnownNeuron { id: None };
 
-    let result = request.validate(&neuron_store);
+    let result = ValidDeregisterKnownNeuron::try_from(request);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
-            && error.error_message.contains("No neuron ID specified")
+        Err(error) if error.contains("No neuron ID specified")
     );
 }
 
@@ -78,7 +78,8 @@ fn test_validate_nonexistent_neuron() {
         id: Some(NeuronId { id: 999 }),
     };
 
-    let result = request.validate(&neuron_store);
+    let valid_request = ValidDeregisterKnownNeuron::try_from(request).unwrap();
+    let result = valid_request.validate(&neuron_store);
     assert_matches!(
         result,
         Err(error) if error.error_type == ErrorType::NotFound as i32
@@ -94,7 +95,8 @@ fn test_validate_regular_neuron_not_known() {
         id: Some(NeuronId { id: 2 }), // Regular neuron without known data
     };
 
-    let result = request.validate(&neuron_store);
+    let valid_request = ValidDeregisterKnownNeuron::try_from(request).unwrap();
+    let result = valid_request.validate(&neuron_store);
     assert_matches!(
         result,
         Err(error) if error.error_type == ErrorType::PreconditionFailed as i32
@@ -136,7 +138,8 @@ fn test_execute_success() {
     );
 
     // Execute the deregistration
-    let result = request.execute(&mut neuron_store);
+    let valid_request = ValidDeregisterKnownNeuron::try_from(request).unwrap();
+    let result = valid_request.execute(&mut neuron_store);
     assert!(result.is_ok(), "Execute should succeed: {result:?}");
 
     // Verify the known neuron data has been removed
@@ -163,14 +166,12 @@ fn test_execute_success() {
 
 #[test]
 fn test_execute_missing_neuron_id() {
-    let mut neuron_store = create_test_neuron_store();
     let request = DeregisterKnownNeuron { id: None };
 
-    let result = request.execute(&mut neuron_store);
+    let result = ValidDeregisterKnownNeuron::try_from(request);
     assert_matches!(
         result,
-        Err(error) if error.error_type == ErrorType::InvalidProposal as i32
-            && error.error_message.contains("No neuron ID specified")
+        Err(error) if error.contains("No neuron ID specified")
     );
 }
 
@@ -181,6 +182,7 @@ fn test_execute_nonexistent_neuron() {
         id: Some(NeuronId { id: 999 }),
     };
 
-    let result = request.execute(&mut neuron_store);
+    let valid_request = ValidDeregisterKnownNeuron::try_from(request).unwrap();
+    let result = valid_request.execute(&mut neuron_store);
     assert_matches!(result, Err(_), "Execute should fail for nonexistent neuron");
 }

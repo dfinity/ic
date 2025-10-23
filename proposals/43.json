@@ -1,0 +1,14 @@
+{
+  "type_name": "Prepare Canister Migration",
+  "type_description": "Insert or update canister migrations entries. Such entries specify that a migration of canister ID ranges is currently ongoing.<br/><br/>The steps of canister migration are:<ol><li>Prepare Canister Migration</li><li>Reroute Canister Ranges</li><li>Complete Canister Migration</li></ol>",
+  "value": {
+    "destination_subnet": "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    "source_subnet": "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    "canister_id_ranges": [
+      {
+        "end": "qsgjb-riaaa-aaaaa-aaaga-cai",
+        "start": "qoctq-giaaa-aaaaa-aaaea-cai"
+      }
+    ]
+  }
+}

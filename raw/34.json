@@ -1,0 +1,26 @@
+[
+  {
+    "type_description": [
+      "Remove unassigned nodes from the registry."
+    ],
+    "type_name": [
+      "Remove Nodes from Registry"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "node_ids",
+            "1": {
+              "Array": [
+                {
+                  "Text": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

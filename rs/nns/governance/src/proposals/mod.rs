@@ -1,21 +1,229 @@
 use crate::{
-    governance::LOG_PREFIX,
-    pb::v1::{GovernanceError, ProposalData, Topic, Vote, governance_error::ErrorType},
+    governance::{Environment, LOG_PREFIX},
+    pb::v1::{
+        ApproveGenesisKyc, CreateServiceNervousSystem, GenericProposalRepresentation,
+        GovernanceError, ManageNeuron, Motion, NetworkEconomics, ProposalData, RewardNodeProvider,
+        RewardNodeProviders, Topic, Vote, governance_error::ErrorType, proposal::Action,
+    },
+    proposals::{
+        add_or_remove_node_provider::ValidAddOrRemoveNodeProvider,
+        deregister_known_neuron::ValidDeregisterKnownNeuron,
+        execute_nns_function::ValidExecuteNnsFunction,
+        fulfill_subnet_rental_request::ValidFulfillSubnetRentalRequest, generic::LocalProposalType,
+        install_code::ValidInstallCode, register_known_neuron::ValidRegisterKnownNeuron,
+        stop_or_start_canister::ValidStopOrStartCanister,
+        update_canister_settings::ValidUpdateCanisterSettings,
+    },
 };
 use ic_base_types::CanisterId;
 use ic_cdk::println;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{PROTOCOL_CANISTER_IDS, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
+pub mod add_or_remove_node_provider;
 pub mod call_canister;
 pub mod create_service_nervous_system;
 pub mod deregister_known_neuron;
+pub mod execute_nns_function;
 pub mod fulfill_subnet_rental_request;
+pub mod generic;
 pub mod install_code;
 pub mod register_known_neuron;
 pub mod stop_or_start_canister;
 pub mod update_canister_settings;
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, PartialEq)]
+pub enum ValidProposalAction {
+    ManageNeuron(ManageNeuron),
+    ManageNetworkEconomics(NetworkEconomics),
+    Motion(Motion),
+    ExecuteNnsFunction(ValidExecuteNnsFunction),
+    ApproveGenesisKyc(ApproveGenesisKyc),
+    AddOrRemoveNodeProvider(ValidAddOrRemoveNodeProvider),
+    RegisterKnownNeuron(ValidRegisterKnownNeuron),
+    DeregisterKnownNeuron(ValidDeregisterKnownNeuron),
+    CreateServiceNervousSystem(CreateServiceNervousSystem),
+    InstallCode(ValidInstallCode),
+    StopOrStartCanister(ValidStopOrStartCanister),
+    UpdateCanisterSettings(ValidUpdateCanisterSettings),
+    FulfillSubnetRentalRequest(ValidFulfillSubnetRentalRequest),
+
+    // TODO: those should be obsolete
+    RewardNodeProvider(RewardNodeProvider),
+    RewardNodeProviders(RewardNodeProviders),
+}
+
+impl TryFrom<Option<Action>> for ValidProposalAction {
+    type Error = String;
+
+    fn try_from(action: Option<Action>) -> Result<Self, Self::Error> {
+        let action = action.ok_or("Action is required")?;
+        match action {
+            Action::ManageNeuron(manage_neuron) => {
+                Ok(ValidProposalAction::ManageNeuron(*manage_neuron))
+            }
+            Action::ManageNetworkEconomics(network_economics) => Ok(
+                ValidProposalAction::ManageNetworkEconomics(network_economics),
+            ),
+            Action::Motion(motion) => Ok(ValidProposalAction::Motion(motion)),
+            Action::ExecuteNnsFunction(execute_nns_function) => {
+                ValidExecuteNnsFunction::try_from(execute_nns_function)
+                    .map(ValidProposalAction::ExecuteNnsFunction)
+            }
+            Action::ApproveGenesisKyc(approve_genesis_kyc) => {
+                Ok(ValidProposalAction::ApproveGenesisKyc(approve_genesis_kyc))
+            }
+            Action::AddOrRemoveNodeProvider(add_or_remove_node_provider) => {
+                ValidAddOrRemoveNodeProvider::try_from(add_or_remove_node_provider)
+                    .map(ValidProposalAction::AddOrRemoveNodeProvider)
+            }
+            Action::RegisterKnownNeuron(register_known_neuron) => {
+                ValidRegisterKnownNeuron::try_from(register_known_neuron)
+                    .map(ValidProposalAction::RegisterKnownNeuron)
+            }
+            Action::DeregisterKnownNeuron(deregister_known_neuron) => {
+                ValidDeregisterKnownNeuron::try_from(deregister_known_neuron)
+                    .map(ValidProposalAction::DeregisterKnownNeuron)
+            }
+            Action::CreateServiceNervousSystem(create_service_nervous_system) => Ok(
+                ValidProposalAction::CreateServiceNervousSystem(create_service_nervous_system),
+            ),
+            Action::InstallCode(install_code) => {
+                ValidInstallCode::try_from(install_code).map(ValidProposalAction::InstallCode)
+            }
+            Action::StopOrStartCanister(stop_or_start_canister) => {
+                ValidStopOrStartCanister::try_from(stop_or_start_canister)
+                    .map(ValidProposalAction::StopOrStartCanister)
+            }
+            Action::UpdateCanisterSettings(update_canister_settings) => {
+                ValidUpdateCanisterSettings::try_from(update_canister_settings)
+                    .map(ValidProposalAction::UpdateCanisterSettings)
+            }
+            Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => {
+                ValidFulfillSubnetRentalRequest::try_from(fulfill_subnet_rental_request)
+                    .map(ValidProposalAction::FulfillSubnetRentalRequest)
+            }
+            Action::RewardNodeProvider(reward_node_provider) => Ok(
+                ValidProposalAction::RewardNodeProvider(reward_node_provider),
+            ),
+            Action::RewardNodeProviders(reward_node_providers) => Ok(
+                ValidProposalAction::RewardNodeProviders(reward_node_providers),
+            ),
+            Action::SetDefaultFollowees(_)
+            | Action::OpenSnsTokenSwap(_)
+            | Action::SetSnsTokenSwapOpenTimeWindow(_) => {
+                Err("This action is obsolete".to_string())
+            }
+        }
+    }
+}
+
+impl ValidProposalAction {
+    pub fn compute_topic_at_creation(&self) -> Result<Topic, GovernanceError> {
+        let topic = match self {
+            ValidProposalAction::ManageNeuron(_) => Topic::NeuronManagement,
+            ValidProposalAction::ManageNetworkEconomics(_) => Topic::NetworkEconomics,
+            ValidProposalAction::Motion(_) => Topic::Governance,
+            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
+                execute_nns_function.compute_topic_at_creation()
+            }
+            ValidProposalAction::ApproveGenesisKyc(_) => Topic::Kyc,
+            ValidProposalAction::AddOrRemoveNodeProvider(_) => Topic::ParticipantManagement,
+            ValidProposalAction::RegisterKnownNeuron(_) => Topic::Governance,
+            ValidProposalAction::DeregisterKnownNeuron(_) => Topic::Governance,
+            ValidProposalAction::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
+            ValidProposalAction::InstallCode(install_code) => {
+                install_code.compute_topic_at_creation()
+            }
+            ValidProposalAction::StopOrStartCanister(stop_or_start_canister) => {
+                stop_or_start_canister.compute_topic_at_creation()
+            }
+            ValidProposalAction::UpdateCanisterSettings(update_canister_settings) => {
+                update_canister_settings.compute_topic_at_creation()
+            }
+            ValidProposalAction::FulfillSubnetRentalRequest(_) => Topic::SubnetRental,
+            ValidProposalAction::RewardNodeProvider(_) => Topic::NodeProviderRewards,
+            ValidProposalAction::RewardNodeProviders(_) => Topic::NodeProviderRewards,
+        };
+        Ok(topic)
+    }
+
+    pub fn allowed_when_resources_are_low(&self) -> bool {
+        match self {
+            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
+                execute_nns_function.allowed_when_resources_are_low()
+            }
+            ValidProposalAction::InstallCode(install_code) => {
+                install_code.allowed_when_resources_are_low()
+            }
+            ValidProposalAction::UpdateCanisterSettings(update_canister_settings) => {
+                update_canister_settings.allowed_when_resources_are_low()
+            }
+            _ => false,
+        }
+    }
+
+    pub fn is_manage_neuron(&self) -> bool {
+        self.manage_neuron().is_some()
+    }
+
+    pub fn manage_neuron(&self) -> Option<&ManageNeuron> {
+        if let ValidProposalAction::ManageNeuron(manage_neuron) = self {
+            Some(manage_neuron)
+        } else {
+            None
+        }
+    }
+
+    pub async fn to_generic_representation(
+        &self,
+        env: Arc<dyn Environment>,
+    ) -> Result<GenericProposalRepresentation, String> {
+        match self {
+            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
+                execute_nns_function.to_generic_representation(env).await
+            }
+            ValidProposalAction::ManageNeuron(action) => Ok(action.to_generic_representation()),
+            ValidProposalAction::ManageNetworkEconomics(action) => {
+                Ok(action.to_generic_representation())
+            }
+            ValidProposalAction::Motion(action) => Ok(action.to_generic_representation()),
+            ValidProposalAction::ApproveGenesisKyc(action) => {
+                Ok(action.to_generic_representation())
+            }
+            ValidProposalAction::AddOrRemoveNodeProvider(action) => {
+                Ok(action.to_generic_representation())
+            }
+            ValidProposalAction::RegisterKnownNeuron(action) => {
+                Ok(action.to_generic_representation())
+            }
+            ValidProposalAction::DeregisterKnownNeuron(action) => {
+                Ok(action.to_generic_representation())
+            }
+            ValidProposalAction::CreateServiceNervousSystem(action) => {
+                Ok(action.to_generic_representation())
+            }
+            ValidProposalAction::InstallCode(action) => Ok(action.to_generic_representation()),
+            ValidProposalAction::StopOrStartCanister(action) => {
+                Ok(action.to_generic_representation())
+            }
+            ValidProposalAction::UpdateCanisterSettings(action) => {
+                Ok(action.to_generic_representation())
+            }
+            ValidProposalAction::FulfillSubnetRentalRequest(action) => {
+                Ok(action.to_generic_representation())
+            }
+            ValidProposalAction::RewardNodeProvider(action) => {
+                Ok(action.to_generic_representation())
+            }
+            ValidProposalAction::RewardNodeProviders(action) => {
+                Ok(action.to_generic_representation())
+            }
+        }
+    }
+}
 
 const SNS_RELATED_CANISTER_IDS: [&CanisterId; 2] =
     [&SNS_WASM_CANISTER_ID, &SNS_AGGREGATOR_CANISTER_ID];

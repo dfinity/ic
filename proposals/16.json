@@ -1,0 +1,5 @@
+{
+  "type_name": "Motion",
+  "type_description": "A motion is a text that can be adopted or rejected. No code is executed when a motion is adopted. An adopted motion should guide the future strategy of the Internet Computer ecosystem.",
+  "value": "some motion text"
+}

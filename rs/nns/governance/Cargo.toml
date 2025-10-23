@@ -27,9 +27,11 @@ build-info = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
+candid_parser = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
 dyn-clone = "1.0.14"
 futures = { workspace = true }
+hex = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
@@ -112,7 +114,6 @@ assert_matches = { workspace = true }
 build-info-build = { workspace = true }
 
 [dev-dependencies]
-candid_parser = { workspace = true }
 criterion = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
 ic-config = { path = "../../config" }
@@ -121,6 +122,7 @@ ic-nns-governance = { path = ".", features = ["test"] }
 ic-nns-governance-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
 local_key = { path = "../../tla_instrumentation/local_key" }
+num-bigint = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }
 tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation" }

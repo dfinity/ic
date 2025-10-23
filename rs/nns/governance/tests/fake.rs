@@ -4,6 +4,7 @@ use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifie
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::tokens::CheckedSub;
+use ic_management_canister_types_private::CanisterMetadataResponse;
 use ic_nervous_system_canisters::cmc::CMC;
 use ic_nervous_system_canisters::ledger::IcpLedger;
 use ic_nervous_system_common::NervousSystemError;
@@ -16,9 +17,10 @@ use ic_nns_constants::{
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
-        ExecuteNnsFunction, GovernanceError, ManageNeuron, Motion, NetworkEconomics, Proposal,
-        Vote, manage_neuron, manage_neuron::NeuronIdOrSubaccount, proposal,
+        GovernanceError, ManageNeuron, Motion, NetworkEconomics, Proposal, Vote, manage_neuron,
+        manage_neuron::NeuronIdOrSubaccount, proposal,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
 use ic_nns_governance_api::Neuron;
 use ic_nns_governance_api::{ManageNeuronResponse, manage_neuron_response};
@@ -472,7 +474,7 @@ impl Environment for FakeDriver {
     fn execute_nns_function(
         &self,
         _proposal_id: u64,
-        _update: &ExecuteNnsFunction,
+        _update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         Ok(())
         //panic!("unexpected call")
@@ -632,6 +634,10 @@ impl Environment for FakeDriver {
             let mut bytes = [0u8; 32];
             self.state.try_lock().unwrap().rng.fill_bytes(&mut bytes);
             return Ok(Encode!(&bytes).unwrap());
+        }
+
+        if method_name == "canister_metadata" {
+            return Ok(Encode!(&CanisterMetadataResponse::new(vec![])).unwrap());
         }
 
         println!(

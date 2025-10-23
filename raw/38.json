@@ -1,0 +1,43 @@
+[
+  {
+    "type_description": [
+      "Remove node operator records from the registry."
+    ],
+    "type_name": [
+      "Remove Node Operators"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "node_operators_to_remove",
+            "1": {
+              "Text": ""
+            }
+          },
+          {
+            "0": "node_operator_principals_to_remove",
+            "1": {
+              "Array": [
+                {
+                  "Map": [
+                    {
+                      "0": "principals",
+                      "1": {
+                        "Array": [
+                          {
+                            "Text": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

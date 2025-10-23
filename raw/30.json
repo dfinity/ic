@@ -1,0 +1,38 @@
+[
+  {
+    "type_description": [
+      "Change the membership (list) of nodes in a subnet by adding and/or removing nodes from the subnet. At the time the proposal is executed, the added nodes (if provided in the proposal) need to be unassigned and the removed nodes (if provided in the proposal) need to be assigned to the subnet. After the proposal is executed, the removed nodes become unassigned, and can be reassigned to other subnets via future proposals or completely removed from the network."
+    ],
+    "type_name": [
+      "Change Subnet Membership"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "subnet_id",
+            "1": {
+              "Text": "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
+            }
+          },
+          {
+            "0": "node_ids_remove",
+            "1": {
+              "Array": [
+                {
+                  "Text": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+                }
+              ]
+            }
+          },
+          {
+            "0": "node_ids_add",
+            "1": {
+              "Text": ""
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

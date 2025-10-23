@@ -1,0 +1,72 @@
+[
+  {
+    "type_description": [
+      "Change a Node Operator's allowance in the registry."
+    ],
+    "type_name": [
+      "Update Node Operator Config"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "ipv6",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "node_allowance",
+            "1": {
+              "Array": [
+                {
+                  "Nat": "5"
+                }
+              ]
+            }
+          },
+          {
+            "0": "rewardable_nodes",
+            "1": {
+              "Text": ""
+            }
+          },
+          {
+            "0": "node_operator_id",
+            "1": {
+              "Array": [
+                {
+                  "Text": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+                }
+              ]
+            }
+          },
+          {
+            "0": "dc_id",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "max_rewardable_nodes",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "set_ipv6_to_none",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "node_provider_id",
+            "1": {
+              "Array": []
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

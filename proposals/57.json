@@ -1,0 +1,36 @@
+{
+  "type_name": "Update Subnet Config",
+  "type_description": "Update a subnet's configuration. This proposal updates the subnet record in the registry, with the changes being picked up by the nodes on the subnet when they reference the respective registry version. Subnet configuration comprises protocol parameters that must be consistent across the subnet (e.g., message sizes).",
+  "value": {
+    "registry_poll_period_ms": [],
+    "initial_notary_delay_millis": [],
+    "ssh_readonly_access": [],
+    "chain_key_config": [],
+    "is_halted": [],
+    "chain_key_signing_disable": [],
+    "max_block_payload_size": [],
+    "max_duplicity": [],
+    "max_chunk_size": [],
+    "ssh_backup_access": [],
+    "chain_key_signing_enable": [],
+    "start_as_nns": [],
+    "set_gossip_config_to_default": 0,
+    "subnet_type": [],
+    "max_ingress_messages_per_block": [],
+    "max_artifact_streams_per_peer": [],
+    "receive_check_cache_size": [],
+    "features": [],
+    "retransmission_request_ms": [],
+    "max_ingress_bytes_per_message": [],
+    "pfn_evaluation_period_ms": [],
+    "max_number_of_canisters": [],
+    "halt_at_cup_height": [],
+    "dkg_dealings_per_block": [],
+    "max_chunk_wait_ms": [],
+    "dkg_interval_length": [],
+    "unit_delay_millis": [
+      500
+    ],
+    "subnet_id": "aff4t-qcpzp-aca7d-sea6x-bbe53-3zrqj-thvaw-nqsn2-b4qob-igtjx-qqe"
+  }
+}

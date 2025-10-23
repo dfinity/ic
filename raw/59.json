@@ -1,0 +1,83 @@
+[
+  {
+    "type_description": [
+      "Assign an identity to a node operator associating key information regarding its ownership, the jurisdiction in which it is located, and other information. The node operator is stored as a record in the registry. It contains the remaining node allowance for that node operator, that is the number of nodes the node operator can still add to the IC. When an additional node is added by the node operator, the remaining allowance is decreased."
+    ],
+    "type_name": [
+      "Assign Node Operator ID (NOID)"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "dc_id",
+            "1": {
+              "Text": "dc1"
+            }
+          },
+          {
+            "0": "max_rewardable_nodes",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "rewardable_nodes",
+            "1": {
+              "Array": [
+                {
+                  "Map": [
+                    {
+                      "0": "1",
+                      "1": {
+                        "Nat": "5"
+                      }
+                    },
+                    {
+                      "0": "0",
+                      "1": {
+                        "Text": "us-west"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "0": "node_operator_principal_id",
+            "1": {
+              "Array": [
+                {
+                  "Text": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+                }
+              ]
+            }
+          },
+          {
+            "0": "ipv6",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "node_provider_principal_id",
+            "1": {
+              "Array": [
+                {
+                  "Text": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+                }
+              ]
+            }
+          },
+          {
+            "0": "node_allowance",
+            "1": {
+              "Nat": "5"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

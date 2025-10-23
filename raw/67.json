@@ -1,0 +1,32 @@
+[
+  {
+    "type_description": [
+      "A proposal to update the version of a set of API Boundary Nodes."
+    ],
+    "type_name": [
+      "Deploy GuestOS To Some API Boundary Nodes"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "node_ids",
+            "1": {
+              "Array": [
+                {
+                  "Text": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+                }
+              ]
+            }
+          },
+          {
+            "0": "version",
+            "1": {
+              "Text": "deadbeef123456789012345678901234567890"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "type_name": "Complete Canister Migration",
+  "type_description": "Remove canister migrations entries. Such entries specify that a migration of canister ID ranges is currently ongoing.<br/><br/>The steps of canister migration are:<ol><li>Prepare Canister Migration</li><li>Reroute Canister Ranges</li><li>Complete Canister Migration</li></ol>",
+  "value": {
+    "canister_id_ranges": [
+      {
+        "end": "qsgjb-riaaa-aaaaa-aaaga-cai",
+        "start": "qoctq-giaaa-aaaaa-aaaea-cai"
+      }
+    ],
+    "migration_trace": [
+      "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
+    ]
+  }
+}

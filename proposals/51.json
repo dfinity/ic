@@ -1,0 +1,43 @@
+{
+  "type_name": "Revise Elected GuestOS Versions",
+  "type_description": "A proposal to change the set of elected GuestOS versions.<br/><br/>The version to elect (identified by the hash of the installation image) is added to the registry. Besides creating a record for that version, the proposal also appends that version to the list of elected versions that can be installed on nodes of a subnet.<br/><br/>Only elected GuestOS versions can be deployed.",
+  "value": {
+    "guest_launch_measurements": [
+      {
+        "guest_launch_measurements": [
+          {
+            "metadata": [
+              {
+                "kernel_cmdline": "root=/dev/vda5 console=ttyS0 nomodeset dfinity.system=A security=selinux selinux=1 enforcing=1 root_hash=bd1a92e52d62f5b2684697280b543dc2bac34930a3946c39132bb1e5836c902e"
+              }
+            ],
+            "measurement": "9fa0109ee66a9758b2b652043ae9144ff81c21983792c9e286ca750002e832693415f662662bec7f7e3092b2547b5581"
+          },
+          {
+            "measurement": "ab403f19bad2c0392cbe9185c81aba48a456a84901f01f04f14b76a48afc3cde81075b8e2c91b02d892a27aac254820b",
+            "metadata": [
+              {
+                "kernel_cmdline": "root=/dev/vda8 console=ttyS0 nomodeset dfinity.system=B security=selinux selinux=1 enforcing=1 root_hash=bd1a92e52d62f5b2684697280b543dc2bac34930a3946c39132bb1e5836c902e"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "replica_version_to_elect": [
+      "206b61a8616bc93d36d6a014e5cc8edf1ba256ae"
+    ],
+    "release_package_urls": [
+      "https://download.dfinity.systems/ic/206b61a8616bc93d36d6a014e5cc8edf1ba256ae/guest-os/update-img/update-img.tar.zst",
+      "https://download.dfinity.network/ic/206b61a8616bc93d36d6a014e5cc8edf1ba256ae/guest-os/update-img/update-img.tar.zst"
+    ],
+    "release_package_sha256_hex": [
+      "6b4965857e181ce9508f879cba56a6425e0e441ad1bb73f56b11dcaf247bd4eb"
+    ],
+    "replica_versions_to_unelect": [
+      "9152ba15ab6cc3c12eb407e13f8ee483a1d5723c",
+      "ab62c6ec1c3b5f492df53c05bb0bf5f2eb6298ba",
+      "c6d90cb33f3d47f808aaaf227a1678cb812d74a2"
+    ]
+  }
+}

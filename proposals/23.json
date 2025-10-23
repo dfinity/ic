@@ -1,0 +1,9 @@
+{
+  "type_name": "Update Canister Settings",
+  "type_description": "Update the settings of a canister that is controlled by the NNS.",
+  "value": {
+    "memory_allocation": 1073741824,
+    "compute_allocation": 10,
+    "canister_id": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+  }
+}

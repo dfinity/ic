@@ -1,0 +1,14 @@
+{
+  "type_name": "Update Firewall Rules",
+  "type_description": "Update firewall rules in the registry. Nodes use a firewall to protect themselves from network attacks.",
+  "value": {
+    "expected_hash": "deadbeef",
+    "scope": {
+      "Global": []
+    },
+    "positions": [
+      0
+    ],
+    "rules": ""
+  }
+}

@@ -40,6 +40,7 @@ use ic_nns_constants::{
 use ic_nns_governance::governance::MINIMUM_SECONDS_BETWEEN_ALLOWANCE_INCREASE;
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
+use ic_nns_governance::proposals::execute_nns_function::ValidExecuteNnsFunction;
 use ic_nns_governance::storage::reset_stable_memory;
 use ic_nns_governance::timer_tasks::schedule_tasks;
 use ic_nns_governance::{
@@ -11043,7 +11044,7 @@ impl Environment for MockEnvironment<'_> {
     fn execute_nns_function(
         &self,
         _proposal_id: u64,
-        _update: &ExecuteNnsFunction,
+        _update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         panic!("Unexpected call to Environment::execute_nns_function");
     }

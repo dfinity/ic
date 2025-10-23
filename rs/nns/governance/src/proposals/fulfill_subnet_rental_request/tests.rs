@@ -24,62 +24,51 @@ fn test_validate_fulfill_subnet_rental_request() {
 
     // Sad cases.
 
-    let no_user = FulfillSubnetRentalRequest {
+    let no_user_error = ValidFulfillSubnetRentalRequest::try_from(FulfillSubnetRentalRequest {
         user: None,
         ..ok.clone()
-    }
-    .validate()
+    })
     .unwrap_err();
 
-    let no_node_ids = FulfillSubnetRentalRequest {
+    let no_node_ids_error = ValidFulfillSubnetRentalRequest::try_from(FulfillSubnetRentalRequest {
         node_ids: vec![],
         ..ok.clone()
-    }
-    .validate()
+    })
     .unwrap_err();
 
-    let absurdly_many_node_ids = FulfillSubnetRentalRequest {
-        node_ids: (0_u64..5000).map(|_| new_subnet_id()).collect(),
-        ..ok.clone()
-    }
-    .validate()
-    .unwrap_err();
+    let absurdly_many_node_ids_error =
+        ValidFulfillSubnetRentalRequest::try_from(FulfillSubnetRentalRequest {
+            node_ids: (0_u64..5000).map(|_| new_subnet_id()).collect(),
+            ..ok.clone()
+        })
+        .unwrap_err();
 
-    let garbage_replica_version_id = FulfillSubnetRentalRequest {
-        replica_version_id: "Trust me, bro. This replica_version_id is legit.".to_string(),
-        ..ok.clone()
-    }
-    .validate()
-    .unwrap_err();
+    let garbage_replica_version_id_error =
+        ValidFulfillSubnetRentalRequest::try_from(FulfillSubnetRentalRequest {
+            replica_version_id: "Trust me, bro. This replica_version_id is legit.".to_string(),
+            ..ok.clone()
+        })
+        .unwrap_err();
 
     // Step 3: Verify results.
 
-    assert_eq!(ok.validate(), Ok(()));
+    let valid = ValidFulfillSubnetRentalRequest::try_from(ok).unwrap();
+    assert_eq!(valid.validate(), Ok(()));
 
     #[track_caller]
-    fn assert_invalid(err: GovernanceError, key_words: &[&str]) {
-        let GovernanceError {
-            error_type,
-            error_message,
-        } = &err;
-
-        let error_type = ErrorType::try_from(*error_type);
-        assert_eq!(error_type, Ok(ErrorType::InvalidProposal), "{err:?}");
-
+    fn assert_invalid(err: String, key_words: &[&str]) {
         for key_word in key_words {
-            let ok = error_message
-                .to_lowercase()
-                .contains(&key_word.to_lowercase());
+            let ok = err.to_lowercase().contains(&key_word.to_lowercase());
 
-            assert!(ok, "{key_word:?} not in error message ({error_message:?})",);
+            assert!(ok, "{key_word:?} not in error message ({err:?})",);
         }
     }
 
-    assert_invalid(no_user, &["user", "null"]);
-    assert_invalid(no_node_ids, &["node_ids", "empty"]);
-    assert_invalid(absurdly_many_node_ids, &["node_ids", "many"]);
+    assert_invalid(no_user_error, &["user", "null"]);
+    assert_invalid(no_node_ids_error, &["node_ids", "empty"]);
+    assert_invalid(absurdly_many_node_ids_error, &["node_ids", "many"]);
     assert_invalid(
-        garbage_replica_version_id,
+        garbage_replica_version_id_error,
         &["replica_version_id", "40", "hexidecimal"],
     );
 }

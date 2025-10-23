@@ -1,0 +1,28 @@
+[
+  {
+    "type_description": [
+      "A proposal to hard reset the NNS root canister to a specific version. This is an emergency recovery mechanism that should only be used when the NNS root canister is in an unrecoverable state."
+    ],
+    "type_name": [
+      "Hard Reset NNS Root To Version"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "init_arg",
+            "1": {
+              "Text": ""
+            }
+          },
+          {
+            "0": "wasm_module",
+            "1": {
+              "Text": "0061736d01000000"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

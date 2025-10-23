@@ -1,0 +1,57 @@
+[
+  {
+    "type_description": [
+      "Add a new SNS canister WASM."
+    ],
+    "type_name": [
+      "Bless New SNS Deployment"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "wasm",
+            "1": {
+              "Array": [
+                {
+                  "Map": [
+                    {
+                      "0": "wasm",
+                      "1": {
+                        "Text": ""
+                      }
+                    },
+                    {
+                      "0": "proposal_id",
+                      "1": {
+                        "Array": []
+                      }
+                    },
+                    {
+                      "0": "canister_type",
+                      "1": {
+                        "Int": "2"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "0": "skip_update_latest_version",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "hash",
+            "1": {
+              "Text": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,6 +1,7 @@
 use crate::benches_util::check_projected_instructions;
 use crate::governance::REWARD_DISTRIBUTION_PERIOD_SECONDS;
 use crate::pb::v1::{Motion, VotingPowerEconomics};
+use crate::proposals::ValidProposalAction;
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::{
@@ -11,7 +12,7 @@ use crate::{
     neuron_store::NeuronStore,
     pb::v1::{
         Ballot, BallotInfo, CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode,
-        KnownNeuron, ListProposalInfo, NnsFunction, Proposal, ProposalData, Topic, Vote,
+        ListProposalInfo, NnsFunction, Proposal, ProposalData, Topic, Vote,
         install_code::CanisterInstallMode, proposal::Action,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
@@ -464,11 +465,12 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
     }
 
     let bench_result = bench_fn(|| {
+        // Note: This is a benchmark and doesn't need to be valid. We just need any ValidProposalAction.
+        // Using Motion instead of RegisterKnownNeuron since we can't create an invalid ValidRegisterKnownNeuron.
         governance
             .compute_ballots_for_new_proposal(
-                &Action::RegisterKnownNeuron(KnownNeuron {
-                    id: None,
-                    known_neuron_data: None,
+                &ValidProposalAction::Motion(Motion {
+                    motion_text: "bench".to_string(),
                 }),
                 &NeuronIdProto { id: 1 },
                 123_456_789,

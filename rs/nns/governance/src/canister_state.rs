@@ -2,6 +2,7 @@ use crate::decoder_config;
 use crate::governance::{
     Environment, Governance, HeapGrowthPotential, RandomnessGenerator, RngError,
 };
+use crate::proposals::execute_nns_function::{ValidExecuteNnsFunction, ValidNnsFunction};
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use ic_base_types::CanisterId;
@@ -187,14 +188,10 @@ impl Environment for CanisterEnv {
     fn execute_nns_function(
         &self,
         proposal_id: u64,
-        update: &crate::pb::v1::ExecuteNnsFunction,
+        execute_nns_function: &ValidExecuteNnsFunction,
     ) -> Result<(), crate::pb::v1::GovernanceError> {
         // use internal types, as this API is used in core
-        use crate::pb::v1::{GovernanceError, NnsFunction, governance_error::ErrorType};
-
-        let mt = NnsFunction::try_from(update.nns_function).map_err(|_|
-            // No update type specified.
-            GovernanceError::new(ErrorType::PreconditionFailed))?;
+        use crate::pb::v1::{GovernanceError, governance_error::ErrorType};
 
         let reply = move || {
             governance_mut().set_proposal_execution_status(proposal_id, Ok(()));
@@ -227,15 +224,14 @@ impl Environment for CanisterEnv {
                 )),
             );
         };
-        let (canister_id, method) = mt.canister_and_function()?;
+        let (canister_id, method) = execute_nns_function.nns_function.canister_and_function();
         let method = method.to_owned();
         let proposal_timestamp_seconds = governance()
             .get_proposal_data(ProposalId(proposal_id))
             .map(|data| data.proposal_timestamp_seconds)
             .ok_or(GovernanceError::new(ErrorType::PreconditionFailed))?;
         let effective_payload = get_effective_payload(
-            mt,
-            update.payload.clone(),
+            execute_nns_function,
             proposal_id,
             proposal_timestamp_seconds,
         )?;
@@ -283,24 +279,27 @@ impl Environment for CanisterEnv {
 // The arguments `proposal_id` is used by AddSnsWasm proposals.
 // `_proposal_timestamp_seconds` will be used in the future by subnet rental NNS proposals.
 fn get_effective_payload(
-    mt: crate::pb::v1::NnsFunction,
-    payload: Vec<u8>,
+    execute_nns_function: &ValidExecuteNnsFunction,
     proposal_id: u64,
     proposal_timestamp_seconds: u64,
 ) -> Result<Vec<u8>, crate::pb::v1::GovernanceError> {
-    use crate::pb::v1::{GovernanceError, NnsFunction, governance_error::ErrorType};
+    use crate::pb::v1::{GovernanceError, governance_error::ErrorType};
 
     const BITCOIN_SET_CONFIG_METHOD_NAME: &str = "set_config";
     const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
     const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 
-    match mt {
-        NnsFunction::BitcoinSetConfig => {
+    match execute_nns_function.nns_function {
+        ValidNnsFunction::BitcoinSetConfig => {
             // Decode the payload to get the network.
-            let payload = match Decode!([decoder_config()]; &payload, BitcoinSetConfigProposal) {
+            let payload = match Decode!([decoder_config()]; &execute_nns_function.payload, BitcoinSetConfigProposal)
+            {
                 Ok(payload) => payload,
                 Err(_) => {
-                    return Err(GovernanceError::new_with_message(ErrorType::InvalidProposal, "Payload must be a valid BitcoinSetConfigProposal."));
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        "Payload must be a valid BitcoinSetConfigProposal.",
+                    ));
                 }
             };
 
@@ -308,23 +307,28 @@ fn get_effective_payload(
             let canister_id = CanisterId::from_str(match payload.network {
                 BitcoinNetwork::Mainnet => BITCOIN_MAINNET_CANISTER_ID,
                 BitcoinNetwork::Testnet => BITCOIN_TESTNET_CANISTER_ID,
-            }).expect("bitcoin canister id must be valid.");
+            })
+            .expect("bitcoin canister id must be valid.");
 
             let encoded_payload = Encode!(&CallCanisterProposal {
                 canister_id,
                 method_name: BITCOIN_SET_CONFIG_METHOD_NAME.to_string(),
                 payload: payload.payload
             })
-                .unwrap();
+            .unwrap();
 
             Ok(encoded_payload)
         }
-        NnsFunction::SubnetRentalRequest => {
+        ValidNnsFunction::SubnetRentalRequest => {
             // Decode the payload to `SubnetRentalRequest`.
-            let payload = match Decode!([decoder_config()]; &payload, SubnetRentalRequest) {
+            let payload = match Decode!([decoder_config()]; &execute_nns_function.payload, SubnetRentalRequest)
+            {
                 Ok(payload) => payload,
                 Err(_) => {
-                    return Err(GovernanceError::new_with_message(ErrorType::InvalidProposal, "Payload must be a valid SubnetRentalRequest."));
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        "Payload must be a valid SubnetRentalRequest.",
+                    ));
                 }
             };
 
@@ -339,13 +343,15 @@ fn get_effective_payload(
                 rental_condition_id,
                 proposal_id,
                 proposal_creation_time_seconds,
-            }).unwrap();
+            })
+            .unwrap();
 
             Ok(encoded_payload)
         }
 
-        | NnsFunction::AddSnsWasm => {
-            let payload = add_proposal_id_to_add_wasm_request(&payload, proposal_id)?;
+        ValidNnsFunction::AddSnsWasm => {
+            let payload =
+                add_proposal_id_to_add_wasm_request(&execute_nns_function.payload, proposal_id)?;
 
             Ok(payload)
         }
@@ -353,58 +359,46 @@ fn get_effective_payload(
         // NOTE: Methods are listed explicitly as opposed to using the `_` wildcard so
         // that adding a new function causes a compile error here, ensuring that the developer
         // makes an explicit decision on how the payload is handled.
-        NnsFunction::Unspecified
-        | NnsFunction::UpdateElectedHostosVersions
-        | NnsFunction::UpdateNodesHostosVersion
-        | NnsFunction::ReviseElectedHostosVersions
-        | NnsFunction::DeployHostosToSomeNodes
-        | NnsFunction::AssignNoid
-        | NnsFunction::CreateSubnet
-        | NnsFunction::AddNodeToSubnet
-        | NnsFunction::RemoveNodesFromSubnet
-        | NnsFunction::ChangeSubnetMembership
-        | NnsFunction::NnsCanisterInstall
-        | NnsFunction::NnsCanisterUpgrade
-        | NnsFunction::NnsRootUpgrade
-        | NnsFunction::HardResetNnsRootToVersion
-        | NnsFunction::RecoverSubnet
-        | NnsFunction::BlessReplicaVersion
-        | NnsFunction::RetireReplicaVersion
-        | NnsFunction::ReviseElectedGuestosVersions
-        | NnsFunction::UpdateNodeOperatorConfig
-        | NnsFunction::DeployGuestosToAllSubnetNodes
-        | NnsFunction::UpdateConfigOfSubnet
-        | NnsFunction::IcpXdrConversionRate
-        | NnsFunction::ClearProvisionalWhitelist
-        | NnsFunction::SetAuthorizedSubnetworks
-        | NnsFunction::SetFirewallConfig
-        | NnsFunction::AddFirewallRules
-        | NnsFunction::RemoveFirewallRules
-        | NnsFunction::UpdateFirewallRules
-        | NnsFunction::StopOrStartNnsCanister
-        | NnsFunction::RemoveNodes
-        | NnsFunction::UninstallCode
-        | NnsFunction::UpdateNodeRewardsTable
-        | NnsFunction::AddOrRemoveDataCenters
-        | NnsFunction::UpdateUnassignedNodesConfig // obsolete
-        | NnsFunction::RemoveNodeOperators
-        | NnsFunction::RerouteCanisterRanges
-        | NnsFunction::PrepareCanisterMigration
-        | NnsFunction::CompleteCanisterMigration
-        | NnsFunction::UpdateSubnetType
-        | NnsFunction::ChangeSubnetTypeAssignment
-        | NnsFunction::UpdateAllowedPrincipals
-        | NnsFunction::UpdateSnsWasmSnsSubnetIds
-        | NnsFunction::InsertSnsWasmUpgradePathEntries
-        | NnsFunction::AddApiBoundaryNodes
-        | NnsFunction::RemoveApiBoundaryNodes
-        | NnsFunction::UpdateApiBoundaryNodesVersion // obsolete
-        | NnsFunction::DeployGuestosToAllUnassignedNodes
-        | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
-        | NnsFunction::DeployGuestosToSomeApiBoundaryNodes
-        | NnsFunction::PauseCanisterMigrations
-        | NnsFunction::UnpauseCanisterMigrations
-        | NnsFunction::SetSubnetOperationalLevel => Ok(payload),
+        ValidNnsFunction::ReviseElectedHostosVersions
+        | ValidNnsFunction::DeployHostosToSomeNodes
+        | ValidNnsFunction::AssignNoid
+        | ValidNnsFunction::CreateSubnet
+        | ValidNnsFunction::AddNodeToSubnet
+        | ValidNnsFunction::RemoveNodesFromSubnet
+        | ValidNnsFunction::ChangeSubnetMembership
+        | ValidNnsFunction::NnsCanisterInstall
+        | ValidNnsFunction::HardResetNnsRootToVersion
+        | ValidNnsFunction::RecoverSubnet
+        | ValidNnsFunction::ReviseElectedGuestosVersions
+        | ValidNnsFunction::UpdateNodeOperatorConfig
+        | ValidNnsFunction::DeployGuestosToAllSubnetNodes
+        | ValidNnsFunction::UpdateConfigOfSubnet
+        | ValidNnsFunction::ClearProvisionalWhitelist
+        | ValidNnsFunction::SetAuthorizedSubnetworks
+        | ValidNnsFunction::SetFirewallConfig
+        | ValidNnsFunction::AddFirewallRules
+        | ValidNnsFunction::RemoveFirewallRules
+        | ValidNnsFunction::UpdateFirewallRules
+        | ValidNnsFunction::RemoveNodes
+        | ValidNnsFunction::UninstallCode
+        | ValidNnsFunction::UpdateNodeRewardsTable
+        | ValidNnsFunction::AddOrRemoveDataCenters
+        | ValidNnsFunction::RemoveNodeOperators
+        | ValidNnsFunction::RerouteCanisterRanges
+        | ValidNnsFunction::PrepareCanisterMigration
+        | ValidNnsFunction::CompleteCanisterMigration
+        | ValidNnsFunction::UpdateSubnetType
+        | ValidNnsFunction::ChangeSubnetTypeAssignment
+        | ValidNnsFunction::UpdateSnsWasmSnsSubnetIds
+        | ValidNnsFunction::InsertSnsWasmUpgradePathEntries
+        | ValidNnsFunction::AddApiBoundaryNodes
+        | ValidNnsFunction::RemoveApiBoundaryNodes
+        | ValidNnsFunction::DeployGuestosToAllUnassignedNodes
+        | ValidNnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes
+        | ValidNnsFunction::DeployGuestosToSomeApiBoundaryNodes
+        | ValidNnsFunction::PauseCanisterMigrations
+        | ValidNnsFunction::UnpauseCanisterMigrations
+        | ValidNnsFunction::SetSubnetOperationalLevel => Ok(execute_nns_function.payload.clone()),
     }
 }
 
@@ -461,7 +455,6 @@ mod tests {
 
     #[test]
     fn test_get_effective_payload_sets_proposal_id_for_add_wasm() {
-        let mt = crate::pb::v1::NnsFunction::AddSnsWasm;
         let proposal_id = 42;
         let wasm = vec![1, 2, 3];
         let canister_type = 3;
@@ -477,7 +470,13 @@ mod tests {
         })
         .unwrap();
 
-        let effective_payload = get_effective_payload(mt, payload, proposal_id, 0).unwrap();
+        let execute_nns_function = ValidExecuteNnsFunction {
+            nns_function: ValidNnsFunction::AddSnsWasm,
+            payload,
+        };
+
+        let effective_payload =
+            get_effective_payload(&execute_nns_function, proposal_id, 0).unwrap();
 
         let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
         assert_eq!(
@@ -496,7 +495,6 @@ mod tests {
 
     #[test]
     fn test_get_effective_payload_overrides_proposal_id_for_add_wasm() {
-        let mt = crate::pb::v1::NnsFunction::AddSnsWasm;
         let proposal_id = 42;
         let payload = Encode!(&AddWasmRequest {
             wasm: Some(SnsWasm {
@@ -507,7 +505,13 @@ mod tests {
         })
         .unwrap();
 
-        let effective_payload = get_effective_payload(mt, payload, proposal_id, 0).unwrap();
+        let execute_nns_function = ValidExecuteNnsFunction {
+            nns_function: ValidNnsFunction::AddSnsWasm,
+            payload,
+        };
+
+        let effective_payload =
+            get_effective_payload(&execute_nns_function, proposal_id, 0).unwrap();
 
         let decoded = Decode!(&effective_payload, AddWasmRequest).unwrap();
         assert_eq!(decoded.wasm.unwrap().proposal_id.unwrap(), proposal_id);

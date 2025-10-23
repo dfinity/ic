@@ -1,0 +1,36 @@
+[
+  {
+    "type_description": [
+      "Deploy a HostOS version to a given set of nodes. The proposal changes the HostOS version that is used on the specified nodes."
+    ],
+    "type_name": [
+      "Deploy HostOS To Some Nodes"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "node_ids",
+            "1": {
+              "Array": [
+                {
+                  "Text": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+                }
+              ]
+            }
+          },
+          {
+            "0": "hostos_version_id",
+            "1": {
+              "Array": [
+                {
+                  "Text": "deadbeef"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

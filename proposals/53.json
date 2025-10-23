@@ -1,0 +1,16 @@
+{
+  "type_name": "Revise Elected HostOS Versions",
+  "type_description": "A proposal to change the set of currently elected HostOS versions, by electing a new version, and/or unelecting some priorly elected versions.<br/><br/>HostOS versions are identified by the hash of the installation image.<br/><br/>The version to elect is added to the Registry, and the versions to unelect are removed from the Registry, ensuring that HostOS cannot upgrade to these versions anymore.<br/><br/>This proposal does not actually perform the upgrade; for deployment of an elected version, please refer to \"Deploy HostOS To Some Nodes\".",
+  "value": {
+    "release_package_urls": [
+      "https://example.com/release.tar.gz"
+    ],
+    "hostos_version_to_elect": [
+      "deadbeef"
+    ],
+    "hostos_versions_to_unelect": "",
+    "release_package_sha256_hex": [
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ]
+  }
+}

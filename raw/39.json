@@ -1,0 +1,51 @@
+[
+  {
+    "type_description": [
+      "In the routing table in the registry, remap canister ID ranges from one subnet to a different subnet.<br/><br/>The steps of canister migration are:<ol><li>Prepare Canister Migration</li><li>Reroute Canister Ranges</li><li>Complete Canister Migration</li></ol>"
+    ],
+    "type_name": [
+      "Reroute Canister Ranges"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "reassigned_canister_ranges",
+            "1": {
+              "Array": [
+                {
+                  "Map": [
+                    {
+                      "0": "end",
+                      "1": {
+                        "Text": "qsgjb-riaaa-aaaaa-aaaga-cai"
+                      }
+                    },
+                    {
+                      "0": "start",
+                      "1": {
+                        "Text": "qoctq-giaaa-aaaaa-aaaea-cai"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "0": "destination_subnet",
+            "1": {
+              "Text": "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
+            }
+          },
+          {
+            "0": "source_subnet",
+            "1": {
+              "Text": "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

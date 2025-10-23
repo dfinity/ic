@@ -1,0 +1,32 @@
+[
+  {
+    "type_description": [
+      "Update the list of SNS subnet IDs that SNS-W will deploy SNS instances to."
+    ],
+    "type_name": [
+      "Update SNS-W Subnet Ids"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "sns_subnet_ids_to_add",
+            "1": {
+              "Array": [
+                {
+                  "Text": "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
+                }
+              ]
+            }
+          },
+          {
+            "0": "sns_subnet_ids_to_remove",
+            "1": {
+              "Text": ""
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

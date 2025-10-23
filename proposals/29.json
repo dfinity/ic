@@ -1,0 +1,5 @@
+{
+  "type_name": "Clear Provisional Whitelist",
+  "type_description": "Clears the provisional whitelist, which allows the listed principals to create Canisters with cycles. The mechanism is only needed for bootstrap and testing and must be deactivated afterward.",
+  "value": []
+}

@@ -1,8 +1,9 @@
 #![allow(clippy::all)]
+use candid::{Int, Nat};
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use icp_ledger::protobuf::AccountIdentifier;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// The entity that owns the nodes that run the network.
 ///
@@ -1981,6 +1982,7 @@ pub struct ProposalInfo {
     pub deadline_timestamp_seconds: Option<u64>,
     pub derived_proposal_information: Option<DerivedProposalInformation>,
     pub total_potential_voting_power: ::core::option::Option<u64>,
+    pub generic_representation: Option<GenericProposalRepresentation>,
 }
 
 /// Network economics contains the parameters for several operations related
@@ -4476,4 +4478,21 @@ pub struct NeuronVotes {
 pub struct NeuronVote {
     pub proposal_id: Option<ProposalId>,
     pub vote: Option<Vote>,
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub enum GenericValue {
+    Blob(Vec<u8>),
+    Text(String),
+    Nat(Nat),
+    Int(Int),
+    Array(Vec<GenericValue>),
+    Map(HashMap<String, GenericValue>),
+}
+
+#[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
+pub struct GenericProposalRepresentation {
+    pub type_name: Option<String>,
+    pub type_description: Option<String>,
+    pub value: Option<GenericValue>,
 }

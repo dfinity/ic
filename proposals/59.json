@@ -1,0 +1,22 @@
+{
+  "type_name": "Assign Node Operator ID (NOID)",
+  "type_description": "Assign an identity to a node operator associating key information regarding its ownership, the jurisdiction in which it is located, and other information. The node operator is stored as a record in the registry. It contains the remaining node allowance for that node operator, that is the number of nodes the node operator can still add to the IC. When an additional node is added by the node operator, the remaining allowance is decreased.",
+  "value": {
+    "dc_id": "dc1",
+    "max_rewardable_nodes": [],
+    "rewardable_nodes": [
+      {
+        "1": 5,
+        "0": "us-west"
+      }
+    ],
+    "node_operator_principal_id": [
+      "rdmx6-jaaaa-aaaaa-aaadq-cai"
+    ],
+    "ipv6": [],
+    "node_provider_principal_id": [
+      "rdmx6-jaaaa-aaaaa-aaadq-cai"
+    ],
+    "node_allowance": 5
+  }
+}

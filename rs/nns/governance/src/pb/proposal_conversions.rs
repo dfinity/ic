@@ -243,6 +243,7 @@ pub fn proposal_data_to_info(
     data: &pb::ProposalData,
     multi_query: bool,
     omit_large_fields_requested: bool,
+    show_generic_representation: bool,
     caller_neurons: &BTreeSet<NeuronId>,
     now_seconds: u64,
     voting_period_seconds: impl Fn(pb::Topic) -> u64,
@@ -267,6 +268,11 @@ pub fn proposal_data_to_info(
     let reward_event_round = data.reward_event_round;
     let derived_proposal_information = data.derived_proposal_information.clone().map(|x| x.into());
     let total_potential_voting_power = data.total_potential_voting_power;
+    let generic_representation = if show_generic_representation {
+        data.generic_representation.clone().map(|x| x.into())
+    } else {
+        None
+    };
 
     // Convert proposal which is potentially large.
     let proposal_action = data
@@ -309,6 +315,7 @@ pub fn proposal_data_to_info(
         deadline_timestamp_seconds,
         derived_proposal_information,
         total_potential_voting_power,
+        generic_representation,
     }
 }
 

@@ -1,0 +1,7 @@
+{
+  "type_name": "Deploy GuestOS To All Unassigned Nodes",
+  "type_description": "A proposal to update the version of all unassigned nodes.",
+  "value": {
+    "elected_replica_version": "deadbeef123456789012345678901234567890"
+  }
+}

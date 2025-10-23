@@ -1,0 +1,9 @@
+{
+  "type_name": "Update SSH Read Only Access For All Unassigned Nodes",
+  "type_description": "A proposal to update SSH readonly access for all unassigned nodes.",
+  "value": {
+    "ssh_readonly_keys": [
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK7wBi0+CKFlLd+bSIHFNSJlQUsOC/JVwBXxzhKBMwfh test@example.com"
+    ]
+  }
+}

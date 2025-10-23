@@ -1,0 +1,34 @@
+[
+  {
+    "type_description": [
+      "Update the settings of a canister that is controlled by the NNS."
+    ],
+    "type_name": [
+      "Update Canister Settings"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "memory_allocation",
+            "1": {
+              "Nat": "1_073_741_824"
+            }
+          },
+          {
+            "0": "compute_allocation",
+            "1": {
+              "Nat": "10"
+            }
+          },
+          {
+            "0": "canister_id",
+            "1": {
+              "Text": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

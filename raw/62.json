@@ -1,0 +1,26 @@
+[
+  {
+    "type_description": [
+      "A proposal to remove a set of API Boundary Nodes, which will designate them as unassigned nodes."
+    ],
+    "type_name": [
+      "Remove API Boundary Nodes"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "node_ids",
+            "1": {
+              "Array": [
+                {
+                  "Text": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

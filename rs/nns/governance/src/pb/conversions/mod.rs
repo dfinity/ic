@@ -1,8 +1,10 @@
-use crate::pb::v1 as pb;
-use ic_crypto_sha2::Sha256;
-use ic_nns_governance_api as pb_api;
+use std::collections::HashMap;
 
 use crate::pb::proposal_conversions::convert_proposal;
+use crate::pb::v1 as pb;
+use candid::{Int, Nat};
+use ic_crypto_sha2::Sha256;
+use ic_nns_governance_api as pb_api;
 
 #[cfg(test)]
 mod tests;
@@ -1484,6 +1486,7 @@ impl From<pb_api::ProposalData> for pb::ProposalData {
             topic: item.topic,
             // This is not intended to be initialized from outside of canister.
             previous_ballots_timestamp_seconds: None,
+            generic_representation: None,
         }
     }
 }
@@ -4073,6 +4076,73 @@ impl From<pb::MaturityDisbursement> for pb_api::MaturityDisbursement {
             finalize_disbursement_timestamp_seconds: Some(
                 item.finalize_disbursement_timestamp_seconds,
             ),
+        }
+    }
+}
+
+impl From<pb::GenericValue> for pb_api::GenericValue {
+    fn from(item: pb::GenericValue) -> Self {
+        let Some(value) = item.value else {
+            return Self::Map(HashMap::new());
+        };
+        match value {
+            pb::generic_value::Value::Blob(v) => Self::Blob(v),
+            pb::generic_value::Value::Text(v) => Self::Text(v),
+            pb::generic_value::Value::Nat(v) => {
+                let nat = Nat::decode(&mut v.as_slice()).unwrap();
+                Self::Nat(nat)
+            }
+            pb::generic_value::Value::Int(v) => {
+                let int = Int::decode(&mut v.as_slice()).unwrap();
+                Self::Int(int)
+            }
+            pb::generic_value::Value::Array(v) => {
+                Self::Array(v.values.into_iter().map(Self::from).collect())
+            }
+            pb::generic_value::Value::Map(v) => Self::Map(
+                v.values
+                    .into_iter()
+                    .map(|(k, v)| (k, Self::from(v)))
+                    .collect(),
+            ),
+        }
+    }
+}
+
+impl From<pb_api::GenericValue> for pb::GenericValue {
+    fn from(item: pb_api::GenericValue) -> Self {
+        let value = match item {
+            pb_api::GenericValue::Blob(v) => pb::generic_value::Value::Blob(v),
+            pb_api::GenericValue::Text(v) => pb::generic_value::Value::Text(v),
+            pb_api::GenericValue::Nat(v) => {
+                let mut bytes = Vec::new();
+                v.encode(&mut bytes).unwrap();
+                pb::generic_value::Value::Nat(bytes)
+            }
+            pb_api::GenericValue::Int(v) => {
+                let mut bytes = Vec::new();
+                v.encode(&mut bytes).unwrap();
+                pb::generic_value::Value::Int(bytes)
+            }
+            pb_api::GenericValue::Array(v) => {
+                pb::generic_value::Value::Array(pb::GenericValueArray {
+                    values: v.into_iter().map(Self::from).collect(),
+                })
+            }
+            pb_api::GenericValue::Map(v) => pb::generic_value::Value::Map(pb::GenericValueMap {
+                values: v.into_iter().map(|(k, v)| (k, Self::from(v))).collect(),
+            }),
+        };
+        Self { value: Some(value) }
+    }
+}
+
+impl From<pb::GenericProposalRepresentation> for pb_api::GenericProposalRepresentation {
+    fn from(item: pb::GenericProposalRepresentation) -> Self {
+        Self {
+            type_name: Some(item.type_name),
+            type_description: Some(item.type_description),
+            value: item.value.map(pb_api::GenericValue::from),
         }
     }
 }

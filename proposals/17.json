@@ -1,0 +1,9 @@
+{
+  "type_name": "Approve Genesis KYC",
+  "type_description": "When new neurons are created at Genesis, they have GenesisKYC=false. This restricts what actions they can perform. Specifically, they cannot spawn new neurons, and once their dissolve delays are zero, they cannot be disbursed and their balances unlocked to new accounts. This proposal sets GenesisKYC=true for batches of principals.<br/>(<i>Special note:</i> The Genesis event disburses all ICP in the form of neurons, whose principals must be KYCed. Consequently, all neurons created after Genesis have GenesisKYC=true set automatically since they must have been derived from balances that have already been KYCed.)",
+  "value": {
+    "principals": [
+      "rdmx6-jaaaa-aaaaa-aaadq-cai"
+    ]
+  }
+}

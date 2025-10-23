@@ -1,0 +1,26 @@
+[
+  {
+    "type_description": [
+      "A proposal to update SSH readonly access for all unassigned nodes."
+    ],
+    "type_name": [
+      "Update SSH Read Only Access For All Unassigned Nodes"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "ssh_readonly_keys",
+            "1": {
+              "Array": [
+                {
+                  "Text": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK7wBi0+CKFlLd+bSIHFNSJlQUsOC/JVwBXxzhKBMwfh test@example.com"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

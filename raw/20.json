@@ -1,0 +1,79 @@
+[
+  {
+    "type_description": [
+      "Install, reinstall or upgrade the code of a canister that is controlled by the NNS."
+    ],
+    "type_name": [
+      "Install Code"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "arg_hash",
+            "1": {
+              "Blob": []
+            }
+          },
+          {
+            "0": "canister_id",
+            "1": {
+              "Text": "rdmx6-jaaaa-aaaaa-aaadq-cai"
+            }
+          },
+          {
+            "0": "skip_stopping_before_installing",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "install_mode",
+            "1": {
+              "Text": "Upgrade"
+            }
+          },
+          {
+            "0": "wasm_module_hash",
+            "1": {
+              "Blob": [
+                227,
+                176,
+                196,
+                66,
+                152,
+                252,
+                28,
+                20,
+                154,
+                251,
+                244,
+                200,
+                153,
+                111,
+                185,
+                36,
+                39,
+                174,
+                65,
+                228,
+                100,
+                155,
+                147,
+                76,
+                164,
+                149,
+                153,
+                27,
+                120,
+                82,
+                184,
+                85
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,12 @@
+{
+  "type_name": "NNS Canister Install",
+  "type_description": "A proposal to add a new canister to be installed and executed in the NNS subnetwork. The root canister, which controls all Canisters on the NNS except for itself, handles this proposal type. The call also expects the Wasm module that shall be installed.",
+  "value": {
+    "initial_cycles": 1,
+    "compute_allocation": [],
+    "name": "test-canister",
+    "memory_allocation": [],
+    "wasm_module": "",
+    "arg": ""
+  }
+}

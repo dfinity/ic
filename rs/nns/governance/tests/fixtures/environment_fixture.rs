@@ -3,6 +3,7 @@ use candid::{CandidType, Decode, Encode, Error};
 use ic_base_types::CanisterId;
 use ic_nervous_system_timers::test::{advance_time_for_timers, set_time_for_timers};
 use ic_nns_governance::governance::RandomnessGenerator;
+use ic_nns_governance::proposals::execute_nns_function::ValidExecuteNnsFunction;
 use ic_nns_governance::{
     governance::{Environment, HeapGrowthPotential, RngError},
     pb::v1::{ExecuteNnsFunction, GovernanceError},
@@ -158,7 +159,7 @@ impl Environment for EnvironmentFixture {
     fn execute_nns_function(
         &self,
         _proposal_id: u64,
-        _update: &ExecuteNnsFunction,
+        _update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         unimplemented!()
     }

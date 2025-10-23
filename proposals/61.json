@@ -1,0 +1,10 @@
+{
+  "type_name": "Add API Boundary Nodes",
+  "type_description": "A proposal to add a set of new API Boundary Nodes using unassigned nodes.",
+  "value": {
+    "node_ids": [
+      "rdmx6-jaaaa-aaaaa-aaadq-cai"
+    ],
+    "version": "deadbeef"
+  }
+}

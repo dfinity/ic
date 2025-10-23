@@ -1,0 +1,1067 @@
+#!/bin/bash
+
+set -xeu
+
+# Extended test proposals script supporting both approaches:
+# 1. Action variants use direct dfx canister call to governance canister
+# 2. ExecuteNnsFunction variants use ic-admin commands
+# 3. Obsolete actions (SetDefaultFollowees, OpenSnsTokenSwap, SetSnsTokenSwapOpenTimeWindow) show errors per governance validation
+
+PROPOSAL_TYPE=${1:-all}
+NEURON_ID=${2:-1797124992355251525}
+
+NNS_URL="http://localhost:$(cd ~; dfx info webserver-port)"
+SUMMARY="Test proposal from extended script"
+IDENTITY_NAME=snsdemo8
+IDENTITY_PATH="$HOME/.config/dfx/identity/$IDENTITY_NAME"
+PEM="${IDENTITY_PATH}/identity.pem"
+GOVERNANCE_CANISTER_ID="rrkah-fqaaa-aaaaa-aaaaq-cai"
+SUPER_POWERFUL_NEURON_ID=$(cat $IDENTITY_PATH/neurons/local)
+
+propose() {
+    ic-admin "$@" --secret-key-pem $PEM --nns-url $NNS_URL --proposer $NEURON_ID --summary "$SUMMARY"
+}
+
+main() {
+
+    dfx identity use $IDENTITY_NAME
+    
+    case $PROPOSAL_TYPE in
+        # Action variants
+        motion)
+            propose_motion
+            ;;
+        approve-genesis-kyc)
+            propose_approve_genesis_kyc
+            ;;
+        manage-network-economics)
+            propose_manage_network_economics
+            ;;
+        add-or-remove-node-provider)
+            propose_add_or_remove_node_provider
+            ;;
+        register-known-neuron)
+            propose_register_known_neuron
+            ;;
+        deregister-known-neuron)
+            propose_deregister_known_neuron
+            ;;
+        install-code)
+            propose_install_code
+            ;;
+        propose-to-start-canister)
+            propose_to_start_canister
+            ;;
+        propose-to-stop-canister)
+            propose_to_stop_canister
+            ;;
+        update-canister-settings)
+            propose_update_canister_settings
+            ;;
+        create-service-nervous-system)
+            propose_create_service_nervous_system
+            ;;
+        # ExecuteNnsFunction variants (sample)
+        execute-nns-function-create-subnet)
+            propose_execute_nns_function_create_subnet
+            ;;
+        execute-nns-function-add-node-to-subnet)
+            propose_execute_nns_function_add_node_to_subnet
+            ;;
+        execute-nns-function-nns-canister-install)
+            propose_execute_nns_function_nns_canister_install
+            ;;
+        execute-nns-function-update-subnet-replica-version)
+            propose_execute_nns_function_update_subnet_replica_version
+            ;;
+        execute-nns-function-clear-provisional-whitelist)
+            propose_execute_nns_function_clear_provisional_whitelist
+            ;;
+        execute-nns-function-remove-nodes-from-subnet)
+            propose_execute_nns_function_remove_nodes_from_subnet
+            ;;
+        execute-nns-function-set-authorized-subnetworks)
+            propose_execute_nns_function_set_authorized_subnetworks
+            ;;
+        execute-nns-function-set-firewall-config)
+            propose_execute_nns_function_set_firewall_config
+            ;;
+        execute-nns-function-update-node-operator-config)
+            propose_execute_nns_function_update_node_operator_config
+            ;;
+        execute-nns-function-remove-nodes)
+            propose_execute_nns_function_remove_nodes
+            ;;
+        execute-nns-function-uninstall-code)
+            propose_execute_nns_function_uninstall_code
+            ;;
+        execute-nns-function-update-node-rewards-table)
+            propose_execute_nns_function_update_node_rewards_table
+            ;;
+        execute-nns-function-add-or-remove-data-centers)
+            propose_execute_nns_function_add_or_remove_data_centers
+            ;;
+        execute-nns-function-remove-node-operators)
+            propose_execute_nns_function_remove_node_operators
+            ;;
+        execute-nns-function-reroute-canister-ranges)
+            propose_execute_nns_function_reroute_canister_ranges
+            ;;
+        execute-nns-function-add-firewall-rules)
+            propose_execute_nns_function_add_firewall_rules
+            ;;
+        execute-nns-function-remove-firewall-rules)
+            propose_execute_nns_function_remove_firewall_rules
+            ;;
+        execute-nns-function-update-firewall-rules)
+            propose_execute_nns_function_update_firewall_rules
+            ;;
+        execute-nns-function-prepare-canister-migration)
+            propose_execute_nns_function_prepare_canister_migration
+            ;;
+        execute-nns-function-complete-canister-migration)
+            propose_execute_nns_function_complete_canister_migration
+            ;;
+        execute-nns-function-add-sns-wasm)
+            propose_execute_nns_function_add_sns_wasm
+            ;;
+        execute-nns-function-change-subnet-membership)
+            propose_execute_nns_function_change_subnet_membership
+            ;;
+        execute-nns-function-update-subnet-type)
+            propose_execute_nns_function_update_subnet_type
+            ;;
+        execute-nns-function-change-subnet-type-assignment)
+            propose_execute_nns_function_change_subnet_type_assignment
+            ;;
+        execute-nns-function-update-sns-wasm-sns-subnet-ids)
+            propose_execute_nns_function_update_sns_wasm_sns_subnet_ids
+            ;;
+        execute-nns-function-insert-sns-wasm-upgrade-path-entries)
+            propose_execute_nns_function_insert_sns_wasm_upgrade_path_entries
+            ;;
+        execute-nns-function-revise-elected-guestos-versions)
+            propose_execute_nns_function_revise_elected_guestos_versions
+            ;;
+        execute-nns-function-bitcoin-set-config)
+            propose_execute_nns_function_bitcoin_set_config
+            ;;
+        execute-nns-function-revise-elected-hostos-versions)
+            propose_execute_nns_function_revise_elected_hostos_versions
+            ;;
+        execute-nns-function-deploy-hostos-to-some-nodes)
+            propose_execute_nns_function_deploy_hostos_to_some_nodes
+            ;;
+        execute-nns-function-subnet-rental-request)
+            propose_execute_nns_function_subnet_rental_request
+            ;;
+        # Additional missing NnsFunctions
+        execute-nns-function-recover-subnet)
+            propose_execute_nns_function_recover_subnet
+            ;;
+        execute-nns-function-update-config-of-subnet)
+            propose_execute_nns_function_update_config_of_subnet
+            ;;
+        execute-nns-function-assign-noid)
+            propose_execute_nns_function_assign_noid
+            ;;
+        execute-nns-function-hard-reset-nns-root-to-version)
+            propose_execute_nns_function_hard_reset_nns_root_to_version
+            ;;
+        execute-nns-function-add-api-boundary-nodes)
+            propose_execute_nns_function_add_api_boundary_nodes
+            ;;
+        execute-nns-function-remove-api-boundary-nodes)
+            propose_execute_nns_function_remove_api_boundary_nodes
+            ;;
+        execute-nns-function-deploy-guestos-to-all-unassigned-nodes)
+            propose_execute_nns_function_deploy_guestos_to_all_unassigned_nodes
+            ;;
+        execute-nns-function-update-ssh-readonly-access-for-all-unassigned-nodes)
+            propose_execute_nns_function_update_ssh_readonly_access_for_all_unassigned_nodes
+            ;;
+        execute-nns-function-pause-canister-migrations)
+            propose_execute_nns_function_pause_canister_migrations
+            ;;
+        execute-nns-function-unpause-canister-migrations)
+            propose_execute_nns_function_unpause_canister_migrations
+            ;;
+        execute-nns-function-deploy-guestos-to-some-api-boundary-nodes)
+            propose_execute_nns_function_deploy_guestos_to_some_api_boundary_nodes
+            ;;
+        execute-nns-function-set-subnet-operational-level)
+            propose_execute_nns_function_set_subnet_operational_level
+            ;;
+        all)
+            echo "Testing ALL proposal types (including those with issues)..."
+            echo ""
+            
+            echo "=== Action Variants ==="
+            echo "Testing motion..."
+            propose_motion
+            echo ""
+            
+            echo "Testing approve-genesis-kyc..."
+            propose_approve_genesis_kyc
+            echo ""
+            
+            echo "Testing manage-network-economics..."
+            propose_manage_network_economics
+            echo ""
+            
+            echo "Testing add-or-remove-node-provider..."
+            propose_add_or_remove_node_provider
+            echo ""
+            
+            echo "Testing register-known-neuron..."
+            propose_register_known_neuron
+            echo ""
+            
+            echo "Testing deregister-known-neuron..."
+            propose_deregister_known_neuron
+            echo ""
+            
+            echo "Testing install-code..."
+            propose_install_code
+            echo ""
+            
+            echo "Testing propose-to-start-canister..."
+            propose_to_start_canister
+            echo ""
+            
+            echo "Testing propose-to-stop-canister..."
+            propose_to_stop_canister
+            echo ""
+            
+            echo "Testing update-canister-settings..."
+            propose_update_canister_settings
+            echo ""
+            
+            echo "Testing create-service-nervous-system..."
+            propose_create_service_nervous_system
+            echo ""
+            
+            echo "=== ExecuteNnsFunction Variants ==="
+            echo "Testing execute-nns-function-create-subnet..."
+            propose_execute_nns_function_create_subnet
+            echo ""
+            
+            echo "Testing execute-nns-function-add-node-to-subnet..."
+            propose_execute_nns_function_add_node_to_subnet
+            echo ""
+            
+            echo "Testing execute-nns-function-nns-canister-install..."
+            propose_execute_nns_function_nns_canister_install
+            echo ""
+            
+            echo "Testing execute-nns-function-update-subnet-replica-version..."
+            propose_execute_nns_function_update_subnet_replica_version
+            echo ""
+            
+            echo "Testing execute-nns-function-clear-provisional-whitelist..."
+            propose_execute_nns_function_clear_provisional_whitelist
+            echo ""
+            
+            echo "Testing execute-nns-function-remove-nodes-from-subnet..."
+            propose_execute_nns_function_remove_nodes_from_subnet
+            echo ""
+            
+            echo "Testing execute-nns-function-set-authorized-subnetworks..."
+            propose_execute_nns_function_set_authorized_subnetworks
+            echo ""
+            
+            echo "Testing execute-nns-function-set-firewall-config..."
+            propose_execute_nns_function_set_firewall_config
+            echo ""
+            
+            echo "Testing execute-nns-function-update-node-operator-config..."
+            propose_execute_nns_function_update_node_operator_config
+            echo ""
+            
+            echo "Testing execute-nns-function-remove-nodes..."
+            propose_execute_nns_function_remove_nodes
+            echo ""
+            
+            echo "Testing execute-nns-function-uninstall-code..."
+            propose_execute_nns_function_uninstall_code
+            echo ""
+            
+            echo "Testing execute-nns-function-update-node-rewards-table..."
+            propose_execute_nns_function_update_node_rewards_table
+            echo ""
+            
+            echo "Testing execute-nns-function-add-or-remove-data-centers..."
+            propose_execute_nns_function_add_or_remove_data_centers
+            echo ""
+            
+            echo "Testing execute-nns-function-remove-node-operators..."
+            propose_execute_nns_function_remove_node_operators
+            echo ""
+            
+            echo "Testing execute-nns-function-reroute-canister-ranges..."
+            propose_execute_nns_function_reroute_canister_ranges
+            echo ""
+            
+            echo "Testing execute-nns-function-add-firewall-rules..."
+            propose_execute_nns_function_add_firewall_rules
+            echo ""
+            
+            echo "Testing execute-nns-function-remove-firewall-rules..."
+            propose_execute_nns_function_remove_firewall_rules
+            echo ""
+            
+            echo "Testing execute-nns-function-update-firewall-rules..."
+            propose_execute_nns_function_update_firewall_rules
+            echo ""
+            
+            echo "Testing execute-nns-function-prepare-canister-migration..."
+            propose_execute_nns_function_prepare_canister_migration
+            echo ""
+            
+            echo "Testing execute-nns-function-complete-canister-migration..."
+            propose_execute_nns_function_complete_canister_migration
+            echo ""
+            
+            echo "Testing execute-nns-function-add-sns-wasm..."
+            propose_execute_nns_function_add_sns_wasm
+            echo ""
+            
+            echo "Testing execute-nns-function-change-subnet-membership..."
+            propose_execute_nns_function_change_subnet_membership
+            echo ""
+            
+            echo "Testing execute-nns-function-update-subnet-type..."
+            propose_execute_nns_function_update_subnet_type
+            echo ""
+            
+            echo "Testing execute-nns-function-change-subnet-type-assignment..."
+            propose_execute_nns_function_change_subnet_type_assignment
+            echo ""
+            
+            echo "Testing execute-nns-function-update-sns-wasm-sns-subnet-ids..."
+            propose_execute_nns_function_update_sns_wasm_sns_subnet_ids
+            echo ""  
+            
+            echo "Testing execute-nns-function-insert-sns-wasm-upgrade-path-entries..."
+            propose_execute_nns_function_insert_sns_wasm_upgrade_path_entries
+            echo ""
+            
+            echo "Testing execute-nns-function-revise-elected-guestos-versions..."
+            propose_execute_nns_function_revise_elected_guestos_versions
+            echo ""
+            
+            echo "Testing execute-nns-function-bitcoin-set-config..."
+            propose_execute_nns_function_bitcoin_set_config
+            echo ""
+            
+            echo "Testing execute-nns-function-revise-elected-hostos-versions..."
+            propose_execute_nns_function_revise_elected_hostos_versions
+            echo ""
+            
+            echo "Testing execute-nns-function-deploy-hostos-to-some-nodes..."
+            propose_execute_nns_function_deploy_hostos_to_some_nodes
+            echo ""
+            
+            echo "Testing execute-nns-function-subnet-rental-request..."
+            propose_execute_nns_function_subnet_rental_request
+            echo ""
+            
+            echo "Testing execute-nns-function-recover-subnet..."
+            propose_execute_nns_function_recover_subnet
+            echo ""
+            
+            echo "Testing execute-nns-function-update-config-of-subnet..."
+            propose_execute_nns_function_update_config_of_subnet
+            echo ""
+            
+            echo "Testing execute-nns-function-assign-noid..."
+            propose_execute_nns_function_assign_noid
+            echo ""
+            
+            echo "Testing execute-nns-function-hard-reset-nns-root-to-version..."
+            propose_execute_nns_function_hard_reset_nns_root_to_version
+            echo ""
+            
+            echo "Testing execute-nns-function-add-api-boundary-nodes..."
+            propose_execute_nns_function_add_api_boundary_nodes
+            echo ""
+            
+            echo "Testing execute-nns-function-remove-api-boundary-nodes..."
+            propose_execute_nns_function_remove_api_boundary_nodes
+            echo ""
+            
+            echo "Testing execute-nns-function-deploy-guestos-to-all-unassigned-nodes..."
+            propose_execute_nns_function_deploy_guestos_to_all_unassigned_nodes
+            echo ""
+            
+            echo "Testing execute-nns-function-update-ssh-readonly-access-for-all-unassigned-nodes..."
+            propose_execute_nns_function_update_ssh_readonly_access_for_all_unassigned_nodes
+            echo ""
+            
+            echo "Testing execute-nns-function-pause-canister-migrations..."
+            propose_execute_nns_function_pause_canister_migrations
+            echo ""
+            
+            echo "Testing execute-nns-function-unpause-canister-migrations..."
+            propose_execute_nns_function_unpause_canister_migrations
+            echo ""
+            
+            echo "Testing execute-nns-function-deploy-guestos-to-some-api-boundary-nodes..."
+            propose_execute_nns_function_deploy_guestos_to_some_api_boundary_nodes
+            echo ""
+            
+            echo "Testing execute-nns-function-set-subnet-operational-level..."
+            propose_execute_nns_function_set_subnet_operational_level
+            echo ""
+            
+            echo "=== Summary ==="
+            echo "Completed testing ALL proposal types!"
+            echo "Results above show which proposals work (✓) and which have issues (ERROR messages)."
+            echo "This provides a comprehensive view of the current state of all proposal types."
+            ;;
+        *)
+            echo "Available proposal types:"
+            echo "  Action variants:"
+            echo "    motion, approve-genesis-kyc, manage-network-economics"
+            echo "    add-or-remove-node-provider, reward-node-provider, reward-node-providers"
+            echo "    set-default-followees, register-known-neuron, deregister-known-neuron"
+            echo "    install-code, propose-to-start-canister, propose-to-stop-canister"
+            echo "    update-canister-settings, create-service-nervous-system"
+            echo "    open-sns-token-swap, set-sns-token-swap-open-time-window"
+            echo "  ExecuteNnsFunction variants:"
+            echo "    execute-nns-function-create-subnet, execute-nns-function-add-node-to-subnet"
+            echo "    execute-nns-function-nns-canister-install, execute-nns-function-update-subnet-replica-version"
+            echo "    execute-nns-function-clear-provisional-whitelist, execute-nns-function-remove-nodes-from-subnet"
+            echo "    execute-nns-function-set-authorized-subnetworks, execute-nns-function-set-firewall-config"
+            echo "    execute-nns-function-update-node-operator-config"
+            echo "    execute-nns-function-remove-nodes, execute-nns-function-uninstall-code"
+            echo "    execute-nns-function-update-node-rewards-table, execute-nns-function-add-or-remove-data-centers"
+            echo "    execute-nns-function-update-unassigned-nodes-config, execute-nns-function-remove-node-operators"
+            echo "    execute-nns-function-reroute-canister-ranges, execute-nns-function-add-firewall-rules"
+            echo "    execute-nns-function-remove-firewall-rules, execute-nns-function-update-firewall-rules"
+            echo "    execute-nns-function-prepare-canister-migration, execute-nns-function-complete-canister-migration"
+            echo "    execute-nns-function-add-sns-wasm, execute-nns-function-change-subnet-membership"
+            echo "    execute-nns-function-update-subnet-type, execute-nns-function-change-subnet-type-assignment"
+            echo "    execute-nns-function-update-sns-wasm-sns-subnet-ids, execute-nns-function-insert-sns-wasm-upgrade-path-entries"
+            echo "    execute-nns-function-revise-elected-guestos-versions, execute-nns-function-bitcoin-set-config"
+            echo "    execute-nns-function-revise-elected-hostos-versions, execute-nns-function-deploy-hostos-to-some-nodes"
+            echo "    execute-nns-function-subnet-rental-request, execute-nns-function-recover-subnet"
+            echo "    execute-nns-function-update-config-of-subnet, execute-nns-function-assign-noid"
+            echo "    execute-nns-function-hard-reset-nns-root-to-version, execute-nns-function-add-api-boundary-nodes"
+            echo "    execute-nns-function-remove-api-boundary-nodes, execute-nns-function-deploy-guestos-to-some-api-boundary-nodes"
+            echo "    execute-nns-function-deploy-guestos-to-all-unassigned-nodes, execute-nns-function-update-ssh-readonly-access-for-all-unassigned-nodes"
+            echo "    execute-nns-function-pause-canister-migrations, execute-nns-function-unpause-canister-migrations"
+            echo "    execute-nns-function-set-subnet-operational-level"
+            echo ""
+            echo "Unknown proposal type: $PROPOSAL_TYPE"
+            exit 1
+            ;;
+        esac
+}
+
+# Action variant functions
+
+propose_motion() {
+    # Motion proposals don't seem to have a direct ic-admin command - needs investigation
+    dfx canister call $GOVERNANCE_CANISTER_ID manage_neuron \
+        "(
+            record { 
+                id = opt record { id = ${NEURON_ID} };
+                command = opt variant { MakeProposal = 
+                    record {
+                        url = \"\"; 
+                        title = opt \"A motion proposal\"; 
+                        action = opt variant { 
+                            Motion = record { 
+                                motion_text = \"some motion text\"
+                            }
+                        };
+                        summary = \"A motion proposal\";
+                    }
+                }; 
+            },
+        )"
+}
+
+propose_approve_genesis_kyc() {
+    # ApproveGenesisKyc using direct dfx canister call
+    dfx canister call $GOVERNANCE_CANISTER_ID manage_neuron \
+        "(
+            record { 
+                id = opt record { id = ${NEURON_ID} };
+                command = opt variant { MakeProposal = 
+                    record {
+                        url = \"\"; 
+                        title = opt \"Approve Genesis KYC proposal\"; 
+                        action = opt variant { 
+                            ApproveGenesisKyc = record {
+                                principals = vec { 
+                                    principal \"rdmx6-jaaaa-aaaaa-aaadq-cai\"
+                                };
+                            }
+                        };
+                        summary = \"Approve genesis KYC for principals\";
+                    }
+                }; 
+            },
+        )"
+}
+
+propose_manage_network_economics() {
+    # ManageNetworkEconomics using direct dfx canister call
+    dfx canister call $GOVERNANCE_CANISTER_ID manage_neuron \
+        "(
+            record { 
+                id = opt record { id = ${NEURON_ID} };
+                command = opt variant { MakeProposal = 
+                    record {
+                        url = \"\"; 
+                        title = opt \"Manage Network Economics proposal\"; 
+                        action = opt variant { 
+                            ManageNetworkEconomics = record {
+                                neuron_minimum_stake_e8s = 100000000 : nat64;
+                                max_proposals_to_keep_per_topic = 100 : nat32;
+                                neuron_management_fee_per_proposal_e8s = 1000000 : nat64;
+                                reject_cost_e8s = 1000000 : nat64;
+                                transaction_fee_e8s = 10000 : nat64;
+                                neuron_spawn_dissolve_delay_seconds = 604800 : nat64;
+                                minimum_icp_xdr_rate = 100 : nat64;
+                                maximum_node_provider_rewards_e8s = 1000000000 : nat64;
+                            }
+                        };
+                        summary = \"Update network economics parameters\";
+                    }
+                }; 
+            },
+        )"
+}
+
+add_node_provider() {
+    local node_provider_pid=$1
+    local neuron_id=$2
+
+    ic-admin propose-to-add-or-remove-node-provider \
+        --node-provider-pid $node_provider_pid \
+        add \
+        --secret-key-pem $PEM --nns-url $NNS_URL --proposer $neuron_id --summary "$SUMMARY"
+}
+
+propose_add_or_remove_node_provider() {
+    # Correct syntax: --node-provider-pid and positional AddOrRemove argument
+    propose propose-to-add-or-remove-node-provider \
+        --node-provider-pid rdmx6-jaaaa-aaaaa-aaadq-cai \
+        add
+}
+
+propose_register_known_neuron() {
+    # RegisterKnownNeuron using direct dfx canister call
+    dfx canister call $GOVERNANCE_CANISTER_ID manage_neuron \
+        "(
+            record { 
+                id = opt record { id = ${NEURON_ID} };
+                command = opt variant { MakeProposal = 
+                    record {
+                        url = \"\"; 
+                        title = opt \"Register Known Neuron proposal\"; 
+                        action = opt variant { 
+                            RegisterKnownNeuron = record {
+                                id = opt record { id = 12345 : nat64 };
+                                known_neuron_data = opt record {
+                                    name = \"Test Known Neuron\";
+                                    description = opt \"A test known neuron\";
+                                }
+                            }
+                        };
+                        summary = \"Register a known neuron for testing\";
+                    }
+                }; 
+            },
+        )"
+}
+
+propose_deregister_known_neuron() {
+    # DeregisterKnownNeuron using direct dfx canister call
+    echo "Not implemented"
+    # dfx canister call $GOVERNANCE_CANISTER_ID manage_neuron \
+    #     "(
+    #         record { 
+    #             id = opt record { id = ${NEURON_ID} };
+    #             command = opt variant { MakeProposal = 
+    #                 record {
+    #                     url = \"\"; 
+    #                     title = opt \"Deregister Known Neuron proposal\"; 
+    #                     action = opt variant { 
+    #                         DeregisterKnownNeuron = record {
+    #                             id = opt record { id = 12345 : nat64 }
+    #                         }
+    #                     };
+    #                     summary = \"Deregister a known neuron\";
+    #                 }
+    #             }; 
+    #         },
+    #     )"
+}
+
+propose_install_code() {
+    # InstallCode using ic-admin commands
+    propose propose-to-change-nns-canister \
+        --canister-id rdmx6-jaaaa-aaaaa-aaadq-cai \
+        --mode upgrade \
+        --wasm-module-path /dev/null \
+        --wasm-module-sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+}
+
+propose_to_start_canister() {
+    # StopOrStartCanister using ic-admin commands
+    propose propose-to-start-canister \
+        --canister-id rdmx6-jaaaa-aaaaa-aaadq-cai
+}
+
+propose_to_stop_canister() {
+    # StopOrStartCanister using ic-admin commands
+    propose propose-to-stop-canister \
+        --canister-id rdmx6-jaaaa-aaaaa-aaadq-cai
+}
+
+propose_update_canister_settings() {
+    # UpdateCanisterSettings using ic-admin commands
+    propose propose-to-update-canister-settings \
+        --canister-id rdmx6-jaaaa-aaaaa-aaadq-cai \
+        --compute-allocation 10 \
+        --memory-allocation 1073741824
+}
+
+propose_create_service_nervous_system() {
+    # CreateServiceNervousSystem using ic-admin
+    # Based on the complete structure from rs/registry/admin/bin/main.rs
+    propose propose-to-create-service-nervous-system \
+        --name "Test SNS" \
+        --description "A test SNS for validation" \
+        --url "https://example.com" \
+        --logo "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==" \
+        --fallback-controller-principal-id rdmx6-jaaaa-aaaaa-aaadq-cai \
+        --dapp-canister 6hsbt-vqaaa-aaaaf-aaafq-cai \
+        --developer-neuron-controller rdmx6-jaaaa-aaaaa-aaadq-cai \
+        --developer-neuron-dissolve-delay "52w" \
+        --developer-neuron-memo 0 \
+        --developer-neuron-stake "100_tokens" \
+        --developer-neuron-vesting-period "104w" \
+        --treasury-amount "1000_tokens" \
+        --swap-amount "1234_tokens" \
+        --swap-minimum-participants 1 \
+        --swap-minimum-direct-participation-icp "100_tokens" \
+        --swap-maximum-direct-participation-icp "10000_tokens" \
+        --swap-minimum-participant-icp "65_tokens" \
+        --swap-maximum-participant-icp "1000_tokens" \
+        --confirmation-text "I confirm participation" \
+        --restrict-swap-in-country "US" \
+        --restrict-swap-in-country "CH" \
+        --swap-neuron-count 3 \
+        --swap-neuron-dissolve-delay "6w" \
+        --swap-start-time "10:01 UTC" \
+        --swap-duration "7 days" \
+        --transaction-fee "10_000_e8s" \
+        --token-name "Test Token" \
+        --token-symbol "TST" \
+        --token-logo-url "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==" \
+        --proposal-rejection-fee "0.1_tokens" \
+        --proposal-initial-voting-period "1d" \
+        --proposal-wait-for-quiet-deadline-increase "1h" \
+        --neuron-minimum-stake "1_tokens" \
+        --neuron-minimum-dissolve-delay-to-vote "4w" \
+        --neuron-maximum-dissolve-delay "1461d" \
+        --neuron-maximum-dissolve-delay-bonus "50%" \
+        --neuron-maximum-age-for-age-bonus "2922d" \
+        --neuron-maximum-age-bonus "10%" \
+        --initial-voting-reward-rate "10.5%" \
+        --final-voting-reward-rate "5.25%" \
+        --voting-reward-rate-transition-duration "4383d"
+}
+
+# ExecuteNnsFunction variant functions
+
+propose_execute_nns_function_create_subnet() {
+    # CreateSubnet proposal with realistic parameters based on actual subnet creations
+    # Using ic-admin with comprehensive parameters like real proposals (e.g., proposal 126364)
+    propose propose-to-create-subnet \
+        --subnet-type application \
+        --replica-version-id 69e1408347723dbaa7a6cd2faa9b65c42abbe861 \
+        --max-ingress-bytes-per-message 2097152 \
+        --max-ingress-messages-per-block 1000 \
+        --max-block-payload-size 4194304 \
+        --unit-delay-millis 1000 \
+        --initial-notary-delay-millis 600 \
+        --dkg-interval-length 499 \
+        --dkg-dealings-per-block 1 \
+        --features http_requests \
+        --max-number-of-canisters 0 \
+        w3phu-4ihah-tqdl6-n32hp-e5254-l6ybu-kvmmx-thj6t-q7z7k-swvi4-iqe \
+        a3xcb-ezfy5-yib3b-5bo75-5nok4-kaolh-a6akg-ilxck-qdbph-pwppb-dae \
+        esi3h-xe7jo-cehj3-trvun-5hou2-eyr6c-olprm-z5u6m-2zoon-jmabh-wae \
+        fneyt-nqoj2-ehhfp-vat74-ookwk-othuy-dj2nz-giiio-tuzqi-dkbsw-mqe \
+        foa3b-mjkuu-3qlgu-6o64i-2omzt-x6suc-5gzcq-6j2gz-bftru-j5idg-gae \
+        fpxeh-odlv7-zuqfj-7l6jb-42tq6-jlmhq-imuur-mpplj-ou3hs-d3l5h-aae \
+        dzol4-3eqco-5b5ag-ritui-tyl7u-i3iwz-ex2qo-cbfjx-5fmxw-yfgwo-tqe \
+        7exbb-k4tu4-mw24y-3zylh-bopa5-fwdsc-f4a3z-45hh4-twpin-4zv4a-yae \
+        3yok3-yvswm-l4ior-bjh62-fsi73-vfqp3-77wji-coglq-l2bjw-rxrph-uqe \
+        ldqxr-qdliy-howvj-2tamr-3fwul-liakv-7523k-tmhrz-5geyk-jlu7b-uae \
+        c2dnc-3ozfd-ew52a-yvmrc-mjyss-edoch-k7cki-f7vzk-zqapg-aw44i-mqe \
+        lzjli-4do6u-xcbtx-co7r7-35gzq-5mmqw-k4jb3-3s63m-facun-6riew-lae \
+        lj6xb-t5tcb-dol3s-ay52b-dulse-zyezk-25qyv-l7yqj-4zrc2-hp5qz-sae
+}
+
+propose_execute_nns_function_add_node_to_subnet() {
+    # This should use the subnet membership change command
+    propose propose-to-change-subnet-membership \
+        --subnet-id tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe \
+        --node-ids-add rdmx6-jaaaa-aaaaa-aaadq-cai
+}
+
+propose_execute_nns_function_nns_canister_install() {
+    propose propose-to-add-nns-canister \
+        --name "test-canister" \
+        --wasm-module-path /dev/null \
+        --wasm-module-sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+}
+
+propose_execute_nns_function_update_subnet_replica_version() {
+    propose propose-to-deploy-guestos-to-all-subnet-nodes \
+        tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe \
+        deadbeef
+}
+
+propose_execute_nns_function_clear_provisional_whitelist() {
+    propose propose-to-clear-provisional-whitelist
+}
+
+propose_execute_nns_function_remove_nodes_from_subnet() {
+    propose propose-to-change-subnet-membership \
+        --subnet-id tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe \
+        --node-ids-remove rdmx6-jaaaa-aaaaa-aaadq-cai
+}
+
+propose_execute_nns_function_set_authorized_subnetworks() {
+    propose propose-to-set-authorized-subnetworks \
+        --subnets tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe
+}
+
+propose_execute_nns_function_set_firewall_config() {
+    propose propose-to-set-firewall-config \
+        /dev/null \
+        "-" \
+        "-"
+}
+
+propose_execute_nns_function_update_node_operator_config() {
+    propose propose-to-update-node-operator-config \
+        --node-operator-id rdmx6-jaaaa-aaaaa-aaadq-cai \
+        5
+}
+
+propose_execute_nns_function_remove_nodes() {
+    # Fix syntax - node IDs should be positional arguments
+    propose propose-to-remove-nodes rdmx6-jaaaa-aaaaa-aaadq-cai
+}
+
+propose_execute_nns_function_uninstall_code() {
+    propose propose-to-uninstall-code \
+        --canister-id rdmx6-jaaaa-aaaaa-aaadq-cai
+}
+
+propose_execute_nns_function_update_node_rewards_table() {
+    propose propose-to-update-node-rewards-table \
+        --updated-node-rewards '{"North America,US": {"default": {"xdr_permyriad_per_node_per_month": 100}}}'
+}
+
+propose_execute_nns_function_add_or_remove_data_centers() {
+    # Correct syntax: --data-centers-to-add (not --add-data-centers)
+    propose propose-to-add-or-remove-data-centers \
+        --data-centers-to-add '{"id":"dc1","region":"us-west","owner":"DFINITY"}' \
+        --skip-confirmation
+}
+
+propose_execute_nns_function_remove_node_operators() {
+    propose propose-to-remove-node-operators \
+        rdmx6-jaaaa-aaaaa-aaadq-cai
+}
+
+propose_execute_nns_function_reroute_canister_ranges() {
+    propose propose-to-reroute-canister-ranges \
+        --canister-id-ranges "qoctq-giaaa-aaaaa-aaaea-cai:qsgjb-riaaa-aaaaa-aaaga-cai" \
+        --source-subnet tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe \
+        --destination-subnet tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe
+}
+
+propose_execute_nns_function_add_firewall_rules() {
+    propose propose-to-add-firewall-rules \
+        global \
+        /tmp/empty-firewall-rules.json \
+        "0" \
+        "deadbeef"
+}
+
+propose_execute_nns_function_remove_firewall_rules() {
+    propose propose-to-remove-firewall-rules \
+        global \
+        "0" \
+        "deadbeef"
+}
+
+propose_execute_nns_function_update_firewall_rules() {
+    propose propose-to-update-firewall-rules \
+        global \
+        /tmp/empty-firewall-rules.json \
+        "0" \
+        "deadbeef"
+}
+
+propose_execute_nns_function_prepare_canister_migration() {
+    propose propose-to-prepare-canister-migration \
+        --canister-id-ranges "qoctq-giaaa-aaaaa-aaaea-cai:qsgjb-riaaa-aaaaa-aaaga-cai" \
+        --source-subnet tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe \
+        --destination-subnet tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe
+}
+
+propose_execute_nns_function_complete_canister_migration() {
+    propose propose-to-complete-canister-migration \
+        --canister-id-ranges "qoctq-giaaa-aaaaa-aaaea-cai:qsgjb-riaaa-aaaaa-aaaga-cai" \
+        --migration-trace tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe
+}
+
+propose_execute_nns_function_add_sns_wasm() {
+    propose propose-to-add-wasm-to-sns-wasm \
+        --wasm-module-path /dev/null \
+        --wasm-module-sha256 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 \
+        --canister-type governance
+}
+
+propose_execute_nns_function_change_subnet_membership() {
+    propose propose-to-change-subnet-membership \
+        --subnet-id tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe \
+        --node-ids-add rdmx6-jaaaa-aaaaa-aaadq-cai
+}
+
+propose_execute_nns_function_update_subnet_type() {
+    # Correct syntax: needs --operation and --subnet-type
+    propose propose-to-update-subnet-type \
+        --operation add \
+        --subnet-type application
+}
+
+propose_execute_nns_function_change_subnet_type_assignment() {
+    # Correct syntax: needs --operation, --subnets, and --subnet-type
+    propose propose-to-change-subnet-type-assignment \
+        --operation add \
+        --subnets tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe \
+        --subnet-type application
+}
+
+propose_execute_nns_function_update_sns_wasm_sns_subnet_ids() {
+    propose propose-to-update-sns-subnet-ids-in-sns-wasm \
+        --sns-subnet-ids-to-add tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe
+}
+
+propose_execute_nns_function_insert_sns_wasm_upgrade_path_entries() {
+    # Fix syntax: --force-upgrade-main-upgrade-path is a boolean flag
+    propose propose-to-insert-sns-wasm-upgrade-path-entries \
+        --force-upgrade-main-upgrade-path true \
+        '{"root_wasm_hash":"deadbeef","governance_wasm_hash":"deadbeef","ledger_wasm_hash":"deadbeef","swap_wasm_hash":"deadbeef","index_wasm_hash":"deadbeef","archive_wasm_hash":"deadbeef"}'
+}
+
+propose_execute_nns_function_revise_elected_guestos_versions() {
+    # Note: --guest-launch-measurements-path is not yet available in the current ic-admin version
+    # Guest launch measurements JSON is available at /tmp/guest_launch_measurements.json for when it's supported
+    propose propose-to-revise-elected-guestos-versions \
+        --replica-version-to-elect 206b61a8616bc93d36d6a014e5cc8edf1ba256ae \
+        --release-package-sha256-hex 6b4965857e181ce9508f879cba56a6425e0e441ad1bb73f56b11dcaf247bd4eb \
+        --release-package-urls "https://download.dfinity.systems/ic/206b61a8616bc93d36d6a014e5cc8edf1ba256ae/guest-os/update-img/update-img.tar.zst" \
+        --release-package-urls "https://download.dfinity.network/ic/206b61a8616bc93d36d6a014e5cc8edf1ba256ae/guest-os/update-img/update-img.tar.zst" \
+        --guest-launch-measurements-path /tmp/guest_launch_measurements.json \
+        --replica-versions-to-unelect 9152ba15ab6cc3c12eb407e13f8ee483a1d5723c \
+        --replica-versions-to-unelect ab62c6ec1c3b5f492df53c05bb0bf5f2eb6298ba \
+        --replica-versions-to-unelect c6d90cb33f3d47f808aaaf227a1678cb812d74a2
+}
+
+propose_execute_nns_function_bitcoin_set_config() {
+    # Bitcoin config requires network and all fee parameters
+    propose propose-to-set-bitcoin-config testnet \
+        --stability-threshold 6 \
+        --get-utxos-base 1000 \
+        --get-utxos-cycles-per-ten-instructions 1000 \
+        --get-utxos-maximum 100000000 \
+        --get-balance 1000 \
+        --get-balance-maximum 100000000 \
+        --get-current-fee-percentiles 1000 \
+        --get-current-fee-percentiles-maximum 100000000 \
+        --send-transaction-base 1000 \
+        --send-transaction-per-byte 100 \
+        --get-block-headers-base 1000 \
+        --get-block-headers-cycles-per-ten-instructions 1000 \
+        --get-block-headers-maximum 100000000
+}
+
+propose_execute_nns_function_revise_elected_hostos_versions() {
+    propose propose-to-revise-elected-hostos-versions \
+        --hostos-version-to-elect deadbeef \
+        --release-package-sha256-hex e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 \
+        --release-package-urls "https://example.com/release.tar.gz"
+}
+
+propose_execute_nns_function_deploy_hostos_to_some_nodes() {
+    propose propose-to-deploy-hostos-to-some-nodes \
+        --hostos-version-id deadbeef \
+        rdmx6-jaaaa-aaaaa-aaadq-cai
+}
+
+propose_execute_nns_function_subnet_rental_request() {
+    propose propose-to-rent-subnet \
+        --user rdmx6-jaaaa-aaaaa-aaadq-cai \
+        --rental-condition-id App13CH
+}
+
+# Additional missing NnsFunction implementations
+
+propose_execute_nns_function_recover_subnet() {
+    propose propose-to-update-recovery-cup \
+        --subnet tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe \
+        --height 100 \
+        --time-ns 1000000000 \
+        --state-hash deadbeef123456789012345678901234567890123456789012345678901234
+}
+
+propose_execute_nns_function_update_config_of_subnet() {
+    VALID_SUBNET_ID=$(ic-admin get-subnet-list -r ${NNS_URL} | jq -r .[0])
+    propose propose-to-update-subnet \
+        --subnet ${VALID_SUBNET_ID} \
+        --unit-delay-millis 500
+}
+
+propose_execute_nns_function_assign_noid() {
+    add_node_provider rdmx6-jaaaa-aaaaa-aaadq-cai $SUPER_POWERFUL_NEURON_ID
+    # AssignNoid can be done using propose-to-add-node-operator
+    # NODE_PROVIDER_PRINCIPAL_ID appears to be a positional argument
+    propose propose-to-add-node-operator \
+        --node-operator-principal-id rdmx6-jaaaa-aaaaa-aaadq-cai \
+        --node-allowance 5 \
+        --dc-id "dc1" \
+        --rewardable-nodes '{"us-west":5}' \
+        rdmx6-jaaaa-aaaaa-aaadq-cai
+}
+
+propose_execute_nns_function_hard_reset_nns_root_to_version() {
+    # Use the actual SHA256 of /dev/null (empty file)
+    WASM_MODULE_FILE=$(mktemp)
+    trap "rm -f ${WASM_MODULE_FILE}" EXIT
+    echo -ne '\x00\x61\x73\x6d\x01\x00\x00\x00' > ${WASM_MODULE_FILE}
+    WASM_MODULE_SHA256=$(sha256sum ${WASM_MODULE_FILE} | awk '{print $1}')
+    propose propose-to-hard-reset-nns-root-to-version \
+        --wasm-module-path ${WASM_MODULE_FILE} \
+        --wasm-module-sha256 ${WASM_MODULE_SHA256}
+}
+
+propose_execute_nns_function_add_api_boundary_nodes() {
+    propose propose-to-add-api-boundary-nodes \
+        --nodes rdmx6-jaaaa-aaaaa-aaadq-cai \
+        --version deadbeef
+}
+
+propose_execute_nns_function_remove_api_boundary_nodes() {
+    propose propose-to-remove-api-boundary-nodes \
+        --nodes rdmx6-jaaaa-aaaaa-aaadq-cai
+}
+
+propose_execute_nns_function_deploy_guestos_to_all_unassigned_nodes() {
+    # DeployGuestosToAllUnassignedNodes - deploy a GuestOS version to all unassigned nodes
+    propose propose-to-deploy-guestos-to-all-unassigned-nodes \
+        --guestos-version-id deadbeef123456789012345678901234567890
+}
+
+propose_execute_nns_function_update_ssh_readonly_access_for_all_unassigned_nodes() {
+    # UpdateSshReadonlyAccessForAllUnassignedNodes - update SSH readonly access keys
+    propose propose-to-update-ssh-readonly-access-for-all-unassigned-nodes \
+        --ssh-readonly-access "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK7wBi0+CKFlLd+bSIHFNSJlQUsOC/JVwBXxzhKBMwfh test@example.com"
+}
+
+propose_execute_nns_function_pause_canister_migrations() {
+    # PauseCanisterMigrations - pause canister migrations using direct dfx call
+    # This function takes an empty payload
+    dfx canister call $GOVERNANCE_CANISTER_ID manage_neuron \
+        "(
+            record { 
+                id = opt record { id = ${NEURON_ID} };
+                command = opt variant { MakeProposal = 
+                    record {
+                        url = \"\"; 
+                        title = opt \"Pause Canister Migrations\"; 
+                        action = opt variant { 
+                            ExecuteNnsFunction = record {
+                                nns_function = 53 : int32;
+                                payload = vec {};
+                            }
+                        };
+                        summary = \"Pause canister migrations\";
+                    }
+                }; 
+            },
+        )"
+}
+
+propose_execute_nns_function_unpause_canister_migrations() {
+    # UnpauseCanisterMigrations - unpause canister migrations using direct dfx call
+    # This function takes an empty payload
+    dfx canister call $GOVERNANCE_CANISTER_ID manage_neuron \
+        "(
+            record { 
+                id = opt record { id = ${NEURON_ID} };
+                command = opt variant { MakeProposal = 
+                    record {
+                        url = \"\"; 
+                        title = opt \"Unpause Canister Migrations\"; 
+                        action = opt variant { 
+                            ExecuteNnsFunction = record {
+                                nns_function = 54 : int32;
+                                payload = vec {};
+                            }
+                        };
+                        summary = \"Unpause canister migrations\";
+                    }
+                }; 
+            },
+        )"
+}
+
+propose_execute_nns_function_deploy_guestos_to_some_api_boundary_nodes() {
+    # DeployGuestosToSomeApiBoundaryNodes - update GuestOS version on specific API boundary nodes
+    propose propose-to-deploy-guestos-to-some-api-boundary-nodes \
+        --nodes rdmx6-jaaaa-aaaaa-aaadq-cai \
+        --version deadbeef123456789012345678901234567890
+}
+
+propose_execute_nns_function_set_subnet_operational_level() {
+    # SetSubnetOperationalLevel - set a subnet's operational level (for subnet recovery)
+    # The ic-admin command is not yet implemented (TODO in do_set_subnet_operational_level.rs)
+    # Using direct dfx call with ExecuteNnsFunction
+    # payload needs to be SetSubnetOperationalLevelPayload encoded
+    # For now, using an empty payload as a placeholder (this will fail but shows the proposal type works)
+    dfx canister call $GOVERNANCE_CANISTER_ID manage_neuron \
+        "(
+            record { 
+                id = opt record { id = ${NEURON_ID} };
+                command = opt variant { MakeProposal = 
+                    record {
+                        url = \"\"; 
+                        title = opt \"Set Subnet Operational Level\"; 
+                        action = opt variant { 
+                            ExecuteNnsFunction = record {
+                                nns_function = 55 : int32;
+                                payload = vec {};
+                            }
+                        };
+                        summary = \"Set subnet operational level for recovery\";
+                    }
+                }; 
+            },
+        )"
+}
+
+main "$@"

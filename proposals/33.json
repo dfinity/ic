@@ -1,0 +1,18 @@
+{
+  "type_name": "Update Node Operator Config",
+  "type_description": "Change a Node Operator's allowance in the registry.",
+  "value": {
+    "ipv6": [],
+    "node_allowance": [
+      5
+    ],
+    "rewardable_nodes": "",
+    "node_operator_id": [
+      "rdmx6-jaaaa-aaaaa-aaadq-cai"
+    ],
+    "dc_id": [],
+    "max_rewardable_nodes": [],
+    "set_ipv6_to_none": [],
+    "node_provider_id": []
+  }
+}

@@ -29,10 +29,11 @@ use ic_nns_governance::{
     pb::v1::{
         ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, ManageNeuron, Motion,
         NetworkEconomics, NeuronType, NnsFunction, Proposal, ProposalData, RewardEvent, Topic,
-        Vote, XdrConversionRate as XdrConversionRatePb, manage_neuron,
-        manage_neuron::{Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
+        Vote, XdrConversionRate as XdrConversionRatePb,
+        manage_neuron::{self, Command, Merge, MergeMaturity, NeuronIdOrSubaccount},
         proposal,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
     storage::reset_stable_memory,
 };
 use ic_nns_governance_api::{
@@ -582,7 +583,7 @@ impl Environment for NNSFixture {
     fn execute_nns_function(
         &self,
         proposal_id: u64,
-        update: &ExecuteNnsFunction,
+        update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         self.nns_state
             .try_lock()
@@ -996,7 +997,7 @@ impl Environment for NNS {
     fn execute_nns_function(
         &self,
         proposal_id: u64,
-        update: &ExecuteNnsFunction,
+        update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         self.fixture.execute_nns_function(proposal_id, update)
     }

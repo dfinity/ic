@@ -1,0 +1,57 @@
+[
+  {
+    "type_description": [
+      "Add or remove Data Center records."
+    ],
+    "type_name": [
+      "Add or Remove Data Centers"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "data_centers_to_remove",
+            "1": {
+              "Text": ""
+            }
+          },
+          {
+            "0": "data_centers_to_add",
+            "1": {
+              "Array": [
+                {
+                  "Map": [
+                    {
+                      "0": "owner",
+                      "1": {
+                        "Text": "DFINITY"
+                      }
+                    },
+                    {
+                      "0": "id",
+                      "1": {
+                        "Text": "dc1"
+                      }
+                    },
+                    {
+                      "0": "region",
+                      "1": {
+                        "Text": "us-west"
+                      }
+                    },
+                    {
+                      "0": "gps",
+                      "1": {
+                        "Array": []
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

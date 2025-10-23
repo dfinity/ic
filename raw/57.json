@@ -1,0 +1,188 @@
+[
+  {
+    "type_description": [
+      "Update a subnet's configuration. This proposal updates the subnet record in the registry, with the changes being picked up by the nodes on the subnet when they reference the respective registry version. Subnet configuration comprises protocol parameters that must be consistent across the subnet (e.g., message sizes)."
+    ],
+    "type_name": [
+      "Update Subnet Config"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "registry_poll_period_ms",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "initial_notary_delay_millis",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "ssh_readonly_access",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "chain_key_config",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "is_halted",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "chain_key_signing_disable",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "max_block_payload_size",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "max_duplicity",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "max_chunk_size",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "ssh_backup_access",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "chain_key_signing_enable",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "start_as_nns",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "set_gossip_config_to_default",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "subnet_type",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "max_ingress_messages_per_block",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "max_artifact_streams_per_peer",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "receive_check_cache_size",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "features",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "retransmission_request_ms",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "max_ingress_bytes_per_message",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "pfn_evaluation_period_ms",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "max_number_of_canisters",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "halt_at_cup_height",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "dkg_dealings_per_block",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "max_chunk_wait_ms",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "dkg_interval_length",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "unit_delay_millis",
+            "1": {
+              "Array": [
+                {
+                  "Nat": "500"
+                }
+              ]
+            }
+          },
+          {
+            "0": "subnet_id",
+            "1": {
+              "Text": "aff4t-qcpzp-aca7d-sea6x-bbe53-3zrqj-thvaw-nqsn2-b4qob-igtjx-qqe"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

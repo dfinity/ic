@@ -1,0 +1,58 @@
+[
+  {
+    "type_description": [
+      "Update a subnet's recovery CUP (used to recover subnets that have stalled). Nodes that find a recovery CUP for their subnet will load that CUP from the registry and restart the replica from that CUP."
+    ],
+    "type_name": [
+      "Recover Subnet"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "replacement_nodes",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "registry_store_uri",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "height",
+            "1": {
+              "Nat": "100"
+            }
+          },
+          {
+            "0": "chain_key_config",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "time_ns",
+            "1": {
+              "Nat": "1_000_000_000"
+            }
+          },
+          {
+            "0": "subnet_id",
+            "1": {
+              "Text": "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"
+            }
+          },
+          {
+            "0": "state_hash",
+            "1": {
+              "Text": "deadbeef123456789012345678901234567890123456789012345678901234"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

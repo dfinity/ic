@@ -1,0 +1,261 @@
+[
+  {
+    "type_description": [
+      "Combine a specified set of nodes, typically drawn from data centers and operators in such a way as to guarantee their independence, into a new decentralized subnet. The execution of this external update first initiates a new instance of the distributed key generation protocol. The transcript of that protocol is written to a new subnet record in the registry, together with initial configuration information for the subnet, from where the nodes comprising the subnet pick it up."
+    ],
+    "type_name": [
+      "Create Subnet"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "subnet_type",
+            "1": {
+              "Map": [
+                {
+                  "0": "application",
+                  "1": {
+                    "Array": []
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "0": "max_number_of_canisters",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "dkg_dealings_per_block",
+            "1": {
+              "Nat": "1"
+            }
+          },
+          {
+            "0": "unit_delay_millis",
+            "1": {
+              "Nat": "1_000"
+            }
+          },
+          {
+            "0": "node_ids",
+            "1": {
+              "Array": [
+                {
+                  "Text": "w3phu-4ihah-tqdl6-n32hp-e5254-l6ybu-kvmmx-thj6t-q7z7k-swvi4-iqe"
+                },
+                {
+                  "Text": "a3xcb-ezfy5-yib3b-5bo75-5nok4-kaolh-a6akg-ilxck-qdbph-pwppb-dae"
+                },
+                {
+                  "Text": "esi3h-xe7jo-cehj3-trvun-5hou2-eyr6c-olprm-z5u6m-2zoon-jmabh-wae"
+                },
+                {
+                  "Text": "fneyt-nqoj2-ehhfp-vat74-ookwk-othuy-dj2nz-giiio-tuzqi-dkbsw-mqe"
+                },
+                {
+                  "Text": "foa3b-mjkuu-3qlgu-6o64i-2omzt-x6suc-5gzcq-6j2gz-bftru-j5idg-gae"
+                },
+                {
+                  "Text": "fpxeh-odlv7-zuqfj-7l6jb-42tq6-jlmhq-imuur-mpplj-ou3hs-d3l5h-aae"
+                },
+                {
+                  "Text": "dzol4-3eqco-5b5ag-ritui-tyl7u-i3iwz-ex2qo-cbfjx-5fmxw-yfgwo-tqe"
+                },
+                {
+                  "Text": "7exbb-k4tu4-mw24y-3zylh-bopa5-fwdsc-f4a3z-45hh4-twpin-4zv4a-yae"
+                },
+                {
+                  "Text": "3yok3-yvswm-l4ior-bjh62-fsi73-vfqp3-77wji-coglq-l2bjw-rxrph-uqe"
+                },
+                {
+                  "Text": "ldqxr-qdliy-howvj-2tamr-3fwul-liakv-7523k-tmhrz-5geyk-jlu7b-uae"
+                },
+                {
+                  "Text": "c2dnc-3ozfd-ew52a-yvmrc-mjyss-edoch-k7cki-f7vzk-zqapg-aw44i-mqe"
+                },
+                {
+                  "Text": "lzjli-4do6u-xcbtx-co7r7-35gzq-5mmqw-k4jb3-3s63m-facun-6riew-lae"
+                },
+                {
+                  "Text": "lj6xb-t5tcb-dol3s-ay52b-dulse-zyezk-25qyv-l7yqj-4zrc2-hp5qz-sae"
+                }
+              ]
+            }
+          },
+          {
+            "0": "initial_notary_delay_millis",
+            "1": {
+              "Nat": "600"
+            }
+          },
+          {
+            "0": "ssh_backup_access",
+            "1": {
+              "Text": ""
+            }
+          },
+          {
+            "0": "gossip_retransmission_request_ms",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "start_as_nns",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "ssh_readonly_access",
+            "1": {
+              "Text": ""
+            }
+          },
+          {
+            "0": "gossip_max_artifact_streams_per_peer",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "gossip_max_duplicity",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "gossip_pfn_evaluation_period_ms",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "replica_version_id",
+            "1": {
+              "Text": "69e1408347723dbaa7a6cd2faa9b65c42abbe861"
+            }
+          },
+          {
+            "0": "features",
+            "1": {
+              "Map": [
+                {
+                  "0": "http_requests",
+                  "1": {
+                    "Nat": "1"
+                  }
+                },
+                {
+                  "0": "sev_enabled",
+                  "1": {
+                    "Array": []
+                  }
+                },
+                {
+                  "0": "canister_sandboxing",
+                  "1": {
+                    "Nat": "0"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "0": "max_ingress_messages_per_block",
+            "1": {
+              "Nat": "1_000"
+            }
+          },
+          {
+            "0": "chain_key_config",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "subnet_id_override",
+            "1": {
+              "Array": []
+            }
+          },
+          {
+            "0": "gossip_registry_poll_period_ms",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "gossip_receive_check_cache_size",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "dkg_interval_length",
+            "1": {
+              "Nat": "499"
+            }
+          },
+          {
+            "0": "gossip_max_chunk_size",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "canister_cycles_cost_schedule",
+            "1": {
+              "Array": [
+                {
+                  "Map": [
+                    {
+                      "0": "Normal",
+                      "1": {
+                        "Array": []
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "0": "is_halted",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "ingress_bytes_per_block_soft_cap",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "max_block_payload_size",
+            "1": {
+              "Nat": "4_194_304"
+            }
+          },
+          {
+            "0": "gossip_max_chunk_wait_ms",
+            "1": {
+              "Nat": "0"
+            }
+          },
+          {
+            "0": "max_ingress_bytes_per_message",
+            "1": {
+              "Nat": "2_097_152"
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

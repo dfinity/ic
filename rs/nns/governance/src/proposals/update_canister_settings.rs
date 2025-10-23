@@ -12,48 +12,30 @@ use ic_nervous_system_clients::update_settings::{
     CanisterSettings as RootCanisterSettings, LogVisibility as RootLogVisibility,
 };
 use ic_nns_constants::{LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_governance_api::GenericValue;
 use ic_nns_handler_root_interface::UpdateCanisterSettingsRequest;
+use maplit::hashmap;
 
-impl UpdateCanisterSettings {
-    pub fn validate(&self) -> Result<(), GovernanceError> {
-        let _ = self.valid_canister_id()?;
-        let _ = self.valid_topic()?;
-        let _ = self.canister_and_function()?;
-        let _ = self.valid_canister_settings()?;
+#[derive(Debug, Clone, PartialEq)]
+pub struct ValidUpdateCanisterSettings {
+    canister_id: CanisterId,
+    settings: RootCanisterSettings,
+}
 
-        Ok(())
-    }
+impl TryFrom<UpdateCanisterSettings> for ValidUpdateCanisterSettings {
+    type Error = String;
 
-    fn valid_canister_id(&self) -> Result<CanisterId, GovernanceError> {
-        let canister_principal_id = self
-            .canister_id
-            .ok_or(invalid_proposal_error("Canister ID is required"))?;
+    fn try_from(value: UpdateCanisterSettings) -> Result<Self, Self::Error> {
+        let UpdateCanisterSettings {
+            canister_id,
+            settings,
+        } = value;
+
+        let canister_principal_id = canister_id.ok_or("Canister ID is required")?;
         let canister_id = CanisterId::try_from(canister_principal_id)
-            .map_err(|_| invalid_proposal_error("Invalid canister ID"))?;
-        Ok(canister_id)
-    }
+            .map_err(|e| format!("Invalid canister ID: {e}"))?;
 
-    pub fn valid_topic(&self) -> Result<Topic, GovernanceError> {
-        let canister_id = self.valid_canister_id()?;
-        Ok(topic_to_manage_canister(&canister_id))
-    }
-
-    fn valid_log_visibility(log_visibility_i32: i32) -> Result<RootLogVisibility, GovernanceError> {
-        let log_visibility = LogVisibility::try_from(log_visibility_i32);
-        match log_visibility {
-            Ok(LogVisibility::Controllers) => Ok(RootLogVisibility::Controllers),
-            Ok(LogVisibility::Public) => Ok(RootLogVisibility::Public),
-            Ok(LogVisibility::Unspecified) | Err(_) => Err(invalid_proposal_error(&format!(
-                "Invalid log visibility {log_visibility_i32}"
-            ))),
-        }
-    }
-
-    fn valid_canister_settings(&self) -> Result<RootCanisterSettings, GovernanceError> {
-        let settings = self
-            .settings
-            .as_ref()
-            .ok_or(invalid_proposal_error("Settings are required"))?;
+        let settings = settings.ok_or("Settings are required")?;
 
         if settings.controllers.is_none()
             && settings.compute_allocation.is_none()
@@ -63,27 +45,34 @@ impl UpdateCanisterSettings {
             && settings.wasm_memory_limit.is_none()
             && settings.wasm_memory_threshold.is_none()
         {
-            return Err(invalid_proposal_error(
-                "At least one setting must be provided",
-            ));
+            return Err("At least one setting must be provided".to_string());
         }
 
         let controllers = settings
             .controllers
-            .as_ref()
-            .map(|controllers| controllers.controllers.clone());
+            .map(|controllers| controllers.controllers);
         let compute_allocation = settings.compute_allocation.map(Nat::from);
         let memory_allocation = settings.memory_allocation.map(Nat::from);
         let freezing_threshold = settings.freezing_threshold.map(Nat::from);
         let wasm_memory_limit = settings.wasm_memory_limit.map(Nat::from);
         let wasm_memory_threshold = settings.wasm_memory_threshold.map(Nat::from);
         let log_visibility = match settings.log_visibility {
-            Some(log_visibility) => Some(Self::valid_log_visibility(log_visibility)?),
+            Some(log_visibility_i32) => {
+                let log_visibility = LogVisibility::try_from(log_visibility_i32);
+                match log_visibility {
+                    Ok(LogVisibility::Controllers) => Some(RootLogVisibility::Controllers),
+                    Ok(LogVisibility::Public) => Some(RootLogVisibility::Public),
+                    Ok(LogVisibility::Unspecified) | Err(_) => {
+                        return Err(format!("Invalid log visibility {log_visibility_i32}"));
+                    }
+                }
+            }
             None => None,
         };
         // Reserved cycles limit is not supported yet.
         let reserved_cycles_limit = None;
-        Ok(RootCanisterSettings {
+
+        let settings = RootCanisterSettings {
             controllers,
             compute_allocation,
             memory_allocation,
@@ -92,21 +81,41 @@ impl UpdateCanisterSettings {
             log_visibility,
             reserved_cycles_limit,
             wasm_memory_threshold,
-        })
-    }
-
-    pub fn allowed_when_resources_are_low(&self) -> bool {
-        let Ok(canister_id) = self.valid_canister_id() else {
-            return false;
         };
-        topic_to_manage_canister(&canister_id) == Topic::ProtocolCanisterManagement
+
+        Ok(ValidUpdateCanisterSettings {
+            canister_id,
+            settings,
+        })
     }
 }
 
-impl CallCanister for UpdateCanisterSettings {
+impl ValidUpdateCanisterSettings {
+    pub fn canister_id(&self) -> &CanisterId {
+        &self.canister_id
+    }
+
+    pub fn settings(&self) -> &RootCanisterSettings {
+        &self.settings
+    }
+
+    pub fn compute_topic_at_creation(&self) -> Topic {
+        topic_to_manage_canister(&self.canister_id)
+    }
+
+    pub fn allowed_when_resources_are_low(&self) -> bool {
+        topic_to_manage_canister(&self.canister_id) == Topic::ProtocolCanisterManagement
+    }
+
+    pub fn validate(&self) -> Result<(), GovernanceError> {
+        // Validation already happened in TryFrom
+        Ok(())
+    }
+}
+
+impl CallCanister for ValidUpdateCanisterSettings {
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
-        let canister_id = self.valid_canister_id()?;
-        if canister_id == ROOT_CANISTER_ID {
+        if self.canister_id == ROOT_CANISTER_ID {
             Ok((LIFELINE_CANISTER_ID, "update_root_settings"))
         } else {
             Ok((ROOT_CANISTER_ID, "update_canister_settings"))
@@ -114,16 +123,13 @@ impl CallCanister for UpdateCanisterSettings {
     }
 
     fn payload(&self) -> Result<Vec<u8>, GovernanceError> {
-        let canister_id = self.valid_canister_id()?;
-        let settings = self.valid_canister_settings()?;
-
-        if canister_id == ROOT_CANISTER_ID {
-            Encode!(&settings)
+        if self.canister_id == ROOT_CANISTER_ID {
+            Encode!(&self.settings)
                 .map_err(|err| invalid_proposal_error(&format!("Failed to encode payload: {err}")))
         } else {
             let update_settings = UpdateCanisterSettingsRequest {
-                canister_id: canister_id.get(),
-                settings,
+                canister_id: self.canister_id.get(),
+                settings: self.settings.clone(),
             };
             Encode!(&update_settings)
                 .map_err(|err| invalid_proposal_error(&format!("Failed to encode payload: {err}")))
@@ -131,11 +137,75 @@ impl CallCanister for UpdateCanisterSettings {
     }
 }
 
+impl From<&ValidUpdateCanisterSettings> for GenericValue {
+    fn from(value: &ValidUpdateCanisterSettings) -> Self {
+        let canister_id_text = value.canister_id().to_string();
+        let mut settings_map = hashmap! {
+            "canister_id".to_string() => GenericValue::Text(canister_id_text),
+        };
+
+        let settings = value.settings();
+        if let Some(ref controllers) = settings.controllers {
+            let controllers_vec: Vec<GenericValue> = controllers
+                .iter()
+                .map(|p| GenericValue::Text(p.to_string()))
+                .collect();
+            settings_map.insert(
+                "controllers".to_string(),
+                GenericValue::Array(controllers_vec),
+            );
+        }
+
+        if let Some(ref compute_allocation) = settings.compute_allocation {
+            settings_map.insert(
+                "compute_allocation".to_string(),
+                GenericValue::Nat(compute_allocation.clone()),
+            );
+        }
+
+        if let Some(ref memory_allocation) = settings.memory_allocation {
+            settings_map.insert(
+                "memory_allocation".to_string(),
+                GenericValue::Nat(memory_allocation.clone()),
+            );
+        }
+
+        if let Some(ref freezing_threshold) = settings.freezing_threshold {
+            settings_map.insert(
+                "freezing_threshold".to_string(),
+                GenericValue::Nat(freezing_threshold.clone()),
+            );
+        }
+
+        if let Some(ref wasm_memory_limit) = settings.wasm_memory_limit {
+            settings_map.insert(
+                "wasm_memory_limit".to_string(),
+                GenericValue::Nat(wasm_memory_limit.clone()),
+            );
+        }
+
+        if let Some(ref wasm_memory_threshold) = settings.wasm_memory_threshold {
+            settings_map.insert(
+                "wasm_memory_threshold".to_string(),
+                GenericValue::Nat(wasm_memory_threshold.clone()),
+            );
+        }
+
+        if let Some(ref log_visibility) = settings.log_visibility {
+            settings_map.insert(
+                "log_visibility".to_string(),
+                GenericValue::Text(format!("{log_visibility:?}")),
+            );
+        }
+
+        GenericValue::Map(settings_map)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::pb::v1::governance_error::ErrorType;
     use crate::pb::v1::update_canister_settings::{CanisterSettings, Controllers};
     use candid::Decode;
     use ic_base_types::CanisterId;
@@ -153,12 +223,14 @@ mod tests {
 
         let is_invalid_proposal_with_keywords =
             |update_canister_settings: UpdateCanisterSettings, keywords: Vec<&str>| {
-                let error = update_canister_settings.validate().expect_err(&format!(
-                    "Expecting validation error for {update_canister_settings:?} but got Ok(())"
+                let error_message = ValidUpdateCanisterSettings::try_from(
+                    update_canister_settings.clone(),
+                )
+                .expect_err(&format!(
+                    "Expecting validation error for {update_canister_settings:#?} but got Ok(())"
                 ));
-                assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
                 for keyword in keywords {
-                    let error_message = error.error_message.to_lowercase();
+                    let error_message = error_message.to_lowercase();
                     assert!(
                         error_message.contains(keyword),
                         "{keyword} not found in {error_message:#?}"
@@ -231,19 +303,20 @@ mod tests {
             }),
         };
 
-        assert_eq!(update_sns_w_canister_settings.validate(), Ok(()));
+        let valid_update_sns_w_canister_settings =
+            ValidUpdateCanisterSettings::try_from(update_sns_w_canister_settings).unwrap();
         assert_eq!(
-            update_sns_w_canister_settings.valid_topic(),
-            Ok(Topic::ServiceNervousSystemManagement)
+            valid_update_sns_w_canister_settings.compute_topic_at_creation(),
+            Topic::ServiceNervousSystemManagement
         );
         assert_eq!(
-            update_sns_w_canister_settings.canister_and_function(),
+            valid_update_sns_w_canister_settings.canister_and_function(),
             Ok((ROOT_CANISTER_ID, "update_canister_settings"))
         );
-        assert!(!update_sns_w_canister_settings.allowed_when_resources_are_low());
+        assert!(!valid_update_sns_w_canister_settings.allowed_when_resources_are_low());
 
         let decoded_payload = Decode!(
-            &update_sns_w_canister_settings.payload().unwrap(),
+            &valid_update_sns_w_canister_settings.payload().unwrap(),
             UpdateCanisterSettingsRequest
         )
         .unwrap();
@@ -283,19 +356,20 @@ mod tests {
             }),
         };
 
-        assert_eq!(update_root_canister_settings.validate(), Ok(()));
+        let valid_update_root_canister_settings =
+            ValidUpdateCanisterSettings::try_from(update_root_canister_settings).unwrap();
         assert_eq!(
-            update_root_canister_settings.valid_topic(),
-            Ok(Topic::ProtocolCanisterManagement)
+            valid_update_root_canister_settings.compute_topic_at_creation(),
+            Topic::ProtocolCanisterManagement
         );
         assert_eq!(
-            update_root_canister_settings.canister_and_function(),
+            valid_update_root_canister_settings.canister_and_function(),
             Ok((LIFELINE_CANISTER_ID, "update_root_settings"))
         );
-        assert!(update_root_canister_settings.allowed_when_resources_are_low());
+        assert!(valid_update_root_canister_settings.allowed_when_resources_are_low());
 
         let decoded_payload = Decode!(
-            &update_root_canister_settings.payload().unwrap(),
+            &valid_update_root_canister_settings.payload().unwrap(),
             RootCanisterSettings
         )
         .unwrap();
@@ -334,8 +408,49 @@ mod tests {
                 }),
             };
 
-            assert_eq!(update_canister_settings.validate(), Ok(()));
-            assert_eq!(update_canister_settings.valid_topic(), Ok(expected_topic),);
+            let valid_update_canister_settings =
+                ValidUpdateCanisterSettings::try_from(update_canister_settings).unwrap();
+            assert_eq!(
+                valid_update_canister_settings.compute_topic_at_creation(),
+                expected_topic
+            );
         }
+    }
+
+    #[test]
+    fn test_generic_value_conversion() {
+        let update_canister_settings = UpdateCanisterSettings {
+            canister_id: Some(SNS_WASM_CANISTER_ID.get()),
+            settings: Some(CanisterSettings {
+                controllers: Some(Controllers {
+                    controllers: vec![ROOT_CANISTER_ID.get()],
+                }),
+                memory_allocation: Some(1 << 32),
+                compute_allocation: Some(10),
+                freezing_threshold: Some(100),
+                log_visibility: Some(LogVisibility::Public as i32),
+                wasm_memory_limit: Some(1 << 31),
+                wasm_memory_threshold: Some(1 << 30),
+            }),
+        };
+
+        let valid_update_canister_settings =
+            ValidUpdateCanisterSettings::try_from(update_canister_settings).unwrap();
+        let generic_value = GenericValue::from(&valid_update_canister_settings);
+
+        let expected_map = hashmap! {
+            "canister_id".to_string() => GenericValue::Text(SNS_WASM_CANISTER_ID.to_string()),
+            "controllers".to_string() => GenericValue::Array(vec![
+                GenericValue::Text(ROOT_CANISTER_ID.get().to_string())
+            ]),
+            "memory_allocation".to_string() => GenericValue::Nat(Nat::from(1u64 << 32)),
+            "compute_allocation".to_string() => GenericValue::Nat(Nat::from(10u64)),
+            "freezing_threshold".to_string() => GenericValue::Nat(Nat::from(100u64)),
+            "log_visibility".to_string() => GenericValue::Text("Public".to_string()),
+            "wasm_memory_limit".to_string() => GenericValue::Nat(Nat::from(1u64 << 31)),
+            "wasm_memory_threshold".to_string() => GenericValue::Nat(Nat::from(1u64 << 30)),
+        };
+
+        assert_eq!(generic_value, GenericValue::Map(expected_map));
     }
 }

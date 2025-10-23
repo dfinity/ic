@@ -191,7 +191,7 @@ async fn stop_or_start_nns_canister(request: StopOrStartCanisterRequest) {
         .unwrap() // For compatibility.
 }
 
-#[update(hidden = true)]
+#[update]
 fn call_canister(proposal: CallCanisterProposal) {
     check_caller_is_governance();
     // Starts the proposal execution, which will continue after this function has returned.

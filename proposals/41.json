@@ -1,0 +1,13 @@
+{
+  "type_name": "Remove Firewall Rules",
+  "type_description": "Remove firewall rules in the registry. Nodes use a firewall to protect themselves from network attacks.",
+  "value": {
+    "expected_hash": "deadbeef",
+    "positions": [
+      0
+    ],
+    "scope": {
+      "Global": []
+    }
+  }
+}

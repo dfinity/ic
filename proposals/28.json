@@ -1,0 +1,8 @@
+{
+  "type_name": "Deploy GuestOS To All Subnet Nodes",
+  "type_description": "Deploy a GuestOS version to a given subnet. The proposal changes the GuestOS version that is used on the specified subnet.<br/><br/>The version must be contained in the list of elected GuestOS versions.<br/><br/>The upgrade is completed when the subnet creates the next regular CUP.",
+  "value": {
+    "subnet_id": "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    "replica_version_id": "deadbeef"
+  }
+}

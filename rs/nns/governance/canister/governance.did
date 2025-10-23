@@ -1091,6 +1091,7 @@ type ProposalInfo = record {
   proposer : opt NeuronId;
   executed_timestamp_seconds : nat64;
   total_potential_voting_power : opt nat64;
+  generic_representation : opt GenericProposalRepresentation;
 };
 
 type RegisterVote = record {
@@ -1415,6 +1416,21 @@ type Vote = variant {
   Unspecified;
   Yes;
   No;
+};
+
+type GenericProposalRepresentation = record {
+  type_name : opt text;
+  type_description : opt text;
+  value : opt GenericValue;
+};
+
+type GenericValue = variant {
+  Blob : blob;
+  Text : text;
+  Nat : nat;
+  Int : int;
+  Array : vec GenericValue;
+  Map : vec record { text; GenericValue };
 };
 
 service : (Governance) -> {

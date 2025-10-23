@@ -1,0 +1,22 @@
+{
+  "type_name": "Update Node Rewards Table",
+  "type_description": "Update the node rewards table.",
+  "value": {
+    "new_entries": [
+      {
+        "1": {
+          "rates": [
+            {
+              "1": {
+                "reward_coefficient_percent": [],
+                "xdr_permyriad_per_node_per_month": 100
+              },
+              "0": "default"
+            }
+          ]
+        },
+        "0": "North America,US"
+      }
+    ]
+  }
+}

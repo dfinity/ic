@@ -1,0 +1,76 @@
+[
+  {
+    "type_description": [
+      "Update the node rewards table."
+    ],
+    "type_name": [
+      "Update Node Rewards Table"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "new_entries",
+            "1": {
+              "Array": [
+                {
+                  "Map": [
+                    {
+                      "0": "1",
+                      "1": {
+                        "Map": [
+                          {
+                            "0": "rates",
+                            "1": {
+                              "Array": [
+                                {
+                                  "Map": [
+                                    {
+                                      "0": "1",
+                                      "1": {
+                                        "Map": [
+                                          {
+                                            "0": "reward_coefficient_percent",
+                                            "1": {
+                                              "Array": []
+                                            }
+                                          },
+                                          {
+                                            "0": "xdr_permyriad_per_node_per_month",
+                                            "1": {
+                                              "Nat": "100"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    {
+                                      "0": "0",
+                                      "1": {
+                                        "Text": "default"
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    {
+                      "0": "0",
+                      "1": {
+                        "Text": "North America,US"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

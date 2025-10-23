@@ -10,6 +10,8 @@ use ic_nervous_system_root::change_canister::{
     CanisterAction as RootCanisterAction, StopOrStartCanisterRequest,
 };
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_governance_api::GenericValue;
+use maplit::hashmap;
 
 const CANISTERS_NOT_ALLOWED_TO_STOP: [&CanisterId; 3] = [
     &ROOT_CANISTER_ID,
@@ -17,82 +19,98 @@ const CANISTERS_NOT_ALLOWED_TO_STOP: [&CanisterId; 3] = [
     &LIFELINE_CANISTER_ID,
 ];
 
-impl StopOrStartCanister {
-    pub fn validate(&self) -> Result<(), GovernanceError> {
-        let canister_id = self.valid_canister_id()?;
-        let canister_action = self.valid_canister_action()?;
-        let _ = self.valid_topic()?;
+#[derive(Debug, Clone, PartialEq)]
+pub struct ValidStopOrStartCanister {
+    canister_id: CanisterId,
+    action: RootCanisterAction,
+}
 
-        // Note that any proposals trying to start governance/root does not make sense since if they
-        // are stopped/stopping, they can't be started as they need to be running in order to
-        // execute the proposal. However, we don't disallow them as they are harmless.
-        if CANISTERS_NOT_ALLOWED_TO_STOP.contains(&&canister_id)
-            && canister_action == RootCanisterAction::Stop
-        {
-            return Err(invalid_proposal_error(
-                "Canister is not allowed to be stopped",
-            ));
-        }
+impl TryFrom<StopOrStartCanister> for ValidStopOrStartCanister {
+    type Error = String;
 
-        Ok(())
-    }
+    fn try_from(value: StopOrStartCanister) -> Result<Self, Self::Error> {
+        let StopOrStartCanister {
+            canister_id,
+            action,
+        } = value;
 
-    pub fn valid_topic(&self) -> Result<Topic, GovernanceError> {
-        let canister_id = self.valid_canister_id()?;
-        Ok(topic_to_manage_canister(&canister_id))
-    }
-
-    fn valid_canister_id(&self) -> Result<CanisterId, GovernanceError> {
-        let canister_principal_id = self
-            .canister_id
-            .ok_or(invalid_proposal_error("Canister ID is required"))?;
+        let canister_principal_id = canister_id.ok_or("Canister ID is required")?;
         let canister_id = CanisterId::try_from(canister_principal_id)
-            .map_err(|_| invalid_proposal_error("Invalid canister ID"))?;
+            .map_err(|e| format!("Invalid canister ID: {e}"))?;
 
-        Ok(canister_id)
-    }
+        let action_i32 = action.ok_or("Canister action is required")?;
+        let action_pb = CanisterAction::try_from(action_i32).unwrap_or(CanisterAction::Unspecified);
 
-    fn valid_canister_action(&self) -> Result<RootCanisterAction, GovernanceError> {
-        let canister_action_i32 = match self.action {
-            Some(canister_action) => canister_action,
-            None => return Err(invalid_proposal_error("Canister action is required")),
+        let action = match action_pb {
+            CanisterAction::Stop => RootCanisterAction::Stop,
+            CanisterAction::Start => RootCanisterAction::Start,
+            CanisterAction::Unspecified => {
+                return Err("Canister action is unspecified or unrecognized".to_string());
+            }
         };
 
-        let canister_action_pb =
-            CanisterAction::try_from(canister_action_i32).unwrap_or(CanisterAction::Unspecified);
-
-        match canister_action_pb {
-            CanisterAction::Stop => Ok(RootCanisterAction::Stop),
-            CanisterAction::Start => Ok(RootCanisterAction::Start),
-            CanisterAction::Unspecified => Err(invalid_proposal_error(
-                "Canister action is unspecified or unrecognized",
-            )),
+        // Validate that we're not trying to stop critical canisters
+        if CANISTERS_NOT_ALLOWED_TO_STOP.contains(&&canister_id)
+            && action == RootCanisterAction::Stop
+        {
+            return Err("Canister is not allowed to be stopped".to_string());
         }
+
+        Ok(ValidStopOrStartCanister {
+            canister_id,
+            action,
+        })
     }
 }
 
-impl CallCanister for StopOrStartCanister {
+impl ValidStopOrStartCanister {
+    pub fn canister_id(&self) -> &CanisterId {
+        &self.canister_id
+    }
+
+    pub fn action(&self) -> &RootCanisterAction {
+        &self.action
+    }
+
+    pub fn compute_topic_at_creation(&self) -> Topic {
+        topic_to_manage_canister(&self.canister_id)
+    }
+
+    pub fn validate(&self) -> Result<(), GovernanceError> {
+        // Validation already happened in TryFrom
+        Ok(())
+    }
+}
+
+impl CallCanister for ValidStopOrStartCanister {
     fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
         Ok((ROOT_CANISTER_ID, "stop_or_start_nns_canister"))
     }
 
     fn payload(&self) -> Result<Vec<u8>, GovernanceError> {
-        let canister_id = self.valid_canister_id()?;
-        let action = self.valid_canister_action()?;
-
         Encode!(&StopOrStartCanisterRequest {
-            canister_id,
-            action,
+            canister_id: self.canister_id,
+            action: self.action,
         })
         .map_err(|e| invalid_proposal_error(&format!("Failed to encode payload: {e}")))
+    }
+}
+
+impl From<&ValidStopOrStartCanister> for GenericValue {
+    fn from(value: &ValidStopOrStartCanister) -> Self {
+        let canister_id = value.canister_id().to_string();
+        let action = format!("{:?}", value.action());
+
+        GenericValue::Map(hashmap! {
+            "canister_id".to_string() => GenericValue::Text(canister_id),
+            "action".to_string() => GenericValue::Text(action),
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    use crate::pb::v1::governance_error::ErrorType;
 
     use candid::Decode;
     use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -106,12 +124,14 @@ mod tests {
 
         let is_invalid_proposal_with_keywords =
             |stop_or_start_canister: StopOrStartCanister, keywords: Vec<&str>| {
-                let error = stop_or_start_canister.validate().expect_err(&format!(
-                    "Expecting validation error for {stop_or_start_canister:?} but got Ok(())"
+                let error_message = ValidStopOrStartCanister::try_from(
+                    stop_or_start_canister.clone(),
+                )
+                .expect_err(&format!(
+                    "Expecting validation error for {stop_or_start_canister:#?} but got Ok(())"
                 ));
-                assert_eq!(error.error_type, ErrorType::InvalidProposal as i32);
                 for keyword in keywords {
-                    let error_message = error.error_message.to_lowercase();
+                    let error_message = error_message.to_lowercase();
                     assert!(
                         error_message.contains(keyword),
                         "{keyword} not found in {error_message:#?}"
@@ -187,17 +207,18 @@ mod tests {
                 action: Some(*canister_action as i32),
             };
 
-            assert_eq!(stop_or_start_canister.validate(), Ok(()));
+            let valid_stop_or_start_canister =
+                ValidStopOrStartCanister::try_from(stop_or_start_canister).unwrap();
             assert_eq!(
-                stop_or_start_canister.valid_topic(),
-                Ok(Topic::ProtocolCanisterManagement)
+                valid_stop_or_start_canister.compute_topic_at_creation(),
+                Topic::ProtocolCanisterManagement
             );
             assert_eq!(
-                stop_or_start_canister.canister_and_function(),
+                valid_stop_or_start_canister.canister_and_function(),
                 Ok((ROOT_CANISTER_ID, "stop_or_start_nns_canister"))
             );
             let decoded_payload = Decode!(
-                &stop_or_start_canister.payload().unwrap(),
+                &valid_stop_or_start_canister.payload().unwrap(),
                 StopOrStartCanisterRequest
             )
             .unwrap();
@@ -218,17 +239,18 @@ mod tests {
             action: Some(CanisterAction::Start as i32),
         };
 
-        assert_eq!(stop_or_start_canister.validate(), Ok(()));
+        let valid_stop_or_start_canister =
+            ValidStopOrStartCanister::try_from(stop_or_start_canister).unwrap();
         assert_eq!(
-            stop_or_start_canister.valid_topic(),
-            Ok(Topic::ProtocolCanisterManagement)
+            valid_stop_or_start_canister.compute_topic_at_creation(),
+            Topic::ProtocolCanisterManagement
         );
         assert_eq!(
-            stop_or_start_canister.canister_and_function(),
+            valid_stop_or_start_canister.canister_and_function(),
             Ok((ROOT_CANISTER_ID, "stop_or_start_nns_canister"))
         );
         let decoded_payload = Decode!(
-            &stop_or_start_canister.payload().unwrap(),
+            &valid_stop_or_start_canister.payload().unwrap(),
             StopOrStartCanisterRequest
         )
         .unwrap();
@@ -264,8 +286,31 @@ mod tests {
                 action: Some(CanisterAction::Start as i32),
             };
 
-            assert_eq!(stop_or_start_canister.validate(), Ok(()));
-            assert_eq!(stop_or_start_canister.valid_topic(), Ok(expected_topic));
+            let valid_stop_or_start_canister =
+                ValidStopOrStartCanister::try_from(stop_or_start_canister).unwrap();
+            assert_eq!(
+                valid_stop_or_start_canister.compute_topic_at_creation(),
+                expected_topic
+            );
         }
+    }
+
+    #[test]
+    fn test_generic_value_conversion() {
+        let stop_or_start_canister = StopOrStartCanister {
+            canister_id: Some(CYCLES_MINTING_CANISTER_ID.get()),
+            action: Some(CanisterAction::Stop as i32),
+        };
+
+        let valid_stop_or_start_canister =
+            ValidStopOrStartCanister::try_from(stop_or_start_canister).unwrap();
+        let generic_value = GenericValue::from(&valid_stop_or_start_canister);
+        assert_eq!(
+            generic_value,
+            GenericValue::Map(hashmap! {
+                "canister_id".to_string() => GenericValue::Text(CYCLES_MINTING_CANISTER_ID.to_string()),
+                "action".to_string() => GenericValue::Text("Stop".to_string()),
+            })
+        );
     }
 }

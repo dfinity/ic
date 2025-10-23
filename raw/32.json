@@ -1,0 +1,34 @@
+[
+  {
+    "type_description": [
+      "Change the Firewall configuration in the registry (configures which boundary nodes subnet blockchain replicas will communicate with)."
+    ],
+    "type_name": [
+      "Set Firewall Config"
+    ],
+    "value": [
+      {
+        "Map": [
+          {
+            "0": "firewall_config",
+            "1": {
+              "Text": ""
+            }
+          },
+          {
+            "0": "ipv6_prefixes",
+            "1": {
+              "Text": ""
+            }
+          },
+          {
+            "0": "ipv4_prefixes",
+            "1": {
+              "Text": ""
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

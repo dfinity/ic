@@ -1,0 +1,8 @@
+{
+  "type_name": "Stop or Start Canister",
+  "type_description": "Stop or start a canister that is controlled by the NNS.",
+  "value": {
+    "canister_id": "rdmx6-jaaaa-aaaaa-aaadq-cai",
+    "action": "Start"
+  }
+}

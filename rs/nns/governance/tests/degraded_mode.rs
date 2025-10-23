@@ -11,12 +11,13 @@ use ic_nervous_system_common::NervousSystemError;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::canister_state::CanisterRandomnessGenerator;
+use ic_nns_governance::proposals::execute_nns_function::ValidExecuteNnsFunction;
 use ic_nns_governance::{
     governance::{
         Environment, Governance, HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES, HeapGrowthPotential,
     },
     pb::v1::{
-        ExecuteNnsFunction, GovernanceError, InstallCode, ManageNeuron, Motion, Proposal,
+        GovernanceError, InstallCode, ManageNeuron, Motion, Proposal,
         governance_error::ErrorType,
         install_code::CanisterInstallMode,
         manage_neuron::{
@@ -42,7 +43,11 @@ impl Environment for DegradedEnv {
         111000222
     }
 
-    fn execute_nns_function(&self, _: u64, _: &ExecuteNnsFunction) -> Result<(), GovernanceError> {
+    fn execute_nns_function(
+        &self,
+        _: u64,
+        _: &ValidExecuteNnsFunction,
+    ) -> Result<(), GovernanceError> {
         unimplemented!()
     }
 

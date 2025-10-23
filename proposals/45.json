@@ -1,0 +1,15 @@
+{
+  "type_name": "Bless New SNS Deployment",
+  "type_description": "Add a new SNS canister WASM.",
+  "value": {
+    "wasm": [
+      {
+        "wasm": "",
+        "proposal_id": [],
+        "canister_type": 2
+      }
+    ],
+    "skip_update_latest_version": [],
+    "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
