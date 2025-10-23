@@ -28,7 +28,7 @@
 #
 # The workflow automatically creates releases using the tag's commit for both the
 # release and the mainnet artifact downloads.
-name: Ledger Suite Create Release
+name: Ledger Suite Release
 
 on:
   push:
