@@ -58,11 +58,30 @@ function update_node_operator_private_key_metric() {
         "gauge"
 }
 
+function update_tee_enabled_metric() {
+    tee_enabled_str=$(get_config_value '.icos_settings.enable_trusted_execution_environment')
+
+    if [[ "${tee_enabled_str}" == "true" ]]; then
+        tee_enabled=1
+    elif [[ "${tee_enabled_str}" == "false" ]]; then
+        tee_enabled=0
+    else
+        # Default/fallback if the key is missing or empty
+        tee_enabled=0
+    fi
+
+    write_metric "guestos_tee_enabled" \
+        "${tee_enabled}" \
+        "Indicates whether the virtual machine is running in a Trusted Execution Environment (1 = TEE enabled, 0 = not in TEE)" \
+        "gauge"
+}
+
 function main() {
     update_guestos_version_metric
     update_guestos_boot_action_metric
     update_config_version_metric
     update_node_operator_private_key_metric
+    update_tee_enabled_metric
 }
 
 main
