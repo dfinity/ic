@@ -924,7 +924,7 @@ impl From<NodeSshAccessFlagValue> for NodeSshAccess {
     }
 }
 
-/// Sub-command to submit a proposal to take a subnet offline for repairs.
+/// Sub-command to submit a proposal to bring a subnet back online after repairs.
 #[derive_common_proposal_fields]
 #[derive(Parser, ProposalMetadata)]
 struct ProposeToBringSubnetBackOnlineAfterRepairsCmd {
