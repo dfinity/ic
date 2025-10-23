@@ -689,8 +689,8 @@ http_file(
 
 http_file(
     name = "evm_rpc.wasm.gz",
-    sha256 = "53ff4625ad3990f22ab8ee1cee85b6ab43cb623e0ca28d3162c41cfac55bd1a6",
-    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.4.0/evm_rpc.wasm.gz",
+    sha256 = "5dbcce40bf3020cfc2d869373a8f3094785c80882fc4d52980814aa89abd541a",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/evm_rpc-v2.6.0/evm_rpc.wasm.gz",
 )
 
 http_archive(

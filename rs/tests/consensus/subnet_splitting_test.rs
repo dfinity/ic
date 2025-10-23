@@ -332,11 +332,13 @@ fn verify_common(
     );
 
     info!(logger, "Verifying that the subnet is healthy");
+    let new_msg = "New message in the canister!";
     assert_subnet_is_healthy(
         &nodes,
         replica_version,
         canister_id,
         canister_message,
+        new_msg,
         logger,
     );
     info!(logger, "Success!");
