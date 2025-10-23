@@ -213,6 +213,7 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
             },
             now,
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
 

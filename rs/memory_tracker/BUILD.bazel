@@ -63,12 +63,13 @@ rust_bench(
 )
 
 rust_bench(
-    name = "bit_vec",
+    name = "bit_vec_bench",
     testonly = True,
     srcs = ["benches/bit_vec.rs"],
     deps = [
         # Keep sorted.
         "@crate_index//:bit-vec",
         "@crate_index//:criterion",
+        "@crate_index//:nix",
     ],
 )
