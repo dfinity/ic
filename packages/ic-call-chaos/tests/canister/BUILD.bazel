@@ -1,0 +1,26 @@
+load("//bazel:canisters.bzl", "rust_canister")
+
+rust_canister(
+    name = "call-chaos-test-canister-no-chaos",
+    srcs = ["src/lib.rs"],
+    features = [],
+    service_file = "canister.did",
+    deps = [
+        # Keep sorted.
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+    ],
+)
+
+rust_canister(
+    name = "call-chaos-test-canister",
+    srcs = ["src/lib.rs"],
+    crate_features = ["use_call_chaos"],
+    service_file = "canister.did",
+    deps = [
+        # Keep sorted.
+        "//packages/ic-call-chaos/call-chaos",
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+    ],
+)

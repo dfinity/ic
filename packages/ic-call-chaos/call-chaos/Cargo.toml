@@ -1,0 +1,16 @@
+[package]
+name = "ic-call-chaos"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ognjen Maric <ognjen.maric@dfinity.org>"]
+description = "Chaos monkey library for Internet Computer calls"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/oggy-dfin/ic_call_utils"
+
+[dependencies]
+futures = { workspace = true }
+lazy_static = { workspace = true }
+ic-cdk = { workspace = true }
+candid = { workspace = true }
+rand_chacha = { version = "0.3.1" }
+rand = { version = "0.8.5", default-features = false, features = ["std"] }

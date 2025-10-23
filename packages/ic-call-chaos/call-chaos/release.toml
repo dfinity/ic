@@ -1,0 +1,13 @@
+# These settings apply across the workspace
+consolidate-commits = true
+tag-name = "v{{version}}"
+tag-message = "Release {{version}}"
+push = true
+publish = true
+allow-branch = ["master"]
+sign-tag = false  # set to true if you use GPG
+pre-release-replacements = [
+  {file="CHANGELOG.md", search="Unreleased", replace="{{version}}"},
+  {file="CHANGELOG.md", search="ReleaseDate", replace="{{date}}"},
+  {file="CHANGELOG.md", search="<!-- next-header -->", replace="<!-- next-header -->\n\n## [Unreleased] - ReleaseDate", exactly=1},
+ ]

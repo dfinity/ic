@@ -1,0 +1,12 @@
+[package]
+name = "call-chaos-pocket-ic-test"
+version = "0.1.0"
+edition = "2021"
+
+[dev-dependencies]
+lazy_static = "1.5.0"
+ic-call-chaos = { path = "../../call-chaos" }
+candid = { workspace = true }
+pocket-ic = "9.0.0"
+once_cell = "1.21.3"
+hex = { workspace = true }

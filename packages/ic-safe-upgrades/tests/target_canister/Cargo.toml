@@ -1,0 +1,15 @@
+[package]
+name = "test-upgrade-target-canister"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+v1 = []
+v2 = []
+
+[dependencies]
+ic-cdk = { workspace = true }
+candid = { workspace = true }
