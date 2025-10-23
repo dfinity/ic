@@ -28,11 +28,15 @@ pub struct GuestLaunchMeasurements {
 )]
 pub struct GuestLaunchMeasurement {
     /// SEV-SNP measurement (48 bytes)
+    #[deprecated]
     #[prost(bytes = "vec", tag = "1")]
     pub measurement: ::prost::alloc::vec::Vec<u8>,
     /// Metadata about how the measurement was obtained
     #[prost(message, optional, tag = "2")]
     pub metadata: ::core::option::Option<GuestLaunchMeasurementMetadata>,
+    /// encoded SEV-SNP measurement (hex)
+    #[prost(string, optional, tag = "3")]
+    pub encoded_measurement: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(
     serde::Serialize, serde::Deserialize, candid::CandidType, Eq, Clone, PartialEq, ::prost::Message,

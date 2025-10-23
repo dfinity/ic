@@ -236,6 +236,16 @@ impl ReviseElectedGuestosVersionsPayload {
     }
 
     pub fn validate(&self) -> Result<(), String> {
+        if self.guest_launch_measurements.as_ref().is_some_and(|v| {
+            v.guest_launch_measurements
+                .iter()
+                .any(|v| v.encoded_measurement.is_none())
+        }) {
+            return Err(
+                "`measurement` is deprecated, please set `encoded_measurement` as well.".into(),
+            );
+        }
+
         if self.is_electing_a_version()? || self.is_unelecting_a_version() {
             Ok(())
         } else {

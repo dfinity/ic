@@ -2,7 +2,6 @@ use ic_interfaces_registry::RegistryClient;
 use ic_registry_client_helpers::blessed_replica_version::BlessedReplicaVersionRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::ReplicaVersion;
-use itertools::Itertools;
 use std::str::FromStr;
 
 pub fn get_blessed_guest_launch_measurements_from_registry(
@@ -33,8 +32,19 @@ pub fn get_blessed_guest_launch_measurements_from_registry(
                 .unwrap_or_default()
                 .guest_launch_measurements
         })
-        .map(|measurement| measurement.measurement)
-        .collect_vec();
+        .map(|measurement| {
+            measurement
+                .encoded_measurement
+                .map(|encoded| {
+                    hex::decode(encoded)
+                        .map_err(|err| format!("Failed to decode replica measurement: {err}"))
+                })
+                .unwrap_or_else(|| {
+                    #[allow(deprecated)]
+                    Ok(measurement.measurement)
+                })
+        })
+        .collect::<Result<_, _>>()?;
 
     Ok(measurements)
 }
@@ -59,8 +69,10 @@ mod tests {
                 guest_launch_measurements: measurements
                     .iter()
                     .map(|m| GuestLaunchMeasurement {
+                        #[allow(deprecated)]
                         measurement: m.as_ref().to_vec(),
                         metadata: None,
+                        encoded_measurement: Some(hex::encode(m)),
                     })
                     .collect(),
             }),

@@ -11,6 +11,7 @@ futures = { workspace = true }
 guest_upgrade_client = { path = "../client" }
 guest_upgrade_server = { path = "../server" }
 guest_upgrade_shared = { path = "../shared" }
+hex = { workspace = true }
 tokio = { workspace = true }
 vsock_lib = { path = "../../vsock/vsock_lib" }
 config_types = { path = "../../config_types" }
