@@ -206,7 +206,11 @@ impl OngoingStateSync {
                 }
                 self.chunks_to_download.download_failed(chunk_id);
             }
-            Err(err) => {
+            Err(
+                err @ (DownloadChunkError::Overloaded
+                | DownloadChunkError::Timeout
+                | DownloadChunkError::Cancelled),
+            ) => {
                 info!(
                     every_n_seconds => 15,
                     self.log,
