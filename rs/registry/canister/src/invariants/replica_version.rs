@@ -267,10 +267,12 @@ mod tests {
             release_package_urls: urls,
             guest_launch_measurements: Some(GuestLaunchMeasurements {
                 guest_launch_measurements: vec![GuestLaunchMeasurement {
+                    #[allow(deprecated)]
                     measurement: vec![0x01, 0x02, 0x03],
                     metadata: Some(GuestLaunchMeasurementMetadata {
                         kernel_cmdline: "foo=bar".to_string(),
                     }),
+                    encoded_measurement: Some(hex::encode(vec![0x01, 0x02, 0x03])),
                 }],
             }),
         }
