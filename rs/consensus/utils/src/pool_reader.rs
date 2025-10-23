@@ -9,8 +9,8 @@ use ic_types::{
 use std::cmp::Ordering;
 use std::time::Instant;
 
-// An error to be returned if the number of payloads found in the pool
-// doesn't match the expected amount.
+/// An error to be returned if the number of payloads found in the pool
+/// doesn't match the expected amount.
 #[derive(Debug)]
 pub struct UnexpectedChainLength {
     pub expected: usize,
