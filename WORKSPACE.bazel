@@ -189,11 +189,6 @@ load("//pre-commit:ormolu.bzl", "ormolu")
 
 ormolu(name = "ormolu")
 
-# candid binary
-load("//pre-commit:candid.bzl", "candid")
-
-candid(name = "candid")
-
 # Mainnet ICOS image support
 get_mainnet_setupos_images()
 
