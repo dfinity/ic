@@ -459,7 +459,7 @@ pub fn get_oldest_idkg_state_registry_version(state: &ReplicatedState) -> Option
         .min()
 }
 
-// Calculate the number of heights in the given range (inclusive)
+/// Calculate the number of heights in the given range (inclusive)
 pub fn range_len(start: Height, end: Height) -> usize {
     if end >= start {
         (end.get() - start.get())
