@@ -504,6 +504,10 @@ impl CallOrTaskHelper {
         let new_message_memory_usage = output
             .new_message_memory_usage
             .unwrap_or_else(|| clean_canister.message_memory_usage());
+        let new_reserved_balance = clean_canister.system_state.reserved_balance()
+            + canister_state_changes
+                .system_state_modifications
+                .reserved_cycles();
         let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
             clean_canister.system_state.freeze_threshold,
             clean_canister.system_state.memory_allocation,
@@ -512,7 +516,7 @@ impl CallOrTaskHelper {
             clean_canister.compute_allocation(),
             original.subnet_size,
             round.cost_schedule,
-            clean_canister.system_state.reserved_balance(),
+            new_reserved_balance,
         );
         let reveal_top_up = self
             .canister

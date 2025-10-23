@@ -146,6 +146,11 @@ impl SystemStateModifications {
         self.cycles_balance_change.get_removed_cycles()
     }
 
+    /// Returns the number of *additional* reserved cycles.
+    pub fn reserved_cycles(&self) -> Cycles {
+        self.reserved_cycles
+    }
+
     /// Returns number of newly created callbacks (i.e. enqueued requests).
     pub fn callbacks_created(&self) -> usize {
         self.requests.len()
