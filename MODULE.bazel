@@ -886,6 +886,22 @@ http_archive(
     url = "https://github.com/dfinity/sdk/releases/download/0.20.1/dfx-0.20.1-x86_64-linux.tar.gz",
 )
 
+http_file(
+    name = "didc-x86_64-linux",
+    downloaded_file_path = "didc",
+    executable = True,
+    sha256 = "1ed8f69036438217c0672097bba75aaf91e6851847d378ea4e0064377d8939fa",
+    url = "https://github.com/dfinity/candid/releases/download/2023-11-16/didc-linux64",
+)
+
+http_file(
+    name = "didc-x86_64-darwin",
+    downloaded_file_path = "didc",
+    executable = True,
+    sha256 = "5df9a457c5ede103c7d017c23a4c1abce4d17db50442a9407724a9006db2f710",
+    url = "https://github.com/dfinity/candid/releases/download/2023-11-16/didc-macos",
+)
+
 # Management canister candid interface
 
 http_file(
