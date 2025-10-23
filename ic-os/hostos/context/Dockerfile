@@ -166,7 +166,7 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin sudo
 
 # The "limited-console" account for restricted console access
-RUN adduser --system --disabled-password --home /var/lib/limited-console --shell /opt/ic/bin/limited-console-shell limited-console && \
+RUN adduser --system --disabled-password --home /var/lib/limited-console --shell /sbin/nologin limited-console && \
     chown limited-console:nogroup /var/lib/limited-console
 
 # The "node_exporter" account. Used to run node_exporter binary to export
