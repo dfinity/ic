@@ -1,3 +1,4 @@
+use crate::pb::v1::NodeProviderRewards;
 use crate::{
     neuron::Neuron,
     pb::v1::{
@@ -30,6 +31,7 @@ pub struct HeapGovernanceData {
     pub neuron_management_voting_period_seconds: u64,
     pub metrics: Option<GovernanceCachedMetrics>,
     pub most_recent_monthly_node_provider_rewards: Option<MonthlyNodeProviderRewards>,
+    pub most_recent_monthly_node_provider_rewards_v2: Option<NodeProviderRewards>,
     pub cached_daily_maturity_modulation_basis_points: Option<i32>,
     pub maturity_modulation_last_updated_at_timestamp_seconds: Option<u64>,
     pub spawning_neurons: Option<bool>,

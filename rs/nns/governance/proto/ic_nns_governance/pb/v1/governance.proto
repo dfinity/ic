@@ -529,6 +529,12 @@ message AddOrRemoveNodeProvider {
   }
 }
 
+message DateUtc {
+  uint32 year = 1;
+  uint32 month = 2;
+  uint32 day = 3;
+}
+
 // This proposal payload is used to reward a node provider by minting
 // ICPs directly to the node provider's ledger account, or into a new
 // neuron created on behalf of the node provider.
@@ -2265,6 +2271,33 @@ message MonthlyNodeProviderRewards {
   repeated NodeProvider node_providers = 7;
 }
 
+// The monthly Node Provider rewards as of a point in time.
+message NodeProviderRewards {
+  // Day start for which the rewards were calculated.
+  DateUtc from_day = 1;
+
+  // Day end for which the rewards were calculated.
+  DateUtc to_day = 2;
+
+  // The Rewards calculated and rewarded.
+  repeated RewardNodeProvider rewards = 3;
+
+  // The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.
+  // This field snapshots the actual rate used by governance when the rewards were calculated.
+  optional XdrConversionRate xdr_conversion_rate = 4;
+
+  // The minimum xdr permyriad per icp at the time when the rewards were calculated.  This is useful for understanding
+  // why the rewards were what they were if the xdr_conversion_rate falls below this threshold.
+  optional uint64 minimum_xdr_permyriad_per_icp = 5;
+
+  // The maximum amount of ICP e8s that can be awarded to a single node provider in one event.  This is snapshotted
+  // from the value in network economics.
+  optional uint64 maximum_node_provider_rewards_e8s = 6;
+
+  // The list of node_provieders at the time when the rewards were calculated.
+  repeated NodeProvider node_providers = 8;
+}
+
 // TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 // manually propagated to (sns) swap.proto.
 // This message is obsolete; please use SettleNeuronsFundParticipation instead.
@@ -2544,11 +2577,17 @@ message ArchivedMonthlyNodeProviderRewards {
   // rewards data structure over time.
   oneof version {
     V1 version_1 = 1;
+    V2 version_2 = 2;
   }
 
   // The first version of the stored rewards.
   message V1 {
     ic_nns_governance.pb.v1.MonthlyNodeProviderRewards rewards = 1;
+  }
+
+  // The second version of the stored rewards.
+  message V2 {
+    ic_nns_governance.pb.v1.NodeProviderRewards rewards = 1;
   }
 }
 

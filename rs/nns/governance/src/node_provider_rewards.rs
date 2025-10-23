@@ -1,3 +1,4 @@
+use crate::pb::v1::NodeProviderRewards;
 use crate::{
     pb::v1::{
         ArchivedMonthlyNodeProviderRewards, MonthlyNodeProviderRewards,
@@ -27,6 +28,20 @@ pub(crate) fn record_node_provider_rewards(most_recent_rewards: MonthlyNodeProvi
     let rewards = ArchivedMonthlyNodeProviderRewards {
         version: Some(archived_monthly_node_provider_rewards::Version::Version1(
             archived_monthly_node_provider_rewards::V1 {
+                rewards: Some(most_recent_rewards),
+            },
+        )),
+    };
+
+    with_node_provider_rewards_log(|log| {
+        log.append(&rewards).expect("TODO: panic message");
+    })
+}
+
+pub(crate) fn record_node_provider_rewards_v2(most_recent_rewards: NodeProviderRewards) {
+    let rewards = ArchivedMonthlyNodeProviderRewards {
+        version: Some(archived_monthly_node_provider_rewards::Version::Version2(
+            archived_monthly_node_provider_rewards::V2 {
                 rewards: Some(most_recent_rewards),
             },
         )),

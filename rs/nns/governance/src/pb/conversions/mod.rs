@@ -1,11 +1,22 @@
+use crate::pb::proposal_conversions::convert_proposal;
 use crate::pb::v1 as pb;
 use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api as pb_api;
 
-use crate::pb::proposal_conversions::convert_proposal;
-
 #[cfg(test)]
 mod tests;
+
+impl TryFrom<ic_node_rewards_canister_api::DateUtc> for pb::DateUtc {
+    type Error = String;
+
+    fn try_from(src: ic_node_rewards_canister_api::DateUtc) -> Result<Self, Self::Error> {
+        Ok(Self {
+            year: src.year.ok_or("Missing year in DateUtc")?,
+            month: src.month.ok_or("Missing month in DateUtc")?,
+            day: src.day.ok_or("Missing day in DateUtc")?,
+        })
+    }
+}
 
 impl From<pb::NodeProvider> for pb_api::NodeProvider {
     fn from(item: pb::NodeProvider) -> Self {
