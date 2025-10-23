@@ -196,11 +196,11 @@ main(int argc, char** argv)
         // Use su to run the program as the limited-console user
         const char* cmdline[] = {
             "/bin/su",
-            "-s", "/opt/ic/bin/limited-console-shell",
+            "-s", "/opt/ic/bin/limited-console",
             "limited-console",
             0
         };
-        check_panic_errno(::execve(cmdline[0], const_cast<char**>(cmdline), environ), opts.tty_dev, "execve limited-console-shell failed");
+        check_panic_errno(::execve(cmdline[0], const_cast<char**>(cmdline), environ), opts.tty_dev, "execve limited-console failed");
     } else {
         // Drop into shell. We do this via the "login" binary which establishes
         // everything nicely to have a login session.
