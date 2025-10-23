@@ -205,8 +205,7 @@ rust_test(
     )
     for name_suffix in [
         "-head-nns",
-        # TODO(NNS1-4259): Revert to:
-        # bazel build //rs/pocket_ic_server:pocket-ic-server-head
+        # TODO(NNS1-4259): Uncomment line
         # The next line is a hack to temporarily work around a mistake that we made
         # where required fields were added to the Register canister's init args.
         # "",
