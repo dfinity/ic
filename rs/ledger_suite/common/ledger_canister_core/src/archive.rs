@@ -23,7 +23,14 @@ pub const DEFAULT_CYCLES_FOR_ARCHIVE_CREATION: u64 = 10_000_000_000_000;
 ///
 /// E.g., for a 37-node subnet, with two rounds per second, 1M instructions per transaction, and 10
 /// transactions per round, 10 trillion cycles would last for about 48 hours.
-pub const MIN_LEDGER_LIQUID_CYCLES_AFTER_ARCHIVE_CREATION: u128 = 10_000_000_000_000;
+const MIN_LEDGER_LIQUID_CYCLES_AFTER_ARCHIVE_CREATION: u128 = 10_000_000_000_000;
+/// The minimum amount of cycles that should be sent to the spawned archive canister, in addition
+/// to the cycles needed for creation. These cycles will be used for the initial installation and
+/// first archiving operations. The actual number of cycles needed will depend on the subnet size,
+/// the freezing threshold, compute and storage allocation, etc. The sum of the canister creation
+/// cost and `MIN_ARCHIVE_INSTALL_AND_OPERATION_CYCLES` should be less than or equal to
+/// `DEFAULT_CYCLES_FOR_ARCHIVE_CREATION`.
+const MIN_ARCHIVE_INSTALL_AND_OPERATION_CYCLES: u64 = 3_000_000_000_000;
 
 fn default_cycles_for_archive_creation() -> u64 {
     0
@@ -369,19 +376,12 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
     // size. At the time of writing, the cost is 500_000_000_000 for a subnet of size 13, and
     // 1_307_692_307_692 for a subnet of size 34.
     let cost_create_canister = ic_cdk::api::cost_create_canister();
-    // The cycles sent to the archive also need to cover the installation of the canister. This
-    // depends on the subnet size, and the instruction required for installing the canister. Here,
-    // we conservatively estimate the installation cost as 10% of the canister creation cost.
-    let cost_install_canister =
-        cost_create_canister
-            .checked_div(10u128)
-            .ok_or(FailedToArchiveBlocks(
-                "Error calculating canister installation cost".to_string(),
-            ))?;
-    let cost_create_and_install_canister = cost_create_canister
-        .checked_add(cost_install_canister)
+    // The cycles sent to the archive also need to cover the installation of the canister, and
+    // some initial operation.
+    let cost_install_and_operate_archive = cost_create_canister
+        .checked_add(MIN_ARCHIVE_INSTALL_AND_OPERATION_CYCLES as u128)
         .ok_or(FailedToArchiveBlocks(
-            "Overflow when calculating canister creation and installation cost".to_string(),
+            "Overflow when calculating archive canister creation, installation, and initial operation cost".to_string(),
         ))?;
     let ledger_liquid_cycles_balance = ic_cdk::api::canister_liquid_cycle_balance();
 
@@ -400,22 +400,22 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         }
         _ => {
             // Application subnet.
-            if (cycles_for_archive_creation as u128) < cost_create_and_install_canister {
+            if (cycles_for_archive_creation as u128) < cost_install_and_operate_archive {
                 return Err(FailedToArchiveBlocks(format!(
                     "Archiving options do not provide enough cycles to create archive canister. \
                     Needed at least {} cycles to create and install the canister, \
                     but only {} cycles were provided.",
-                    cost_create_and_install_canister, cycles_for_archive_creation
+                    cost_install_and_operate_archive, cycles_for_archive_creation
                 )));
             }
 
-            if ledger_liquid_cycles_balance < cost_create_and_install_canister {
+            if ledger_liquid_cycles_balance < cost_install_and_operate_archive {
                 return Err(FailedToArchiveBlocks(format!(
                     "Not enough liquid cycles in the ledger to create archive canister. \
                     Needed at least {} cycles to create the canister, plus some more to install the \
                     canister (estimated total {}), but only have {} cycles.",
                     cost_create_canister,
-                    cost_create_and_install_canister,
+                    cost_install_and_operate_archive,
                     ledger_liquid_cycles_balance
                 )));
             }
