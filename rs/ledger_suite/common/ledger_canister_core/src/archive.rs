@@ -14,25 +14,6 @@ use ic_ledger_core::block::EncodedBlock;
 
 /// 10 trillion cycles.
 pub const DEFAULT_CYCLES_FOR_ARCHIVE_CREATION: u64 = 10_000_000_000_000;
-/// The minimum amount of liquid cycles that the ledger must have left after creating an archive
-/// canister. How long the ledger can continue operating with the amount of cycles depends on:
-/// - The subnet size
-/// - The subnet finalization rate (blocks per second)
-/// - The transaction rate of the ledger
-/// - The number of instructions per transaction
-///
-/// E.g., for a 37-node subnet, with two rounds per second, 1M instructions per transaction, and 10
-/// transactions per round, 10 trillion cycles would last for about 48 hours.
-const MIN_LEDGER_LIQUID_CYCLES_AFTER_ARCHIVE_CREATION: u128 = 10_000_000_000_000;
-/// The minimum amount of cycles that should be sent to the spawned archive canister. These cycles
-/// will be used for the initial installation and first archiving operations. The actual number of
-/// cycles needed will depend on the subnet size, the freezing threshold, compute and storage
-/// allocation, etc. `MIN_CYCLES_FOR_ARCHIVE_CREATION` should be less than or equal to
-/// `DEFAULT_CYCLES_FOR_ARCHIVE_CREATION`.
-const MIN_CYCLES_FOR_ARCHIVE_CREATION: u128 = 4_500_000_000_000;
-/// The minimum number of cycles to send to the spawned archive, as a multiple of the canister
-/// creation cost, to cover installation and some initial operations.
-const MIN_CYCLES_FOR_ARCHIVE_CREATION_COST_MULTIPLIER: u128 = 3;
 
 fn default_cycles_for_archive_creation() -> u64 {
     0
@@ -347,6 +328,26 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
     log_sink: impl Sink,
     archive: &Arc<RwLock<Option<Archive<Rt, Wasm>>>>,
 ) -> Result<(CanisterId, usize, u64), FailedToArchiveBlocks> {
+    /// The minimum amount of liquid cycles that the ledger must have left after creating an archive
+    /// canister. How long the ledger can continue operating with the amount of cycles depends on:
+    /// - The subnet size
+    /// - The subnet finalization rate (blocks per second)
+    /// - The transaction rate of the ledger
+    /// - The number of instructions per transaction
+    ///
+    /// E.g., for a 37-node subnet, with two rounds per second, 1M instructions per transaction, and 10
+    /// transactions per round, 10 trillion cycles would last for about 48 hours.
+    const MIN_LEDGER_LIQUID_CYCLES_AFTER_ARCHIVE_CREATION: u64 = 10_000_000_000_000;
+    /// The minimum amount of cycles that should be sent to the spawned archive canister. These cycles
+    /// will be used for the initial installation and first archiving operations. The actual number of
+    /// cycles needed will depend on the subnet size, the freezing threshold, compute and storage
+    /// allocation, etc. `MIN_CYCLES_FOR_ARCHIVE_CREATION` should be less than or equal to
+    /// `DEFAULT_CYCLES_FOR_ARCHIVE_CREATION`.
+    const MIN_CYCLES_FOR_ARCHIVE_CREATION: u64 = 4_500_000_000_000;
+    /// The minimum number of cycles to send to the spawned archive, as a multiple of the canister
+    /// creation cost, to cover installation and some initial operations.
+    const MIN_CYCLES_FOR_ARCHIVE_CREATION_COST_MULTIPLIER: u8 = 3;
+
     log!(log_sink, "[archive] calling create_canister()");
 
     let (
@@ -382,8 +383,8 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
     // some initial operation. Since the costs may change after the deployment of the ledger, we
     // conservatively estimate this cost as at least three times the canister creation cost, or a
     // fixed amount, whichever is greater.
-    let cost_install_and_operate_archive = MIN_CYCLES_FOR_ARCHIVE_CREATION.max(cost_create_canister
-        .checked_mul(MIN_CYCLES_FOR_ARCHIVE_CREATION_COST_MULTIPLIER)
+    let cost_install_and_operate_archive = (MIN_CYCLES_FOR_ARCHIVE_CREATION as u128).max(cost_create_canister
+        .checked_mul(MIN_CYCLES_FOR_ARCHIVE_CREATION_COST_MULTIPLIER as u128)
         .ok_or(FailedToArchiveBlocks(
             "Overflow when calculating archive canister creation, installation, and initial operation cost".to_string(),
         ))?);
@@ -430,7 +431,7 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
             let ledger_liquid_cycles_after_archive_creation =
                 ledger_liquid_cycles_balance.saturating_sub(cycles_for_archive_creation as u128);
             if ledger_liquid_cycles_after_archive_creation
-                < MIN_LEDGER_LIQUID_CYCLES_AFTER_ARCHIVE_CREATION
+                < (MIN_LEDGER_LIQUID_CYCLES_AFTER_ARCHIVE_CREATION as u128)
             {
                 return Err(FailedToArchiveBlocks(format!(
                     "Not enough liquid cycles in the ledger to create archive canister. \
