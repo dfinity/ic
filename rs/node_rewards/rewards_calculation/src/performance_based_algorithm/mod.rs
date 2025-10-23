@@ -46,7 +46,7 @@ pub mod v1;
 
 #[derive(Default)]
 struct FailureRateResults {
-    subnets_failure_rate_percent: BTreeMap<SubnetId, Decimal>,
+    subnets_failure_rate: BTreeMap<SubnetId, Decimal>,
     nodes_metrics_daily: BTreeMap<NodeId, NodeMetricsDaily>,
 }
 
@@ -157,7 +157,7 @@ trait PerformanceBasedAlgorithm {
 
         // Calculate failure rates for subnets and individual nodes
         let FailureRateResults {
-            subnets_failure_rate_percent,
+            subnets_failure_rate,
             mut nodes_metrics_daily,
         } = Self::calculate_failure_rates(metrics_by_subnet);
 
@@ -172,7 +172,7 @@ trait PerformanceBasedAlgorithm {
         }
 
         Ok(DailyResults {
-            subnets_failure_rate: subnets_failure_rate_percent,
+            subnets_failure_rate,
             provider_results: results_per_provider,
         })
     }
@@ -295,7 +295,7 @@ trait PerformanceBasedAlgorithm {
                 *failure_rates[index]
             };
             result
-                .subnets_failure_rate_percent
+                .subnets_failure_rate
                 .insert(subnet_id, subnet_failure_rate);
 
             for NodeMetricsDailyRaw {
@@ -379,14 +379,14 @@ trait PerformanceBasedAlgorithm {
                 .get_rate(region, &node_reward_type.to_string())
                 .map(|rate| {
                     let base_rewards_monthly = Decimal::from(rate.xdr_permyriad_per_node_per_month);
-                    // Default reward_coefficient_percent is set to 80%, which is used as a fallback only in the
+                    // Default reward_coefficient percent is set to 80%, which is used as a fallback only in the
                     // unlikely case that the type3 entry in the reward table:
                     // a) has xdr_permyriad_per_node_per_month entry set for this region, but
-                    // b) does NOT have the reward_coefficient_percent value set
-                    let reward_coefficient_percent =
+                    // b) does NOT have the reward_coefficient value set
+                    let reward_coefficient =
                         Decimal::from(rate.reward_coefficient_percent.unwrap_or(80)) / dec!(100);
 
-                    (base_rewards_monthly, reward_coefficient_percent)
+                    (base_rewards_monthly, reward_coefficient)
                 })
                 .unwrap_or((dec!(1), dec!(1)))
         }
@@ -562,23 +562,23 @@ trait PerformanceBasedAlgorithm {
                     }
                 };
 
-            let rewards_reduction_percent = reward_reduction
+            let node_rewards_reduction = reward_reduction
                 .remove(&node.node_id)
                 .expect("Rewards reduction should be present in rewards");
 
-            let performance_multiplier_percent = performance_multiplier
+            let node_performance_multiplier = performance_multiplier
                 .remove(&node.node_id)
                 .expect("Performance multiplier should be present in rewards");
 
-            let base_rewards_xdr_permyriad = base_rewards_per_node
+            let node_base_rewards_xdr_permyriad = base_rewards_per_node
                 .remove(&node.node_id)
                 .expect("Base rewards should be present in rewards");
 
-            let adjusted_rewards_xdr_permyriad = adjusted_rewards
+            let node_adjusted_rewards_xdr_permyriad = adjusted_rewards
                 .remove(&node.node_id)
                 .expect("Adjusted rewards should be present in rewards");
 
-            rewards_total_xdr_permyriad += adjusted_rewards_xdr_permyriad;
+            rewards_total_xdr_permyriad += node_adjusted_rewards_xdr_permyriad;
 
             results_by_node.push(DailyNodeRewards {
                 node_id: node.node_id,
@@ -586,10 +586,10 @@ trait PerformanceBasedAlgorithm {
                 region: node.region,
                 dc_id: node.dc_id,
                 daily_node_failure_rate: node_status,
-                performance_multiplier: performance_multiplier_percent,
-                rewards_reduction: rewards_reduction_percent,
-                base_rewards_xdr_permyriad,
-                adjusted_rewards_xdr_permyriad,
+                performance_multiplier: node_performance_multiplier,
+                rewards_reduction: node_rewards_reduction,
+                base_rewards_xdr_permyriad: node_base_rewards_xdr_permyriad,
+                adjusted_rewards_xdr_permyriad: node_adjusted_rewards_xdr_permyriad,
             });
         }
 
