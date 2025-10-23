@@ -18,8 +18,8 @@ use std::collections::{BTreeMap, HashMap};
 // Note: Values for 'xdr_permyriad_per_node_per_month' have been chosen to be give good daily
 // rewards once divided by REWARDS_TABLE_DAYS.
 lazy_static! {
-  static ref NODE_REWARDS_TABLE: NodeRewardsTable = {
-    let mut table = BTreeMap::new();
+    static ref NODE_REWARDS_TABLE: NodeRewardsTable = {
+        let mut table = BTreeMap::new();
 
         // Type1 nodes - Europe
         table.insert(
@@ -74,7 +74,7 @@ lazy_static! {
         );
 
         NodeRewardsTable { table }
-  };
+    };
 }
 
 #[derive(Default, Clone)]
@@ -290,10 +290,7 @@ fn test_failure_rate_calculation_various_performance() {
     let mut daily_result = result.daily_results.remove(&day).unwrap();
     let provider_result = daily_result.provider_results.remove(&provider_id).unwrap();
     // Verify subnet failure rate is calculated (75th percentile of 0.99%, 4.76%, 16.67%, 33.33% = 16.67%)
-    let subnet_fr = *daily_result
-        .subnets_failure_rate_percent
-        .get(&subnet_id)
-        .unwrap();
+    let subnet_fr = *daily_result.subnets_failure_rate.get(&subnet_id).unwrap();
     assert_eq!(subnet_fr, dec!(0.1666666666666666666666666667));
 
     // Verify node results show different performance multipliers
@@ -312,29 +309,29 @@ fn test_failure_rate_calculation_various_performance() {
     let poor_node = node_results.remove(&test_node_id(13)).unwrap();
 
     // Excellent node should have no penalty (performance_multiplier = 1.0)
-    assert_eq!(excellent_node.performance_multiplier_percent, dec!(1.0));
-    assert_eq!(excellent_node.rewards_reduction_percent, dec!(0.0));
+    assert_eq!(excellent_node.performance_multiplier, dec!(1.0));
+    assert_eq!(excellent_node.rewards_reduction, dec!(0.0));
 
     // Good node should have no penalty (failure rate < 10%)
-    assert_eq!(good_node.performance_multiplier_percent, dec!(1.0));
-    assert_eq!(good_node.rewards_reduction_percent, dec!(0.0));
+    assert_eq!(good_node.performance_multiplier, dec!(1.0));
+    assert_eq!(good_node.rewards_reduction, dec!(0.0));
 
     // Average node should have no penalty (failure rate = subnet FR)
     // With subnet FR = 0.1666..., relative FR = max(0, 0.1666... - 0.1666...) = 0.0
     // Since 0.0 < 0.1 (MIN_FAILURE_RATE), there should be no penalty
-    assert_eq!(average_node.performance_multiplier_percent, dec!(1.0));
-    assert_eq!(average_node.rewards_reduction_percent, dec!(0.0));
+    assert_eq!(average_node.performance_multiplier, dec!(1.0));
+    assert_eq!(average_node.rewards_reduction, dec!(0.0));
 
     // Poor node should have some penalty
     // With subnet FR = 0.1666..., relative FR = max(0, 0.3333... - 0.1666...) = 0.1666...
     // Since 0.1666... is between 0.1 and 0.6, penalty = (0.1666...-0.1)/(0.6-0.1) * 0.8 = 0.0666.../0.5 * 0.8 = 0.1066...
     // Performance multiplier = 1 - 0.1066... = 0.8933...
     assert_eq!(
-        poor_node.performance_multiplier_percent,
+        poor_node.performance_multiplier,
         dec!(0.8933333333333333333333333334)
     );
     assert_eq!(
-        poor_node.rewards_reduction_percent,
+        poor_node.rewards_reduction,
         dec!(0.1066666666666666666666666666)
     );
 }
@@ -446,14 +443,14 @@ fn test_type3_reduction_coefficient_logic() {
         .unwrap();
 
     assert_eq!(usa_rewards.nodes_count, 5); // 3 Type3 + 2 Type3.1 nodes grouped together
-    assert_eq!(usa_rewards.avg_coefficient_percent, dec!(0.82)); // Average of 90% and 70% coefficients -> (3 * 90 + 2 * 70)/5
+    assert_eq!(usa_rewards.avg_coefficient, dec!(0.82)); // Average of 90% and 70% coefficients -> (3 * 90 + 2 * 70)/5
     assert_eq!(usa_rewards.avg_rewards_xdr_permyriad, dec!(34000)); // Average of daily rates -> (30000 * 3 + 40000 * 2) / 5
     // Average of daily rates discounted by coefficient percent
     // Computed as (34000 + 34000*0.82 + 34000*0.82^2 + 34000*0.82^3 + 34000*0.82^4) / 5
     assert_eq!(usa_rewards.daily_xdr_permyriad, dec!(23772.05036800));
 
     // Calculate expected subnet failure rate (75th percentile of 4.76%, 13.04%, 20%, 25.93%, 31.03% = 25.93%)
-    let subnet_fr = daily_result.subnets_failure_rate_percent[&subnet_id];
+    let subnet_fr = daily_result.subnets_failure_rate[&subnet_id];
     assert_eq!(subnet_fr, dec!(0.2592592592592592592592592593)); // 25.93% failure rate
 
     // Verify individual node rewards with performance penalties
@@ -465,17 +462,17 @@ fn test_type3_reduction_coefficient_logic() {
         .find(|n| n.node_id == test_node_id(20))
         .unwrap();
     assert_eq!(good_node.base_rewards_xdr_permyriad, dec!(23772.05036800)); // From previous assert case
-    assert_eq!(good_node.performance_multiplier_percent, dec!(1.0)); // No penalty
-    assert_eq!(good_node.rewards_reduction_percent, dec!(0.0)); // No reduction
+    assert_eq!(good_node.performance_multiplier, dec!(1.0)); // No penalty
+    assert_eq!(good_node.rewards_reduction, dec!(0.0)); // No reduction
 
     if let DailyNodeFailureRate::SubnetMember { node_metrics } = &good_node.daily_node_failure_rate
     {
         assert_eq!(
-            node_metrics.original_failure_rate_percent,
+            node_metrics.original_failure_rate,
             dec!(0.0476190476190476190476190476)
         );
         // relative FR = max(0, 0.0476 - 0.2593) = 0 (no penalty)
-        assert_eq!(node_metrics.relative_failure_rate_percent, dec!(0));
+        assert_eq!(node_metrics.relative_failure_rate, dec!(0));
     } else {
         panic!("Node is not a SubnetMember");
     }
@@ -501,12 +498,12 @@ fn test_type3_reduction_coefficient_logic() {
         &node_with_penalty.daily_node_failure_rate
     {
         assert_eq!(
-            node_metrics.original_failure_rate_percent,
+            node_metrics.original_failure_rate,
             dec!(0.4117647058823529411764705882)
         );
         // relative FR = max(0, ~0.41 - 0.2593) ~= 0.1525
         assert_eq!(
-            node_metrics.relative_failure_rate_percent,
+            node_metrics.relative_failure_rate,
             dec!(0.1525054466230936819172113289)
         );
     } else {
@@ -514,11 +511,11 @@ fn test_type3_reduction_coefficient_logic() {
     }
 
     assert_eq!(
-        node_with_penalty.rewards_reduction_percent,
+        node_with_penalty.rewards_reduction,
         dec!(0.0840087145969498910675381262)
     ); // Linear interpolation
     assert_eq!(
-        node_with_penalty.performance_multiplier_percent,
+        node_with_penalty.performance_multiplier,
         dec!(0.9159912854030501089324618738)
     );
 
@@ -642,13 +639,13 @@ fn test_single_node_subnet() {
     let provider_result = &daily_result.provider_results[&provider_id];
 
     // With only one node, the subnet failure rate should be the same as the node's failure rate
-    let subnet_fr = daily_result.subnets_failure_rate_percent[&subnet_id];
+    let subnet_fr = daily_result.subnets_failure_rate[&subnet_id];
     assert_eq!(subnet_fr, dec!(0.1)); // 10/100
 
     // The single node should have no penalty since its relative failure rate is 0
     let node_1_rewards = &provider_result.daily_nodes_rewards[0];
-    assert_eq!(node_1_rewards.performance_multiplier_percent, dec!(1.0));
-    assert_eq!(node_1_rewards.rewards_reduction_percent, dec!(0.0));
+    assert_eq!(node_1_rewards.performance_multiplier, dec!(1.0));
+    assert_eq!(node_1_rewards.rewards_reduction, dec!(0.0));
 }
 
 #[test]
@@ -679,18 +676,12 @@ fn test_empty_subnet_metrics() {
     let provider_result = &daily_result.provider_results[&provider_id];
 
     // Subnet failure rate should be 0 for empty subnet
-    assert_eq!(
-        daily_result.subnets_failure_rate_percent[&subnet_id],
-        dec!(0.0)
-    );
+    assert_eq!(daily_result.subnets_failure_rate[&subnet_id], dec!(0.0));
 
     // Node should have no penalty since subnet FR is 0
     let daily_nodes_rewards = &provider_result.daily_nodes_rewards[0];
-    assert_eq!(
-        daily_nodes_rewards.performance_multiplier_percent,
-        dec!(1.0)
-    );
-    assert_eq!(daily_nodes_rewards.rewards_reduction_percent, dec!(0.0));
+    assert_eq!(daily_nodes_rewards.performance_multiplier, dec!(1.0));
+    assert_eq!(daily_nodes_rewards.rewards_reduction, dec!(0.0));
 }
 
 /// **Scenario**: Provider with empty rewardable nodes (no nodes to reward)
@@ -807,7 +798,7 @@ fn test_zero_blocks_edge_cases() {
     let provider_result = &daily_result.provider_results[&provider_id];
 
     // Subnet failure rate should be 1.0 (75th percentile of 0, 0, 0, 1.0)
-    let subnet_fr = daily_result.subnets_failure_rate_percent[&subnet_id];
+    let subnet_fr = daily_result.subnets_failure_rate[&subnet_id];
     assert_eq!(subnet_fr, dec!(0));
 
     // Convert node_results into a HashMap for direct access by node_id
@@ -819,22 +810,22 @@ fn test_zero_blocks_edge_cases() {
 
     // Node 1
     let node1 = node_results_map.get(&test_node_id(1)).unwrap();
-    if let DailyNodeFailureRate::SubnetMember { node_metrics } = &node1.daily_node_failure_rate {
-        assert_eq!(node_metrics.original_failure_rate_percent, dec!(0));
-        assert_eq!(node_metrics.relative_failure_rate_percent, dec!(0));
-    } else {
-        panic!("Node 1 is not a SubnetMember");
-    }
+    let node_metrics = match &node1.daily_node_failure_rate {
+        DailyNodeFailureRate::SubnetMember { node_metrics } => node_metrics,
+        _ => panic!("Node 1 is not a SubnetMember"),
+    };
+    assert_eq!(node_metrics.original_failure_rate, dec!(0));
+    assert_eq!(node_metrics.relative_failure_rate, dec!(0));
     assert_eq!(node1.adjusted_rewards_xdr_permyriad, dec!(10000)); // No penalty
 
     // Node 2
     let node2 = node_results_map.get(&test_node_id(2)).unwrap();
-    if let DailyNodeFailureRate::SubnetMember { node_metrics } = &node2.daily_node_failure_rate {
-        assert_eq!(node_metrics.original_failure_rate_percent, dec!(1));
-        assert_eq!(node_metrics.relative_failure_rate_percent, dec!(1));
-    } else {
-        panic!("Node 2 is not a SubnetMember");
-    }
-    assert_eq!(node2.performance_multiplier_percent, dec!(0.2));
+    let node_metrics = match &node2.daily_node_failure_rate {
+        DailyNodeFailureRate::SubnetMember { node_metrics } => node_metrics,
+        _ => panic!("Node 2 is not a SubnetMember"),
+    };
+    assert_eq!(node_metrics.original_failure_rate, dec!(1));
+    assert_eq!(node_metrics.relative_failure_rate, dec!(1));
+    assert_eq!(node2.performance_multiplier, dec!(0.2));
     assert_eq!(node2.adjusted_rewards_xdr_permyriad, dec!(8000)); // Max penalty 40000 * 0.2 = 8000
 }

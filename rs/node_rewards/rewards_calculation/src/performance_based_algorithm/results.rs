@@ -19,7 +19,7 @@ pub struct NodeMetricsDaily {
     /// This is the SUBNET_FAILURE_RATE_PERCENTILE of the original_fr all nodes in the subnet.
     /// It is used to adjust individual node failure rates to account for systematic issues
     /// affecting the whole subnet.
-    pub subnet_assigned_failure_rate_percent: Decimal,
+    pub subnet_assigned_failure_rate: Decimal,
 
     /// Number of blocks successfully proposed by this node on this day
     pub num_blocks_proposed: u64,
@@ -31,14 +31,14 @@ pub struct NodeMetricsDaily {
     ///
     /// Calculated as `num_blocks_failed / (num_blocks_proposed + num_blocks_failed)`.
     /// Represents the failure rate of the node before any subnet-level adjustments.
-    pub original_failure_rate_percent: Decimal,
+    pub original_failure_rate: Decimal,
 
     /// Relative Failure Rate
     ///
     /// Failure rate adjusted for subnet performance.
     /// Calculated as `max(0, original_fr - subnet_assigned_fr_percent)`.
     /// TODO: Link documentation about performance based rewards algorithm
-    pub relative_failure_rate_percent: Decimal,
+    pub relative_failure_rate: Decimal,
 }
 
 // TODO: Link documentation about performance based rewards algorithm
@@ -51,7 +51,7 @@ pub enum DailyNodeFailureRate {
     NonSubnetMember {
         /// Extrapolated Failure Rate (EFR)
         /// Used to estimate the node's performance when unassigned
-        extrapolated_failure_rate_percent: Decimal,
+        extrapolated_failure_rate: Decimal,
     },
 }
 
@@ -75,11 +75,11 @@ pub struct DailyNodeRewards {
     /// Performance multiplier (1 - rewards_reduction)
     ///
     /// Represents how rewards are adjusted based on node performance
-    pub performance_multiplier_percent: Decimal,
+    pub performance_multiplier: Decimal,
 
     /// Rewards reduction applied due to failure rates
     // TODO: Link to documentation about performance based rewards
-    pub rewards_reduction_percent: Decimal,
+    pub rewards_reduction: Decimal,
 
     /// Base rewards before applying performance multipliers
     pub base_rewards_xdr_permyriad: Decimal,
@@ -121,7 +121,7 @@ pub struct Type3RegionBaseRewards {
     pub avg_rewards_xdr_permyriad: Decimal,
 
     /// Average performance coefficient applied to nodes
-    pub avg_coefficient_percent: Decimal,
+    pub avg_coefficient: Decimal,
 
     /// Base rewards value for Type 3 nodes
     pub daily_xdr_permyriad: Decimal,
@@ -145,7 +145,7 @@ pub struct DailyNodeProviderRewards {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct DailyResults {
     /// Failure rates for all subnets on this day
-    pub subnets_failure_rate_percent: BTreeMap<SubnetId, Decimal>,
+    pub subnets_failure_rate: BTreeMap<SubnetId, Decimal>,
 
     /// Rewards for all node providers on this day
     pub provider_results: BTreeMap<PrincipalId, DailyNodeProviderRewards>,

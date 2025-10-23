@@ -117,7 +117,7 @@ trait PerformanceBasedAlgorithm {
             return Err("from_day must be before to_day".to_string());
         }
 
-        let reward_period = from_date.iter_days().take_while(|d| d <= &to_date);
+        let reward_period = from_date.iter_days().take_while(|d| *d <= to_date);
         let mut total_rewards_per_provider = BTreeMap::new();
         let mut daily_results = BTreeMap::new();
 
@@ -172,7 +172,7 @@ trait PerformanceBasedAlgorithm {
         }
 
         Ok(DailyResults {
-            subnets_failure_rate_percent,
+            subnets_failure_rate: subnets_failure_rate_percent,
             provider_results: results_per_provider,
         })
     }
@@ -191,7 +191,7 @@ trait PerformanceBasedAlgorithm {
 
         let relative_nodes_failure_rate: BTreeMap<NodeId, Decimal> = provider_nodes_metrics_daily
             .iter()
-            .map(|(node_id, metrics)| (*node_id, metrics.relative_failure_rate_percent))
+            .map(|(node_id, metrics)| (*node_id, metrics.relative_failure_rate))
             .collect();
 
         // Calculate extrapolated failure rate for unassigned nodes
@@ -312,11 +312,11 @@ trait PerformanceBasedAlgorithm {
                     node_id,
                     NodeMetricsDaily {
                         subnet_assigned: subnet_id,
-                        subnet_assigned_failure_rate_percent: subnet_failure_rate,
+                        subnet_assigned_failure_rate: subnet_failure_rate,
                         num_blocks_proposed,
                         num_blocks_failed,
-                        original_failure_rate_percent: original_failure_rate,
-                        relative_failure_rate_percent: relative_failure_rate,
+                        original_failure_rate: original_failure_rate,
+                        relative_failure_rate: relative_failure_rate,
                     },
                 );
             }
@@ -486,7 +486,7 @@ trait PerformanceBasedAlgorithm {
                         region,
                         nodes_count,
                         avg_rewards_xdr_permyriad: avg_rewards,
-                        avg_coefficient_percent: avg_coefficient,
+                        avg_coefficient: avg_coefficient,
                         daily_xdr_permyriad: daily_rewards,
                     }
                 },
@@ -558,7 +558,7 @@ trait PerformanceBasedAlgorithm {
                     DailyNodeFailureRate::SubnetMember { node_metrics }
                 } else {
                     DailyNodeFailureRate::NonSubnetMember {
-                        extrapolated_failure_rate_percent: extrapolated_failure_rate,
+                        extrapolated_failure_rate: extrapolated_failure_rate,
                     }
                 };
 
@@ -586,8 +586,8 @@ trait PerformanceBasedAlgorithm {
                 region: node.region,
                 dc_id: node.dc_id,
                 daily_node_failure_rate: node_status,
-                performance_multiplier_percent,
-                rewards_reduction_percent,
+                performance_multiplier: performance_multiplier_percent,
+                rewards_reduction: rewards_reduction_percent,
                 base_rewards_xdr_permyriad,
                 adjusted_rewards_xdr_permyriad,
             });
