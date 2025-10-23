@@ -199,11 +199,6 @@ load("//pre-commit:candid.bzl", "candid")
 
 candid(name = "candid")
 
-# dfx binary for haskell linting
-load("//bazel:dfx.bzl", "dfx")
-
-dfx(name = "dfx")
-
 # sns-quill for SNS testing
 load("//bazel:sns_quill.bzl", "sns_quill")
 
