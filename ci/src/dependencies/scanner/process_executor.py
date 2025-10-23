@@ -36,4 +36,5 @@ class ProcessExecutor:
                 logging.debug(result.stdout)
             raise subprocess.CalledProcessError(result.returncode, command, result.args, result.stderr)
         else:
+            logging.debug(f"result.stderr output:\n{result.stderr}")
             return result.stdout.strip()
