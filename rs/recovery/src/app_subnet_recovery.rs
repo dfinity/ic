@@ -21,7 +21,16 @@ use strum_macros::{EnumIter, EnumString};
 use url::Url;
 
 #[derive(
-    Copy, Clone, PartialEq, Debug, Deserialize, EnumIter, EnumMessage, EnumString, Serialize,
+    Copy,
+    Clone,
+    PartialEq,
+    Debug,
+    Deserialize,
+    EnumIter,
+    EnumMessage,
+    EnumString,
+    Serialize,
+    strum_macros::Display,
 )]
 pub enum StepType {
     /// Before we can start the recovery process, we need to prevent the subnet from attempting to
@@ -31,7 +40,7 @@ pub enum StepType {
     /// download the subnet state from the most up to date node.
     Halt,
     /// In order to determine whether we had a possible state divergence during the subnet failure,
-    /// we need to pull all certification pools from all nodes.
+    /// we need to pull the certification pools from as many nodes as possible.
     DownloadCertifications,
     /// In this step we will merge all found certifications and determine whether it is safe to
     /// continue without a manual intervention. In most cases, when a subnet happened due to a
@@ -196,10 +205,6 @@ impl AppSubnetRecovery {
             recovery,
             logger,
         }
-    }
-
-    pub fn get_recovery_api(&self) -> &Recovery {
-        &self.recovery
     }
 }
 

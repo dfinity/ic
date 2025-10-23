@@ -43,13 +43,7 @@ pub struct SubnetRentalRequest {
 pub enum RentalConditionId {
     App13CH,
 }
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
-pub struct SubnetRentalProposalPayload {
-    pub user: PrincipalId,
-    pub rental_condition_id: RentalConditionId,
-    pub proposal_id: u64,
-    pub proposal_creation_time_seconds: u64,
-}
+
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
 pub struct RentalRequest {
     pub user: PrincipalId,

@@ -5,27 +5,32 @@ helper targets to generate the test DID and patch when the patch cannot be appli
 
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
-def canister_test_did(name, canister_did, canister_test_did_patch):
+def canister_test_did(name, canister_did, canister_test_did_patch, output_path = None):
     """ Generates a test DID file from a main DID file and a patch file.
 
     Args:
         name: The name of the rule that represents the generated test candid file.
         canister_did: The main candid file.
         canister_test_did_patch: The patch file representing the differences between the main and test candid files.
+        output_path: The filepath to use for the output, patched did (defaults to 'name').
     """
 
-    if not name.endswith("_test.did"):
-        fail("Name must end with '_test.did'")
+    if output_path == None:
+        output_path = canister_did
 
-    canister_test_did = name
+    if not output_path.endswith("_test.did"):
+        fail("output path must end with '_test.did'")
+
+    canister_test_did = output_path
     canister_did_path = "$(location {})".format(canister_did)
     canister_test_did_patch_path = "$(location {})".format(canister_test_did_patch)
     target_base_name = native.package_name() + ":" + canister_test_did
 
     native.genrule(
-        name = canister_test_did,
+        name = name,
         srcs = [canister_did, canister_test_did_patch],
         outs = [canister_test_did],
+        testonly = True,
         cmd = r"""
             # The --follow-symlinks option is needed for Linux, as it doesn't follow symlinks by default, and for `bazel build` the input files are symlinks to the original files.
             if [ "$$(uname)" == "Linux" ]; then
@@ -46,7 +51,7 @@ def canister_test_did(name, canister_did, canister_test_did_patch):
         ),
     )
     sh_binary(
-        name = canister_test_did + "_generate_test_did",
+        name = name + "_generate_test_did",
         srcs = [
             "//rs/nervous_system/patch_canister_did:helper.sh",
         ],
@@ -64,7 +69,7 @@ def canister_test_did(name, canister_did, canister_test_did_patch):
         ],
     )
     sh_binary(
-        name = canister_test_did + "_update_patch",
+        name = name + "_update_patch",
         srcs = [
             "//rs/nervous_system/patch_canister_did:helper.sh",
         ],

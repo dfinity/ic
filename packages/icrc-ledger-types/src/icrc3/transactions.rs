@@ -22,6 +22,7 @@ pub struct Mint {
     pub to: Account,
     pub memo: Option<Memo>,
     pub created_at_time: Option<u64>,
+    pub fee: Option<Nat>,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -31,6 +32,7 @@ pub struct Burn {
     pub spender: Option<Account>,
     pub memo: Option<Memo>,
     pub created_at_time: Option<u64>,
+    pub fee: Option<Nat>,
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

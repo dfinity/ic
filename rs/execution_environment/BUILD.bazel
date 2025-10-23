@@ -346,6 +346,7 @@ rust_ic_bench(
         "//rs/types/base_types",
         "//rs/types/types",
         "@crate_index//:criterion",
+        "@crate_index//:lazy_static",
     ],
 )
 

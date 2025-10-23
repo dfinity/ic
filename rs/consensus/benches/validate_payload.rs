@@ -16,6 +16,7 @@ use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressP
 use ic_config::state_manager::Config as StateManagerConfig;
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_utils::pool_reader::PoolReader;
+use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
@@ -38,7 +39,6 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::{
-    crypto::temp_crypto_component_with_fake_registry,
     cycles_account_manager::CyclesAccountManagerBuilder,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
@@ -213,6 +213,7 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
             },
             now,
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
 
