@@ -48,6 +48,8 @@ pub struct BallotInfo {
     candid::CandidType, candid::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug, Default,
 )]
 pub struct NeuronInfo {
+    /// The unique identifier of the neuron.
+    pub id: Option<NeuronId>,
     /// The exact time at which this data was computed. This means, for
     /// example, that the exact time that this neuron will enter the
     /// dissolved state, assuming it is currently dissolving, is given

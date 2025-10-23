@@ -3527,12 +3527,15 @@ impl Governance {
         requester: PrincipalId,
     ) -> Result<NeuronIndexData, GovernanceError> {
         if !is_comprehensive_neuron_list_enabled() {
-            return Ok(NeuronIndexData { neurons: vec![] });
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Comprehensive neuron list is not enabled.",
+            ));
         }
 
         let now = self.env.now();
 
-        let exclusive_start_id = req.exclusive_start_neuron_id.unwrap_or(NeuronId { id: 0 });
+        let exclusive_start_neuron_id = req.exclusive_start_neuron_id.unwrap_or(NeuronId { id: 0 });
 
         let page_size = req
             .page_size
@@ -3540,7 +3543,7 @@ impl Governance {
             .min(MAX_NEURON_PAGE_SIZE);
 
         let neurons = self.neuron_store.list_all_neurons_paginated(
-            exclusive_start_id,
+            exclusive_start_neuron_id,
             page_size,
             requester,
             now,
