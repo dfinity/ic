@@ -1,0 +1,209 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//rs/tests:system_tests.bzl", "system_test_nns")
+
+package(default_visibility = ["//rs:system-tests-pkg"])
+
+rust_binary(
+    name = "empty_test_bin",
+    testonly = True,
+    srcs = ["empty.rs"],
+)
+
+# uses_guestos_img
+system_test_nns(
+    name = "uses_guestos_img",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = True,
+)
+
+# uses_guestos_malicious_img
+system_test_nns(
+    name = "uses_guestos_malicious_img",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_guestos_malicious_img = True,
+)
+
+# uses_guestos_mainnet_latest_img
+system_test_nns(
+    name = "uses_guestos_mainnet_latest_img",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_guestos_mainnet_latest_img = True,
+)
+
+system_test_nns(
+    name = "uses_guestos_mainnet_latest_img_dev",
+    test_driver_target = ":empty_test_bin",
+    uses_dev_mainnet = True,
+    uses_guestos_img = False,
+    uses_guestos_mainnet_latest_img = True,
+)
+
+# uses_guestos_mainnet_nns_img
+system_test_nns(
+    name = "uses_guestos_mainnet_nns_img",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_guestos_mainnet_nns_img = True,
+)
+
+system_test_nns(
+    name = "uses_guestos_mainnet_nns_img_dev",
+    test_driver_target = ":empty_test_bin",
+    uses_dev_mainnet = True,
+    uses_guestos_img = False,
+    uses_guestos_mainnet_nns_img = True,
+)
+
+# uses_guestos_mainnet_app_img
+system_test_nns(
+    name = "uses_guestos_mainnet_app_img",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_guestos_mainnet_app_img = True,
+)
+
+system_test_nns(
+    name = "uses_guestos_mainnet_app_img_dev",
+    test_driver_target = ":empty_test_bin",
+    uses_dev_mainnet = True,
+    uses_guestos_img = False,
+    uses_guestos_mainnet_app_img = True,
+)
+
+# uses_guestos_recovery_dev_img
+system_test_nns(
+    name = "uses_guestos_recovery_dev_img",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_guestos_recovery_dev_img = True,
+)
+
+# uses_guestos_update
+system_test_nns(
+    name = "uses_guestos_update",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_guestos_update = True,
+)
+
+# uses_guestos_test_update
+system_test_nns(
+    name = "uses_guestos_test_update",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_guestos_test_update = True,
+)
+
+# uses_guestos_malicious_update
+system_test_nns(
+    name = "uses_guestos_malicious_update",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_guestos_malicious_update = True,
+)
+
+# uses_guestos_mainnet_latest_update
+system_test_nns(
+    name = "uses_guestos_mainnet_latest_update",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_guestos_mainnet_latest_update = True,
+)
+
+system_test_nns(
+    name = "uses_guestos_mainnet_latest_update_dev",
+    test_driver_target = ":empty_test_bin",
+    uses_dev_mainnet = True,
+    uses_guestos_img = False,
+    uses_guestos_mainnet_latest_update = True,
+)
+
+# uses_guestos_mainnet_nns_update
+system_test_nns(
+    name = "uses_guestos_mainnet_nns_update",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_guestos_mainnet_nns_update = True,
+)
+
+system_test_nns(
+    name = "uses_guestos_mainnet_nns_update_dev",
+    test_driver_target = ":empty_test_bin",
+    uses_dev_mainnet = True,
+    uses_guestos_img = False,
+    uses_guestos_mainnet_nns_update = True,
+)
+
+# uses_guestos_mainnet_app_update
+system_test_nns(
+    name = "uses_guestos_mainnet_app_update",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_guestos_mainnet_app_update = True,
+)
+
+system_test_nns(
+    name = "uses_guestos_mainnet_app_update_dev",
+    test_driver_target = ":empty_test_bin",
+    uses_dev_mainnet = True,
+    uses_guestos_img = False,
+    uses_guestos_mainnet_app_update = True,
+)
+
+# uses_setupos_img
+system_test_nns(
+    name = "uses_setupos_img",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_setupos_img = True,
+)
+
+# uses_setupos_mainnet_latest_img
+system_test_nns(
+    name = "uses_setupos_mainnet_latest_img",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_setupos_mainnet_latest_img = True,
+)
+
+system_test_nns(
+    name = "uses_setupos_mainnet_latest_img_dev",
+    test_driver_target = ":empty_test_bin",
+    uses_dev_mainnet = True,
+    uses_guestos_img = False,
+    uses_setupos_mainnet_latest_img = True,
+)
+
+# uses_hostos_update
+system_test_nns(
+    name = "uses_hostos_update",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_hostos_update = True,
+)
+
+# uses_hostos_test_update
+system_test_nns(
+    name = "uses_hostos_test_update",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_hostos_test_update = True,
+)
+
+# uses_hostos_mainnet_latest_update
+system_test_nns(
+    name = "uses_hostos_mainnet_latest_update",
+    test_driver_target = ":empty_test_bin",
+    uses_guestos_img = False,
+    uses_hostos_mainnet_latest_update = True,
+)
+
+system_test_nns(
+    name = "uses_hostos_mainnet_latest_update_dev",
+    test_driver_target = ":empty_test_bin",
+    uses_dev_mainnet = True,
+    uses_guestos_img = False,
+    uses_hostos_mainnet_latest_update = True,
+)
