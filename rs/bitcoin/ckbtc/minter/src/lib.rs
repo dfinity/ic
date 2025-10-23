@@ -1439,6 +1439,9 @@ pub trait CanisterRuntime {
     /// Address controlled by the minter (via threshold ECDSA) for a given user.
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
 
+    /// Returns the frequency at which fee percentiles are refreshed.
+    fn refresh_fee_percentiles_frequency(&self) -> Duration;
+
     /// Retrieves the current transaction fee percentiles.
     async fn get_current_fee_percentiles(
         &self,
@@ -1488,6 +1491,11 @@ pub struct IcCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
+    fn refresh_fee_percentiles_frequency(&self) -> Duration {
+        const ONE_HOUR: Duration = Duration::from_secs(3_600);
+        ONE_HOUR
+    }
+
     async fn get_current_fee_percentiles(
         &self,
         request: &GetCurrentFeePercentilesRequest,

@@ -222,7 +222,7 @@ fn should_refresh_fee_percentiles() {
     let median_fee = fee_percentiles[50];
     assert_eq!(median_fee, 50);
     dogecoin.set_fee_percentiles(fee_percentiles);
-    setup.env.advance_time(Duration::from_secs(60 * 60 + 1));
+    setup.env.advance_time(Duration::from_secs(60 * 6 + 1));
     setup.env.tick();
     setup.env.tick();
     setup.env.tick();

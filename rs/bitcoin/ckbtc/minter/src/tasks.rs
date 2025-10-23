@@ -146,10 +146,9 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
             reimburse_withdrawals(&runtime).await;
         }
         TaskType::RefreshFeePercentiles => {
-            const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);
             let _enqueue_followup_guard = guard((), |_| {
                 schedule_after(
-                    FEE_ESTIMATE_DELAY,
+                    runtime.refresh_fee_percentiles_frequency(),
                     TaskType::RefreshFeePercentiles,
                     &runtime,
                 )

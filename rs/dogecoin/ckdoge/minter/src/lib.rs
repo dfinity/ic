@@ -16,6 +16,7 @@ use ic_ckbtc_minter::{
     updates::retrieve_btc::BtcAddressCheckStatus,
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
+use std::time::Duration;
 
 use crate::dogecoin_canister::MillikoinuPerByte;
 pub use dogecoin_canister::get_dogecoin_canister_id;
@@ -34,6 +35,11 @@ pub struct DogeCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for DogeCanisterRuntime {
+    fn refresh_fee_percentiles_frequency(&self) -> Duration {
+        const SIX_MINUTES: Duration = Duration::from_secs(360);
+        SIX_MINUTES
+    }
+
     async fn get_current_fee_percentiles(
         &self,
         request: &GetCurrentFeePercentilesRequest,
