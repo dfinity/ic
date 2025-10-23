@@ -25,6 +25,7 @@ use ic_validate_eq_derive::ValidateEq;
 use phantom_newtype::Id;
 use serde::{Deserialize, Serialize};
 use std::{
+    cmp::Reverse,
     convert::{From, TryFrom, TryInto},
     hash::{Hash, Hasher},
     mem::size_of,
@@ -585,13 +586,8 @@ impl PartialOrd for Refund {
 
 impl Ord for Refund {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        match self.amount.cmp(&other.amount) {
-            // Break ties by recipient: smaller IDs have higher priority.
-            std::cmp::Ordering::Equal => self.recipient.cmp(&other.recipient),
-
-            // Reverse order for different amounts: larger amounts have higher priority.
-            ord => ord.reverse(),
-        }
+        // Order by amount decreasing, then by recipient increasing.
+        (Reverse(self.amount), &self.recipient).cmp(&(Reverse(other.amount), &other.recipient))
     }
 }
 
