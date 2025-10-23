@@ -389,13 +389,7 @@ impl HttpsOutcallsService for CanisterHttp {
                         .map_err(|socks_err| {
                             format!(
                                 "Request failed direct connect {direct_err:?} \
-                                and connect through socks {socks_err:?}. \
-                                (Please note that the canister HTTPS outcalls feature \
-                                is an IPv6-only feature. \
-                                While IPv4 is an experimental feature, \
-                                it cannot be relied upon for this functionality. \
-                                For more information, please consult \
-                                the Internet Computer developer documentation)"
+                                and connect through socks {socks_err:?}."
                             )
                         })
                 }

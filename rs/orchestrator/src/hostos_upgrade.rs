@@ -130,6 +130,6 @@ impl HostosUpgrader {
     fn get_load_balance_number(&self) -> usize {
         // XOR all the u8 in node_id:
         let principal = self.node_id.get().0;
-        principal.as_slice().iter().fold(0, |acc, x| (acc ^ x)) as usize
+        principal.as_slice().iter().fold(0, |acc, x| acc ^ x) as usize
     }
 }

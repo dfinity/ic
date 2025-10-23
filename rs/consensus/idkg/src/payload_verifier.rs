@@ -461,6 +461,7 @@ fn validate_data_payload(
         &block_reader,
         &builder,
         &builder,
+        thread_pool,
         state_manager,
         registry_client,
         None,
@@ -703,11 +704,11 @@ mod test {
     use ic_crypto_test_utils_canister_threshold_sigs::{
         CanisterThresholdSigTestEnvironment, dummy_values::dummy_dealings,
     };
+    use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces_state_manager::CertifiedStateSnapshot;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{MasterPublicKeyId, Payload, SignWithECDSAReply};
-    use ic_test_utilities::crypto::CryptoReturningOk;
     use ic_test_utilities_consensus::idkg::*;
     use ic_test_utilities_types::ids::subnet_test_id;
     use ic_types::{

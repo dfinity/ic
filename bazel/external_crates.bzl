@@ -242,7 +242,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.3.6",
             ),
             "async-trait": crate.spec(
-                version = "^0.1.83",
+                version = "^0.1.89",
             ),
             "axum": crate.spec(
                 version = "^0.8.4",
@@ -782,9 +782,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "jsonrpc": crate.spec(
                 version = "^0.18.0",
-                features = [
-                    "minreq_http",
-                ],
             ),
             "json-patch": crate.spec(
                 version = "^0.2.6",
@@ -1119,6 +1116,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "regex": crate.spec(
                 version = "^1.11.0",
+            ),
+            "regex-lite": crate.spec(
+                version = "^0.1.8",
             ),
             "reqwest": crate.spec(
                 version = "^0.12.15",

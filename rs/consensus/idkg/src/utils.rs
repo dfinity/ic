@@ -32,7 +32,6 @@ use ic_types::{
         },
     },
     crypto::{
-        ExtendedDerivationPath,
         canister_threshold_sig::{
             MasterPublicKey, ThresholdEcdsaSigInputs, ThresholdSchnorrSigInputs,
             idkg::{IDkgTranscript, IDkgTranscriptOperation, InitialIDkgDealings},
@@ -42,7 +41,6 @@ use ic_types::{
     messages::CallbackId,
     registry::RegistryClientError,
 };
-use phantom_newtype::Id;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
     cell::RefCell,
@@ -140,10 +138,10 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             })
     }
 
-    fn transcript(
+    fn transcript_as_ref(
         &self,
         transcript_ref: &TranscriptRef,
-    ) -> Result<IDkgTranscript, TranscriptLookupError> {
+    ) -> Result<&IDkgTranscript, TranscriptLookupError> {
         let idkg_payload = match self.chain.get_block_by_height(transcript_ref.height) {
             Ok(block) => {
                 if let Some(idkg_payload) = block.payload.as_ref().as_idkg() {
@@ -167,7 +165,6 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             .ok_or(format!(
                 "transcript(): missing idkg_transcript: {transcript_ref:?}"
             ))
-            .cloned()
     }
 
     fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_> {
@@ -230,10 +227,10 @@ pub(super) fn block_chain_cache(
 }
 
 /// Helper to build threshold signature inputs from the context
-pub(super) fn build_signature_inputs(
+pub(super) fn build_signature_inputs<'a>(
     callback_id: CallbackId,
-    context: &SignWithThresholdContext,
-) -> Result<(RequestId, ThresholdSigInputs), BuildSignatureInputsError> {
+    context: &'a SignWithThresholdContext,
+) -> Result<(RequestId, ThresholdSigInputs<'a>), BuildSignatureInputsError> {
     match &context.args {
         ThresholdArguments::Ecdsa(args) => {
             let matched_data = args
@@ -244,21 +241,18 @@ pub(super) fn build_signature_inputs(
                 callback_id,
                 height: matched_data.height,
             };
-            let nonce = Id::from(
-                context
-                    .nonce
-                    .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
-            );
+            let nonce_ref = context
+                .nonce
+                .as_ref()
+                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
             let inputs = ThresholdSigInputs::Ecdsa(
                 ThresholdEcdsaSigInputs::new(
-                    &ExtendedDerivationPath {
-                        caller: context.request.sender.into(),
-                        derivation_path: context.derivation_path.to_vec(),
-                    },
+                    context.request.sender.get_ref(),
+                    &context.derivation_path,
                     &args.message_hash,
-                    nonce,
-                    matched_data.pre_signature.as_ref().clone(),
-                    matched_data.key_transcript.as_ref().clone(),
+                    nonce_ref,
+                    matched_data.pre_signature.as_ref(),
+                    matched_data.key_transcript.as_ref(),
                 )
                 .map_err(BuildSignatureInputsError::ThresholdEcdsaSigInputsCreationError)?,
             );
@@ -273,22 +267,19 @@ pub(super) fn build_signature_inputs(
                 callback_id,
                 height: matched_data.height,
             };
-            let nonce = Id::from(
-                context
-                    .nonce
-                    .ok_or(BuildSignatureInputsError::ContextIncomplete)?,
-            );
+            let nonce_ref = context
+                .nonce
+                .as_ref()
+                .ok_or(BuildSignatureInputsError::ContextIncomplete)?;
             let inputs = ThresholdSigInputs::Schnorr(
                 ThresholdSchnorrSigInputs::new(
-                    &ExtendedDerivationPath {
-                        caller: context.request.sender.into(),
-                        derivation_path: context.derivation_path.to_vec(),
-                    },
+                    context.request.sender.get_ref(),
+                    &context.derivation_path,
                     &args.message,
-                    args.taproot_tree_root.as_ref().map(|v| &***v),
-                    nonce,
-                    matched_data.pre_signature.as_ref().clone(),
-                    matched_data.key_transcript.as_ref().clone(),
+                    args.taproot_tree_root.as_ref().map(|v| v.as_slice()),
+                    nonce_ref,
+                    matched_data.pre_signature.as_ref(),
+                    matched_data.key_transcript.as_ref(),
                 )
                 .map_err(BuildSignatureInputsError::ThresholdSchnorrSigInputsCreationError)?,
             );
