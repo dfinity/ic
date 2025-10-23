@@ -1,23 +1,20 @@
 use ic_interfaces::p2p::state_sync::ChunkId;
-use std::collections::VecDeque;
 
 /// Maintains a list of chunks that still need to be downloaded
 pub(crate) struct ChunksToDownload {
-    chunks: VecDeque<ChunkId>,
+    chunks: Vec<ChunkId>,
 }
 
 impl ChunksToDownload {
     pub(crate) fn new() -> Self {
-        Self {
-            chunks: VecDeque::new(),
-        }
+        Self { chunks: vec![] }
     }
 
     // Add chunks to the chunks to download list
     pub(crate) fn add_chunks(&mut self, chunks: impl Iterator<Item = ChunkId>) -> usize {
         let mut added = 0;
         for chunk_id in chunks {
-            self.chunks.push_back(chunk_id);
+            self.chunks.push(chunk_id);
             added += 1;
         }
 
@@ -26,12 +23,12 @@ impl ChunksToDownload {
 
     /// Pick the next chunk to download
     pub(crate) fn next_chunk_to_download(&mut self) -> Option<ChunkId> {
-        self.chunks.pop_front()
+        self.chunks.pop()
     }
 
     /// Register a chunk download as failed, i.e. requeue the chunk
     pub(crate) fn download_failed(&mut self, chunk_id: ChunkId) {
-        self.chunks.push_front(chunk_id);
+        self.chunks.push(chunk_id);
     }
 
     pub(crate) fn is_empty(&self) -> bool {
