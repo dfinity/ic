@@ -1,6 +1,7 @@
 use super::refunds::RefundPool;
 use super::*;
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
+use ic_protobuf::state::queues::v1::Refunds;
 use ic_protobuf::state::queues::v1::canister_queues::CanisterQueuePair;
 use ic_protobuf::types::v1 as pb_types;
 use ic_types::messages::Refund;
@@ -155,14 +156,9 @@ impl TryFrom<(pb_queues::CanisterQueues, &dyn CheckpointLoadingMetrics)> for Can
 
 impl From<&RefundPool> for pb_queues::Refunds {
     fn from(item: &RefundPool) -> Self {
-        let mut refunds = Self::default();
-        item.clone().retain(|recipient, amount| {
-            refunds
-                .refunds
-                .push((&Refund::anonymous(*recipient, *amount)).into());
-            true
-        });
-        refunds
+        Refunds {
+            refunds: item.iter().map(|refund| refund.into()).collect(),
+        }
     }
 }
 

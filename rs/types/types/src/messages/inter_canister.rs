@@ -547,7 +547,10 @@ impl Hash for Response {
 /// refunds for best-effort calls.
 ///
 /// Represents an _anonymous refund_.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
+///
+/// Refunds are ordered by amount (larger amounts first). Ties are broken by
+/// canister ID (smaller IDs first).
+#[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Refund {
     /// Whom this refund is to be delivered to.
@@ -571,6 +574,24 @@ impl Refund {
 
     pub fn amount(&self) -> Cycles {
         self.amount
+    }
+}
+
+impl PartialOrd for Refund {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Refund {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match self.amount.cmp(&other.amount) {
+            // Break ties by recipient: smaller IDs have higher priority.
+            std::cmp::Ordering::Equal => self.recipient.cmp(&other.recipient),
+
+            // Reverse order for different amounts: larger amounts have higher priority.
+            ord => ord.reverse(),
+        }
     }
 }
 
