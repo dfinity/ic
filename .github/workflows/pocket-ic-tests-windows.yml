@@ -8,6 +8,8 @@ jobs:
   run-pocket-ic-tests:
     name: Check Run PocketIC Tests
     runs-on: ubuntu-latest
+    outputs:
+      run-pocket-ic-tests: ${{ steps.set-output.outputs.run-pocket-ic-tests }}
     steps:
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
@@ -19,6 +21,7 @@ jobs:
               - packages/pocket-ic/**
               - rs/pocket_ic_server/**
       - name: Check Run Conditions
+        id: set-output
         shell: bash
         run: |
           set -euo pipefail
