@@ -48,12 +48,12 @@ sh_test(
     data = [
         "//:WORKSPACE.bazel",
         "//:buf.yaml",
-        "@buf",
+        "@rules_buf_toolchains//:buf",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "buf_path": "$(rootpath @buf//:buf)",
+        "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
         "buf_config": "$(rootpath //:buf.yaml)",
     },
     tags = [
@@ -69,12 +69,12 @@ sh_test(
     srcs = ["protobuf-format-check.sh"],
     data = [
         "//:WORKSPACE.bazel",
-        "@buf",
+        "@rules_buf_toolchains//:buf",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "buf_path": "$(rootpath @buf//:buf)",
+        "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
@@ -88,12 +88,12 @@ sh_binary(
     srcs = ["protobuf-format.sh"],
     data = [
         "//:WORKSPACE.bazel",
-        "@buf",
+        "@rules_buf_toolchains//:buf",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "buf_path": "$(rootpath @buf//:buf)",
+        "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
@@ -226,13 +226,13 @@ sh_test(
     data = [
         "//:WORKSPACE.bazel",
         "//:buf.yaml",
-        "@buf",
+        "@rules_buf_toolchains//:buf",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
         "buf_config": "$(rootpath //:buf.yaml)",
-        "buf_path": "$(rootpath @buf//:buf)",
+        "buf_path": "$(rootpath @rules_buf_toolchains//:buf)",
     },
     env_inherit = [
         "MERGE_BASE_SHA",
