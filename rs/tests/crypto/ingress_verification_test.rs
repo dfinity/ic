@@ -27,10 +27,7 @@ use slog::{debug, info};
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_parallel(
-            SystemTestSubGroup::new()
-                .add_test(systest!(requests_with_delegations))
-        )
+        .add_parallel(SystemTestSubGroup::new().add_test(systest!(requests_with_delegations)))
         .execute_from_args()?;
     Ok(())
 }
@@ -65,17 +62,20 @@ struct GenericIdentity {
 impl GenericIdentity {
     fn new<R: Rng + CryptoRng>(typ: GenericIdentityType, rng: &mut R) -> Self {
         let identity: Box<dyn Identity> = match typ {
-            GenericIdentityType::Ed25519 => {
-                Box::new(random_ed25519_identity())
-            },
-            GenericIdentityType::EcdsaSecp256k1 => {
-                Box::new(Secp256k1Identity::from_private_key(k256::SecretKey::random(rng)))
-            }
+            GenericIdentityType::Ed25519 => Box::new(random_ed25519_identity()),
+            GenericIdentityType::EcdsaSecp256k1 => Box::new(Secp256k1Identity::from_private_key(
+                k256::SecretKey::random(rng),
+            )),
         };
 
-        let principal = identity.sender().expect("Identity somehow has no principal");
+        let principal = identity
+            .sender()
+            .expect("Identity somehow has no principal");
 
-        Self { identity, principal }
+        Self {
+            identity,
+            principal,
+        }
     }
 
     fn identity(&self) -> &dyn Identity {
@@ -87,7 +87,9 @@ impl GenericIdentity {
     }
 
     fn public_key(&self) -> Vec<u8> {
-        self.identity.public_key().expect("Public key missing from identity")
+        self.identity
+            .public_key()
+            .expect("Public key missing from identity")
     }
 }
 
@@ -117,25 +119,31 @@ pub fn requests_with_delegations(env: TestEnv) {
             };
 
             for delegation_count in 0..32 {
-                info!(logger, "Testing request with {} delegations", delegation_count);
+                info!(
+                    logger,
+                    "Testing request with {} delegations", delegation_count
+                );
 
                 let mut identities = Vec::with_capacity(delegation_count + 1);
 
                 for _ in 0..(delegation_count + 1) {
-                    let id_type = if rng.r#gen::<bool>() { GenericIdentityType::EcdsaSecp256k1 } else { GenericIdentityType::Ed25519 };
+                    let id_type = if rng.r#gen::<bool>() {
+                        GenericIdentityType::EcdsaSecp256k1
+                    } else {
+                        GenericIdentityType::Ed25519
+                    };
                     identities.push(GenericIdentity::new(id_type, rng));
                 }
 
-                let delegation_expiry = Time::from_nanos_since_unix_epoch(expiry_time().as_nanos() as u64);
+                let delegation_expiry =
+                    Time::from_nanos_since_unix_epoch(expiry_time().as_nanos() as u64);
 
                 let mut delegations = Vec::with_capacity(delegation_count);
 
                 if delegation_count > 0 {
                     for i in 1..=delegation_count {
-                        let delegation = Delegation::new(
-                            identities[i].public_key(),
-                            delegation_expiry,
-                        );
+                        let delegation =
+                            Delegation::new(identities[i].public_key(), delegation_expiry);
 
                         let signed_delegation = sign_delegation(delegation, &identities[i - 1]);
 
@@ -146,8 +154,10 @@ pub fn requests_with_delegations(env: TestEnv) {
                 let sender = &identities[0];
                 let signer = &identities[identities.len() - 1];
 
-                let query_result = query_delegation(&test_info, &sender, &signer, &delegations).await;
-                let update_result = update_delegation(&test_info, &sender, &signer, &delegations).await;
+                let query_result =
+                    query_delegation(&test_info, &sender, &signer, &delegations).await;
+                let update_result =
+                    update_delegation(&test_info, &sender, &signer, &delegations).await;
 
                 if delegation_count <= 20 {
                     assert_eq!(query_result, 200);
