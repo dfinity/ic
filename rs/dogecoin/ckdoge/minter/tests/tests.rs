@@ -214,7 +214,7 @@ mod deposit {
 }
 
 #[test]
-fn should_estimate_doge_transaction_fee() {
+fn should_refresh_fee_percentiles() {
     let setup = Setup::default();
     let dogecoin = setup.dogecoin();
     let minter = setup.minter();
