@@ -2704,33 +2704,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "consensus-subnet-recovery-system-tests"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "candid",
- "canister-test",
- "canister_http",
- "ic-agent",
- "ic-base-types",
- "ic-management-canister-types-private",
- "ic-nns-constants",
- "ic-protobuf",
- "ic-recovery",
- "ic-registry-subnet-features",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "ic-types",
- "ic_consensus_system_test_utils",
- "ic_consensus_threshold_sig_system_test_utils",
- "prost 0.13.4",
- "serde",
- "serde_json",
- "slog",
- "url",
-]
-
-[[package]]
 name = "consensus-tecdsa-system-tests"
 version = "0.9.0"
 dependencies = [
@@ -4693,6 +4666,7 @@ dependencies = [
  "serde_cbor",
  "slog",
  "tokio",
+ "tokio-util",
  "wat",
 ]
 
@@ -15431,6 +15405,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic_consensus_system_test_subnet_recovery"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "canister_http",
+ "ic-agent",
+ "ic-base-types",
+ "ic-management-canister-types-private",
+ "ic-nns-constants",
+ "ic-protobuf",
+ "ic-recovery",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "prost 0.13.4",
+ "serde",
+ "serde_json",
+ "slog",
+ "ssh2",
+ "url",
+]
+
+[[package]]
 name = "ic_consensus_system_test_utils"
 version = "0.9.0"
 dependencies = [
@@ -15600,6 +15602,7 @@ dependencies = [
  "anyhow",
  "ic-recovery",
  "ic-system-test-driver",
+ "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
  "nested",
  "rand 0.8.5",
@@ -23369,11 +23372,11 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-limits",
- "ic-recovery",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-xrc-types",
+ "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
  "ic_nested_nns_recovery_common",
  "nested",

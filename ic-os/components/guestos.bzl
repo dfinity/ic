@@ -49,6 +49,7 @@ component_files = {
 
     # init
     Label("guestos/init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
+    Label("guestos/init/mount-config/maybe-disable-store-mounts.service"): "/etc/systemd/system/maybe-disable-store-mounts.service",
     Label("guestos/init/init-config/init-config.sh"): "/opt/ic/bin/init-config.sh",
     Label("guestos/init/init-config/init-config.service"): "/etc/systemd/system/init-config.service",
     Label("guestos/init/setup-encryption/setup-data-encryption.sh"): "/opt/ic/bin/setup-data-encryption.sh",
@@ -57,7 +58,6 @@ component_files = {
     Label("guestos/init/setup-encryption/override.conf"): "/etc/systemd/system/systemd-fsck@dev-mapper-var_crypt.service.d/override.conf",
     Label("guestos/init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",
     Label("guestos/init/setup-lvs/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
-    Label("guestos/guest-upgrade-client/guest-upgrade-client.service"): "/etc/systemd/system/guest-upgrade-client.service",
     Label("guestos/init/cleanup-config-bootstrap/cleanup-config-bootstrap.service"): "/etc/systemd/system/cleanup-config-bootstrap.service",
 
     # misc
@@ -80,6 +80,7 @@ component_files = {
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
     Label("guestos/misc/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
     Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
+    Label("guestos/guest-upgrade-client/guest-upgrade-client.service"): "/etc/systemd/system/guest-upgrade-client.service",
 
     # monitoring
     Label("monitoring/guestos/ipv4-connectivity-check/ipv4-connectivity-check.sh"): "/opt/ic/bin/ipv4-connectivity-check.sh",
