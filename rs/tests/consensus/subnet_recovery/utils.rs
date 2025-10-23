@@ -203,6 +203,12 @@ pub fn assert_subnet_is_broken(
     );
 }
 
+/// Helper function to get the certification share height of a node with less boilerplate
+pub fn get_node_certification_share_height(node: &IcNodeSnapshot, logger: &Logger) -> Option<u64> {
+    block_on(get_node_metrics(logger, &node.get_ip_addr()))
+        .map(|m| m.certification_share_height.get())
+}
+
 /// Select a node with highest certification share height in the given subnet snapshot
 pub fn node_with_highest_certification_share_height(
     subnet: &SubnetSnapshot,
@@ -210,11 +216,8 @@ pub fn node_with_highest_certification_share_height(
 ) -> (IcNodeSnapshot, u64) {
     subnet
         .nodes()
-        .filter_map(|n| {
-            block_on(get_node_metrics(logger, &n.get_ip_addr()))
-                .map(|m| (n, m.certification_share_height.get()))
-        })
-        .max_by_key(|&(_, cert_height)| cert_height)
+        .map(|n| (n, get_node_certification_share_height(&n, logger)))
+        .max_by_key(|&(_, cert_height)| cert_height) // Option's Ord: None < Some(_)
         .expect("No healthy node found")
 }
 

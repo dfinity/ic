@@ -30,7 +30,7 @@ end::catalog[] */
 
 use crate::utils::{
     AdminAndUserKeys, Cursor, assert_subnet_is_broken, break_nodes,
-    get_admin_keys_and_generate_readonly_keys, halt_subnet,
+    get_admin_keys_and_generate_readonly_keys, get_node_certification_share_height, halt_subnet,
     local::app_subnet_recovery_local_cli_args, node_with_highest_certification_share_height,
     remote_recovery, unhalt_subnet,
 };
@@ -514,13 +514,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
             download_pool_node.node_id,
             download_pool_node.get_ip_addr(),
         );
-        let node_cert_share = block_on(get_node_metrics(
-            &logger,
-            &download_state_node.get_ip_addr(),
-        ))
-        .unwrap()
-        .certification_share_height
-        .get();
+        let node_cert_share =
+            get_node_certification_share_height(&download_state_node, &logger).unwrap();
         let admins = vec![&upload_node, &download_state_node];
 
         (download_pool_node, node_cert_share, admins)
