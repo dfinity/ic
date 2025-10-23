@@ -72,7 +72,7 @@ system_test(
 )
 
 system_test(
-    name = "crypto_ingress_verification_test",
+    name = "ingress_verification_test",
     env = UNIVERSAL_CANISTER_ENV,
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES,

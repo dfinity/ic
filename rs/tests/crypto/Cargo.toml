@@ -54,5 +54,5 @@ name = "rpc_csp_vault_reconnection_test"
 path = "rpc_csp_vault_reconnection_test.rs"
 
 [[bin]]
-name = "crypto_ingress_verification_test"
-path = "crypto_ingress_verification_test.rs"
+name = "ingress_verification_test"
+path = "ingress_verification_test.rs"

@@ -5,7 +5,7 @@ use ic_agent::export::Principal;
 use ic_agent::{Identity, identity::Secp256k1Identity};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
@@ -27,7 +27,10 @@ use slog::{debug, info};
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
-        .add_test(systest!(query_request_no_delegations))
+        .add_parallel(
+            SystemTestSubGroup::new()
+                .add_test(systest!(requests_with_delegations))
+        )
         .execute_from_args()?;
     Ok(())
 }
@@ -88,7 +91,7 @@ impl GenericIdentity {
     }
 }
 
-pub fn query_request_no_delegations(env: TestEnv) {
+pub fn requests_with_delegations(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
@@ -113,20 +116,49 @@ pub fn query_request_no_delegations(env: TestEnv) {
                 canister_id: canister.canister_id(),
             };
 
-            for delegations in 0..=1 {
-                info!(logger, "Testing request with {} delegations", delegations);
+            for delegation_count in 0..32 {
+                info!(logger, "Testing request with {} delegations", delegation_count);
 
-                let identity = GenericIdentity::new(GenericIdentityType::EcdsaSecp256k1, rng);
-                let (delegations, sender) = gen_delegation_chain(rng, delegations, &identity);
+                let mut identities = Vec::with_capacity(delegation_count + 1);
 
-                test_accepted_sender_delegation(&test_info, &delegations, &sender, &identity).await;
+                for _ in 0..(delegation_count + 1) {
+                    let id_type = if rng.r#gen::<bool>() { GenericIdentityType::EcdsaSecp256k1 } else { GenericIdentityType::Ed25519 };
+                    identities.push(GenericIdentity::new(id_type, rng));
+                }
+
+                let delegation_expiry = Time::from_nanos_since_unix_epoch(expiry_time().as_nanos() as u64);
+
+                let mut delegations = Vec::with_capacity(delegation_count);
+
+                if delegation_count > 0 {
+                    for i in 1..=delegation_count {
+                        let delegation = Delegation::new(
+                            identities[i].public_key(),
+                            delegation_expiry,
+                        );
+
+                        let signed_delegation = sign_delegation(delegation, &identities[i - 1]);
+
+                        delegations.push(signed_delegation);
+                    }
+                }
+
+                let sender = &identities[0];
+                let signer = &identities[identities.len() - 1];
+
+                let query_result = query_delegation(&test_info, &sender, &signer, &delegations).await;
+                let update_result = update_delegation(&test_info, &sender, &signer, &delegations).await;
+
+                if delegation_count <= 20 {
+                    assert_eq!(query_result, 200);
+                    assert_eq!(update_result, 202);
+                } else {
+                    assert_eq!(query_result, 400);
+                    assert_eq!(update_result, 400);
+                }
             }
         }
     });
-}
-
-pub fn random_ecdsa_identity<R: Rng + CryptoRng>(rng: &mut R) -> Secp256k1Identity {
-    Secp256k1Identity::from_private_key(k256::SecretKey::random(rng))
 }
 
 fn sign_delegation(delegation: Delegation, identity: &GenericIdentity) -> SignedDelegation {
@@ -137,62 +169,10 @@ fn sign_delegation(delegation: Delegation, identity: &GenericIdentity) -> Signed
     SignedDelegation::new(delegation, signature.signature.unwrap())
 }
 
-fn gen_delegation_chain<R: Rng + CryptoRng>(
-    rng: &mut R,
-    cnt: usize,
-    identity: &GenericIdentity,
-) -> (Vec<SignedDelegation>, Principal) {
-    if cnt == 0 {
-        return (vec![], *identity.principal());
-    }
-
-    let delegation_expiry = Time::from_nanos_since_unix_epoch(expiry_time().as_nanos() as u64);
-
-    assert!(cnt == 1);
-    let mut delegations = Vec::with_capacity(cnt);
-
-    let delegating_id = GenericIdentity::new(GenericIdentityType::Ed25519, rng);
-
-    let delegation = Delegation::new(
-        identity
-            .public_key(),
-        delegation_expiry,
-    );
-
-    let signed_delegation = sign_delegation(delegation, &delegating_id);
-
-    delegations.push(signed_delegation);
-
-    (
-        delegations,
-        *delegating_id.principal()
-    )
-
-    /*
-        let mut public_keys = Vec::with_capacity(cnt);
-        let mut identities = Vec::with_capacity(cnt);
-
-        public_keys.push(identity.public_key());
-
-        for i in 0..cnt {
-            identities.push(random_ed25519_identity());
-            public_keys.push(identities[i].public_key());
-
-            let delegation = Delegation::new(
-                public_keys[i].clone(),
-                delegation_expiry,
-            );
-
-            let signed_delegation = sign_delegation(delegation, identity);
-        }
-        Some(delegations)
-    */
-}
-
 async fn query_delegation(
     test: &TestInformation,
-    sender: &Principal,
-    identity: &GenericIdentity,
+    sender: &GenericIdentity,
+    signer: &GenericIdentity,
     delegations: &[SignedDelegation],
 ) -> StatusCode {
     let content = HttpQueryContent::Query {
@@ -200,15 +180,14 @@ async fn query_delegation(
             canister_id: Blob(test.canister_id.as_slice().to_vec()),
             method_name: "query".to_string(),
             arg: Blob(wasm().caller().reply_data_append().reply().build()),
-            sender: Blob(sender.as_slice().to_vec()),
+            sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
         },
     };
 
-    let signature = sign_query(&content, &identity.identity());
+    let signature = sign_query(&content, &signer.identity());
 
-    // Add the public key but not the signature to the envelope. Should fail.
     let envelope = HttpRequestEnvelope {
         content: content.clone(),
         sender_delegation: if delegations.is_empty() {
@@ -216,7 +195,7 @@ async fn query_delegation(
         } else {
             Some(delegations.to_vec())
         },
-        sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
+        sender_pubkey: Some(Blob(sender.public_key())),
         sender_sig: Some(Blob(signature.signature.clone().unwrap())),
     };
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
@@ -237,8 +216,8 @@ async fn query_delegation(
 
 async fn update_delegation(
     test: &TestInformation,
-    sender: &Principal,
-    identity: &GenericIdentity,
+    sender: &GenericIdentity,
+    signer: &GenericIdentity,
     delegations: &[SignedDelegation],
 ) -> StatusCode {
     let content = HttpCallContent::Call {
@@ -246,15 +225,14 @@ async fn update_delegation(
             canister_id: Blob(test.canister_id.as_slice().to_vec()),
             method_name: "update".to_string(),
             arg: Blob(wasm().caller().reply_data_append().reply().build()),
-            sender: Blob(sender.as_slice().to_vec()),
+            sender: Blob(sender.principal().as_slice().to_vec()),
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
         },
     };
 
-    let signature = sign_update(&content, &identity.identity());
+    let signature = sign_update(&content, &signer.identity());
 
-    // Add the public key but not the signature to the envelope. Should fail.
     let envelope = HttpRequestEnvelope {
         content: content.clone(),
         sender_delegation: if delegations.is_empty() {
@@ -262,7 +240,7 @@ async fn update_delegation(
         } else {
             Some(delegations.to_vec())
         },
-        sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
+        sender_pubkey: Some(Blob(sender.public_key())),
         sender_sig: Some(Blob(signature.signature.clone().unwrap())),
     };
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
@@ -279,20 +257,4 @@ async fn update_delegation(
         .unwrap();
 
     res.status()
-}
-
-async fn test_accepted_sender_delegation(
-    test: &TestInformation,
-    delegations: &[SignedDelegation],
-    sender: &Principal,
-    identity: &GenericIdentity,
-) {
-    assert_eq!(
-        query_delegation(test, sender, &identity, &delegations).await,
-        200
-    );
-    assert_eq!(
-        update_delegation(test, sender, &identity, &delegations).await,
-        202
-    );
 }
