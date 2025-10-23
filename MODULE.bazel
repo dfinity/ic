@@ -6,6 +6,11 @@ module(
     name = "ic",
 )
 
+ext = use_extension("@rules_buf//buf:extensions.bzl", "buf")
+use_repo(ext, "rules_buf_toolchains")
+
+register_toolchains("@rules_buf_toolchains//:all")
+
 # General Bazel helpers
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
@@ -74,6 +79,9 @@ bazel_dep(
     # We rename it to keep the legacy name used throughout our bazel files
     repo_name = "com_google_protobuf",
 )
+
+# protobuf linter
+bazel_dep(name = "rules_buf", version = "0.5.2")
 
 # Go dependencies
 
@@ -860,6 +868,22 @@ http_archive(
     sha256 = "14aaed7163df57894c96f8aca94757f19065f9cb3cb8a84ff9c33234271e1d69",
     strip_prefix = "rclone-v1.69.2-linux-amd64",
     url = "https://github.com/rclone/rclone/releases/download/v1.69.2/rclone-v1.69.2-linux-amd64.zip",
+)
+
+# even if the macOS version is "x86_64" it runs on ARM chips because of
+# emulation
+http_archive(
+    name = "dfx-x86_64-darwin",
+    build_file = "@//third_party:BUILD.dfx.bazel",
+    sha256 = "4b1c24805f655576fb97f61aba019fbbe7c1bdca0598a5c1a9220a4bfe80f460",
+    url = "https://github.com/dfinity/sdk/releases/download/0.20.1/dfx-0.20.1-x86_64-darwin.tar.gz",
+)
+
+http_archive(
+    name = "dfx-x86_64-linux",
+    build_file = "@//third_party:BUILD.dfx.bazel",
+    sha256 = "011c8a6ff9af0578ee2c8b0a7af3abc5b3d5950cc64421b4c3a7acd1fc18265e",
+    url = "https://github.com/dfinity/sdk/releases/download/0.20.1/dfx-0.20.1-x86_64-linux.tar.gz",
 )
 
 # Management canister candid interface
