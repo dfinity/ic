@@ -395,9 +395,11 @@ enum SubCommand {
 
     /// Sets three things:
     ///
-    ///     1. is_halted = false
-    ///     2. ssh_readonly_access = vec![]
-    ///     3. ssh_node_state_write_access = vec![]
+    ///     1. In SubnetRecord:
+    ///         1. is_halted = false
+    ///         2. ssh_readonly_access = vec![]
+    ///     2. In NodeRecord:
+    ///         1. ssh_node_state_write_access = vec![]
     ///
     /// This is done at the end of subnet recovery. See also
     /// propose-to-take-subnet-offline-for-repairs. This generally rolls back
