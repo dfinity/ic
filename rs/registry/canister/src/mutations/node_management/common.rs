@@ -3,6 +3,7 @@ use std::{default::Default, str::FromStr};
 use crate::{common::LOG_PREFIX, registry::Registry, storage::with_chunks};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::{
     node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
 };
@@ -73,6 +74,28 @@ pub fn get_node_operator_id_for_node(
                 )
                 .map_err(|_| {
                     format!("Could not decode node_record's node_operator_id for Node Id {node_id}")
+                })
+            },
+        )
+}
+
+pub fn get_node_reward_type_for_node(
+    registry: &Registry,
+    node_id: NodeId,
+) -> Result<NodeRewardType, String> {
+    let node_key = make_node_record_key(node_id);
+    registry
+        .get(node_key.as_bytes(), registry.latest_version())
+        .map_or(
+            Err(format!("Node Id {node_id:} not found in the registry")),
+            |result| {
+                let node_reward_type = NodeRecord::decode(result.value.as_slice())
+                    .unwrap()
+                    .node_reward_type
+                    .ok_or(format!("Node Id {node_id:} does not have a reward type"))?;
+
+                NodeRewardType::try_from(node_reward_type).map_err(|_| {
+                    format!("Could not decode node_record's node_reward_type for Node Id {node_id}")
                 })
             },
         )
@@ -229,6 +252,29 @@ pub fn scan_for_nodes_by_ip(registry: &Registry, ip_addr: &str) -> Vec<NodeId> {
             v.http.and_then(|v| {
                 (v.ip_addr == ip_addr).then(|| NodeId::from(PrincipalId::from_str(&k).unwrap()))
             })
+        })
+        .collect()
+}
+
+/// Scan through the registry, returning a list of any nodes with the given IP.
+pub fn get_node_operator_nodes(
+    registry: &Registry,
+    node_operator_id: PrincipalId,
+) -> Vec<NodeRecord> {
+    get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX)
+        .into_iter()
+        .filter_map(|(_, node_record)| {
+            let node_operator_id_src = node_record
+                .node_operator_id
+                .clone()
+                .try_into()
+                .expect("Failed to parse PrincipalId from node operator ID");
+
+            if node_operator_id_src == node_operator_id {
+                Some(node_record)
+            } else {
+                None
+            }
         })
         .collect()
 }

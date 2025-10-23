@@ -13,6 +13,9 @@ use std::fmt::Display;
 use std::net::SocketAddr;
 use std::time::SystemTime;
 
+use crate::mutations::node_management::common::{
+    get_node_operator_nodes, get_node_reward_type_for_node,
+};
 use crate::mutations::node_management::{
     common::{
         get_node_operator_record, make_add_node_registry_mutations,
@@ -49,13 +52,28 @@ impl Registry {
         let reservation =
             self.try_reserve_capacity_for_node_operator_operation(now, caller_id, 1)?;
 
-        // 1. Validate keys and get the node id
+        // Validate keys and get the node id
         let (node_id, valid_pks) = valid_keys_from_payload(&payload)
             .map_err(|err| format!("{LOG_PREFIX}do_add_node: {err}"))?;
 
         println!("{LOG_PREFIX}do_add_node: The node id is {node_id:?}");
 
-        // 2. Clear out any nodes that already exist at this IP.
+        // Get required valid node_reward_type
+        let node_reward_type = payload
+            .node_reward_type
+            .as_ref()
+            .map(|t| {
+                validate_str_as_node_reward_type(t).map_err(|e| {
+                    format!("{LOG_PREFIX}do_add_node: Error parsing node type from payload: {e}")
+                })
+            })
+            .transpose()?
+            .map(|node_reward_type| node_reward_type)
+            .ok_or(format!(
+                "{LOG_PREFIX}do_add_node: Node reward type is required."
+            ))?;
+
+        // Clear out any nodes that already exist at this IP.
         // This will only succeed if the same NO was in control of the original nodes.
         //
         // (We use the http endpoint to be in line with what is used by the
@@ -63,7 +81,15 @@ impl Registry {
         let http_endpoint = connection_endpoint_from_string(&payload.http_endpoint);
         let nodes_with_same_ip = scan_for_nodes_by_ip(self, &http_endpoint.ip_addr);
         let mut mutations = Vec::new();
-        let num_removed_nodes = nodes_with_same_ip.len() as u64;
+        let num_removed_same_type: usize = nodes_with_same_ip
+            .into_iter()
+            .map(|node_id| {
+                let node_reward_type_src = get_node_reward_type_for_node(self, *node_id)?;
+                Ok(node_reward_type_src == node_reward_type)
+            })
+            .collect::<Result<_, String>>()?
+            .into_iter()
+            .count();
         if !nodes_with_same_ip.is_empty() {
             if nodes_with_same_ip.len() == 1 {
                 mutations = self.make_remove_or_replace_node_mutations(
@@ -94,33 +120,27 @@ impl Registry {
             }
         }
 
-        // 3. Check if adding one more node will get us over the cap for the Node Operator
-        if node_operator_record.node_allowance + num_removed_nodes == 0 {
+        // Validate node operator's max_rewardable_nodes quota
+        let max_rewardable_nodes_same_type = *node_operator_record.max_rewardable_nodes.get(&(node_reward_type.to_string()))
+            .ok_or(Err(format!("{LOG_PREFIX}do_add_node: Node Operator does not have max_rewardable_nodes for {node_reward_type}")))? as usize;
+
+        let node_operator_id =
+            PrincipalId::try_from(node_operator_record.node_operator_principal_id.clone())
+                .map_err(|e| {
+                    format!("{LOG_PREFIX}do_add_node: Node Operator ID is not valid: {e}")
+                })?;
+        let num_in_registry_same_type = get_node_operator_nodes(self, node_operator_id)
+            .into_iter()
+            .filter(|node_id| node_id.node_reward_type.unwrap() == node_reward_type as i32)
+            .count();
+
+        if max_rewardable_nodes_same_type + num_removed_same_type == num_in_registry_same_type {
             return Err(format!(
-                "{LOG_PREFIX}do_add_node: Node allowance for this Node Operator is exhausted"
+                " {LOG_PREFIX}do_add_node: Node Operator has reached max_rewardable_nodes quota for {node_reward_type}"
             ));
         }
 
-        // 4. Get valid type if type is in request
-        let node_reward_type = payload
-            .node_reward_type
-            .as_ref()
-            .map(|t| {
-                validate_str_as_node_reward_type(t).map_err(|e| {
-                    format!("{LOG_PREFIX}do_add_node: Error parsing node type from payload: {e}")
-                })
-            })
-            .transpose()?
-            .map(|node_reward_type| node_reward_type as i32);
-
-        // 4a.  Conditionally enforce node_reward_type presence if node rewards are enabled
-        if self.are_node_rewards_enabled() && node_reward_type.is_none() {
-            return Err(format!(
-                "{LOG_PREFIX}do_add_node: Node reward type is required."
-            ));
-        }
-
-        // 5. Validate the domain
+        // Validate the domain
         let domain: Option<String> = payload
             .domain
             .as_ref()
@@ -134,7 +154,7 @@ impl Registry {
             })
             .transpose()?;
 
-        // 6. If there is an IPv4 config, make sure that the same IPv4 address is not used by any other node
+        // If there is an IPv4 config, make sure that the same IPv4 address is not used by any other node
         let ipv4_intf_config = payload.public_ipv4_config.clone().map(|ipv4_config| {
             ipv4_config.panic_on_invalid();
             IPv4InterfaceConfig {
@@ -152,7 +172,7 @@ impl Registry {
             ));
         }
 
-        // 7. Create the Node Record
+        // Create the Node Record
         let node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
@@ -161,27 +181,23 @@ impl Registry {
             chip_id: payload.chip_id.clone(),
             public_ipv4_config: ipv4_intf_config,
             domain,
-            node_reward_type,
+            node_reward_type: Some(node_reward_type as i32),
             ssh_node_state_write_access: vec![],
         };
 
-        // 8. Insert node, public keys, and crypto keys
+        // Insert node, public keys, and crypto keys
         mutations.extend(make_add_node_registry_mutations(
             node_id,
             node_record,
             valid_pks,
         ));
 
-        // 9. Update the Node Operator record
-        node_operator_record.node_allowance =
-            node_operator_record.node_allowance + num_removed_nodes - 1;
-
         let update_node_operator_record =
             make_update_node_operator_mutation(caller_id, &node_operator_record);
 
         mutations.push(update_node_operator_record);
 
-        // 10. Check invariants and then apply mutations
+        // Check invariants and then apply mutations
         self.maybe_apply_mutation_internal(mutations);
 
         println!("{LOG_PREFIX}do_add_node finished: {payload:?}");
@@ -191,13 +207,6 @@ impl Registry {
         }
 
         Ok(node_id)
-    }
-
-    /// Currently, we know that node rewards are enabled based on the presence of the table in the
-    /// registry.
-    fn are_node_rewards_enabled(&self) -> bool {
-        self.get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
-            .is_some()
     }
 }
 
