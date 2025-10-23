@@ -44,6 +44,7 @@ DEPENDENCIES = [
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/utils",
+    "@crate_index//:base64",
     "@crate_index//:build-info",
     "@crate_index//:candid",
     "@crate_index//:futures",

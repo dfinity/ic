@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 attestation = { path = "../../attestation" }
+base64 = { workspace = true }
 attestation_testing = { path = "../../attestation/testing" }
 futures = { workspace = true }
 guest_upgrade_client = { path = "../client" }

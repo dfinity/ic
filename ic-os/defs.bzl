@@ -276,8 +276,11 @@ def icos_build(
                         hex=$$($(execpath //ic-os:sev-snp-measure) --mode snp --vcpus 64 --ovmf "$(execpath //ic-os/components/ovmf:ovmf_sev)" --vcpu-type=EPYC-v4 --append "$$cmdline" --initrd "$(location extracted_initrd.img)" --kernel "$(location extracted_vmlinuz)")
                         # Convert hex string to decimal list, e.g. "abcd" ->  171\\n205
                         measurement=$$(echo -n "$$hex" | fold -w2 | sed "s/^/0x/" | xargs printf "%d\n")
-                        jq -na --arg cmd "$$cmdline" --arg m "$$measurement" '{
+                        # Convert hex string to base64, e.g. "abcd" -> q80=
+                        encoded_measurement=$$(echo -n "$$hex" | xxd -r -p | base64)
+                        jq -na --arg cmd "$$cmdline" --arg m "$$measurement" --arg em "$$encoded_measurement" '{
                           measurement: ($$m | split("\n") | map(tonumber)),
+                          encoded_measurement: $$em,
                           metadata: {kernel_cmdline: $$cmd}
                         }'
                     done) | jq -sc "{guest_launch_measurements: .}" > $@
