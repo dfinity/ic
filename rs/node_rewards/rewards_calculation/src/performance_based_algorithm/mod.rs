@@ -315,8 +315,8 @@ trait PerformanceBasedAlgorithm {
                         subnet_assigned_failure_rate: subnet_failure_rate,
                         num_blocks_proposed,
                         num_blocks_failed,
-                        original_failure_rate: original_failure_rate,
-                        relative_failure_rate: relative_failure_rate,
+                        original_failure_rate,
+                        relative_failure_rate,
                     },
                 );
             }
@@ -486,7 +486,7 @@ trait PerformanceBasedAlgorithm {
                         region,
                         nodes_count,
                         avg_rewards_xdr_permyriad: avg_rewards,
-                        avg_coefficient: avg_coefficient,
+                        avg_coefficient,
                         daily_xdr_permyriad: daily_rewards,
                     }
                 },
@@ -558,7 +558,7 @@ trait PerformanceBasedAlgorithm {
                     DailyNodeFailureRate::SubnetMember { node_metrics }
                 } else {
                     DailyNodeFailureRate::NonSubnetMember {
-                        extrapolated_failure_rate: extrapolated_failure_rate,
+                        extrapolated_failure_rate,
                     }
                 };
 
