@@ -8,7 +8,9 @@ use ic_consensus_dkg::payload_builder::create_payload as create_dkg_payload;
 use ic_consensus_idkg::{self as idkg, metrics::IDkgPayloadMetrics};
 use ic_consensus_utils::{
     find_lowest_ranked_non_disqualified_proposals, get_notarization_delay_settings,
-    get_subnet_record, membership::Membership, pool_reader::PoolReader, range_len,
+    get_subnet_record,
+    membership::Membership,
+    pool_reader::{PoolReader, UnexpectedChainLength},
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, idkg::IDkgPool, time_source::TimeSource,
@@ -426,26 +428,26 @@ impl BlockMaker {
         subnet_records: &SubnetRecords,
     ) -> BatchPayload {
         let start_height = context.certified_height.increment();
-        let past_payloads = pool.get_payloads_from_height(start_height, parent.clone());
-
-        // If there are some past payloads missing, propose an empty payload instead
-        let expected_len = range_len(start_height, parent.height);
-        if past_payloads.len() != expected_len {
-            self.metrics
-                .get_payload_calls
-                .with_label_values(&["error"])
-                .inc();
-            error!(
-                self.log,
-                "Missing past payloads when attempting to build new batch payload at height {}. \
+        let past_payloads = match pool.get_payloads_from_height(start_height, parent.clone()) {
+            Ok(past_payloads) => past_payloads,
+            Err(UnexpectedChainLength { expected, returned }) => {
+                // If there are some past payloads missing, propose an empty payload instead
+                self.metrics
+                    .get_payload_calls
+                    .with_label_values(&["error"])
+                    .inc();
+                error!(
+                    self.log,
+                    "Missing past payloads when attempting to build new batch payload at height {}. \
                 Certified height: {}, expected past payloads len: {}, real past payloads len: {}",
-                height,
-                context.certified_height,
-                expected_len,
-                past_payloads.len()
-            );
-            return BatchPayload::default();
-        }
+                    height,
+                    context.certified_height,
+                    expected,
+                    returned,
+                );
+                return BatchPayload::default();
+            }
+        };
 
         let payload =
             self.payload_builder
@@ -723,7 +725,8 @@ mod tests {
             let next_height = start.height().increment();
             let start_hash = start.content.get_hash();
             let expected_payloads = PoolReader::new(&pool)
-                .get_payloads_from_height(certified_height.increment(), start.as_ref().clone());
+                .get_payloads_from_height(certified_height.increment(), start.as_ref().clone())
+                .unwrap();
             let returned_payload =
                 DkgPayload::Data(dkg::DkgDataPayload::new_empty(Height::from(0)));
             let pool_reader = PoolReader::new(&pool);

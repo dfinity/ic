@@ -13,8 +13,7 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto,
     get_oldest_idkg_state_registry_version,
     membership::{Membership, MembershipError},
-    pool_reader::PoolReader,
-    range_len,
+    pool_reader::{PoolReader, UnexpectedChainLength},
 };
 use ic_interfaces::{
     batch_payload::ProposalContext,
@@ -1263,24 +1262,25 @@ impl Validator {
 
         // Below are all the payload validations
         let start_height = proposal.context.certified_height.increment();
-        let past_payloads = pool_reader.get_payloads_from_height(start_height, parent.clone());
-
-        // Defer validation if there are some past payloads missing.
-        // This means that we already have a CUP and this block should be verified
-        // using the notarization fast path.
-        let expected_len = range_len(start_height, parent.height);
-        if past_payloads.len() != expected_len {
-            warn!(
-                every_n_seconds => 10,
-                self.log,
-                "Missing past payloads when attempting to validate batch payload at height {}. \
-                Certified height: {}, expected past payloads len: {}, real past payloads len: {}",
-                proposal.height(), proposal.context.certified_height, expected_len, past_payloads.len()
-            );
-            return Err(ValidationError::ValidationFailed(
-                ValidationFailure::MissingPastPayloads,
-            ));
-        }
+        let past_payloads = match pool_reader.get_payloads_from_height(start_height, parent.clone())
+        {
+            Ok(past_payloads) => past_payloads,
+            Err(UnexpectedChainLength { expected, returned }) => {
+                // Defer validation if there are some past payloads missing.
+                // This means that we already have a CUP and this block should be verified
+                // using the notarization fast path.
+                warn!(
+                    every_n_seconds => 10,
+                    self.log,
+                    "Missing past payloads when attempting to validate batch payload at height {}. \
+                    Certified height: {}, expected past payloads len: {}, real past payloads len: {}",
+                    proposal.height(), proposal.context.certified_height, expected, returned
+                );
+                return Err(ValidationError::ValidationFailed(
+                    ValidationFailure::MissingPastPayloads,
+                ));
+            }
+        };
 
         self.payload_builder
             .validate_payload(
