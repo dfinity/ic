@@ -18,6 +18,7 @@ rust_test(
         "//rs/interfaces/registry",
         "//rs/protobuf",
         "@crate_index//:anyhow",
+        "@crate_index//:base64",
         "@crate_index//:futures",
         "@crate_index//:rustls",
         "@crate_index//:tempfile",
