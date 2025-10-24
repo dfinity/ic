@@ -498,14 +498,16 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         // If we cannot deploy read-only access to the subnet, this would mean that the CUP is
         // corrupted on enough nodes to stall the subnet which, in practice, should happen only
         // during upgrades. In that case, all nodes stalled at the same height (the upgrade height)
-        // and the node with admin access should have the highest certification height, which
-        // can be used to download both the consensus pool and the state. We would then replay
-        // until the highest certification height that this node has seen. Though, this also
-        // means that this node requires admin access.
+        // and the node with admin access (if not lagging behind) will have the highest
+        // certification height (and thus state), which can be used to download both the consensus
+        // pool and the state. Though, this means that this node requires admin access to read them
+        // without a readonly key.
         //
         // Note: inside this system test, it is not the case that all nodes stalled at the same
-        // height. But since we do not break `download_state_node`, we know that it will have the
-        // highest certification height available in the subnet.
+        // height, and it is not the case that they stalled at an upgrade height. We would normally
+        // not need to replay anything (because it would be an upgrade height), but we need here,
+        // and since we do not break `download_state_node`, we know that it will have the highest
+        // certification height available in the subnet.
 
         let download_pool_node = download_state_node.clone();
         info!(
