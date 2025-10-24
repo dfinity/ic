@@ -591,8 +591,8 @@ mod tests {
 
         (0..n)
             .map(|_i| {
-                let k = rng.r#gen::<usize>() % 64 + 2;
-                (0..(k + 2)).map(|k| key_mutation(k, rng)).collect()
+                let k = rng.r#gen::<usize>() % 64 + 1;
+                (0..k).map(|k| key_mutation(k, rng)).collect()
             })
             .collect()
     }
