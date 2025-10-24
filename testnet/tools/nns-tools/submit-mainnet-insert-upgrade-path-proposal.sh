@@ -23,6 +23,8 @@ fi
 PROPOSAL_FILE=$1
 NEURON_ID=$2
 
+DRY_RUN="${DRY_RUN:-false}"
+
 extract_versions_to_publish() {
     PROPOSAL_FILE=$1
 
@@ -63,14 +65,18 @@ submit_insert_upgrade_path_proposal_mainnet() {
     )
 
     if [ "${TARGET_SNS_GOVERNANCE_CANISTER}" == "All" ]; then
-        cmd+=("--force-upgrade-main-upgrade-path true")
+        cmd+=("--force-upgrade-main-upgrade-path=true")
     else
-        cmd+=("--sns-governance-canister-id ${TARGET_SNS_GOVERNANCE_CANISTER}")
+        cmd+=("--sns-governance-canister-id=${TARGET_SNS_GOVERNANCE_CANISTER}")
     fi
 
     for V in $(extract_versions_to_publish $PROPOSAL_FILE); do
         cmd+=("$V")
     done
+
+    if [ "$DRY_RUN" = true ]; then
+        cmd+=(--dry-run)
+    fi
 
     confirm_submit_proposal_command "${cmd[@]}"
 
