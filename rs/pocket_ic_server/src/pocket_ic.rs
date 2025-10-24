@@ -14,7 +14,7 @@ use axum::{
 };
 use bitcoin::Network as BtcAdapterNetwork;
 use bytes::Bytes;
-use candid::{Decode, Encode, Principal};
+use candid::{CandidType, Decode, Encode, Principal};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, CyclesCanisterInitPayload,
     DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS, SetAuthorizedSubnetworkListArgs,
@@ -2213,13 +2213,18 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, MIGRATION_CANISTER_ID);
 
             // Install the canister migration orchestrator canister.
+            // TODO: replace by public interface
+            #[derive(CandidType, Deserialize, Default)]
+            struct MigrationCanisterInitArgs {
+                allowlist: Option<Vec<Principal>>,
+            }
             nns_subnet
                 .state_machine
                 .install_wasm_in_mode(
                     canister_id,
                     CanisterInstallMode::Install,
                     MIGRATION_CANISTER_WASM.to_vec(),
-                    Encode!(&()).unwrap(),
+                    Encode!(&MigrationCanisterInitArgs::default()).unwrap(),
                 )
                 .unwrap();
         }
