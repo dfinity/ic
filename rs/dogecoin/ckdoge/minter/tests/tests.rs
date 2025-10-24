@@ -214,6 +214,7 @@ mod deposit {
 }
 
 mod withdrawal {
+    use std::array;
     use candid::Principal;
     use ic_ckdoge_minter::address::DogecoinAddress;
     use ic_ckdoge_minter::candid_api::{RetrieveDogeStatus, RetrieveDogeWithApprovalArgs};
@@ -237,6 +238,10 @@ mod withdrawal {
         let minter = setup.minter();
         let ledger = setup.ledger();
         let dogecoin = setup.dogecoin();
+        let fee_percentiles = array::from_fn(|i| i as u64);
+        let median_fee = fee_percentiles[50];
+        assert_eq!(median_fee, 50);
+        dogecoin.set_fee_percentiles(fee_percentiles);
         let account = Account {
             owner: USER_PRINCIPAL,
             subaccount: Some([42_u8; 32]),
@@ -289,6 +294,7 @@ mod withdrawal {
                     kyt_fee: Some(0),
                 }))),
                 created_at_time: None,
+                fee: None,
             });
 
         minter.assert_that_events().contains_only_once_in_order(&[
@@ -351,6 +357,7 @@ mod withdrawal {
                     status: None,
                 }))),
                 created_at_time: None,
+                fee: None,
             });
 
         let _txid = minter.await_doge_transaction(retrieve_doge_id.block_index);

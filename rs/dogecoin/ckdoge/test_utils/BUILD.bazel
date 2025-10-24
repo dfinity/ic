@@ -19,7 +19,6 @@ rust_library(
         "//packages/ic-http-types",
         "//packages/ic-metrics-assert:ic-metrics-assert_pocket_ic",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//packages/ic-http-types",
         "//packages/pocket-ic",
         "//rs/bitcoin/mock",
         "//rs/dogecoin/ckdoge/minter:ckdoge_minter_lib",

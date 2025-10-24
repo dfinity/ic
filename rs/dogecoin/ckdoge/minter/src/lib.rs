@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use candid::Principal;
 use ic_ckbtc_minter::{
     CanisterRuntime, CheckTransactionResponse, GetCurrentFeePercentilesRequest, GetUtxosRequest,
-    GetUtxosResponse, address::BitcoinAddress, management::CallError, state::CkBtcMinterState, tx,
+    GetUtxosResponse, management::CallError, state::CkBtcMinterState, tx,
     updates::retrieve_btc::BtcAddressCheckStatus,
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
@@ -21,9 +21,11 @@ use std::time::Duration;
 use crate::dogecoin_canister::MillikoinuPerByte;
 pub use dogecoin_canister::get_dogecoin_canister_id;
 pub use ic_ckbtc_minter::{
-    Log, LogEntry, OutPoint, Page, Txid, Utxo,
+    OutPoint, Page, Txid, Utxo,
+    address::BitcoinAddress,
     logs::Priority,
     memo::{BurnMemo, MintMemo, encode as memo_encode},
+    state::RetrieveBtcRequest,
     state::eventlog::{Event, EventType, GetEventsArg},
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };

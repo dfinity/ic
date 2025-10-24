@@ -1,18 +1,19 @@
+use crate::MAX_TIME_IN_QUEUE;
 use crate::events::MinterEventAssert;
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
-use ic_ckdoge_minter::Event;
-use ic_ckdoge_minter::Priority;
-use ic_ckdoge_minter::UtxoStatus;
-use ic_ckdoge_minter::candid_api::{
-    GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalArgs,
-    RetrieveDogeWithApprovalError,
+use ic_ckdoge_minter::{
+    Event, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
+    candid_api::{
+        GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
+        RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
+    },
 };
-use ic_ckdoge_minter::{UpdateBalanceArgs, UpdateBalanceError};
 use ic_management_canister_types::CanisterId;
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use pocket_ic::{PocketIc, RejectResponse};
 use std::sync::Arc;
+use std::time::Duration;
 
 pub struct MinterCanister {
     pub(crate) env: Arc<PocketIc>,
@@ -178,6 +179,10 @@ impl MinterCanister {
             )
             .expect("BUG: failed to call get_events");
         Decode!(&call_result, Vec<Event>).unwrap()
+    }
+
+    pub fn id(&self) -> CanisterId {
+        self.id
     }
 }
 

@@ -1,6 +1,7 @@
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
+use ic_ckdoge_minter::candid_api::RetrieveDogeStatusRequest;
 use ic_ckdoge_minter::{
     DOGECOIN_CANISTER_RUNTIME, Event, EventType, GetEventsArg,
     candid_api::{
@@ -130,7 +131,9 @@ fn check_invariants() -> Result<(), String> {
 
 #[query]
 fn retrieve_doge_status(req: RetrieveDogeStatusRequest) -> RetrieveDogeStatus {
-    read_state(|s| RetrieveDogeStatus::from(s.retrieve_btc_status_v2(req.block_index)))
+    ic_ckbtc_minter::state::read_state(|s| {
+        RetrieveDogeStatus::from(s.retrieve_btc_status_v2(req.block_index))
+    })
 }
 
 // TODO XC-495: Currently events from ckBTC are re-used and it might be worthwhile to split
