@@ -98,7 +98,8 @@ impl MinterCanister {
     }
 
     pub fn await_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
-        self.env.advance_time(MAX_TIME_IN_QUEUE);
+        self.env
+            .advance_time(MAX_TIME_IN_QUEUE + Duration::from_nanos(1));
         let mut last_status = None;
         let max_ticks = 10;
         for _ in 0..max_ticks {

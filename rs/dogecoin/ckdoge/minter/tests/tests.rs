@@ -214,7 +214,6 @@ mod deposit {
 }
 
 mod withdrawal {
-    use std::array;
     use candid::Principal;
     use ic_ckdoge_minter::address::DogecoinAddress;
     use ic_ckdoge_minter::candid_api::{RetrieveDogeStatus, RetrieveDogeWithApprovalArgs};
@@ -231,6 +230,7 @@ mod withdrawal {
     use icrc_ledger_types::icrc1::transfer::Memo;
     use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
     use pocket_ic::Time;
+    use std::array;
 
     #[test]
     fn should_withdraw_doge() {
