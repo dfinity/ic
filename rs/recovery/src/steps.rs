@@ -676,7 +676,8 @@ impl Step for UploadAndRestartStep {
             let copy_to = format!("{upload_dir}/{CHECKPOINTS}/{max_checkpoint}");
             let cp = format!("sudo cp -r {copy_from} {copy_to}");
             let cmd_create_and_copy_checkpoint_dir = format!(
-                "sudo mkdir -p {upload_dir}/{CHECKPOINTS}; {cp}; sudo chown -R {account} {upload_dir};"
+                "sudo mkdir -p {copy_to_parent}; {cp}; sudo chown -R {account} {upload_dir};",
+                copy_to_parent = PathBuf::from(&copy_to).parent().unwrap().display()
             );
 
             let ssh_helper = SshHelper::new(
