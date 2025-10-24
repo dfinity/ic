@@ -10,6 +10,13 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+# 2025-10-17: Proposal 138992
+
+https://dashboard.internetcomputer.org/proposal/138992
+
+## Changed
+
+Swapping out a node, if the subnet is halted in the registry, is disabled.
 
 # 2025-10-10: Proposal 138914
 
