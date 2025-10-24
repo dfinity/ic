@@ -7,7 +7,7 @@ fn main() -> ExitCode {
         Ok(false) => ExitCode::from(1),
         Err(err) => {
             eprintln!("Error checking SEV status: {err:?}");
-            ExitCode::from(2)
+            ExitCode::from(255)
         }
     }
 }

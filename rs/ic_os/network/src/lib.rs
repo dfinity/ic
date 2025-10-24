@@ -41,7 +41,7 @@ pub fn generate_network_config(
     }
 }
 
-pub fn resolve_mgmt_mac(config_mac: Option<String>) -> Result<MacAddr6> {
+pub fn resolve_mgmt_mac(config_mac: Option<&str>) -> Result<MacAddr6> {
     if let Some(config_mac) = config_mac {
         // Take MAC address override from config
         let mgmt_mac = config_mac.parse()?;

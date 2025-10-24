@@ -990,7 +990,7 @@ impl EccPoint {
         let mut mul_states: Vec<SlidingWindowMulState> = point_scalar_pairs
             .iter()
             .zip(luts.iter())
-            .map(|(&(_p, s), lut)| (SlidingWindowMulState::new(s, lut.window_size)))
+            .map(|(&(_p, s), lut)| SlidingWindowMulState::new(s, lut.window_size))
             .collect();
 
         let mut accum = EccPoint::identity(point_scalar_pairs[0].0.curve_type());

@@ -114,8 +114,8 @@ canister_deps()
 
 http_archive(
     name = "rules_rust",
-    integrity = "sha256-2GH766nwQzOgrmnkSO6D1pF/JC3bt/41xo/CEqarpUY=",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.64.0/rules_rust-0.64.0.tar.gz"],
+    integrity = "sha256-5Kgp+5cZcrJoTOUq9CF6KJdNsB2zNzvYM9UnYMoY5lc=",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.66.0/rules_rust-0.66.0.tar.gz"],
 )
 
 load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
@@ -135,7 +135,7 @@ rust_register_toolchains(
         "fastbuild": "none",
         "opt": "none",
     }},
-    versions = ["1.89.0"],
+    versions = ["1.90.0"],
 )
 
 load("//bazel:external_crates.bzl", "external_crates_repository")
@@ -188,31 +188,6 @@ ruff(name = "ruff")
 load("//pre-commit:ormolu.bzl", "ormolu")
 
 ormolu(name = "ormolu")
-
-# buf binary for protobuf linting
-load("//pre-commit:buf.bzl", "buf")
-
-buf(name = "buf")
-
-# candid binary
-load("//pre-commit:candid.bzl", "candid")
-
-candid(name = "candid")
-
-# dfx binary for haskell linting
-load("//bazel:dfx.bzl", "dfx")
-
-dfx(name = "dfx")
-
-# sns-quill for SNS testing
-load("//bazel:sns_quill.bzl", "sns_quill")
-
-sns_quill(name = "sns_quill")
-
-# idl2json for SNS testing
-load("//bazel:idl2json.bzl", "idl_to_json")
-
-idl_to_json(name = "idl2json")
 
 # Mainnet ICOS image support
 get_mainnet_setupos_images()
