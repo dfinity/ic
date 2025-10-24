@@ -213,6 +213,166 @@ mod deposit {
     }
 }
 
+mod withdrawal {
+    use candid::Principal;
+    use ic_ckdoge_minter::address::DogecoinAddress;
+    use ic_ckdoge_minter::candid_api::{RetrieveDogeStatus, RetrieveDogeWithApprovalArgs};
+    use ic_ckdoge_minter::lifecycle::init::Network;
+    use ic_ckdoge_minter::{
+        BitcoinAddress, BurnMemo, EventType, MintMemo, OutPoint, RetrieveBtcRequest,
+        UpdateBalanceArgs, Utxo, UtxoStatus, candid_api::GetDogeAddressArgs, memo_encode,
+    };
+    use ic_ckdoge_minter_test_utils::{
+        DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
+        txid,
+    };
+    use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::icrc1::transfer::Memo;
+    use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
+    use pocket_ic::Time;
+    use std::array;
+
+    #[test]
+    fn should_withdraw_doge() {
+        let setup = Setup::default();
+        let minter = setup.minter();
+        let ledger = setup.ledger();
+        let dogecoin = setup.dogecoin();
+        let fee_percentiles = array::from_fn(|i| i as u64);
+        let median_fee = fee_percentiles[50];
+        assert_eq!(median_fee, 50);
+        dogecoin.set_fee_percentiles(fee_percentiles);
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+
+        let deposit_address = minter.get_doge_address(
+            Principal::anonymous(),
+            &GetDogeAddressArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+        );
+
+        let utxo = Utxo {
+            height: 0,
+            outpoint: OutPoint {
+                txid: txid(),
+                vout: 1,
+            },
+            value: RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE,
+        };
+        dogecoin.simulate_transaction(utxo.clone(), deposit_address);
+
+        let utxo_status = minter
+            .update_balance(
+                account.owner,
+                &UpdateBalanceArgs {
+                    owner: Some(account.owner),
+                    subaccount: account.subaccount,
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            utxo_status,
+            vec![UtxoStatus::Minted {
+                block_index: 0,
+                minted_amount: utxo.value,
+                utxo: utxo.clone(),
+            }]
+        );
+
+        ledger
+            .assert_that_transaction(0_u64)
+            .equals_mint_ignoring_timestamp(Mint {
+                amount: utxo.value.into(),
+                to: account,
+                memo: Some(Memo::from(memo_encode(&MintMemo::Convert {
+                    txid: Some(utxo.outpoint.txid.as_ref()),
+                    vout: Some(utxo.outpoint.vout),
+                    kyt_fee: Some(0),
+                }))),
+                created_at_time: None,
+                fee: None,
+            });
+
+        minter.assert_that_events().contains_only_once_in_order(&[
+            EventType::CheckedUtxoV2 {
+                utxo: utxo.clone(),
+                account,
+            },
+            EventType::ReceivedUtxos {
+                mint_txid: Some(0),
+                to_account: account,
+                utxos: vec![utxo],
+            },
+        ]);
+
+        let _ledger_approval_index = ledger
+            .icrc2_approve(account, RETRIEVE_DOGE_MIN_AMOUNT, minter.id())
+            .unwrap();
+
+        let beneficiary_address =
+            DogecoinAddress::parse(DOGECOIN_ADDRESS_1, &Network::Mainnet).unwrap();
+        let time_of_retrieval = Time::from_nanos_since_unix_epoch(1760709476000000000);
+
+        setup.as_ref().set_time(time_of_retrieval);
+        let retrieve_doge_id = minter
+            .retrieve_doge_with_approval(
+                USER_PRINCIPAL,
+                &RetrieveDogeWithApprovalArgs {
+                    amount: RETRIEVE_DOGE_MIN_AMOUNT,
+                    from_subaccount: account.subaccount,
+                    address: DOGECOIN_ADDRESS_1.to_string(),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            minter.retrieve_doge_status(retrieve_doge_id.block_index),
+            RetrieveDogeStatus::Pending
+        );
+        minter.assert_that_events().contains_only_once_in_order(&[
+            EventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
+                amount: RETRIEVE_DOGE_MIN_AMOUNT,
+                address: BitcoinAddress::P2pkh(
+                    beneficiary_address.as_bytes().to_vec().try_into().unwrap(),
+                ),
+                block_index: retrieve_doge_id.block_index,
+                received_at: time_of_retrieval.as_nanos_since_unix_epoch(),
+                kyt_provider: None,
+                reimbursement_account: Some(account),
+            }),
+        ]);
+
+        ledger
+            .assert_that_transaction(retrieve_doge_id.block_index)
+            .equals_burn_ignoring_timestamp(Burn {
+                amount: RETRIEVE_DOGE_MIN_AMOUNT.into(),
+                from: account,
+                spender: Some(minter.id().into()),
+                memo: Some(Memo::from(memo_encode(&BurnMemo::Convert {
+                    address: Some(DOGECOIN_ADDRESS_1),
+                    kyt_fee: None,
+                    status: None,
+                }))),
+                created_at_time: None,
+                fee: None,
+            });
+
+        let txid = minter.await_doge_transaction(retrieve_doge_id.block_index);
+        let mempool = dogecoin.mempool();
+        assert_eq!(
+            mempool.len(),
+            1,
+            "ckDOGE transaction did not appear in the mempool"
+        );
+        let tx = mempool
+            .get(&txid)
+            .expect("the mempool does not contain the withdrawal transaction");
+    }
+}
+
 #[test]
 fn should_refresh_fee_percentiles() {
     let setup = Setup::default();

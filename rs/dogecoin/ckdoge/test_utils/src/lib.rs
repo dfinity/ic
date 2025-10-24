@@ -24,7 +24,11 @@ use std::time::Duration;
 pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
 pub const USER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 42]);
 pub const DOGECOIN_ADDRESS_1: &str = "DJfU2p6woQ9GiBdiXsWZWJnJ9uDdZfSSNC";
-pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 100_000_000;
+pub const DOGE: u64 = 100_000_000;
+pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 50 * DOGE;
+// 0.01 DOGE, ca 0.002 USD (2025.09.06)
+pub const LEDGER_TRANSFER_FEE: u64 = DOGE / 100;
+const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
 pub const MIN_CONFIRMATIONS: u32 = 60;
 
 pub struct Setup {
@@ -95,7 +99,7 @@ impl Setup {
                 ecdsa_key_name: "key_1".into(),
                 retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
                 ledger_id: ledger,
-                max_time_in_queue_nanos: Duration::from_secs(10).as_nanos() as u64,
+                max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
                 min_confirmations: Some(MIN_CONFIRMATIONS),
                 mode: Mode::GeneralAvailability,
                 get_utxos_cache_expiration_seconds: Some(Duration::from_secs(60).as_secs()),
@@ -119,8 +123,7 @@ impl Setup {
                     ]),
                 }),
                 initial_balances: vec![],
-                // 0.1 DOGE, ca 0.02 USD (2025.09.06)
-                transfer_fee: 10_000_000_u32.into(),
+                transfer_fee: LEDGER_TRANSFER_FEE.into(),
                 decimals: Some(8),
                 token_name: "ckDOGE".to_string(),
                 token_symbol: "ckDOGE".to_string(),
@@ -180,6 +183,12 @@ impl Setup {
 impl Default for Setup {
     fn default() -> Self {
         Self::new(Network::Mainnet)
+    }
+}
+
+impl AsRef<PocketIc> for Setup {
+    fn as_ref(&self) -> &PocketIc {
+        &self.env
     }
 }
 

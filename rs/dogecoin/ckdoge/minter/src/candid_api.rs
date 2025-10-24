@@ -1,5 +1,6 @@
 //! Candid types for the canister enpoints (arguments and return types)
 
+use crate::Txid;
 use candid::{CandidType, Principal};
 use icrc_ledger_types::icrc1::account::Subaccount;
 use serde::{Deserialize, Serialize};
@@ -89,6 +90,51 @@ impl From<ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError>
             ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError::InsufficientAllowance { allowance } => Self::InsufficientAllowance { allowance },
             ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError::TemporarilyUnavailable(msg) => Self::TemporarilyUnavailable(msg),
             ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError::GenericError { error_message, error_code } => Self::GenericError { error_message, error_code },
+        }
+    }
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct RetrieveDogeStatusRequest {
+    pub block_index: u64,
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
+pub enum RetrieveDogeStatus {
+    /// The minter has no data for this request.
+    /// The request id is either invalid or too old.
+    Unknown,
+    /// The request is in the batch queue.
+    Pending,
+    /// Waiting for a signature on a transaction satisfy this request.
+    Signing,
+    /// Sending the transaction satisfying this request.
+    Sending { txid: Txid },
+    /// Awaiting for confirmations on the transaction satisfying this request.
+    Submitted { txid: Txid },
+    /// The retrieval amount was too low. Satisfying the request is impossible.
+    AmountTooLow,
+    /// Confirmed a transaction satisfying this request.
+    Confirmed { txid: Txid },
+    /// The retrieve bitcoin request has been reimbursed.
+    Reimbursed(ic_ckbtc_minter::state::ReimbursedDeposit),
+    /// The minter will try to reimburse this transaction.
+    WillReimburse(ic_ckbtc_minter::state::ReimburseDepositTask),
+}
+
+impl From<ic_ckbtc_minter::state::RetrieveBtcStatusV2> for RetrieveDogeStatus {
+    fn from(status: ic_ckbtc_minter::state::RetrieveBtcStatusV2) -> Self {
+        use ic_ckbtc_minter::state::RetrieveBtcStatusV2;
+        match status {
+            RetrieveBtcStatusV2::Unknown => Self::Unknown,
+            RetrieveBtcStatusV2::Pending => Self::Pending,
+            RetrieveBtcStatusV2::Signing => Self::Signing,
+            RetrieveBtcStatusV2::Sending { txid } => Self::Sending { txid },
+            RetrieveBtcStatusV2::Submitted { txid } => Self::Submitted { txid },
+            RetrieveBtcStatusV2::AmountTooLow => Self::AmountTooLow,
+            RetrieveBtcStatusV2::Confirmed { txid } => Self::Confirmed { txid },
+            RetrieveBtcStatusV2::Reimbursed(info) => Self::Reimbursed(info),
+            RetrieveBtcStatusV2::WillReimburse(task) => Self::WillReimburse(task),
         }
     }
 }

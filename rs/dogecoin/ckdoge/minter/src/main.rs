@@ -1,10 +1,13 @@
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
-use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
+use ic_ckdoge_minter::candid_api::RetrieveDogeStatusRequest;
 use ic_ckdoge_minter::{
     DOGECOIN_CANISTER_RUNTIME, Event, EventType, GetEventsArg,
-    candid_api::{RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError},
+    candid_api::{
+        GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalArgs,
+        RetrieveDogeWithApprovalError,
+    },
     lifecycle::init::MinterArg,
     updates,
 };
@@ -123,6 +126,13 @@ fn check_invariants() -> Result<(), String> {
         }
 
         Ok(())
+    })
+}
+
+#[query]
+fn retrieve_doge_status(req: RetrieveDogeStatusRequest) -> RetrieveDogeStatus {
+    ic_ckbtc_minter::state::read_state(|s| {
+        RetrieveDogeStatus::from(s.retrieve_btc_status_v2(req.block_index))
     })
 }
 
