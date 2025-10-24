@@ -69,8 +69,6 @@ mod tests {
                 guest_launch_measurements: measurements
                     .iter()
                     .map(|m| GuestLaunchMeasurement {
-                        #[allow(deprecated)]
-                        measurement: m.as_ref().to_vec(),
                         metadata: None,
                         encoded_measurement: Some(base64::encode(m)),
                     })
