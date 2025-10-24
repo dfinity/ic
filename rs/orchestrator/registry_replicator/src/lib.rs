@@ -413,7 +413,7 @@ impl RegistryReplicator {
     /// `get_certified_changes_since` of `RegistryCanister`), so multiple polls might be necessary
     /// to get the most recent version of the registry.
     pub async fn poll(&self) -> Result<(), String> {
-        InternalState::new(
+        let poll_result = InternalState::new(
             self.logger.clone(),
             self.node_id,
             self.registry_client.clone(),
@@ -423,10 +423,11 @@ impl RegistryReplicator {
             self.poll_delay,
         )
         .poll()
-        .await?;
+        .await;
 
-        // Update the registry client with the latest changes.
-        self.registry_client.poll_once().map_err(|e| e.to_string())
+        // Update the registry client with the latest changes, regardless of whether
+        // the polling succeeded or failed. Return any error from either operation.
+        poll_result.and(self.registry_client.poll_once().map_err(|e| e.to_string()))
     }
 
     /// Set the local registry data to what is contained in the provided local
