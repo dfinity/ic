@@ -12,7 +12,9 @@ use ic_embedders::{
         sandbox_safe_system_state::SandboxSafeSystemState,
     },
 };
-use ic_interfaces::execution_environment::{ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
 use ic_metrics::MetricsRegistry;
