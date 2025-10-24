@@ -17,6 +17,19 @@ pub struct Call {
     pub downstream_calls: Vec<Call>,
 }
 
+impl Default for Call {
+    fn default() -> Self {
+        // Default with a dummy canister Id and no padding or downstream calls.
+        Self {
+            receiver: CanisterId::from_u64(42),
+            call_bytes: 0,
+            reply_bytes: 0,
+            timeout_secs: None,
+            downstream_calls: vec![],
+        }
+    }
+}
+
 /// The message sent to this canister by an ingress or an inter canister message.
 #[derive(Serialize, Deserialize, CandidType, Debug, Eq, PartialEq)]
 pub struct Message {
