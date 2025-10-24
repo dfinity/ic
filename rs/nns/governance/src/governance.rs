@@ -12,7 +12,7 @@ use crate::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
-    is_neuron_follow_restrictions_enabled, is_set_subnet_operational_level_enabled,
+    is_neuron_follow_restrictions_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -5125,15 +5125,6 @@ impl Governance {
                 format!("Invalid NnsFunction id: {}", update.nns_function),
             )
         })?;
-
-        if !is_set_subnet_operational_level_enabled()
-            && nns_function == NnsFunction::SetSubnetOperationalLevel
-        {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "SetSubnetOperationalLevel proposals are not enabled yet.".to_string(),
-            ));
-        }
 
         let invalid_proposal_error = |error_message: String| -> GovernanceError {
             GovernanceError::new_with_message(ErrorType::InvalidProposal, error_message)
