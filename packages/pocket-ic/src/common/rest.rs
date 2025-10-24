@@ -614,6 +614,9 @@ pub struct IcpFeatures {
     /// Deploys the bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
     /// Subnets: Bitcoin.
     pub bitcoin: Option<IcpFeaturesConfig>,
+    /// Deploys the canister migration orchestrator canister.
+    /// Subnets: NNS.
+    pub canister_migration: Option<IcpFeaturesConfig>,
 }
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -798,6 +801,7 @@ impl ExtendedSubnetConfigSet {
             ii,
             nns_ui,
             bitcoin,
+            canister_migration,
         } = icp_features;
         // NNS canisters
         for (flag, icp_feature_str) in [
@@ -807,6 +811,7 @@ impl ExtendedSubnetConfigSet {
             (nns_governance, "nns_governance"),
             (sns, "sns"),
             (nns_ui, "nns_ui"),
+            (canister_migration, "canister_migration"),
         ] {
             if flag.is_some() {
                 check_empty_subnet(&self.nns, "NNS", icp_feature_str)?;
