@@ -13,13 +13,6 @@ def _canisters_impl(repository_ctx):
     cans = json.decode(repository_ctx.read(repository_ctx.attr.path))
     canister_keys = cans.keys()
 
-    content = '''
-
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
-
-def canister_deps():
-    '''
-
     # Iterate over all the keys defined in the mainnet canister data
 
     for canister_key in canister_keys:
