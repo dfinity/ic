@@ -59,16 +59,17 @@ class DependencyScanner:
 
     def do_periodic_scan(self, repositories: typing.List[Repository]):
         for repository in repositories:
+            repo_cloned = False
+            repo_top_level_path = self.root.parent / repository.name
             try:
                 finding_by_id: typing.Dict[typing.Tuple[str, str, str, str], Finding] = {}
                 if repository.name != "ic":
                     # we are cloning an external repository
-                    top_level_path = self.root.parent / repository.name
-                    if top_level_path.is_dir():
+                    if repo_top_level_path.is_dir():
                         # git clone fails if the directory already exists
-                        shutil.rmtree(top_level_path)
+                        shutil.rmtree(repo_top_level_path)
                     self.__clone_repository_from_url(repository.url, self.root.parent)
-
+                    repo_cloned = True
                 for project in repository.projects:
                     path = self.root.parent / project.path
                     if not path.is_dir():
@@ -180,6 +181,10 @@ class DependencyScanner:
                         self.job_id,
                         str(err),
                     )
+            finally:
+                # delete the repo in order to save disk space
+                if repo_cloned and repo_top_level_path.is_dir():
+                    shutil.rmtree(repo_top_level_path)
         for subscriber in self.subscribers:
             subscriber.on_scan_job_succeeded(
                 self.dependency_manager.get_scanner_id(), ScannerJobType.PERIODIC_SCAN, self.job_id

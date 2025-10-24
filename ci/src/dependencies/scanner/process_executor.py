@@ -41,5 +41,4 @@ class ProcessExecutor:
             else:
                 logging.info("Process Executor succeeded")
             logging.debug(result.stderr)
-            logging.debug(result.stdout)
             return result.stdout.strip()
