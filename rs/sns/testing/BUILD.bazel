@@ -92,10 +92,7 @@ rust_binary(
     )
     for (name_suffix, dev_data, dev_env) in [
         ("-head-nns", HEAD_NNS_DEV_DATA, HEAD_NNS_DEV_ENV),
-        # TODO(NNS1-4259): Uncomment the next line once the hack is removed:
-        # The next line is a hack to temporarily work around a mistake that we made
-        # where required fields were added to the Register canister's init args.
-        # ("", MAINNET_NNS_DEV_DATA, MAINNET_NNS_DEV_ENV),
+        ("", MAINNET_NNS_DEV_DATA, MAINNET_NNS_DEV_ENV),
     ]
 ]
 
