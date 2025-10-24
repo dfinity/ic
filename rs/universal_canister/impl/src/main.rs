@@ -500,6 +500,13 @@ fn eval(ops_bytes: OpsBytes) {
                 stack.push_blob(api::root_key());
             }
             Ops::SetOnLowWasmMemoryMethod => set_on_low_wasm_memory_method(stack.pop_blob()),
+            Ops::WasmMemoryGrow => {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let pages = stack.pop_int();
+                    core::arch::wasm32::memory_grow(0, pages as usize);
+                }
+            }
         }
     }
 }

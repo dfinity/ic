@@ -820,6 +820,15 @@ impl PayloadBuilder {
         self
     }
 
+    /// Grows WASM memory by the specified amount of WASM pages.
+    /// This function should only be used to test WASM memory growth,
+    /// it does not substitute the Rust allocator.
+    pub fn wasm_memory_grow(mut self, pages: u32) -> Self {
+        self = self.push_int(pages);
+        self.0.push(Ops::WasmMemoryGrow as u8);
+        self
+    }
+
     pub fn build(self) -> Vec<u8> {
         self.0
     }
