@@ -6,6 +6,7 @@ mod minter;
 use crate::dogecoin::DogecoinCanister;
 use crate::ledger::LedgerCanister;
 pub use crate::minter::MinterCanister;
+use bitcoin::TxOut;
 use candid::{Encode, Principal};
 use ic_ckdoge_minter::{
     Txid, get_dogecoin_canister_id,
@@ -219,4 +220,28 @@ pub fn assert_trap<T: Debug>(result: Result<T, RejectResponse>, message: &str) {
 
 pub fn txid() -> Txid {
     Txid::from([42u8; 32])
+}
+
+pub fn into_outpoint(
+    value: ic_ckdoge_minter::OutPoint,
+) -> bitcoin::blockdata::transaction::OutPoint {
+    use bitcoin::hashes::Hash;
+
+    bitcoin::blockdata::transaction::OutPoint {
+        txid: bitcoin::blockdata::transaction::Txid::from_slice(value.txid.as_ref()).unwrap(),
+        vout: value.vout,
+    }
+}
+
+pub fn parse_dogecoin_address(tx_out: &TxOut) -> bitcoin::dogecoin::Address {
+    bitcoin::dogecoin::Address::from_script(
+        tx_out.script_pubkey.as_script(),
+        bitcoin::dogecoin::Network::Dogecoin,
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "BUG: invalid Dogecoin address from script '{}'",
+            tx_out.script_pubkey
+        )
+    })
 }

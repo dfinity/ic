@@ -224,7 +224,7 @@ mod withdrawal {
     };
     use ic_ckdoge_minter_test_utils::{
         DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-        txid,
+        into_outpoint, parse_dogecoin_address, txid,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
@@ -246,6 +246,13 @@ mod withdrawal {
             owner: USER_PRINCIPAL,
             subaccount: Some([42_u8; 32]),
         };
+        let minter_address = minter.get_doge_address(
+            Principal::anonymous(),
+            &GetDogeAddressArgs {
+                owner: Some(minter.id()),
+                subaccount: None,
+            },
+        );
 
         let deposit_address = minter.get_doge_address(
             Principal::anonymous(),
@@ -305,7 +312,7 @@ mod withdrawal {
             EventType::ReceivedUtxos {
                 mint_txid: Some(0),
                 to_account: account,
-                utxos: vec![utxo],
+                utxos: vec![utxo.clone()],
             },
         ]);
 
@@ -370,6 +377,15 @@ mod withdrawal {
         let tx = mempool
             .get(&txid)
             .expect("the mempool does not contain the withdrawal transaction");
+        assert_eq!(tx.input.len(), 1);
+        assert_eq!(tx.input[0].previous_output, into_outpoint(utxo.outpoint));
+
+        assert_eq!(tx.output.len(), 2);
+        let beneficiary = parse_dogecoin_address(tx.output.get(0).unwrap());
+        assert_eq!(DOGECOIN_ADDRESS_1, beneficiary.to_string());
+
+        let change_beneficiary = parse_dogecoin_address(tx.output.get(1).unwrap());
+        assert_eq!(minter_address, change_beneficiary.to_string());
     }
 }
 
