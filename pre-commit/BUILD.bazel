@@ -110,12 +110,12 @@ sh_test(
     args = ["$(rootpath //:WORKSPACE.bazel)"],
     data = [
         "//:WORKSPACE.bazel",
-        "@shfmt",
+        "//:shfmt",
     ],
     env = {
         # Hack to get a path to the actual checkout
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "shfmt_path": "$(rootpath @shfmt//:shfmt)",
+        "shfmt_path": "$(rootpath //:shfmt)",
         # read by our script to differentiate between write & check
         "SHFMT_CHECK": "1",
     },
@@ -131,12 +131,12 @@ sh_binary(
     srcs = ["shfmt-format.sh"],
     data = [
         "//:WORKSPACE.bazel",
-        "@shfmt",
+        "//:shfmt",
     ],
     env = {
         # Hack to get a path to the actual checkout
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "shfmt_path": "$(rootpath @shfmt//:shfmt)",
+        "shfmt_path": "$(rootpath //:shfmt)",
     },
     tags = [
         "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.

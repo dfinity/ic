@@ -159,6 +159,18 @@ alias(
     }),
 )
 
+### shfmt, used to format bash code
+
+alias(
+    name = "shfmt",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@shfmt-x86_64-linux//file:shfmt",
+        "@bazel_tools//src/conditions:darwin_arm64": "@shfmt-aarch64-darwin//file:shfmt",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@shfmt-x86_64-darwin//file:shfmt",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
 ### Pocket IC
 
 # The pocket-ic server binary. Use this as a test dependency if the test
