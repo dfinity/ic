@@ -67,6 +67,7 @@ pub const CANISTER_FILE: &str = "canister.pbuf";
 pub const INGRESS_HISTORY_FILE: &str = "ingress_history.pbuf";
 pub const SPLIT_MARKER_FILE: &str = "split_from.pbuf";
 pub const SUBNET_QUEUES_FILE: &str = "subnet_queues.pbuf";
+pub const REFUNDS_FILE: &str = "refunds.pbuf";
 pub const SYSTEM_METADATA_FILE: &str = "system_metadata.pbuf";
 pub const STATS_FILE: &str = "stats.pbuf";
 pub const WASM_FILE: &str = "software.wasm";
@@ -187,6 +188,7 @@ pub struct CanisterStateBits {
     pub wasm_chunk_store_metadata: WasmChunkStoreMetadata,
     pub total_query_stats: TotalQueryStats,
     pub log_visibility: LogVisibilityV2,
+    pub log_memory_limit: NumBytes,
     pub canister_log: CanisterLog,
     pub wasm_memory_limit: Option<NumBytes>,
     pub next_snapshot_id: u64,
@@ -1688,6 +1690,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     pub fn subnet_queues(&self) -> ProtoFileWith<pb_queues::CanisterQueues, Permissions> {
         self.0.root.join(SUBNET_QUEUES_FILE).into()
+    }
+
+    pub fn refunds(&self) -> ProtoFileWith<pb_queues::Refunds, Permissions> {
+        self.0.root.join(REFUNDS_FILE).into()
     }
 
     pub fn split_marker(&self) -> ProtoFileWith<pb_metadata::SplitFrom, Permissions> {

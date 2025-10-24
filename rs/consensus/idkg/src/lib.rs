@@ -235,7 +235,7 @@ pub use payload_verifier::{
 pub use stats::IDkgStatsImpl;
 
 /// The maximum number of threads used to process IDkg artifacts in parallel.
-pub(crate) const MAX_IDKG_THREADS: usize = 8;
+pub(crate) const MAX_IDKG_THREADS: usize = 16;
 
 /// Similar to consensus, we don't fetch artifacts too far ahead in future.
 const LOOK_AHEAD: u64 = 10;
@@ -295,6 +295,7 @@ impl IDkgImpl {
             node_id,
             consensus_block_cache.clone(),
             crypto.clone(),
+            state_reader.clone(),
             metrics_registry.clone(),
             logger.clone(),
         ));
