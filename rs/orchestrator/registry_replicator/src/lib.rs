@@ -796,24 +796,28 @@ mod tests {
     }
 
     #[tokio::test]
-    #[should_panic(expected = "NNS public key not set in the registry and not configured.")]
-    async fn test_poll_panics_without_nns_pub_key_nor_in_store_nor_in_config() {
+    async fn test_poll_is_error_without_nns_pub_key_nor_in_store_nor_in_config() {
         let (_pocket_ic, nns_urls, _nns_pub_key) = PocketIcHelper::setup().await;
 
         let replicator = new_test_replicator(Some(INIT_NUM_VERSIONS), nns_urls, None).await;
 
-        replicator.poll().await.unwrap();
+        assert_eq!(
+            replicator.poll().await,
+            Err("NNS public key not set in the registry and not configured.".to_string())
+        );
     }
 
     #[tokio::test]
-    #[should_panic(expected = "No remote registry canister configured.")]
-    async fn test_poll_panics_without_nns_urls_nor_in_store_nor_in_config() {
+    async fn test_poll_is_error_without_nns_urls_nor_in_store_nor_in_config() {
         let (_pocket_ic, _nns_urls, nns_pub_key) = PocketIcHelper::setup().await;
 
         let replicator =
             new_test_replicator(Some(INIT_NUM_VERSIONS), vec![], Some(nns_pub_key)).await;
 
-        replicator.poll().await.unwrap();
+        assert_eq!(
+            replicator.poll().await,
+            Err("No remote registry canister configured.".to_string())
+        );
     }
 
     #[tokio::test]
