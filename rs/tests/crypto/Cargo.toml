@@ -20,6 +20,7 @@ ic-universal-canister = { path = "../../universal_canister/lib" }
 k256 = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
+serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }

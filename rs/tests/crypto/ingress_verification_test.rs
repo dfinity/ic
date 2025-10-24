@@ -19,7 +19,6 @@ use ic_types::messages::{
     Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope,
     HttpUserQuery, SignedDelegation,
 };
-use ic_universal_canister::wasm;
 use rand::{CryptoRng, Rng};
 use reqwest::{StatusCode, Url};
 use slog::{debug, info};
@@ -91,6 +90,20 @@ impl GenericIdentity {
             .public_key()
             .expect("Public key missing from identity")
     }
+
+    fn sign_query(&self, query: &HttpQueryContent) -> Vec<u8> {
+        sign_query(query, &self.identity())
+            .signature
+            .clone()
+            .expect("Signature missing")
+    }
+
+    fn sign_update(&self, update: &HttpCallContent) -> Vec<u8> {
+        sign_update(update, &self.identity())
+            .signature
+            .clone()
+            .expect("Signature missing")
+    }
 }
 
 pub fn requests_with_delegations(env: TestEnv) {
@@ -154,8 +167,7 @@ pub fn requests_with_delegations(env: TestEnv) {
                 let sender = &identities[0];
                 let signer = &identities[identities.len() - 1];
 
-                let query_result =
-                    query_delegation(&test_info, sender, signer, &delegations).await;
+                let query_result = query_delegation(&test_info, sender, signer, &delegations).await;
                 let update_result =
                     update_delegation(&test_info, sender, signer, &delegations).await;
 
@@ -179,6 +191,40 @@ fn sign_delegation(delegation: Delegation, identity: &GenericIdentity) -> Signed
     SignedDelegation::new(delegation, signature.signature.unwrap())
 }
 
+async fn status_of_request<C: serde::ser::Serialize>(
+    test: &TestInformation,
+    req_type: &'static str,
+    content: C,
+    sender_pubkey: Vec<u8>,
+    sender_delegation: Option<Vec<SignedDelegation>>,
+    sender_sig: Vec<u8>,
+) -> StatusCode {
+    let envelope = HttpRequestEnvelope {
+        content,
+        sender_delegation,
+        sender_pubkey: Some(Blob(sender_pubkey)),
+        sender_sig: Some(Blob(sender_sig)),
+    };
+
+    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
+    let client = reqwest::Client::new();
+
+    let url = format!(
+        "{}api/v2/canister/{}/{}",
+        test.url, test.canister_id, req_type
+    );
+
+    let res = client
+        .post(url)
+        .header("Content-Type", "application/cbor")
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+
+    res.status()
+}
+
 async fn query_delegation(
     test: &TestInformation,
     sender: &GenericIdentity,
@@ -196,32 +242,17 @@ async fn query_delegation(
         },
     };
 
-    let signature = sign_query(&content, &signer.identity());
+    let signature = signer.sign_query(&content);
 
-    let envelope = HttpRequestEnvelope {
-        content: content.clone(),
-        sender_delegation: if delegations.is_empty() {
-            None
-        } else {
-            Some(delegations.to_vec())
-        },
-        sender_pubkey: Some(Blob(sender.public_key())),
-        sender_sig: Some(Blob(signature.signature.clone().unwrap())),
-    };
-    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-    let client = reqwest::Client::new();
-    let res = client
-        .post(format!(
-            "{}api/v2/canister/{}/query",
-            test.url, test.canister_id
-        ))
-        .header("Content-Type", "application/cbor")
-        .body(body)
-        .send()
-        .await
-        .unwrap();
-
-    res.status()
+    status_of_request(
+        &test,
+        "query",
+        content,
+        sender.public_key(),
+        Some(delegations.to_vec()),
+        signature,
+    )
+    .await
 }
 
 async fn update_delegation(
@@ -241,30 +272,15 @@ async fn update_delegation(
         },
     };
 
-    let signature = sign_update(&content, &signer.identity());
+    let signature = signer.sign_update(&content);
 
-    let envelope = HttpRequestEnvelope {
-        content: content.clone(),
-        sender_delegation: if delegations.is_empty() {
-            None
-        } else {
-            Some(delegations.to_vec())
-        },
-        sender_pubkey: Some(Blob(sender.public_key())),
-        sender_sig: Some(Blob(signature.signature.clone().unwrap())),
-    };
-    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-    let client = reqwest::Client::new();
-    let res = client
-        .post(format!(
-            "{}api/v2/canister/{}/call",
-            test.url, test.canister_id
-        ))
-        .header("Content-Type", "application/cbor")
-        .body(body)
-        .send()
-        .await
-        .unwrap();
-
-    res.status()
+    status_of_request(
+        &test,
+        "call",
+        content,
+        sender.public_key(),
+        Some(delegations.to_vec()),
+        signature,
+    )
+    .await
 }
