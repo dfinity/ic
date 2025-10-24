@@ -360,7 +360,16 @@ mod withdrawal {
                 fee: None,
             });
 
-        let _txid = minter.await_doge_transaction(retrieve_doge_id.block_index);
+        let txid = minter.await_doge_transaction(retrieve_doge_id.block_index);
+        let mempool = dogecoin.mempool();
+        assert_eq!(
+            mempool.len(),
+            1,
+            "ckDOGE transaction did not appear in the mempool"
+        );
+        let tx = mempool
+            .get(&txid)
+            .expect("the mempool does not contain the withdrawal transaction");
     }
 }
 
