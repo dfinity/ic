@@ -19,6 +19,7 @@ pub mod do_remove_nodes_from_subnet;
 pub mod do_retire_replica_version;
 pub mod do_revise_elected_replica_versions;
 pub mod do_set_firewall_config;
+pub mod do_set_subnet_operational_level;
 pub mod do_swap_node_in_subnet_directly;
 pub mod do_update_api_boundary_nodes_version;
 pub mod do_update_elected_hostos_versions;

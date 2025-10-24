@@ -4,6 +4,11 @@ use ic_logger::{ReplicaLogger, info};
 use ic_types::NodeId;
 use std::collections::{BTreeMap, btree_map::Entry};
 
+struct ChunkToDownload {
+    id: ChunkId,
+    downloading: bool,
+}
+
 /// Maintains a list of chunks that are still be downloaded
 pub(crate) struct ChunksToDownload {
     own_node_id: NodeId,
@@ -79,9 +84,4 @@ impl ChunksToDownload {
     pub(crate) fn is_empty(&self) -> bool {
         self.chunks.is_empty()
     }
-}
-
-struct ChunkToDownload {
-    id: ChunkId,
-    downloading: bool,
 }

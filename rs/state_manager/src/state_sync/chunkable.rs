@@ -163,7 +163,9 @@ impl Drop for IncompleteState {
                     .sub(dropped_chunks as i64);
             }
             DownloadState::Complete => {
-                // state sync duration already recorded earlier in make_checkpoint
+                // State sync duration already recorded:
+                // - in make_checkpoint() if the checkpoint already existed
+                // - after deliver_state_sync() if the checkpoint was successfully synced and delivered
             }
         }
 
@@ -264,6 +266,11 @@ impl IncompleteState {
         })
     }
 
+    /// Creates parent directories for all the files listed in the manifest.
+    /// Returns the number of parent directories created.
+    ///
+    /// This method must be called before hardlinking files because
+    /// the parent directory of the destination file must exist before hardlinking.
     pub(crate) fn preallocate_layout_directories(
         log: &ReplicaLogger,
         root: &Path,
@@ -286,6 +293,12 @@ impl IncompleteState {
             })
             .collect::<HashSet<_>>();
 
+        info!(
+            log,
+            "state sync: preallocate_layout_directories for {} unique directories",
+            unique_dirs.len(),
+        );
+
         for dir in &unique_dirs {
             let path = root.join(dir);
             std::fs::create_dir_all(&path).unwrap_or_else(|err| {
@@ -300,11 +313,14 @@ impl IncompleteState {
         unique_dirs.len()
     }
 
+    /// Creates the files listed in the manifest and resizes them to their expected sizes.
+    /// If a diff script is provided, files scheduled to be hardlinked will be skipped during file creation and resizing.
     pub(crate) fn preallocate_layout_files(
         log: &ReplicaLogger,
         root: &Path,
         unique_dirs_size: usize,
         manifest: &Manifest,
+        diff_script: Option<&DiffScript>,
         metrics: &StateSyncMetrics,
         thread_pool: &mut scoped_threadpool::Pool,
     ) {
@@ -313,63 +329,72 @@ impl IncompleteState {
             .with_label_values(&[LABEL_PREALLOCATE_FILES])
             .start_timer();
 
+        let num_files_to_hardlink = diff_script.map_or(0, |ds| ds.hardlink_files.len());
+        info!(
+            log,
+            "state sync: preallocate_layout_files for {} out of {} files ({} files to be hardlinked)",
+            manifest.file_table.len() - num_files_to_hardlink,
+            manifest.file_table.len(),
+            num_files_to_hardlink,
+        );
+
         let mut by_parent: HashMap<PathBuf, Vec<&FileInfo>> =
             HashMap::with_capacity(unique_dirs_size);
-        for file in manifest.file_table.iter() {
-            let parent = file
-                .relative_path
-                .parent()
-                .expect("every file in the manifest must have a parent");
-            by_parent.entry(parent.to_owned()).or_default().push(file);
+
+        match diff_script {
+            Some(ds) => {
+                for (idx, file) in manifest.file_table.iter().enumerate() {
+                    if ds.hardlink_files.contains_key(&idx) {
+                        continue;
+                    }
+                    let parent = file
+                        .relative_path
+                        .parent()
+                        .expect("every file in the manifest must have a parent");
+                    by_parent.entry(parent.to_owned()).or_default().push(file);
+                }
+            }
+            None => {
+                for file in manifest.file_table.iter() {
+                    let parent = file
+                        .relative_path
+                        .parent()
+                        .expect("every file in the manifest must have a parent");
+                    by_parent.entry(parent.to_owned()).or_default().push(file);
+                }
+            }
         }
 
         parallel_map(thread_pool, by_parent.into_iter(), |(_parent, files)| {
             for file_info in files {
                 let path = root.join(&file_info.relative_path);
-                let f = std::fs::File::create(&path).unwrap_or_else(|err| {
-                    fatal!(log, "Failed to create file {}: {}", path.display(), err)
-                });
-                f.set_len(file_info.size_bytes).unwrap_or_else(|err| {
-                    fatal!(
-                        log,
-                        "Failed to truncate file {} to size {}: {}",
-                        path.display(),
-                        file_info.size_bytes,
-                        err
-                    )
-                });
+                Self::create_file_and_set_len(log, &path, file_info.size_bytes);
             }
         });
     }
 
-    /// Creates all the files listed in the manifest and resizes them to their
-    /// expected sizes.  This way we won't have to worry about creating parent
-    /// directories when we receive chunks.
-    pub(crate) fn preallocate_layout(
-        log: &ReplicaLogger,
-        root: &Path,
-        manifest: &Manifest,
-        metrics: &StateSyncMetrics,
-        thread_pool: &mut scoped_threadpool::Pool,
-    ) {
-        let _timer = metrics
-            .step_duration
-            .with_label_values(&[LABEL_PREALLOCATE])
-            .start_timer();
-
-        let unique_dirs_size = Self::preallocate_layout_directories(log, root, manifest, metrics);
-        Self::preallocate_layout_files(log, root, unique_dirs_size, manifest, metrics, thread_pool);
+    /// Creates a file and sets its length.
+    /// Panics if the file cannot be created or its length cannot be set.
+    fn create_file_and_set_len(log: &ReplicaLogger, path: &Path, size: u64) -> std::fs::File {
+        let f = std::fs::File::create(path)
+            .unwrap_or_else(|err| fatal!(log, "Failed to create file {}: {}", path.display(), err));
+        f.set_len(size).unwrap_or_else(|err| {
+            fatal!(
+                log,
+                "Failed to truncate file {} to size {}: {}",
+                path.display(),
+                size,
+                err
+            )
+        });
+        f
     }
 
     /// Marks the source file as readonly and creates a hard link to the destination.
     ///
     /// If the source file is writable, it will be marked as readonly.
     /// Any existing file at the destination will be removed.
-    fn mark_readonly_and_hardlink_file(
-        _log: &ReplicaLogger,
-        src: &Path,
-        dst: &Path,
-    ) -> std::io::Result<()> {
+    fn mark_readonly_and_hardlink_file(src: &Path, dst: &Path) -> std::io::Result<()> {
         let src_metadata = src.metadata()?;
         let mut permissions = src_metadata.permissions();
         if !permissions.readonly() {
@@ -412,6 +437,10 @@ impl IncompleteState {
 
         // hard_link() requires the destination to not exist.
         if dst.exists() {
+            debug_assert!(
+                false,
+                "destination file should not exist as we don't preallocate it"
+            );
             std::fs::remove_file(dst)?;
         }
 
@@ -441,7 +470,7 @@ impl IncompleteState {
         info!(
             log,
             "state sync: hardlink_files for {} files {} validation",
-            diff_script.copy_files.len(),
+            diff_script.hardlink_files.len(),
             if self.should_validate(validate_data) {
                 "with"
             } else {
@@ -452,7 +481,7 @@ impl IncompleteState {
         let corrupted_chunks = Arc::new(Mutex::new(Vec::new()));
 
         thread_pool.scoped(|scope| {
-            for (new_index, old_index) in diff_script.copy_files.iter() {
+            for (new_index, old_index) in diff_script.hardlink_files.iter() {
                 let src_path = root_old.join(&manifest_old.file_table[*old_index].relative_path);
                 let dst_path = root_new.join(&manifest_new.file_table[*new_index].relative_path);
                 let corrupted_chunks = Arc::clone(&corrupted_chunks);
@@ -576,7 +605,7 @@ impl IncompleteState {
                             // All the hash sums and the file size match, so we can
                             // simply hardlink the whole file.  That's much faster than
                             // copying one chunk at a time.
-                            Self::mark_readonly_and_hardlink_file(log, &src_path, &dst_path).unwrap_or_else(|err| {
+                            Self::mark_readonly_and_hardlink_file(&src_path, &dst_path).unwrap_or_else(|err| {
                                 fatal!(
                                     log,
                                     "Failed to hardlink file from {} to {}: {}",
@@ -590,20 +619,9 @@ impl IncompleteState {
                                 .remaining
                                 .sub(new_chunk_range.len() as i64);
                         } else {
+                            let dst = Self::create_file_and_set_len(log, &dst_path, manifest_new.file_table[*new_index].size_bytes);
                             // Copy the chunks that passed validation to the
                             // destination, the rest will be fetched and applied later.
-                            let dst = std::fs::OpenOptions::new()
-                                .write(true)
-                                .create(false)
-                                .open(&dst_path)
-                                .unwrap_or_else(|err| {
-                                    fatal!(
-                                        log,
-                                        "Failed to open file {}: {}",
-                                        dst_path.display(),
-                                        err
-                                    )
-                                });
                             for idx in old_chunk_range {
                                 if bad_chunks.contains(&idx) {
                                     continue;
@@ -658,7 +676,7 @@ impl IncompleteState {
                     } else {
                         // Since we do not validate in this else branch, we can simply hardlink the
                         // file without any extra work
-                        Self::mark_readonly_and_hardlink_file(log, &src_path, &dst_path).unwrap_or_else(|err| {
+                        Self::mark_readonly_and_hardlink_file(&src_path, &dst_path).unwrap_or_else(|err| {
                             fatal!(
                                 log,
                                 "Failed to hardlink file from {} to {}: {}",
@@ -949,15 +967,11 @@ impl IncompleteState {
         match state_layout.promote_scratchpad_to_unverified_checkpoint(scratchpad_layout, height) {
             Ok(_) => {
                 let elapsed = started_at.elapsed();
-                metrics
-                    .state_sync_metrics
-                    .duration
-                    .with_label_values(&["ok"])
-                    .observe(elapsed.as_secs_f64());
-
                 info!(
                     log,
-                    "Successfully completed sync of state {} in {:?}", height, elapsed
+                    "state sync: elapsed since start: {:?}, successfully made checkpoint at height {}",
+                    elapsed,
+                    height
                 );
                 true
             }
@@ -1008,12 +1022,11 @@ impl IncompleteState {
     /// that we have locally.
     /// Returns a set of chunks that still need to be fetched
     fn initialize_state_on_disk(&self, manifest_new: &Manifest) -> HashSet<usize> {
-        Self::preallocate_layout(
+        let unique_dirs_size = Self::preallocate_layout_directories(
             &self.log,
             &self.root,
             manifest_new,
             &self.metrics.state_sync_metrics,
-            &mut self.thread_pool.lock().unwrap(),
         );
 
         let state_sync_size_fetch = self
@@ -1159,7 +1172,7 @@ impl IncompleteState {
                 (diff_script.zeros_chunks * crate::state_sync::types::DEFAULT_CHUNK_SIZE) as u64;
 
             let hardlink_files_bytes: u64 = diff_script
-                .copy_files
+                .hardlink_files
                 .keys()
                 .map(|i| manifest_new.file_table[*i].size_bytes)
                 .sum();
@@ -1178,6 +1191,16 @@ impl IncompleteState {
                 .sub(diff_script.zeros_chunks as i64);
 
             let mut thread_pool = self.thread_pool.lock().unwrap();
+            Self::preallocate_layout_files(
+                &self.log,
+                &self.root,
+                unique_dirs_size,
+                manifest_new,
+                Some(&diff_script),
+                &self.metrics.state_sync_metrics,
+                &mut thread_pool,
+            );
+
             self.hardlink_files(
                 &self.log,
                 &self.metrics.state_sync_metrics,
@@ -1190,6 +1213,17 @@ impl IncompleteState {
                 validate_data,
                 &mut fetch_chunks,
             );
+
+            #[cfg(debug_assertions)]
+            {
+                // All files should be present with the expected size before copying chunks,
+                // either as a result of preallocation or hardlinking
+                for file in manifest_new.file_table.iter() {
+                    let path = self.root.join(&file.relative_path);
+                    let size = std::fs::metadata(&path).expect("file should exist").len();
+                    debug_assert_eq!(size, file.size_bytes);
+                }
+            }
 
             self.copy_chunks(
                 &self.log,
@@ -1210,6 +1244,15 @@ impl IncompleteState {
                 self.log,
                 "Initializing state sync for height {} without any caches or previous checkpoints",
                 self.height
+            );
+            Self::preallocate_layout_files(
+                &self.log,
+                &self.root,
+                unique_dirs_size,
+                manifest_new,
+                None,
+                &self.metrics.state_sync_metrics,
+                &mut self.thread_pool.lock().unwrap(),
             );
             let non_zero_chunks = filter_out_zero_chunks(manifest_new);
             let diff_bytes: u64 = non_zero_chunks
@@ -1511,6 +1554,12 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                             manifest.clone(),
                             Arc::new(meta_manifest.clone()),
                         );
+                        self.metrics
+                            .state_sync_metrics
+                            .duration
+                            .with_label_values(&["ok"])
+                            .observe(self.started_at.elapsed().as_secs_f64());
+
                         self.state = DownloadState::Complete;
                         Ok(())
                     } else {
@@ -1724,6 +1773,12 @@ impl Chunkable<StateSyncMessage> for IncompleteState {
                         manifest.clone(),
                         Arc::new(meta_manifest.clone()),
                     );
+                    self.metrics
+                        .state_sync_metrics
+                        .duration
+                        .with_label_values(&["ok"])
+                        .observe(self.started_at.elapsed().as_secs_f64());
+
                     self.state = DownloadState::Complete;
 
                     // Delay delivery of artifact

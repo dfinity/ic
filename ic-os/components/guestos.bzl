@@ -51,6 +51,7 @@ component_files = {
     Label("guestos/init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
     Label("guestos/init/mount-config/mount-config.sh"): "/opt/ic/bin/mount-config.sh",
     Label("guestos/init/mount-config/mount-config.service"): "/etc/systemd/system/mount-config.service",
+    Label("guestos/init/mount-config/maybe-disable-store-mounts.service"): "/etc/systemd/system/maybe-disable-store-mounts.service",
     Label("guestos/init/init-config/init-config.sh"): "/opt/ic/bin/init-config.sh",
     Label("guestos/init/init-config/init-config.service"): "/etc/systemd/system/init-config.service",
     Label("guestos/init/setup-encryption/setup-data-encryption.sh"): "/opt/ic/bin/setup-data-encryption.sh",
@@ -59,7 +60,6 @@ component_files = {
     Label("guestos/init/setup-encryption/override.conf"): "/etc/systemd/system/systemd-fsck@dev-mapper-var_crypt.service.d/override.conf",
     Label("guestos/init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",
     Label("guestos/init/setup-lvs/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
-    Label("guestos/guest-upgrade-client/guest-upgrade-client.service"): "/etc/systemd/system/guest-upgrade-client.service",
 
     # misc
     Label("misc/config/config-guestos.sh"): "/opt/ic/bin/config.sh",
@@ -69,6 +69,7 @@ component_files = {
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",
+    Label("misc/sev/99-sev.rules"): "/etc/udev/rules.d/99-sev.rules",
     Label("guestos/misc/ic-node.conf"): "/etc/tmpfiles.d/ic-node.conf",
     Label("guestos/misc/sudoers"): "/etc/sudoers",
     Label("guestos/misc/crypttab"): "/etc/crypttab",
@@ -80,6 +81,7 @@ component_files = {
     Label("misc/log-config/log-config.sh"): "/opt/ic/bin/log-config.sh",
     Label("guestos/misc/sync_fstrim.sh"): "/opt/ic/bin/sync_fstrim.sh",
     Label("misc/systemd-user/user@.service"): "/etc/systemd/system/user@.service",
+    Label("guestos/guest-upgrade-client/guest-upgrade-client.service"): "/etc/systemd/system/guest-upgrade-client.service",
 
     # monitoring
     Label("monitoring/guestos/ipv4-connectivity-check/ipv4-connectivity-check.sh"): "/opt/ic/bin/ipv4-connectivity-check.sh",

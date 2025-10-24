@@ -126,7 +126,6 @@ impl OngoingStateSync {
                 Some(download_result) = self.downloading_chunks.join_next() => {
                     match download_result {
                         Ok((result, chunk_id)) => {
-                            // 5-10min when state sync restarts.
                             self.peer_state.entry(result.peer_id).and_modify(|peer| { peer.deregister_download();});
                             self.handle_downloaded_chunk_result(chunk_id, result);
                             self.spawn_chunk_downloads(cancellation.clone(), tracker.clone()).await;
@@ -198,6 +197,7 @@ impl OngoingStateSync {
                     let new_partial_state = self.chunks_to_download.next_xor_distance();
                     *self.partial_state.write().unwrap() = new_partial_state;
                 }
+                self.chunks_to_download.download_failed(chunk_id);
             }
             Err(DownloadChunkError::NoContent) => {
                 if self.peer_state.remove(&peer_id).is_some() {
@@ -217,12 +217,17 @@ impl OngoingStateSync {
                 }
                 self.chunks_to_download.download_failed(chunk_id);
             }
-            Err(err) => {
+            Err(
+                err @ (DownloadChunkError::Overloaded
+                | DownloadChunkError::Timeout
+                | DownloadChunkError::Cancelled),
+            ) => {
                 self.peer_state.entry(peer_id).and_modify(|peer| {
                     peer.deregister_download();
                 });
 
                 info!(
+                    every_n_seconds => 15,
                     self.log,
                     "STATE_SYNC: Failed to download chunk {} from {}: {} ", chunk_id, peer_id, err
                 );

@@ -3,9 +3,11 @@ mod framework;
 
 use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
+use ic_consensus::consensus::{MAX_CONSENSUS_THREADS, build_thread_pool};
 use ic_consensus_certification::CertifierImpl;
 use ic_consensus_dkg::{DkgKeyManager, get_dkg_summary_from_cup_contents};
 use ic_consensus_utils::pool_reader::PoolReader;
+use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::Labeled;
@@ -15,8 +17,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_test_utilities::{
-    crypto::CryptoReturningOk, ingress_selector::FakeIngressSelector,
-    message_routing::FakeMessageRouting,
+    ingress_selector::FakeIngressSelector, message_routing::FakeMessageRouting,
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     xnet_payload_builder::FakeXNetPayloadBuilder,
 };
@@ -167,6 +168,7 @@ fn consensus_produces_expected_batches() {
             dkg_key_manager.clone(),
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
+            build_thread_pool(MAX_CONSENSUS_THREADS),
             Arc::clone(&time_source) as Arc<_>,
             0,
             MaliciousFlags::default(),

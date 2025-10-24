@@ -115,6 +115,7 @@ members = [
     "rs/crypto/test_utils",
     "rs/crypto/test_utils/canister_sigs",
     "rs/crypto/test_utils/canister_threshold_sigs",
+    "rs/crypto/test_utils/crypto_returning_ok",
     "rs/crypto/test_utils/csp",
     "rs/crypto/test_utils/keygen",
     "rs/crypto/test_utils/keys",
@@ -596,7 +597,7 @@ assert_cmd = "2.0.16"
 assert_matches = "1.5.0"
 async-recursion = "1.0.5"
 async-stream = "0.3.6"
-async-trait = "0.1.83"
+async-trait = "0.1.89"
 axum = { version = "0.8.4", features = ["ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
@@ -712,7 +713,7 @@ indoc = "1.0.9"
 inferno = "0.12.0"
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
-jsonrpc = { version = "0.18.0", features = ["minreq_http"] }
+jsonrpc = "0.18.0"
 k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
     "ecdsa",
