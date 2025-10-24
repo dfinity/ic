@@ -538,6 +538,12 @@ where
                     &fee.clone().or(block.effective_fee.clone()),
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
+                Operation::FeeCollector {
+                    fee_collector,
+                    caller,
+                } => {
+                    panic!("not implemented")
+                }
             }
         }
         self.post_process_ledger_blocks(blocks);

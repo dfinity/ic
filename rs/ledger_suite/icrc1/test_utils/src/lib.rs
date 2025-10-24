@@ -223,6 +223,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Burn { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Mint { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
+                Operation::FeeCollector { .. } => None,
             };
 
             Block {
@@ -539,19 +540,19 @@ impl TransactionsAndBalances {
                 if let Some(spender_account) = spender {
                     let used_allowance = amount.get_e8s() + fee;
                     self.allowances.entry((from, spender_account)).and_modify(
-                        |current_allowance| {
-                            let current_amount = current_allowance.get_e8s();
-                            *current_allowance = Tokens::from_e8s(
-                                current_amount
-                                    .checked_sub(used_allowance)
-                                    .unwrap_or_else(|| {
-                                        panic!(
-                                            "Allowance {current_amount} not enough to cover amount and fee {used_allowance} - from: {from}, to: {to}, spender: {spender_account}"
-                                        )
-                                    }),
+                                |current_allowance| {
+                                    let current_amount = current_allowance.get_e8s();
+                                    *current_allowance = Tokens::from_e8s(
+                                        current_amount
+                                            .checked_sub(used_allowance)
+                                            .unwrap_or_else(|| {
+                                                panic!(
+                                                    "Allowance {current_amount} not enough to cover amount and fee {used_allowance} - from: {from}, to: {to}, spender: {spender_account}"
+                                                )
+                                            }),
+                                    );
+                                },
                             );
-                        },
-                    );
 
                     // Remove allowance entry if it's now zero
                     if let Some(allowance) = self.allowances.get(&(from, spender_account))
@@ -576,6 +577,12 @@ impl TransactionsAndBalances {
                     })
                     .or_insert(amount);
                 self.debit(from, fee);
+            }
+            Operation::FeeCollector {
+                fee_collector,
+                caller,
+            } => {
+                panic!("not implemented")
             }
         };
         self.transactions.push(tx);
@@ -603,6 +610,12 @@ impl TransactionsAndBalances {
                 // Check if the from account should be added/removed from valid_allowance_from
                 // (allowance was added/modified for this account)
                 self.check_and_update_account_validity(*from, default_fee);
+            }
+            Operation::FeeCollector {
+                fee_collector,
+                caller,
+            } => {
+                panic!("not implemented")
             }
         }
     }

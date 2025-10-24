@@ -80,6 +80,21 @@ pub enum Operation<Tokens: TokensType> {
         #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
+    #[serde(rename = "107feecol")]
+    FeeCollector {
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "compact_account::opt"
+        )]
+        fee_collector: Option<Account>,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "compact_account::opt"
+        )]
+        caller: Option<Account>,
+    },
 }
 
 // A [Transaction] but flattened meaning that [Operation]
@@ -131,6 +146,16 @@ struct FlattenedTransaction<Tokens: TokensType> {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     expires_at: Option<u64>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "compact_account::opt")]
+    fee_collector: Option<Account>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "compact_account::opt")]
+    caller: Option<Account>,
 }
 
 impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
@@ -194,6 +219,7 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Mint { .. } => "mint",
                 Transfer { .. } => "xfer",
                 Approve { .. } => "approve",
+                FeeCollector { .. } => "107feecol",
             }
             .into(),
             from: match &t.operation {
@@ -214,12 +240,14 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 | Mint { amount, .. }
                 | Transfer { amount, .. }
                 | Approve { amount, .. } => amount.clone(),
+                FeeCollector { .. } => Tokens::zero(),
             },
             fee: match &t.operation {
                 Transfer { fee, .. }
                 | Approve { fee, .. }
                 | Mint { fee, .. }
                 | Burn { fee, .. } => fee.to_owned(),
+                FeeCollector { .. } => None,
             },
             expected_allowance: match &t.operation {
                 Approve {
@@ -229,6 +257,14 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
             },
             expires_at: match &t.operation {
                 Approve { expires_at, .. } => expires_at.to_owned(),
+                _ => None,
+            },
+            fee_collector: match &t.operation {
+                FeeCollector { fee_collector, .. } => fee_collector.to_owned(),
+                _ => None,
+            },
+            caller: match &t.operation {
+                FeeCollector { caller, .. } => caller.to_owned(),
                 _ => None,
             },
         }
@@ -421,6 +457,12 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                     return Err(e);
                 }
             }
+            Operation::FeeCollector {
+                fee_collector,
+                caller,
+            } => {
+                panic!("not implemented")
+            }
         }
         Ok(())
     }
@@ -553,6 +595,17 @@ impl<Tokens: TokensType> TryFrom<icrc_ledger_types::icrc3::transactions::Transac
                     });
                 }
             }
+        }
+        if let Some(fee_collector) = value.fee_collector {
+            let operation = Operation::FeeCollector {
+                fee_collector: fee_collector.fee_collector,
+                caller: fee_collector.caller,
+            };
+            return Ok(Self {
+                operation: operation,
+                created_at_time: fee_collector.created_at_time,
+                memo: None,
+            });
         }
         Err("Transaction has neither mint, burn nor transfer operation".to_owned())
     }
