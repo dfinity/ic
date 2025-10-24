@@ -919,6 +919,27 @@ http_archive(
     url = "https://github.com/rclone/rclone/releases/download/v1.69.2/rclone-v1.69.2-linux-amd64.zip",
 )
 
+http_archive(
+    name = "trivy-x86_64-linux",
+    build_file = "@//third_party:BUILD.trivy.bazel",
+    sha256 = "ebc1dd4d4c0594028d6a501dfc1a73d56add20b29d3dee5ab6e64aac94b1d526",
+    url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_Linux-64bit.tar.gz",
+)
+
+http_archive(
+    name = "trivy-aarch64-darwin",
+    build_file = "@//third_party:BUILD.trivy.bazel",
+    sha256 = "343fb01737e886bde797f30e5e6359fc1a7b7e1e9807f0e62ae3aea3f9508a1a",
+    url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_macOS-ARM64.tar.gz",
+)
+
+http_archive(
+    name = "trivy-x86_64-darwin",
+    build_file = "@//third_party:BUILD.trivy.bazel",
+    sha256 = "165c501451ab91a486678107c34bfb7b0b9e117c8ed5bba746ebda31923d9330",
+    url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_macOS-64bit.tar.gz",
+)
+
 # even if the macOS version is "x86_64" it runs on ARM chips because of
 # emulation
 http_archive(

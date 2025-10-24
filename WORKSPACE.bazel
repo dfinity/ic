@@ -163,11 +163,6 @@ load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
 
 rules_motoko_dependencies()
 
-# trivy binary for vulnerability scanning
-load("//bazel:trivy.bzl", "trivy_scan")
-
-trivy_scan(name = "trivy")
-
 # ormolu binary for haskell linting
 load("//pre-commit:ormolu.bzl", "ormolu")
 
