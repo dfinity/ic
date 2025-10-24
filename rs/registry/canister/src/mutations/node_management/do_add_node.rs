@@ -1134,35 +1134,45 @@ mod tests {
             node_operator_record.encode_to_vec(),
         )]);
 
-        // Prepare payloads with the same IP address
-        let (payload_1, _) = prepare_add_node_payload(1);
-        let (mut payload_2, _) = prepare_add_node_payload(2);
-        payload_2.http_endpoint.clone_from(&payload_1.http_endpoint);
+        // Prepare an add_node payload.
+        let (template_payload, _) = prepare_add_node_payload(1);
 
         let now = now_system_time();
         let test_ip = connection_endpoint_from_string(&payload_1.http_endpoint).ip_addr;
 
+        let add_node_payload_with_same_ip = |i| {
+            let (mut new_payload, _) = prepare_add_node_payload(i);
+            new_payload
+                .http_endpoint
+                .clone_from(&template_payload.http_endpoint);
+            new_payload
+        };
+
         // Check that we start with capacity available
         let initial_capacity = get_available_add_node_capacity(test_ip.clone(), now);
-        assert_eq!(initial_capacity, 7, "Should start with 1 capacity");
+        assert_eq!(initial_capacity, 7, "Should start with 7 capacity");
 
         // Act: Add first node with a specific IP - should succeed
-        let result_1 = registry.do_add_node_(payload_1.clone(), node_operator_id, now);
+        let result_1 =
+            registry.do_add_node_(add_node_payload_with_same_ip(1), node_operator_id, now);
         assert!(result_1.is_ok(), "First node addition should succeed");
 
-        let after_first_capacity = get_available_add_node_capacity(test_ip.clone(), now);
-        assert_eq!(
-            after_first_capacity, 6,
-            "Capacity should be exhausted after first node"
-        );
+        assert_eq!(get_available_add_node_capacity(test_ip.clone(), now), 6,);
 
-        for _ in 0..6 {
+        // The next 6 should also succeed.
+        for i in 2..=7 {
             registry
-                .do_add_node_(prepare_add_node_payload(1).0, node_operator_id, now)
+                .do_add_node_(add_node_payload_with_same_ip(i), node_operator_id, now)
                 .unwrap();
         }
+        assert_eq!(
+            get_available_add_node_capacity(test_ip.clone(), now),
+            0,
+            "Capacity should be exhausted after 7 nodes"
+        );
 
-        let result_2 = registry.do_add_node_(prepare_add_node_payload(1).0, node_operator_id, now);
+        let new_payload = add_node_payload_with_same_ip(8);
+        let result_2 = registry.do_add_node_(new_payload.clone(), node_operator_id, now);
         assert!(
             result_2.is_err(),
             "Second node addition should fail due to rate limiting"
@@ -1181,7 +1191,7 @@ mod tests {
             "Capacity should be restored after 24 hours"
         );
 
-        let result_3 = registry.do_add_node_(payload_1.clone(), node_operator_id, one_day_later);
+        let result_3 = registry.do_add_node_(new_payload, node_operator_id, one_day_later);
         assert!(
             result_3.is_ok(),
             "Node addition should succeed after 24 hours"
@@ -1204,26 +1214,16 @@ mod tests {
             node_operator_record.encode_to_vec(),
         )]);
 
-        // Prepare payloads with different IP addresses
-        let (payload_1, _) = prepare_add_node_payload(1);
-        let (payload_2, _) = prepare_add_node_payload(2);
-
-        assert_ne!(
-            payload_1.http_endpoint, payload_2.http_endpoint,
-            "Payloads should have different IPs"
-        );
-
         let now = now_system_time();
 
-        // Act: Add first node
-        let result_1 = registry.do_add_node_(payload_1, node_operator_id, now);
-        assert!(result_1.is_ok(), "First node addition should succeed");
-
-        // Act: Add second node with different IP immediately - should succeed
-        let result_2 = registry.do_add_node_(payload_2, node_operator_id, now);
-        assert!(
-            result_2.is_ok(),
-            "Second node addition with different IP should succeed"
-        );
+        // Add 8 nodes with different IP address at the same time
+        for i in 0..8 {
+            let (payload, _) = prepare_add_node_payload(i);
+            let result = registry.do_add_node_(payload, node_operator_id, now);
+            assert!(
+                result.is_ok(),
+                "Attempt {i} should succeed but got {result:?}"
+            );
+        }
     }
 }
