@@ -53,6 +53,16 @@ enum GenericIdentityType {
     // TODO webauthn
 }
 
+impl GenericIdentityType {
+    fn random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
+        if rng.r#gen::<bool>() {
+            Self::EcdsaSecp256k1
+        } else {
+            Self::Ed25519
+        }
+    }
+}
+
 struct GenericIdentity {
     identity: Box<dyn Identity>,
     principal: Principal,
@@ -140,11 +150,7 @@ pub fn requests_with_delegations(env: TestEnv) {
                 let mut identities = Vec::with_capacity(delegation_count + 1);
 
                 for _ in 0..(delegation_count + 1) {
-                    let id_type = if rng.r#gen::<bool>() {
-                        GenericIdentityType::EcdsaSecp256k1
-                    } else {
-                        GenericIdentityType::Ed25519
-                    };
+                    let id_type = GenericIdentityType::random(rng);
                     identities.push(GenericIdentity::new(id_type, rng));
                 }
 
