@@ -32,17 +32,14 @@ pub fn get_blessed_guest_launch_measurements_from_registry(
                 .unwrap_or_default()
                 .guest_launch_measurements
         })
-        .map(|measurement| {
+        .flat_map(|measurement| {
             measurement
                 .encoded_measurement
-                .map(|encoded| {
-                    base64::decode(encoded)
-                        .map_err(|err| format!("Failed to decode replica measurement: {err}"))
-                })
-                .unwrap_or_else(|| {
-                    #[allow(deprecated)]
-                    Ok(measurement.measurement)
-                })
+                .ok_or("No encoded measurement found".to_string())
+        })
+        .map(|measurement| {
+            base64::decode(measurement)
+                .map_err(|err| format!("Failed to decode replica measurement: {err}"))
         })
         .collect::<Result<_, _>>()?;
 
@@ -69,8 +66,6 @@ mod tests {
                 guest_launch_measurements: measurements
                     .iter()
                     .map(|m| GuestLaunchMeasurement {
-                        #[allow(deprecated)]
-                        measurement: m.as_ref().to_vec(),
                         metadata: None,
                         encoded_measurement: Some(base64::encode(m)),
                     })
