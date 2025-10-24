@@ -2174,14 +2174,14 @@ impl PocketIcSubnets {
         };
 
         let nns_subnet = self.nns_subnet.clone().expect(
-            "The NNS subnet is supposed to already exist if the `nns_ui` ICP feature is specified.",
+            "The NNS subnet is supposed to already exist if the `canister_migration` ICP feature is specified.",
         );
 
         if !nns_subnet
             .state_machine
             .canister_exists(MIGRATION_CANISTER_ID)
         {
-            // Create the NNS dapp canister with its ICP mainnet settings.
+            // Create the canister migration orchestrator canister with its ICP mainnet settings.
             // These settings have been obtained by calling
             // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"sbzkb-zqaaa-aaaaa-aaaiq-cai";})' --ic`:
             //     settings = record {
