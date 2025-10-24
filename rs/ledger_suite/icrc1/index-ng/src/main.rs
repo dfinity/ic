@@ -989,6 +989,9 @@ fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
         Operation::Mint { to, .. } => vec![to],
         Operation::Transfer { from, to, .. } => vec![from, to],
         Operation::Approve { from, .. } => vec![from],
+        Operation::FeeCollector { fee_collector, .. } => {
+            panic!("not implemented")
+        }
     }
 }
 
