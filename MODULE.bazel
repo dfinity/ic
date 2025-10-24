@@ -898,7 +898,7 @@ http_archive(
 http_archive(
     name = "ruff-x86_64-darwin",
     build_file = "@//third_party:BUILD.ruff.bazel",
-    sha256 = "e554d55281391138e44b30ccd38c666388e4aeb05417c9ffb98a6cbb014aef0d",
+    sha256 = "44039cea2aed4787cedcda0c35e5b352530d6ca2178f39c8bd4ff63526c43aef",
     strip_prefix = "ruff-x86_64-apple-darwin",
     url = "https://github.com/astral-sh/ruff/releases/download/0.6.8/ruff-x86_64-apple-darwin.tar.gz",
 )
