@@ -501,6 +501,7 @@ mod tests {
     use rand::{Rng, RngCore};
     use tempfile::TempDir;
 
+    const INIT_NUM_VERSIONS: usize = 5;
     const TEST_POLL_DELAY: Duration = Duration::from_secs(1);
     const DELAY_LEEWAY: Duration = Duration::from_millis(200);
 
@@ -765,24 +766,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_new_replicator_works_on_initialized_store_and_client_sees_it() {
-        let num_versions = 10;
-        let replicator = new_locally_initialized_replicator(num_versions).await;
+        let replicator = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
         assert_eq!(
             replicator.registry_client.get_latest_version(),
-            RegistryVersion::from(num_versions as u64)
-        )
+            RegistryVersion::from(INIT_NUM_VERSIONS as u64)
+        );
     }
 
     #[tokio::test]
     async fn test_set_local_registry_data_works() {
-        let source_num_versions = 5;
-        let source = new_locally_initialized_replicator(source_num_versions).await;
-        let target = new_locally_initialized_replicator(2).await;
+        let source = new_locally_initialized_replicator(2 * INIT_NUM_VERSIONS).await;
+        let target = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
 
         target.set_local_registry_data(source.get_local_store().as_ref());
         assert_eq!(
             target.registry_client.get_latest_version(),
-            RegistryVersion::from(source_num_versions as u64)
+            RegistryVersion::from(2 * INIT_NUM_VERSIONS as u64)
         );
         assert_eq!(
             target
@@ -801,7 +800,7 @@ mod tests {
     async fn test_poll_panics_without_nns_pub_key_nor_in_store_nor_in_config() {
         let (_pocket_ic, nns_urls, _nns_pub_key) = PocketIcHelper::setup().await;
 
-        let replicator = new_test_replicator(Some(5), nns_urls, None).await;
+        let replicator = new_test_replicator(Some(INIT_NUM_VERSIONS), nns_urls, None).await;
 
         replicator.poll().await.unwrap();
     }
@@ -811,7 +810,8 @@ mod tests {
     async fn test_poll_panics_without_nns_urls_nor_in_store_nor_in_config() {
         let (_pocket_ic, _nns_urls, nns_pub_key) = PocketIcHelper::setup().await;
 
-        let replicator = new_test_replicator(Some(5), vec![], Some(nns_pub_key)).await;
+        let replicator =
+            new_test_replicator(Some(INIT_NUM_VERSIONS), vec![], Some(nns_pub_key)).await;
 
         replicator.poll().await.unwrap();
     }
@@ -907,7 +907,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_start_polling_twice_fails() {
-        let replicator = new_locally_initialized_replicator(10).await;
+        let replicator = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
         let token = CancellationToken::new();
 
         let fut = replicator.start_polling(token.clone());
@@ -919,14 +919,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_stop_polling_idempotent() {
-        let replicator = new_locally_initialized_replicator(5).await;
+        let replicator = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
         assert!(!replicator.cancelled.load(Ordering::Relaxed));
         replicator.stop_polling();
         assert!(replicator.cancelled.load(Ordering::Relaxed));
         replicator.stop_polling();
-        let new_num_versions = 10;
         replicator.stop_polling_and_set_local_registry_data(
-            new_locally_initialized_replicator(new_num_versions)
+            new_locally_initialized_replicator(2 * INIT_NUM_VERSIONS)
                 .await
                 .get_local_store()
                 .as_ref(),
@@ -934,7 +933,7 @@ mod tests {
         replicator.stop_polling();
         assert_eq!(
             replicator.registry_client.get_latest_version(),
-            RegistryVersion::from(new_num_versions as u64)
+            RegistryVersion::from(2 * INIT_NUM_VERSIONS as u64)
         );
     }
 
