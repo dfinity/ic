@@ -223,7 +223,7 @@ MAINNET_NNS_CANISTER_DATA = [
     "@mainnet_sns-root-canister//file",
     "@mainnet_sns-swap-canister//file",
     "@nns_governance_canister_test_at_mainnet_commit//file",
-    "//rs/migration_canister:migration-canister", # the migration canister is not yet deployed to the ICP mainnet
+    "//rs/migration_canister:migration-canister",  # the migration canister is not yet deployed to the ICP mainnet
 ]
 
 MAINNET_NNS_CANISTER_ENV = {
