@@ -877,6 +877,32 @@ http_archive(
     url = "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-linux-amd64.tar.gz",
 )
 
+# ruff, python linter & formatter
+
+http_archive(
+    name = "ruff-x86_64-linux",
+    build_file = "@//third_party:BUILD.ruff.bazel",
+    sha256 = "7edce7075bf6d43b1ef2a9383b76a43310bbf5d70fa4471330fd5aaf655192b0",
+    strip_prefix = "ruff-x86_64-unknown-linux-gnu",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.6.8/ruff-x86_64-unknown-linux-gnu.tar.gz",
+)
+
+http_archive(
+    name = "ruff-aarch64-darwin",
+    build_file = "@//third_party:BUILD.ruff.bazel",
+    sha256 = "e554d55281391138e44b30ccd38c666388e4aeb05417c9ffb98a6cbb014aef0d",
+    strip_prefix = "ruff-aarch64-apple-darwin",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.6.8/ruff-aarch64-apple-darwin.tar.gz",
+)
+
+http_archive(
+    name = "ruff-x86_64-darwin",
+    build_file = "@//third_party:BUILD.ruff.bazel",
+    sha256 = "e554d55281391138e44b30ccd38c666388e4aeb05417c9ffb98a6cbb014aef0d",
+    strip_prefix = "ruff-x86_64-apple-darwin",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.6.8/ruff-x86_64-apple-darwin.tar.gz",
+)
+
 http_archive(
     name = "rclone-x86_64-darwin",
     build_file = "@//third_party:BUILD.rclone.bazel",

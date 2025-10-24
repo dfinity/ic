@@ -168,11 +168,6 @@ load("//bazel:trivy.bzl", "trivy_scan")
 
 trivy_scan(name = "trivy")
 
-# ruff binary for fast python linting
-load("//pre-commit:ruff.bzl", "ruff")
-
-ruff(name = "ruff")
-
 # ormolu binary for haskell linting
 load("//pre-commit:ormolu.bzl", "ormolu")
 

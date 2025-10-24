@@ -7,12 +7,12 @@ sh_test(
     srcs = ["ruff-lint.sh"],
     data = [
         "//:WORKSPACE.bazel",
-        "@ruff",
+        "//:ruff",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "ruff_path": "$(rootpath @ruff//:ruff)",
+        "ruff_path": "$(rootpath //:ruff)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
@@ -26,12 +26,12 @@ sh_binary(
     srcs = ["ruff-format.sh"],
     data = [
         "//:WORKSPACE.bazel",
-        "@ruff",
+        "//:ruff",
     ],
     env = {
         # Hack to escape the sandbox and grep on the actual repository
         "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
-        "ruff_path": "$(rootpath @ruff//:ruff)",
+        "ruff_path": "$(rootpath //:ruff)",
     },
     tags = [
         "external",  # force test to be unconditionally executed.
