@@ -19269,7 +19269,6 @@ dependencies = [
  "ic-logger",
  "ic-management-canister-types-private",
  "ic-metrics",
- "ic-migration-canister",
  "ic-nervous-system-common",
  "ic-nns-common",
  "ic-nns-constants",

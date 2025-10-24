@@ -54,7 +54,6 @@ ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
-ic-migration-canister = { path = "../migration_canister" }
 ic-metrics = { path = "../monitoring/metrics" }
 ic-nervous-system-common = { path = "../nervous_system/common" }
 ic-nns-common = { path = "../nns/common" }
