@@ -15,6 +15,9 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//packages/canlog",
+        "//packages/ic-http-types",
+        "//packages/ic-metrics-assert:ic-metrics-assert_pocket_ic",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/ic-http-types",
         "//packages/pocket-ic",

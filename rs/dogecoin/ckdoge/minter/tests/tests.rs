@@ -3,6 +3,8 @@ use ic_ckdoge_minter::candid_api::{RetrieveDogeWithApprovalArgs, RetrieveDogeWit
 use ic_ckdoge_minter_test_utils::{
     DOGECOIN_ADDRESS_1, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap,
 };
+use std::array;
+use std::time::Duration;
 
 #[test]
 fn should_fail_withdrawal() {
@@ -194,6 +196,7 @@ mod deposit {
                     kyt_fee: Some(0),
                 }))),
                 created_at_time: None,
+                fee: None,
             });
 
         minter.assert_that_events().contains_only_once_in_order(&[
@@ -352,4 +355,38 @@ mod withdrawal {
 
         let _txid = minter.await_doge_transaction(retrieve_doge_id.block_index);
     }
+}
+
+#[test]
+fn should_refresh_fee_percentiles() {
+    let setup = Setup::default();
+    let dogecoin = setup.dogecoin();
+    let minter = setup.minter();
+    let fee_percentiles = array::from_fn(|i| i as u64);
+    let median_fee = fee_percentiles[50];
+    assert_eq!(median_fee, 50);
+    dogecoin.set_fee_percentiles(fee_percentiles);
+    setup.env.advance_time(Duration::from_secs(60 * 6 + 1));
+    setup.env.tick();
+    setup.env.tick();
+    setup.env.tick();
+
+    minter
+        .assert_that_metrics()
+        .assert_contains_metric_matching(format!("ckbtc_minter_median_fee_per_vbyte {median_fee}"));
+}
+
+#[test]
+fn should_get_logs() {
+    let setup = Setup::default();
+    let minter = setup.minter();
+
+    let logs = minter.get_logs();
+    let init_log = logs.first().unwrap();
+
+    assert!(
+        init_log.message.contains("[init]"),
+        "Expected first log message to be for canister initialization but got: {}",
+        init_log.message
+    );
 }

@@ -7,6 +7,7 @@ package(default_visibility = ["//visibility:public"])
 
 LIB_DEPS = [
     # Keep sorted.
+    "//packages/canlog",
     "//packages/ic-dummy-getrandom-for-wasm",
     "//packages/ic-http-types",
     "//packages/ic-secp256k1",
@@ -16,7 +17,6 @@ LIB_DEPS = [
     "//rs/crypto/sha2",
     "//rs/ledger_suite/common/ledger_core",
     "//rs/ledger_suite/icrc1/ledger",
-    "//rs/rust_canisters/canister_log",
     "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/utils/ensure",
@@ -43,6 +43,7 @@ LIB_DEPS = [
 
 LIB_PROC_MACRO_DEPS = [
     # Keep sorted.
+    "//packages/canlog_derive",
     "@crate_index//:async-trait",
     "@crate_index//:minicbor-derive",
 ]
@@ -99,7 +100,6 @@ alias(
             "//packages/ic-dummy-getrandom-for-wasm",
             "//packages/ic-http-types",
             "//packages/icrc-ledger-types:icrc_ledger_types",
-            "//rs/rust_canisters/canister_log",
             "@crate_index//:candid",
             "@crate_index//:ic-btc-interface",
             "@crate_index//:ic-cdk",
@@ -218,6 +218,7 @@ rust_ic_test(
     deps = [
         # Keep sorted.
         ":ckbtc_minter_lib",
+        "//packages/canlog",
         "//packages/ic-http-types",
         "//packages/ic-metrics-assert",
         "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -308,7 +309,6 @@ rust_canbench(
         "//packages/ic-dummy-getrandom-for-wasm",
         "//packages/ic-http-types",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/rust_canisters/canister_log",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:ic-cdk",

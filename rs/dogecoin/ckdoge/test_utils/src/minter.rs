@@ -1,17 +1,16 @@
-use crate::MAX_TIME_IN_QUEUE;
 use crate::events::MinterEventAssert;
 use candid::{Decode, Encode, Principal};
-use ic_ckdoge_minter::Log;
+use canlog::LogEntry;
+use ic_ckdoge_minter::Event;
+use ic_ckdoge_minter::Priority;
 use ic_ckdoge_minter::UtxoStatus;
 use ic_ckdoge_minter::candid_api::{
-    GetDogeAddressArgs, RetrieveDogeStatus, RetrieveDogeStatusRequest,
+    GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalArgs,
+    RetrieveDogeWithApprovalError,
 };
-use ic_ckdoge_minter::candid_api::{
-    RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
-};
-use ic_ckdoge_minter::{Event, Txid};
 use ic_ckdoge_minter::{UpdateBalanceArgs, UpdateBalanceError};
 use ic_management_canister_types::CanisterId;
+use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use pocket_ic::{PocketIc, RejectResponse};
 use std::sync::Arc;
 
@@ -119,7 +118,7 @@ impl MinterCanister {
         )
     }
 
-    pub fn get_logs(&self) -> Log {
+    pub fn get_logs(&self) -> Vec<LogEntry<Priority>> {
         use ic_http_types::{HttpRequest, HttpResponse};
 
         let request = HttpRequest {
@@ -138,13 +137,19 @@ impl MinterCanister {
             )
             .expect("BUG: failed to call get_log");
         let response = Decode!(&result, HttpResponse).unwrap();
-        serde_json::from_slice(&response.body).expect("failed to parse ckbtc minter log")
+        serde_json::from_slice::<canlog::Log<Priority>>(&response.body)
+            .expect("failed to parse ckBTC minter log")
+            .entries
     }
 
     pub fn assert_that_events(&self) -> MinterEventAssert {
         MinterEventAssert {
             events: self.get_all_events(),
         }
+    }
+
+    pub fn assert_that_metrics(&self) -> MetricsAssert<&Self> {
+        MetricsAssert::from_http_query(self)
     }
 
     pub fn get_all_events(&self) -> Vec<Event> {
@@ -160,10 +165,6 @@ impl MinterCanister {
         }
     }
 
-    pub fn id(&self) -> CanisterId {
-        self.id
-    }
-
     fn get_events(&self, start: u64, length: u64) -> Vec<Event> {
         use ic_ckdoge_minter::GetEventsArg;
 
@@ -177,5 +178,14 @@ impl MinterCanister {
             )
             .expect("BUG: failed to call get_events");
         Decode!(&call_result, Vec<Event>).unwrap()
+    }
+}
+
+impl PocketIcHttpQuery for &MinterCanister {
+    fn get_pocket_ic(&self) -> &pocket_ic::PocketIc {
+        &self.env
+    }
+    fn get_canister_id(&self) -> candid::Principal {
+        self.id
     }
 }

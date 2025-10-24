@@ -115,7 +115,7 @@ pub fn test(env: TestEnv) {
         &target_version,
         &log,
         sha256,
-        guest_launch_measurements,
+        Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     ));
     info!(log, "TARGET_VERSION: {}", target_version);

@@ -5126,6 +5126,7 @@ fn certified_read_can_certify_ingress_history_entry() {
                 state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
         let path: LabeledTree<()> = LabeledTree::SubTree(flatmap! {
@@ -5440,6 +5441,7 @@ fn certified_read_returns_absence_proof_for_non_existing_entries() {
                 state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
@@ -5516,6 +5518,7 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
                 state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(2),
@@ -5526,6 +5529,7 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
                 state: IngressState::Processing,
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
@@ -5581,6 +5585,7 @@ fn certified_read_can_produce_proof_of_absence() {
                 state: IngressState::Completed(WasmResult::Reply(b"done".to_vec())),
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(3),
@@ -5591,6 +5596,7 @@ fn certified_read_can_produce_proof_of_absence() {
                 state: IngressState::Processing,
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata, None);
 
@@ -6809,6 +6815,7 @@ fn can_recover_ingress_history() {
                 time: ic_types::time::UNIX_EPOCH,
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
 
         state_manager.commit_and_certify(state.clone(), height(2), CertificationScope::Full, None);

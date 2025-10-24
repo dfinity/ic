@@ -194,6 +194,7 @@ rust_canister(
 
 rust_canister(
     name = "sns-governance-canister-test",
+    testonly = True,
     srcs = ["canister/canister.rs"],
     aliases = ALIASES,
     compile_data = [":test_did"],

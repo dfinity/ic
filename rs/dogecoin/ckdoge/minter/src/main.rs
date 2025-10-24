@@ -1,13 +1,12 @@
 use ic_cdk::{init, post_upgrade, query, update};
-use ic_ckbtc_minter::state::read_state;
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
-use ic_ckdoge_minter::candid_api::{
-    GetDogeAddressArgs, RetrieveDogeStatus, RetrieveDogeStatusRequest,
-};
 use ic_ckdoge_minter::{
     DOGECOIN_CANISTER_RUNTIME, Event, EventType, GetEventsArg,
-    candid_api::{RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError},
+    candid_api::{
+        GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalArgs,
+        RetrieveDogeWithApprovalError,
+    },
     lifecycle::init::MinterArg,
     updates,
 };

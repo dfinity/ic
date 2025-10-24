@@ -94,13 +94,13 @@ type UtxoStatus = variant {
     // The minter ignored this UTXO because UTXO's value is too small to pay
     // the check fees.
     ValueTooSmall : Utxo;
-    // The Bitcoin checker considered this UTXO to be tainted.
+    // The Dogecoin checker considered this UTXO to be tainted.
     Tainted : Utxo;
-    // The UTXO passed the Bitcoin check, but the minter failed to mint ckBTC
+    // The UTXO passed the Dogecoin check, but the minter failed to mint ckDOGE
     // because the Ledger was unavailable. Retrying the [update_balance] call
     // should eventually advance the UTXO to the [Minted] state.
     Checked : Utxo;
-    // The UTXO passed the Bitcoin check, and ckBTC has been minted.
+    // The UTXO passed the Dogecoin check, and ckDOGE has been minted.
     Minted : record {
         block_index : nat64;
         minted_amount : nat64;
@@ -142,7 +142,7 @@ type SuspendedReason = variant {
     // The minter ignored this UTXO because UTXO's value is too small to pay
     // the check fees.
     ValueTooSmall;
-    // The Bitcoin checker considered this UTXO to be tainted.
+    // The Dogecoin checker considered this UTXO to be tainted.
     Quarantined;
 };
 

@@ -455,7 +455,7 @@ mod update_balance {
             runtime.expect_caller().return_const(account.owner);
             runtime.expect_id().return_const(MINTER_CANISTER_ID);
             runtime
-                .expect_bitcoin_get_utxos()
+                .expect_get_utxos()
                 .times(num_pages)
                 .returning(move |_| responses.next().unwrap());
         }
@@ -833,7 +833,7 @@ mod update_balance {
 
     fn expect_bitcoin_get_utxos_returning(runtime: &mut MockCanisterRuntime, utxos: Vec<Utxo>) {
         runtime
-            .expect_bitcoin_get_utxos()
+            .expect_get_utxos()
             .return_const(Ok(GetUtxosResponse {
                 utxos,
                 ..get_uxos_response()

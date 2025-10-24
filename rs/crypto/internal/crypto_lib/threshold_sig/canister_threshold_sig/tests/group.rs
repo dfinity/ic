@@ -566,7 +566,7 @@ fn test_mul_n_ct_pippenger_is_correct() -> CanisterThresholdResult<()> {
         for num_terms in 2..20 {
             // generate point-scalar pairs
             let pairs: Vec<_> = (0..num_terms)
-                .map(|_| (random_point_and_scalar(curve_type)))
+                .map(|_| random_point_and_scalar(curve_type))
                 .collect::<Result<Vec<_>, _>>()?;
 
             // create "deep" refs of pairs
