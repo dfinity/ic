@@ -446,7 +446,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::UploadState => {
                 if let Some(method) = self.params.upload_method {
-                    Ok(Box::new(self.recovery.get_upload_and_restart_step(method)))
+                    Ok(Box::new(
+                        self.recovery.get_upload_state_and_restart_step(method),
+                    ))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

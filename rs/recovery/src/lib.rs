@@ -549,8 +549,11 @@ impl Recovery {
 
     /// Return an [UploadAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
-    pub fn get_upload_and_restart_step(&self, upload_method: DataLocation) -> impl Step + use<> {
-        UploadAndRestartStep {
+    pub fn get_upload_state_and_restart_step(
+        &self,
+        upload_method: DataLocation,
+    ) -> impl Step + use<> {
+        UploadStateAndRestartStep {
             logger: self.logger.clone(),
             upload_method,
             work_dir: self.work_dir.clone(),

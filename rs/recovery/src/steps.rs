@@ -593,7 +593,7 @@ impl Step for ValidateReplayStep {
     }
 }
 
-pub struct UploadAndRestartStep {
+pub struct UploadStateAndRestartStep {
     pub logger: Logger,
     pub upload_method: DataLocation,
     pub work_dir: PathBuf,
@@ -603,7 +603,7 @@ pub struct UploadAndRestartStep {
     pub check_ic_replay_height: bool,
 }
 
-impl UploadAndRestartStep {
+impl UploadStateAndRestartStep {
     const CMD_STOP_REPLICA: &str = "sudo systemctl stop ic-replica;";
     // Note that on older versions of IC-OS this service does not exist.
     // So try this operation, but ignore possible failure if service
@@ -632,7 +632,7 @@ impl UploadAndRestartStep {
         set_permissions
     }
 }
-impl Step for UploadAndRestartStep {
+impl Step for UploadStateAndRestartStep {
     fn descr(&self) -> String {
         let replica = match self.upload_method {
             DataLocation::Remote(ip) => &format!("replica {ip}"),

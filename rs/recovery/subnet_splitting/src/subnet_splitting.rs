@@ -25,7 +25,7 @@ use ic_recovery::{
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
-    steps::{AdminStep, Step, UploadAndRestartStep},
+    steps::{AdminStep, Step, UploadStateAndRestartStep},
     util::{DataLocation, SshUser},
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -342,12 +342,12 @@ impl SubnetSplitting {
         )
     }
 
-    fn upload_and_restart_step(
+    fn upload_state_and_restart_step(
         &self,
         target_subnet: TargetSubnet,
     ) -> RecoveryResult<impl Step + use<>> {
         match self.upload_node(target_subnet) {
-            Some(node_ip) => Ok(UploadAndRestartStep {
+            Some(node_ip) => Ok(UploadStateAndRestartStep {
                 logger: self.recovery.logger.clone(),
                 upload_method: DataLocation::Remote(node_ip),
                 work_dir: self.layout.work_dir(target_subnet),
@@ -617,14 +617,14 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
             }
 
             StepType::ProposeCupForSourceSubnet => self.propose_cup(TargetSubnet::Source)?.into(),
-            StepType::UploadStateToSourceSubnet => {
-                self.upload_and_restart_step(TargetSubnet::Source)?.into()
-            }
+            StepType::UploadStateToSourceSubnet => self
+                .upload_state_and_restart_step(TargetSubnet::Source)?
+                .into(),
             StepType::ProposeCupForDestinationSubnet => {
                 self.propose_cup(TargetSubnet::Destination)?.into()
             }
             StepType::UploadStateToDestinationSubnet => self
-                .upload_and_restart_step(TargetSubnet::Destination)?
+                .upload_state_and_restart_step(TargetSubnet::Destination)?
                 .into(),
             StepType::WaitForCUPOnSourceSubnet => {
                 self.wait_for_cup_step(TargetSubnet::Source)?.into()
