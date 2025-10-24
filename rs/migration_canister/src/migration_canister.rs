@@ -31,7 +31,7 @@ fn post_upgrade() {
 }
 
 #[derive(Clone, CandidType, Deserialize)]
-struct MigrateCanisterArgs {
+pub struct MigrateCanisterArgs {
     pub source: Principal,
     pub target: Principal,
 }
@@ -69,7 +69,7 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
 }
 
 #[derive(Clone, Display, CandidType, Deserialize)]
-enum MigrationStatus {
+pub enum MigrationStatus {
     #[strum(to_string = "MigrationStatus::InProgress {{ status: {status} }}")]
     InProgress { status: String },
     #[strum(to_string = "MigrationStatus::Failed {{ reason: {reason}, time: {time} }}")]

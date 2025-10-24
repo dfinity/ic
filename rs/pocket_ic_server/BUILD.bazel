@@ -187,6 +187,7 @@ HEAD_NNS_CANISTER_DATA = [
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
     "//rs/nns/governance:governance-canister-test",
+    "//rs/migration_canister:migration-canister",
 ]
 
 HEAD_NNS_CANISTER_ENV = {
@@ -204,6 +205,7 @@ HEAD_NNS_CANISTER_ENV = {
     "SNS_LEDGER_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/ledger:ledger_canister)",
     "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/archive:archive_canister)",
     "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location //rs/ledger_suite/icrc1/index-ng:index_ng_canister)",
+    "MIGRATION_CANISTER_WASM_PATH": "$(location //rs/migration_canister:migration-canister)",
 }
 
 MAINNET_NNS_CANISTER_DATA = [
@@ -221,6 +223,7 @@ MAINNET_NNS_CANISTER_DATA = [
     "@mainnet_sns-root-canister//file",
     "@mainnet_sns-swap-canister//file",
     "@nns_governance_canister_test_at_mainnet_commit//file",
+    "//rs/migration_canister:migration-canister", # the migration canister is not yet deployed to the ICP mainnet
 ]
 
 MAINNET_NNS_CANISTER_ENV = {
@@ -238,6 +241,7 @@ MAINNET_NNS_CANISTER_ENV = {
     "SNS_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-ledger//file)",
     "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-archive//file)",
     "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_ic-icrc1-index-ng//file)",
+    "MIGRATION_CANISTER_WASM_PATH": "$(location //rs/migration_canister:migration-canister)",
 }
 
 [
