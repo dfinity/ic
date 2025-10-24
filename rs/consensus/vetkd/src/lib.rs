@@ -281,7 +281,7 @@ impl VetKdPayloadBuilderImpl {
                     accumulated_size_estimate
                         .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current_size| {
                             let new_size = current_size + candidate_size;
-                            if new_size >= max_payload_size.get() as usize {
+                            if new_size > max_payload_size.get() as usize {
                                 return None;
                             }
                             Some(new_size)
