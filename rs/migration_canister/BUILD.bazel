@@ -53,13 +53,21 @@ rust_test(
     data = [
         # Keep sorted
         "//rs/migration_canister:migration-canister",
-        "//rs/pocket_ic_server:pocket-ic-server",
+        # TODO(NNS1-4259): Revert to:
+        # "//rs/pocket_ic_server:pocket-ic-server",
+        # The next line is a hack to temporarily work around a mistake that we made
+        # where required fields were added to the Register canister's init args.
+        "//rs/pocket_ic_server:pocket-ic-server-head-nns",
         "//rs/registry/canister:registry-canister",
     ],
     env = {
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
         "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
-        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        # TODO(NNS1-4259): Revert to:
+        # "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        # The next line is a hack to temporarily work around a mistake that we made
+        # where required fields were added to the Register canister's init args.
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server-head-nns)",
     },
     proc_macro_deps = [
         "@crate_index//:strum_macros",
