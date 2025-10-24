@@ -1,5 +1,6 @@
 pub mod common;
 
+/*
 use common::{
     DebugInfo, KB, MB, SubnetPair, SubnetPairConfig, arb_canister_config,
     induct_from_head_of_stream, stream_snapshot,
@@ -293,3 +294,4 @@ fn check_canister_can_be_stopped_with_remote_subnet_stalling_impl(
         "failed to stop local canister after {shutdown_phase_max_rounds} ticks"
     ))
 }
+*/

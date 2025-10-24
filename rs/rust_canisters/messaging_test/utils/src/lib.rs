@@ -12,6 +12,7 @@ const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize
  */
 
 /// Parameters for generating arbitrary `Calls`.
+#[derive(Clone, Debug)]
 pub struct CallConfig {
     pub receivers: Vec<CanisterId>,
     pub call_bytes_range: RangeInclusive<usize>,

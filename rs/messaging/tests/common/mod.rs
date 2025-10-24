@@ -8,8 +8,8 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::MessageId,
 };
-use messaging_test::{Call, Message, Reply, decode_reply, encode_message};
-use messaging_test_utils::to_encoded_ingress;
+use messaging_test::{Call, Response};
+use messaging_test_utils::{CallConfig, arb_call, from_blob, to_encoded_ingress};
 use proptest::prelude::*;
 use std::ops::RangeInclusive;
 use std::sync::Arc;
@@ -17,12 +17,12 @@ use std::sync::Arc;
 pub const KB: u32 = 1024;
 pub const MB: u32 = KB * KB;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum PulseStatus {
     /// The pulse has been submitted; the outcome is not known yet.
     Submitted(Call, MessageId),
     /// The pulse has been processed successfully.
-    Completed(Call, Reply),
+    Completed(Call, Response),
     /// The pulse was rejected by the destination canister.
     Rejected(Call, String),
     /// The pulse triggered an error during execution, i.e. the destination canister trapped.
@@ -38,7 +38,10 @@ impl PulseStatus {
                 IngressStatus::Known {
                     state: IngressState::Completed(WasmResult::Reply(blob)),
                     ..
-                } => Self::Completed(call, decode_reply(blob)),
+                } => {
+                    let respondent = call.receiver;
+                    Self::Completed(call, from_blob(respondent, blob))
+                }
                 // The pulse was rejected by the `receiver`.
                 IngressStatus::Known {
                     state: IngressState::Completed(WasmResult::Reject(reject_msg)),
@@ -58,6 +61,7 @@ impl PulseStatus {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct TestSubnet {
     pub env: Arc<StateMachine>,
     pulses: Vec<PulseStatus>,
@@ -139,87 +143,134 @@ impl TestSubnet {
     }
 }
 
-/// Config for two `TestSubnet` including message memory limits
-/// and number of canisters for each subnet.
-///
-/// Note: low values for `*_max_instructions_per_round` can lead to continuous resets during
-/// execution, leading to the canister apparently doing nothing at all.
-#[derive(Debug)]
-pub struct TestSubnetsConfig {
-    pub local_canisters_count: u64,
-    pub local_max_instructions_per_round: u64,
-    pub local_message_memory_capacity: u64,
-    pub remote_canisters_count: u64,
-    pub remote_max_instructions_per_round: u64,
-    pub remote_message_memory_capacity: u64,
+#[derive(Clone, Debug)]
+pub struct TestSubnetConfig {
+    pub canisters_count: u64,
+    pub max_instructions_per_round: u64,
+    pub guaranteed_response_message_memory_capacity: u64,
+    pub best_effort_message_memory_capacity: u64,
 }
 
-impl Default for TestSubnetsConfig {
+impl Default for TestSubnetConfig {
     fn default() -> Self {
         Self {
-            local_canisters_count: 2,
-            local_max_instructions_per_round: 3_000_000_000,
-            local_message_memory_capacity: 100 * MB as u64,
-            remote_canisters_count: 1,
-            remote_max_instructions_per_round: 3_000_000_000,
-            remote_message_memory_capacity: 50 * MB as u64,
+            canisters_count: 1,
+            max_instructions_per_round: 3_000_000_000,
+            guaranteed_response_message_memory_capacity: 50 * MB as u64,
+            best_effort_message_memory_capacity: 50 * MB as u64,
         }
     }
 }
 
-impl TestSubnetsConfig {
-    /// Generates a `StateMachineConfig` using defaults for an application subnet, except for the
-    /// subnet message memory capacity and the maximum number of instructions per round.
-    fn state_machine_config(
-        subnet_message_memory_capacity: u64,
-        max_instructions_per_round: u64,
-    ) -> StateMachineConfig {
+impl TestSubnetConfig {
+    fn state_machine_config(&self) -> StateMachineConfig {
         StateMachineConfig::new(
             SubnetConfig {
                 scheduler_config: SchedulerConfig {
                     scheduler_cores: 4,
-                    max_instructions_per_round: max_instructions_per_round.into(),
-                    max_instructions_per_message_without_dts: max_instructions_per_round.into(),
-                    max_instructions_per_slice: max_instructions_per_round.into(),
+                    max_instructions_per_round: self.max_instructions_per_round.into(),
+                    max_instructions_per_message_without_dts: self
+                        .max_instructions_per_round
+                        .into(),
+                    max_instructions_per_slice: self.max_instructions_per_round.into(),
                     ..SchedulerConfig::application_subnet()
                 },
                 cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),
             },
             HypervisorConfig {
-                guaranteed_response_message_memory_capacity: subnet_message_memory_capacity.into(),
-                best_effort_message_memory_capacity: subnet_message_memory_capacity.into(),
+                guaranteed_response_message_memory_capacity: self
+                    .guaranteed_response_message_memory_capacity
+                    .into(),
+                best_effort_message_memory_capacity: self
+                    .best_effort_message_memory_capacity
+                    .into(),
                 ..HypervisorConfig::default()
             },
         )
     }
-
-    /// Generates a `StateMachineConfig` for the `local_env`.
-    pub fn local_state_machine_config(&self) -> StateMachineConfig {
-        Self::state_machine_config(
-            self.local_message_memory_capacity,
-            self.local_max_instructions_per_round,
-        )
-    }
-
-    /// Generates a `StateMachineConfig` for the `remote_env`.
-    pub fn remote_state_machine_config(&self) -> StateMachineConfig {
-        Self::state_machine_config(
-            self.remote_message_memory_capacity,
-            self.remote_max_instructions_per_round,
-        )
-    }
 }
 
-pub fn two_test_subnets(config: TestSubnetsConfig) -> (TestSubnet, TestSubnet) {
-    let (local_env, remote_env) = ic_state_machine_tests::two_subnets_with_config(
-        config.local_state_machine_config(),
-        config.remote_state_machine_config(),
+/// Generates two `TestSubnet` from configs.
+pub fn two_test_subnets(
+    config1: TestSubnetConfig,
+    config2: TestSubnetConfig,
+) -> (TestSubnet, TestSubnet) {
+    let (env1, env2) = ic_state_machine_tests::two_subnets_with_config(
+        config1.state_machine_config(),
+        config2.state_machine_config(),
     );
     (
-        TestSubnet::new(local_env, config.local_canisters_count),
-        TestSubnet::new(remote_env, config.remote_canisters_count),
+        TestSubnet::new(env1, config1.canisters_count),
+        TestSubnet::new(env2, config2.canisters_count),
     )
 }
+
+#[derive(Clone, Debug)]
+pub struct TestSubnetSetup {
+    pub subnet1: TestSubnet,
+    pub subnet2: TestSubnet,
+    pub canisters: Vec<CanisterId>,
+}
+
+impl TestSubnetSetup {
+    pub fn into_parts(self) -> (TestSubnet, TestSubnet, Vec<CanisterId>) {
+        (self.subnet1, self.subnet2, self.canisters)
+    }
+}
+
+/// A mock arbitrary generator for two `TestSubnet`.
+///
+/// This is to allow generating two `TestSubnet` in the proptest input generator clause. This is
+/// useful because canister Ids are generated when installing canisters, hence to use the Ids in
+/// random input generation, the subnets must be created first.
+pub fn arb_test_subnets(
+    config1: TestSubnetConfig,
+    config2: TestSubnetConfig,
+) -> impl Strategy<Value = TestSubnetSetup> {
+    Just((config1, config2)).prop_map(|(config1, config2)| {
+        let (subnet1, subnet2) = two_test_subnets(config1, config2);
+        let mut canisters = subnet1.canisters();
+        canisters.append(&mut subnet2.canisters());
+
+        TestSubnetSetup {
+            subnet1,
+            subnet2,
+            canisters,
+        }
+    })
+}
+
+/*
+/// Generates `call_count` arbitrary calls using `call_config` together with a pair of `TestSubnet`
+/// generated using `subnets_config`.
+pub fn arb_subnets_with_input(
+    call_config: CallConfig,
+    call_count: usize,
+    subnets_config: TestSubnetsConfig,
+) -> impl Strategy<Value = (Vec<Call>, TestSubnet, TestSubnet)> {
+    Just((call_config, call_count, subnets_config))
+        .prop_flat_map(|(call_config, call_count, subnets_config)| {
+            // Test subnets with canisters installed must be created first in order
+            // to use their canister Ids as the receivers of the arbitrary calls.
+            let (local_subnet, remote_subnet) = two_test_subnets(subnets_config);
+            Just((call_config, call_count, local_subnet, remote_subnet))
+        })
+        .prop_flat_map(|(call_config, call_count, local_subnet, remote_subnet)| {
+            // Set `receivers` to the canisters in `local_subnet` and `remote_subnet`.
+            let mut receivers = local_subnet.canisters();
+            receivers.append(&mut remote_subnet.canisters());
+            let call_config = CallConfig {
+                receivers,
+                ..call_config.clone()
+            };
+            (
+                proptest::collection::vec(arb_call(call_config), call_count),
+                Just(local_subnet),
+                Just(remote_subnet),
+            )
+        })
+}
+*/
 
 /*
 use candid::{Decode, Encode};
