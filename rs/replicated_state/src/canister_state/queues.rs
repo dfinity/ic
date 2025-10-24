@@ -2,6 +2,7 @@ mod input_schedule;
 mod message_pool;
 pub mod proto;
 mod queue;
+pub mod refunds;
 #[cfg(test)]
 mod tests;
 

@@ -9,7 +9,7 @@ use crate::{
     CanisterQueues, DroppedMessageMetrics,
     canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
     canister_state::{
-        queues::{CanisterInput, CanisterQueuesLoopDetector},
+        queues::{CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool},
         system_state::{CanisterOutputQueuesIterator, CyclesUseCase, push_input},
     },
     metadata_state::subnet_call_context_manager::PreSignatureStash,
@@ -102,14 +102,14 @@ pub enum StateError {
     /// Canister is stopping, only accepting responses.
     CanisterStopping(CanisterId),
 
-    /// Message enqueuing failed due to full in/out queue.
+    /// Request enqueuing failed due to full input / output queue.
     QueueFull { capacity: usize },
 
-    /// Message enqueuing would have caused the canister or subnet to run over
-    /// their memory limit.
+    /// Guaranteed response request enqueuing would have caused the subnet to exceed
+    /// its guaranteed response memory limit.
     OutOfMemory { requested: NumBytes, available: i64 },
 
-    /// Response enqueuing failed due to not matching the expected response.
+    /// Response enqueuing failed due to it not matching the callback.
     NonMatchingResponse {
         err_str: String,
         originator: CanisterId,
@@ -118,7 +118,8 @@ pub enum StateError {
         deadline: CoarseTime,
     },
 
-    /// No corresponding request found when trying to push a response from the bitcoin adapter.
+    /// No corresponding request found when trying to push a response from the
+    /// bitcoin adapter.
     BitcoinNonMatchingResponse { callback_id: u64 },
 }
 
@@ -427,6 +428,14 @@ pub struct ReplicatedState {
     #[validate_eq(CompareWithValidateEq)]
     subnet_queues: CanisterQueues,
 
+    /// Pool of outbound refund messages to be routed into streams.
+    ///
+    /// We may not be able to route all refunds into streams every round due to
+    /// stream message and byte limits, so this holds any unrouted refunds across
+    /// rounds.
+    #[validate_eq(CompareWithValidateEq)]
+    refunds: RefundPool,
+
     /// Queue for holding responses arriving from Consensus.
     ///
     /// Responses from consensus are to be processed each round.
@@ -450,6 +459,7 @@ impl ReplicatedState {
             canister_states: BTreeMap::new(),
             metadata: SystemMetadata::new(own_subnet_id, own_subnet_type),
             subnet_queues: CanisterQueues::default(),
+            refunds: RefundPool::default(),
             consensus_queue: Vec::new(),
             epoch_query_stats: RawQueryStats::default(),
             canister_snapshots: CanisterSnapshots::default(),
@@ -461,6 +471,7 @@ impl ReplicatedState {
         canister_states: BTreeMap<CanisterId, CanisterState>,
         metadata: SystemMetadata,
         subnet_queues: CanisterQueues,
+        refunds: RefundPool,
         epoch_query_stats: RawQueryStats,
         canister_snapshots: CanisterSnapshots,
     ) -> Self {
@@ -468,6 +479,7 @@ impl ReplicatedState {
             canister_states,
             metadata,
             subnet_queues,
+            refunds,
             consensus_queue: Vec::new(),
             epoch_query_stats,
             canister_snapshots,
@@ -481,6 +493,7 @@ impl ReplicatedState {
         &BTreeMap<CanisterId, CanisterState>,
         &SystemMetadata,
         &CanisterQueues,
+        &RefundPool,
         &Vec<ConsensusResponse>,
         &RawQueryStats,
         &CanisterSnapshots,
@@ -489,6 +502,7 @@ impl ReplicatedState {
             canister_states,
             metadata,
             subnet_queues,
+            refunds,
             consensus_queue,
             epoch_query_stats,
             canister_snapshots,
@@ -497,6 +511,7 @@ impl ReplicatedState {
             canister_states,
             metadata,
             subnet_queues,
+            refunds,
             consensus_queue,
             epoch_query_stats,
             canister_snapshots,
@@ -1027,6 +1042,11 @@ impl ReplicatedState {
         &self.subnet_queues
     }
 
+    /// Returns an immutable reference to `self.refunds`.
+    pub fn refunds(&self) -> &RefundPool {
+        &self.refunds
+    }
+
     /// See `IngressQueue::filter_messages()` for documentation.
     pub fn filter_subnet_queues_ingress_messages<F>(&mut self, filter: F) -> Vec<Arc<Ingress>>
     where
@@ -1334,6 +1354,7 @@ impl ReplicatedState {
             mut canister_states,
             metadata,
             mut subnet_queues,
+            mut refunds,
             consensus_queue,
             epoch_query_stats: _,
             mut canister_snapshots,
@@ -1366,6 +1387,13 @@ impl ReplicatedState {
             subnet_queues = CanisterQueues::default();
         }
 
+        // Retain only one copy of the refund pool, on subnet A'. Refund messages have
+        // no explicit origin, so it doesn't matter which of the two subnets they
+        // originate from.
+        if metadata.own_subnet_id != subnet_id {
+            refunds = RefundPool::default();
+        }
+
         // Obtain a new metadata state for subnet B. No-op for subnet A' (apart from
         // setting the split marker).
         let mut metadata = metadata.split(subnet_id, new_subnet_batch_time)?;
@@ -1383,6 +1411,7 @@ impl ReplicatedState {
             canister_states,
             metadata,
             subnet_queues,
+            refunds,
             consensus_queue,
             epoch_query_stats: RawQueryStats::default(), // Don't preserve query stats during subnet splitting.
             canister_snapshots,
@@ -1407,6 +1436,7 @@ impl ReplicatedState {
             metadata,
             subnet_queues,
             consensus_queue: _,
+            refunds: _,
             epoch_query_stats: _,
             canister_snapshots: _,
         } = self;
@@ -1528,6 +1558,9 @@ pub mod testing {
         /// Testing only: Returns the number of messages across all canister and
         /// subnet output queues.
         fn output_message_count(&self) -> usize;
+
+        /// Testing only: Adds the given refund to the subnet-wide refund pool.
+        fn add_refund(&mut self, receiver: CanisterId, amount: Cycles);
     }
 
     impl ReplicatedStateTesting for ReplicatedState {
@@ -1560,6 +1593,10 @@ pub mod testing {
                 .sum::<usize>()
                 + self.subnet_queues.output_queues_message_count()
         }
+
+        fn add_refund(&mut self, receiver: CanisterId, amount: Cycles) {
+            self.refunds.add(receiver, amount);
+        }
     }
 
     /// Early warning system / stumbling block forcing the authors of changes adding
@@ -1588,6 +1625,7 @@ pub mod testing {
                 SubnetType::Application,
             ),
             subnet_queues: Default::default(),
+            refunds: Default::default(),
             consensus_queue: Default::default(),
             epoch_query_stats: Default::default(),
             // TODO(EXC-1527): Handle canister snapshots during a subnet split.
