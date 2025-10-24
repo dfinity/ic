@@ -18,9 +18,20 @@ pub struct RegistryCanisterInitPayload {
     //
     // Note: these flags are temporary and will
     // go away once the feature is fully deployed.
+    #[serde(default = "default_false")]
     pub is_swapping_feature_enabled: bool,
+    #[serde(default = "default_empty_vec")]
     pub swapping_whitelisted_callers: Vec<PrincipalId>,
+    #[serde(default = "default_empty_vec")]
     pub swapping_enabled_subnets: Vec<SubnetId>,
+}
+
+fn default_false() -> bool {
+    false
+}
+
+fn default_empty_vec<T>() -> Vec<T> {
+    Vec::new()
 }
 
 impl fmt::Display for RegistryCanisterInitPayload {
