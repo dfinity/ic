@@ -551,7 +551,7 @@ impl NeuronStore {
                 .range_neurons((Bound::Excluded(exclusive_start_id), Bound::Unbounded))
                 .take(page_size as usize)
                 .map(|neuron| {
-                    neuron.get_neuron_info(voting_power_economics, now_seconds, requester, false)
+                    neuron.get_neuron_info(voting_power_economics, now_seconds, requester, true)
                 })
                 .collect()
         })
