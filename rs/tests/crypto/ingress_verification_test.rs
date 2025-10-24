@@ -155,9 +155,9 @@ pub fn requests_with_delegations(env: TestEnv) {
                 let signer = &identities[identities.len() - 1];
 
                 let query_result =
-                    query_delegation(&test_info, &sender, &signer, &delegations).await;
+                    query_delegation(&test_info, sender, signer, &delegations).await;
                 let update_result =
-                    update_delegation(&test_info, &sender, &signer, &delegations).await;
+                    update_delegation(&test_info, sender, signer, &delegations).await;
 
                 if delegation_count <= 20 {
                     assert_eq!(query_result, 200);
