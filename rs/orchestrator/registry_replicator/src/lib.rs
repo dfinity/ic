@@ -35,18 +35,22 @@ use ic_config::{
 };
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_interfaces_registry::{RegistryClient, RegistryDataProvider, ZERO_REGISTRY_VERSION};
-use ic_logger::{ReplicaLogger, debug, info, warn};
+use ic_interfaces_registry::{RegistryClient, ZERO_REGISTRY_VERSION};
+use ic_logger::{ReplicaLogger, debug, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore, LocalStoreImpl};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
-use ic_types::{NodeId, RegistryVersion, crypto::threshold_sig::ThresholdSigPublicKey};
+use ic_types::{
+    NodeId, RegistryVersion, crypto::threshold_sig::ThresholdSigPublicKey,
+    registry::RegistryClientError,
+};
 use metrics::RegistryreplicatorMetrics;
 use std::{
     future::Future,
     io::{Error, ErrorKind},
     net::SocketAddr,
+    path::Path,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -60,10 +64,23 @@ pub mod args;
 mod internal_state;
 pub mod metrics;
 
+trait PollableRegistryClient: RegistryClient {
+    /// Polls the registry once, updating its cache by polling the latest local store changes.
+    fn poll_once(&self) -> Result<(), RegistryClientError>;
+}
+
+impl PollableRegistryClient for RegistryClientImpl {
+    fn poll_once(&self) -> Result<(), RegistryClientError> {
+        self.poll_once()
+    }
+}
+
 pub struct RegistryReplicator {
     logger: ReplicaLogger,
     node_id: Option<NodeId>,
-    registry_client: Arc<dyn RegistryClient>,
+    fallback_nns_urls: Vec<Url>,
+    fallback_nns_pub_key: Option<ThresholdSigPublicKey>,
+    registry_client: Arc<dyn PollableRegistryClient>,
     local_store: Arc<dyn LocalStore>,
     started: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
@@ -72,49 +89,46 @@ pub struct RegistryReplicator {
 }
 
 impl RegistryReplicator {
-    pub fn new_with_clients(
-        logger: ReplicaLogger,
-        local_store: Arc<dyn LocalStore>,
-        registry_client: Arc<dyn RegistryClient>,
-        poll_delay: Duration,
-    ) -> Self {
-        let metrics = Arc::new(RegistryreplicatorMetrics::new(&MetricsRegistry::new()));
-
-        Self {
-            logger,
-            node_id: None,
-            registry_client,
-            local_store,
-            started: Arc::new(AtomicBool::new(false)),
-            cancelled: Arc::new(AtomicBool::new(false)),
-            poll_delay,
-            metrics,
-        }
-    }
-
-    pub fn new_from_config(
+    /// Creates a new instance of the registry replicator.
+    /// This function will not return until the local store is initialized.
+    async fn new_impl<P: AsRef<Path>>(
         logger: ReplicaLogger,
         node_id: Option<NodeId>,
-        config: &Config,
+        local_store_path: P,
+        poll_delay: Duration,
+        metrics_registry: MetricsRegistry,
+        nns_urls: Vec<Url>,
+        nns_pub_key: Option<ThresholdSigPublicKey>,
     ) -> Self {
-        // We only support the local store data provider
-        let local_store_path = &config.registry_client.local_store;
-        let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
+        let local_store = Arc::new(LocalStoreImpl::new(&local_store_path));
         std::fs::create_dir_all(local_store_path)
             .expect("Could not create directory for registry local store.");
 
-        let poll_delay =
-            std::time::Duration::from_millis(config.nns_registry_replicator.poll_delay_duration_ms);
+        // Initialize the registry local store. Will not return if the nns is not
+        // reachable.
+        Self::initialize_local_store(&logger, local_store.clone(), nns_urls.clone(), nns_pub_key)
+            .await;
 
-        // Initialize registry client and start polling/caching *local* store for
-        // updates
-        let registry_client = Self::initialize_registry_client(local_store.clone());
+        let registry_client = Arc::new(RegistryClientImpl::new(
+            local_store.clone(),
+            Some(&metrics_registry),
+        ));
 
-        let metrics = Arc::new(RegistryreplicatorMetrics::new(&MetricsRegistry::global()));
+        // Initialize the registry client with the latest version from the local store.
+        if let Err(err) = registry_client.poll_once() {
+            error!(
+                logger,
+                "Failed to poll the registry once after initialization: {}", err
+            )
+        }
+
+        let metrics = Arc::new(RegistryreplicatorMetrics::new(&metrics_registry));
 
         Self {
             logger,
             node_id,
+            fallback_nns_urls: nns_urls,
+            fallback_nns_pub_key: nns_pub_key,
             registry_client,
             local_store,
             started: Arc::new(AtomicBool::new(false)),
@@ -124,13 +138,59 @@ impl RegistryReplicator {
         }
     }
 
-    pub fn new_with_metrics_runtime(
+    /// Creates a new instance of the registry replicator from the local store path, NNS URLs and
+    /// root public key.
+    /// This function will not return until the local store is initialized.
+    pub async fn new<P: AsRef<Path>>(
+        logger: ReplicaLogger,
+        local_store_path: P,
+        poll_delay: Duration,
+        nns_urls: Vec<Url>,
+        nns_pub_key: Option<ThresholdSigPublicKey>,
+    ) -> Self {
+        Self::new_impl(
+            logger,
+            None,
+            local_store_path,
+            poll_delay,
+            MetricsRegistry::new(),
+            nns_urls,
+            nns_pub_key,
+        )
+        .await
+    }
+
+    /// Creates a new instance of the registry replicator from the node configuration.
+    /// This function will not return until the local store is initialized.
+    pub async fn new_from_config(
+        logger: ReplicaLogger,
+        node_id: Option<NodeId>,
+        config: &Config,
+    ) -> Self {
+        let (nns_urls, nns_pub_key) = Self::parse_registry_access_info_from_config(&logger, config);
+
+        Self::new_impl(
+            logger,
+            node_id,
+            &config.registry_client.local_store,
+            Duration::from_millis(config.nns_registry_replicator.poll_delay_duration_ms),
+            MetricsRegistry::global(),
+            nns_urls,
+            nns_pub_key,
+        )
+        .await
+    }
+
+    /// Creates a new instance of the registry replicator from the node configuration and a custom
+    /// metrics address.
+    /// This function will not return until the local store is initialized.
+    pub async fn new_with_metrics_runtime(
         logger: ReplicaLogger,
         node_id: Option<NodeId>,
         config: &Config,
         metrics_addr: SocketAddr,
     ) -> (Self, MetricsHttpEndpoint) {
-        let replicator = RegistryReplicator::new_from_config(logger.clone(), node_id, config);
+        let replicator = RegistryReplicator::new_from_config(logger.clone(), node_id, config).await;
 
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
@@ -146,42 +206,21 @@ impl RegistryReplicator {
         (replicator, metrics_endpoint)
     }
 
-    /// initialize a new registry client and start polling the given data
-    /// provider for registry updates
-    fn initialize_registry_client(
-        data_provider: Arc<dyn RegistryDataProvider>,
-    ) -> Arc<dyn RegistryClient> {
-        let metrics_registry = MetricsRegistry::global();
-        let registry_client = Arc::new(RegistryClientImpl::new(
-            data_provider,
-            Some(&metrics_registry),
-        ));
-
-        if let Err(e) = registry_client.fetch_and_start_polling() {
-            panic!("fetch_and_start_polling failed: {e}");
-        };
-
-        registry_client
-    }
-
     /// Return NNS [`Url`]s and [`ThresholdSigPublicKey`] if configured
-    pub fn parse_registry_access_info_from_config(
-        &self,
+    fn parse_registry_access_info_from_config(
+        logger: &ReplicaLogger,
         config: &Config,
     ) -> (Vec<Url>, Option<ThresholdSigPublicKey>) {
         let nns_urls = match config.registration.nns_url.clone() {
             None => {
-                info!(self.logger, "No NNS Url is configured.");
+                info!(logger, "No NNS Url is configured.");
                 vec![]
             }
             Some(string) => string
                 .split(',')
                 .flat_map(|s| match Url::parse(s) {
                     Err(_) => {
-                        info!(
-                            self.logger,
-                            "Could not parse registration NNS url from config."
-                        );
+                        info!(logger, "Could not parse registration NNS url from config.");
                         None
                     }
                     Ok(url) => Some(url),
@@ -191,13 +230,13 @@ impl RegistryReplicator {
 
         let nns_pub_key = match config.registration.nns_pub_key_pem.clone() {
             None => {
-                info!(self.logger, "No NNS public key is configured.");
+                info!(logger, "No NNS public key is configured.");
                 None
             }
             Some(path) => match parse_threshold_sig_key(&path) {
                 Err(e) => {
                     info!(
-                        self.logger,
+                        logger,
                         "Could not parse configured NNS Public Key file: {}", e
                     );
                     None
@@ -209,20 +248,20 @@ impl RegistryReplicator {
         (nns_urls, nns_pub_key)
     }
 
-    pub async fn initialize_local_store(
-        &self,
+    async fn initialize_local_store(
+        logger: &ReplicaLogger,
+        local_store: Arc<dyn LocalStore>,
         nns_urls: Vec<Url>,
         nns_pub_key: Option<ThresholdSigPublicKey>,
     ) {
         // If the local registry store is not empty, exit.
-        if !self
-            .local_store
+        if !local_store
             .get_changelog_since_version(ZERO_REGISTRY_VERSION)
             .expect("Could not read registry local store.")
             .is_empty()
         {
             info!(
-                self.logger,
+                logger,
                 "Local registry store is not empty, skipping initialization."
             );
             return;
@@ -268,7 +307,7 @@ impl RegistryReplicator {
                         .enumerate()
                         .try_for_each(|(i, cle)| {
                             let v = registry_version + RegistryVersion::from(i as u64 + 1);
-                            self.local_store.store(v, cle)
+                            local_store.store(v, cle)
                         })
                         .expect("Could not write to local store.");
 
@@ -277,14 +316,14 @@ impl RegistryReplicator {
 
                     if entries > 0 {
                         info!(
-                            self.logger,
+                            logger,
                             "Stored registry versions up to: {}", registry_version
                         );
                     }
                 }
                 Err(e) => {
                     warn!(
-                        self.logger,
+                        logger,
                         "Couldn't fetch registry updates (retry in {}s): {:?}", timeout, e
                     );
                     tokio::time::sleep(Duration::from_secs(timeout)).await;
@@ -295,17 +334,15 @@ impl RegistryReplicator {
         }
 
         info!(
-            self.logger,
+            logger,
             "Finished local store initialization at registry version: {}", registry_version
         );
     }
 
     /// Initializes the registry local store asynchronously and returns a future that
     /// continuously polls for registry updates.
-    pub async fn start_polling(
+    pub fn start_polling(
         &self,
-        nns_urls: Vec<Url>,
-        nns_pub_key: Option<ThresholdSigPublicKey>,
         cancellation_token: CancellationToken,
     ) -> Result<impl Future<Output = ()> + use<>, Error> {
         if self.started.swap(true, Ordering::Relaxed) {
@@ -315,23 +352,19 @@ impl RegistryReplicator {
             ));
         }
 
-        // Initialize the registry local store. Will not return if the nns is not
-        // reachable.
-        self.initialize_local_store(nns_urls.clone(), nns_pub_key)
-            .await;
-
         let mut internal_state = InternalState::new(
             self.logger.clone(),
             self.node_id,
             self.registry_client.clone(),
             self.local_store.clone(),
-            nns_urls,
+            self.fallback_nns_urls.clone(),
+            self.fallback_nns_pub_key,
             self.poll_delay,
         );
 
         let logger = self.logger.clone();
-        let metrics = self.metrics.clone();
-        let registry_client = self.registry_client.clone();
+        let metrics = Arc::clone(&self.metrics);
+        let registry_client = Arc::clone(&self.registry_client);
         let cancelled = Arc::clone(&self.cancelled);
         let poll_delay = self.poll_delay;
 
@@ -353,6 +386,12 @@ impl RegistryReplicator {
                     metrics.poll_count.with_label_values(&["success"]).inc();
                 }
                 timer.observe_duration();
+
+                // Update the registry client with the latest changes.
+                if let Err(msg) = registry_client.poll_once() {
+                    warn!(logger, "Registry client failed to poll: {}", msg);
+                }
+
                 metrics
                     .registry_version
                     .set(registry_client.get_latest_version().get() as i64);
@@ -367,23 +406,28 @@ impl RegistryReplicator {
         Ok(future)
     }
 
-    /// Requests latest version and certified changes from the
-    /// [`RegistryCanister`] and applies changes to [`LocalStore`] accordingly.
+    /// Requests latest version and certified changes from the [`RegistryCanister`] and applies
+    /// changes to [`LocalStore`] and [`RegistryClient`] accordingly.
     ///
     /// Note that we will poll at most 1000 oldest registry versions (see the implementation of
     /// `get_certified_changes_since` of `RegistryCanister`), so multiple polls might be necessary
     /// to get the most recent version of the registry.
-    pub async fn poll(&self, nns_urls: Vec<Url>) -> Result<(), String> {
-        InternalState::new(
+    pub async fn poll(&self) -> Result<(), String> {
+        let poll_result = InternalState::new(
             self.logger.clone(),
             self.node_id,
             self.registry_client.clone(),
             self.local_store.clone(),
-            nns_urls,
+            self.fallback_nns_urls.clone(),
+            self.fallback_nns_pub_key,
             self.poll_delay,
         )
         .poll()
-        .await
+        .await;
+
+        // Update the registry client with the latest changes, regardless of whether
+        // the polling succeeded or failed. Return any error from either operation.
+        poll_result.and(self.registry_client.poll_once().map_err(|e| e.to_string()))
     }
 
     /// Set the local registry data to what is contained in the provided local
@@ -402,6 +446,13 @@ impl RegistryReplicator {
             self.local_store
                 .store(RegistryVersion::from((v + 1) as u64), cle)
                 .expect("Could not store change log entry");
+        }
+
+        if let Err(msg) = self.registry_client.poll_once() {
+            warn!(
+                self.logger,
+                "Failed to update the registry client after setting local registry data: {}", msg
+            )
         }
     }
 
@@ -426,5 +477,516 @@ impl RegistryReplicator {
 impl Drop for RegistryReplicator {
     fn drop(&mut self) {
         self.stop_polling();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use candid::Encode;
+    use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
+    use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+    use ic_interfaces_registry::RegistryRecord;
+    use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister;
+    use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
+    use ic_nns_test_utils::common::{NnsInitPayloadsBuilder, build_test_registry_wasm};
+    use ic_registry_local_store::LocalStoreWriter;
+    use ic_registry_transport::{
+        deserialize_atomic_mutate_response,
+        pb::v1::{RegistryMutation, registry_mutation::Type},
+        serialize_atomic_mutate_request,
+    };
+    use ic_test_utilities_logger::with_test_replica_logger;
+    use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
+    use rand::{Rng, RngCore};
+    use tempfile::TempDir;
+
+    const INIT_NUM_VERSIONS: usize = 5;
+    const TEST_POLL_DELAY: Duration = Duration::from_secs(1);
+    const DELAY_LEEWAY: Duration = Duration::from_millis(200);
+
+    struct PocketIcHelper {
+        pocket_ic: PocketIc,
+        registry_canister: RegistryCanister,
+        nns_pub_key: ThresholdSigPublicKey,
+    }
+
+    impl PocketIcHelper {
+        async fn setup() -> (Self, Vec<Url>, ThresholdSigPublicKey) {
+            let mut pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
+            let mut nns_configuration = NnsInitPayloadsBuilder::new();
+            let registry_init_args = nns_configuration
+                .with_initial_invariant_compliant_mutations()
+                .build()
+                .registry;
+            install_canister(
+                &pocket_ic,
+                "Registry",
+                REGISTRY_CANISTER_ID,
+                Encode!(&registry_init_args).unwrap(),
+                build_test_registry_wasm(),
+                Some(REGISTRY_CANISTER_ID.get()),
+            )
+            .await;
+
+            let nns_url = pocket_ic.make_live(None).await;
+            let nns_pub_key_bytes = pocket_ic.root_key().await.unwrap();
+            let nns_pub_key =
+                parse_threshold_sig_key_from_der(nns_pub_key_bytes.as_slice()).unwrap();
+
+            (
+                Self {
+                    pocket_ic,
+                    registry_canister: RegistryCanister::new(vec![nns_url.clone()]),
+                    nns_pub_key,
+                },
+                vec![nns_url],
+                nns_pub_key,
+            )
+        }
+
+        async fn get_all_certified_records(&self) -> (Vec<RegistryRecord>, RegistryVersion) {
+            let (records, latest_version, _t) = self
+                .registry_canister
+                .get_certified_changes_since(0, &self.nns_pub_key)
+                .await
+                .unwrap();
+
+            (records, latest_version)
+        }
+
+        async fn atomic_mutate(&self, mutation: RegistryMutation) -> Result<u64, String> {
+            let encoded_request = serialize_atomic_mutate_request(vec![mutation], vec![]);
+            let response = self
+                .pocket_ic
+                .update_call(
+                    REGISTRY_CANISTER_ID.into(),
+                    GOVERNANCE_CANISTER_ID.into(),
+                    "atomic_mutate",
+                    encoded_request,
+                )
+                .await
+                .map_err(|e| e.to_string())?;
+
+            deserialize_atomic_mutate_response(response)
+                .map_err(|_| "Could not decode response".to_string())
+        }
+    }
+
+    fn get_random_changelog(n: usize, rng: &mut ReproducibleRng) -> Changelog {
+        // some pseudo random entries
+
+        fn key_mutation(k: usize, rng: &mut ReproducibleRng) -> KeyMutation {
+            let s = rng.next_u64() & 64;
+            let set: bool = rng.r#gen();
+            KeyMutation {
+                key: k.to_string(),
+                value: if set {
+                    Some((0..s as u8).collect())
+                } else {
+                    None
+                },
+            }
+        }
+
+        (0..n)
+            .map(|_i| {
+                let k = rng.r#gen::<usize>() % 64 + 1;
+                (0..k).map(|k| key_mutation(k, rng)).collect()
+            })
+            .collect()
+    }
+
+    async fn new_locally_initialized_replicator(num_versions_to_init: usize) -> RegistryReplicator {
+        new_test_replicator(Some(num_versions_to_init), vec![], None).await
+    }
+
+    async fn new_test_replicator(
+        num_versions_to_init: Option<usize>,
+        nns_urls: Vec<Url>,
+        nns_pub_key: Option<ThresholdSigPublicKey>,
+    ) -> RegistryReplicator {
+        let local_store_path = TempDir::new().unwrap().keep();
+        let store = LocalStoreImpl::new(&local_store_path);
+
+        if let Some(n) = num_versions_to_init {
+            let changelog = get_random_changelog(n, &mut reproducible_rng());
+
+            changelog.iter().enumerate().for_each(|(i, c)| {
+                store
+                    .store(RegistryVersion::from((i + 1) as u64), c.clone())
+                    .unwrap()
+            });
+        }
+
+        with_test_replica_logger(|logger| {
+            RegistryReplicator::new(
+                logger,
+                local_store_path,
+                TEST_POLL_DELAY,
+                nns_urls,
+                nns_pub_key,
+            )
+        })
+        .await
+    }
+
+    fn assert_replicator_not_up_to_date_yet(
+        replicator: &RegistryReplicator,
+        previous_latest_version: RegistryVersion,
+        previous_records: &[RegistryRecord],
+        new_record: &RegistryRecord,
+    ) {
+        assert_registry_client_and_local_store_have_expected_records(
+            replicator.get_registry_client().as_ref(),
+            replicator.get_local_store().as_ref(),
+            previous_latest_version,
+            previous_records,
+        );
+
+        assert_eq!(
+            replicator
+                .registry_client
+                .get_value(&new_record.key, new_record.version),
+            Err(RegistryClientError::VersionNotAvailable {
+                version: new_record.version
+            })
+        );
+    }
+
+    async fn assert_replicator_up_to_date(
+        replicator: &RegistryReplicator,
+        latest_version: RegistryVersion,
+        records: &[RegistryRecord],
+        new_record: &RegistryRecord,
+    ) {
+        assert_registry_client_and_local_store_have_expected_records(
+            replicator.get_registry_client().as_ref(),
+            replicator.get_local_store().as_ref(),
+            latest_version,
+            records,
+        );
+
+        assert_eq!(
+            replicator
+                .registry_client
+                .get_value(&new_record.key, new_record.version)
+                .unwrap(),
+            new_record.value
+        );
+    }
+
+    fn assert_registry_client_and_local_store_have_expected_records(
+        registry_client: &dyn RegistryClient,
+        local_store: &dyn LocalStore,
+        expected_latest_version: RegistryVersion,
+        expected_records: &[RegistryRecord],
+    ) {
+        //
+        // Check registry client
+        //
+        assert_eq!(
+            registry_client.get_latest_version(),
+            expected_latest_version
+        );
+        for record in expected_records {
+            assert_eq!(
+                registry_client
+                    .get_value(&record.key, record.version)
+                    .unwrap(),
+                record.value
+            );
+        }
+
+        //
+        // Check local store
+        //
+        let expected_changelog = expected_records
+            .iter()
+            .fold(Changelog::default(), |mut cl, r| {
+                if cl.len() < r.version.get() as usize {
+                    cl.push(ChangelogEntry::default());
+                }
+                cl.last_mut().unwrap().push(KeyMutation {
+                    key: r.key.clone(),
+                    value: r.value.clone(),
+                });
+                cl
+            });
+        assert_eq!(
+            expected_changelog.len(),
+            expected_latest_version.get() as usize
+        );
+        assert_eq!(
+            local_store
+                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
+                .unwrap(),
+            expected_changelog
+        );
+    }
+
+    async fn random_mutate(
+        pocket_ic: &PocketIcHelper,
+        rng: &mut ReproducibleRng,
+    ) -> RegistryRecord {
+        let (_, version) = pocket_ic.get_all_certified_records().await;
+        let key = format!("key_{}", version.get() + 1);
+        let value = (0..(rng.next_u64() & 64) as u8).collect::<Vec<_>>();
+
+        let mutation = RegistryMutation {
+            mutation_type: Type::Insert as i32,
+            key: key.clone().into_bytes(),
+            value: value.clone(),
+        };
+
+        let new_version = pocket_ic.atomic_mutate(mutation).await.unwrap();
+
+        RegistryRecord {
+            key,
+            version: RegistryVersion::from(new_version),
+            value: Some(value),
+        }
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "Registry Local Store is empty and no NNS Public Key is provided.")]
+    async fn test_new_replicator_panics_on_empty_store_without_nns_pub_key() {
+        let (_pocket_ic, nns_urls, _nns_pub_key) = PocketIcHelper::setup().await;
+
+        let _replicator = new_test_replicator(None, nns_urls, None).await;
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "empty list of URLs passed to RegistryCanister::new()")]
+    async fn test_new_replicator_panics_on_empty_store_without_nns_urls() {
+        let (_pocket_ic, _nns_urls, nns_pub_key) = PocketIcHelper::setup().await;
+
+        let _replicator = new_test_replicator(None, vec![], Some(nns_pub_key)).await;
+    }
+
+    #[tokio::test]
+    async fn test_new_replicator_works_on_initialized_store_and_client_sees_it() {
+        let replicator = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
+        assert_eq!(
+            replicator.registry_client.get_latest_version(),
+            RegistryVersion::from(INIT_NUM_VERSIONS as u64)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_set_local_registry_data_works() {
+        let source = new_locally_initialized_replicator(2 * INIT_NUM_VERSIONS).await;
+        let target = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
+
+        target.set_local_registry_data(source.get_local_store().as_ref());
+        assert_eq!(
+            target.registry_client.get_latest_version(),
+            RegistryVersion::from(2 * INIT_NUM_VERSIONS as u64)
+        );
+        assert_eq!(
+            target
+                .get_local_store()
+                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
+                .unwrap(),
+            source
+                .get_local_store()
+                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
+                .unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_poll_is_error_without_nns_pub_key_nor_in_store_nor_in_config() {
+        let (_pocket_ic, nns_urls, _nns_pub_key) = PocketIcHelper::setup().await;
+
+        let replicator = new_test_replicator(Some(INIT_NUM_VERSIONS), nns_urls, None).await;
+
+        assert_eq!(
+            replicator.poll().await,
+            Err("NNS public key not set in the registry and not configured.".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_poll_is_error_without_nns_urls_nor_in_store_nor_in_config() {
+        let (_pocket_ic, _nns_urls, nns_pub_key) = PocketIcHelper::setup().await;
+
+        let replicator =
+            new_test_replicator(Some(INIT_NUM_VERSIONS), vec![], Some(nns_pub_key)).await;
+
+        assert_eq!(
+            replicator.poll().await,
+            Err("No remote registry canister configured.".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_poll_and_start_polling_and_stop_polling_correctly_update_local_store_and_client()
+    {
+        let mut rng = reproducible_rng();
+        let (pocket_ic, nns_urls, nns_pub_key) = PocketIcHelper::setup().await;
+        let replicator = new_test_replicator(None, nns_urls, Some(nns_pub_key)).await;
+        let token = CancellationToken::new();
+
+        let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+
+        let new_record = random_mutate(&pocket_ic, &mut rng).await;
+        tokio::time::sleep(replicator.poll_delay + DELAY_LEEWAY).await;
+
+        // Even though we waited for the poll delay, registry replicator was not set to start
+        // polling yet, so local store and client should still contain initial state
+        assert_replicator_not_up_to_date_yet(&replicator, latest_version, &records, &new_record);
+
+        // Poll once, local store and client should contain latest changes
+        replicator.poll().await.unwrap();
+
+        let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+        assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
+
+        let new_record = random_mutate(&pocket_ic, &mut rng).await;
+        tokio::time::sleep(replicator.poll_delay + DELAY_LEEWAY).await;
+
+        // Again, even though we waited for the poll delay, registry replicator was not set to
+        // start polling yet, so local store and client should still contain the previous state
+        assert_replicator_not_up_to_date_yet(&replicator, latest_version, &records, &new_record);
+
+        //
+        // Start polling
+        //
+        tokio::spawn(replicator.start_polling(token).unwrap());
+
+        // `start_polling` polls the registry canister in the background, so we wait until the
+        // replicator has updated to the latest version
+        while replicator.registry_client.get_latest_version() < new_record.version {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        // Starting to poll should update local store and client to latest changes
+        let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+        assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
+
+        let new_record = random_mutate(&pocket_ic, &mut rng).await;
+
+        // Even though, we started polling, we haven't waited for the poll delay yet, so local store
+        // and client should still contain the previous state
+        assert_replicator_not_up_to_date_yet(&replicator, latest_version, &records, &new_record);
+
+        tokio::time::sleep(replicator.poll_delay + DELAY_LEEWAY).await;
+
+        // Now that we waited for the poll delay, local store and client should contain latest
+        // changes
+        let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+        assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
+
+        let new_record = random_mutate(&pocket_ic, &mut rng).await;
+
+        // Again, we haven't waited for the poll delay yet, so local store and client should still
+        // contain the previous state
+        assert_replicator_not_up_to_date_yet(&replicator, latest_version, &records, &new_record);
+
+        replicator.poll().await.unwrap();
+
+        // But after manually polling, local store and client should contain latest changes
+        let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+        assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
+
+        //
+        // Stop polling
+        //
+        replicator.stop_polling();
+
+        let new_record = random_mutate(&pocket_ic, &mut rng).await;
+        tokio::time::sleep(replicator.poll_delay + DELAY_LEEWAY).await;
+
+        // Since we stopped polling, even though we waited for the poll delay, local store and
+        // client should still contain the previous state
+        assert_replicator_not_up_to_date_yet(&replicator, latest_version, &records, &new_record);
+
+        // Poll once, local store and client should contain latest changes
+        replicator.poll().await.unwrap();
+
+        let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+        assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
+    }
+
+    #[tokio::test]
+    async fn test_start_polling_twice_fails() {
+        let replicator = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
+        let token = CancellationToken::new();
+
+        let fut = replicator.start_polling(token.clone());
+        assert!(fut.is_ok());
+
+        let fut = replicator.start_polling(token);
+        assert!(fut.is_err_and(|e| e.kind() == ErrorKind::AlreadyExists));
+    }
+
+    #[tokio::test]
+    async fn test_stop_polling_idempotent() {
+        let replicator = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
+        assert!(!replicator.cancelled.load(Ordering::Relaxed));
+        replicator.stop_polling();
+        assert!(replicator.cancelled.load(Ordering::Relaxed));
+        replicator.stop_polling();
+        replicator.stop_polling_and_set_local_registry_data(
+            new_locally_initialized_replicator(2 * INIT_NUM_VERSIONS)
+                .await
+                .get_local_store()
+                .as_ref(),
+        );
+        replicator.stop_polling();
+        assert!(replicator.cancelled.load(Ordering::Relaxed));
+        assert_eq!(
+            replicator.registry_client.get_latest_version(),
+            RegistryVersion::from(2 * INIT_NUM_VERSIONS as u64)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_drop_stops_polling() {
+        let mut rng = reproducible_rng();
+        let (pocket_ic, nns_urls, nns_pub_key) = PocketIcHelper::setup().await;
+        let replicator = new_test_replicator(None, nns_urls, Some(nns_pub_key)).await;
+        let token = CancellationToken::new();
+
+        let new_record = random_mutate(&pocket_ic, &mut rng).await;
+
+        tokio::spawn(replicator.start_polling(token).unwrap());
+
+        // `start_polling` polls the registry canister in the background, so we wait until the
+        // replicator has updated to the latest version
+        while replicator.registry_client.get_latest_version() < new_record.version {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        // Ensure that replicator is up to date
+        let (records, latest_version) = pocket_ic.get_all_certified_records().await;
+        assert_replicator_up_to_date(&replicator, latest_version, &records, &new_record).await;
+
+        // Clone parameters before dropping replicator
+        let registry_client = replicator.get_registry_client();
+        let local_store = replicator.get_local_store();
+        let poll_delay = replicator.poll_delay;
+
+        drop(replicator);
+
+        let new_record = random_mutate(&pocket_ic, &mut rng).await;
+        tokio::time::sleep(poll_delay + DELAY_LEEWAY).await;
+
+        // Even though we waited for the poll delay, replicator was dropped and thus stopped
+        // polling, so local store and client should still contain the previous state
+        assert_registry_client_and_local_store_have_expected_records(
+            registry_client.as_ref(),
+            local_store.as_ref(),
+            latest_version,
+            &records,
+        );
+
+        assert_eq!(
+            registry_client.get_value(&new_record.key, new_record.version),
+            Err(RegistryClientError::VersionNotAvailable {
+                version: new_record.version
+            })
+        );
     }
 }
