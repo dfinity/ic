@@ -7,19 +7,17 @@ pub mod lifecycle;
 pub mod updates;
 
 use crate::address::DogecoinAddress;
+use crate::dogecoin_canister::MillikoinuPerByte;
 use crate::lifecycle::init::Network;
 use async_trait::async_trait;
 use candid::Principal;
+pub use dogecoin_canister::get_dogecoin_canister_id;
+use ic_cdk::management_canister::SignWithEcdsaArgs;
 use ic_ckbtc_minter::{
     CanisterRuntime, CheckTransactionResponse, GetCurrentFeePercentilesRequest, GetUtxosRequest,
     GetUtxosResponse, management::CallError, state::CkBtcMinterState, tx,
     updates::retrieve_btc::BtcAddressCheckStatus,
 };
-use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
-use std::time::Duration;
-
-use crate::dogecoin_canister::MillikoinuPerByte;
-pub use dogecoin_canister::get_dogecoin_canister_id;
 pub use ic_ckbtc_minter::{
     OutPoint, Page, Txid, Utxo,
     address::BitcoinAddress,
@@ -29,6 +27,8 @@ pub use ic_ckbtc_minter::{
     state::eventlog::{Event, EventType, GetEventsArg},
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
+use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
+use std::time::Duration;
 
 pub const DOGECOIN_CANISTER_RUNTIME: DogeCanisterRuntime = DogeCanisterRuntime {};
 
@@ -79,11 +79,21 @@ impl CanisterRuntime for DogeCanisterRuntime {
 
     async fn sign_with_ecdsa(
         &self,
-        _key_name: String,
-        _derivation_path: Vec<Vec<u8>>,
-        _message_hash: [u8; 32],
+        key_name: String,
+        derivation_path: Vec<Vec<u8>>,
+        message_hash: [u8; 32],
     ) -> Result<Vec<u8>, CallError> {
-        todo!()
+        ic_cdk::management_canister::sign_with_ecdsa(&SignWithEcdsaArgs {
+            message_hash: message_hash.to_vec(),
+            derivation_path,
+            key_id: ic_cdk::management_canister::EcdsaKeyId {
+                curve: ic_cdk::management_canister::EcdsaCurve::Secp256k1,
+                name: key_name.clone(),
+            },
+        })
+        .await
+        .map(|result| result.signature)
+        .map_err(CallError::from_sign_error)
     }
 
     async fn send_transaction(
