@@ -232,52 +232,47 @@ impl VetKdPayloadBuilderImpl {
                         &request_expiry,
                         Some(&self.metrics),
                     ) {
-                        Some((*callback_id, reject))
-                    } else {
-                        let shares = grouped_shares.get(callback_id)?;
-                        let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
-                            return None;
-                        };
-                        let args = VetKdArgs {
-                            context: VetKdDerivationContext {
-                                caller: context.request.sender.into(),
-                                context: context
-                                    .derivation_path
-                                    .iter()
-                                    .flatten()
-                                    .cloned()
-                                    .collect(),
+                        return Some((*callback_id, reject));
+                    }
+                    
+                    let shares = grouped_shares.get(callback_id)?;
+                    let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
+                        return None;
+                    };
+                    let args = VetKdArgs {
+                        context: VetKdDerivationContext {
+                            caller: context.request.sender.into(),
+                            context: context.derivation_path.iter().flatten().cloned().collect(),
+                        },
+                        ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
+                        input: ctxt_args.input.to_vec(),
+                        transport_public_key: ctxt_args.transport_public_key.clone(),
+                    };
+                    let key_id = context.key_id();
+                    match self.crypto.combine_encrypted_key_shares(shares, &args) {
+                        Ok(key) => {
+                            self.metrics
+                                .payload_metrics_inc("vetkd_agreement_completed", &key_id);
+                            let result = VetKdDeriveKeyResult {
+                                encrypted_key: key.encrypted_key,
+                            };
+                            Some((*callback_id, VetKdAgreement::Success(result.encode())))
+                        }
+                        Err(
+                            VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
+                                ..
                             },
-                            ni_dkg_id: ctxt_args.ni_dkg_id.clone(),
-                            input: ctxt_args.input.to_vec(),
-                            transport_public_key: ctxt_args.transport_public_key.clone(),
-                        };
-                        let key_id = context.key_id();
-                        match self.crypto.combine_encrypted_key_shares(shares, &args) {
-                            Ok(key) => {
-                                self.metrics
-                                    .payload_metrics_inc("vetkd_agreement_completed", &key_id);
-                                let result = VetKdDeriveKeyResult {
-                                    encrypted_key: key.encrypted_key,
-                                };
-                                Some((*callback_id, VetKdAgreement::Success(result.encode())))
-                            }
-                            Err(
-                                VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
-                                    ..
-                                },
-                            ) => None,
-                            Err(err) => {
-                                warn!(
-                                    self.log,
-                                    "Failed to combine vetKD key shares: callback_id = {:?}, {:?}",
-                                    callback_id,
-                                    err
-                                );
-                                self.metrics
-                                    .payload_errors_inc("combine_key_shares", &key_id);
-                                None
-                            }
+                        ) => None,
+                        Err(err) => {
+                            warn!(
+                                self.log,
+                                "Failed to combine vetKD key shares: callback_id = {:?}, {:?}",
+                                callback_id,
+                                err
+                            );
+                            self.metrics
+                                .payload_errors_inc("combine_key_shares", &key_id);
+                            None
                         }
                     }
                 })
