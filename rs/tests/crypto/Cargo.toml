@@ -20,6 +20,7 @@ ic-universal-canister = { path = "../../universal_canister/lib" }
 k256 = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
+serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }
@@ -52,3 +53,7 @@ path = "request_signature_test.rs"
 [[bin]]
 name = "rpc_csp_vault_reconnection_test"
 path = "rpc_csp_vault_reconnection_test.rs"
+
+[[bin]]
+name = "ingress_verification_test"
+path = "ingress_verification_test.rs"
