@@ -12,22 +12,31 @@ use strum::Display;
 use crate::{
     RequestState, ValidationError,
     canister_state::{
+        caller_allowed,
         events::find_event,
         migrations_disabled,
         requests::{find_request, insert_request},
+        set_allowlist,
     },
     rate_limited, start_timers,
     validation::validate_request,
 };
 
+#[derive(CandidType, Deserialize)]
+struct MigrationCanisterInitArgs {
+    allowlist: Option<Vec<Principal>>,
+}
+
 #[init]
-fn init() {
+fn init(args: MigrationCanisterInitArgs) {
     start_timers();
+    set_allowlist(args.allowlist);
 }
 
 #[post_upgrade]
-fn post_upgrade() {
+fn post_upgrade(args: MigrationCanisterInitArgs) {
     start_timers();
+    set_allowlist(args.allowlist);
 }
 
 #[derive(Clone, CandidType, Deserialize)]
@@ -55,6 +64,10 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
         return Err(ValidationError::RateLimited);
     }
     let caller = msg_caller();
+    // For soft rollout purposes
+    if !caller_allowed(&caller) {
+        return Err(ValidationError::MigrationsDisabled);
+    }
     match validate_request(args.source, args.target, caller).await {
         Err(e) => {
             println!("Failed to validate request {}: {}", args, e);
