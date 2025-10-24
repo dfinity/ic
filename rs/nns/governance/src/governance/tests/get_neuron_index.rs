@@ -41,7 +41,7 @@ fn make_governance_for_neuron_index() -> Governance {
         .with_controller(PrincipalId::new_user_test_id(id))
         .build();
 
-        governance.add_neuron(neuron.id().id, neuron).unwrap();
+        governance.add_neuron(id, neuron).unwrap();
     }
 
     governance
@@ -50,6 +50,7 @@ fn make_governance_for_neuron_index() -> Governance {
 // This user doesn't control any neurons.
 static NEURONLESS_USER_ID: PrincipalId = PrincipalId::new_user_test_id(1001);
 
+#[track_caller]
 fn assert_neuron_index(neurons: &[NeuronInfo], start_id: u64, size: usize) {
     assert_eq!(neurons.len(), size);
     for (i, neuron) in neurons.iter().enumerate() {
@@ -67,12 +68,12 @@ fn assert_neuron_index(neurons: &[NeuronInfo], start_id: u64, size: usize) {
 fn test_get_neuron_index_empty_args() {
     let _temp = temporarily_enable_comprehensive_neuron_list();
 
+    let governance = make_governance_for_neuron_index();
+
     let request = GetNeuronIndexRequest {
         exclusive_start_neuron_id: None,
         page_size: None,
     };
-
-    let governance = make_governance_for_neuron_index();
 
     let response = governance
         .get_neuron_index(request, NEURONLESS_USER_ID)
@@ -85,12 +86,12 @@ fn test_get_neuron_index_empty_args() {
 fn test_get_neuron_index_large_page() {
     let _temp = temporarily_enable_comprehensive_neuron_list();
 
+    let governance = make_governance_for_neuron_index();
+
     let request = GetNeuronIndexRequest {
         exclusive_start_neuron_id: None,
         page_size: Some(500),
     };
-
-    let governance = make_governance_for_neuron_index();
 
     let response = governance
         .get_neuron_index(request, NEURONLESS_USER_ID)
@@ -103,12 +104,12 @@ fn test_get_neuron_index_large_page() {
 fn test_get_neuron_index_multiple_pages() {
     let _temp = temporarily_enable_comprehensive_neuron_list();
 
+    let governance = make_governance_for_neuron_index();
+
     let request = GetNeuronIndexRequest {
         exclusive_start_neuron_id: Some(NeuronId { id: 0 }),
         page_size: Some(MAX_NEURON_PAGE_SIZE),
     };
-
-    let governance = make_governance_for_neuron_index();
 
     let response = governance
         .get_neuron_index(request, NEURONLESS_USER_ID)
@@ -134,12 +135,12 @@ fn test_get_neuron_index_multiple_pages() {
 fn test_get_neuron_index_disabled() {
     let _temp = temporarily_disable_comprehensive_neuron_list();
 
+    let governance = make_governance_for_neuron_index();
+
     let request = GetNeuronIndexRequest {
         exclusive_start_neuron_id: Some(NeuronId { id: 0 }),
         page_size: Some(MAX_NEURON_PAGE_SIZE),
     };
-
-    let governance = make_governance_for_neuron_index();
 
     let response = governance.get_neuron_index(request, NEURONLESS_USER_ID);
 
