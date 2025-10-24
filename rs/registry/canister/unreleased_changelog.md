@@ -18,6 +18,9 @@ on the process that this file is part of, see
 
 ## Changed
 
+* `ssh_node_state_write_access` can have at most 50 elements. Previously, there
+  was no limit. (This brings this field in line with other ssh_*_access fields.)
+
 ## Deprecated
 
 ## Removed
