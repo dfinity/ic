@@ -931,6 +931,7 @@ mod tests {
                 .as_ref(),
         );
         replicator.stop_polling();
+        assert!(replicator.cancelled.load(Ordering::Relaxed));
         assert_eq!(
             replicator.registry_client.get_latest_version(),
             RegistryVersion::from(2 * INIT_NUM_VERSIONS as u64)
