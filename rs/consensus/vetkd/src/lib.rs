@@ -42,6 +42,7 @@ use ic_types::{
 use num_traits::ops::saturating::SaturatingSub;
 use rayon::ThreadPool;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
@@ -209,18 +210,12 @@ impl VetKdPayloadBuilderImpl {
             )
         };
 
-        let accumulated_size_estimate = RwLock::new(0);
+        let accumulated_size_estimate = AtomicUsize::new(0);
         let candidates = self.thread_pool.install(|| {
             state
                 .signature_request_contexts()
                 .par_iter()
                 .flat_map(|(callback_id, context)| {
-                    if NumBytes::new(*accumulated_size_estimate.read().unwrap()) >= max_payload_size
-                    {
-                        // Stop if the payload is full according to the accumulated estimate
-                        return None;
-                    }
-
                     if !context.is_vetkd() {
                         // Skip non-vetkd contexts.
                         return None;
@@ -231,13 +226,13 @@ impl VetKdPayloadBuilderImpl {
                         return None;
                     }
 
-                    let candidate = if let Some(reject) = reject_if_invalid(
+                    if let Some(reject) = reject_if_invalid(
                         &valid_keys,
                         context,
                         &request_expiry,
                         Some(&self.metrics),
                     ) {
-                        reject
+                        Some((*callback_id, reject))
                     } else {
                         let shares = grouped_shares.get(callback_id)?;
                         let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
@@ -265,15 +260,13 @@ impl VetKdPayloadBuilderImpl {
                                 let result = VetKdDeriveKeyResult {
                                     encrypted_key: key.encrypted_key,
                                 };
-                                VetKdAgreement::Success(result.encode())
+                                Some((*callback_id, VetKdAgreement::Success(result.encode())))
                             }
                             Err(
                                 VetKdKeyShareCombinationError::UnsatisfiedReconstructionThreshold {
                                     ..
                                 },
-                            ) => {
-                                return None;
-                            }
+                            ) => None,
                             Err(err) => {
                                 warn!(
                                     self.log,
@@ -283,24 +276,22 @@ impl VetKdPayloadBuilderImpl {
                                 );
                                 self.metrics
                                     .payload_errors_inc("combine_key_shares", &key_id);
-                                return None;
+                                None
                             }
                         }
-                    };
-
-                    // Estimate the canidate size by counting bytes, which is a lower bound compared
-                    // to actual serialization.
+                    }
+                })
+                .take_any_while(|(callback_id, candidate)| {
                     let candidate_size = callback_id.count_bytes() + candidate.count_bytes();
-                    let mut accumulated_size_estimate = accumulated_size_estimate.write().unwrap();
-                    // We always include the created candidate, even if at this point the payload
-                    // may already be full (i.e. due to inaccurate size estimates, or other threads
-                    // filling up the payload in the meantime).
-                    // Returning a payload that is "too large" here is fine, since the hard limit
-                    // is enforced after all candidates are serialized in `vetkd_payload_to_bytes`.
-                    // The size estimate in this function exists primarily to avoid computing
-                    // significantly more candidates than necessary.
-                    *accumulated_size_estimate += candidate_size as u64;
-                    Some((*callback_id, candidate))
+                    accumulated_size_estimate
+                        .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |current_size| {
+                            let new_size = current_size + candidate_size;
+                            if new_size >= max_payload_size.get() as usize {
+                                return None;
+                            }
+                            Some(new_size)
+                        })
+                        .is_ok()
                 })
                 .collect::<BTreeMap<_, _>>()
         });
