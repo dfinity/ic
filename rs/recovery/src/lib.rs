@@ -875,14 +875,6 @@ impl Recovery {
         }
     }
 
-    pub fn get_copy_ic_state(&self, new_state_dir: PathBuf) -> impl Step + use<> {
-        CopyIcStateStep {
-            logger: self.logger.clone(),
-            work_dir: self.work_dir.join(IC_STATE_DIR),
-            new_state_dir,
-        }
-    }
-
     /// Return an [UploadCUPAndTarStep] uploading CUP and registry tar to the given node IP
     pub fn get_upload_cup_and_tar_step(&self, node_ip: IpAddr) -> impl Step + use<> {
         UploadCUPAndTarStep {

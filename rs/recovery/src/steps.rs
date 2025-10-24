@@ -937,33 +937,6 @@ impl Step for CreateRegistryTarStep {
     }
 }
 
-pub struct CopyIcStateStep {
-    pub logger: Logger,
-    pub work_dir: PathBuf,
-    pub new_state_dir: PathBuf,
-}
-
-impl Step for CopyIcStateStep {
-    fn descr(&self) -> String {
-        format!(
-            "Copying ic_state for upload to: {}",
-            self.new_state_dir.display()
-        )
-    }
-
-    fn exec(&self) -> RecoveryResult<()> {
-        rsync(
-            &self.logger,
-            Vec::<String>::default(),
-            &self.work_dir.join(""),
-            &self.new_state_dir.join(""),
-            false,
-            None,
-        )?;
-        Ok(())
-    }
-}
-
 pub struct UploadCUPAndTarStep {
     pub logger: Logger,
     pub registry_helper: RegistryHelper,
