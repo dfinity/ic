@@ -1,9 +1,9 @@
 use ic_interfaces::{
+    consensus::PayloadWithSizeEstimate,
     ingress_manager::{IngressPayloadValidationError, IngressSelector, IngressSetQuery},
-    validation::ValidationResult,
 };
 use ic_types::{
-    CountBytes, Height, NumBytes, Time,
+    CountBytes, Height, Time, WireBytes,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
@@ -56,8 +56,8 @@ impl IngressSelector for FakeIngressSelector {
         &self,
         _past_payloads: &dyn IngressSetQuery,
         _context: &ValidationContext,
-        byte_limit: NumBytes,
-    ) -> IngressPayload {
+        byte_limit: WireBytes,
+    ) -> PayloadWithSizeEstimate<IngressPayload> {
         let mut queue = self.queue.lock().unwrap();
 
         // Find the index of a payload that fits in byte_limit
@@ -73,22 +73,26 @@ impl IngressSelector for FakeIngressSelector {
             })
             .map(|(idx, _)| idx);
 
-        // Return the found payload or default
-        match payload_idx {
+        let payload = match payload_idx {
             Some(idx) => queue
                 .remove(idx)
                 .map(|payload| payload.into())
                 .unwrap_or_default(),
             None => IngressPayload::default(),
+        };
+
+        PayloadWithSizeEstimate {
+            wire_size_estimate: WireBytes::new(payload.total_ids_size_estimate().get()),
+            payload,
         }
     }
     fn validate_ingress_payload(
         &self,
-        _payload: &IngressPayload,
+        payload: &IngressPayload,
         _past_payloads: &dyn IngressSetQuery,
         _context: &ValidationContext,
-    ) -> ValidationResult<IngressPayloadValidationError> {
-        Ok(())
+    ) -> Result<WireBytes, IngressPayloadValidationError> {
+        Ok(WireBytes::new(payload.total_ids_size_estimate().get()))
     }
 
     fn filter_past_payloads(

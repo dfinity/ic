@@ -7749,6 +7749,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-consensus-features"
+version = "0.9.0"
+
+[[package]]
 name = "ic-consensus-idkg"
 version = "0.9.0"
 dependencies = [
@@ -10344,6 +10348,7 @@ dependencies = [
  "criterion",
  "ic-artifact-pool",
  "ic-config",
+ "ic-consensus-features",
  "ic-crypto-interfaces-sig-verification",
  "ic-crypto-temp-crypto",
  "ic-cycles-account-manager",
@@ -10374,6 +10379,7 @@ dependencies = [
  "prometheus 0.13.4",
  "proptest",
  "rand 0.8.5",
+ "rstest",
  "slog",
  "tokio",
 ]
@@ -13046,6 +13052,7 @@ dependencies = [
  "ic-consensus",
  "ic-consensus-certification",
  "ic-consensus-dkg",
+ "ic-consensus-features",
  "ic-consensus-idkg",
  "ic-consensus-manager",
  "ic-consensus-utils",

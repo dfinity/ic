@@ -9,7 +9,7 @@ use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
 };
 use ic_types::{
-    CountBytes, Height, Time,
+    Height, Time,
     batch::BatchPayload,
     consensus::{Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank},
 };
@@ -150,7 +150,8 @@ impl BatchStats {
 
     pub(crate) fn add_from_payload(&mut self, payload: &BatchPayload) {
         self.ingress_messages_delivered += payload.ingress.message_count();
-        self.ingress_message_bytes_delivered += payload.ingress.count_bytes();
+        self.ingress_message_bytes_delivered +=
+            payload.ingress.total_messages_size_estimate().get() as usize;
         self.xnet_bytes_delivered += payload.xnet.size_bytes();
         self.ingress_ids
             .extend(payload.ingress.message_ids().cloned());
@@ -276,9 +277,9 @@ impl FinalizerMetrics {
                 "Total number of canister http messages delivered as divergences",
             ),
             canister_http_payload_bytes_delivered: metrics_registry.histogram(
-                "canister_http_payload_bytes_delivered", 
+                "canister_http_payload_bytes_delivered",
                 "Total number of bytes in the canister http payload",
-                // This will create 16 buckets starting from 0, 100, 200, 500, 1000  
+                // This will create 16 buckets starting from 0, 100, 200, 500, 1000
                 // up to 5 * 10^6 ~= 5MB
                 decimal_buckets_with_zero(2, 6),
             ),

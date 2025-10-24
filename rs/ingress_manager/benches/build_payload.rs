@@ -42,7 +42,7 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
-    CanisterId, Cycles, Height, NumBytes, PrincipalId, RegistryVersion, SubnetId, Time,
+    CanisterId, Cycles, Height, PrincipalId, RegistryVersion, SubnetId, Time, WireBytes,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     ingress::IngressStatus,
@@ -209,7 +209,7 @@ fn prepare(
 fn get_ingress_payload(
     now: Time,
     manager: &IngressManager,
-    byte_limit: NumBytes,
+    byte_limit: WireBytes,
 ) -> IngressPayload {
     let validation_context = ValidationContext {
         time: now,
@@ -217,7 +217,9 @@ fn get_ingress_payload(
         certified_height: Height::from(0),
     };
     let past_payload = HashSet::new();
-    manager.get_ingress_payload(&past_payload, &validation_context, byte_limit)
+    manager
+        .get_ingress_payload(&past_payload, &validation_context, byte_limit)
+        .payload
 }
 
 /// Validate payload
@@ -291,7 +293,7 @@ fn build_payload(criterion: &mut Criterion) {
                         get_ingress_payload(
                             current_time,
                             manager,
-                            NumBytes::new(MAX_BLOCK_PAYLOAD_SIZE),
+                            WireBytes::new(MAX_BLOCK_PAYLOAD_SIZE),
                         );
                     })
                 });
@@ -329,7 +331,7 @@ fn validate_payload(criterion: &mut Criterion) {
                 let payload = get_ingress_payload(
                     current_time,
                     manager,
-                    NumBytes::new(MAX_BLOCK_PAYLOAD_SIZE),
+                    WireBytes::new(MAX_BLOCK_PAYLOAD_SIZE),
                 );
 
                 let name = format!(

@@ -4,14 +4,14 @@ use crate::consensus::metrics::{
 use ic_consensus_utils::pool_reader::filter_past_payloads;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
-    consensus::PayloadValidationError,
+    consensus::{PayloadValidationError, PayloadWithSizeEstimate},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
 };
 use ic_logger::{ReplicaLogger, error, warn};
 use ic_types::{
-    CountBytes, Height, NumBytes, Time,
+    Height, NumBytes, Time, WireBytes,
     batch::{BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     consensus::Payload,
     messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT,
@@ -114,12 +114,14 @@ impl BatchPayloadSectionBuilder {
             Self::Ingress(builder) => {
                 let past_payloads = builder
                     .filter_past_payloads(past_payloads, proposal_context.validation_context);
-                let ingress = builder.get_ingress_payload(
+                let PayloadWithSizeEstimate {
+                    payload: ingress,
+                    wire_size_estimate,
+                } = builder.get_ingress_payload(
                     &past_payloads,
                     proposal_context.validation_context,
-                    max_size,
+                    WireBytes::new(max_size.get()),
                 );
-                let size = NumBytes::new(ingress.count_bytes() as u64);
 
                 // Validate the ingress payload as a safety measure
                 if let Err(err) = builder.validate_ingress_payload(
@@ -140,7 +142,7 @@ impl BatchPayloadSectionBuilder {
                 }
 
                 // Perform an additional size check
-                if size > max_size {
+                if wire_size_estimate.get() > max_size.get() {
                     error!(
                         logger,
                         "IngressPayload is larger than byte limits, this is a bug, @{}",
@@ -153,7 +155,7 @@ impl BatchPayloadSectionBuilder {
                 }
 
                 payload.ingress = ingress;
-                size
+                NumBytes::new(wire_size_estimate.get())
             }
             Self::XNet(builder) => {
                 // NOTE: The XNetPayloadBuilder has some special properties that requires some extra logic.
@@ -384,12 +386,13 @@ impl BatchPayloadSectionBuilder {
             Self::Ingress(builder) => {
                 let past_payloads = builder
                     .filter_past_payloads(past_payloads, proposal_context.validation_context);
-                builder.validate_ingress_payload(
-                    &payload.ingress,
-                    &past_payloads,
-                    proposal_context.validation_context,
-                )?;
-                Ok(NumBytes::new(payload.ingress.count_bytes() as u64))
+                Ok(builder
+                    .validate_ingress_payload(
+                        &payload.ingress,
+                        &past_payloads,
+                        proposal_context.validation_context,
+                    )
+                    .map(|bytes| NumBytes::new(bytes.get()))?)
             }
             Self::XNet(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
