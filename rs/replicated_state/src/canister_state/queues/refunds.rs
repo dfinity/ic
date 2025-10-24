@@ -85,4 +85,14 @@ impl RefundPool {
     pub fn is_empty(&self) -> bool {
         self.refunds.is_empty()
     }
+
+    /// Computes the total amount of pooled cycles.
+    ///
+    /// Complexity: `O(n)`
+    #[cfg(debug_assertions)]
+    pub(crate) fn compute_total(&self) -> Cycles {
+        self.refunds
+            .iter()
+            .fold(Cycles::zero(), |acc, r| acc + r.amount())
+    }
 }

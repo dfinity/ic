@@ -802,7 +802,7 @@ impl StreamHandlerImpl {
     /// There are 4 possible outcomes:
     ///  * `msg` successfully inducted: returns `Accept`.
     ///  * silently dropped late best-effort response: returns `Accept` (having
-    ///    credited any refund).
+    ///    refunded any attached cycles).
     ///  * `msg` failed to be inducted (error or canister migrating), returns a
     ///    `Reject` wrapping a `RejectReason` and the original `msg`. The caller is
     ///    expected to produce a reject response or a reject signal.
