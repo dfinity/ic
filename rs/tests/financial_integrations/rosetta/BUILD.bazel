@@ -10,9 +10,9 @@ system_test_nns(
         "long_test",  # the P90 duration was over 7 minutes in the week starting on 2025-08-21
     ],
     runtime_deps = [
+        "//:rosetta-cli",
         "//rs/rosetta-api/icp:ic-rosetta-api",
         "//rs/tests:rosetta_workspace",
-        "@rosetta-cli//:rosetta-cli",
     ],
     deps = [
         "//rs/canister_client",
@@ -42,10 +42,10 @@ system_test_nns(
     ],
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS + [
+            "//:rosetta-cli",
             "//rs/rosetta-api/icp:ic-rosetta-api",
             "//rs/rosetta-api/icp:rosetta_image.tar",
             "//rs/tests:rosetta_workspace",
-            "@rosetta-cli//:rosetta-cli",
         ],
     deps = [
         "//rs/ledger_suite/common/ledger_core",

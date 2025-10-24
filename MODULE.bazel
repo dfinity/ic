@@ -854,6 +854,29 @@ http_file(
     url = "https://github.com/dfinity/pocketic/releases/download/9.0.1/pocket-ic-x86_64-linux.gz",
 )
 
+## Rosetta CLI
+
+http_archive(
+    name = "rosetta-cli-x86_64-darwin",
+    build_file = "@//third_party:BUILD.rosetta-cli.bazel",
+    sha256 = "6426d69d8ce6851a00eb47c4b3bb5a5f2f792daca58a58d077ac5ade7c07f42b",
+    url = "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-darwin-amd64.tar.gz",
+)
+
+http_archive(
+    name = "rosetta-cli-aarch64-darwin",
+    build_file = "@//third_party:BUILD.rosetta-cli.bazel",
+    sha256 = "41eaa23bc2a34568549e7c0d99c3471fd0c20959ffb7a1e9fd2acc658f500b20",
+    url = "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-darwin-arm64.tar.gz",
+)
+
+http_archive(
+    name = "rosetta-cli-x86_64-linux",
+    build_file = "@//third_party:BUILD.rosetta-cli.bazel",
+    sha256 = "1ea96b427dfa69a93d2915bc57669014b58d66a9ee7d761509d50b66486d42f8",
+    url = "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-linux-amd64.tar.gz",
+)
+
 http_archive(
     name = "rclone-x86_64-darwin",
     build_file = "@//third_party:BUILD.rclone.bazel",
