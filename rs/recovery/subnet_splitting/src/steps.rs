@@ -44,6 +44,7 @@ impl Step for CopyWorkDirStep {
     fn exec(&self) -> RecoveryResult<()> {
         rsync(
             &self.logger,
+            Vec::<String>::default(),
             vec![CUPS_DIR, IC_REGISTRY_LOCAL_STORE],
             &format!("{}/", self.layout.work_dir(TargetSubnet::Source).display()),
             &self

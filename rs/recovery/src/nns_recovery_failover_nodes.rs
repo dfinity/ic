@@ -1,5 +1,5 @@
 use crate::{
-    CUPS_DIR, IC_REGISTRY_LOCAL_STORE, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
+    IC_REGISTRY_LOCAL_STORE, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
     admin_helper::RegistryParams,
     cli::{
         print_height_info, read_optional, read_optional_data_location, read_optional_node_ids,
@@ -40,6 +40,7 @@ pub enum StepType {
     StopReplica,
     DownloadCertifications,
     MergeCertificationPools,
+    DownloadConsensusPool,
     DownloadState,
     ProposeToCreateSubnet,
     DownloadParentNNSStore,
@@ -179,8 +180,10 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
     }
 
     fn read_step_params(&mut self, step_type: StepType) {
+        // Depending on the next step we might require some user interaction before we can execute
+        // it.
         match step_type {
-            StepType::StopReplica => {
+            StepType::StopReplica | StepType::DownloadConsensusPool | StepType::DownloadState => {
                 print_height_info(
                     &self.logger,
                     &self.recovery.registry_helper,
@@ -191,7 +194,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                     self.params.download_node = read_optional(&self.logger, "Enter download IP:");
                 }
             }
-
+            _ => {}
+        }
+        match step_type {
             StepType::ProposeToCreateSubnet => {
                 if self.params.replica_version.is_none() {
                     self.params.replica_version = read_optional_version(
@@ -275,6 +280,18 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 Ok(Box::new(self.recovery.get_merge_certification_pools_step()))
             }
 
+            StepType::DownloadConsensusPool => {
+                if let Some(node_ip) = self.params.download_node {
+                    Ok(Box::new(self.recovery.get_download_consensus_pool_step(
+                        node_ip,
+                        SshUser::Admin,
+                        self.recovery.admin_key_file.clone(),
+                    )))
+                } else {
+                    Err(RecoveryError::StepSkipped)
+                }
+            }
+
             StepType::DownloadState => {
                 if let Some(node_ip) = self.params.download_node {
                     Ok(Box::new(self.recovery.get_download_state_step(
@@ -282,8 +299,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                         SshUser::Admin,
                         self.recovery.admin_key_file.clone(),
                         /*keep_downloaded_state=*/ false,
-                        /*additional_excludes=*/ vec![CUPS_DIR],
-                    )))
+                    )?))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

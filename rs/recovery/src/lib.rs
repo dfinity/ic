@@ -7,25 +7,32 @@
 //! execution.
 use crate::{
     cli::wait_for_confirmation, file_sync_helper::remove_dir, registry_helper::RegistryHelper,
-    util::SshUser,
+    ssh_helper::SshHelper, util::SshUser,
 };
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
 use command_helper::exec_cmd;
 use error::{RecoveryError, RecoveryResult};
 use file_sync_helper::{create_dir, download_binary, read_dir};
 use futures::future::join_all;
+use ic_artifact_pool::consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl};
 use ic_base_types::{CanisterId, NodeId};
+use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_cup_explorer::get_catchup_content;
+use ic_interfaces::{consensus_pool::ConsensusPool, time_source::SysTimeSource};
+use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_replay::{
     cmd::{AddRegistryContentCmd, SubCommand, UpgradeSubnetToReplicaVersionCmd},
     player::StateParams,
 };
-use ic_types::{Height, ReplicaVersion, SubnetId, messages::HttpStatusResponse};
+use ic_types::{
+    Height, PrincipalId, ReplicaVersion, SubnetId, consensus::HasHeight,
+    messages::HttpStatusResponse,
+};
 use registry_helper::RegistryPollingStrategy;
 use serde::{Deserialize, Serialize};
 use slog::{Logger, info, warn};
-use std::{env, io::ErrorKind};
+use std::{env, io::ErrorKind, sync::Arc};
 use std::{
     net::IpAddr,
     path::{Path, PathBuf},
@@ -64,20 +71,6 @@ pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
 pub const IC_CONSENSUS_POOL_PATH: &str = "ic_consensus_pool";
 pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
-pub const IC_STATE_EXCLUDES: &[&str] = &[
-    "images",
-    "tip",
-    "backups",
-    "fs_tmp",
-    "recovery",
-    // The page_deltas/ directory should not be copied over on rsync as well,
-    // it is a new directory used for storing the files backing up the
-    // page deltas. We do not need to copy page deltas when nodes are re-assigned.
-    "page_deltas",
-    "node_operator_private_key.pem",
-    "ic_adapter",
-    IC_REGISTRY_LOCAL_STORE,
-];
 pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
 pub const OLD_IC_STATE: &str = "old_ic_state";
@@ -95,6 +88,7 @@ pub struct NeuronArgs {
 #[derive(Debug)]
 pub struct NodeMetrics {
     _ip: IpAddr,
+    pub catch_up_package_height: Height,
     pub finalization_height: Height,
     pub certification_height: Height,
     pub certification_share_height: Height,
@@ -314,7 +308,66 @@ impl Recovery {
         }
     }
 
-    /// Return a [DownloadIcStateStep] downloading the ic_state of the given
+    /// Return the list of paths to include when downloading the consensus pool with rsync.
+    /// Certifications are only included if they do not already exist in the
+    /// work directory.
+    fn get_consensus_pool_includes(&self) -> Vec<PathBuf> {
+        let consensus_pool_path = PathBuf::from(IC_CONSENSUS_POOL_PATH);
+        let mut includes = vec![
+            consensus_pool_path.join(""),
+            consensus_pool_path.join("replica_version"),
+            consensus_pool_path.join("consensus").join("***"),
+        ];
+
+        // If we already have some certifications, we do not download them again.
+        if !self
+            .work_dir
+            .join("data")
+            .join(IC_CERTIFICATIONS_PATH)
+            .exists()
+        {
+            includes.push(consensus_pool_path.join("certification").join("***"));
+        }
+
+        includes
+    }
+
+    /// Return the list of paths to include when downloading the ic_state with rsync.
+    /// These are the paths leading to the latest CUP checkpoint.
+    fn get_state_includes(&self, ssh_helper: &SshHelper) -> RecoveryResult<Vec<PathBuf>> {
+        let cup_checkpoint_name = Recovery::get_checkpoint_name_for_latest_cup_height(
+            &self.logger,
+            &self.work_dir,
+            Some(ssh_helper),
+        )?;
+
+        Ok(vec![
+            PathBuf::from(IC_STATE).join(""),
+            PathBuf::from(IC_STATE).join(CHECKPOINTS).join(""),
+            PathBuf::from(IC_STATE)
+                .join(CHECKPOINTS)
+                .join(cup_checkpoint_name)
+                .join("***"),
+        ])
+    }
+
+    /// Return a [DownloadIcDataStep] downloading the consensus pool of the given
+    /// node to the recovery data directory using the given account.
+    pub fn get_download_consensus_pool_step(
+        &self,
+        node_ip: IpAddr,
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
+    ) -> impl Step + use<> {
+        let includes = self.get_consensus_pool_includes();
+
+        self.get_download_data_step(
+            node_ip, ssh_user, key_file, /*keep_downloaded_data=*/ false, includes,
+            /*include_config=*/ false,
+        )
+    }
+
+    /// Return a [DownloadIcDataStep] downloading the ic_state of the given
     /// node to the recovery data directory using the given account.
     pub fn get_download_state_step(
         &self,
@@ -322,21 +375,76 @@ impl Recovery {
         ssh_user: SshUser,
         key_file: Option<PathBuf>,
         keep_downloaded_state: bool,
-        additional_excludes: Vec<&str>,
+    ) -> RecoveryResult<impl Step + use<>> {
+        let includes = self.get_state_includes(&SshHelper::new(
+            self.logger.clone(),
+            ssh_user.to_string(),
+            node_ip,
+            self.ssh_confirmation,
+            key_file.clone(),
+        ))?;
+
+        Ok(self.get_download_data_step(
+            node_ip,
+            ssh_user,
+            key_file,
+            keep_downloaded_state,
+            includes,
+            /*include_config=*/ true,
+        ))
+    }
+
+    /// Return a [DownloadIcDataStep] downloading the ic_state and CUPs of the
+    /// given node to the recovery data directory using the given account.
+    pub fn get_download_state_and_cups_step(
+        &self,
+        node_ip: IpAddr,
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
+        keep_downloaded_data: bool,
+    ) -> RecoveryResult<impl Step + use<>> {
+        let mut includes = self.get_state_includes(&SshHelper::new(
+            self.logger.clone(),
+            ssh_user.to_string(),
+            node_ip,
+            self.ssh_confirmation,
+            key_file.clone(),
+        ))?;
+
+        includes.push(PathBuf::from(CUPS_DIR).join("***"));
+
+        Ok(self.get_download_data_step(
+            node_ip,
+            ssh_user,
+            key_file,
+            keep_downloaded_data,
+            includes,
+            /*include_config=*/ true,
+        ))
+    }
+
+    /// Return a [DownloadIcDataStep] downloading some data of the given
+    /// node to the recovery data directory using the given account.
+    pub fn get_download_data_step(
+        &self,
+        node_ip: IpAddr,
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
+        keep_downloaded_data: bool,
+        data_includes: Vec<PathBuf>,
+        include_config: bool,
     ) -> impl Step + use<> {
-        DownloadIcStateStep {
+        DownloadIcDataStep {
             logger: self.logger.clone(),
             ssh_user,
             node_ip,
-            target: self.data_dir.display().to_string(),
-            keep_downloaded_state,
-            working_dir: self.work_dir.display().to_string(),
+            backup_dir: self.data_dir.clone(),
+            keep_downloaded_data,
+            working_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
             key_file,
-            additional_excludes: additional_excludes
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect(),
+            data_includes,
+            include_config,
         }
     }
 
@@ -457,6 +565,51 @@ impl Recovery {
             })
             .collect::<Vec<String>>();
         Ok(res)
+    }
+
+    /// Reads the consensus pool in the working directory to find the height of the highest CUP and
+    /// checks whether a checkpoint exists for that height. If it does, returns its name.
+    /// Otherwise, returns an error.
+    /// If an `SshHelper` is provided, the existence check is performed over SSH, otherwise
+    /// locally.
+    pub fn get_checkpoint_name_for_latest_cup_height(
+        logger: &Logger,
+        work_dir: &Path,
+        ssh_helper: Option<&SshHelper>,
+    ) -> RecoveryResult<String> {
+        let pool = ConsensusPoolImpl::from_uncached(
+            NodeId::from(PrincipalId::new_anonymous()),
+            UncachedConsensusPoolImpl::new(
+                ArtifactPoolConfig::new(work_dir.join("data").join(IC_CONSENSUS_POOL_PATH)),
+                logger.clone().into(),
+            ),
+            MetricsRegistry::new(),
+            logger.clone().into(),
+            Arc::new(SysTimeSource::new()),
+        );
+        let highest_cup_height = pool.validated().highest_catch_up_package().height().get();
+
+        let checkpoint_name = format!("{:016x}", highest_cup_height);
+        let full_checkpoint_path = PathBuf::from(IC_DATA_PATH)
+            .join(IC_CHECKPOINTS_PATH)
+            .join(&checkpoint_name)
+            .display()
+            .to_string();
+        let command = format!("test -d {full_checkpoint_path}");
+        let result = match ssh_helper {
+            Some(helper) => helper.ssh(command),
+            None => {
+                let mut cmd = Command::new("bash");
+                cmd.arg("-c").arg(command);
+                exec_cmd(&mut cmd)
+            }
+        };
+        match result {
+            Ok(_) => Ok(checkpoint_name),
+            Err(_) => Err(RecoveryError::invalid_output_error(format!(
+                "No checkpoint found for latest CUP height {highest_cup_height} at expected path: {full_checkpoint_path}",
+            ))),
+        }
     }
 
     /// Get the name and the height of the latest checkpoint currently on disk
@@ -932,6 +1085,7 @@ pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetric
         }
     };
     let mut node_heights = NodeMetrics {
+        catch_up_package_height: Height::from(0),
         finalization_height: Height::from(0),
         certification_height: Height::from(0),
         certification_share_height: Height::from(0),
@@ -941,6 +1095,14 @@ pub async fn get_node_metrics(logger: &Logger, ip: &IpAddr) -> Option<NodeMetric
         let mut parts = line.split(' ');
         if let (Some(prefix), Some(height)) = (parts.next(), parts.next()) {
             match prefix {
+                r#"artifact_pool_consensus_height_stat{pool_type="validated",stat="max",type="catch_up_package"}"# => {
+                    match height.trim().parse::<u64>() {
+                        Ok(val) => node_heights.catch_up_package_height = Height::from(val),
+                        error => {
+                            warn!(logger, "Couldn't parse height {}: {:?}", height, error)
+                        }
+                    }
+                }
                 r#"artifact_pool_certification_height_stat{pool_type="validated",stat="max",type="certification"}"# => {
                     match height.trim().parse::<u64>() {
                         Ok(val) => node_heights.certification_height = Height::from(val),

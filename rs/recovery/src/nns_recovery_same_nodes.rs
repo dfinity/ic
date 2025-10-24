@@ -1,5 +1,5 @@
 use crate::{
-    CUPS_DIR, IC_STATE_DIR, RecoveryArgs, RecoveryResult,
+    RecoveryArgs, RecoveryResult,
     cli::{
         consent_given, print_height_info, read_optional, read_optional_data_location,
         read_optional_version,
@@ -367,38 +367,30 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::DownloadConsensusPool => {
                 if let Some(node_ip) = self.params.download_pool_node {
-                    Ok(Box::new(self.recovery.get_download_state_step(
+                    Ok(Box::new(self.recovery.get_download_consensus_pool_step(
                         node_ip,
                         SshUser::Backup,
                         self.params.backup_key_file.clone(),
-                        /*keep_downloaded_state=*/ false,
-                        /*additional_excludes=*/
-                        vec![CUPS_DIR, IC_STATE_DIR, "orchestrator"], // exclude folders to
-                                                                      // download only the
-                                                                      // consensus pool
                     )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
             }
 
-            StepType::DownloadState => {
-                match self.params.admin_access_location {
-                    Some(DataLocation::Local) => {
-                        Ok(Box::new(self.recovery.get_copy_local_state_step()))
-                    }
-                    Some(DataLocation::Remote(node_ip)) => {
-                        Ok(Box::new(self.recovery.get_download_state_step(
-                            node_ip,
-                            SshUser::Admin,
-                            self.recovery.admin_key_file.clone(),
-                            self.params.keep_downloaded_state == Some(true),
-                            /*additional_excludes=*/ vec![CUPS_DIR],
-                        )))
-                    }
-                    None => Err(RecoveryError::StepSkipped),
+            StepType::DownloadState => match self.params.admin_access_location {
+                Some(DataLocation::Local) => {
+                    Ok(Box::new(self.recovery.get_copy_local_state_step()))
                 }
-            }
+                Some(DataLocation::Remote(node_ip)) => {
+                    Ok(Box::new(self.recovery.get_download_state_step(
+                        node_ip,
+                        SshUser::Admin,
+                        self.recovery.admin_key_file.clone(),
+                        self.params.keep_downloaded_state == Some(true),
+                    )?))
+                }
+                None => Err(RecoveryError::StepSkipped),
+            },
 
             StepType::ICReplay => {
                 if let Some(upgrade_version) = self.params.upgrade_version.clone() {

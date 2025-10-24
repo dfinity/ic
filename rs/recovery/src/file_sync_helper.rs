@@ -64,22 +64,30 @@ pub async fn download_binary(
 }
 
 /// If auto-retry is set to false, the user will be prompted for retries on rsync failures.
-pub fn rsync_with_retries(
+pub fn rsync_with_retries<I, E, S, T>(
     logger: &Logger,
-    excludes: Vec<&str>,
-    src: &str,
-    target: &str,
+    includes: I,
+    excludes: E,
+    src: S,
+    target: T,
     require_confirmation: bool,
     key_file: Option<&PathBuf>,
     auto_retry: bool,
     max_retries: usize,
-) -> RecoveryResult<Option<String>> {
+) -> RecoveryResult<Option<String>>
+where
+    I: IntoIterator<Item: AsRef<Path>> + Clone,
+    E: IntoIterator<Item: AsRef<Path>> + Clone,
+    S: AsRef<Path>,
+    T: AsRef<Path>,
+{
     for _ in 0..max_retries {
         match rsync(
             logger,
             excludes.clone(),
-            src,
-            target,
+            includes.clone(),
+            src.as_ref(),
+            target.as_ref(),
             require_confirmation,
             key_file,
         ) {
@@ -101,21 +109,26 @@ pub fn rsync_with_retries(
     Err(RecoveryError::RsyncFailed)
 }
 
-/// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) and options `--delete`, `-acP`.
-/// File and directory names part of the `excludes` vector are discarded.
-pub fn rsync<I>(
+/// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) and options
+/// `--delete`, `-acP`. Includes and excludes are passed as `--include=` and `--exclude=` options
+/// respectively. See the manual page of rsync for more details about how these options interact
+/// with each other.
+pub fn rsync<I, E, S, T>(
     logger: &Logger,
-    excludes: I,
-    src: &str,
-    target: &str,
+    includes: I,
+    excludes: E,
+    src: S,
+    target: T,
     require_confirmation: bool,
     key_file: Option<&PathBuf>,
 ) -> RecoveryResult<Option<String>>
 where
-    I: IntoIterator,
-    I::Item: std::fmt::Display,
+    I: IntoIterator<Item: AsRef<Path>>,
+    E: IntoIterator<Item: AsRef<Path>>,
+    S: AsRef<Path>,
+    T: AsRef<Path>,
 {
-    let mut rsync = get_rsync_command(excludes, src, target, key_file);
+    let mut rsync = get_rsync_command(includes, excludes, src, target, key_file);
 
     info!(logger, "");
     info!(logger, "About to execute:");
@@ -138,15 +151,32 @@ where
     }
 }
 
-fn get_rsync_command<I>(excludes: I, src: &str, target: &str, key_file: Option<&PathBuf>) -> Command
+fn get_rsync_command<I, E, S, T>(
+    includes: I,
+    excludes: E,
+    src: S,
+    target: T,
+    key_file: Option<&PathBuf>,
+) -> Command
 where
-    I: IntoIterator,
-    I::Item: std::fmt::Display,
+    I: IntoIterator<Item: AsRef<Path>>,
+    E: IntoIterator<Item: AsRef<Path>>,
+    S: AsRef<Path>,
+    T: AsRef<Path>,
 {
     let mut rsync = Command::new("rsync");
     rsync.arg("--delete").arg("-acP").arg("--no-g");
-    rsync.args(excludes.into_iter().map(|e| format!("--exclude={e}")));
-    rsync.arg(src).arg(target);
+    rsync.args(
+        includes
+            .into_iter()
+            .map(|i| format!("--include={}", i.as_ref().display())),
+    );
+    rsync.args(
+        excludes
+            .into_iter()
+            .map(|e| format!("--exclude={}", e.as_ref().display())),
+    );
+    rsync.arg(src.as_ref()).arg(target.as_ref());
     rsync.arg("-e").arg(ssh_helper::get_rsync_ssh_arg(key_file));
 
     rsync
@@ -235,6 +265,7 @@ mod tests {
     #[test]
     fn get_rsync_command_test() {
         let rsync = get_rsync_command(
+            ["include1", "include2", "include3"],
             ["exclude1", "exclude2"],
             "/tmp/src",
             "/tmp/target",
@@ -248,6 +279,9 @@ mod tests {
                 "--delete",
                 "-acP",
                 "--no-g",
+                "--include=include1",
+                "--include=include2",
+                "--include=include3",
                 "--exclude=exclude1",
                 "--exclude=exclude2",
                 "/tmp/src",
