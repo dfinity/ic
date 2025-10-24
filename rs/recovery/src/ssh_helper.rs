@@ -1,8 +1,17 @@
 use crate::{
-    RecoveryResult, cli::wait_for_confirmation, command_helper::exec_cmd, error::RecoveryError,
+    RecoveryResult,
+    cli::wait_for_confirmation,
+    command_helper::exec_cmd,
+    error::RecoveryError,
+    file_sync_helper::{rsync, rsync_with_retries},
 };
 use slog::{Logger, info, warn};
-use std::{net::IpAddr, path::PathBuf, process::Command, thread, time};
+use std::{
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::Command,
+    thread, time,
+};
 
 const SSH_ARGS: &[&str] = &[
     "-o",
@@ -43,6 +52,14 @@ impl SshHelper {
         }
     }
 
+    /// Return a remote path string usable by commands like `rsync`.
+    pub fn remote_path<P: AsRef<Path>>(&self, path: P) -> String {
+        match self.ip {
+            IpAddr::V4(_) => format!("{}@{}:{}", self.account, self.ip, path.as_ref().display()),
+            IpAddr::V6(_) => format!("{}@[{}]:{}", self.account, self.ip, path.as_ref().display()),
+        }
+    }
+
     /// Execute the given command string on a remote machine using SSH.
     pub fn ssh(&self, commands: String) -> RecoveryResult<Option<String>> {
         let mut ssh = self.get_command(commands);
@@ -72,6 +89,60 @@ impl SshHelper {
         ssh.arg(format!("{}@{}", self.account, self.ip));
         ssh.arg(commands);
         ssh
+    }
+
+    /// Wrapper around `crate::file_sync_helper::rsync_with_retries`
+    pub fn rsync_with_retries<I, E, S, T>(
+        &self,
+        includes: I,
+        excludes: E,
+        src: S,
+        target: T,
+        auto_retry: bool,
+        max_retries: usize,
+    ) -> RecoveryResult<Option<String>>
+    where
+        I: IntoIterator<Item: AsRef<Path>> + Clone,
+        E: IntoIterator<Item: AsRef<Path>> + Clone,
+        S: AsRef<Path>,
+        T: AsRef<Path>,
+    {
+        rsync_with_retries(
+            &self.logger,
+            includes,
+            excludes,
+            src,
+            target,
+            self.require_confirmation,
+            self.key_file.as_ref(),
+            auto_retry,
+            max_retries,
+        )
+    }
+
+    /// Wrapper around `crate::file_sync_helper::rsync`
+    pub fn rsync<I, E, S, T>(
+        &self,
+        includes: I,
+        excludes: E,
+        src: S,
+        target: T,
+    ) -> RecoveryResult<Option<String>>
+    where
+        I: IntoIterator<Item: AsRef<Path>>,
+        E: IntoIterator<Item: AsRef<Path>>,
+        S: AsRef<Path>,
+        T: AsRef<Path>,
+    {
+        rsync(
+            &self.logger,
+            includes,
+            excludes,
+            src,
+            target,
+            self.require_confirmation,
+            self.key_file.as_ref(),
+        )
     }
 
     /// Return `true` if this SSH helper can establish a connection to the configured host
