@@ -1,5 +1,5 @@
 use crate::{
-    CUPS_DIR, DataLocation, IC_STATE_DIR, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
+    DataLocation, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
     cli::{
         consent_given, print_height_info, read_optional, read_optional_data_location,
         read_optional_node_ids, read_optional_subnet_id, read_optional_version,
@@ -395,44 +395,41 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         (SshUser::Admin, self.recovery.admin_key_file.clone())
                     };
 
-                    Ok(Box::new(self.recovery.get_download_state_step(
-                        node_ip,
-                        ssh_user,
-                        key_file,
-                        /*keep_downloaded_state=*/ false,
-                        /*additional_excludes=*/
-                        vec![CUPS_DIR, IC_STATE_DIR, "orchestrator"], // exclude folders to
-                                                                      // download only the
-                                                                      // consensus pool
+                    let includes = self.recovery.get_consensus_pool_includes();
+                    Ok(Box::new(self.recovery.get_download_data_step(
+                        node_ip, ssh_user, key_file, /*keep_downloaded_data=*/ false,
+                        includes, /*include_config=*/ false,
                     )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
             }
 
-            StepType::DownloadState => {
-                match self.params.download_state_method {
-                    Some(DataLocation::Local) => {
-                        Ok(Box::new(self.recovery.get_copy_local_state_step()))
-                    }
-                    Some(DataLocation::Remote(node_ip)) => {
-                        let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
-                            (SshUser::Readonly, self.params.readonly_key_file.clone())
-                        } else {
-                            (SshUser::Admin, self.recovery.admin_key_file.clone())
-                        };
-
-                        Ok(Box::new(self.recovery.get_download_state_step(
-                            node_ip,
-                            ssh_user,
-                            key_file,
-                            self.params.keep_downloaded_state == Some(true),
-                            /*additional_excludes=*/ vec![CUPS_DIR],
-                        )))
-                    }
-                    None => Err(RecoveryError::StepSkipped),
+            StepType::DownloadState => match self.params.download_state_method {
+                Some(DataLocation::Local) => {
+                    Ok(Box::new(self.recovery.get_copy_local_state_step()))
                 }
-            }
+                Some(DataLocation::Remote(node_ip)) => {
+                    let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
+                        (SshUser::Readonly, self.params.readonly_key_file.clone())
+                    } else {
+                        (SshUser::Admin, self.recovery.admin_key_file.clone())
+                    };
+
+                    let includes =
+                        self.recovery
+                            .get_state_includes(node_ip, ssh_user, key_file.clone())?;
+                    Ok(Box::new(self.recovery.get_download_data_step(
+                        node_ip,
+                        ssh_user,
+                        key_file,
+                        self.params.keep_downloaded_state == Some(true),
+                        includes,
+                        /*include_config=*/ true,
+                    )))
+                }
+                None => Err(RecoveryError::StepSkipped),
+            },
 
             StepType::ICReplay => Ok(Box::new(self.recovery.get_replay_step(
                 self.params.subnet_id,

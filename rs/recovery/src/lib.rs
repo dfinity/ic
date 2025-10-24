@@ -7,7 +7,7 @@
 //! execution.
 use crate::{
     cli::wait_for_confirmation, file_sync_helper::remove_dir, registry_helper::RegistryHelper,
-    util::SshUser,
+    ssh_helper::SshHelper, util::SshUser,
 };
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
 use command_helper::exec_cmd;
@@ -64,20 +64,6 @@ pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
 pub const IC_CONSENSUS_POOL_PATH: &str = "ic_consensus_pool";
 pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
-pub const IC_STATE_EXCLUDES: &[&str] = &[
-    "images",
-    "tip",
-    "backups",
-    "fs_tmp",
-    "recovery",
-    // The page_deltas/ directory should not be copied over on rsync as well,
-    // it is a new directory used for storing the files backing up the
-    // page deltas. We do not need to copy page deltas when nodes are re-assigned.
-    "page_deltas",
-    "node_operator_private_key.pem",
-    "ic_adapter",
-    IC_REGISTRY_LOCAL_STORE,
-];
 pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
 pub const OLD_IC_STATE: &str = "old_ic_state";
@@ -243,7 +229,7 @@ impl Recovery {
         checkpoint_path: &Path,
         logger: &Logger,
     ) -> RecoveryResult<Height> {
-        let checkpoints = Self::get_checkpoint_names(checkpoint_path)?;
+        let checkpoints = Self::list_directory_contents(checkpoint_path)?;
         let (max_name, max_height) = Self::get_latest_checkpoint_name_and_height(checkpoint_path)?;
 
         for checkpoint in checkpoints {
@@ -314,29 +300,74 @@ impl Recovery {
         }
     }
 
-    /// Return a [DownloadIcStateStep] downloading the ic_state of the given
-    /// node to the recovery data directory using the given account.
-    pub fn get_download_state_step(
+    /// Return the list of paths to include when downloading the consensus pool with rsync.
+    /// Certifications are only included if they do not already exist in the
+    /// work directory.
+    pub fn get_consensus_pool_includes(&self) -> Vec<PathBuf> {
+        let consensus_pool_path = PathBuf::from(IC_CONSENSUS_POOL_PATH);
+        let mut includes = vec![
+            consensus_pool_path.join("replica_version"),
+            consensus_pool_path.join("consensus"),
+        ];
+
+        // If we already have some certifications, we do not download them again.
+        if !self
+            .work_dir
+            .join("data")
+            .join(IC_CERTIFICATIONS_PATH)
+            .exists()
+        {
+            includes.push(consensus_pool_path.join("certification"));
+        }
+
+        includes
+    }
+
+    /// Return the list of paths to include when downloading the ic_state with rsync.
+    /// These are the paths leading to the latest CUP checkpoint.
+    pub fn get_state_includes(
         &self,
         node_ip: IpAddr,
         ssh_user: SshUser,
         key_file: Option<PathBuf>,
-        keep_downloaded_state: bool,
-        additional_excludes: Vec<&str>,
+    ) -> RecoveryResult<Vec<PathBuf>> {
+        let latest_checkpoint_name = Self::get_latest_checkpoint_name_remotely(&SshHelper::new(
+            self.logger.clone(),
+            ssh_user.to_string(),
+            node_ip,
+            self.ssh_confirmation,
+            key_file,
+        ))?;
+
+        Ok(vec![
+            PathBuf::from(IC_STATE)
+                .join(CHECKPOINTS)
+                .join(latest_checkpoint_name),
+        ])
+    }
+
+    /// Return a [DownloadIcDataStep] downloading some data of the given
+    /// node to the recovery data directory using the given account.
+    pub fn get_download_data_step(
+        &self,
+        node_ip: IpAddr,
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
+        keep_downloaded_data: bool,
+        data_includes: Vec<PathBuf>,
+        include_config: bool,
     ) -> impl Step + use<> {
-        DownloadIcStateStep {
+        DownloadIcDataStep {
             logger: self.logger.clone(),
             ssh_user,
             node_ip,
-            target: self.data_dir.display().to_string(),
-            keep_downloaded_state,
-            working_dir: self.work_dir.display().to_string(),
+            backup_dir: self.data_dir.clone(),
+            keep_downloaded_data,
+            working_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
             key_file,
-            additional_excludes: additional_excludes
-                .iter()
-                .map(std::string::ToString::to_string)
-                .collect(),
+            data_includes,
+            include_config,
         }
     }
 
@@ -345,7 +376,7 @@ impl Recovery {
     pub fn get_copy_local_state_step(&self) -> impl Step + use<> {
         CopyLocalIcStateStep {
             logger: self.logger.clone(),
-            working_dir: self.work_dir.display().to_string(),
+            working_dir: self.work_dir.clone(),
             require_confirmation: self.ssh_confirmation,
         }
     }
@@ -447,7 +478,7 @@ impl Recovery {
     }
 
     /// Get names of all checkpoints currently on disk
-    pub fn get_checkpoint_names(path: &Path) -> RecoveryResult<Vec<String>> {
+    pub fn list_directory_contents(path: &Path) -> RecoveryResult<Vec<String>> {
         let res = read_dir(path)?
             .flatten()
             .filter_map(|e| {
@@ -459,13 +490,31 @@ impl Recovery {
         Ok(res)
     }
 
+    /// Get the name of the latest checkpoint currently on the remote node
+    pub fn get_latest_checkpoint_name_remotely(ssh_helper: &SshHelper) -> RecoveryResult<String> {
+        ssh_helper
+            .ssh(format!(
+                "ls -1 {} | sort | tail -n 1",
+                PathBuf::from(IC_DATA_PATH)
+                    .join(IC_CHECKPOINTS_PATH)
+                    .display()
+            ))
+            .and_then(|output| {
+                output
+                    .map(|output| output.trim().to_string())
+                    .ok_or_else(|| {
+                        RecoveryError::invalid_output_error("No checkpoints found on remote node")
+                    })
+            })
+    }
+
     /// Get the name and the height of the latest checkpoint currently on disk
     ///
     /// Returns an error when there are no checkpoints.
     pub fn get_latest_checkpoint_name_and_height(
         checkpoints_path: &Path,
     ) -> RecoveryResult<(String, Height)> {
-        Self::get_checkpoint_names(checkpoints_path)?
+        Self::list_directory_contents(checkpoints_path)?
             .into_iter()
             .map(|name| parse_hex_str(&name).map(|height| (name, Height::from(height))))
             .collect::<RecoveryResult<Vec<_>>>()?
@@ -1091,7 +1140,7 @@ mod tests {
 
         assert_eq!(height, Height::from(64900));
         assert_eq!(
-            Recovery::get_checkpoint_names(checkpoints_dir.path()).unwrap(),
+            Recovery::list_directory_contents(checkpoints_dir.path()).unwrap(),
             vec![String::from("000000000000fd84")]
         );
     }

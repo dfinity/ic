@@ -13,6 +13,7 @@ use std::{
 use std::{future::Future, path::Path, str::FromStr};
 use tokio::runtime::Runtime;
 
+#[derive(Clone, Copy)]
 pub enum SshUser {
     Admin,
     Readonly,

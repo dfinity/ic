@@ -1,11 +1,12 @@
 use crate::{
     CHECKPOINTS, DataLocation, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
-    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE,
-    OLD_IC_STATE, Recovery,
+    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, OLD_IC_STATE, Recovery,
     admin_helper::IcAdmin,
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_with_retries},
+    file_sync_helper::{
+        clear_dir, create_dir, read_dir, rsync, rsync_relative, rsync_with_retries,
+    },
     get_member_ips, get_node_heights_from_metrics,
     registry_helper::RegistryHelper,
     replay_helper,
@@ -21,7 +22,13 @@ use ic_metrics::MetricsRegistry;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
 use ic_types::{Height, SubnetId, consensus::certification::CertificationMessage};
 use slog::{Logger, debug, info, warn};
-use std::{collections::HashMap, net::IpAddr, path::PathBuf, process::Command, thread, time};
+use std::{
+    collections::HashMap,
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::Command,
+    thread, time,
+};
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -92,7 +99,11 @@ impl Step for DownloadCertificationsStep {
         let mut number_successful_downloads = 0;
         for (i, ip) in ips.iter().enumerate() {
             let data_src = format!("{ssh_user}@[{ip}]:{cert_path}");
-            let target = self.work_dir.join("certifications").join(ip.to_string());
+            let target = self
+                .work_dir
+                .join("certifications")
+                .join(ip.to_string())
+                .join("");
             if let Err(e) = create_dir(&target) {
                 warn!(self.logger, "Failed to create target dir: {:?}", e);
                 continue;
@@ -105,9 +116,9 @@ impl Step for DownloadCertificationsStep {
             );
             let res = rsync_with_retries(
                 &self.logger,
-                vec![],
+                Vec::<String>::default(),
                 &data_src,
-                &target.display().to_string(),
+                &target,
                 self.require_confirmation,
                 self.key_file.as_ref(),
                 self.auto_retry,
@@ -273,33 +284,47 @@ impl Step for MergeCertificationPoolsStep {
     }
 }
 
-pub struct DownloadIcStateStep {
+pub struct DownloadIcDataStep {
     pub logger: Logger,
     pub ssh_user: SshUser,
     pub node_ip: IpAddr,
-    pub target: String,
-    pub working_dir: String,
-    pub keep_downloaded_state: bool,
+    pub backup_dir: PathBuf,
+    pub working_dir: PathBuf,
+    pub keep_downloaded_data: bool,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
-    pub additional_excludes: Vec<String>,
+    pub data_includes: Vec<PathBuf>,
+    pub include_config: bool,
 }
 
-impl Step for DownloadIcStateStep {
+impl Step for DownloadIcDataStep {
     fn descr(&self) -> String {
         let data_src = format!("[{}]:{}", self.node_ip, IC_DATA_PATH);
-        let config_src = format!("[{}]:{}", self.node_ip, IC_JSON5_PATH);
-        if self.keep_downloaded_state {
-            format!(
-                "Copy node state from {} and config from {} to {}. Then copy to {}",
-                data_src, config_src, self.target, self.working_dir
-            )
-        } else {
-            format!(
-                "Copy node state from {} and config from {} to {}.",
-                data_src, config_src, self.working_dir
-            )
+        let mut descr = format!(
+            "Download node data {} from {}",
+            self.data_includes
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            data_src
+        );
+
+        if self.include_config {
+            let config_src = format!("[{}]:{}", self.node_ip, IC_JSON5_PATH);
+            descr.push_str(&format!(" and config from {}", config_src));
         }
+        if self.keep_downloaded_data {
+            descr.push_str(&format!(
+                " to {}. Then copy to {}.",
+                self.backup_dir.display(),
+                self.working_dir.display()
+            ));
+        } else {
+            descr.push_str(&format!(" to {}.", self.working_dir.display()));
+        }
+
+        descr
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -323,79 +348,67 @@ impl Step for DownloadIcStateStep {
             "Continuing with account: {}", ssh_helper.account
         );
 
-        let data_src = format!("{}@[{}]:{}", ssh_helper.account, self.node_ip, IC_DATA_PATH);
-        let config_src = format!(
-            "{}@[{}]:{}",
-            ssh_helper.account, self.node_ip, IC_JSON5_PATH
-        );
-
-        let mut excludes: Vec<&str> = IC_STATE_EXCLUDES
-            .iter()
-            .copied()
-            .chain(self.additional_excludes.iter().map(|x| x.as_str()))
-            .collect();
-
-        let res = ssh_helper
-            .ssh(format!(
-                r"echo $(ls {IC_DATA_PATH}/{IC_CHECKPOINTS_PATH} | sort | awk 'n>=1 {{ print a[n%1] }} {{ a[n++%1]=$0 }}');"
-            ))?
-            .unwrap_or_default();
-        res.trim().split(' ').for_each(|cp| {
-            excludes.push(cp);
-        });
-
-        // If we already have some certifications, we do not download them again.
-        if PathBuf::from(self.working_dir.clone())
-            .join("data/ic_consensus_pool/certification")
-            .exists()
-        {
-            info!(self.logger, "Excluding certifications from download");
-            excludes.push("certification");
-            excludes.push("certifications");
-        }
-
-        // If we already have the consensus pool, we do not download it again.
-        if PathBuf::from(self.working_dir.clone())
-            .join("data/ic_consensus_pool/consensus")
-            .exists()
-        {
-            info!(self.logger, "Excluding consensus pool from download");
-            excludes.push("ic_consensus_pool/consensus");
-        }
-
-        let target = if self.keep_downloaded_state {
-            &self.target
+        let target = if self.keep_downloaded_data {
+            &self.backup_dir
         } else {
             &self.working_dir
-        };
+        }
+        .join("");
 
-        rsync(
-            &self.logger,
-            excludes.clone(),
-            &data_src,
-            target,
-            self.require_confirmation,
-            self.key_file.as_ref(),
-        )?;
+        for include in self.data_includes.iter() {
+            rsync_relative(
+                &self.logger,
+                Vec::<String>::default(),
+                &format!(
+                    "{}@[{}]:{}",
+                    ssh_helper.account,
+                    self.node_ip,
+                    // Note the "." for relative paths (see rsync manual for --relative)
+                    PathBuf::from("/var/lib/ic/./data").join(include).display()
+                ),
+                &target,
+                self.require_confirmation,
+                self.key_file.as_ref(),
+            )?;
 
-        rsync(
-            &self.logger,
-            Vec::<String>::default(),
-            &config_src,
-            target,
-            self.require_confirmation,
-            self.key_file.as_ref(),
-        )?;
+            if self.keep_downloaded_data {
+                rsync_relative(
+                    &self.logger,
+                    Vec::<String>::default(),
+                    // Note the "." for relative paths (see rsync manual for --relative)
+                    &target.join(".").join("data").join(include),
+                    &self.working_dir.join(""),
+                    false,
+                    None,
+                )?;
+            }
+        }
 
-        if self.keep_downloaded_state {
+        if self.include_config {
+            let config_src = format!(
+                "{}@[{}]:{}",
+                ssh_helper.account, self.node_ip, IC_JSON5_PATH
+            );
+
             rsync(
                 &self.logger,
-                excludes,
-                &format!("{}/", self.target),
-                &self.working_dir,
-                false,
-                None,
+                Vec::<String>::default(),
+                &config_src,
+                &target,
+                self.require_confirmation,
+                self.key_file.as_ref(),
             )?;
+
+            if self.keep_downloaded_data {
+                rsync(
+                    &self.logger,
+                    Vec::<String>::default(),
+                    &target.join(PathBuf::from(IC_JSON5_PATH).file_name().unwrap()),
+                    &self.working_dir.join(""),
+                    false,
+                    None,
+                )?;
+            }
         }
 
         Ok(())
@@ -404,7 +417,7 @@ impl Step for DownloadIcStateStep {
 
 pub struct CopyLocalIcStateStep {
     pub logger: Logger,
-    pub working_dir: String,
+    pub working_dir: PathBuf,
     pub require_confirmation: bool,
 }
 
@@ -412,63 +425,22 @@ impl Step for CopyLocalIcStateStep {
     fn descr(&self) -> String {
         format!(
             "Copy node state from {} and config from {} to {}.",
-            IC_DATA_PATH, IC_JSON5_PATH, self.working_dir
+            IC_DATA_PATH,
+            IC_JSON5_PATH,
+            self.working_dir.display()
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let mut excludes: Vec<&str> = IC_STATE_EXCLUDES.to_vec();
-
-        // Do not copy state using rsync, we will use the `cp` instead
-        excludes.push(CHECKPOINTS);
-
-        let work_dir = PathBuf::from(self.working_dir.clone());
-        // If we already have some certifications, we do not copy them again.
-        if work_dir
-            .join("data/ic_consensus_pool/certification")
-            .exists()
-        {
-            info!(self.logger, "Excluding certifications from copy");
-            excludes.push("certification");
-            excludes.push("certifications");
-        }
-        // If we already have the consensus pool, we do not copy it again.
-        if PathBuf::from(self.working_dir.clone())
-            .join("data/ic_consensus_pool/consensus")
-            .exists()
-        {
-            info!(self.logger, "Excluding consensus pool from copy");
-            excludes.push("ic_consensus_pool/consensus");
-        }
-
-        rsync(
-            &self.logger,
-            excludes,
-            IC_DATA_PATH,
-            &self.working_dir,
-            self.require_confirmation,
-            None,
-        )?;
-
-        rsync(
-            &self.logger,
-            Vec::<String>::default(),
-            IC_JSON5_PATH,
-            &self.working_dir,
-            self.require_confirmation,
-            None,
-        )?;
-
-        let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
-        let latest_checkpoint =
-            Recovery::get_latest_checkpoint_name_and_height(&ic_checkpoints_path)?;
-        info!(
-            self.logger,
-            "Found latest checkpoint: {latest_checkpoint:?}"
-        );
-
-        let recovery_checkpoints_path = work_dir.join("data").join(IC_CHECKPOINTS_PATH);
         let log = self.require_confirmation.then_some(&self.logger);
+
+        // State
+        let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
+        let (latest_checkpoint, _) =
+            Recovery::get_latest_checkpoint_name_and_height(&ic_checkpoints_path)?;
+        info!(self.logger, "Found latest checkpoint: {latest_checkpoint}");
+
+        let recovery_checkpoints_path = self.working_dir.join("data").join(IC_CHECKPOINTS_PATH);
 
         info!(self.logger, "Creating recovery checkpoint directory");
         let mut mkdir = Command::new("mkdir");
@@ -481,8 +453,13 @@ impl Step for CopyLocalIcStateStep {
         );
         let mut cp = Command::new("cp");
         cp.arg("-R")
-            .arg(ic_checkpoints_path.join(latest_checkpoint.0.clone()))
+            .arg(ic_checkpoints_path.join(latest_checkpoint))
             .arg(recovery_checkpoints_path);
+        confirm_exec_cmd(&mut cp, log)?;
+
+        // Config
+        let mut cp = Command::new("cp");
+        cp.arg(IC_JSON5_PATH).arg(&self.working_dir);
         confirm_exec_cmd(&mut cp, log)?;
 
         Ok(())
@@ -638,7 +615,10 @@ impl UploadAndRestartStep {
     /// Sets the right state permissions on `target`, by copying the
     /// permissions of the src path, removing executable permission and
     /// giving read permissions for the target path to group and others.
-    fn cmd_set_permissions(src: &str, target: &str) -> String {
+    fn cmd_set_permissions<S: AsRef<Path>, T: AsRef<Path>>(src: S, target: T) -> String {
+        let src = src.as_ref().display();
+        let target = target.as_ref().display();
+
         let mut set_permissions = String::new();
         set_permissions.push_str(&format!("sudo chmod -R --reference={src} {target};"));
         set_permissions.push_str(&format!("sudo chown -R --reference={src} {target};"));
@@ -667,7 +647,7 @@ impl Step for UploadAndRestartStep {
     fn exec(&self) -> RecoveryResult<()> {
         let account = SshUser::Admin;
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
-        let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
+        let checkpoints = Recovery::list_directory_contents(&checkpoint_path)?;
 
         let [max_checkpoint] = checkpoints.as_slice() else {
             return Err(RecoveryError::invalid_output_error(
@@ -687,26 +667,10 @@ impl Step for UploadAndRestartStep {
             }
         }
 
-        let ic_state_path = format!("{IC_DATA_PATH}/{IC_STATE}");
-        let src = format!("{}/", self.data_src.display());
+        let ic_state_path = PathBuf::from(IC_DATA_PATH).join(IC_STATE);
 
         // Decide: remote or local recovery
         if let DataLocation::Remote(node_ip) = self.upload_method {
-            // For remote recoveries, we copy the source directory via rsync.
-            // To improve rsync times, we copy the latest checkpoint to the
-            // upload directory.
-            let upload_dir = format!("{IC_DATA_PATH}/{NEW_IC_STATE}");
-            let ic_checkpoints_path = format!("{IC_DATA_PATH}/{IC_CHECKPOINTS_PATH}");
-            // path of highest checkpoint on upload node
-            let copy_from =
-                format!("{ic_checkpoints_path}/$(ls {ic_checkpoints_path} | sort | tail -1)");
-            // path and name of checkpoint after replay
-            let copy_to = format!("{upload_dir}/{CHECKPOINTS}/{max_checkpoint}");
-            let cp = format!("sudo cp -r {copy_from} {copy_to}");
-            let cmd_create_and_copy_checkpoint_dir = format!(
-                "sudo mkdir -p {upload_dir}/{CHECKPOINTS}; {cp}; sudo chown -R {account} {upload_dir};"
-            );
-
             let ssh_helper = SshHelper::new(
                 self.logger.clone(),
                 account.to_string(),
@@ -714,27 +678,54 @@ impl Step for UploadAndRestartStep {
                 self.require_confirmation,
                 self.key_file.clone(),
             );
+
+            // For remote recoveries, we copy the source directory via rsync.
+            // To improve rsync times, we copy the latest checkpoint to the
+            // upload directory.
+            let upload_dir = PathBuf::from(IC_DATA_PATH).join(NEW_IC_STATE);
+            // path of latest checkpoint on upload node
+            let copy_from = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH).join(
+                Recovery::get_latest_checkpoint_name_remotely(&ssh_helper).unwrap_or_default(),
+            );
+            // path and name of checkpoint after replay
+            let copy_to = upload_dir.join(CHECKPOINTS).join(max_checkpoint);
+            let cp = format!(
+                "sudo cp -r {copy_from} {copy_to}",
+                copy_from = copy_from.display(),
+                copy_to = copy_to.display()
+            );
+            let cmd_create_and_copy_checkpoint_dir = format!(
+                "sudo mkdir -p {copy_to_parent}; {cp}; sudo chown -R {account} {upload_dir};",
+                copy_to_parent = copy_to.parent().unwrap().display(),
+                upload_dir = upload_dir.display()
+            );
+
             info!(
                 self.logger,
                 "Creating remote directory and copying previous checkpoint..."
             );
-            if let Some(res) = ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)? {
-                info!(self.logger, "{}", res);
-            }
-            let target = format!("{account}@[{node_ip}]:{upload_dir}/");
+            ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)?;
+
+            let target = format!(
+                "{account}@[{node_ip}]:{upload_dir}/",
+                upload_dir = upload_dir.display()
+            );
             info!(self.logger, "Uploading state...");
             rsync(
                 &self.logger,
-                IC_STATE_EXCLUDES.to_vec(),
-                &src,
+                Vec::<String>::default(),
+                &self.data_src.join(""),
                 &target,
                 self.require_confirmation,
                 self.key_file.as_ref(),
             )?;
 
             let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);
-            let cmd_replace_state =
-                format!("sudo rm -r {ic_state_path}; sudo mv {upload_dir} {ic_state_path};");
+            let cmd_replace_state = format!(
+                "sudo rm -r {ic_state_path}; sudo mv {upload_dir} {ic_state_path};",
+                ic_state_path = ic_state_path.display(),
+                upload_dir = upload_dir.display()
+            );
 
             info!(self.logger, "Restarting replica...");
             ssh_helper.ssh(Self::CMD_STOP_REPLICA.to_string())?;
@@ -750,14 +741,18 @@ impl Step for UploadAndRestartStep {
             )?;
 
             info!(self.logger, "Setting file permissions...");
-            let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &src);
+            let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &self.data_src);
             confirm_exec_cmd(Command::new("bash").arg("-c").arg(cmd_set_permissions), log)?;
 
             // For local recoveries we first backup the original state, and
             // then simply `mv` the new state to the upload directory. No
             // rsync is needed, and thus no checkpoint copying.
-            let backup_path = format!("{}/{}", self.work_dir.display(), OLD_IC_STATE);
-            info!(self.logger, "Moving original state into {}...", backup_path);
+            let backup_path = self.work_dir.join(OLD_IC_STATE);
+            info!(
+                self.logger,
+                "Moving original state into {}...",
+                backup_path.display()
+            );
             let mut cmd_backup_state = Command::new("sudo");
             cmd_backup_state.arg("mv");
             cmd_backup_state.arg(&ic_state_path);
@@ -767,7 +762,7 @@ impl Step for UploadAndRestartStep {
             info!(self.logger, "Moving state locally...");
             let mut mv_to_target = Command::new("sudo");
             mv_to_target.arg("mv");
-            mv_to_target.arg(src);
+            mv_to_target.arg(&self.data_src);
             mv_to_target.arg(ic_state_path);
             confirm_exec_cmd(&mut mv_to_target, log)?;
 
@@ -959,8 +954,8 @@ impl Step for CopyIcStateStep {
         rsync(
             &self.logger,
             Vec::<String>::default(),
-            &format!("{}/", self.work_dir.display()),
-            &format!("{}/", self.new_state_dir.display()),
+            &self.work_dir.join(""),
+            &self.new_state_dir.join(""),
             false,
             None,
         )?;
@@ -997,12 +992,12 @@ sudo systemctl restart setup-permissions || true ;
 sudo systemctl start ic-replica;
 sudo systemctl status ic-replica;
 "#,
-            UploadCUPAndTarStep::get_upload_dir_name(),
+            UploadCUPAndTarStep::get_upload_dir_name().display(),
         )
     }
 
-    pub fn get_upload_dir_name() -> String {
-        "/tmp/subnet_recovery".to_string()
+    pub fn get_upload_dir_name() -> PathBuf {
+        PathBuf::from("/tmp").join("subnet_recovery")
     }
 }
 
@@ -1011,7 +1006,7 @@ impl Step for UploadCUPAndTarStep {
         format!(
             "Uploading CUP and registry to [{}]:{} and execute:\n{}",
             self.node_ip,
-            UploadCUPAndTarStep::get_upload_dir_name(),
+            UploadCUPAndTarStep::get_upload_dir_name().display(),
             self.get_restart_commands()
         )
     }
@@ -1035,14 +1030,22 @@ impl Step for UploadCUPAndTarStep {
 
         info!(self.logger, "Uploading to {}", self.node_ip);
         let upload_dir = UploadCUPAndTarStep::get_upload_dir_name();
-        ssh_helper.ssh(format!("sudo rm -rf {upload_dir} && mkdir {upload_dir}"))?;
+        ssh_helper.ssh(format!(
+            "sudo rm -rf {upload_dir} && mkdir {upload_dir}",
+            upload_dir = upload_dir.display()
+        ))?;
 
-        let target = format!("{}@[{}]:{}/", SshUser::Admin, self.node_ip, upload_dir);
+        let target = format!(
+            "{}@[{}]:{}/",
+            SshUser::Admin,
+            self.node_ip,
+            upload_dir.display()
+        );
 
         rsync(
             &self.logger,
             Vec::<String>::default(),
-            &format!("{}/cup.proto", self.work_dir.display()),
+            &self.work_dir.join("cup.proto"),
             &target,
             self.require_confirmation,
             self.key_file.as_ref(),
@@ -1051,10 +1054,7 @@ impl Step for UploadCUPAndTarStep {
         rsync(
             &self.logger,
             Vec::<String>::default(),
-            &format!(
-                "{}/ic_registry_local_store.tar.zst",
-                self.work_dir.display()
-            ),
+            &self.work_dir.join("ic_registry_local_store.tar.zst"),
             &target,
             self.require_confirmation,
             self.key_file.as_ref(),
@@ -1213,7 +1213,7 @@ impl Step for DownloadRegistryStoreStep {
             &self.logger,
             Vec::<String>::default(),
             &data_src,
-            &format!("{}/", self.work_dir.display()),
+            &self.work_dir.join(""),
             self.require_confirmation,
             self.key_file.as_ref(),
         )?;
@@ -1250,17 +1250,24 @@ impl Step for UploadAndHostTarStep {
             self.key_file.clone(),
         );
 
-        let upload_dir = "/tmp/recovery_registry";
+        let upload_dir = PathBuf::from("/tmp").join("recovery_registry");
 
         ssh_helper.ssh("nix-env -i daemonize python3".to_string())?;
-        ssh_helper.ssh(format!("mkdir -p {upload_dir}"))?;
+        ssh_helper.ssh(format!(
+            "mkdir -p {upload_dir}",
+            upload_dir = upload_dir.display()
+        ))?;
 
-        let target = format!("{}@[{}]:{}/", self.aux_host, self.aux_ip, upload_dir);
-        let src = format!("{}", self.tar.display());
+        let target = format!(
+            "{}@[{}]:{}/",
+            self.aux_host,
+            self.aux_ip,
+            upload_dir.display()
+        );
         rsync(
             &self.logger,
             Vec::<String>::default(),
-            &src,
+            &self.tar,
             &target,
             self.require_confirmation,
             self.key_file.as_ref(),
