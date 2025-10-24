@@ -97,7 +97,7 @@ def image_deps(mode, malicious = False):
         })
 
     # Update dev rootfs
-    if "dev" in mode:
+    if mode in ["dev", "test"]:
         # Allow console access
         deps["rootfs"].update({"//ic-os/guestos/context:allow_console_root": "/etc/allow_console_root:0644"})
 
