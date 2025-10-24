@@ -180,8 +180,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
     }
 
     fn read_step_params(&mut self, step_type: StepType) {
+        // Depending on the next step we might require some user interaction before we can execute
+        // it.
         match step_type {
             StepType::StopReplica | StepType::DownloadConsensusPool | StepType::DownloadState => {
+                // We could pick a node with highest finalization height automatically,
+                // but we might have a preference between nodes of the same finalization height.
                 print_height_info(
                     &self.logger,
                     &self.recovery.registry_helper,
