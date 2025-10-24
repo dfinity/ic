@@ -234,7 +234,7 @@ impl VetKdPayloadBuilderImpl {
                     ) {
                         return Some((*callback_id, reject));
                     }
-                    
+
                     let shares = grouped_shares.get(callback_id)?;
                     let ThresholdArguments::VetKd(ctxt_args) = &context.args else {
                         return None;
