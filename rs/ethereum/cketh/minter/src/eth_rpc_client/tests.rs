@@ -8,7 +8,7 @@ mod multi_call_results {
 
     mod reduce_with_min_by_key {
         use crate::eth_rpc_client::tests::{BLOCK_PI, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MinByKey, ReduceWithStrategy};
+        use crate::eth_rpc_client::{MinByKey, ToReducedWithStrategy};
         use crate::numeric::TransactionCount;
         use evm_rpc_types::{MultiRpcResult, Nat256};
 
@@ -19,8 +19,9 @@ mod multi_call_results {
                 (PUBLIC_NODE, Ok(123457_u32.into())),
             ]);
 
-            let reduced: Result<TransactionCount, _> =
-                ReduceWithStrategy::<MinByKey>::reduce(results).result;
+            let reduced: Result<TransactionCount, _> = results
+                .map(TransactionCount::from)
+                .reduce_with_strategy(MinByKey::new(|count: &TransactionCount| *count));
 
             assert_eq!(reduced, Ok(TransactionCount::new(123456)));
         }
@@ -29,8 +30,9 @@ mod multi_call_results {
     mod reduce_with_stable_majority_by_key {
         use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
         use crate::eth_rpc_client::{
-            MultiCallError, MultiCallResults, ReduceWithStrategy, StrictMajorityByKey,
+            MultiCallError, MultiCallResults, StrictMajorityByKey, ToReducedWithStrategy,
         };
+        use candid::Nat;
         use evm_rpc_types::{
             FeeHistory, HttpOutcallError, JsonRpcError, LegacyRejectionCode, MultiRpcResult,
         };
@@ -40,7 +42,9 @@ mod multi_call_results {
             let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Consistent(Ok(fee_history()));
 
             let reduced: Result<FeeHistory, _> =
-                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).result;
+                results.reduce_with_strategy(StrictMajorityByKey::new(
+                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
+                ));
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -68,7 +72,9 @@ mod multi_call_results {
                 ]);
 
                 let reduced: Result<FeeHistory, _> =
-                    ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).result;
+                    results.reduce_with_strategy(StrictMajorityByKey::new(
+                        |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
+                    ));
 
                 assert_eq!(reduced, Ok(majority_fee));
             }
@@ -90,7 +96,9 @@ mod multi_call_results {
             ]);
 
             let reduced: Result<FeeHistory, _> =
-                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).result;
+                results.reduce_with_strategy(StrictMajorityByKey::new(
+                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
+                ));
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -117,8 +125,9 @@ mod multi_call_results {
                 ]);
 
             let reduced: Result<FeeHistory, _> =
-                ReduceWithStrategy::<StrictMajorityByKey>::reduce(three_distinct_results.clone())
-                    .result;
+                three_distinct_results.reduce_with_strategy(StrictMajorityByKey::new(
+                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
+                ));
 
             assert_eq!(
                 reduced,
@@ -137,8 +146,9 @@ mod multi_call_results {
                 ]);
 
             let reduced: Result<FeeHistory, _> =
-                ReduceWithStrategy::<StrictMajorityByKey>::reduce(two_distinct_results.clone())
-                    .result;
+                two_distinct_results.reduce_with_strategy(StrictMajorityByKey::new(
+                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
+                ));
 
             assert_eq!(
                 reduced,
@@ -164,10 +174,10 @@ mod multi_call_results {
                     (LLAMA_NODES, Ok(llama_nodes_fee_history.clone())),
                 ]);
 
-            let reduced: Result<FeeHistory, _> = ReduceWithStrategy::<StrictMajorityByKey>::reduce(
-                two_distinct_results_and_error.clone(),
-            )
-            .result;
+            let reduced: Result<FeeHistory, _> = two_distinct_results_and_error
+                .reduce_with_strategy(StrictMajorityByKey::new(|fee_history: &FeeHistory| {
+                    Nat::from(fee_history.oldest_block.clone())
+                }));
 
             assert_eq!(
                 reduced,
@@ -196,7 +206,9 @@ mod multi_call_results {
             ]);
 
             let reduced: Result<FeeHistory, _> =
-                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results).result;
+                results.reduce_with_strategy(StrictMajorityByKey::new(
+                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
+                ));
 
             assert_eq!(
                 reduced,
@@ -224,7 +236,11 @@ mod multi_call_results {
             ]);
 
             let reduced: Result<FeeHistory, _> =
-                ReduceWithStrategy::<StrictMajorityByKey>::reduce(results.clone()).result;
+                results
+                    .clone()
+                    .reduce_with_strategy(StrictMajorityByKey::new(|fee_history: &FeeHistory| {
+                        Nat::from(fee_history.oldest_block.clone())
+                    }));
 
             assert_eq!(
                 reduced,
