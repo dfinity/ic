@@ -195,6 +195,8 @@ impl OngoingStateSync {
                 if self.active_downloads.remove(&peer_id).is_some() {
                     self.allowed_downloads -= PARALLEL_CHUNK_DOWNLOADS;
                 }
+
+                self.chunks_to_download.download_failed(chunk_id);
             }
             Err(DownloadChunkError::RequestError { chunk_id, err }) => {
                 info!(
