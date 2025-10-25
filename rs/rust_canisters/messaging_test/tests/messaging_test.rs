@@ -84,7 +84,12 @@ fn smoke_test() {
     };
     let (receiver1, payload) = to_encoded_ingress(call1.clone());
     let msg_id1 = env1
-        .submit_ingress_as(PrincipalId::new_anonymous(), receiver1, "pulse", payload)
+        .submit_ingress_as(
+            PrincipalId::new_anonymous(),
+            receiver1,
+            "handle_call",
+            payload,
+        )
         .unwrap();
 
     // A call to be sent to `canister2` as an ingress that then calls `canister1`
@@ -104,7 +109,12 @@ fn smoke_test() {
     };
     let (receiver2, payload) = to_encoded_ingress(call2.clone());
     let msg_id2 = env1
-        .submit_ingress_as(PrincipalId::new_anonymous(), receiver2, "pulse", payload)
+        .submit_ingress_as(
+            PrincipalId::new_anonymous(),
+            receiver2,
+            "handle_call",
+            payload,
+        )
         .unwrap();
 
     // Executing 20 rounds should plenty for these two calls to conclude.

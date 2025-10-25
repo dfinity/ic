@@ -18,7 +18,7 @@ fn no_op(bytes: Vec<u8>) -> Vec<u8> {
 }
 
 #[ic_cdk::update(decode_with = "decode", encode_with = "no_op")]
-async fn pulse((msg, bytes_received_on_call, _): (Message, u32, u32)) -> Vec<u8> {
+async fn handle_call((msg, bytes_received_on_call, _): (Message, u32, u32)) -> Vec<u8> {
     // Check for sequence errors if this is an inter canister call.
     if let Ok(caller) = CanisterId::try_from_principal_id(PrincipalId(ic_cdk::api::msg_caller())) {
         INCOMING_CALL_INDICES.with_borrow_mut(|incoming_call_indices| {
@@ -48,9 +48,11 @@ async fn pulse((msg, bytes_received_on_call, _): (Message, u32, u32)) -> Vec<u8>
             call.call_bytes as usize,
         );
         match call.timeout_secs {
-            Some(timeout_secs) => ic_cdk::call::Call::bounded_wait(call.receiver.into(), "pulse")
-                .change_timeout(timeout_secs),
-            None => ic_cdk::call::Call::unbounded_wait(call.receiver.into(), "pulse"),
+            Some(timeout_secs) => {
+                ic_cdk::call::Call::bounded_wait(call.receiver.into(), "handle_call")
+                    .change_timeout(timeout_secs)
+            }
+            None => ic_cdk::call::Call::unbounded_wait(call.receiver.into(), "handle_call"),
         }
         .take_raw_args(payload)
         .into_future()
