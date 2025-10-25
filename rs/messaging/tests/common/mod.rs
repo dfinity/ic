@@ -4,9 +4,10 @@ use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_state_machine_tests::{StateMachine, StateMachineConfig, SubmitIngressError, UserError};
 use ic_types::{
-    Cycles,
+    Cycles, SubnetId,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::MessageId,
+    messages::{MessageId, StreamMessage},
+    xnet::StreamHeader,
 };
 use messaging_test::{Call, Response};
 use messaging_test_utils::{CallConfig, arb_call, from_blob, to_encoded_ingress};
@@ -29,42 +30,9 @@ pub enum PulseStatus {
     Failed(Call, UserError),
 }
 
-impl PulseStatus {
-    /// Queries `env` for an update on the pulse and updates it accordingly.
-    fn update(self, env: &StateMachine) -> Self {
-        if let Self::Submitted(call, msg_id) = self {
-            match env.ingress_status(&msg_id) {
-                // The pulse has been processed successfully.
-                IngressStatus::Known {
-                    state: IngressState::Completed(WasmResult::Reply(blob)),
-                    ..
-                } => {
-                    let respondent = call.receiver;
-                    Self::Completed(call, from_blob(respondent, blob))
-                }
-                // The pulse was rejected by the `receiver`.
-                IngressStatus::Known {
-                    state: IngressState::Completed(WasmResult::Reject(reject_msg)),
-                    ..
-                } => Self::Rejected(call, reject_msg),
-                // The pulse triggered an error during execution.
-                IngressStatus::Known {
-                    state: IngressState::Failed(user_error),
-                    ..
-                } => Self::Failed(call, user_error),
-                // There is no update for the pulse yet.
-                _ => Self::Submitted(call, msg_id),
-            }
-        } else {
-            self
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct TestSubnet {
-    pub env: Arc<StateMachine>,
-    pulses: Vec<PulseStatus>,
+    env: Arc<StateMachine>,
 }
 
 impl TestSubnet {
@@ -79,10 +47,7 @@ impl TestSubnet {
             )
             .expect("Installing messaging-test-canister failed");
         }
-        Self {
-            env,
-            pulses: Vec::new(),
-        }
+        Self { env }
     }
 
     /// Executes a round on this state machine and advances time by one second.
@@ -91,45 +56,19 @@ impl TestSubnet {
         self.env.advance_time(std::time::Duration::from_secs(1));
     }
 
-    /// Attempts to submit a new pulse.
-    pub fn pulse(&mut self, call: Call) -> Result<(), (Call, SubmitIngressError)> {
-        let (receiver, payload) = to_encoded_ingress(call.clone());
-
-        // Try signing up a new pulse.
-        let pulse = match self.env.submit_ingress_as(
+    /// Attempts to subnet a new `Call` as ingress.
+    pub fn submit_call(&self, call: Call) -> -> Result<MessageId, SubmitIngressError> {
+        self.env.submit_ingress_as(
             PrincipalId::new_anonymous(),
             receiver,
             "pulse",
             payload,
-        ) {
-            Ok(msg_id) => PulseStatus::Submitted(call, msg_id),
-            Err(err) => {
-                return Err((call, err));
-            }
-        };
-        self.pulses.push(pulse);
-        Ok(())
+        )
     }
 
-    /// Iterates through all the pulses and attempts to update their status.
-    pub fn update_submitted_pulses(&mut self) {
-        self.pulses = std::mem::take(&mut self.pulses)
-            .into_iter()
-            .map(|status| status.update(&self.env))
-            .collect::<Vec<_>>();
-    }
-
-    /// Returns a reference to the pulses made on this test subnet.
-    pub fn pulses(&self) -> &Vec<PulseStatus> {
-        &self.pulses
-    }
-
-    /// Returns the number of pulses whose outcome is not known yet.
-    pub fn awaiting_pulses_count(&self) -> u64 {
-        self.pulses
-            .iter()
-            .map(|status| matches!(status, PulseStatus::Submitted(..)) as u64)
-            .sum()
+    /// Returns the subnet Id of this `TestSubnet`.
+    pub fn id(&self) -> SubnetId {
+        self.env.get_subnet_id()
     }
 
     /// Returns the IDs of the canisters installed at the latest state height.
@@ -140,6 +79,26 @@ impl TestSubnet {
             .keys()
             .cloned()
             .collect()
+    }
+
+    /// Returns a snapshot of a XNet stream to another subnet.
+    pub fn stream_snapshot(
+        &self,
+        to_subnet: SubnetId,
+    ) -> Option<(StreamHeader, Vec<StreamMessage>)> {
+        self.env
+            .get_latest_state()
+            .get_stream(&to_subnet)
+            .map(|stream| {
+                (
+                    stream.header(),
+                    stream
+                        .messages()
+                        .iter()
+                        .map(|(_, msg)| msg.clone())
+                        .collect(),
+                )
+            })
     }
 }
 
