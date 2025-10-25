@@ -157,7 +157,7 @@ pub fn setup_impl(env: TestEnv, deploy_nns_canisters: bool, http_requests: bool)
                                 .build()?;
 
                             let webserver_ipv6 = get_universal_vm_address(&cloned_env);
-                            let httpbin = format!("https://[{webserver_ipv6}]:20443");
+                            let httpbin = format!("https://[{webserver_ipv6}]");
 
                             let resp = client.get(httpbin).send().await?;
 
@@ -213,7 +213,7 @@ pub fn test_subnet(
     };
     let httpbin = if http_requests {
         let webserver_ipv6 = get_universal_vm_address(&env);
-        Some(format!("[{webserver_ipv6}]:20443"))
+        Some(format!("[{webserver_ipv6}]"))
     } else {
         None
     };

@@ -82,7 +82,7 @@ pub fn test(env: TestEnv) {
         }
 
         block_on(async {
-            let url = format!("https://[{webserver_ipv6}]:20443");
+            let url = format!("https://[{webserver_ipv6}]");
             for canister in &proxy_canisters {
                 leave_proxy_canister_running(canister, url.clone(), logger.clone()).await;
             }
