@@ -256,26 +256,19 @@ pub fn scan_for_nodes_by_ip(registry: &Registry, ip_addr: &str) -> Vec<NodeId> {
         .collect()
 }
 
-/// Scan through the registry, returning a list of any nodes with the given IP.
+/// Scan through the registry, returning a list of node records for the given node operator.
 pub fn get_node_operator_nodes(
     registry: &Registry,
     node_operator_id: PrincipalId,
 ) -> Vec<NodeRecord> {
     get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX)
         .into_iter()
-        .filter_map(|(_, node_record)| {
-            let node_operator_id_src: PrincipalId = node_record
-                .node_operator_id
-                .clone()
-                .try_into()
-                .expect("Failed to parse PrincipalId from node operator ID");
-
-            if node_operator_id_src == node_operator_id {
-                Some(node_record)
-            } else {
-                None
-            }
+        .filter(|(_, node_record)| {
+            let node_operator_id_src: PrincipalId =
+                PrincipalId::try_from(&node_record.node_operator_id).unwrap();
+            node_operator_id_src == node_operator_id
         })
+        .map(|(_, node_record)| node_record)
         .collect()
 }
 
