@@ -3,6 +3,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::CanisterStatusType;
+use ic_replicated_state::CanisterState;
 use ic_state_machine_tests::{StateMachine, StateMachineConfig, SubmitIngressError, UserError};
 use ic_types::{
     Cycles, SubnetId,
@@ -114,6 +115,24 @@ impl TestSubnet {
             .unwrap()
     }
 
+    /// Returns `true` if `self` hosts the canister with `id`.
+    pub fn has_canister(&self, id: &CanisterId) -> bool {
+        self.env
+            .get_latest_state()
+            .canister_states
+            .get(id)
+            .is_some()
+    }
+
+    /// Returns the status of the canister if any, e.g. running, stopping, stopped.
+    pub fn canister_status(&self, id: &CanisterId) -> Option<CanisterStatusType> {
+        self.env
+            .get_latest_state()
+            .canister_states
+            .get(id)
+            .map(|state| state.status())
+    }
+
     /// Returns a snapshot of a XNet stream to another subnet.
     pub fn stream_snapshot(
         &self,
@@ -134,13 +153,14 @@ impl TestSubnet {
             })
     }
 
-    /// Returns the status of the canister, e.g. running, stopping, stopped.
-    pub fn canister_status(&self, id: &CanisterId) -> Option<CanisterStatusType> {
+    /// Splits `self` by assigning `canister_range` to a new subnet.
+    ///
+    /// Note: This uses a fixed seed for the new subnet which won't work for multiple splits.
+    ///       Until we support multiple subnet splits at the same time, it should be ok.
+    pub fn split(&self, canister_range: RangeInclusive<CanisterId>) -> Result<TestSubnet, String> {
         self.env
-            .get_latest_state()
-            .canister_states
-            .get(&id)
-            .map(|state| state.status())
+            .split([123_u8; 32], canister_range)
+            .map(|env| Self { env })
     }
 }
 
