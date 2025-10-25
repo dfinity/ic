@@ -227,3 +227,6 @@ jobs:
           compression-level: 9
           path: |
             cov_html.zip
+
+  pocket-ic-tests-windows:
+    uses: ./.github/workflows/pocket-ic-tests-windows.yml
