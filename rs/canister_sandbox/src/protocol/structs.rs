@@ -5,11 +5,11 @@ use ic_embedders::{
         sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
     },
 };
-use ic_interfaces::execution_environment::{SubnetAvailableMemory, WasmExecutionOutput};
-use ic_management_canister_types_private::Global;
-use ic_replicated_state::{
-    Memory, MessageMemoryUsage, NumWasmPages, PageIndex, page_map::PageDeltaSerialization,
+use ic_interfaces::execution_environment::{
+    MessageMemoryUsage, SubnetAvailableMemory, WasmExecutionOutput,
 };
+use ic_management_canister_types_private::Global;
+use ic_replicated_state::{Memory, NumWasmPages, PageIndex, page_map::PageDeltaSerialization};
 use ic_types::{NumBytes, methods::FuncRef};
 use serde::{Deserialize, Serialize};
 

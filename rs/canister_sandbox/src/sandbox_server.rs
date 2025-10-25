@@ -135,14 +135,14 @@ mod tests {
             sandbox_safe_system_state::{CanisterStatusView, SandboxSafeSystemState},
         },
     };
-    use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+    use ic_interfaces::execution_environment::{
+        ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+    };
     use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::Global;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{
-        MessageMemoryUsage, NetworkTopology, NumWasmPages, PageIndex, PageMap,
-    };
+    use ic_replicated_state::{NetworkTopology, NumWasmPages, PageIndex, PageMap};
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
         CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,

@@ -39,9 +39,7 @@ use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
@@ -396,74 +394,6 @@ impl MemoryTaken {
     /// Returns the amount of memory taken by canister history.
     pub fn canister_history(&self) -> NumBytes {
         self.canister_history
-    }
-}
-
-/// Combination of memory used by and reserved for guaranteed response messages
-/// and memory used by best-effort messages.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
-pub struct MessageMemoryUsage {
-    /// Memory used by and reserved for guaranteed response canister messages, in
-    /// bytes.
-    pub guaranteed_response: NumBytes,
-
-    /// Memory used by best-effort canister messages, in bytes.
-    pub best_effort: NumBytes,
-}
-
-impl MessageMemoryUsage {
-    pub const ZERO: MessageMemoryUsage = MessageMemoryUsage {
-        guaranteed_response: NumBytes::new(0),
-        best_effort: NumBytes::new(0),
-    };
-
-    /// Returns the total memory used by all canister messages (guaranteed response
-    /// or best-effort).
-    pub fn total(&self) -> NumBytes {
-        self.guaranteed_response + self.best_effort
-    }
-
-    /// Calculates `self` + `rhs`.
-    ///
-    /// Returns a tuple of the addition along with a boolean indicating whether an
-    /// arithmetic overflow would occur on either field. If an overflow would have
-    /// occurred then the wrapped value is returned.
-    pub fn overflowing_add(&self, rhs: &Self) -> (Self, bool) {
-        let (guaranteed_response, overflow1) = self
-            .guaranteed_response
-            .get()
-            .overflowing_add(rhs.guaranteed_response.get());
-        let (best_effort, overflow2) = self
-            .best_effort
-            .get()
-            .overflowing_add(rhs.best_effort.get());
-        (
-            Self {
-                guaranteed_response: guaranteed_response.into(),
-                best_effort: best_effort.into(),
-            },
-            overflow1 || overflow2,
-        )
-    }
-
-    /// Returns `true` iff both fields of `self` are greater than or equal to the
-    /// corresponding fields of `rhs`.
-    pub fn ge(&self, rhs: Self) -> bool {
-        self.guaranteed_response >= rhs.guaranteed_response && self.best_effort >= rhs.best_effort
-    }
-}
-
-impl AddAssign<MessageMemoryUsage> for MessageMemoryUsage {
-    fn add_assign(&mut self, rhs: MessageMemoryUsage) {
-        self.guaranteed_response += rhs.guaranteed_response;
-        self.best_effort += rhs.best_effort;
-    }
-}
-
-impl SubAssign<MessageMemoryUsage> for MessageMemoryUsage {
-    fn sub_assign(&mut self, rhs: MessageMemoryUsage) {
-        self.guaranteed_response -= rhs.guaranteed_response;
-        self.best_effort -= rhs.best_effort;
     }
 }
 

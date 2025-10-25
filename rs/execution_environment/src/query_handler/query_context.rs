@@ -19,7 +19,8 @@ use ic_embedders::wasmtime_embedder::system_api::{
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
-    ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApiCallCounters,
+    ExecutionMode, HypervisorError, MessageMemoryUsage, SubnetAvailableMemory,
+    SystemApiCallCounters,
 };
 use ic_interfaces_state_manager::Labeled;
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
@@ -27,8 +28,7 @@ use ic_logger::{ReplicaLogger, error, info};
 use ic_query_stats::QueryStatsCollector;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallContextAction, CallOrigin, CanisterState, MessageMemoryUsage, NetworkTopology,
-    ReplicatedState,
+    CallContextAction, CallOrigin, CanisterState, NetworkTopology, ReplicatedState,
 };
 use ic_types::{
     CanisterId, Cycles, NumInstructions, NumMessages, NumSlices, Time,

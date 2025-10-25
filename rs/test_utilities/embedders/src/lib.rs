@@ -17,7 +17,7 @@ use ic_embedders::{
     },
 };
 use ic_interfaces::execution_environment::{
-    ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApi,
+    ExecutionMode, HypervisorError, MessageMemoryUsage, SubnetAvailableMemory, SystemApi,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
@@ -171,7 +171,7 @@ impl WasmtimeInstanceBuilder {
             self.api_type,
             sandbox_safe_system_state,
             self.memory_usage,
-            ic_replicated_state::MessageMemoryUsage::ZERO,
+            MessageMemoryUsage::ZERO,
             ExecutionParameters {
                 instruction_limits: InstructionLimits::new(
                     self.num_instructions,

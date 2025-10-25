@@ -1,6 +1,7 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
+use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
     CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallChunkedCodeArgsLegacy,
@@ -10,7 +11,7 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
-use ic_replicated_state::{ExecutionTask, MessageMemoryUsage, ReplicatedState};
+use ic_replicated_state::{ExecutionTask, ReplicatedState};
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, get_reply,
 };

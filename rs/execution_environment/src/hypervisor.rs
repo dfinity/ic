@@ -13,15 +13,13 @@ use ic_embedders::{
 };
 use ic_heap_bytes::HeapBytes;
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, WasmExecutionOutput,
+    HypervisorError, HypervisorResult, MessageMemoryUsage, WasmExecutionOutput,
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
-use ic_replicated_state::{
-    ExecutionState, MessageMemoryUsage, NetworkTopology, ReplicatedState, SystemState,
-};
+use ic_replicated_state::{ExecutionState, NetworkTopology, ReplicatedState, SystemState};
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
