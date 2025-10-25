@@ -95,7 +95,7 @@ wirm = { workspace = true }
 escargot = "0.5"
 
 [features]
-default = []
+default = ["sigsegv_handler_checksum"]
 sigsegv_handler_checksum = [
 	"ic-canister-sandbox-backend-lib/sigsegv_handler_checksum",
 	"memory_tracker/sigsegv_handler_checksum",

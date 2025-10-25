@@ -960,6 +960,7 @@ mod checksum {
 
     impl Drop for SigsegChecksum {
         fn drop(&mut self) {
+            println!("XXX_DROPPING_CHECKSUM:{}_ZZZ", self.value);
             let output_file = std::env::var("CHECKSUM_FILE").unwrap();
             let mut file = std::fs::OpenOptions::new()
                 .create(true)
