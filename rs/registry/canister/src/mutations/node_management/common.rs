@@ -264,7 +264,7 @@ pub fn get_node_operator_nodes(
     get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX)
         .into_iter()
         .filter_map(|(_, node_record)| {
-            let node_operator_id_src = node_record
+            let node_operator_id_src: PrincipalId = node_record
                 .node_operator_id
                 .clone()
                 .try_into()

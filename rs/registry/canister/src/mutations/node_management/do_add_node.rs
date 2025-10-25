@@ -25,7 +25,6 @@ use crate::mutations::node_management::{
 };
 use ic_nervous_system_time_helpers::now_system_time;
 use ic_registry_canister_api::AddNodePayload;
-use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
 use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
 use prost::Message;
 
@@ -46,7 +45,7 @@ impl Registry {
         caller_id: PrincipalId,
         now: SystemTime,
     ) -> Result<NodeId, String> {
-        let mut node_operator_record = get_node_operator_record(self, caller_id)
+        let node_operator_record = get_node_operator_record(self, caller_id)
             .map_err(|err| format!("{LOG_PREFIX}do_add_node: Aborting node addition: {err}"))?;
 
         let reservation =
@@ -81,15 +80,14 @@ impl Registry {
         let http_endpoint = connection_endpoint_from_string(&payload.http_endpoint);
         let nodes_with_same_ip = scan_for_nodes_by_ip(self, &http_endpoint.ip_addr);
         let mut mutations = Vec::new();
-        let num_removed_same_type: usize = nodes_with_same_ip
-            .into_iter()
-            .map(|node_id| {
-                let node_reward_type_src = get_node_reward_type_for_node(self, *node_id)?;
-                Ok(node_reward_type_src == node_reward_type)
-            })
-            .collect::<Result<_, String>>()?
-            .into_iter()
-            .count();
+        let mut num_removed_same_type = 0;
+        for node in &nodes_with_same_ip {
+            let removed_type = get_node_reward_type_for_node(self, node.clone())
+                .map_err(|e| format!("{LOG_PREFIX}do_add_node: {e}"))?;
+            if removed_type == node_reward_type {
+                num_removed_same_type += 1;
+            }
+        }
         if !nodes_with_same_ip.is_empty() {
             if nodes_with_same_ip.len() == 1 {
                 mutations = self.make_remove_or_replace_node_mutations(
@@ -121,8 +119,9 @@ impl Registry {
         }
 
         // Validate node operator's max_rewardable_nodes quota
-        let max_rewardable_nodes_same_type = *node_operator_record.max_rewardable_nodes.get(&(node_reward_type.to_string()))
-            .ok_or(Err(format!("{LOG_PREFIX}do_add_node: Node Operator does not have max_rewardable_nodes for {node_reward_type}")))? as usize;
+        println!("record: {:?}", node_operator_record);
+        let max_rewardable_nodes_same_type = node_operator_record.max_rewardable_nodes.get(&(node_reward_type.to_string()))
+            .ok_or(format!("{LOG_PREFIX}do_add_node: Node Operator does not have rewardable nodes for {node_reward_type}"))?;
 
         let node_operator_id =
             PrincipalId::try_from(node_operator_record.node_operator_principal_id.clone())
@@ -132,7 +131,7 @@ impl Registry {
         let num_in_registry_same_type = get_node_operator_nodes(self, node_operator_id)
             .into_iter()
             .filter(|node_id| node_id.node_reward_type.unwrap() == node_reward_type as i32)
-            .count();
+            .count() as u32;
 
         if max_rewardable_nodes_same_type + num_removed_same_type == num_in_registry_same_type {
             return Err(format!(
@@ -374,7 +373,7 @@ mod tests {
             // Unused section follows
             p2p_flow_endpoints: Default::default(),
             prometheus_metrics_endpoint: Default::default(),
-            node_reward_type: None,
+            node_reward_type: Some(NodeRewardType::Type1.to_string()),
         };
 
         (payload, node_public_keys)
@@ -558,14 +557,11 @@ mod tests {
     }
 
     #[test]
-    fn should_fail_if_node_allowance_is_zero() {
+    fn should_fail_if_empty_rewardable_nodes() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
         // Add node operator record with node allowance 0.
-        let node_operator_record = NodeOperatorRecord {
-            node_allowance: 0,
-            ..Default::default()
-        };
+        let node_operator_record = NodeOperatorRecord::default();
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
@@ -577,7 +573,7 @@ mod tests {
         // Assert
         assert_eq!(
             result.unwrap_err(),
-            "[Registry] do_add_node: Node allowance for this Node Operator is exhausted"
+            "[Registry] do_add_node: Node Operator does not have rewardable nodes for type1"
         );
     }
 
@@ -602,8 +598,7 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
         // Add node operator record first
         let node_operator_record = NodeOperatorRecord {
-            node_allowance: 1, // Should be > 0 to add a new node
-            rewardable_nodes: btreemap! { "type0".to_string() => 0, "type1".to_string() => 28 },
+            max_rewardable_nodes: btreemap! { "type1".to_string() => 28 },
             ..Default::default()
         };
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
@@ -622,6 +617,7 @@ mod tests {
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
             node_operator_id: node_operator_id.into(),
             domain: Some("api-example.com".to_string()),
+            node_reward_type: Some(NodeRewardType::from(payload.node_reward_type.unwrap()) as i32),
             ..Default::default()
         };
         let node_record = registry.get_node_or_panic(node_id);
@@ -643,7 +639,7 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
         // Add node operator record first
         let node_operator_record = NodeOperatorRecord {
-            node_allowance: 2, // needed for adding two nodes
+            max_rewardable_nodes: btreemap! { "type1".to_string() => 2 },
             ..Default::default()
         };
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
@@ -669,6 +665,7 @@ mod tests {
             http: Some(connection_endpoint_from_string(&payload_1.http_endpoint)),
             node_operator_id: node_operator_id.into(),
             domain: Some("api-example.com".to_string()),
+            node_reward_type: Some(NodeRewardType::from(payload_1.node_reward_type.unwrap()) as i32),
             ..Default::default()
         };
         let node_record_expected_2 = NodeRecord {
@@ -676,6 +673,7 @@ mod tests {
             http: Some(connection_endpoint_from_string(&payload_2.http_endpoint)),
             node_operator_id: node_operator_id.into(),
             domain: Some("api-example.com".to_string()),
+            node_reward_type: Some(NodeRewardType::from(payload_2.node_reward_type.unwrap()) as i32),
             ..Default::default()
         };
         let node_record_1 = registry.get_node_or_panic(node_id_1);
@@ -694,7 +692,8 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
         // Add node operator record first
         let node_operator_record = NodeOperatorRecord {
-            node_allowance: 2, // needed for adding two nodes
+            // Set max rewardable nodes to 1 to make sure the first node is removed
+            max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
             ..Default::default()
         };
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
@@ -706,6 +705,7 @@ mod tests {
         let (payload_1, _) = prepare_add_node_payload(1);
         let (mut payload_2, _) = prepare_add_node_payload(2);
         payload_2.http_endpoint.clone_from(&payload_1.http_endpoint);
+
         assert_eq!(payload_1.http_endpoint, payload_2.http_endpoint);
         // Act: Add two nodes with the same IPs
         let node_id_1: NodeId = registry
@@ -716,6 +716,7 @@ mod tests {
             http: Some(connection_endpoint_from_string(&payload_1.http_endpoint)),
             node_operator_id: node_operator_id.into(),
             domain: Some("api-example.com".to_string()),
+            node_reward_type: Some(NodeRewardType::from(payload_1.node_reward_type.unwrap()) as i32),
             ..Default::default()
         };
         let node_record_1 = registry.get_node_or_panic(node_id_1);
@@ -723,13 +724,14 @@ mod tests {
         // Add the second node, this should remove the first one from the registry
         let node_id_2: NodeId = registry
             .do_add_node_(payload_2.clone(), node_operator_id, now_system_time())
-            .expect("failed to add a node");
+            .unwrap();
         // Assert second node record is in the registry and is correct
         let node_record_expected_2 = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload_2.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload_2.http_endpoint)),
             node_operator_id: node_operator_id.into(),
             domain: Some("api-example.com".to_string()),
+            node_reward_type: Some(NodeRewardType::from(payload_2.node_reward_type.unwrap()) as i32),
             ..Default::default()
         };
         let node_record_2 = registry.get_node_or_panic(node_id_2);
@@ -743,10 +745,13 @@ mod tests {
                 )
                 .is_none()
         );
-        // Assert node allowance counter has decremented by one (as only one node record was effectively added)
-        let node_operator_record = get_node_operator_record(&registry, node_operator_id)
+        // Assert max_rewardable_nodes has decremented by one (as only one node record was effectively added)
+        let node_operator_record_got = get_node_operator_record(&registry, node_operator_id)
             .expect("failed to get node operator");
-        assert_eq!(node_operator_record.node_allowance, 1);
+        assert_eq!(
+            node_operator_record_got.max_rewardable_nodes,
+            node_operator_record.max_rewardable_nodes
+        );
     }
 
     #[test]
@@ -983,6 +988,8 @@ mod tests {
 
     #[test]
     fn test_node_reward_type_is_required() {
+        use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
+
         let mut registry = invariant_compliant_registry(0);
         // Add node operator record first
         let node_operator_record = NodeOperatorRecord {
@@ -1009,32 +1016,6 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             "[Registry] do_add_node: Node reward type is required."
-        );
-    }
-
-    #[test]
-    fn test_node_reward_type_is_not_required_if_no_node_rewards_table_present() {
-        let mut registry = invariant_compliant_registry(0);
-        // Add node operator record first
-        let node_operator_record = NodeOperatorRecord {
-            node_allowance: 1, // Should be > 0 to add a new node
-            ..Default::default()
-        };
-        let node_operator_id = PrincipalId::new_user_test_id(10001);
-
-        registry.maybe_apply_mutation_internal(vec![insert(
-            make_node_operator_record_key(node_operator_id),
-            node_operator_record.encode_to_vec(),
-        )]);
-        let (mut payload, _) = prepare_add_node_payload(1);
-        payload.node_reward_type = None;
-        // Code under test
-        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
-
-        // Assert
-        assert!(
-            result.is_ok(),
-            "Could not create node with no node reward type: {result:?}"
         );
     }
 
