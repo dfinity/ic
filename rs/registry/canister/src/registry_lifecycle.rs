@@ -25,7 +25,8 @@ pub fn canister_post_upgrade(
 
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
-        let mutations = migrate_node_reward_type1_type0_to_type1dot1(registry);
+        // let mutations = migrate_node_reward_type1_type0_to_type1dot1(registry);
+        let mutations = migrate_xph6u_nodes_to_type0(registry);
         if mutations.is_empty() {
             0 // No mutations required for this data migration.
         } else {
@@ -61,6 +62,39 @@ pub fn canister_post_upgrade(
     }
 }
 
+fn migrate_xph6u_nodes_to_type0(registry: &Registry) -> Vec<RegistryMutation> {
+    let mut mutations = Vec::new();
+    // DFINITY node operator with 28 nodes
+    let target_node_operator_id =
+        PrincipalId::from_str("xph6u-z3z2t-s7hh7-gtlxh-bbgbx-aatlm-eab4o-bsank-nqruh-3ub4q-sae")
+            .unwrap();
+
+    for (id, mut record) in
+        get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX).into_iter()
+    {
+        let node_operator_id = PrincipalId::try_from(&record.node_operator_id).unwrap();
+        let Some(some_reward_type) = record.node_reward_type else {
+            // If the node does not have a node_reward_type, we skip it.
+            continue;
+        };
+        let node_reward_type =
+            NodeRewardType::try_from(some_reward_type).expect("Invalid node_reward_type value");
+
+        if node_operator_id == target_node_operator_id && node_reward_type != NodeRewardType::Type0
+        {
+            record.node_reward_type = Some(NodeRewardType::Type0 as i32);
+            let node_id = NodeId::from(PrincipalId::from_str(&id).unwrap());
+            mutations.push(update(
+                make_node_record_key(node_id),
+                record.encode_to_vec(),
+            ));
+        }
+    }
+
+    mutations
+}
+
+#[allow(unused)]
 fn migrate_node_reward_type1_type0_to_type1dot1(registry: &Registry) -> Vec<RegistryMutation> {
     let mut mutations = Vec::new();
 
@@ -268,6 +302,65 @@ mod test {
                 public_ipv4_config: None,
                 domain: Some(format!("dummy_domain_{test_id}")),
                 node_reward_type: Some(NodeRewardType::Type1dot1 as i32),
+                ssh_node_state_write_access: vec![],
+            };
+
+            assert_eq!(
+                record, expected_record,
+                "Assertion for Node {test_id} failed"
+            );
+        }
+    }
+
+    #[test]
+    fn test_migrate_xph6u_nodes_to_type0_works_correctly() {
+        let mut registry = invariant_compliant_registry(0);
+        let node_operator_id = PrincipalId::from_str(
+            "xph6u-z3z2t-s7hh7-gtlxh-bbgbx-aatlm-eab4o-bsank-nqruh-3ub4q-sae",
+        )
+        .unwrap()
+        .to_vec();
+
+        let mut node_additions = Vec::new();
+        for (idx, test_id) in enumerate(0..10) {
+            let node_reward_type = if idx < 5 {
+                NodeRewardType::Type0
+            } else {
+                NodeRewardType::Type1
+            };
+            let record = NodeRecord {
+                node_operator_id: node_operator_id.clone(),
+                hostos_version_id: Some(format!("dummy_version_{test_id}")),
+                domain: Some(format!("dummy_domain_{test_id}")),
+                node_reward_type: Some(node_reward_type as i32),
+                ..NodeRecord::default()
+            };
+
+            node_additions.push(insert(
+                make_node_record_key(NodeId::new(PrincipalId::new_node_test_id(test_id))),
+                record.encode_to_vec(),
+            ));
+        }
+
+        registry.apply_mutations_for_test(node_additions);
+        let mutations = migrate_xph6u_nodes_to_type0(&registry);
+        assert_eq!(mutations.len(), 5);
+
+        registry.apply_mutations_for_test(mutations);
+
+        for test_id in 0..10 {
+            let record =
+                registry.get_node_or_panic(NodeId::from(PrincipalId::new_node_test_id(test_id)));
+
+            let expected_record = NodeRecord {
+                xnet: None,
+                http: None,
+                node_operator_id: node_operator_id.clone(),
+                chip_id: None,
+                hostos_version_id: Some(format!("dummy_version_{test_id}")),
+                public_ipv4_config: None,
+                domain: Some(format!("dummy_domain_{test_id}")),
+                node_reward_type: Some(NodeRewardType::Type0 as i32),
                 ssh_node_state_write_access: vec![],
             };
 
