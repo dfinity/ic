@@ -123,13 +123,7 @@ impl Registry {
         let max_rewardable_nodes_same_type = node_operator_record.max_rewardable_nodes.get(&(node_reward_type.to_string()))
             .ok_or(format!("{LOG_PREFIX}do_add_node: Node Operator does not have rewardable nodes for {node_reward_type}"))?;
 
-        let node_operator_id =
-            PrincipalId::try_from(node_operator_record.node_operator_principal_id.clone())
-                .map_err(|e| {
-                    format!("{LOG_PREFIX}do_add_node: Node Operator ID is not valid: {e}")
-                })?;
-
-        let num_in_registry_same_type = get_node_operator_nodes(self, node_operator_id)
+        let num_in_registry_same_type = get_node_operator_nodes(self, caller_id)
             .into_iter()
             .filter_map(|node| node.node_reward_type)
             .filter(|&node_reward_type_src| node_reward_type_src == node_reward_type as i32)
@@ -762,8 +756,7 @@ mod tests {
         let mut registry = invariant_compliant_registry(0);
         // Add node operator record first
         let node_operator_record = NodeOperatorRecord {
-            // Set max rewardable nodes to 1 to make sure the first node is removed
-            max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
+            max_rewardable_nodes: btreemap! { "type1".to_string() => 2 },
             ..Default::default()
         };
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
@@ -791,6 +784,8 @@ mod tests {
         let e = registry
             .do_add_node_(payload_2.clone(), node_operator_id, now_system_time())
             .unwrap_err();
+
+        println!("{:?}", e);
         assert!(
             e.contains("do_add_node: There is already another node with the same IPv4 address")
         );
