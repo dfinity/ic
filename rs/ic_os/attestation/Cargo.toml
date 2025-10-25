@@ -4,9 +4,9 @@ edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+base64 = { workspace = true }
 candid = { workspace = true }
 der = { workspace = true, features = ["alloc", "derive", "std"] }
-itertools = { workspace = true }
 pem = { workspace = true }
 prost = { workspace = true }
 ring = { workspace = true }
