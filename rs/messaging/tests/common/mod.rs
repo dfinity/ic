@@ -2,6 +2,7 @@ use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_state_machine_tests::{StateMachine, StateMachineConfig, SubmitIngressError, UserError};
 use ic_types::{
     Cycles, SubnetId,
@@ -18,21 +19,20 @@ use std::sync::Arc;
 pub const KB: u32 = 1024;
 pub const MB: u32 = KB * KB;
 
-#[derive(Clone, Debug)]
-pub enum PulseStatus {
-    /// The pulse has been submitted; the outcome is not known yet.
-    Submitted(Call, MessageId),
-    /// The pulse has been processed successfully.
-    Completed(Call, Response),
-    /// The pulse was rejected by the destination canister.
-    Rejected(Call, String),
-    /// The pulse triggered an error during execution, i.e. the destination canister trapped.
-    Failed(Call, UserError),
-}
-
 #[derive(Debug, Clone)]
 pub struct TestSubnet {
-    env: Arc<StateMachine>,
+    pub env: Arc<StateMachine>,
+}
+
+/// The status a `Call` submitted as an ingress can have. For documentation see `IngressState`,
+/// except `Rejected` which is mapped to `IngressState::Completed(WasmResult::Reject(_))`.
+#[derive(Clone, Debug)]
+pub enum CallStatus {
+    Rejected(String),
+    Received,
+    Failed(UserError),
+    Processing,
+    Done,
 }
 
 impl TestSubnet {
@@ -57,13 +57,35 @@ impl TestSubnet {
     }
 
     /// Attempts to subnet a new `Call` as ingress.
-    pub fn submit_call(&self, call: Call) -> -> Result<MessageId, SubmitIngressError> {
+    pub fn submit_call(&self, call: Call) -> Result<MessageId, SubmitIngressError> {
+        let (receiver, payload) = to_encoded_ingress(call);
         self.env.submit_ingress_as(
             PrincipalId::new_anonymous(),
             receiver,
-            "pulse",
+            "handle_call",
             payload,
         )
+    }
+
+    /// Attempts to get the `Response` for a `Call` submitted with `id`; panics for an
+    /// unknown `id` since this case shouldn't be possible in a test without a bug.
+    pub fn try_get_response(&self, id: &MessageId) -> Result<Response, CallStatus> {
+        match self.env.ingress_status(id) {
+            IngressStatus::Unknown => unreachable!("unknown Id"),
+            IngressStatus::Known {
+                receiver, state, ..
+            } => match state {
+                IngressState::Received => Err(CallStatus::Received),
+                IngressState::Completed(WasmResult::Reply(blob)) => Ok(from_blob(
+                    CanisterId::unchecked_from_principal(receiver),
+                    blob,
+                )),
+                IngressState::Completed(WasmResult::Reject(err)) => Err(CallStatus::Rejected(err)),
+                IngressState::Failed(err) => Err(CallStatus::Failed(err)),
+                IngressState::Processing => Err(CallStatus::Processing),
+                IngressState::Done => Err(CallStatus::Done),
+            },
+        }
     }
 
     /// Returns the subnet Id of this `TestSubnet`.
@@ -79,6 +101,17 @@ impl TestSubnet {
             .keys()
             .cloned()
             .collect()
+    }
+
+    /// Returns the canister first installed on this subnet.
+    pub fn principal_canister(&self) -> CanisterId {
+        *self
+            .env
+            .get_latest_state()
+            .canister_states
+            .keys()
+            .next()
+            .unwrap()
     }
 
     /// Returns a snapshot of a XNet stream to another subnet.
@@ -99,6 +132,15 @@ impl TestSubnet {
                         .collect(),
                 )
             })
+    }
+
+    /// Returns the status of the canister, e.g. running, stopping, stopped.
+    pub fn canister_status(&self, id: &CanisterId) -> Option<CanisterStatusType> {
+        self.env
+            .get_latest_state()
+            .canister_states
+            .get(&id)
+            .map(|state| state.status())
     }
 }
 

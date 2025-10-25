@@ -107,6 +107,7 @@ rust_ic_test_suite_with_extra_srcs(
     deps = [
         # Keep sorted.
         ":messaging",
+        "//packages/ic-error-types",
         "//rs/config",
         "//rs/interfaces/certified_stream_store",
         "//rs/registry/routing_table",

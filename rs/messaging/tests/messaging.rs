@@ -2,40 +2,28 @@ pub mod common;
 
 use assert_matches::assert_matches;
 use common::{TestSubnet, TestSubnetConfig, TestSubnetSetup, arb_test_subnets, two_test_subnets};
+use ic_error_types::RejectCode;
+use ic_management_canister_types_private::CanisterStatusType;
 use ic_types::{
     CanisterId, PrincipalId,
     ingress::{IngressState, IngressStatus},
     messages::StreamMessage,
 };
-use messaging_test::Call;
+use messaging_test::{Call, Response};
 use messaging_test_utils::{CallConfig, arb_call};
 use proptest::prelude::ProptestConfig;
 
 #[test]
 fn test_canister_can_be_stopped_with_hanging_call_on_stalled_subnet() {
-    let (mut subnet1, subnet2) =
+    let (subnet1, subnet2) =
         two_test_subnets(TestSubnetConfig::default(), TestSubnetConfig::default());
 
-    let [canister1] = subnet1.canisters()[..] else {
-        unreachable!()
-    };
-    let [canister2] = subnet2.canisters()[..] else {
-        unreachable!()
-    };
+    let canister1 = subnet1.principal_canister();
+    let canister2 = subnet2.principal_canister();
 
-    // A call sent to `subnet1` as ingress, which then best-effort call to `subnet2`.
-    let call = Call {
-        receiver: canister1,
-        downstream_calls: vec![Call {
-            receiver: canister2,
-            timeout_secs: Some(10),
-            ..Call::default()
-        }],
-        ..Call::default()
-    };
-    /*
-    subnet1
-        .pulse(Call {
+    // A call sent to `subnet1` as ingress, which then makes a best-effort call to `subnet2`.
+    let msg_id = subnet1
+        .submit_call(Call {
             receiver: canister1,
             downstream_calls: vec![Call {
                 receiver: canister2,
@@ -45,33 +33,13 @@ fn test_canister_can_be_stopped_with_hanging_call_on_stalled_subnet() {
             ..Call::default()
         })
         .unwrap();
-    */
 
-    let (receiver, payload) = messaging_test_utils::to_encoded_ingress(call);
-    let msg_id = subnet1
-        .env
-        .submit_ingress_as(PrincipalId::new_anonymous(), receiver, "pulse", payload)
-        .unwrap();
-    subnet1.execute_round();
-    let status = subnet1.env.ingress_status(&msg_id);
-    assert!(false, "{:#?}", status);
-
-    /*
-    // Two rounds should be enough to route the message into the stream to `subnet2`.
+    // Two rounds should be enough to route the message to `subnet2`.
     subnet1.execute_round();
     subnet1.execute_round();
-    assert_matches!(
-        subnet1
-            .stream_snapshot(subnet2.id())
-            .map(|(_, msgs)| msgs)
-            .as_deref(),
-        Some([StreamMessage::Request(_)])
-    );
-
     // Put `canister1` into `Stopping` state.
-    let msg_id = subnet1.env.stop_canister_non_blocking(canister1);
+    subnet1.env.stop_canister_non_blocking(canister1);
     subnet1.execute_round();
-
     // Advance time and execute another round; this should time out the downstream call
     // and allow the ingress to conclude.
     subnet1
@@ -79,35 +47,57 @@ fn test_canister_can_be_stopped_with_hanging_call_on_stalled_subnet() {
         .advance_time(std::time::Duration::from_secs(100));
     subnet1.execute_round();
 
-    let status = subnet1.env.ingress_status(&msg_id);
-    let IngressStatus::Known { receiver, .. } = status else {
-        unreachable!();
-    };
-    let receiver = CanisterId::unchecked_from_principal(receiver);
-    assert!(false, "{:#?}\n\n{:#?}", status, receiver);
-
-    //subnet1.update_submitted_pulses();
-    */
-
+    // The downstream call was timed out...
+    assert_matches!(
+        subnet1.try_get_response(&msg_id),
+        Ok(Response::Success {
+            downstream_responses,
+            ..
+        }) if matches!(downstream_responses[..], [Response::AsyncReject {
+            reject_code: RejectCode::SysUnknown as u32,
+            ..
+        }])
+    );
+    // ...and the canister was stopped.
+    assert_matches!(
+        subnet1.canister_status(&canister1),
+        Some(CanisterStatusType::Stopped)
+    );
     /*
-    pub fn stop_canister_non_blocking(&self, canister_id: CanisterId) -> MessageId {
 
-    // Tick for up to `shutdown_phase_max_rounds` times on the local subnet only
-    // or until the local canister has stopped.
-    for _ in 0..shutdown_phase_max_rounds {
-        match subnets.local_env.ingress_status(&msg_id) {
-            IngressStatus::Known {
-                state: IngressState::Completed(_),
-                ..
-            } => return subnets.check_canister_traps(),
-            _ => {
-                subnets.local_env.tick();
-                subnets
-                    .local_env
-                    .advance_time(std::time::Duration::from_secs(1));
-            }
-        }
-    }
+
+
+
+        // Two rounds should be enough to route the message into the stream to `subnet2`.
+        subnet1.execute_round();
+        subnet1.execute_round();
+        assert_matches!(
+            subnet1
+                .stream_snapshot(subnet2.id())
+                .map(|(_, msgs)| msgs)
+                .as_deref(),
+            Some([StreamMessage::Request(_)])
+        );
+
+        // Put `canister1` into `Stopping` state.
+        subnet1.env.stop_canister_non_blocking(canister1);
+        subnet1.execute_round();
+
+        // Advance time and execute another round; this should time out the downstream call
+        // and allow the ingress to conclude.
+        subnet1
+            .env
+            .advance_time(std::time::Duration::from_secs(100));
+        subnet1.execute_round();
+
+        assert_matches!(
+            subnet1.try_get_response(&msg_id),
+            Ok(Response::Success { .. })
+        );
+        assert_matches!(
+            subnet1.canister_status(&canister1),
+            Some(CanisterStatusType::Stopped)
+        );
     */
 }
 
