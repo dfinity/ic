@@ -11,12 +11,14 @@ use crate::lifecycle::init::Network;
 use async_trait::async_trait;
 use candid::Principal;
 use ic_ckbtc_minter::{
-    CanisterRuntime, CheckTransactionResponse, GetUtxosRequest, GetUtxosResponse,
-    address::BitcoinAddress, management::CallError, state::CkBtcMinterState, tx,
+    CanisterRuntime, CheckTransactionResponse, GetCurrentFeePercentilesRequest, GetUtxosRequest,
+    GetUtxosResponse, address::BitcoinAddress, management::CallError, state::CkBtcMinterState, tx,
     updates::retrieve_btc::BtcAddressCheckStatus,
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
+use std::time::Duration;
 
+use crate::dogecoin_canister::MillikoinuPerByte;
 pub use dogecoin_canister::get_dogecoin_canister_id;
 pub use ic_ckbtc_minter::{
     OutPoint, Page, Txid, Utxo,
@@ -33,6 +35,20 @@ pub struct DogeCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for DogeCanisterRuntime {
+    fn refresh_fee_percentiles_frequency(&self) -> Duration {
+        const SIX_MINUTES: Duration = Duration::from_secs(360);
+        SIX_MINUTES
+    }
+
+    async fn get_current_fee_percentiles(
+        &self,
+        request: &GetCurrentFeePercentilesRequest,
+    ) -> Result<Vec<MillikoinuPerByte>, CallError> {
+        dogecoin_canister::dogecoin_get_fee_percentiles(request)
+            .await
+            .map_err(|err| CallError::from_cdk_call_error("dogecoin_get_fee_percentiles", err))
+    }
+
     async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
         dogecoin_canister::dogecoin_get_utxos(request)
             .await
@@ -128,15 +144,18 @@ impl CanisterRuntime for DogeCanisterRuntime {
 mod dogecoin_canister {
     use crate::Network;
     use candid::Principal;
-    use ic_cdk::bitcoin_canister::{GetUtxosRequest, GetUtxosResponse};
+    use ic_cdk::bitcoin_canister::{
+        GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
+    };
     use ic_cdk::call::{Call, CallResult};
 
+    /// Unit of Dogecoin transaction fee.
+    ///
+    /// This is the element in the [`dogecoin_get_fee_percentiles`] response.
+    pub type MillikoinuPerByte = u64;
+
     pub async fn dogecoin_get_utxos(arg: &GetUtxosRequest) -> CallResult<GetUtxosResponse> {
-        let canister_id = get_dogecoin_canister_id(&match arg.network {
-            ic_cdk::bitcoin_canister::Network::Mainnet => Network::Mainnet,
-            ic_cdk::bitcoin_canister::Network::Testnet => Network::Testnet,
-            ic_cdk::bitcoin_canister::Network::Regtest => Network::Regtest,
-        });
+        let canister_id = get_dogecoin_canister_id(&into_dogecoin_network(arg.network));
         // same cycles cost as for the Bitcoin canister
         let cycles = ic_cdk::bitcoin_canister::cost_get_utxos(arg);
         Ok(Call::bounded_wait(canister_id, "dogecoin_get_utxos")
@@ -144,6 +163,21 @@ mod dogecoin_canister {
             .with_cycles(cycles)
             .await?
             .candid()?)
+    }
+
+    pub async fn dogecoin_get_fee_percentiles(
+        arg: &GetCurrentFeePercentilesRequest,
+    ) -> CallResult<Vec<MillikoinuPerByte>> {
+        let canister_id = get_dogecoin_canister_id(&into_dogecoin_network(arg.network));
+        // same cycles cost as for the Bitcoin canister
+        let cycles = ic_cdk::bitcoin_canister::cost_get_current_fee_percentiles(arg);
+        Ok(
+            Call::bounded_wait(canister_id, "dogecoin_get_current_fee_percentiles")
+                .with_arg(arg)
+                .with_cycles(cycles)
+                .await?
+                .candid()?,
+        )
     }
 
     /// Gets the canister ID of the Dogecoin canister for the specified network.
@@ -156,6 +190,14 @@ mod dogecoin_canister {
             Network::Mainnet => MAINNET_ID,
             Network::Testnet => TESTNET_ID,
             Network::Regtest => REGTEST_ID,
+        }
+    }
+
+    fn into_dogecoin_network(network: ic_cdk::bitcoin_canister::Network) -> Network {
+        match network {
+            ic_cdk::bitcoin_canister::Network::Mainnet => Network::Mainnet,
+            ic_cdk::bitcoin_canister::Network::Testnet => Network::Testnet,
+            ic_cdk::bitcoin_canister::Network::Regtest => Network::Regtest,
         }
     }
 }

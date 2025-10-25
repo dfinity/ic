@@ -90,7 +90,7 @@ async fn refresh_fee_percentiles() {
         Some(guard) => guard,
         None => return,
     };
-    let _ = ic_ckbtc_minter::estimate_fee_per_vbyte().await;
+    let _ = ic_ckbtc_minter::estimate_fee_per_vbyte(&IC_CANISTER_RUNTIME).await;
 }
 
 fn check_postcondition<T>(t: T) -> T {

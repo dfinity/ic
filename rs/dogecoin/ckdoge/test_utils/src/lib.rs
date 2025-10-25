@@ -28,7 +28,7 @@ pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 100_000_000;
 pub const MIN_CONFIRMATIONS: u32 = 60;
 
 pub struct Setup {
-    env: Arc<PocketIc>,
+    pub env: Arc<PocketIc>,
     dogecoin: CanisterId,
     minter: CanisterId,
     ledger: CanisterId,

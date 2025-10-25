@@ -8,7 +8,6 @@ use pocket_ic::{
     common::rest::{IcpFeatures, IcpFeaturesConfig},
     nonblocking::PocketIc,
 };
-use registry_canister::init::RegistryCanisterInitPayload;
 use serde::Deserialize;
 use std::{
     collections::{HashMap, VecDeque},
@@ -23,6 +22,11 @@ pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(17);
 struct MigrateCanisterArgs {
     pub source: Principal,
     pub target: Principal,
+}
+
+#[derive(CandidType, Deserialize, Default)]
+struct MigrationCanisterInitArgs {
+    allowlist: Option<Vec<Principal>>,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -68,6 +72,7 @@ pub struct Settings {
     pub mc_controls_source: bool,
     pub mc_controls_target: bool,
     pub enough_cycles: bool,
+    pub allowlist: Option<Vec<Principal>>,
 }
 
 impl Default for Settings {
@@ -76,6 +81,7 @@ impl Default for Settings {
             mc_controls_source: true,
             mc_controls_target: true,
             enough_cycles: true,
+            allowlist: None,
         }
     }
 }
@@ -86,6 +92,7 @@ async fn setup(
         mc_controls_source,
         mc_controls_target,
         enough_cycles,
+        allowlist,
     }: Settings,
 ) -> Setup {
     let pic = PocketIcBuilder::new()
@@ -132,7 +139,10 @@ async fn setup(
     pic.install_canister(
         MIGRATION_CANISTER_ID.into(),
         migration_canister_wasm.bytes(),
-        Encode!(&RegistryCanisterInitPayload::default()).unwrap(),
+        Encode!(&MigrationCanisterInitArgs {
+            allowlist: allowlist.clone()
+        })
+        .unwrap(),
         Some(system_controller),
     )
     .await;
@@ -156,6 +166,9 @@ async fn setup(
         // make migration canister controller of source
         let mut new_controllers = source_controllers.clone();
         new_controllers.push(MIGRATION_CANISTER_ID.into());
+        if let Some(ref allowlist) = allowlist {
+            new_controllers.extend(allowlist.clone());
+        }
         pic.update_canister_settings(
             source,
             Some(c1),
@@ -188,6 +201,9 @@ async fn setup(
         // make migration canister controller of target
         let mut new_controllers = target_controllers.clone();
         new_controllers.push(MIGRATION_CANISTER_ID.into());
+        if let Some(ref allowlist) = allowlist {
+            new_controllers.extend(allowlist.clone());
+        }
         pic.update_canister_settings(
             target,
             Some(c1),
@@ -371,6 +387,40 @@ async fn migration_succeeds() {
         .await
         .unwrap_err();
     assert!(err.reject_message.contains("no wasm module"));
+}
+
+#[tokio::test]
+async fn validation_fails_not_allowlisted() {
+    let special_caller = Principal::self_authenticating(vec![42]);
+    let Setup {
+        pic,
+        source,
+        target,
+        source_controllers,
+        ..
+    } = setup(Settings {
+        allowlist: Some(vec![special_caller]),
+        ..Settings::default()
+    })
+    .await;
+    let sender = source_controllers[0];
+
+    let Err(ValidationError::MigrationsDisabled) =
+        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
+    else {
+        panic!()
+    };
+    // but allowlisted principal succeeds
+    migrate_canister(
+        &pic,
+        special_caller,
+        &MigrateCanisterArgs { source, target },
+    )
+    .await
+    .unwrap();
+
+    pic.advance_time(Duration::from_secs(250)).await;
+    advance(&pic).await;
 }
 
 #[tokio::test]
@@ -705,34 +755,32 @@ async fn status_correct() {
         }
     );
 
-    // TODO: Depends on a PocketIC change
+    advance(&pic).await;
+    let status = get_status(&pic, sender, &args).await;
+    assert_eq!(
+        status[0],
+        MigrationStatus::InProgress {
+            status: "RoutingTableChangeAccepted".to_string()
+        }
+    );
 
-    // advance(&pic).await;
-    // let status = get_status(&pic, sender, &args).await;
-    // assert_eq!(
-    //     status[0],
-    //     MigrationStatus::InProgress {
-    //         status: "RoutingTableChangeAccepted".to_string()
-    //     }
-    // );
-
-    // advance(&pic).await;
-    // let status = get_status(&pic, sender, &args).await;
-    // assert_eq!(
-    //     status[0],
-    //     MigrationStatus::InProgress {
-    //         status: "SourceDeleted".to_string()
-    //     }
-    // );
-
-    // advance(&pic).await;
-    // let status = get_status(&pic, sender, &args).await;
-    // assert_eq!(
-    //     status[0],
-    //     MigrationStatus::InProgress {
-    //         status: "RestoredControllers".to_string()
-    //     }
-    // );
+    advance(&pic).await;
+    let status = get_status(&pic, sender, &args).await;
+    assert_eq!(
+        status[0],
+        MigrationStatus::InProgress {
+            status: "SourceDeleted".to_string()
+        }
+    );
+    pic.advance_time(Duration::from_secs(310)).await;
+    advance(&pic).await;
+    let status = get_status(&pic, sender, &args).await;
+    assert_eq!(
+        status[0],
+        MigrationStatus::InProgress {
+            status: "RestoredControllers".to_string()
+        }
+    );
 }
 
 #[tokio::test]
@@ -889,34 +937,36 @@ async fn failure_controllers_restored() {
     assert_eq!(target_controllers, target_controllers_after);
 }
 
-// TODO: Depends on a PocketIC change
-
-// #[tokio::test]
-// async fn success_controllers_restored() {
-//     let Setup {
-//         pic,
-//         source,
-//         target,
-//         mut source_controllers,
-//         ..
-//     } = setup(Settings::default()).await;
-//     let sender = source_controllers[0];
-//     let args = MigrateCanisterArgs { source, target };
-//     migrate_canister(&pic, sender, &args).await.unwrap();
-//     for _ in 0..10 {
-//         advance(&pic).await;
-//     }
-//     let status = get_status(&pic, sender, &args).await;
-//     let MigrationStatus::Succeeded { .. } = status[0] else {
-//         panic!()
-//     };
-//     let mut source_controllers_after = pic.get_controllers(source).await;
-//     source_controllers_after.sort();
-//     // On success, the MC should have removed itself from the controllers.
-//     source_controllers.retain(|x| x != &MIGRATION_CANISTER_ID.get().0);
-//     source_controllers.sort();
-//     assert_eq!(source_controllers, source_controllers_after);
-// }
+#[tokio::test]
+async fn success_controllers_restored() {
+    let Setup {
+        pic,
+        source,
+        target,
+        mut source_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    let args = MigrateCanisterArgs { source, target };
+    migrate_canister(&pic, sender, &args).await.unwrap();
+    for _ in 0..10 {
+        advance(&pic).await;
+    }
+    pic.advance_time(Duration::from_secs(300)).await;
+    for _ in 0..10 {
+        advance(&pic).await;
+    }
+    let status = get_status(&pic, sender, &args).await;
+    let MigrationStatus::Succeeded { .. } = status[0] else {
+        panic!("status: {:?}", status[0]);
+    };
+    let mut source_controllers_after = pic.get_controllers(source).await;
+    source_controllers_after.sort();
+    // On success, the MC should have removed itself from the controllers.
+    source_controllers.retain(|x| x != &MIGRATION_CANISTER_ID.get().0);
+    source_controllers.sort();
+    assert_eq!(source_controllers, source_controllers_after);
+}
 
 // parallel processing
 
@@ -967,7 +1017,7 @@ async fn parallel_migrations() {
     pic.install_canister(
         MIGRATION_CANISTER_ID.into(),
         migration_canister_wasm.bytes(),
-        Encode!(&RegistryCanisterInitPayload::default()).unwrap(),
+        Encode!(&MigrationCanisterInitArgs::default()).unwrap(),
         Some(system_controller),
     )
     .await;

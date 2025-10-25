@@ -163,26 +163,10 @@ load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
 
 rules_motoko_dependencies()
 
-# Rosetta CLI
-
-load("//bazel:rosetta_cli.bzl", "rosetta_cli_repository")
-
-rosetta_cli_repository(name = "rosetta-cli")
-
 # trivy binary for vulnerability scanning
 load("//bazel:trivy.bzl", "trivy_scan")
 
 trivy_scan(name = "trivy")
-
-# shfmt binary for fast shell formatting
-load("//bazel:shfmt.bzl", "shfmt")
-
-shfmt(name = "shfmt")
-
-# ruff binary for fast python linting
-load("//pre-commit:ruff.bzl", "ruff")
-
-ruff(name = "ruff")
 
 # ormolu binary for haskell linting
 load("//pre-commit:ormolu.bzl", "ormolu")

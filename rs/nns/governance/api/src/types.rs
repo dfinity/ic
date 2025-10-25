@@ -48,6 +48,8 @@ pub struct BallotInfo {
     candid::CandidType, candid::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug, Default,
 )]
 pub struct NeuronInfo {
+    /// The unique identifier of the neuron.
+    pub id: Option<NeuronId>,
     /// The exact time at which this data was computed. This means, for
     /// example, that the exact time that this neuron will enter the
     /// dissolved state, assuming it is currently dissolving, is given
@@ -4444,15 +4446,15 @@ pub struct MaturityDisbursement {
     candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
 )]
 pub struct GetNeuronIndexRequest {
-    exclusive_start_neuron_id: Option<NeuronId>,
-    page_size: Option<u32>,
+    pub exclusive_start_neuron_id: Option<NeuronId>,
+    pub page_size: Option<u32>,
 }
 
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
 )]
 pub struct NeuronIndexData {
-    neurons: Vec<NeuronInfo>,
+    pub neurons: Vec<NeuronInfo>,
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
