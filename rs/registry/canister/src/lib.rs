@@ -13,4 +13,5 @@ pub mod registry_lifecycle;
 pub mod storage;
 
 mod invariants;
+mod max_rewardable_nodes_mapping;
 mod rate_limits;
