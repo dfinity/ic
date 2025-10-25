@@ -34,6 +34,7 @@ def image_deps(mode, _malicious = False):
             "//rs/ic_os/release:guest_vm_runner": "/opt/ic/bin/guest_vm_runner:0755",
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
             "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
+            "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",
@@ -41,7 +42,7 @@ def image_deps(mode, _malicious = False):
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/hostos/context:context-files"),
-        "component_files": component_files,
+        "component_files": dict(component_files),
         "partition_table": Label("//ic-os/hostos:partitions.csv"),
         "volume_table": Label("//ic-os/hostos:volumes.csv"),
         "rootfs_size": "3G",
@@ -73,6 +74,11 @@ def image_deps(mode, _malicious = False):
 
     # Update dev rootfs
     if "dev" in mode:
+        # Allow console access
+        deps["component_files"].update({
+            Label("//ic-os/components:misc/serial-getty@/hostos-dev/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
+        })
+
         deps["rootfs"].pop("//rs/ic_os/release:config", None)
         deps["rootfs"].update({"//rs/ic_os/release:config_dev": "/opt/ic/bin/config:0755"})
 
@@ -81,6 +87,11 @@ def image_deps(mode, _malicious = False):
 
         deps["rootfs"].pop("//rs/ic_os/release:guest_vm_runner", None)
         deps["rootfs"].update({"//rs/ic_os/release:guest_vm_runner_dev": "/opt/ic/bin/guest_vm_runner:0755"})
+    else:
+        # Allow limited-console access on prod
+        deps["component_files"].update({
+            Label("//ic-os/components:misc/serial-getty@/hostos-prod/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
+        })
 
     return deps
 

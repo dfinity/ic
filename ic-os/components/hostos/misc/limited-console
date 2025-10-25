@@ -1,0 +1,102 @@
+#!/bin/bash
+# Limited Console Shell provides restricted access to select commands
+
+source /opt/ic/bin/config.sh
+
+# Show available commands
+show_menu() {
+    echo "=== HostOS Limited Console ==="
+    echo "Available commands:"
+    echo "1. system-status           - Show system status"
+    echo "2. service-status          - Show service status (usage: service-status <service-name>)" 
+    echo "3. view-logs               - View service logs (usage: view-logs <service-name>)"
+    echo "4. config-json             - Show /boot/config/config.json"
+    echo "5. network-config-settings - Show network settings from config"
+    echo "6. rbash-console           - Drop into restricted bash console"
+    echo "7. clear                   - Clear the console"
+    echo "8. exit                    - Exit console"
+    echo ""
+}
+
+# Command dispatcher
+execute_command() {
+    case "$1" in
+        "system-status")
+            echo "=== System Status ==="
+            echo "Hostname: $(hostname)"
+            echo "Uptime: $(uptime)"
+            echo "Memory: $(free -h | grep '^Mem')"
+            echo "Disk Usage: $(df -h / | tail -1)"
+            ;;
+        "service-status")
+            if [ -n "${2:-}" ]; then
+                sudo systemctl status "$2"
+            else
+                echo "Usage: service-status <service-name>"
+                echo "Example: service-status guestos"
+            fi
+            ;;
+        "view-logs")
+            if [ -n "${2:-}" ]; then
+                sudo journalctl -u "$2" --no-pager -n 50
+            else
+                echo "Usage: view-logs <service-name>"
+                echo "Example: view-logs guestos"
+            fi
+            ;;
+        "config-json")
+            echo "=== /boot/config/config.json ==="
+            cat /boot/config/config.json 
+            ;;
+        "network-config-settings")
+            echo "=== Network Settings from Config ==="
+            local network_settings=$(get_config_value '.network_settings' 2>/dev/null)
+            if [ -n "$network_settings" ]; then
+                echo "$network_settings" | jq . 2>/dev/null || echo "$network_settings"
+            else
+                echo "No network settings found in config"
+            fi
+            ;;
+        "rbash-console")
+            echo "=== Dropping into Restricted Bash Console ==="
+            echo "You are now in a restricted bash shell with limited commands."
+            echo "Type 'exit' to return to the limited console menu."
+            echo ""
+            # Start rbash with restricted environment and PATH
+            PATH="/bin:/usr/bin:/opt/ic/bin" /bin/rbash
+            ;;
+        "clear")
+            clear
+            ;;
+        "exit")
+            echo "Exiting limited console..."
+            exit 0
+            ;;
+        *)
+            echo "Unknown command: $1"
+            show_menu
+            ;;
+    esac
+}
+
+echo "Welcome to HostOS Limited Console"
+echo "Type 'help' for available commands or 'exit' to quit"
+echo ""
+
+while true; do
+    echo -n "limited-console> "
+    read -r command
+
+    # Skip empty input
+    if [ -z "$command" ]; then
+        continue
+    fi
+
+    if [ "$command" = "help" ]; then
+        show_menu
+    else
+        # Parse command and arguments
+        read -r cmd args <<< "$command"
+        execute_command "$cmd" $args
+    fi
+done
