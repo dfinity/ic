@@ -148,6 +148,18 @@ alias(
     }),
 )
 
+### trivy, used by ic-os for vulnerability scanning
+
+alias(
+    name = "trivy",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@trivy-x86_64-linux//:trivy",
+        "@bazel_tools//src/conditions:darwin_arm64": "@trivy-aarch64-darwin//:trivy",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@trivy-x86_64-darwin//:trivy",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
 ### dfx
 
 alias(
