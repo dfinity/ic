@@ -17,6 +17,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
 };
@@ -911,6 +912,7 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
     let idkg_dealing_encryption_pk = node_public_keys
         .idkg_dealing_encryption_key()
         .encode_to_vec();
+    let node_reward_type = NodeRewardType::Type1.to_string();
 
     let payload = AddNodePayload {
         node_signing_pk,
@@ -926,7 +928,7 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         // Unused section follows
         p2p_flow_endpoints: Default::default(),
         prometheus_metrics_endpoint: Default::default(),
-        node_reward_type: None,
+        node_reward_type: Some(node_reward_type),
     };
 
     (payload, node_public_keys)

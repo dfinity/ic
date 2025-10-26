@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use dfn_candid::candid;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
@@ -19,8 +17,10 @@ use ic_registry_transport::pb::v1::{
     RegistryAtomicMutateRequest, RegistryMutation, registry_mutation,
 };
 use ic_types::NodeId;
+use maplit::btreemap;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use std::collections::BTreeMap;
 
 #[test]
 fn node_is_created_on_receiving_the_request() {
@@ -31,7 +31,9 @@ fn node_is_created_on_receiving_the_request() {
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(100))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type3".to_string() => 100 },
+                ))
                 .build(),
         )
         .await;
@@ -110,7 +112,9 @@ fn node_is_not_created_with_invalid_type() {
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(100))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 100 },
+                ))
                 .build(),
         )
         .await;
@@ -156,7 +160,9 @@ fn node_is_not_created_on_wrong_principal() {
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(100))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 100 },
+                ))
                 .build(),
         )
         .await;
@@ -195,7 +201,9 @@ fn node_is_not_created_when_above_capacity() {
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(1))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 1 },
+                ))
                 .build(),
         )
         .await;
@@ -253,7 +261,9 @@ fn duplicated_nodes_are_removed_on_join() {
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(10))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 10 },
+                ))
                 .build(),
         )
         .await;
@@ -317,7 +327,9 @@ fn join_with_duplicate_is_allowed_when_at_capacity() {
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(1))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 1 },
+                ))
                 .build(),
         )
         .await;
@@ -373,16 +385,18 @@ fn join_with_duplicate_is_allowed_when_at_capacity() {
     });
 }
 
-fn init_mutation_with_node_allowance(node_allowance: u64) -> RegistryAtomicMutateRequest {
+fn init_mutation_with_max_rewardable_nodes(
+    max_rewardable_nodes: BTreeMap<String, u32>,
+) -> RegistryAtomicMutateRequest {
     let node_operator_record = NodeOperatorRecord {
         node_operator_principal_id: TEST_NEURON_1_OWNER_PRINCIPAL.to_vec(),
-        node_allowance,
+        node_allowance: 0,
         // This doesn't go through Governance validation
         node_provider_principal_id: vec![],
         dc_id: "".into(),
         rewardable_nodes: BTreeMap::new(),
         ipv6: None,
-        max_rewardable_nodes: BTreeMap::new(),
+        max_rewardable_nodes,
     };
     RegistryAtomicMutateRequest {
         mutations: vec![RegistryMutation {
