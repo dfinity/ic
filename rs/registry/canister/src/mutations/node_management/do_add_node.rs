@@ -82,9 +82,8 @@ impl Registry {
         let mut num_removed_same_ip_same_type = 0;
         if !nodes_with_same_ip.is_empty() {
             for node_with_same_ip in &nodes_with_same_ip {
-                let node_same_ip_type =
-                    get_node_reward_type_for_node(self, node_with_same_ip.clone())
-                        .map_err(|e| format!("{LOG_PREFIX}do_add_node: {e}"))?;
+                let node_same_ip_type = get_node_reward_type_for_node(self, *node_with_same_ip)
+                    .map_err(|e| format!("{LOG_PREFIX}do_add_node: {e}"))?;
 
                 if node_same_ip_type == node_reward_type {
                     num_removed_same_ip_same_type += 1;
