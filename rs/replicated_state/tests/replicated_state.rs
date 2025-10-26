@@ -1061,6 +1061,7 @@ fn split() {
                     },
                     UNIX_EPOCH,
                     NumBytes::from(u64::MAX),
+                    |_| {},
                 );
             }
         }
@@ -1103,6 +1104,10 @@ fn split() {
         assert_eq!(2, fixture.local_subnet_input_schedule(&canister).len());
         assert_eq!(0, fixture.remote_subnet_input_schedule(&canister).len());
     }
+
+    // Add some refunds. Should be retained on subnet A' only.
+    fixture.state.add_refund(CANISTER_1, Cycles::new(100));
+    fixture.state.add_refund(CANISTER_2, Cycles::new(200));
 
     //
     // Split off subnet A', phase 1.
