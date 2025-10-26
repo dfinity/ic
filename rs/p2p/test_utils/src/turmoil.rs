@@ -30,6 +30,7 @@ use ic_quic_transport::SubnetTopology;
 use ic_quic_transport::{QuicTransport, Transport};
 use ic_state_manager::state_sync::types::StateSyncMessage;
 use ic_types::{NodeId, RegistryVersion};
+use ic_types_test_utils::ids::node_test_id;
 use quinn::{self, AsyncUdpSocket, UdpPoller, udp::EcnCodepoint};
 use tokio::{
     select,
@@ -360,6 +361,7 @@ pub fn add_transport_to_sim<F>(
             let state_sync_manager = if let Some(ref state_sync) = state_sync_client_clone {
                 let (state_sync_router, state_sync_manager) =
                     ic_state_sync_manager::build_state_sync_manager(
+                        node_test_id(0),
                         &log,
                         &MetricsRegistry::default(),
                         &tokio::runtime::Handle::current(),

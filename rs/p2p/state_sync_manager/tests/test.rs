@@ -664,6 +664,7 @@ fn test_state_sync_abortion() {
             .expect_chunks_to_download()
             .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
         c2.get_mut().expect_add_chunk().return_const(Ok(()));
+        c2.get_mut().expect_is_base_layer().returning(|| false);
         {
             let c2 = c2.clone();
             s2.get_mut()
@@ -730,6 +731,8 @@ fn test_state_sync_abortion() {
         c2.get_mut()
             .expect_chunks_to_download()
             .returning(|| Box::new(vec![ChunkId::from(1)].into_iter()) as Box<_>);
+        c2.get_mut().expect_is_base_layer().returning(|| false);
+
         wait_for(&mut sim, || c2.add_chunks_calls() >= 1).unwrap();
 
         // State sync should now be stopped. This means new incoming adverts will invoke `maybe_start_state_sync`

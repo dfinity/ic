@@ -1,4 +1,4 @@
-use crate::utils::Advert;
+use crate::utils::{Advert, XorDistance};
 use axum::{
     Extension,
     body::Bytes,
@@ -50,8 +50,14 @@ impl StateSyncAdvertHandler {
     }
 }
 
-pub(crate) fn build_advert_handler_request(artifact_id: StateSyncArtifactId) -> Request<Bytes> {
-    let advert = Advert { id: artifact_id };
+pub(crate) fn build_advert_handler_request(
+    artifact_id: StateSyncArtifactId,
+    partial_state: Option<XorDistance>,
+) -> Request<Bytes> {
+    let advert = Advert {
+        id: artifact_id,
+        partial_state,
+    };
 
     let advert = pb::Advert::from(advert);
     let mut raw = BytesMut::with_capacity(advert.encoded_len());

@@ -297,6 +297,10 @@ impl Chunkable<StateSyncMessage> for FakeChunkable {
 
         Ok(())
     }
+
+    fn is_base_layer(&self) -> bool {
+        self.chunk_sets[0].is_empty() && self.chunk_sets[1].is_empty()
+    }
 }
 
 #[derive(Clone, Default)]
@@ -333,6 +337,10 @@ impl Chunkable<StateSyncMessage> for SharableMockChunkable {
     fn add_chunk(&mut self, chunk_id: ChunkId, chunk: Chunk) -> Result<(), AddChunkError> {
         self.add_chunks_calls.fetch_add(1, Ordering::SeqCst);
         self.mock.lock().unwrap().add_chunk(chunk_id, chunk)
+    }
+
+    fn is_base_layer(&self) -> bool {
+        self.mock.lock().unwrap().is_base_layer()
     }
 }
 
@@ -418,18 +426,16 @@ pub fn create_node(
         disconnected: Arc::new(AtomicBool::new(false)),
     });
 
+    let node_id = NodeId::from(PrincipalId::new_node_test_id(node_num));
+
     let (router, manager) = ic_state_sync_manager::build_state_sync_manager(
+        node_id.clone(),
         &log,
         &MetricsRegistry::default(),
         rt,
         state_sync.clone(),
     );
-    let transport = transport_router.add_peer(
-        NodeId::from(PrincipalId::new_node_test_id(node_num)),
-        router,
-        link.0,
-        link.1,
-    );
+    let transport = transport_router.add_peer(node_id, router, link.0, link.1);
     let shutdown = manager.start(Arc::new(transport));
     (state_sync, shutdown)
 }

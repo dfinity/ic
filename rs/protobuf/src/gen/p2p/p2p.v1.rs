@@ -3,6 +3,8 @@
 pub struct Advert {
     #[prost(message, optional, tag = "1")]
     pub id: ::core::option::Option<StateSyncId>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub partial_state: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct StateSyncId {
