@@ -97,7 +97,10 @@ fn node_is_created_on_receiving_the_request() {
             get_node_operator_record(&registry, *TEST_NEURON_1_OWNER_PRINCIPAL)
                 .await
                 .unwrap();
-        assert_eq!(node_operator_record.node_allowance, 99);
+        assert_eq!(
+            node_operator_record.max_rewardable_nodes,
+            btreemap! { "type3".to_string() => 100 }
+        );
 
         Ok(())
     });
