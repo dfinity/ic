@@ -10,9 +10,7 @@ use std::time::Duration;
 
 use candid::{CandidType, Deserialize};
 use ic_cdk::api::call::RejectionCode;
-use ic_management_canister_types_private::{
-    BoundedHttpHeaders, HttpHeader, HttpMethod, Payload, TransformContext,
-};
+use ic_management_canister_types_private::{HttpHeader, HttpMethod, Payload, TransformContext};
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct RemoteHttpRequest {
@@ -41,22 +39,6 @@ pub struct UnvalidatedCanisterHttpRequestArgs {
     pub is_replicated: Option<bool>,
 }
 impl Payload<'_> for UnvalidatedCanisterHttpRequestArgs {}
-
-impl From<UnvalidatedCanisterHttpRequestArgs>
-    for ic_management_canister_types_private::CanisterHttpRequestArgs
-{
-    fn from(args: UnvalidatedCanisterHttpRequestArgs) -> Self {
-        Self {
-            url: args.url,
-            max_response_bytes: args.max_response_bytes,
-            headers: BoundedHttpHeaders::new(args.headers),
-            body: args.body,
-            method: args.method,
-            transform: args.transform,
-            is_replicated: None,
-        }
-    }
-}
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct RemoteHttpResponse {

@@ -3042,6 +3042,7 @@ fn canister_is_stopped_if_timeout_occurs_and_ready_to_stop() {
             transform: None,
             max_response_bytes: None,
             is_replicated: None,
+            pricing_version: None,
         })
         .unwrap();
 
@@ -4115,6 +4116,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             context: transform_context,
         }),
         is_replicated: None,
+        pricing_version: None,
     };
 
     // Create request to `HttpRequest` method.
@@ -4204,6 +4206,7 @@ fn http_outcalls_free() {
             context: transform_context,
         }),
         is_replicated: None,
+        pricing_version: None,
     };
 
     // Create request to `HttpRequest` method.
