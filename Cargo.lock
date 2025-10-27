@@ -17565,6 +17565,7 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-types",
  "ic-types-test-utils",
+ "maplit",
  "messaging-test-utils",
  "proptest",
  "serde",

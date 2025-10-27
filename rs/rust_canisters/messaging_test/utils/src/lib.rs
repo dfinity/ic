@@ -1,7 +1,8 @@
 use ic_types::{CanisterId, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
 use messaging_test::{Call, Message, Reply, Response, decode, encode};
 use proptest::prelude::*;
-use std::ops::{AddAssign, RangeInclusive};
+use std::collections::BTreeMap;
+use std::ops::{Add, RangeInclusive};
 
 const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 
@@ -155,91 +156,63 @@ pub fn from_blob(respondent: CanisterId, blob: Vec<u8>) -> Response {
     }
 }
 
-/// Stats when comparing a `Call` made to the canister vs the `Response` obtained from it.
-#[derive(Default, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Stats {
-    /// Number of calls performed successfully.
     pub successful_calls_count: usize,
-    /// Number of times the requested call payload size was matched exactly.
-    pub call_bytes_match_count: usize,
-    /// Number of times the requested reply payload size was matched exactly.
-    pub reply_bytes_match_count: usize,
-    /// Number of calls that were rejected.
-    pub rejected_calls_count: usize,
-    /// Number of downstream calls that were not performed due to calls getting rejected.
-    pub missed_downstream_calls_count: usize,
+    pub sync_rejected_calls_count: usize,
+    pub async_rejected_calls_count: usize,
+    pub traps_count: usize,
 }
 
-impl AddAssign for Stats {
-    fn add_assign(&mut self, rhs: Self) {
-        *self = Self {
+impl Add for Stats {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        Self {
             successful_calls_count: self.successful_calls_count + rhs.successful_calls_count,
-            call_bytes_match_count: self.call_bytes_match_count + rhs.call_bytes_match_count,
-            reply_bytes_match_count: self.reply_bytes_match_count + rhs.reply_bytes_match_count,
-            rejected_calls_count: self.rejected_calls_count + rhs.rejected_calls_count,
-            missed_downstream_calls_count: self.missed_downstream_calls_count
-                + rhs.missed_downstream_calls_count,
-        };
-    }
-}
-
-pub fn stats_call_vs_response(call: Call, response: Response) -> Stats {
-    match response {
-        Response::Success {
-            respondent,
-            bytes_received_on_call,
-            bytes_sent_on_reply,
-            downstream_responses,
-        } => {
-            // These asserts can only happen if the call and the response do not originate from the same invocation.
-            assert_eq!(call.receiver, respondent);
-            assert_eq!(call.downstream_calls.len(), downstream_responses.len());
-            // These must always hold because of the added padding.
-            assert!(
-                call.call_bytes <= bytes_received_on_call,
-                "call_bytes: {} > bytes_received_on_call: {}",
-                call.call_bytes,
-                bytes_received_on_call,
-            );
-            assert!(
-                call.reply_bytes <= bytes_sent_on_reply,
-                "reply_bytes: {} > bytes_sent_on_reply: {}",
-                call.reply_bytes,
-                bytes_sent_on_reply,
-            );
-
-            call.downstream_calls
-                .into_iter()
-                .zip(downstream_responses)
-                .fold(
-                    Stats {
-                        successful_calls_count: 1,
-                        call_bytes_match_count: (call.call_bytes == bytes_received_on_call)
-                            as usize,
-                        reply_bytes_match_count: (call.reply_bytes == bytes_sent_on_reply) as usize,
-                        rejected_calls_count: 0,
-                        missed_downstream_calls_count: 0,
-                    },
-                    |mut acc, (call, response)| {
-                        acc += stats_call_vs_response(call, response);
-                        acc
-                    },
-                )
+            sync_rejected_calls_count: self.sync_rejected_calls_count
+                + rhs.sync_rejected_calls_count,
+            async_rejected_calls_count: self.async_rejected_calls_count
+                + rhs.async_rejected_calls_count,
+            traps_count: self.traps_count + rhs.traps_count,
         }
-        Response::SyncReject { call } | Response::AsyncReject { call, .. } => Stats {
-            successful_calls_count: 0,
-            call_bytes_match_count: 0,
-            reply_bytes_match_count: 0,
-            rejected_calls_count: 1,
-            missed_downstream_calls_count: recursive_count_calls(call),
-        },
     }
 }
 
-/// Recursively counts all the downstream calls attached to this `call`, i.e. downstream calls to downstream calls and so forth.
-fn recursive_count_calls(call: Call) -> usize {
-    let len = call.downstream_calls.len();
-    call.downstream_calls
-        .into_iter()
-        .fold(len, |acc, call| acc + recursive_count_calls(call))
+/// Computes `Stats` by call depth.
+pub fn stats_from(response: &Response) -> BTreeMap<usize, Stats> {
+    fn collect_recursively(
+        response: &Response,
+        stats: &mut BTreeMap<usize, Stats>,
+        call_depth: usize,
+    ) {
+        match response {
+            Response::Success {
+                downstream_responses,
+                ..
+            } => {
+                stats.entry(call_depth).or_default().successful_calls_count += 1;
+                for response in downstream_responses.iter() {
+                    collect_recursively(response, stats, call_depth + 1);
+                }
+            }
+            Response::SyncReject { .. } => {
+                stats
+                    .entry(call_depth)
+                    .or_default()
+                    .sync_rejected_calls_count += 1;
+            }
+            Response::AsyncReject { reject_message, .. } => {
+                let s = stats.entry(call_depth).or_default();
+                s.async_rejected_calls_count += 1;
+                if reject_message.contains("trapped") {
+                    s.traps_count += 1;
+                }
+            }
+        }
+    }
+
+    let mut stats = BTreeMap::new();
+    collect_recursively(response, &mut stats, 0);
+    stats
 }
