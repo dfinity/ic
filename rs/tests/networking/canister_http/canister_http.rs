@@ -11,22 +11,38 @@ use ic_system_test_driver::driver::simulate_network::SimulateNetwork;
 use ic_system_test_driver::driver::test_env_api::{
     HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr,
 };
+use ic_system_test_driver::nns::vote_execute_proposal_assert_executed;
 use ic_system_test_driver::driver::test_setup::InfraProvider;
 use ic_system_test_driver::driver::universal_vm::*;
 use ic_system_test_driver::driver::{
     test_env::{TestEnv, TestEnvAttribute},
     test_env_api::*,
 };
-use ic_system_test_driver::util::{self, create_and_install, create_and_install_with_cycles};
+use ic_system_test_driver::util::{self, block_on, create_and_install, create_and_install_with_cycles};
 pub use ic_types::{CanisterId, Cycles, PrincipalId};
 use slog::info;
 use std::env;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 
+//use anyhow::Result;
+use candid::CandidType; 
+use ic_nns_governance_api::NnsFunction; 
+use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection}; 
+use ic_registry_keys::FirewallRulesScope; 
+use registry_canister::mutations::firewall::{
+    AddFirewallRulesPayload, compute_firewall_ruleset_hash,
+};
+use slog::Logger;
+use url::Url;
+
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 pub const EXPIRATION: Duration = Duration::from_secs(120);
 pub const BACKOFF_DELAY: Duration = Duration::from_secs(5);
+
+const INITIAL_WAIT: Duration = Duration::from_secs(10);
+const WAIT_TIMEOUT: Duration = Duration::from_secs(60);
+const MAX_WAIT: Duration = Duration::from_secs(120);
 
 const APP_SUBNET_SIZES: [usize; 3] = [13, 28, 40];
 pub const CONCURRENCY_LEVELS: [u64; 3] = [200, 500, 1000];
@@ -259,9 +275,183 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
         .unwrap_or_else(|e| panic!("Could not start httpbin on {UNIVERSAL_VM_NAME} because {e:?}"));
 
     // Allow list all nodes to access the UVM httpbin service.
-    create_accept_fw_rules(env, SocketAddr::new(IpAddr::V6(vm.ipv6), http_bin_port));
+    create_accept_fw_rules_via_proposal(env, SocketAddr::new(IpAddr::V6(vm.ipv6), http_bin_port));
 
     info!(&env.logger(), "httpbin service started on UVM");
+}
+
+// helper
+enum Proposal<T: CandidType> {
+    Add(T, NnsFunction),
+}
+
+// helper
+async fn execute_proposal<T: Clone + CandidType>(
+    log: &Logger,
+    nns_node: &ic_system_test_driver::driver::test_env_api::IcNodeSnapshot, // Added full path
+    proposal: Proposal<T>,
+) {
+    let (proposal_payload, function) = match proposal {
+        Proposal::Add(payload, func) => (payload, func),
+    };
+    let nns_runtime =
+        util::runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance_canister = ic_system_test_driver::nns::get_governance_canister(&nns_runtime);
+    let proposal_id = ic_system_test_driver::nns::submit_external_proposal_with_test_id(
+        &governance_canister,
+        function,
+        proposal_payload.clone(),
+    )
+    .await;
+    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
+    // Note: Removed await_proposal_execution for brevity as per example's usage in setup
+    info!(
+        log,
+        "Proposal to add firewall rule submitted and executed: {}", proposal_id
+    );
+}
+
+// helper
+fn prepare_add_rules_proposal(
+    scope: FirewallRulesScope,
+    new_rules: Vec<FirewallRule>,
+    positions_sorted: Vec<i32>,
+    previous_rules: Vec<FirewallRule>, // Caller needs to provide this
+) -> AddFirewallRulesPayload {
+    let mut all_rules = previous_rules;
+    for (rule, &pos) in new_rules.iter().zip(&positions_sorted) {
+        if pos < 0 || pos as usize > all_rules.len() {
+            panic!("Invalid insertion position {} for rule", pos);
+        }
+        all_rules.insert(pos as usize, rule.clone());
+    }
+    AddFirewallRulesPayload {
+        scope,
+        rules: new_rules,
+        positions: positions_sorted,
+        expected_hash: compute_firewall_ruleset_hash(&all_rules),
+    }
+}
+
+fn create_accept_fw_rules_via_proposal(env: &TestEnv, target_socket_addr: SocketAddr) {
+    let log = env.logger();
+    let nns_node = env
+        .topology_snapshot()
+        .root_subnet()
+        .nodes()
+        .next()
+        .expect("there is no NNS node");
+    let ip_addr = target_socket_addr.ip();
+    let port = target_socket_addr.port();
+    let (ipv4_prefixes, ipv6_prefixes) = match ip_addr {
+        std::net::IpAddr::V4(ip) => (vec![ip.to_string()], vec![]),
+        std::net::IpAddr::V6(ip) => (vec![], vec![ip.to_string()]),
+    };
+    let new_rule = FirewallRule {
+        ipv4_prefixes,
+        ipv6_prefixes,
+        ports: vec![port as u32],
+        action: FirewallAction::Allow.into(),
+        comment: format!("Allow egress to {}", target_socket_addr),
+        user: Some("ic-http-adapter".to_string()),
+        direction: Some(FirewallRuleDirection::Outbound as i32),
+    };
+    
+    let previous_rules: Vec<FirewallRule> = Vec::new(); 
+    let positions_sorted: Vec<i32> = vec![0]; 
+
+    let proposal_payload = prepare_add_rules_proposal(
+        FirewallRulesScope::ReplicaNodes,
+        vec![new_rule],
+        positions_sorted,
+        previous_rules,
+    );
+
+    info!(
+        &log,
+        "Submitting proposal to add firewall rule to allow access to {} ...",
+        target_socket_addr
+    );
+
+    block_on(execute_proposal(
+        &log,
+        &nns_node,
+        Proposal::Add(proposal_payload, NnsFunction::AddFirewallRules),
+    ));
+
+    info!(
+        &log,
+        "Proposal to add firewall rule to allow access to {} executed.",
+        target_socket_addr
+    );
+
+    let rule_applied = await_rule_execution_with_backoff(
+        &log,
+        &|| {
+            check_port_connectable(target_socket_addr)
+        },
+        INITIAL_WAIT,  
+        BACKOFF_DELAY, 
+        MAX_WAIT       
+    );
+    
+    if rule_applied {
+        info!(log, "Firewall rule appears active.");
+    } else {
+        slog::warn!(log, "Timed out waiting for firewall rule to become active.");
+    }
+}
+
+//helper
+fn await_rule_execution_with_backoff(
+    log: &slog::Logger,
+    test: &dyn Fn() -> bool,
+    initial_wait: Duration,
+    linear_backoff: Duration,
+    max_wait: Duration,
+) -> bool {
+    let mut total_duration = initial_wait;
+    std::thread::sleep(initial_wait);
+    if test() {
+        info!(
+            log,
+            "(Waited {} seconds, succeeded)",
+            total_duration.as_secs()
+        );
+        return true;
+    }
+    while total_duration < max_wait {
+        std::thread::sleep(linear_backoff);
+        total_duration += linear_backoff;
+        if test() {
+            info!(
+                log,
+                "(Waited {} seconds, succeeded)",
+                total_duration.as_secs()
+            );
+            return true;
+        }
+    }
+    info!(log, "(Waited {} seconds, failed)", total_duration.as_secs());
+    false
+}
+
+// helper
+fn check_port_connectable(target: SocketAddr) -> bool {
+    // Convert SocketAddr to something reqwest can use (like a URL string)
+    // Note: reqwest usually needs a scheme like http/https.
+    // If just checking TCP, std::net::TcpStream::connect_timeout might be better.
+    // This is a placeholder - adapt based on your actual check_port logic.
+    let url_str = format!("http://{}", target); // Use http for simplicity if allowed
+    let url = Url::parse(&url_str).unwrap();
+
+    let client = reqwest::blocking::ClientBuilder::new()
+        .timeout(Duration::from_secs(2)) // Short timeout for check
+        .build()
+        .expect("Could not build reqwest client.");
+
+    // Attempt a simple request (HEAD is lightweight)
+    client.head(url).send().is_ok()
 }
 
 // Create firewall rules on all nodes to allow connections from canister http adapter to the target socket address.
