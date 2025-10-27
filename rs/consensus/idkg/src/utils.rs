@@ -4,7 +4,7 @@ use crate::{
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
     metrics::{IDkgPayloadMetrics, IDkgPayloadStats},
 };
-use ic_consensus_utils::{RoundRobin, pool_reader::PoolReader};
+use ic_consensus_utils::{RoundRobin, pool_reader::PoolReader, range_len};
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockChain,
@@ -138,10 +138,10 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             })
     }
 
-    fn transcript(
+    fn transcript_as_ref(
         &self,
         transcript_ref: &TranscriptRef,
-    ) -> Result<IDkgTranscript, TranscriptLookupError> {
+    ) -> Result<&IDkgTranscript, TranscriptLookupError> {
         let idkg_payload = match self.chain.get_block_by_height(transcript_ref.height) {
             Ok(block) => {
                 if let Some(idkg_payload) = block.payload.as_ref().as_idkg() {
@@ -165,7 +165,6 @@ impl IDkgBlockReader for IDkgBlockReaderImpl {
             .ok_or(format!(
                 "transcript(): missing idkg_transcript: {transcript_ref:?}"
             ))
-            .cloned()
     }
 
     fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &IDkgPayload> + '_> {
@@ -205,7 +204,7 @@ pub(super) fn block_chain_cache(
     end: Block,
 ) -> Result<Arc<dyn ConsensusBlockChain>, InvalidChainCacheError> {
     let end_height = end.height();
-    let expected_len = (end_height.get() - start_height.get() + 1) as usize;
+    let expected_len = range_len(start_height, end_height);
     let chain = pool_reader.pool().build_block_chain(start_height, end);
     let chain_len = chain.len();
     if chain_len == expected_len {

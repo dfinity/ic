@@ -138,8 +138,8 @@ pub mod mock {
     use crate::management::CallError;
     use crate::updates::update_balance::UpdateBalanceError;
     use crate::{
-        BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, GetUtxosRequest, GetUtxosResponse,
-        Network, tx,
+        BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, GetCurrentFeePercentilesRequest,
+        GetUtxosRequest, GetUtxosResponse, Network, tx,
     };
     use async_trait::async_trait;
     use candid::Principal;
@@ -148,6 +148,7 @@ pub mod mock {
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
     use mockall::mock;
+    use std::time::Duration;
 
     mock! {
         #[derive(Debug)]
@@ -161,6 +162,8 @@ pub mod mock {
             fn global_timer_set(&self, timestamp: u64);
             fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
             fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
+            fn refresh_fee_percentiles_frequency(&self) -> Duration;
+            async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
             async fn mint_ckbtc(&self, amount: u64, to: Account, memo: Memo) -> Result<u64, UpdateBalanceError>;

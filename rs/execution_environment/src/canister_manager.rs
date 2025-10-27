@@ -19,7 +19,9 @@ use ic_embedders::{
     wasm_utils::decoding::decode_wasm, wasmtime_embedder::system_api::ExecutionParameters,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    IngressHistoryWriter, MessageMemoryUsage, SubnetAvailableMemory,
+};
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterMetadataResponse,
@@ -38,8 +40,7 @@ use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
 };
 use ic_replicated_state::page_map::Buffer;
 use ic_replicated_state::{
-    CallOrigin, CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
-    SchedulerState, SystemState,
+    CallOrigin, CanisterState, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
     canister_snapshots::CanisterSnapshot,
     canister_state::{
         NextExecution,
@@ -1075,14 +1076,91 @@ impl CanisterManager {
         cost_schedule: CanisterCyclesCostSchedule,
         ready_for_migration: bool,
     ) -> Result<CanisterStatusResultV2, CanisterManagerError> {
-        get_canister_status(
-            Arc::clone(&self.cycles_account_manager),
-            sender,
-            canister,
-            subnet_size,
-            cost_schedule,
+        // Skip the controller check if the canister itself is requesting its
+        // own status, as the canister is considered in the same trust domain.
+        if sender != canister.canister_id().get() {
+            validate_controller(canister, &sender)?
+        }
+
+        let controller = canister.system_state.controller();
+        let controllers = canister
+            .controllers()
+            .iter()
+            .copied()
+            .collect::<Vec<PrincipalId>>();
+
+        let version = canister.system_state.canister_version;
+
+        let canister_memory_usage = canister.memory_usage();
+        let canister_wasm_memory_usage = canister.wasm_memory_usage();
+        let canister_stable_memory_usage = canister.stable_memory_usage();
+        let canister_global_memory_usage = canister.global_memory_usage();
+        let canister_wasm_binary_memory_usage = canister.wasm_binary_memory_usage();
+        let canister_custom_sections_memory_usage = canister.wasm_custom_sections_memory_usage();
+        let canister_history_memory_usage = canister.canister_history_memory_usage();
+        let canister_wasm_chunk_store_memory_usage = canister.wasm_chunk_store_memory_usage();
+        let canister_snapshots_memory_usage = canister.snapshots_memory_usage();
+        let canister_message_memory_usage = canister.message_memory_usage();
+        let compute_allocation = canister.scheduler_state.compute_allocation;
+        let memory_allocation = canister.memory_allocation();
+        let freeze_threshold = canister.system_state.freeze_threshold;
+        let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
+        let log_visibility = canister.system_state.log_visibility.clone();
+        let log_memory_limit = canister.system_state.log_memory_limit;
+        let wasm_memory_limit = canister.system_state.wasm_memory_limit;
+        let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
+
+        Ok(CanisterStatusResultV2::new(
+            canister.status(),
             ready_for_migration,
-        )
+            version,
+            canister
+                .execution_state
+                .as_ref()
+                .map(|es| es.wasm_binary.binary.module_hash().to_vec()),
+            *controller,
+            controllers,
+            canister_memory_usage,
+            canister_wasm_memory_usage,
+            canister_stable_memory_usage,
+            canister_global_memory_usage,
+            canister_wasm_binary_memory_usage,
+            canister_custom_sections_memory_usage,
+            canister_history_memory_usage,
+            canister_wasm_chunk_store_memory_usage,
+            canister_snapshots_memory_usage,
+            canister.system_state.balance().get(),
+            compute_allocation.as_percent(),
+            Some(memory_allocation.bytes().get()),
+            freeze_threshold.get(),
+            reserved_cycles_limit.map(|x| x.get()),
+            log_visibility,
+            log_memory_limit.get(),
+            self.cycles_account_manager
+                .idle_cycles_burned_rate(
+                    memory_allocation,
+                    canister_memory_usage,
+                    canister_message_memory_usage,
+                    compute_allocation,
+                    subnet_size,
+                    cost_schedule,
+                )
+                .get(),
+            canister.system_state.reserved_balance().get(),
+            canister.scheduler_state.total_query_stats.num_calls,
+            canister.scheduler_state.total_query_stats.num_instructions,
+            canister
+                .scheduler_state
+                .total_query_stats
+                .ingress_payload_size,
+            canister
+                .scheduler_state
+                .total_query_stats
+                .egress_payload_size,
+            wasm_memory_limit.map(|x| x.get()),
+            wasm_memory_threshold.get(),
+            canister.system_state.environment_variables.clone(),
+        ))
     }
 
     /// Gets the metadata of the canister.
@@ -3092,102 +3170,6 @@ pub fn uninstall_canister(
                 }
             }
         })
-}
-
-/// Fetches the current status of the canister.
-pub(crate) fn get_canister_status(
-    cycles_account_manager: Arc<CyclesAccountManager>,
-    sender: PrincipalId,
-    canister: &CanisterState,
-    subnet_size: usize,
-    cost_schedule: CanisterCyclesCostSchedule,
-    ready_for_migration: bool,
-) -> Result<CanisterStatusResultV2, CanisterManagerError> {
-    // Skip the controller check if the canister itself is requesting its
-    // own status, as the canister is considered in the same trust domain.
-    if sender != canister.canister_id().get() {
-        validate_controller(canister, &sender)?
-    }
-
-    let controller = canister.system_state.controller();
-    let controllers = canister
-        .controllers()
-        .iter()
-        .copied()
-        .collect::<Vec<PrincipalId>>();
-
-    let version = canister.system_state.canister_version;
-
-    let canister_memory_usage = canister.memory_usage();
-    let canister_wasm_memory_usage = canister.wasm_memory_usage();
-    let canister_stable_memory_usage = canister.stable_memory_usage();
-    let canister_global_memory_usage = canister.global_memory_usage();
-    let canister_wasm_binary_memory_usage = canister.wasm_binary_memory_usage();
-    let canister_custom_sections_memory_usage = canister.wasm_custom_sections_memory_usage();
-    let canister_history_memory_usage = canister.canister_history_memory_usage();
-    let canister_wasm_chunk_store_memory_usage = canister.wasm_chunk_store_memory_usage();
-    let canister_snapshots_memory_usage = canister.snapshots_memory_usage();
-    let canister_message_memory_usage = canister.message_memory_usage();
-    let compute_allocation = canister.scheduler_state.compute_allocation;
-    let memory_allocation = canister.memory_allocation();
-    let freeze_threshold = canister.system_state.freeze_threshold;
-    let reserved_cycles_limit = canister.system_state.reserved_balance_limit();
-    let log_visibility = canister.system_state.log_visibility.clone();
-    let log_memory_limit = canister.system_state.log_memory_limit;
-    let wasm_memory_limit = canister.system_state.wasm_memory_limit;
-    let wasm_memory_threshold = canister.system_state.wasm_memory_threshold;
-
-    Ok(CanisterStatusResultV2::new(
-        canister.status(),
-        ready_for_migration,
-        version,
-        canister
-            .execution_state
-            .as_ref()
-            .map(|es| es.wasm_binary.binary.module_hash().to_vec()),
-        *controller,
-        controllers,
-        canister_memory_usage,
-        canister_wasm_memory_usage,
-        canister_stable_memory_usage,
-        canister_global_memory_usage,
-        canister_wasm_binary_memory_usage,
-        canister_custom_sections_memory_usage,
-        canister_history_memory_usage,
-        canister_wasm_chunk_store_memory_usage,
-        canister_snapshots_memory_usage,
-        canister.system_state.balance().get(),
-        compute_allocation.as_percent(),
-        Some(memory_allocation.bytes().get()),
-        freeze_threshold.get(),
-        reserved_cycles_limit.map(|x| x.get()),
-        log_visibility,
-        log_memory_limit.get(),
-        cycles_account_manager
-            .idle_cycles_burned_rate(
-                memory_allocation,
-                canister_memory_usage,
-                canister_message_memory_usage,
-                compute_allocation,
-                subnet_size,
-                cost_schedule,
-            )
-            .get(),
-        canister.system_state.reserved_balance().get(),
-        canister.scheduler_state.total_query_stats.num_calls,
-        canister.scheduler_state.total_query_stats.num_instructions,
-        canister
-            .scheduler_state
-            .total_query_stats
-            .ingress_payload_size,
-        canister
-            .scheduler_state
-            .total_query_stats
-            .egress_payload_size,
-        wasm_memory_limit.map(|x| x.get()),
-        wasm_memory_threshold.get(),
-        canister.system_state.environment_variables.clone(),
-    ))
 }
 
 fn globals_match(g1: &[Global], g2: &[Global]) -> bool {

@@ -14,7 +14,7 @@ use axum::{
 };
 use bitcoin::Network as BtcAdapterNetwork;
 use bytes::Bytes;
-use candid::{Decode, Encode, Principal};
+use candid::{CandidType, Decode, Encode, Principal};
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, CyclesCanisterInitPayload,
     DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS, SetAuthorizedSubnetworkListArgs,
@@ -69,8 +69,8 @@ use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
-    LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, NNS_UI_CANISTER_ID,
+    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_governance_api::{NetworkEconomics, Neuron, neuron::DissolveState};
@@ -186,6 +186,7 @@ const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
 const NNS_DAPP_TEST_CANISTER_WASM: &[u8] = include_bytes!(env!("NNS_DAPP_TEST_CANISTER_WASM_PATH"));
 const BITCOIN_TESTNET_CANISTER_WASM: &[u8] =
     include_bytes!(env!("BITCOIN_TESTNET_CANISTER_WASM_PATH"));
+const MIGRATION_CANISTER_WASM: &[u8] = include_bytes!(env!("MIGRATION_CANISTER_WASM_PATH"));
 
 const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
 
@@ -968,6 +969,7 @@ impl PocketIcSubnets {
                 ii,
                 nns_ui,
                 bitcoin,
+                canister_migration,
             } = icp_features;
             if let Some(ref config) = registry {
                 self.update_registry(config);
@@ -995,6 +997,9 @@ impl PocketIcSubnets {
             }
             if let Some(ref config) = bitcoin {
                 self.deploy_bitcoin(config);
+            }
+            if let Some(ref config) = canister_migration {
+                self.deploy_canister_migration(config);
             }
         }
 
@@ -1986,7 +1991,6 @@ impl PocketIcSubnets {
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(None),
-                feature_flag_continue_from_another_device: Some(true),
             });
             ii_subnet
                 .state_machine
@@ -2156,6 +2160,71 @@ impl PocketIcSubnets {
                     CanisterInstallMode::Install,
                     BITCOIN_TESTNET_CANISTER_WASM.to_vec(),
                     Encode!(&args).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
+    fn deploy_canister_migration(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
+        let nns_subnet = self.nns_subnet.clone().expect(
+            "The NNS subnet is supposed to already exist if the `canister_migration` ICP feature is specified.",
+        );
+
+        if !nns_subnet
+            .state_machine
+            .canister_exists(MIGRATION_CANISTER_ID)
+        {
+            // Create the canister migration orchestrator canister with its ICP mainnet settings.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"sbzkb-zqaaa-aaaaa-aaaiq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec { principal "r7inp-6aaaa-aaaaa-aaabq-cai" };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![ROOT_CANISTER_ID.get()])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = nns_subnet.state_machine.create_canister_with_cycles(
+                Some(MIGRATION_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, MIGRATION_CANISTER_ID);
+
+            // Install the canister migration orchestrator canister.
+            // TODO: replace by public interface
+            #[derive(CandidType, Deserialize, Default)]
+            struct MigrationCanisterInitArgs {
+                allowlist: Option<Vec<Principal>>,
+            }
+            nns_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    MIGRATION_CANISTER_WASM.to_vec(),
+                    Encode!(&MigrationCanisterInitArgs::default()).unwrap(),
                 )
                 .unwrap();
         }
@@ -2379,7 +2448,7 @@ impl PocketIc {
     pub(crate) fn try_new(
         runtime: Arc<Runtime>,
         seed: u64,
-        mut subnet_configs: ExtendedSubnetConfigSet,
+        subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
         icp_config: IcpConfig,
         log_level: Option<Level>,
@@ -2466,9 +2535,6 @@ impl PocketIc {
                 })
                 .collect()
         } else {
-            if let Some(ref icp_features) = icp_features {
-                subnet_configs = subnet_configs.try_with_icp_features(icp_features)?;
-            }
             let fixed_range_subnets = subnet_configs.get_named();
             let flexible_subnets = {
                 let sys = subnet_configs.system.iter().map(|spec| {

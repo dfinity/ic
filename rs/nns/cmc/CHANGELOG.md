@@ -11,6 +11,22 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-10-24: Proposal 139088
+
+Just a "maintenance" release, i.e. no behavior changes, just making
+sure that we do not become too behind, and avoid too many changes
+piling up in for the next "real" upgrade.
+
+
+# 2025-10-17: Proposal 138993
+
+https://dashboard.internetcomputer.org/proposal/138993
+
+## Added
+
+- Added `environment_variables` to canister settings for `create_canister` and `notify_create_canister`
+
+
 # 2025-09-05: Proposal 138372
 
 http://dashboard.internetcomputer.org/proposal/138372

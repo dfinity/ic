@@ -432,7 +432,7 @@ impl Scalar {
         let t_bits = std::mem::size_of::<u64>() * 8;
         let n_bits = std::cmp::min(255, t_bits - n.leading_zeros() as usize);
         let n_bytes = n_bits.div_ceil(8);
-        let n_mask = if n_bits % 8 == 0 {
+        let n_mask = if n_bits.is_multiple_of(8) {
             0xFF
         } else {
             0xFF >> (8 - n_bits % 8)

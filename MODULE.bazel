@@ -6,6 +6,11 @@ module(
     name = "ic",
 )
 
+ext = use_extension("@rules_buf//buf:extensions.bzl", "buf")
+use_repo(ext, "rules_buf_toolchains")
+
+register_toolchains("@rules_buf_toolchains//:all")
+
 # General Bazel helpers
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
@@ -74,6 +79,9 @@ bazel_dep(
     # We rename it to keep the legacy name used throughout our bazel files
     repo_name = "com_google_protobuf",
 )
+
+# protobuf linter
+bazel_dep(name = "rules_buf", version = "0.5.2")
 
 # Go dependencies
 
@@ -689,8 +697,8 @@ http_file(
 
 http_file(
     name = "evm_rpc.wasm.gz",
-    sha256 = "53ff4625ad3990f22ab8ee1cee85b6ab43cb623e0ca28d3162c41cfac55bd1a6",
-    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/v2.4.0/evm_rpc.wasm.gz",
+    sha256 = "5dbcce40bf3020cfc2d869373a8f3094785c80882fc4d52980814aa89abd541a",
+    url = "https://github.com/internet-computer-protocol/evm-rpc-canister/releases/download/evm_rpc-v2.6.0/evm_rpc.wasm.gz",
 )
 
 http_archive(
@@ -846,6 +854,55 @@ http_file(
     url = "https://github.com/dfinity/pocketic/releases/download/9.0.1/pocket-ic-x86_64-linux.gz",
 )
 
+## Rosetta CLI
+
+http_archive(
+    name = "rosetta-cli-x86_64-darwin",
+    build_file = "@//third_party:BUILD.rosetta-cli.bazel",
+    sha256 = "6426d69d8ce6851a00eb47c4b3bb5a5f2f792daca58a58d077ac5ade7c07f42b",
+    url = "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-darwin-amd64.tar.gz",
+)
+
+http_archive(
+    name = "rosetta-cli-aarch64-darwin",
+    build_file = "@//third_party:BUILD.rosetta-cli.bazel",
+    sha256 = "41eaa23bc2a34568549e7c0d99c3471fd0c20959ffb7a1e9fd2acc658f500b20",
+    url = "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-darwin-arm64.tar.gz",
+)
+
+http_archive(
+    name = "rosetta-cli-x86_64-linux",
+    build_file = "@//third_party:BUILD.rosetta-cli.bazel",
+    sha256 = "1ea96b427dfa69a93d2915bc57669014b58d66a9ee7d761509d50b66486d42f8",
+    url = "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-linux-amd64.tar.gz",
+)
+
+# ruff, python linter & formatter
+
+http_archive(
+    name = "ruff-x86_64-linux",
+    build_file = "@//third_party:BUILD.ruff.bazel",
+    sha256 = "7edce7075bf6d43b1ef2a9383b76a43310bbf5d70fa4471330fd5aaf655192b0",
+    strip_prefix = "ruff-x86_64-unknown-linux-gnu",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.6.8/ruff-x86_64-unknown-linux-gnu.tar.gz",
+)
+
+http_archive(
+    name = "ruff-aarch64-darwin",
+    build_file = "@//third_party:BUILD.ruff.bazel",
+    sha256 = "e554d55281391138e44b30ccd38c666388e4aeb05417c9ffb98a6cbb014aef0d",
+    strip_prefix = "ruff-aarch64-apple-darwin",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.6.8/ruff-aarch64-apple-darwin.tar.gz",
+)
+
+http_archive(
+    name = "ruff-x86_64-darwin",
+    build_file = "@//third_party:BUILD.ruff.bazel",
+    sha256 = "44039cea2aed4787cedcda0c35e5b352530d6ca2178f39c8bd4ff63526c43aef",
+    strip_prefix = "ruff-x86_64-apple-darwin",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.6.8/ruff-x86_64-apple-darwin.tar.gz",
+)
+
 http_archive(
     name = "rclone-x86_64-darwin",
     build_file = "@//third_party:BUILD.rclone.bazel",
@@ -860,6 +917,85 @@ http_archive(
     sha256 = "14aaed7163df57894c96f8aca94757f19065f9cb3cb8a84ff9c33234271e1d69",
     strip_prefix = "rclone-v1.69.2-linux-amd64",
     url = "https://github.com/rclone/rclone/releases/download/v1.69.2/rclone-v1.69.2-linux-amd64.zip",
+)
+
+http_archive(
+    name = "trivy-x86_64-linux",
+    build_file = "@//third_party:BUILD.trivy.bazel",
+    sha256 = "ebc1dd4d4c0594028d6a501dfc1a73d56add20b29d3dee5ab6e64aac94b1d526",
+    url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_Linux-64bit.tar.gz",
+)
+
+http_archive(
+    name = "trivy-aarch64-darwin",
+    build_file = "@//third_party:BUILD.trivy.bazel",
+    sha256 = "343fb01737e886bde797f30e5e6359fc1a7b7e1e9807f0e62ae3aea3f9508a1a",
+    url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_macOS-ARM64.tar.gz",
+)
+
+http_archive(
+    name = "trivy-x86_64-darwin",
+    build_file = "@//third_party:BUILD.trivy.bazel",
+    sha256 = "165c501451ab91a486678107c34bfb7b0b9e117c8ed5bba746ebda31923d9330",
+    url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_macOS-64bit.tar.gz",
+)
+
+# even if the macOS version is "x86_64" it runs on ARM chips because of
+# emulation
+http_archive(
+    name = "dfx-x86_64-darwin",
+    build_file = "@//third_party:BUILD.dfx.bazel",
+    sha256 = "4b1c24805f655576fb97f61aba019fbbe7c1bdca0598a5c1a9220a4bfe80f460",
+    url = "https://github.com/dfinity/sdk/releases/download/0.20.1/dfx-0.20.1-x86_64-darwin.tar.gz",
+)
+
+http_archive(
+    name = "dfx-x86_64-linux",
+    build_file = "@//third_party:BUILD.dfx.bazel",
+    sha256 = "011c8a6ff9af0578ee2c8b0a7af3abc5b3d5950cc64421b4c3a7acd1fc18265e",
+    url = "https://github.com/dfinity/sdk/releases/download/0.20.1/dfx-0.20.1-x86_64-linux.tar.gz",
+)
+
+http_file(
+    name = "didc-x86_64-linux",
+    downloaded_file_path = "didc",
+    executable = True,
+    sha256 = "1ed8f69036438217c0672097bba75aaf91e6851847d378ea4e0064377d8939fa",
+    url = "https://github.com/dfinity/candid/releases/download/2023-11-16/didc-linux64",
+)
+
+http_file(
+    name = "didc-x86_64-darwin",
+    downloaded_file_path = "didc",
+    executable = True,
+    sha256 = "5df9a457c5ede103c7d017c23a4c1abce4d17db50442a9407724a9006db2f710",
+    url = "https://github.com/dfinity/candid/releases/download/2023-11-16/didc-macos",
+)
+
+## shfmt, for formatting bash code
+
+http_file(
+    name = "shfmt-x86_64-linux",
+    downloaded_file_path = "shfmt",
+    executable = True,
+    sha256 = "5741a02a641de7e56b8da170e71a97e58050d66a3cf485fb268d6a5a8bb74afb",
+    url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_linux_amd64",
+)
+
+http_file(
+    name = "shfmt-aarch64-darwin",
+    downloaded_file_path = "shfmt",
+    executable = True,
+    sha256 = "633f242246ee0a866c5f5df25cbf61b6af0d5e143555aca32950059cf13d91e0",
+    url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_darwin_arm64",
+)
+
+http_file(
+    name = "shfmt-x86_64-darwin",
+    downloaded_file_path = "shfmt",
+    executable = True,
+    sha256 = "b8c9c025b498e2816b62f0b717f6032e9ab49e725a45b8205f52f66318f17185",
+    url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_darwin_amd64",
 )
 
 # Management canister candid interface
