@@ -7,8 +7,12 @@ def _canisters_impl(repository_ctx):
     repositories = dict(repository_ctx.attr.repositories)
     filenames = dict(repository_ctx.attr.filenames)
 
+    # The path to the canister data
+    json_path = repository_ctx.attr.path
+    repository_ctx.watch(json_path)  # recreate the repo if the data changes
+
     # Read and decode mainnet canister data
-    cans = json.decode(repository_ctx.read(repository_ctx.attr.path))
+    cans = json.decode(repository_ctx.read(json_path))
     canister_keys = cans.keys()
 
     # Iterate over all the keys defined in the mainnet canister data
