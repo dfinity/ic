@@ -62,7 +62,7 @@ def _canisters_impl(repository_ctx):
 
     repository_ctx.file("BUILD.bazel", content = 'exports_files(glob(["*"]))', executable = False)
 
-_canisters = repository_rule(
+canisters = repository_rule(
     implementation = _canisters_impl,
     attrs = {
         "path": attr.label(mandatory = True, doc = "path to mainnet canister data"),
@@ -70,6 +70,3 @@ _canisters = repository_rule(
         "filenames": attr.string_dict(mandatory = True, doc = "mapping from canister key to filename as per the DFINITY CDN"),
     },
 )
-
-def canisters(name, path, repositories, filenames):
-    _canisters(name = name, path = path, repositories = repositories, filenames = filenames)
