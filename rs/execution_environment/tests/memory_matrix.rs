@@ -1,3 +1,36 @@
+/*!
+
+This module contains matrix tests for canister memory usage/allocation, reserved cycles, and subnet available memory.
+
+It defines multiple *scenarios* and their expectations in terms of memory usage change
+and performs multiple *runs* of every scenarios with various initial parameters.
+
+The runs ensure the following properties for every scenario:
+- subnet available memory is updated properly in both successful and failed executions;
+- the execution fails if the subnet memory capacity would be exceeded;
+- the execution fails if the reserved cycles limit would be exceeded;
+- the execution fails if the canister would become frozen;
+- the execution fails if the canister does not have sufficient balance to reserve storage cycles;
+- the execution does not allocate additional cycles for canisters with memory allocation.
+
+The scenarios cover the following:
+- growing WASM/stable memory in canister (update) entry point;
+- growing WASM/stable memory in canister reply/cleanup callback;
+- taking a canister snapshot;
+- replacing a canister snapshot by a snapshot of the same size;
+- loading a canister snapshot;
+- installing code;
+- upgrading code with growing/shrinking memory and temporary memory growth in pre-upgrade;
+- reinstalling code with growing/shrinking memory;
+- uploading new chunk and uploading the same chunk again;
+- creating a new canister snapshot by uploading its metadata;
+- uploading canister WASM module to its snapshot;
+- uploading canister WASM chunk to its snapshot;
+- increasing/decreasing canister memory allocation;
+- uninstalling code.
+
+*/
+
 use ic_base_types::{CanisterId, NumBytes, PrincipalId, SnapshotId};
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
@@ -1003,7 +1036,7 @@ fn test_memory_suite_upload_canister_snapshot_data_wasm_module() {
 }
 
 #[test]
-fn test_memory_suite_upload_canister_snapshot_data_chunk() {
+fn test_memory_suite_upload_canister_snapshot_data_wasm_chunk() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
         let metadata = take_snapshot_and_read_metadata(test, canister_id);
