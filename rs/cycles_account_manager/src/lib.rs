@@ -30,7 +30,7 @@ use ic_types::{
     batch::CanisterCyclesCostSchedule,
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
     canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
-    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Request, Response, SignedIngress},
+    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, Request, SignedIngress},
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -983,13 +983,13 @@ impl CyclesAccountManager {
         &self,
         log: &ReplicaLogger,
         error_counter: &IntCounter,
-        response: &Response,
+        response: &Payload,
         prepayment_for_response_transmission: Cycles,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
         let max_expected_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get();
-        let transmitted_bytes = response.payload_size_bytes().get();
+        let transmitted_bytes = response.size_bytes().get();
         debug_assert!(transmitted_bytes <= max_expected_bytes);
         if max_expected_bytes < transmitted_bytes {
             error_counter.inc();
