@@ -488,7 +488,8 @@ impl SystemState {
             initial_cycles,
             freeze_threshold,
             CanisterStatus::new_running(),
-            WasmChunkStore::new(fd_factory),
+            WasmChunkStore::new(fd_factory.clone()),
+            LogMemoryStore::new(fd_factory),
         )
     }
 
@@ -499,6 +500,7 @@ impl SystemState {
         freeze_threshold: NumSeconds,
         status: CanisterStatus,
         wasm_chunk_store: WasmChunkStore,
+        log_memory_store: LogMemoryStore,
     ) -> Self {
         Self {
             canister_id,
@@ -523,6 +525,7 @@ impl SystemState {
             log_visibility: Default::default(),
             log_memory_limit: default_log_memory_limit(),
             canister_log: Default::default(),
+            log_memory_store,
             wasm_memory_limit: None,
             next_snapshot_id: 0,
             snapshots_memory_usage: NumBytes::new(0),
@@ -657,6 +660,7 @@ impl SystemState {
             freeze_threshold,
             status,
             WasmChunkStore::new_for_testing(),
+            LogMemoryStore::new_for_testing(),
         )
     }
 
@@ -2225,6 +2229,7 @@ pub mod testing {
             log_visibility: Default::default(),
             log_memory_limit: default_log_memory_limit(),
             canister_log: Default::default(),
+            log_memory_store: LogMemoryStore::new_for_testing(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),
             snapshots_memory_usage: Default::default(),
