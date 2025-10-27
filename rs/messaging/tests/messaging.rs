@@ -1,20 +1,25 @@
 pub mod common;
 
 use assert_matches::assert_matches;
-use common::{TestSubnet, TestSubnetConfig, TestSubnetSetup, arb_test_subnets, two_test_subnets};
+use common::{
+    MB, TestSubnet, TestSubnetConfig, TestSubnetSetup, arb_test_subnets, two_test_subnets,
+};
 use ic_config::message_routing::TARGET_STREAM_SIZE_BYTES;
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_types::{
     CanisterId, PrincipalId,
     ingress::{IngressState, IngressStatus},
-    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, RequestOrResponse, StreamMessage},
+    messages::{
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MessageId, RequestOrResponse, StreamMessage,
+    },
 };
 use messaging_test::{Call, Response};
 use messaging_test_utils::{CallConfig, arb_call};
 use proptest::prelude::ProptestConfig;
+use std::collections::BTreeMap;
 
-const MAX_PAYLOAD_SIZE: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
+const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 const SYS_UNKNOWN_U32: u32 = RejectCode::SysUnknown as u32;
 
 /// Tests that a canister with a hanging best-effort call can be stopped after the call has timed out.
@@ -26,17 +31,16 @@ fn canister_can_be_stopped_with_hanging_call_on_stalled_subnet() {
     let canister1 = subnet1.principal_canister();
     let canister2 = subnet2.principal_canister();
 
-    // A call sent to `subnet1` as ingress, which then makes a best-effort call to `subnet2`.
+    // Make `canister1` a best-effort call to `canister2` on `subnet2`.
     let msg_id = subnet1
-        .submit_call(Call {
-            receiver: canister1,
-            downstream_calls: vec![Call {
+        .submit_ingress(
+            canister1,
+            vec![Call {
                 receiver: canister2,
                 timeout_secs: Some(10),
                 ..Call::default()
             }],
-            ..Call::default()
-        })
+        )
         .unwrap();
 
     // Two rounds should be enough to route the call.
@@ -69,7 +73,7 @@ fn canister_can_be_stopped_with_hanging_call_on_stalled_subnet() {
 }
 
 /// Tests that requests stuck in output queues are timed out, but backpressure remains
-/// if there is a response stuck somewhere in the front.
+/// if there is a response stuck in the front.
 #[test]
 fn test_requests_are_timed_out_in_output_queues_but_backpressure_remains() {
     let (subnet1, subnet2) =
@@ -80,19 +84,17 @@ fn test_requests_are_timed_out_in_output_queues_but_backpressure_remains() {
 
     // Send enough small requests that will produce maximum size responses to fill
     // up the reverse stream and leave at least one in the output queue of `canister`.
-    const NUM_CALLS: usize = TARGET_STREAM_SIZE_BYTES / MAX_PAYLOAD_SIZE as usize + 2;
+    const NUM_CALLS: usize = TARGET_STREAM_SIZE_BYTES / MAX_PAYLOAD_SIZE + 2;
     for _ in 0..NUM_CALLS {
         subnet2
-            .submit_call(Call {
-                receiver: canister2,
-                downstream_calls: vec![Call {
+            .submit_ingress(
+                canister2,
+                vec![Call {
                     receiver: canister1,
-                    call_bytes: 0,
-                    reply_bytes: MAX_PAYLOAD_SIZE,
+                    reply_bytes: MAX_PAYLOAD_SIZE as u32,
                     ..Call::default()
                 }],
-                ..Call::default()
-            })
+            )
             .unwrap();
         subnet2.execute_round();
     }
@@ -109,17 +111,16 @@ fn test_requests_are_timed_out_in_output_queues_but_backpressure_remains() {
     // continuously time them out. Note: the output queue capacity for requests is 500.
     for _ in 0..10 {
         subnet1
-            .submit_call(Call {
-                receiver: canister1,
-                downstream_calls: vec![
+            .submit_ingress(
+                canister1,
+                vec![
                     Call {
                         receiver: canister2,
                         ..Call::default()
                     };
                     100
                 ],
-                ..Call::default()
-            })
+            )
             .unwrap();
         subnet1.execute_round();
         subnet1.advance_time_by_secs(500);
@@ -135,6 +136,58 @@ fn test_requests_are_timed_out_in_output_queues_but_backpressure_remains() {
             .iter()
             .all(|msg| matches!(msg, RequestOrResponse::Response(_)))
     );
+}
+
+/// Config used for `test_memory_accounting_and_sequence_errors`.
+const MEMORY_ACCOUNTING_CONFIG: TestSubnetConfig = TestSubnetConfig {
+    canisters_count: 2,
+    max_instructions_per_round: 3_000_000_000,
+    guaranteed_response_message_memory_capacity: 30 * MB as u64,
+    best_effort_message_memory_capacity: 30 * MB as u64,
+};
+
+/// Tests the memory accounting is upheld during random traffic at all times.
+/// Also check the outcome of each ingress trigger to make sure there are no
+/// sequencing error and sync rejections due to out of memory actually occurred.
+///
+/// Ingress triggers are only sent to the principal canister on `subnet1`, which
+/// will then send downstream calls to all canisters. Through downstream calls,
+/// random calls going every which way is established after a few rounds.
+#[test_strategy::proptest(ProptestConfig::with_cases(3))]
+fn test_memory_accounting_and_sequence_errors(
+    #[strategy(arb_test_subnets(MEMORY_ACCOUNTING_CONFIG.clone(), TestSubnetConfig::default()))]
+    setup: TestSubnetSetup,
+
+    #[strategy(proptest::collection::vec(arb_call(
+        #setup.subnet1.principal_canister(),
+        CallConfig {
+            receivers: #setup.canisters,
+            call_bytes_range: 0..=MAX_PAYLOAD_SIZE,
+            reply_bytes_range: 0..=MAX_PAYLOAD_SIZE,
+            best_effort_percentage: 50,
+            timeout_secs_range: 300..=300,
+            downstream_calls_percentage: 66,
+            downstream_calls_count_range: 3..=6,
+            max_total_calls: 20,
+        }
+    ), 10))]
+    calls: Vec<Call>,
+) {
+    let (subnet1, subnet2, _) = setup.into_parts();
+
+    // Submit all the calls into the ingress pool.
+    let mut call_registry: BTreeMap<MessageId, (Call, Option<Response>)> = calls
+        .into_iter()
+        .map(|call| {
+            (
+                subnet1.submit_call_as_ingress(call.clone()).unwrap(),
+                (call, None),
+            )
+        })
+        .collect();
+
+    subnet1.execute_round();
+    subnet2.execute_round();
 }
 
 /*

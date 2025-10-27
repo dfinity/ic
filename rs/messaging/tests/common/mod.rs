@@ -65,7 +65,7 @@ impl TestSubnet {
     }
 
     /// Attempts to subnet a new `Call` as ingress.
-    pub fn submit_call(&self, call: Call) -> Result<MessageId, SubmitIngressError> {
+    pub fn submit_call_as_ingress(&self, call: Call) -> Result<MessageId, SubmitIngressError> {
         let (receiver, payload) = to_encoded_ingress(call);
         self.env.submit_ingress_as(
             PrincipalId::new_anonymous(),
@@ -73,6 +73,20 @@ impl TestSubnet {
             "handle_call",
             payload,
         )
+    }
+
+    /// Same as `submit_call_as_ingress` but from just `receiver` and `downstream_calls`;
+    /// this is more convenient to use when spelling out calls manually.
+    pub fn submit_ingress(
+        &self,
+        receiver: CanisterId,
+        downstream_calls: Vec<Call>,
+    ) -> Result<MessageId, SubmitIngressError> {
+        self.submit_call_as_ingress(Call {
+            receiver,
+            downstream_calls,
+            ..Call::default()
+        })
     }
 
     /// Attempts to get the `Response` for a `Call` submitted with `id`; panics for an
