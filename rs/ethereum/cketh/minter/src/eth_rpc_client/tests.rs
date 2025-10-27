@@ -1,3 +1,4 @@
+use candid::Nat;
 use evm_rpc_types::{EthMainnetService, FeeHistory, RpcService as EvmRpcService};
 
 const BLOCK_PI: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::BlockPi);
