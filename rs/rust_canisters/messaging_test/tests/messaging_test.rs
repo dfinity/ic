@@ -12,10 +12,13 @@ use proptest::prop_assert_eq;
 /// payloads of the requested size (or larger where the target is too small).
 #[test_strategy::proptest]
 fn test_message_roundtrip_with_payload_size(
-    #[strategy(arb_call(CallConfig {
-        receivers: vec![canister_test_id(13), canister_test_id(17), canister_test_id(19)],
-        ..CallConfig::default()
-    }))]
+    #[strategy(arb_call(
+        canister_test_id(13),
+        CallConfig {
+            receivers: vec![canister_test_id(13), canister_test_id(17), canister_test_id(19)],
+            ..CallConfig::default()
+        }
+    ))]
     call: Call,
 ) {
     let test_message = Message {
