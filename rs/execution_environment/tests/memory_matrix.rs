@@ -913,7 +913,42 @@ fn test_memory_suite_upload_canister_snapshot_metadata() {
 }
 
 #[test]
-fn test_memory_suite_upload_canister_snapshot_data() {
+fn test_memory_suite_upload_canister_snapshot_data_wasm_module() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister(test, canister_id);
+        let metadata = take_snapshot_and_read_metadata(test, canister_id);
+        let res = test.subnet_message(
+            Method::UploadCanisterSnapshotMetadata,
+            metadata_upload_payload(canister_id, metadata).encode(),
+        );
+        UploadCanisterSnapshotMetadataResponse::decode(&get_reply(res))
+            .unwrap()
+            .snapshot_id
+    };
+    let op = |test: &mut ExecutionTest, canister_id: CanisterId, snapshot_id: SnapshotId| {
+        let upload_canister_snapshot_data_args = UploadCanisterSnapshotDataArgs {
+            canister_id: canister_id.get(),
+            snapshot_id,
+            kind: CanisterSnapshotDataOffset::WasmModule { offset: 0 },
+            chunk: vec![42; 1 << 10],
+        };
+        test.subnet_message(
+            Method::UploadCanisterSnapshotData,
+            upload_canister_snapshot_data_args.encode(),
+        )
+        .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::None,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_upload_canister_snapshot_data_chunk() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
         let metadata = take_snapshot_and_read_metadata(test, canister_id);
