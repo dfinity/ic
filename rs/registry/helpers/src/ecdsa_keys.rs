@@ -4,10 +4,10 @@ use ic_interfaces_registry::{RegistryClient, RegistryClientResult};
 use ic_management_canister_types_private::EcdsaKeyId;
 use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
 use ic_registry_keys::{
-    get_ecdsa_key_id_from_signing_subnet_list_key, ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX,
+    ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX, get_ecdsa_key_id_from_signing_subnet_list_key,
 };
 use ic_types::{
-    registry::RegistryClientError, subnet_id_try_from_protobuf, RegistryVersion, SubnetId,
+    RegistryVersion, SubnetId, registry::RegistryClientError, subnet_id_try_from_protobuf,
 };
 
 use crate::deserialize_registry_value;

@@ -1,18 +1,18 @@
 use super::{
     canister_state::CanisterState,
     metadata_state::{
-        subnet_call_context_manager::{ReshareChainKeyContext, SignWithThresholdContext},
         IngressHistoryState, Stream, StreamMap, SystemMetadata,
+        subnet_call_context_manager::{ReshareChainKeyContext, SignWithThresholdContext},
     },
 };
 use crate::{
+    CanisterQueues, DroppedMessageMetrics,
     canister_snapshots::{CanisterSnapshot, CanisterSnapshots},
     canister_state::{
-        queues::{CanisterInput, CanisterQueuesLoopDetector},
-        system_state::{push_input, CanisterOutputQueuesIterator},
+        queues::{CanisterInput, CanisterQueuesLoopDetector, refunds::RefundPool},
+        system_state::{CanisterOutputQueuesIterator, CyclesUseCase, push_input},
     },
     metadata_state::subnet_call_context_manager::PreSignatureStash,
-    CanisterQueues, DroppedMessageMetrics,
 };
 use ic_base_types::{PrincipalId, SnapshotId};
 use ic_btc_replica_types::BitcoinAdapterResponse;
@@ -26,20 +26,20 @@ use ic_protobuf::state::queues::v1::canister_queues::NextInputQueue;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    batch::{ConsensusResponse, RawQueryStats},
+    AccumulatedPriority, CanisterId, Cycles, NumBytes, SubnetId, Time,
+    batch::{CanisterCyclesCostSchedule, ConsensusResponse, RawQueryStats},
     consensus::idkg::IDkgMasterPublicKeyId,
     ingress::IngressStatus,
-    messages::{CallbackId, CanisterMessage, Ingress, MessageId, RequestOrResponse, Response},
+    messages::{
+        CallbackId, CanisterMessage, Ingress, MessageId, Refund, RequestOrResponse, Response,
+    },
     time::CoarseTime,
-    AccumulatedPriority, CanisterId, Cycles, MemoryAllocation, NumBytes, SubnetId, Time,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaChaRng;
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
-use std::ops::{AddAssign, SubAssign};
 use std::sync::Arc;
 use strum_macros::{EnumCount, EnumIter};
 
@@ -102,14 +102,14 @@ pub enum StateError {
     /// Canister is stopping, only accepting responses.
     CanisterStopping(CanisterId),
 
-    /// Message enqueuing failed due to full in/out queue.
+    /// Request enqueuing failed due to full input / output queue.
     QueueFull { capacity: usize },
 
-    /// Message enqueuing would have caused the canister or subnet to run over
-    /// their memory limit.
+    /// Guaranteed response request enqueuing would have caused the subnet to exceed
+    /// its guaranteed response memory limit.
     OutOfMemory { requested: NumBytes, available: i64 },
 
-    /// Response enqueuing failed due to not matching the expected response.
+    /// Response enqueuing failed due to it not matching the callback.
     NonMatchingResponse {
         err_str: String,
         originator: CanisterId,
@@ -118,7 +118,8 @@ pub enum StateError {
         deadline: CoarseTime,
     },
 
-    /// No corresponding request found when trying to push a response from the bitcoin adapter.
+    /// No corresponding request found when trying to push a response from the
+    /// bitcoin adapter.
     BitcoinNonMatchingResponse { callback_id: u64 },
 }
 
@@ -298,35 +299,43 @@ impl std::fmt::Display for StateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StateError::CanisterNotFound(canister_id) => {
-                write!(f, "Canister {} not found", canister_id)
+                write!(f, "Canister {canister_id} not found")
             }
             StateError::CanisterStopped(canister_id) => {
-                write!(f, "Canister {} is stopped", canister_id)
+                write!(f, "Canister {canister_id} is stopped")
             }
             StateError::CanisterStopping(canister_id) => {
-                write!(f, "Canister {} is stopping", canister_id)
+                write!(f, "Canister {canister_id} is stopping")
             }
             StateError::QueueFull { capacity } => {
-                write!(f, "Maximum queue capacity {} reached", capacity)
+                write!(f, "Maximum queue capacity {capacity} reached")
             }
             StateError::OutOfMemory {
                 requested,
                 available,
             } => write!(
                 f,
-                "Cannot enqueue message. Out of memory: requested {}, available {}",
-                requested, available
+                "Cannot enqueue message. Out of memory: requested {requested}, available {available}"
             ),
-            StateError::NonMatchingResponse {err_str, originator, callback_id, respondent, deadline} => write!(
+            StateError::NonMatchingResponse {
+                err_str,
+                originator,
+                callback_id,
+                respondent,
+                deadline,
+            } => write!(
                 f,
                 "Cannot enqueue response with callback ID {} due to {} : originator => {}, respondent => {}, deadline => {}",
-                callback_id, err_str, originator, respondent, Time::from(*deadline)
+                callback_id,
+                err_str,
+                originator,
+                respondent,
+                Time::from(*deadline)
             ),
             StateError::BitcoinNonMatchingResponse { callback_id } => {
                 write!(
                     f,
-                    "Bitcoin: Attempted to push a response for callback ID {} without an in-flight corresponding request",
-                    callback_id
+                    "Bitcoin: Attempted to push a response for callback ID {callback_id} without an in-flight corresponding request"
                 )
             }
         }
@@ -388,74 +397,6 @@ impl MemoryTaken {
     }
 }
 
-/// Combination of memory used by and reserved for guaranteed response messages
-/// and memory used by best-effort messages.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
-pub struct MessageMemoryUsage {
-    /// Memory used by and reserved for guaranteed response canister messages, in
-    /// bytes.
-    pub guaranteed_response: NumBytes,
-
-    /// Memory used by best-effort canister messages, in bytes.
-    pub best_effort: NumBytes,
-}
-
-impl MessageMemoryUsage {
-    pub const ZERO: MessageMemoryUsage = MessageMemoryUsage {
-        guaranteed_response: NumBytes::new(0),
-        best_effort: NumBytes::new(0),
-    };
-
-    /// Returns the total memory used by all canister messages (guaranteed response
-    /// or best-effort).
-    pub fn total(&self) -> NumBytes {
-        self.guaranteed_response + self.best_effort
-    }
-
-    /// Calculates `self` + `rhs`.
-    ///
-    /// Returns a tuple of the addition along with a boolean indicating whether an
-    /// arithmetic overflow would occur on either field. If an overflow would have
-    /// occurred then the wrapped value is returned.
-    pub fn overflowing_add(&self, rhs: &Self) -> (Self, bool) {
-        let (guaranteed_response, overflow1) = self
-            .guaranteed_response
-            .get()
-            .overflowing_add(rhs.guaranteed_response.get());
-        let (best_effort, overflow2) = self
-            .best_effort
-            .get()
-            .overflowing_add(rhs.best_effort.get());
-        (
-            Self {
-                guaranteed_response: guaranteed_response.into(),
-                best_effort: best_effort.into(),
-            },
-            overflow1 || overflow2,
-        )
-    }
-
-    /// Returns `true` iff both fields of `self` are greater than or equal to the
-    /// corresponding fields of `rhs`.
-    pub fn ge(&self, rhs: Self) -> bool {
-        self.guaranteed_response >= rhs.guaranteed_response && self.best_effort >= rhs.best_effort
-    }
-}
-
-impl AddAssign<MessageMemoryUsage> for MessageMemoryUsage {
-    fn add_assign(&mut self, rhs: MessageMemoryUsage) {
-        self.guaranteed_response += rhs.guaranteed_response;
-        self.best_effort += rhs.best_effort;
-    }
-}
-
-impl SubAssign<MessageMemoryUsage> for MessageMemoryUsage {
-    fn sub_assign(&mut self, rhs: MessageMemoryUsage) {
-        self.guaranteed_response -= rhs.guaranteed_response;
-        self.best_effort -= rhs.best_effort;
-    }
-}
-
 /// ReplicatedState is the deterministic replicated state of the system.
 /// Broadly speaking it consists of two parts:  CanisterState used for canister
 /// execution and SystemMetadata used for message routing and history queries.
@@ -487,6 +428,14 @@ pub struct ReplicatedState {
     #[validate_eq(CompareWithValidateEq)]
     subnet_queues: CanisterQueues,
 
+    /// Pool of outbound refund messages to be routed into streams.
+    ///
+    /// We may not be able to route all refunds into streams every round due to
+    /// stream message and byte limits, so this holds any unrouted refunds across
+    /// rounds.
+    #[validate_eq(CompareWithValidateEq)]
+    refunds: RefundPool,
+
     /// Queue for holding responses arriving from Consensus.
     ///
     /// Responses from consensus are to be processed each round.
@@ -510,6 +459,7 @@ impl ReplicatedState {
             canister_states: BTreeMap::new(),
             metadata: SystemMetadata::new(own_subnet_id, own_subnet_type),
             subnet_queues: CanisterQueues::default(),
+            refunds: RefundPool::default(),
             consensus_queue: Vec::new(),
             epoch_query_stats: RawQueryStats::default(),
             canister_snapshots: CanisterSnapshots::default(),
@@ -521,6 +471,7 @@ impl ReplicatedState {
         canister_states: BTreeMap<CanisterId, CanisterState>,
         metadata: SystemMetadata,
         subnet_queues: CanisterQueues,
+        refunds: RefundPool,
         epoch_query_stats: RawQueryStats,
         canister_snapshots: CanisterSnapshots,
     ) -> Self {
@@ -528,6 +479,7 @@ impl ReplicatedState {
             canister_states,
             metadata,
             subnet_queues,
+            refunds,
             consensus_queue: Vec::new(),
             epoch_query_stats,
             canister_snapshots,
@@ -541,22 +493,25 @@ impl ReplicatedState {
         &BTreeMap<CanisterId, CanisterState>,
         &SystemMetadata,
         &CanisterQueues,
+        &RefundPool,
         &Vec<ConsensusResponse>,
         &RawQueryStats,
         &CanisterSnapshots,
     ) {
         let ReplicatedState {
-            ref canister_states,
-            ref metadata,
-            ref subnet_queues,
-            ref consensus_queue,
-            ref epoch_query_stats,
-            ref canister_snapshots,
+            canister_states,
+            metadata,
+            subnet_queues,
+            refunds,
+            consensus_queue,
+            epoch_query_stats,
+            canister_snapshots,
         } = self;
         (
             canister_states,
             metadata,
             subnet_queues,
+            refunds,
             consensus_queue,
             epoch_query_stats,
             canister_snapshots,
@@ -639,7 +594,7 @@ impl ReplicatedState {
         let canister = self.canister_state(canister_id).ok_or_else(|| {
             UserError::new(
                 ErrorCode::CanisterNotFound,
-                format!("Canister {} not found", canister_id),
+                format!("Canister {canister_id} not found"),
             )
         })?;
 
@@ -660,6 +615,43 @@ impl ReplicatedState {
         &self.metadata
     }
 
+    /// Returns the cost schedule of this subnet.
+    pub fn get_own_cost_schedule(&self) -> CanisterCyclesCostSchedule {
+        let subnet_id = self.metadata.own_subnet_id;
+        self.metadata
+            .network_topology
+            .subnets
+            .get(&subnet_id)
+            .map(|x| x.cost_schedule)
+            .unwrap_or_default()
+    }
+
+    /// Returns the cost schedule of the provided subnet, if it exists.
+    pub fn get_cost_schedule(&self, subnet_id: SubnetId) -> Option<CanisterCyclesCostSchedule> {
+        self.metadata
+            .network_topology
+            .subnets
+            .get(&subnet_id)
+            .map(|x| x.cost_schedule)
+    }
+
+    /// Every round, the cost schedule flag is read from the registry and the
+    /// replicated state's flag is updated.
+    ///
+    /// Don't use this outside of tests or `execute_round`, or state may become
+    /// inconsistent.
+    pub fn set_own_cost_schedule(&mut self, cost_schedule: CanisterCyclesCostSchedule) {
+        let own_subnet_id = self.metadata.own_subnet_id;
+        if let Some(subnet_topology) = self
+            .metadata
+            .network_topology
+            .subnets
+            .get_mut(&own_subnet_id)
+        {
+            subnet_topology.cost_schedule = cost_schedule
+        }
+    }
+
     pub fn get_ingress_status(&self, message_id: &MessageId) -> &IngressStatus {
         self.metadata
             .ingress_history
@@ -678,18 +670,21 @@ impl ReplicatedState {
     /// oldest to newest in case inserting `status` pushes the memory
     /// consumption over the bound.
     ///
-    /// Returns the previous status associated with `message_id`.
+    /// Returns the previous status associated with `message_id` and a histogram
+    /// of times spent in ingress history.
     pub fn set_ingress_status(
         &mut self,
         message_id: MessageId,
         status: IngressStatus,
         ingress_memory_capacity: NumBytes,
+        observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
         self.metadata.ingress_history.insert(
             message_id,
             status,
             self.time(),
             ingress_memory_capacity,
+            observe_time_in_terminal_state,
         )
     }
 
@@ -770,22 +765,19 @@ impl ReplicatedState {
             mut best_effort_message_memory_taken,
             wasm_custom_sections_memory_taken,
             canister_history_memory_taken,
-            wasm_chunk_store_memory_usage,
         ) = self
             .canisters_iter()
             .map(|canister| {
                 (
-                    match canister.memory_allocation() {
-                        MemoryAllocation::Reserved(bytes) => bytes,
-                        MemoryAllocation::BestEffort => canister.execution_memory_usage(),
-                    },
+                    canister
+                        .memory_allocation()
+                        .allocated_bytes(canister.memory_usage()),
                     canister
                         .system_state
                         .guaranteed_response_message_memory_usage(),
                     canister.system_state.best_effort_message_memory_usage(),
                     canister.wasm_custom_sections_memory_usage(),
                     canister.canister_history_memory_usage(),
-                    canister.wasm_chunk_store_memory_usage(),
                 )
             })
             .reduce(|accum, val| {
@@ -795,7 +787,6 @@ impl ReplicatedState {
                     accum.2 + val.2,
                     accum.3 + val.3,
                     accum.4 + val.4,
-                    accum.5 + val.5,
                 )
             })
             .unwrap_or_default();
@@ -805,13 +796,8 @@ impl ReplicatedState {
         best_effort_message_memory_taken +=
             (self.subnet_queues.best_effort_message_memory_usage() as u64).into();
 
-        let canister_snapshots_memory_taken = self.canister_snapshots.memory_taken();
-
         MemoryTaken {
-            execution: raw_memory_taken
-                + canister_history_memory_taken
-                + wasm_chunk_store_memory_usage
-                + canister_snapshots_memory_taken,
+            execution: raw_memory_taken,
             guaranteed_response_messages: guaranteed_response_message_memory_taken,
             best_effort_messages: best_effort_message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
@@ -870,16 +856,12 @@ impl ReplicatedState {
     /// Returns the `SubnetId` hosting the given `principal_id` (canister or
     /// subnet).
     pub fn find_subnet_id(&self, principal_id: PrincipalId) -> Result<SubnetId, UserError> {
-        let subnet_id = self
-            .metadata
-            .network_topology
-            .routing_table
-            .route(principal_id);
+        let subnet_id = self.metadata.network_topology.route(principal_id);
 
         match subnet_id {
             None => Err(UserError::new(
                 ErrorCode::SubnetNotFound,
-                format!("Could not find subnetId given principalId {}", principal_id),
+                format!("Could not find subnetId given principalId {principal_id}"),
             )),
             Some(subnet_id) => Ok(subnet_id),
         }
@@ -887,10 +869,6 @@ impl ReplicatedState {
 
     /// Pushes a `RequestOrResponse` into the induction pool (canister or subnet
     /// input queue).
-    ///
-    /// The messages from the same subnet get pushed into the local subnet
-    /// queue, while the messages from the other subnets get pushed to the inter
-    /// subnet queues.
     ///
     /// On success, returns `Ok(true)` if the message was successfully inducted; or
     /// `Ok(false)` if the message was a best-effort response that was silently
@@ -934,7 +912,9 @@ impl ReplicatedState {
                             subnet_available_guaranteed_response_memory,
                             own_subnet_type,
                             input_queue_type,
-                        ),
+                        )
+                        // Requests are never silently dropped.
+                        .map(|_| true),
 
                         RequestOrResponse::Response(response) => Err((
                             StateError::non_matching_response(
@@ -948,6 +928,9 @@ impl ReplicatedState {
                     match msg {
                         // Best-effort responses are silently dropped if the canister is not found.
                         RequestOrResponse::Response(response) if response.is_best_effort() => {
+                            if !response.refund.is_zero() {
+                                self.observe_lost_cycles_due_to_dropped_messages(response.refund);
+                            }
                             Ok(false)
                         }
                         // For all other messages this is an error.
@@ -961,7 +944,7 @@ impl ReplicatedState {
     /// Pushes an ingress message into the induction pool (canister or subnet
     /// ingress queue).
     pub fn push_ingress(&mut self, msg: Ingress) -> Result<(), IngressInductionError> {
-        if msg.is_addressed_to_subnet(self.metadata.own_subnet_id) {
+        if msg.is_addressed_to_subnet() {
             self.subnet_queues.push_ingress(msg);
         } else {
             let canister_id = msg.receiver;
@@ -972,6 +955,21 @@ impl ReplicatedState {
             canister.push_ingress(msg);
         }
         Ok(())
+    }
+
+    /// Credits the cycles in `refund` to the recipient canister's balance.
+    ///
+    /// Returns `true` if the recipient canister exists and was credited, `false`
+    /// otherwise.
+    pub fn credit_refund(&mut self, refund: &Refund) -> bool {
+        if let Some(canister) = self.canister_states.get_mut(&refund.recipient()) {
+            canister
+                .system_state
+                .add_cycles(refund.amount(), CyclesUseCase::NonConsumed);
+            true
+        } else {
+            false
+        }
     }
 
     /// Extracts the next inter-canister or ingress message (round-robin) from
@@ -1042,6 +1040,11 @@ impl ReplicatedState {
     /// Returns an immutable reference to `self.subnet_queues`.
     pub fn subnet_queues(&self) -> &CanisterQueues {
         &self.subnet_queues
+    }
+
+    /// Returns an immutable reference to `self.refunds`.
+    pub fn refunds(&self) -> &RefundPool {
+        &self.refunds
     }
 
     /// See `IngressQueue::filter_messages()` for documentation.
@@ -1351,6 +1354,7 @@ impl ReplicatedState {
             mut canister_states,
             metadata,
             mut subnet_queues,
+            mut refunds,
             consensus_queue,
             epoch_query_stats: _,
             mut canister_snapshots,
@@ -1362,8 +1366,12 @@ impl ReplicatedState {
         // Retain only canisters hosted by `own_subnet_id`.
         //
         // TODO: Validate that canisters are split across no more than 2 subnets.
-        canister_states
-            .retain(|canister_id, _| routing_table.route(canister_id.get()) == Some(subnet_id));
+        canister_states.retain(|canister_id, _| {
+            routing_table
+                .lookup_entry(*canister_id)
+                .map(|(_range, subnet_id)| subnet_id)
+                == Some(subnet_id)
+        });
 
         // All subnet messages (ingress and canister) only remain on subnet A' because:
         //
@@ -1377,6 +1385,13 @@ impl ReplicatedState {
         if metadata.own_subnet_id != subnet_id {
             // On subnet B, start with empty subnet queues.
             subnet_queues = CanisterQueues::default();
+        }
+
+        // Retain only one copy of the refund pool, on subnet A'. Refund messages have
+        // no explicit origin, so it doesn't matter which of the two subnets they
+        // originate from.
+        if metadata.own_subnet_id != subnet_id {
+            refunds = RefundPool::default();
         }
 
         // Obtain a new metadata state for subnet B. No-op for subnet A' (apart from
@@ -1396,6 +1411,7 @@ impl ReplicatedState {
             canister_states,
             metadata,
             subnet_queues,
+            refunds,
             consensus_queue,
             epoch_query_stats: RawQueryStats::default(), // Don't preserve query stats during subnet splitting.
             canister_snapshots,
@@ -1416,10 +1432,11 @@ impl ReplicatedState {
         //
         // (!) DO NOT USE THE ".." WILDCARD, THIS SERVES THE SAME FUNCTION AS a `match`!
         let Self {
-            ref mut canister_states,
-            ref mut metadata,
-            ref mut subnet_queues,
+            canister_states,
+            metadata,
+            subnet_queues,
             consensus_queue: _,
+            refunds: _,
             epoch_query_stats: _,
             canister_snapshots: _,
         } = self;
@@ -1457,6 +1474,14 @@ impl ReplicatedState {
             |canister_id| canister_states.contains_key(&canister_id),
             subnet_queues,
         );
+    }
+
+    /// Records the loss of `cycles` due to dropping messages (e.g. late best-effort
+    /// responses to deleted canisters).
+    pub fn observe_lost_cycles_due_to_dropped_messages(&mut self, cycles: Cycles) {
+        self.metadata
+            .subnet_metrics
+            .observe_consumed_cycles_with_use_case(CyclesUseCase::DroppedMessages, cycles.into());
     }
 }
 
@@ -1533,6 +1558,9 @@ pub mod testing {
         /// Testing only: Returns the number of messages across all canister and
         /// subnet output queues.
         fn output_message_count(&self) -> usize;
+
+        /// Testing only: Adds the given refund to the subnet-wide refund pool.
+        fn add_refund(&mut self, receiver: CanisterId, amount: Cycles);
     }
 
     impl ReplicatedStateTesting for ReplicatedState {
@@ -1565,6 +1593,10 @@ pub mod testing {
                 .sum::<usize>()
                 + self.subnet_queues.output_queues_message_count()
         }
+
+        fn add_refund(&mut self, receiver: CanisterId, amount: Cycles) {
+            self.refunds.add(receiver, amount);
+        }
     }
 
     /// Early warning system / stumbling block forcing the authors of changes adding
@@ -1593,6 +1625,7 @@ pub mod testing {
                 SubnetType::Application,
             ),
             subnet_queues: Default::default(),
+            refunds: Default::default(),
             consensus_queue: Default::default(),
             epoch_query_stats: Default::default(),
             // TODO(EXC-1527): Handle canister snapshots during a subnet split.

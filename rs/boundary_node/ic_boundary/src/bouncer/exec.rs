@@ -3,7 +3,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use anyhow::{anyhow, Context, Error};
+use anyhow::{Context, Error, bail};
 use nftables::schema::Nftables;
 
 const SUDO: &str = "/usr/bin/sudo";
@@ -71,10 +71,10 @@ impl Execute for Executor {
         // Wait for the process to finish
         let result = process.wait_with_output()?;
         if !result.status.success() {
-            return Err(anyhow!(
+            bail!(
                 "Command terminated with non-zero exit code: {}",
                 result.status
-            ));
+            );
         }
 
         let stdout = String::from_utf8(result.stdout)?;

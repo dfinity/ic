@@ -21,6 +21,7 @@ ic-btc-validation = { path = "../validation" }
 ic-config = { path = "../../config" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
+lmdb-rkv = { workspace = true }
 parking_lot = { workspace = true }
 primitive-types = "0.12"
 prometheus = { workspace = true }
@@ -38,20 +39,25 @@ tonic = { workspace = true }
 tower = { workspace = true, optional = true }
 
 [dev-dependencies]
-bitcoincore-rpc = { workspace = true }
-bitcoind = "0.32.0"
 criterion = { workspace = true }
+flate2 = { workspace = true }
 ic-btc-adapter-client = { path = "../client" }
 ic-btc-adapter-test-utils = { path = "./test_utils" }
-ic-btc-interface = { workspace = true }
 ic-btc-replica-types = { path = "../replica_types" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-test-utilities-logger = { path = "../../test_utilities/logger" }
+sha2 = { workspace = true }
+scrypt = { version = "0.11.0", default-features = false }
 tempfile = { workspace = true }
 
 [[bench]]
 name = "e2e"
 harness = false
+
+[[bin]]
+name = "ic-btc-adapter"
+path = "bin/ic-btc-adapter/main.rs"
 
 [[bin]]
 name = "adapter-stress-test"

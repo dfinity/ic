@@ -2,56 +2,43 @@ pub mod batch;
 pub mod fake;
 pub mod idkg;
 
+use assert_matches::assert_matches;
 use ic_interfaces::{
     consensus_pool::{ChangeAction, ConsensusPoolCache, ConsensusTime},
     validation::*,
 };
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
+    Height, Time,
     batch::ValidationContext,
     consensus::{
-        dkg::DkgSummary,
-        idkg::{IDkgBlockReader, IDkgStats, RequestId},
         Block, BlockPayload, CatchUpContent, CatchUpPackage, ConsensusMessageHashable, HasHeight,
         HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank, SummaryPayload,
+        dkg::DkgSummary,
+        idkg::{IDkgBlockReader, IDkgStats, RequestId},
     },
     crypto::{
+        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
         canister_threshold_sig::idkg::{IDkgDealingSupport, IDkgTranscriptParams},
         crypto_hash,
         threshold_sig::ni_dkg::NiDkgTag,
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, Signed,
     },
     signature::ThresholdSignature,
     time::UNIX_EPOCH,
-    Height, Time,
 };
 use phantom_newtype::Id;
-use std::{sync::RwLock, time::Duration};
+use std::{fmt::Debug, sync::RwLock, time::Duration};
 
 #[macro_export]
 macro_rules! assert_changeset_matches_pattern {
     ($v:expr, $p:pat) => {
         assert_eq!($v.len(), 1);
-        assert!(matches_pattern!($v[0], $p));
+        assert_matches!($v[0], $p);
     };
 }
 
-#[macro_export]
-macro_rules! matches_pattern {
-    ($v:expr, $p:pat) => {
-        if let $p = $v {
-            true
-        } else {
-            false
-        }
-    };
-}
-
-pub fn assert_result_invalid<P, T>(result: ValidationResult<ValidationError<P, T>>) {
-    assert!(matches_pattern!(
-        result,
-        Err(ValidationError::InvalidArtifact(_))
-    ));
+pub fn assert_result_invalid<P: Debug, T: Debug>(result: ValidationResult<ValidationError<P, T>>) {
+    assert_matches!(result, Err(ValidationError::InvalidArtifact(_)));
 }
 
 pub fn assert_action_invalid<T: ConsensusMessageHashable>(action: ChangeAction, msg: &T) {

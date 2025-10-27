@@ -3,10 +3,10 @@ use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::{Canister, Duration as DurationPb, Tokens as TokensPb};
 use ic_nns_governance::governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM;
 use ic_nns_governance_api::{
-    create_service_nervous_system::{
-        initial_token_distribution::developer_distribution::NeuronDistribution, SwapParameters,
-    },
     CreateServiceNervousSystem,
+    create_service_nervous_system::{
+        SwapParameters, initial_token_distribution::developer_distribution::NeuronDistribution,
+    },
 };
 
 #[derive(Clone, Debug)]

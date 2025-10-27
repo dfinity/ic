@@ -1,5 +1,5 @@
 use crate::{payload_builder::IDkgDealingContext, pre_signer::IDkgTranscriptBuilder};
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_management_canister_types_private::ReshareChainKeyResponse;
 use ic_types::{
     batch::ConsensusResponse,
@@ -178,8 +178,8 @@ mod tests {
     use crate::{
         payload_builder::filter_idkg_reshare_chain_key_contexts,
         test_utils::{
-            create_reshare_request, set_up_idkg_payload, TestIDkgBlockReader,
-            TestIDkgTranscriptBuilder,
+            TestIDkgBlockReader, TestIDkgTranscriptBuilder, create_reshare_request,
+            set_up_idkg_payload,
         },
     };
     use assert_matches::assert_matches;

@@ -1,9 +1,9 @@
 use candid::candid_method;
 use ic_cdk::query;
+use ic_types::Time;
 use ic_types::messages::{
     Blob, HttpCallContent, HttpCanisterUpdate, HttpRequest, HttpRequestEnvelope,
 };
-use ic_types::Time;
 use ic_validator_ingress_message::{HttpRequestVerifier, IngressMessageVerifier, TimeProvider};
 
 /// Validate an internally-created dummy HTTP request with a provided ingress expiry.

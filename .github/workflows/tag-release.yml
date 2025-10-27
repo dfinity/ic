@@ -26,10 +26,10 @@ jobs:
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/guest-os/update-img/update-img.tar.zst" -o update-os-img.tar.zst
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/ic-admin.gz" -o ic-admin-x86_64-linux.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/ic-admin.gz" -o ic-admin-x86_64-darwin.gz
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/drun.gz" -o drun-x86_64-linux.gz
-          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/drun.gz" -o drun-x86_64-darwin.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-linux/pocket-ic.gz" -o pocket-ic-x86_64-linux.gz
           curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/x86_64-darwin/pocket-ic.gz" -o pocket-ic-x86_64-darwin.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-linux/pocket-ic.gz" -o pocket-ic-arm64-linux.gz
+          curl -sfSL --retry 3 "${DOWNLOAD_PREFIX}/binaries/arm64-darwin/pocket-ic.gz" -o pocket-ic-arm64-darwin.gz
           sha256sum *.gz > sha256sums.txt
 
           echo "DOWNLOAD_PREFIX=${DOWNLOAD_PREFIX}" >> "$GITHUB_ENV"
@@ -82,8 +82,8 @@ jobs:
             update-os-img.tar.gz
             ic-admin-x86_64-linux.gz
             ic-admin-x86_64-darwin.gz
-            drun-x86_64-linux.gz
-            drun-x86_64-darwin.gz
             pocket-ic-x86_64-linux.gz
             pocket-ic-x86_64-darwin.gz
+            pocket-ic-arm64-linux.gz
+            pocket-ic-arm64-darwin.gz
             sha256sums.txt

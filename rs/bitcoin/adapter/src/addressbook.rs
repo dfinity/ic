@@ -1,10 +1,10 @@
-use crate::config::Config;
+use crate::{common::BlockchainNetwork, config::Config};
 use bitcoin::p2p::Address;
 use bitcoin::p2p::ServiceFlags;
-use ic_logger::{info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info};
 use rand::{
-    prelude::{IteratorRandom, SliceRandom, StdRng},
     SeedableRng,
+    prelude::{IteratorRandom, SliceRandom, StdRng},
 };
 use std::{
     collections::{HashSet, VecDeque},
@@ -42,6 +42,9 @@ pub enum AddressBookError {
         /// This field contains the max amount of addresses that can be received.
         max_amount: usize,
     },
+    /// async error thrown by tokio runtime
+    #[error("JoinError")]
+    JoinError(#[from] tokio::task::JoinError),
 }
 
 /// A convenience wrapper type for addressing results from the AddressBook.
@@ -99,13 +102,16 @@ impl AddressBook {
     /// config provided. If no addresses found, a panic will be issued as a connection
     /// cannot be made without an address. If not enough addresses are found to
     /// meet the minimum number of connections, a panic will be issued.
-    pub fn new(config: &Config, logger: ReplicaLogger) -> Self {
+    pub fn new<Network: BlockchainNetwork>(
+        config: &Config<Network>,
+        logger: ReplicaLogger,
+    ) -> Self {
         let (min_addresses, max_addresses) = config.address_limits;
         let known_addresses: HashSet<SocketAddr> = config.nodes.iter().cloned().collect();
         Self {
             dns_seeds: config.dns_seeds.clone(),
             ipv6_only: config.ipv6_only,
-            port: config.network_port(),
+            port: config.network.p2p_port(),
             active_addresses: HashSet::new(),
             known_addresses,
             logger,
@@ -116,22 +122,27 @@ impl AddressBook {
     }
 
     /// This function takes the DNS seeds and creates a new queue of socket addresses to connect to
-    /// for the address discovery process.
-    fn build_seed_queue(&mut self) {
+    /// for the address discovery process. It is made async because `to_socket_addrs` is a blocking
+    /// operation that may involve DNS lookup.
+    async fn build_seed_queue(&mut self) -> Result<(), tokio::task::JoinError> {
         let mut rng = StdRng::from_entropy();
-        let dns_seeds = self
-            .dns_seeds
-            .iter()
-            .map(|seed| format_addr(seed, self.port));
-        let mut addresses = dns_seeds
-            .flat_map(|seed| {
-                seed.to_socket_addrs().map_or(vec![], |v| {
-                    v.filter(|addr| !self.ipv6_only || addr.is_ipv6()).collect()
+        let ipv6_only = self.ipv6_only;
+        let tasks = self.dns_seeds.iter().map(|seed| {
+            let addr = format_addr(seed, self.port);
+            tokio::task::spawn_blocking(move || addr.to_socket_addrs())
+        });
+        let mut addresses = futures::future::try_join_all(tasks)
+            .await?
+            .into_iter()
+            .flat_map(|addr| {
+                addr.map_or(vec![], |v| {
+                    v.filter(|addr| !ipv6_only || addr.is_ipv6()).collect()
                 })
             })
             .collect::<Vec<SocketAddr>>();
         addresses.shuffle(&mut rng);
         self.seed_queue = addresses.into_iter().collect();
+        Ok(())
     }
 
     /// This function is used when the adapter idles. It clears out the seed queue and active addresses.
@@ -240,9 +251,9 @@ impl AddressBook {
 
     /// This function retrieves the next seed address from the seed queue.
     /// If no seeds are found, the seed queue is rebuilt from the DNS seeds.
-    pub fn pop_seed(&mut self) -> AddressBookResult<AddressEntry> {
+    pub async fn resolve_next_seed(&mut self) -> AddressBookResult<AddressEntry> {
         if self.seed_queue.is_empty() {
-            self.build_seed_queue();
+            self.build_seed_queue().await?;
         }
 
         let address = self
@@ -301,7 +312,7 @@ pub fn validate_services(services: &ServiceFlags) -> bool {
 /// This is a simple utility function for creating a string that is a valid string
 /// for ToSocketAddrs.
 fn format_addr(seed: &str, port: u16) -> String {
-    format!("{}:{}", seed, port)
+    format!("{seed}:{port}")
 }
 
 #[cfg(test)]
@@ -316,7 +327,7 @@ mod test {
     /// and `remove_from_active`.
     #[test]
     fn test_address_book_basics() {
-        let config = ConfigBuilder::new()
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
@@ -363,14 +374,17 @@ mod test {
 
     /// This function tests the `AddressManager::add_many(...)` function to ensure
     /// addresses that are not valid are skipped while adding the valid addresses.
-    #[test]
-    fn test_address_manager_add_many() {
-        let config = ConfigBuilder::new()
+    #[tokio::test]
+    async fn test_address_manager_add_many() {
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
 
-        let seed = book.pop_seed().expect("there should be 1 seed");
+        let seed = book
+            .resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         let socket_1 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let address_1 = Address::new(&socket_1, ServiceFlags::NETWORK);
 
@@ -387,15 +401,18 @@ mod test {
 
     /// This function tests the `AddressBook::add_many(...)` function to ensure
     /// IPv4 addresses are skipped when in IPv6 only mode.
-    #[test]
-    fn test_address_book_add_many_ipv6_only() {
-        let config = ConfigBuilder::new()
+    #[tokio::test]
+    async fn test_address_book_add_many_ipv6_only() {
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("::1")])
             .with_ipv6_only(true)
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
 
-        let seed = book.pop_seed().expect("there should be 1 seed");
+        let seed = book
+            .resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         let socket_1 = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let address_1 = Address::new(&socket_1, ServiceFlags::NETWORK);
 
@@ -413,13 +430,16 @@ mod test {
 
     /// This function tests the `AddressBook::discard(...)` function to ensure
     /// the addresses are removed from the pool.
-    #[test]
-    fn test_discard_address() {
-        let config = ConfigBuilder::new()
+    #[tokio::test]
+    async fn test_discard_address() {
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
-        let seed = book.pop_seed().expect("there should be 1 seed");
+        let seed = book
+            .resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         let socket = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let address = Address::new(&socket, ServiceFlags::NETWORK);
 
@@ -447,8 +467,7 @@ mod test {
 
     #[test]
     fn test_discard_address_no_seeds() {
-        let config = ConfigBuilder::new()
-            .with_network(Network::Regtest)
+        let config = ConfigBuilder::default_with(Network::Regtest)
             .with_nodes(vec![SocketAddr::from_str("127.0.0.1:8333").unwrap()])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
@@ -463,40 +482,46 @@ mod test {
         assert_eq!(book.active_addresses.len(), 0);
     }
 
-    /// This function ensures that the [AddressBook::pop_seed](AddressBook::pop_seed) method
+    /// This function ensures that the [AddressBook::resolve_next_seed](AddressBook::resolve_next_seed) method
     /// gives the next address in queue but also pushes it to the back of the queue.
-    #[test]
-    fn test_pop_seed() {
-        let config = ConfigBuilder::new()
-            .with_network(Network::Signet)
+    #[tokio::test]
+    async fn test_resolve_next_seed() {
+        let config = ConfigBuilder::default_with(Network::Signet)
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
-        book.pop_seed().expect("there should be 1 seed");
+        book.resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         assert_eq!(book.seed_queue.len(), 1);
 
-        book.pop_seed().expect("there should be 1 seed");
+        book.resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         assert_eq!(book.seed_queue.len(), 0);
 
-        book.pop_seed().expect("pop_seed should rebuild seed queue");
+        book.resolve_next_seed()
+            .await
+            .expect("resolve_next_seed should rebuild seed queue");
         assert_eq!(book.seed_queue.len(), 1);
 
         // Remove the remaining seed address and then empty the dns_seeds.
-        book.pop_seed().expect("there should be 1 seed");
+        book.resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         book.dns_seeds.clear();
-        // `pop_seed` should now cause the AddressBookError::NoSeedAddressesFound error.
+        // `resolve_next_seed` should now cause the AddressBookError::NoSeedAddressesFound error.
         assert!(matches!(
-            book.pop_seed(),
+            book.resolve_next_seed().await,
             Err(AddressBookError::NoSeedAddressesFound)
         ));
     }
 
     /// This function tests to ensure that when the seed queue is built and IPv6 only is enabled,
     /// IPv4 seeds are filtered out.
-    #[test]
-    fn test_seeds_ipv6_only() {
-        let config = ConfigBuilder::new()
-            .with_network(Network::Signet)
+    #[tokio::test]
+    async fn test_seeds_ipv6_only() {
+        let config = ConfigBuilder::default_with(Network::Signet)
             .with_dns_seeds(vec![
                 String::from("127.0.0.1"),
                 String::from("[2401:3f00:1000:23:5000:7bff:fe3d:b81d]"),
@@ -505,22 +530,28 @@ mod test {
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
         assert_eq!(book.seed_queue.len(), 0);
-        book.build_seed_queue();
+        book.build_seed_queue().await.unwrap();
         assert_eq!(book.seed_queue.len(), 1);
-        let addr_entry = book.pop_seed().expect("there should be 1 seed");
+        let addr_entry = book
+            .resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         assert!(addr_entry.addr().is_ipv6());
     }
 
     /// This test exercises `AddressBook::clear(...)` by checking the following:
     /// 1. If there are DNS seeds, the known, active addresses, and seed queue should be emptied.
     /// 2. If there are no DNS seeds, the seed queue and active addresses is emptied.
-    #[test]
-    fn test_clear() {
-        let config = ConfigBuilder::new()
+    #[tokio::test]
+    async fn test_clear() {
+        let config = ConfigBuilder::default_with(Network::Bitcoin)
             .with_dns_seeds(vec![String::from("127.0.0.1"), String::from("192.168.1.1")])
             .build();
         let mut book = AddressBook::new(&config, no_op_logger());
-        let seed = book.pop_seed().expect("there should be 1 seed");
+        let seed = book
+            .resolve_next_seed()
+            .await
+            .expect("there should be 1 seed");
         let socket = SocketAddr::from_str("127.0.0.1:8444").expect("bad address format");
         let address = Address::new(
             &socket,

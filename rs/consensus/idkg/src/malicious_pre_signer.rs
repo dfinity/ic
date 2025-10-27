@@ -1,23 +1,23 @@
 //! The malicious pre signature process manager
 
 use crate::{
-    metrics::IDkgPreSignerMetrics, pre_signer::IDkgPreSignerImpl, utils::transcript_op_summary,
-    IDkgBlockReaderImpl,
+    IDkgBlockReaderImpl, metrics::IDkgPreSignerMetrics, pre_signer::IDkgPreSignerImpl,
+    utils::transcript_op_summary,
 };
 use ic_interfaces::{
     crypto::BasicSigner,
     idkg::{IDkgChangeAction, IDkgChangeSet},
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_registry_client_helpers::node::RegistryVersion;
 use ic_types::{
+    NodeId,
     consensus::idkg::{IDkgBlockReader, IDkgMessage},
     crypto::{
-        canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptParams, SignedIDkgDealing},
         BasicSigOf, CryptoResult,
+        canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptParams, SignedIDkgDealing},
     },
     malicious_flags::MaliciousFlags,
-    NodeId,
 };
 use std::collections::BTreeSet;
 

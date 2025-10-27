@@ -1,12 +1,12 @@
 use std::path::{Path, PathBuf};
 
 use crate::exes::mcopy;
-use anyhow::{anyhow, ensure, Context, Result};
+use anyhow::{Context, Result, anyhow, ensure};
 use async_trait::async_trait;
 use tokio::process::Command;
 
-use crate::gpt;
 use crate::Partition;
+use crate::gpt;
 
 pub struct FatPartition {
     offset_bytes: Option<u64>,
@@ -21,7 +21,7 @@ impl Partition for FatPartition {
         let _ = mcopy().context("mcopy is needed to open FAT partitions")?;
         let mut offset = None;
         if let Some(index) = index {
-            offset = Some(gpt::get_partition_offset(&image, index).await?);
+            offset = Some(gpt::get_partition_offset(&image, index)?);
         }
         Ok(FatPartition {
             offset_bytes: offset,
@@ -196,7 +196,7 @@ impl FatPartition {
 #[cfg(test)]
 mod test {
     use super::*;
-    use tempfile::{tempdir, TempDir};
+    use tempfile::{TempDir, tempdir};
     use tokio::fs;
 
     async fn create_empty_partition_img(path: &Path) -> Result<()> {
@@ -274,12 +274,14 @@ mod test {
         assert_eq!(read, contents2);
 
         // Reading non-existing files should fail.
-        assert!(partition
-            .read_file(Path::new("/does/not/exist.txt"))
-            .await
-            .expect_err("Expected reading non-existing file to fail")
-            .to_string()
-            .contains("not found"));
+        assert!(
+            partition
+                .read_file(Path::new("/does/not/exist.txt"))
+                .await
+                .expect_err("Expected reading non-existing file to fail")
+                .to_string()
+                .contains("not found")
+        );
     }
 
     #[tokio::test]

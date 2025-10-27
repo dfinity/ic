@@ -5,28 +5,28 @@ use ic_crypto_internal_csp::vault::api::{
     CspVault, IDkgTranscriptInternalBytes, ThresholdSchnorrCreateSigShareVaultError,
 };
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
+    DerivationPath, EccCurveType, IDkgTranscriptInternal,
+    ThresholdBip340CombineSigSharesInternalError, ThresholdBip340CombinedSignatureInternal,
+    ThresholdBip340SignatureShareInternal, ThresholdBip340VerifySigShareInternalError,
+    ThresholdBip340VerifySignatureInternalError, ThresholdEd25519CombineSigSharesInternalError,
+    ThresholdEd25519CombinedSignatureInternal, ThresholdEd25519SignatureShareInternal,
+    ThresholdEd25519VerifySigShareInternalError, ThresholdEd25519VerifySignatureInternalError,
     combine_bip340_signature_shares, combine_ed25519_signature_shares,
     verify_bip340_signature_share, verify_ed25519_signature_share,
-    verify_threshold_bip340_signature, verify_threshold_ed25519_signature, DerivationPath,
-    EccCurveType, IDkgTranscriptInternal, ThresholdBip340CombineSigSharesInternalError,
-    ThresholdBip340CombinedSignatureInternal, ThresholdBip340SignatureShareInternal,
-    ThresholdBip340VerifySigShareInternalError, ThresholdBip340VerifySignatureInternalError,
-    ThresholdEd25519CombineSigSharesInternalError, ThresholdEd25519CombinedSignatureInternal,
-    ThresholdEd25519SignatureShareInternal, ThresholdEd25519VerifySigShareInternalError,
-    ThresholdEd25519VerifySignatureInternalError,
+    verify_threshold_bip340_signature, verify_threshold_ed25519_signature,
 };
 use ic_types::{
+    NodeId, NodeIndex, Randomness,
     crypto::canister_threshold_sig::{
+        MasterPublicKey, ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
+        ThresholdSchnorrSigShare,
         error::{
             ThresholdSchnorrCombineSigSharesError, ThresholdSchnorrCreateSigShareError,
             ThresholdSchnorrVerifyCombinedSigError, ThresholdSchnorrVerifySigShareError,
         },
         idkg::IDkgReceivers,
-        MasterPublicKey, ThresholdSchnorrCombinedSignature, ThresholdSchnorrSigInputs,
-        ThresholdSchnorrSigShare,
     },
-    crypto::AlgorithmId,
-    NodeId, NodeIndex,
+    crypto::{AlgorithmId, ExtendedDerivationPath},
 };
 use std::collections::BTreeMap;
 
@@ -40,8 +40,8 @@ pub(crate) fn get_tschnorr_master_public_key_from_internal_transcript(
         EccCurveType::Ed25519 => AlgorithmId::Ed25519,
         x => {
             return Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
-                format!("Schnorr does not support curve {:?}", x),
-            ))
+                format!("Schnorr does not support curve {x:?}"),
+            ));
         }
     };
     Ok(MasterPublicKey {
@@ -65,10 +65,13 @@ pub fn create_sig_share(
 
     let sig_share_raw_typed = vault
         .create_schnorr_sig_share(
-            inputs.derivation_path().clone(),
+            ExtendedDerivationPath {
+                caller: *inputs.caller(),
+                derivation_path: inputs.derivation_path().to_vec(),
+            },
             inputs.message().to_vec(),
             inputs.taproot_tree_root().map(Vec::from),
-            *inputs.nonce(),
+            Randomness::from(*inputs.nonce()),
             IDkgTranscriptInternalBytes::from(key_raw),
             IDkgTranscriptInternalBytes::from(presignature_raw),
             inputs.algorithm_id(),
@@ -126,10 +129,13 @@ pub fn verify_sig_share(
 
             verify_bip340_signature_share(
                 &internal_share,
-                &DerivationPath::from(inputs.derivation_path()),
+                &DerivationPath::from(ExtendedDerivationPath {
+                    caller: *inputs.caller(),
+                    derivation_path: inputs.derivation_path().to_vec(),
+                }),
                 inputs.message(),
                 inputs.taproot_tree_root(),
-                *inputs.nonce(),
+                Randomness::from(*inputs.nonce()),
                 signer_index,
                 &key,
                 &presig,
@@ -158,9 +164,12 @@ pub fn verify_sig_share(
 
             verify_ed25519_signature_share(
                 &internal_share,
-                &DerivationPath::from(inputs.derivation_path()),
+                &DerivationPath::from(ExtendedDerivationPath {
+                    caller: *inputs.caller(),
+                    derivation_path: inputs.derivation_path().to_vec(),
+                }),
                 inputs.message(),
-                *inputs.nonce(),
+                Randomness::from(*inputs.nonce()),
                 signer_index,
                 &key,
                 &presig,
@@ -208,10 +217,13 @@ pub fn combine_sig_shares(
                 internal_bip340_sig_shares_by_index_from_sig_shares(shares, inputs)?;
 
             let internal_combined_sig = combine_bip340_signature_shares(
-                &DerivationPath::from(inputs.derivation_path()),
+                &DerivationPath::from(ExtendedDerivationPath {
+                    caller: *inputs.caller(),
+                    derivation_path: inputs.derivation_path().to_vec(),
+                }),
                 inputs.message(),
                 inputs.taproot_tree_root(),
-                *inputs.nonce(),
+                Randomness::from(*inputs.nonce()),
                 &key,
                 &presig,
                 inputs.reconstruction_threshold(),
@@ -247,9 +259,12 @@ pub fn combine_sig_shares(
                 internal_ed25519_sig_shares_by_index_from_sig_shares(shares, inputs)?;
 
             let internal_combined_sig = combine_ed25519_signature_shares(
-                &DerivationPath::from(inputs.derivation_path()),
+                &DerivationPath::from(ExtendedDerivationPath {
+                    caller: *inputs.caller(),
+                    derivation_path: inputs.derivation_path().to_vec(),
+                }),
                 inputs.message(),
-                *inputs.nonce(),
+                Randomness::from(*inputs.nonce()),
                 &key,
                 &presig,
                 inputs.reconstruction_threshold(),
@@ -312,12 +327,10 @@ fn internal_bip340_sig_shares_by_index_from_sig_shares(
             let index = inputs
                 .index_for_signer_id(id)
                 .ok_or(ThresholdSchnorrCombineSigSharesError::SignerNotAllowed { node_id: id })?;
-            let internal_share = ThresholdBip340SignatureShareInternal::deserialize(
-                &share.sig_share_raw,
-            )
-            .map_err(|e| {
-                ThresholdSchnorrCombineSigSharesError::SerializationError(format!("{:?}", e))
-            })?;
+            let internal_share =
+                ThresholdBip340SignatureShareInternal::deserialize(&share.sig_share_raw).map_err(
+                    |e| ThresholdSchnorrCombineSigSharesError::SerializationError(format!("{e:?}")),
+                )?;
             Ok((index, internal_share))
         })
         .collect()
@@ -384,10 +397,13 @@ pub fn verify_combined_sig(
                     })?;
             verify_threshold_bip340_signature(
                 &signature,
-                &DerivationPath::from(inputs.derivation_path()),
+                &DerivationPath::from(ExtendedDerivationPath {
+                    caller: *inputs.caller(),
+                    derivation_path: inputs.derivation_path().to_vec(),
+                }),
                 inputs.message(),
                 inputs.taproot_tree_root(),
-                *inputs.nonce(),
+                Randomness::from(*inputs.nonce()),
                 &blinder_unmasked,
                 &key,
             )
@@ -412,9 +428,12 @@ pub fn verify_combined_sig(
                     })?;
             verify_threshold_ed25519_signature(
                 &signature,
-                &DerivationPath::from(inputs.derivation_path()),
+                &DerivationPath::from(ExtendedDerivationPath {
+                    caller: *inputs.caller(),
+                    derivation_path: inputs.derivation_path().to_vec(),
+                }),
                 inputs.message(),
-                *inputs.nonce(),
+                Randomness::from(*inputs.nonce()),
                 &blinder_unmasked,
                 &key,
             )

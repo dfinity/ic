@@ -7,10 +7,10 @@ use ic_cdk::{
 };
 use ic_cdk::{heartbeat, init, query, update};
 use rand::{
+    Rng, SeedableRng,
     distributions::{Distribution, WeightedIndex},
     rngs::StdRng,
     seq::SliceRandom,
-    Rng, SeedableRng,
 };
 use random_traffic_test::*;
 use serde::{Deserialize, Serialize};
@@ -288,12 +288,14 @@ fn update_record(result: &Result<CallResponse, CallFailed>, index: u32) {
             // Remove the record for synchronous rejections.
             SYNCHRONOUS_REJECTIONS_COUNT.set(SYNCHRONOUS_REJECTIONS_COUNT.get() + 1);
             RECORDS.with_borrow_mut(|records| {
-                assert!(records
-                    .remove(&index)
-                    .unwrap()
-                    .1
-                    .duration_and_response
-                    .is_none())
+                assert!(
+                    records
+                        .remove(&index)
+                        .unwrap()
+                        .1
+                        .duration_and_response
+                        .is_none()
+                )
             });
         }
         Err(CallFailed::CallRejected(rejection)) => {

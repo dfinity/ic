@@ -2,35 +2,26 @@ use crate::CertificationVersion;
 use ic_error_types::RejectCode;
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
+    Cycles, Time,
     messages::{
-        CallbackId, Payload, RejectContext, Request, RequestMetadata, RequestOrResponse, Response,
-        NO_DEADLINE,
+        CallbackId, Payload, Refund, RejectContext, Request, RequestMetadata, Response,
+        StreamMessage,
     },
     time::CoarseTime,
     xnet::{RejectReason, RejectSignal, StreamFlags, StreamHeader},
-    Cycles, Time,
 };
 
-pub fn stream_header(certification_version: CertificationVersion) -> StreamHeader {
-    use CertificationVersion::*;
-    let reject_signals = match certification_version {
-        version if version < V19 => vec![
-            RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
-            RejectSignal::new(RejectReason::CanisterMigrating, 200.into()),
-            RejectSignal::new(RejectReason::CanisterMigrating, 250.into()),
-        ]
-        .into(),
-        _ => vec![
-            RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
-            RejectSignal::new(RejectReason::CanisterNotFound, 200.into()),
-            RejectSignal::new(RejectReason::OutOfMemory, 250.into()),
-            RejectSignal::new(RejectReason::CanisterStopping, 251.into()),
-            RejectSignal::new(RejectReason::CanisterStopped, 252.into()),
-            RejectSignal::new(RejectReason::QueueFull, 253.into()),
-            RejectSignal::new(RejectReason::Unknown, 254.into()),
-        ]
-        .into(),
-    };
+pub fn stream_header(_certification_version: CertificationVersion) -> StreamHeader {
+    let reject_signals = vec![
+        RejectSignal::new(RejectReason::CanisterMigrating, 10.into()),
+        RejectSignal::new(RejectReason::CanisterNotFound, 200.into()),
+        RejectSignal::new(RejectReason::OutOfMemory, 250.into()),
+        RejectSignal::new(RejectReason::CanisterStopping, 251.into()),
+        RejectSignal::new(RejectReason::CanisterStopped, 252.into()),
+        RejectSignal::new(RejectReason::QueueFull, 253.into()),
+        RejectSignal::new(RejectReason::Unknown, 254.into()),
+    ]
+    .into();
     let flags = StreamFlags {
         deprecated_responses_only: true,
     };
@@ -38,13 +29,9 @@ pub fn stream_header(certification_version: CertificationVersion) -> StreamHeade
     StreamHeader::new(23.into(), 25.into(), 256.into(), reject_signals, flags)
 }
 
-pub fn request(certification_version: CertificationVersion) -> RequestOrResponse {
+pub fn request(_certification_version: CertificationVersion) -> StreamMessage {
     let metadata = RequestMetadata::new(1, Time::from_nanos_since_unix_epoch(100_000));
-    let deadline = if certification_version >= CertificationVersion::V18 {
-        CoarseTime::from_secs_since_unix_epoch(8)
-    } else {
-        NO_DEADLINE
-    };
+    let deadline = CoarseTime::from_secs_since_unix_epoch(8);
     Request {
         receiver: canister_test_id(1),
         sender: canister_test_id(2),
@@ -58,12 +45,8 @@ pub fn request(certification_version: CertificationVersion) -> RequestOrResponse
     .into()
 }
 
-pub fn response(certification_version: CertificationVersion) -> RequestOrResponse {
-    let deadline = if certification_version >= CertificationVersion::V18 {
-        CoarseTime::from_secs_since_unix_epoch(7)
-    } else {
-        NO_DEADLINE
-    };
+pub fn response(_certification_version: CertificationVersion) -> StreamMessage {
+    let deadline = CoarseTime::from_secs_since_unix_epoch(7);
     Response {
         originator: canister_test_id(6),
         respondent: canister_test_id(5),
@@ -75,12 +58,8 @@ pub fn response(certification_version: CertificationVersion) -> RequestOrRespons
     .into()
 }
 
-pub fn reject_response(certification_version: CertificationVersion) -> RequestOrResponse {
-    let deadline = if certification_version >= CertificationVersion::V18 {
-        CoarseTime::from_secs_since_unix_epoch(7)
-    } else {
-        NO_DEADLINE
-    };
+pub fn reject_response(_certification_version: CertificationVersion) -> StreamMessage {
+    let deadline = CoarseTime::from_secs_since_unix_epoch(7);
     Response {
         originator: canister_test_id(6),
         respondent: canister_test_id(5),
@@ -90,4 +69,9 @@ pub fn reject_response(certification_version: CertificationVersion) -> RequestOr
         deadline,
     }
     .into()
+}
+
+pub fn anonymous_refund(certification_version: CertificationVersion) -> StreamMessage {
+    assert!(certification_version >= CertificationVersion::V22);
+    Refund::anonymous(canister_test_id(7), Cycles::new(8)).into()
 }

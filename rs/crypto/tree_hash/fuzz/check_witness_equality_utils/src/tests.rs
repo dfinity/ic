@@ -1,6 +1,6 @@
 use super::*;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
-use ic_crypto_tree_hash::{flatmap, Label, LabeledTree};
+use ic_crypto_tree_hash::{Label, LabeledTree, flatmap};
 
 pub fn v(v: Vec<u8>) -> LabeledTree<Vec<u8>> {
     LabeledTree::<Vec<u8>>::Leaf(v)

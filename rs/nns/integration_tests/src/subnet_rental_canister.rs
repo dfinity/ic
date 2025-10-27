@@ -7,8 +7,8 @@ use ic_nns_constants::{
     SUBNET_RENTAL_CANISTER_ID,
 };
 use ic_nns_governance_api::{
-    manage_neuron_response::{Command as CommandResponse, RegisterVoteResponse},
     ExecuteNnsFunction, MakeProposalRequest, NnsFunction, ProposalActionRequest, Vote,
+    manage_neuron_response::{Command as CommandResponse, RegisterVoteResponse},
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -24,8 +24,8 @@ use ic_state_machine_tests::{StateMachine, WasmResult};
 use ic_types::Time;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Memo, Subaccount, Tokens, TransferArgs,
-    DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, BinaryAccountBalanceArgs, DEFAULT_TRANSFER_FEE, Memo, Subaccount, Tokens,
+    TransferArgs,
 };
 use std::time::Duration;
 use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};
@@ -43,13 +43,7 @@ pub struct SubnetRentalRequest {
 pub enum RentalConditionId {
     App13CH,
 }
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
-pub struct SubnetRentalProposalPayload {
-    pub user: PrincipalId,
-    pub rental_condition_id: RentalConditionId,
-    pub proposal_id: u64,
-    pub proposal_creation_time_seconds: u64,
-}
+
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
 pub struct RentalRequest {
     pub user: PrincipalId,
@@ -143,7 +137,7 @@ fn get_todays_price(machine: &StateMachine) -> Tokens {
         .unwrap();
     match rental_price_icp {
         WasmResult::Reply(bytes) => Decode!(&bytes, Result<Tokens, String>).unwrap().unwrap(),
-        WasmResult::Reject(reason) => panic!("canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("canister call rejected: {reason}"),
     }
 }
 
@@ -268,7 +262,7 @@ fn subnet_rental_request_lifecycle() {
     .expect("Making NNS proposal failed");
     let proposal_id = match cmd {
         CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     };
     let proposal_time = state_machine.get_time();
 
@@ -318,7 +312,7 @@ fn subnet_rental_request_lifecycle() {
         .unwrap();
     let rental_requests = match raw_rental_requests {
         WasmResult::Reply(bytes) => Decode!(&bytes, Vec<RentalRequest>).unwrap(),
-        WasmResult::Reject(reason) => panic!("canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("canister call rejected: {reason}"),
     };
     assert_eq!(rental_requests.len(), 1);
     let RentalRequest {
@@ -367,7 +361,7 @@ fn subnet_rental_request_lifecycle() {
         .unwrap();
     let remaining_rental_requests = match raw_rental_requests {
         WasmResult::Reply(bytes) => Decode!(&bytes, Vec<RentalRequest>).unwrap(),
-        WasmResult::Reject(reason) => panic!("canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("canister call rejected: {reason}"),
     };
     assert!(remaining_rental_requests.is_empty());
 }
@@ -407,18 +401,20 @@ fn test_renting_a_subnet_without_paying_fails() {
     .expect("Making NNS proposal failed");
     let proposal_id = match cmd {
         CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
-        other => panic!("Unexpected response: {:?}", other),
+        other => panic!("Unexpected response: {other:?}"),
     };
 
     // the proposal is expected to fail since the user did not make the initial transfer
     nns_wait_for_proposal_failure(&state_machine, proposal_id.id);
     let proposal_info =
         nns_governance_get_proposal_info_as_anonymous(&state_machine, proposal_id.id);
-    assert!(proposal_info
-        .failure_reason
-        .unwrap()
-        .error_message
-        .contains("Subnet rental request proposal failed: InsufficientFunds"));
+    assert!(
+        proposal_info
+            .failure_reason
+            .unwrap()
+            .error_message
+            .contains("Subnet rental request proposal failed: InsufficientFunds")
+    );
 
     // check that the rental request has NOT been created
     let raw_rental_requests = state_machine
@@ -430,7 +426,7 @@ fn test_renting_a_subnet_without_paying_fails() {
         .unwrap();
     let rental_requests = match raw_rental_requests {
         WasmResult::Reply(bytes) => Decode!(&bytes, Vec<RentalRequest>).unwrap(),
-        WasmResult::Reject(reason) => panic!("canister call rejected: {}", reason),
+        WasmResult::Reject(reason) => panic!("canister call rejected: {reason}"),
     };
     assert!(rental_requests.is_empty());
 }

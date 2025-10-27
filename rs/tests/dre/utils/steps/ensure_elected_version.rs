@@ -1,20 +1,23 @@
 use std::time::Duration;
 
-use ic_consensus_system_test_utils::upgrade::{
-    bless_replica_version_with_urls, fetch_update_metadata_with_retry, get_public_update_image_url,
-};
+use ic_consensus_system_test_utils::upgrade::bless_replica_version_with_urls;
+use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
 use ic_system_test_driver::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasTopologySnapshot,
 };
 use ic_types::ReplicaVersion;
 use slog::info;
 use tokio::runtime::Handle;
+use url::Url;
 
 use super::Step;
 
 #[derive(Clone)]
 pub struct EnsureElectedVersion {
     pub version: ReplicaVersion,
+    pub url: Url,
+    pub sha256: String,
+    pub guest_launch_measurements: Option<GuestLaunchMeasurements>,
 }
 
 impl Step for EnsureElectedVersion {
@@ -31,21 +34,14 @@ impl Step for EnsureElectedVersion {
 
         let nns_node = env.get_first_healthy_system_node_snapshot();
 
-        let upgrade_url = get_public_update_image_url(&self.version);
-        info!(env.logger(), "Upgrade URL: {}", upgrade_url);
-
-        let sha256 = rt.block_on(fetch_update_metadata_with_retry(
-            &env.logger(),
-            &self.version,
-        ));
-        let guest_launch_measurements = None;
+        info!(env.logger(), "Upgrade URL: {}", self.url);
 
         rt.block_on(bless_replica_version_with_urls(
             &nns_node,
             &self.version,
-            vec![upgrade_url.clone()],
-            sha256,
-            guest_launch_measurements,
+            vec![self.url.to_string()],
+            self.sha256.clone(),
+            self.guest_launch_measurements.clone(),
             &env.logger(),
         ));
 

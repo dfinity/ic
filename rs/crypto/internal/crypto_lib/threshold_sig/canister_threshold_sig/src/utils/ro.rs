@@ -125,7 +125,7 @@ impl RandomOracle {
     ) -> CanisterThresholdResult<()> {
         for (i, pt) in pts.iter().enumerate() {
             self.add_input(
-                &format!("{}[{}]", name, i),
+                &format!("{name}[{i}]"),
                 &pt.serialize_tagged(),
                 RandomOracleInputType::Point,
             )?;

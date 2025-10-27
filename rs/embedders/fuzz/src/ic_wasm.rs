@@ -1,8 +1,7 @@
-use crate::imports::{system_api_imports, SystemApiImportStore};
+use crate::imports::{SystemApiImportStore, system_api_imports};
 use crate::special_int::SpecialInt;
 use arbitrary::{Arbitrary, Result, Unstructured};
 use ic_config::embedders::Config as EmbeddersConfig;
-use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_utils::validation::{
     RESERVED_SYMBOLS, WASM_FUNCTION_SIZE_LIMIT, WASM_VALID_SYSTEM_FUNCTIONS,
 };
@@ -22,9 +21,9 @@ use wasmparser::*;
 
 lazy_static! {
     static ref SYSTEM_API_IMPORTS_WASM32: SystemApiImportStore =
-        system_api_imports(ic_embedders_config(false));
+        system_api_imports(EmbeddersConfig::default());
     static ref SYSTEM_API_IMPORTS_WASM64: SystemApiImportStore =
-        system_api_imports(ic_embedders_config(true));
+        system_api_imports(EmbeddersConfig::default());
 }
 
 const CANISTER_EXPORT_FUNCTION_PREFIX: &[&str] = &[
@@ -48,10 +47,10 @@ pub struct ICWasmModule {
 
 impl<'a> Arbitrary<'a> for ICWasmModule {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
-        let memory64_enabled = u.ratio(2, 3)?;
-        let embedder_config = ic_embedders_config(memory64_enabled);
+        let embedder_config = EmbeddersConfig::default();
         let exports = generate_exports(embedder_config.clone(), u)?;
-        let mut config = ic_wasm_config(embedder_config);
+        let is_wasm64 = u.ratio(2, 3)?;
+        let mut config = ic_wasm_config(embedder_config, is_wasm64);
         config.exports = exports;
         Ok(ICWasmModule::new(config.clone(), Module::new(config, u)?))
     }
@@ -60,7 +59,7 @@ impl<'a> Arbitrary<'a> for ICWasmModule {
 #[derive(Debug)]
 pub struct SystemApiModule {
     pub module: Vec<u8>,
-    pub memory64_enabled: bool,
+    pub is_wasm64: bool,
     pub exported_functions: BTreeSet<WasmMethod>,
 }
 
@@ -72,9 +71,9 @@ impl<'a> Arbitrary<'a> for SystemApiModule {
         // memory pages are bound to 100
         let memory_minimum = u.int_in_range(0..=50)?;
         let memory_maximum = u.int_in_range(memory_minimum..=100)?;
-        let memory64_enabled = u.ratio(2, 3)?;
+        let is_wasm64 = u.ratio(2, 3)?;
 
-        let store: &'static SystemApiImportStore = if memory64_enabled {
+        let store: &'static SystemApiImportStore = if is_wasm64 {
             &SYSTEM_API_IMPORTS_WASM64
         } else {
             &SYSTEM_API_IMPORTS_WASM32
@@ -95,7 +94,7 @@ impl<'a> Arbitrary<'a> for SystemApiModule {
         memories.memory(MemoryType {
             minimum: memory_minimum,
             maximum: Some(memory_maximum),
-            memory64: memory64_enabled,
+            memory64: is_wasm64,
             shared: false,
             page_size_log2: None,
         });
@@ -154,7 +153,7 @@ impl<'a> Arbitrary<'a> for SystemApiModule {
 
         Ok(SystemApiModule {
             module: wasm_bytes,
-            memory64_enabled,
+            is_wasm64,
             exported_functions: BTreeSet::from([wasm_method]),
         })
     }
@@ -248,8 +247,7 @@ impl ICWasmModule {
     }
 }
 
-pub fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
-    let memory64_enabled = embedder_config.feature_flags.wasm64 == FlagStatus::Enabled;
+pub fn ic_wasm_config(embedder_config: EmbeddersConfig, is_wasm64: bool) -> Config {
     Config {
         min_funcs: 10,
         min_exports: 10,
@@ -266,31 +264,20 @@ pub fn ic_wasm_config(embedder_config: EmbeddersConfig) -> Config {
         bulk_memory_enabled: true,
         reference_types_enabled: true,
         simd_enabled: true,
-        memory64_enabled,
+        memory64_enabled: is_wasm64,
 
         threads_enabled: false,
         relaxed_simd_enabled: false,
         canonicalize_nans: false,
         exceptions_enabled: false,
 
-        available_imports: Some(if memory64_enabled {
+        available_imports: Some(if is_wasm64 {
             SYSTEM_API_IMPORTS_WASM64.module.to_vec()
         } else {
             SYSTEM_API_IMPORTS_WASM32.module.to_vec()
         }),
         ..Default::default()
     }
-}
-
-pub fn ic_embedders_config(memory64_enabled: bool) -> EmbeddersConfig {
-    let mut config = EmbeddersConfig::default();
-    config.feature_flags.write_barrier = FlagStatus::Enabled;
-    if memory64_enabled {
-        config.feature_flags.wasm64 = FlagStatus::Enabled;
-    } else {
-        config.feature_flags.wasm64 = FlagStatus::Disabled;
-    }
-    config
 }
 
 fn get_persisted_global(g: wasmparser::Global) -> Option<Global> {

@@ -10,7 +10,7 @@ Runbook:
 
 end::catalog[] */
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use candid::{Encode, Principal};
 use ic_base_types::PrincipalId;
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
@@ -28,8 +28,8 @@ use ic_system_test_driver::{
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
-            IcNodeContainer,
+            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            get_dependency_path,
         },
     },
     retry_with_msg_async, systest,
@@ -113,7 +113,10 @@ async fn test_async(env: TestEnv) {
         format!("http://{ipv6}/metrics")
     };
 
-    info!(&logger, "Step 3. Verify that API boundary node retrieves the salt and exposes the corresponding metric");
+    info!(
+        &logger,
+        "Step 3. Verify that API boundary node retrieves the salt and exposes the corresponding metric"
+    );
 
     let metrics_extractor = MetricsExtractor { url };
 

@@ -1,20 +1,14 @@
 //! This module contains async functions for interacting with the management canister.
-use crate::logs::P0;
 use crate::metrics::{observe_get_utxos_latency, observe_sign_with_ecdsa_latency};
-use crate::{tx, CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network};
-use candid::{CandidType, Principal};
-use ic_btc_checker::{
-    CheckAddressArgs, CheckAddressResponse, CheckTransactionArgs, CheckTransactionResponse,
-};
+use crate::{CanisterRuntime, ECDSAPublicKey, GetUtxosRequest, GetUtxosResponse, Network, tx};
+use candid::Principal;
+use ic_btc_checker::{CheckTransactionArgs, CheckTransactionResponse};
 use ic_btc_interface::{Address, MillisatoshiPerByte, Utxo};
-use ic_canister_log::log;
-use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::management_canister::bitcoin::UtxoFilter;
-use ic_management_canister_types::{
-    EcdsaCurve, EcdsaKeyId, EcdsaPublicKeyArgs, EcdsaPublicKeyResult,
-};
+use ic_cdk::bitcoin_canister;
+use ic_cdk::bitcoin_canister::GetCurrentFeePercentilesRequest;
+use ic_cdk::management_canister::SignCallError;
+use ic_management_canister_types::{EcdsaCurve, EcdsaKeyId};
 use ic_management_canister_types_private::DerivationPath;
-use serde::de::DeserializeOwned;
 use std::fmt;
 
 /// Represents an error from a management canister call, such as
@@ -36,10 +30,34 @@ impl CallError {
         &self.reason
     }
 
-    pub fn from_cdk_error(method: &str, (code, msg): (RejectionCode, String)) -> CallError {
+    pub fn from_cdk_call_error<T: Into<ic_cdk::call::Error>>(method: &str, error: T) -> CallError {
+        use ic_cdk::call::Error as CdkError;
         CallError {
             method: String::from(method),
-            reason: Reason::from_reject(code, msg),
+            reason: match error.into() {
+                CdkError::InsufficientLiquidCycleBalance(_e) => Reason::OutOfCycles,
+                CdkError::CallPerformFailed(e) => Reason::Rejected(e.to_string()),
+                CdkError::CallRejected(e) => Reason::Rejected(e.to_string()),
+                CdkError::CandidDecodeFailed(e) => Reason::CanisterError(e.to_string()),
+            },
+        }
+    }
+
+    pub fn from_sign_error(error: SignCallError) -> Self {
+        let reason = match error {
+            SignCallError::SignCostError(e) => {
+                //no signatures were made
+                Reason::Rejected(e.to_string())
+            }
+            SignCallError::CallFailed(e) => {
+                //no signatures were made
+                Reason::Rejected(e.to_string())
+            }
+            SignCallError::CandidDecodeFailed(e) => Reason::CanisterError(e.to_string()),
+        };
+        Self {
+            method: "sign_with_ecdsa".to_string(),
+            reason,
         }
     }
 }
@@ -74,60 +92,11 @@ impl fmt::Display for Reason {
         match self {
             Self::QueueIsFull => write!(fmt, "the canister queue is full"),
             Self::OutOfCycles => write!(fmt, "the canister is out of cycles"),
-            Self::CanisterError(msg) => write!(fmt, "canister error: {}", msg),
+            Self::CanisterError(msg) => write!(fmt, "canister error: {msg}"),
             Self::Rejected(msg) => {
-                write!(fmt, "the management canister rejected the call: {}", msg)
+                write!(fmt, "the management canister rejected the call: {msg}")
             }
         }
-    }
-}
-
-impl Reason {
-    fn from_reject(reject_code: RejectionCode, reject_message: String) -> Self {
-        match reject_code {
-            RejectionCode::SysTransient => Self::QueueIsFull,
-            RejectionCode::CanisterError => Self::CanisterError(reject_message),
-            RejectionCode::CanisterReject => Self::Rejected(reject_message),
-            _ => Self::QueueIsFull,
-        }
-    }
-}
-
-pub(crate) async fn call<I, O>(method: &str, payment: u64, input: &I) -> Result<O, CallError>
-where
-    I: CandidType,
-    O: CandidType + DeserializeOwned,
-{
-    let balance = ic_cdk::api::canister_balance128();
-    if balance < payment as u128 {
-        log!(
-            P0,
-            "Failed to call {}: need {} cycles, the balance is only {}",
-            method,
-            payment,
-            balance
-        );
-
-        return Err(CallError {
-            method: method.to_string(),
-            reason: Reason::OutOfCycles,
-        });
-    }
-
-    let res: Result<(O,), _> = ic_cdk::api::call::call_with_payment(
-        Principal::management_canister(),
-        method,
-        (input,),
-        payment,
-    )
-    .await;
-
-    match res {
-        Ok((output,)) => Ok(output),
-        Err((code, msg)) => Err(CallError {
-            method: method.to_string(),
-            reason: Reason::from_reject(code, msg),
-        }),
     }
 }
 
@@ -173,7 +142,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
             Ok(res)
         } else {
             crate::metrics::GET_UTXOS_CACHE_MISSES.with(|cell| cell.set(cell.get() + 1));
-            runtime.bitcoin_get_utxos(req.clone()).await.inspect(|res| {
+            runtime.get_utxos(&req).await.inspect(|res| {
                 *now = runtime.time();
                 crate::state::mutate_state(|s| s.get_utxos_cache.insert(req, res.clone(), *now))
             })
@@ -185,7 +154,9 @@ pub async fn get_utxos<R: CanisterRuntime>(
     let request = GetUtxosRequest {
         address: address.clone(),
         network: network.into(),
-        filter: Some(UtxoFilter::MinConfirmations(min_confirmations)),
+        filter: Some(bitcoin_canister::UtxosFilter::MinConfirmations(
+            min_confirmations,
+        )),
     };
 
     let mut response = bitcoin_get_utxos(&mut now, request.clone(), source, runtime).await?;
@@ -196,7 +167,7 @@ pub async fn get_utxos<R: CanisterRuntime>(
     // Continue fetching until there are no more pages.
     while let Some(page) = response.next_page {
         let paged_request = GetUtxosRequest {
-            filter: Some(UtxoFilter::Page(page.to_vec())),
+            filter: Some(bitcoin_canister::UtxosFilter::Page(page.to_vec())),
             ..request.clone()
         };
         response = bitcoin_get_utxos(&mut now, paged_request, source, runtime).await?;
@@ -212,23 +183,20 @@ pub async fn get_utxos<R: CanisterRuntime>(
 }
 
 /// Fetches a subset of UTXOs for the specified address.
-pub async fn bitcoin_get_utxos(request: GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
-    ic_cdk::api::management_canister::bitcoin::bitcoin_get_utxos(request)
+pub async fn bitcoin_get_utxos(request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
+    bitcoin_canister::bitcoin_get_utxos(request)
         .await
-        .map(|(response,)| response.into())
-        .map_err(|err| CallError::from_cdk_error("bitcoin_get_utxos", err))
+        .map(GetUtxosResponse::from)
+        .map_err(|err| CallError::from_cdk_call_error("bitcoin_get_utxos", err))
 }
 
 /// Returns the current fee percentiles on the Bitcoin network.
-pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByte>, CallError> {
-    ic_cdk::api::management_canister::bitcoin::bitcoin_get_current_fee_percentiles(
-        ic_cdk::api::management_canister::bitcoin::GetCurrentFeePercentilesRequest {
-            network: network.into(),
-        },
-    )
-    .await
-    .map(|(result,)| result)
-    .map_err(|err| CallError::from_cdk_error("bitcoin_get_current_fee_percentiles", err))
+pub async fn bitcoin_get_current_fee_percentiles(
+    request: &GetCurrentFeePercentilesRequest,
+) -> Result<Vec<MillisatoshiPerByte>, CallError> {
+    bitcoin_canister::bitcoin_get_current_fee_percentiles(request)
+        .await
+        .map_err(|err| CallError::from_cdk_call_error("bitcoin_get_current_fee_percentiles", err))
 }
 
 /// Sends the transaction to the network the management canister interacts with.
@@ -236,14 +204,12 @@ pub async fn send_transaction(
     transaction: &tx::SignedTransaction,
     network: Network,
 ) -> Result<(), CallError> {
-    ic_cdk::api::management_canister::bitcoin::bitcoin_send_transaction(
-        ic_cdk::api::management_canister::bitcoin::SendTransactionRequest {
-            transaction: transaction.serialize(),
-            network: network.into(),
-        },
-    )
+    bitcoin_canister::bitcoin_send_transaction(&bitcoin_canister::SendTransactionRequest {
+        transaction: transaction.serialize(),
+        network: network.into(),
+    })
     .await
-    .map_err(|err| CallError::from_cdk_error("bitcoin_send_transaction", err))
+    .map_err(|err| CallError::from_cdk_call_error("bitcoin_send_transaction", err))
 }
 
 /// Fetches the ECDSA public key of the canister.
@@ -251,12 +217,8 @@ pub async fn ecdsa_public_key(
     key_name: String,
     derivation_path: DerivationPath,
 ) -> Result<ECDSAPublicKey, CallError> {
-    // Retrieve the public key of this canister at the given derivation path
-    // from the ECDSA API.
-    call(
-        "ecdsa_public_key",
-        /*payment=*/ 0,
-        &EcdsaPublicKeyArgs {
+    ic_cdk::management_canister::ecdsa_public_key(
+        &ic_cdk::management_canister::EcdsaPublicKeyArgs {
             canister_id: None,
             derivation_path: derivation_path.into_inner(),
             key_id: EcdsaKeyId {
@@ -266,10 +228,11 @@ pub async fn ecdsa_public_key(
         },
     )
     .await
-    .map(|response: EcdsaPublicKeyResult| ECDSAPublicKey {
+    .map(|response| ECDSAPublicKey {
         public_key: response.public_key,
         chain_code: response.chain_code,
     })
+    .map_err(|err| CallError::from_cdk_call_error("ecdsa_public_key", err))
 }
 
 /// Signs a message hash using the tECDSA API.
@@ -282,30 +245,12 @@ pub async fn sign_with_ecdsa<R: CanisterRuntime>(
     let start_time = runtime.time();
 
     let result = runtime
-        .sign_with_ecdsa(key_name, derivation_path, message_hash)
+        .sign_with_ecdsa(key_name, derivation_path.into_inner(), message_hash)
         .await;
 
     observe_sign_with_ecdsa_latency(&result, start_time, runtime.time());
 
     result
-}
-
-/// Check if the given Bitcoin address is blocked.
-pub async fn check_withdrawal_destination_address(
-    btc_checker_principal: Principal,
-    address: String,
-) -> Result<CheckAddressResponse, CallError> {
-    let (res,): (CheckAddressResponse,) = ic_cdk::api::call::call(
-        btc_checker_principal,
-        "check_address",
-        (CheckAddressArgs { address },),
-    )
-    .await
-    .map_err(|(code, message)| CallError {
-        method: "check_address".to_string(),
-        reason: Reason::from_reject(code, message),
-    })?;
-    Ok(res)
 }
 
 /// Check if the given UTXO passes Bitcoin check.
@@ -314,18 +259,15 @@ pub async fn check_transaction(
     utxo: &Utxo,
     cycle_payment: u128,
 ) -> Result<CheckTransactionResponse, CallError> {
-    let (res,): (CheckTransactionResponse,) = ic_cdk::api::call::call_with_payment128(
-        btc_checker_principal,
-        "check_transaction",
-        (CheckTransactionArgs {
+    // use unbounded wait because calls require cycles
+    // and currently cycles are not reimbursed with bounded-wait calls in case of a timeout.
+    ic_cdk::call::Call::unbounded_wait(btc_checker_principal, "check_transaction")
+        .with_arg(CheckTransactionArgs {
             txid: utxo.outpoint.txid.as_ref().to_vec(),
-        },),
-        cycle_payment,
-    )
-    .await
-    .map_err(|(code, message)| CallError {
-        method: "check_transaction".to_string(),
-        reason: Reason::from_reject(code, message),
-    })?;
-    Ok(res)
+        })
+        .with_cycles(cycle_payment)
+        .await
+        .map_err(|e| CallError::from_cdk_call_error("check_transaction", e))?
+        .candid()
+        .map_err(|e| CallError::from_cdk_call_error("check_transaction", e))
 }

@@ -3,9 +3,9 @@
 use crate::artifact::IngressMessageId;
 use crate::batch::VetKdAgreement;
 use crate::consensus::hashed::Hashed;
+use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::common::{PreSignatureInCreation, PreSignatureRef};
 use crate::consensus::idkg::ecdsa::QuadrupleInCreation;
-use crate::consensus::idkg::IDkgMasterPublicKeyId;
 use crate::consensus::idkg::{
     CompletedReshareRequest, CompletedSignature, HasIDkgMasterPublicKeyId, IDkgPayload,
     IDkgReshareRequest, IDkgUIDGenerator, MaskedTranscript, MasterKeyTranscript, PreSigId,
@@ -22,13 +22,13 @@ use crate::crypto::canister_threshold_sig::idkg::{
     InitialIDkgDealings, SignedIDkgDealing,
 };
 use crate::crypto::threshold_sig::ni_dkg::{
-    config::{tests::valid_dkg_config_data, NiDkgConfig},
     NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTranscript,
+    config::{NiDkgConfig, tests::valid_dkg_config_data},
 };
 use crate::crypto::{
-    crypto_hash, AlgorithmId, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf,
-    CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, CryptoHashable,
-    IndividualMultiSig, IndividualMultiSigOf, Signed, ThresholdSigShare, ThresholdSigShareOf,
+    AlgorithmId, BasicSig, BasicSigOf, CombinedMultiSig, CombinedMultiSigOf, CombinedThresholdSig,
+    CombinedThresholdSigOf, CryptoHash, CryptoHashOf, CryptoHashable, IndividualMultiSig,
+    IndividualMultiSigOf, Signed, ThresholdSigShare, ThresholdSigShareOf, crypto_hash,
 };
 use crate::messages::{CallbackId, SignedRequestBytes};
 use crate::signature::{
@@ -922,7 +922,7 @@ fn dummy_dealings(
         let signed_dealing = SignedIDkgDealing {
             content: IDkgDealing {
                 transcript_id,
-                internal_dealing_raw: format!("Dummy raw dealing for dealer {}", node_id)
+                internal_dealing_raw: format!("Dummy raw dealing for dealer {node_id}")
                     .into_bytes(),
             },
             signature: BasicSignature {
@@ -1019,7 +1019,7 @@ mod tests {
 
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 
-    use crate::consensus::ConsensusMessage;
+    use crate::{canister_http::CanisterHttpResponse, consensus::ConsensusMessage};
 
     use super::*;
 
@@ -1101,6 +1101,31 @@ mod tests {
             assert_eq!(
                 msg, &new_msg,
                 "deserialized consensus message is different from original"
+            );
+        }
+    }
+
+    #[test]
+    fn verify_exhaustive_canister_http_response() {
+        let set = CanisterHttpResponse::exhaustive_set(&mut reproducible_rng());
+        println!(
+            "Number of CanisterHttpResponse variants generated for exhaustive test: {}",
+            set.len()
+        );
+
+        for original_response in &set {
+            // --- Serialization (Rust -> Protobuf -> bytes) ---
+            let proto_response = pb::CanisterHttpResponse::from(original_response.clone());
+            let bytes = proto_response.encode_to_vec();
+
+            // --- Deserialization (bytes -> Protobuf -> Rust) ---
+            let decoded_proto = pb::CanisterHttpResponse::decode(bytes.as_slice()).unwrap();
+            let new_response = CanisterHttpResponse::try_from(decoded_proto).unwrap();
+
+            // --- Verification ---
+            assert_eq!(
+                original_response, &new_response,
+                "Deserialized CanisterHttpResponse is different from the original"
             );
         }
     }

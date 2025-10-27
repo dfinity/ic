@@ -1,8 +1,8 @@
 use ic_interfaces::messaging::{XNetPayloadBuilder, XNetPayloadValidationError};
 use ic_types::{
+    NumBytes, SubnetId,
     batch::{ValidationContext, XNetPayload},
     xnet::CertifiedStreamSlice,
-    NumBytes, SubnetId,
 };
 use std::{
     collections::{BTreeMap, VecDeque},

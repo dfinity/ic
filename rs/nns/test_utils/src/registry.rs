@@ -9,7 +9,7 @@ use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_test_utils_ni_dkg::{
-    dummy_initial_dkg_transcript, initial_dkg_transcript, InitialNiDkgConfig,
+    InitialNiDkgConfig, dummy_initial_dkg_transcript, initial_dkg_transcript,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use ic_crypto_utils_ni_dkg::extract_threshold_sig_public_key;
@@ -38,26 +38,25 @@ use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_node_operator_record_key, make_node_record_key,
-    make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
-    make_subnet_record_key,
+    make_replica_version_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::{
-    dechunkify_get_value_response_content, deserialize_get_value_response, insert,
+    Error, GetChunk, dechunkify_get_value_response_content, deserialize_get_value_response, insert,
     pb::v1::{
-        registry_mutation::Type, HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest,
-        RegistryAtomicMutateResponse, RegistryMutation,
+        HighCapacityRegistryGetValueResponse, RegistryAtomicMutateRequest,
+        RegistryAtomicMutateResponse, RegistryMutation, registry_mutation::Type,
     },
-    serialize_get_value_request, Error, GetChunk,
+    serialize_get_value_request,
 };
 use ic_test_utilities_types::ids::subnet_test_id;
 use ic_types::{
-    crypto::{
-        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript},
-        CurrentNodePublicKeys, KeyPurpose,
-    },
     NodeId, ReplicaVersion,
+    crypto::{
+        CurrentNodePublicKeys, KeyPurpose,
+        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId, NiDkgTranscript},
+    },
 };
 use maplit::btreemap;
 use on_wire::bytes;
@@ -120,9 +119,8 @@ impl GetChunk for GetChunkImpl<'_> {
             .await
             .map_err(|err| {
                 format!(
-                    "Registry canister received our get_chunk request (key={:?}), \
-                     but found it lacking in some way: {}",
-                    content_sha256, err,
+                    "Registry canister received our get_chunk request (key={content_sha256:?}), \
+                     but found it lacking in some way: {err}",
                 )
             })?;
 
@@ -132,9 +130,8 @@ impl GetChunk for GetChunkImpl<'_> {
         } = chunk
         else {
             return Err(format!(
-                "Registry replied to our get_chunk request (key={:?}), \
+                "Registry replied to our get_chunk request (key={content_sha256:?}), \
                  but the reply did not have a populated `content` field.",
-                content_sha256,
             ));
         };
 
@@ -171,8 +168,7 @@ pub async fn get_value_result<T: Message + Default>(
     let Some(content) = result.content else {
         return Err(Error::MalformedMessage(format!(
             "Registry replied to get_value call, but no content field \
-             was populated. key={:?}",
-            key,
+             was populated. key={key:?}",
         )));
     };
 
@@ -198,7 +194,7 @@ pub async fn get_value<T: Message + Default>(registry: &Canister<'_>, key: &[u8]
 /// Panics if there is no T
 pub async fn get_value_or_panic<T: Message + Default>(registry: &Canister<'_>, key: &[u8]) -> T {
     get_value::<T>(registry, key).await.unwrap_or_else(|| {
-        panic!("Registry does not have a record under the key {:?}.", key);
+        panic!("Registry does not have a record under the key {key:?}.");
     })
 }
 
@@ -299,19 +295,11 @@ pub fn initial_routing_table_mutations(rt: &RoutingTable) -> Vec<RegistryMutatio
     let rt_pb = pb::RoutingTable::from(rt);
     let mut buf = vec![];
     rt_pb.encode(&mut buf).unwrap();
-    vec![
-        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-        RegistryMutation {
-            mutation_type: Type::Upsert as i32,
-            key: make_routing_table_record_key().into_bytes(),
-            value: buf.clone(),
-        },
-        RegistryMutation {
-            mutation_type: Type::Upsert as i32,
-            key: make_canister_ranges_key(CanisterId::from(0)).into_bytes(),
-            value: buf,
-        },
-    ]
+    vec![RegistryMutation {
+        mutation_type: Type::Upsert as i32,
+        key: make_canister_ranges_key(CanisterId::from(0)).into_bytes(),
+        value: buf,
+    }]
 }
 
 /// Returns a mutation that sets the initial state of the registry to be
@@ -665,11 +653,6 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
         insert(
             make_subnet_record_key(nns_subnet_id).as_bytes(),
             system_subnet.encode_to_vec(),
-        ),
-        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-        insert(
-            make_routing_table_record_key().as_bytes(),
-            RoutingTablePB::from(routing_table.clone()).encode_to_vec(),
         ),
         insert(
             make_canister_ranges_key(CanisterId::from_u64(0)).as_bytes(),

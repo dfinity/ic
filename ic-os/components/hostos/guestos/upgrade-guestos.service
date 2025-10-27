@@ -1,0 +1,12 @@
+[Unit]
+Description=Manage GuestOS Upgrade virtual machine
+Requires=libvirtd.service
+After=libvirtd.service
+
+RequiresMountsFor=/var
+
+[Service]
+Type=notify
+ExecStart=/opt/ic/bin/guest_vm_runner --type=upgrade
+Restart=no
+RestartSec=20

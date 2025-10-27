@@ -53,7 +53,7 @@ mod pubkey_proto_to_pubkey_bytes {
             result.unwrap_err(),
             PublicKeyBytesFromProtoError {
                 key_bytes: pk_proto.key_value,
-                internal_error: format!("Unknown algorithm: {}", unknown_algorithm,)
+                internal_error: format!("Unknown algorithm: {unknown_algorithm}",)
             }
         );
     }

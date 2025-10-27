@@ -341,8 +341,7 @@ impl ThresholdBip340CombinedSignatureInternal {
         let mut v = vec![];
         let serialized_p = self.r.serialize_bip340().map_err(|e| {
             ThresholdBip340SignatureShareInternalSerializationError(format!(
-                "Failed to serialize r: {:?}",
-                e
+                "Failed to serialize r: {e:?}"
             ))
         })?;
         v.extend_from_slice(&serialized_p);
@@ -373,11 +372,11 @@ impl ThresholdBip340CombinedSignatureInternal {
         let (point_bytes, scalar_bytes) = bytes.split_at(POINT_LEN);
 
         let r = EccPoint::deserialize_bip340(K256, point_bytes).map_err(|e| {
-            ThresholdBip340SignatureShareInternalSerializationError(format!("Invalid r: {:?}", e))
+            ThresholdBip340SignatureShareInternalSerializationError(format!("Invalid r: {e:?}"))
         })?;
 
         let s = EccScalar::deserialize(K256, scalar_bytes).map_err(|e| {
-            ThresholdBip340SignatureShareInternalSerializationError(format!("Invalid s: {:?}", e))
+            ThresholdBip340SignatureShareInternalSerializationError(format!("Invalid s: {e:?}"))
         })?;
 
         Ok(Self { r, s })

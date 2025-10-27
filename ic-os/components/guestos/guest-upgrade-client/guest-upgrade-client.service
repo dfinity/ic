@@ -1,0 +1,18 @@
+[Unit]
+Description=Guest Upgrade Client - Disk Encryption Key Exchange
+After=init-config.service network-online.target dev-sev\x2dguest.device
+Requires=init-config.service dev-sev\x2dguest.device
+Wants=network-online.target
+RequiresMountsFor=/var
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/ic/bin/guest_upgrade_client
+TimeoutSec=300
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
+

@@ -164,7 +164,7 @@ impl DashboardPaginationParameters {
         fn parse_query_param(req: &HttpRequest, param_name: &str) -> Result<usize, String> {
             Ok(match req.raw_query_param(param_name) {
                 Some(arg) => usize::from_str(arg)
-                    .map_err(|_| format!("failed to parse the '{}' parameter", param_name))?,
+                    .map_err(|_| format!("failed to parse the '{param_name}' parameter"))?,
                 None => 0,
             })
         }

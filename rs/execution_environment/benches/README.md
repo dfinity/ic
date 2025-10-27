@@ -78,7 +78,13 @@ Both the baseline results and new change benchmarks should be run on the same ho
 The benchmark scripts enforce this and will not compare results produced on
 different hosts.
 
-The best candidates for running the benchmarks are the `zh1-spm34` or `dm1-dll46` hosts.
+The best candidate for running the benchmarks is the `zh1-spm34` host.
+
+Running the benchmarks in a dev container is also supported:
+
+   ```sh
+   ./ci/container/container-run.sh ./rs/execution_environment/benches/run-all-benchmarks.sh
+   ```
 
 Adding New Benchmarks
 ---------------------

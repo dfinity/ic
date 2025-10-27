@@ -20,8 +20,8 @@ end::catalog[] */
 
 use anyhow::Result;
 use candid::{Decode, Encode};
-use ic_agent::export::Principal;
 use ic_agent::Agent;
+use ic_agent::export::Principal;
 use ic_base_types::PrincipalId;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;

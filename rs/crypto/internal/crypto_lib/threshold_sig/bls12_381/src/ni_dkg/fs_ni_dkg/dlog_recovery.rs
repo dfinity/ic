@@ -1,14 +1,12 @@
 use crate::ni_dkg::fs_ni_dkg::forward_secure::{CHUNK_MAX, CHUNK_MIN, CHUNK_SIZE};
 use crate::ni_dkg::fs_ni_dkg::nizk_chunking::{CHALLENGE_BITS, NUM_ZK_REPETITIONS};
 use ic_crypto_internal_bls12_381_type::{Gt, Scalar};
-
+use std::sync::LazyLock;
 pub struct HonestDealerDlogLookupTable {
     table: Vec<u32>,
 }
-
-lazy_static::lazy_static! {
-    static ref LINEAR_DLOG_SEARCH: HonestDealerDlogLookupTable = HonestDealerDlogLookupTable::create();
-}
+static LINEAR_DLOG_SEARCH: LazyLock<HonestDealerDlogLookupTable> =
+    LazyLock::new(HonestDealerDlogLookupTable::create);
 
 impl HonestDealerDlogLookupTable {
     fn create() -> Self {
@@ -251,7 +249,7 @@ impl BabyStepGiantStep {
     /// Set up a table for Baby-Step Giant-step to solve the discrete logarithm
     /// problem in the range `[lo..lo+range)` with respect to base element `base`.
     ///
-    /// To reduce the cost of the online search phase of the algorith, this
+    /// To reduce the cost of the online search phase of the algorithm, this
     /// implementation supports using a larger table than the typical `sqrt(n)`.
     /// The parameters `max_mbytes` and `max_table_mul` control how large a
     /// table is created. We always create at least a `sqrt(n)` sized table, but

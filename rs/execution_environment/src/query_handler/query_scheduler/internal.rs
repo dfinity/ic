@@ -5,7 +5,7 @@ use std::{
 };
 
 use ic_base_types::CanisterId;
-use ic_metrics::{buckets::decimal_buckets_with_zero, MetricsRegistry};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets_with_zero};
 use prometheus::Histogram;
 use tracing::instrument;
 

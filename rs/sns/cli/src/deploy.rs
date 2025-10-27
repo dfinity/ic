@@ -1,21 +1,21 @@
 //! Contains the logic for deploying SNS canisters
 
 use std::{
-    fs::{create_dir_all, OpenOptions},
+    fs::{OpenOptions, create_dir_all},
     io::{BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     str::FromStr,
 };
 
 use candid::Decode;
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 
-use crate::{call_dfx, call_dfx_or_panic, get_identity, hex_encode_candid, DeployTestflightArgs};
-use anyhow::{anyhow, Context, Result};
+use crate::{DeployTestflightArgs, call_dfx, call_dfx_or_panic, get_identity, hex_encode_candid};
+use anyhow::{Context, Result, anyhow};
 use ic_base_types::PrincipalId;
 use ic_nns_constants::ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID;
 use ic_sns_governance_api::pb::v1::ListNeuronsResponse;
-use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterIds, SnsCanisterInitPayloads};
+use ic_sns_init::{SnsCanisterIds, SnsCanisterInitPayloads, pb::v1::SnsInitPayload};
 use ic_sns_root::pb::v1::ListSnsCanistersResponse;
 
 /// If SNS canisters have already been created, return their canister IDs, else create the
@@ -32,8 +32,7 @@ pub fn lookup_or_else_create_canisters(
         }
         None => {
             println!(
-                "SNS canisters not found, creating SNS canisters with {:?} cycles each",
-                initial_cycles_per_canister
+                "SNS canisters not found, creating SNS canisters with {initial_cycles_per_canister:?} cycles each"
             );
             create_canisters(verbose, network, initial_cycles_per_canister)
         }
@@ -88,8 +87,7 @@ pub fn get_canister_id(
         .map_err(|e| {
             if verbose {
                 println!(
-                    "Could not parse the output of 'dfx canister id {}' as a string, error: {}",
-                    canister_name, e
+                    "Could not parse the output of 'dfx canister id {canister_name}' as a string, error: {e}"
                 )
             }
         })
@@ -99,8 +97,7 @@ pub fn get_canister_id(
         .map_err(|e| {
             if verbose {
                 println!(
-                    "Could not parse the output of 'dfx canister id {}' as a PrincipalId, error: {}",
-                    canister_name, e
+                    "Could not parse the output of 'dfx canister id {canister_name}' as a PrincipalId, error: {e}"
                 )
             }
         })
@@ -464,7 +461,7 @@ impl DirectSnsDeployerForTests {
     /// Install the given canister
     fn install_canister(&self, sns_canister_name: &str, wasm_name: &str, init_args: &str) {
         let mut wasm = self.wasms_dir.clone();
-        wasm.push(format!("{}.wasm", wasm_name));
+        wasm.push(format!("{wasm_name}.wasm"));
         call_dfx_or_panic(&[
             "canister",
             "--network",

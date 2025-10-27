@@ -20,14 +20,14 @@ use std::{
 use ic_base_types::{RegistryVersion, SubnetId};
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_quic_transport::SubnetTopology;
 use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
 use metrics::PeerManagerMetrics;
 use tokio::{
     runtime::Handle,
-    sync::watch::{channel, Receiver},
+    sync::watch::{Receiver, channel},
     task::JoinHandle,
 };
 
@@ -83,8 +83,13 @@ impl PeerManager {
 
             let mut topology = self.get_latest_subnet_topology();
             let _timer = self.metrics.topology_watcher_update_duration.start_timer();
-            // Notify watchers of latest shared state iff the latest topology is different
-            // to the old one.
+            self.metrics
+                .earliest_registry_version
+                .set(topology.earliest_registry_version().get() as i64);
+            self.metrics
+                .latest_registry_version
+                .set(topology.latest_registry_version().get() as i64);
+            // Notify watchers of latest shared state iff the latest topology is different to the old one.
             self.topology_sender
                 .send_if_modified(move |old_topology: &mut SubnetTopology| {
                     if old_topology == &topology {
@@ -208,7 +213,7 @@ mod tests {
     use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
     use ic_registry_keys::make_node_record_key;
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_test_utilities_registry::{add_single_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_single_subnet_record};
     use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_0};
 
     use super::*;

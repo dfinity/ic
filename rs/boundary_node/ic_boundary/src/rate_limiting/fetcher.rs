@@ -1,11 +1,11 @@
 use std::{path::PathBuf, sync::Arc};
 
-use anyhow::{anyhow, Context as _, Error};
+use anyhow::{Context as _, Error, anyhow, bail};
 use async_trait::async_trait;
 use candid::{Decode, Encode};
-use ic_agent::{export::Principal, Agent};
+use ic_agent::{Agent, export::Principal};
 use ic_types::CanisterId;
-use rate_limits_api::{v1::RateLimitRule, GetConfigResponse, Version};
+use rate_limits_api::{GetConfigResponse, Version, v1::RateLimitRule};
 use tokio::fs;
 
 const SCHEMA_VERSION: u64 = 1;
@@ -55,7 +55,7 @@ impl FetchesConfig for CanisterConfigFetcherQuery {
             .map_err(|e| anyhow!("failed to fetch config from the canister: {e:#}"))?;
 
         if response.is_empty() {
-            Err(anyhow!("got empty response from the canister"))
+            bail!("got empty response from the canister")
         } else {
             Ok(response)
         }
@@ -76,7 +76,7 @@ impl FetchesConfig for CanisterConfigFetcherUpdate {
             .map_err(|e| anyhow!("failed to fetch config from the canister: {e:#}"))?;
 
         if response.is_empty() {
-            Err(anyhow!("got empty response from the canister"))
+            bail!("got empty response from the canister")
         } else {
             Ok(response)
         }
@@ -99,17 +99,15 @@ impl FetchesRules for CanisterFetcher {
             .map_err(|e| anyhow!("failed to get config: {e:?}"))?;
 
         if response.config.schema_version != SCHEMA_VERSION {
-            return Err(anyhow!(
+            bail!(
                 "incorrect schema version (got {}, expected {})",
                 response.config.schema_version,
                 SCHEMA_VERSION
-            ));
+            );
         }
 
         if response.config.is_redacted {
-            return Err(anyhow!(
-                "got a redacted response, probably authentication is incorrect"
-            ));
+            bail!("got a redacted response, probably authentication is incorrect");
         }
 
         let rules = response
@@ -118,11 +116,7 @@ impl FetchesRules for CanisterFetcher {
             .into_iter()
             .map(|x| -> Result<RateLimitRule, Error> {
                 let Some(raw) = x.rule_raw else {
-                    return Err(anyhow!(
-                        "rule with id {} ({:?}) is None",
-                        x.rule_id,
-                        x.description
-                    ));
+                    bail!("rule with id {} ({:?}) is None", x.rule_id, x.description);
                 };
 
                 let rule = RateLimitRule::from_bytes_yaml(&raw)

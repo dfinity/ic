@@ -1,7 +1,10 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_ic_bench")
 
 package(default_visibility = [
     "//rs/http_endpoints:__subpackages__",
+    "//rs/https_outcalls:__subpackages__",
+    "//rs/pocket_ic_server:__subpackages__",
     "//rs/replica:__subpackages__",
 ])
 
@@ -28,6 +31,7 @@ rust_library(
         "@crate_index//:hyper-util",
         "@crate_index//:prometheus",
         "@crate_index//:rand",
+        "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:slog",
         "@crate_index//:tokio",
@@ -38,7 +42,7 @@ rust_library(
 )
 
 rust_test(
-    name = "nns_delegation_manager_tests",
+    name = "nns_delegation_manager_test",
     crate = ":nns_delegation_manager",
     deps = [
         "//rs/certification/test-utils",
@@ -46,6 +50,7 @@ rust_test(
         "//rs/crypto/tls_interfaces/mocks",
         "//rs/crypto/tree_hash",
         "//rs/crypto/utils/threshold_sig_der",
+        "//rs/http_endpoints/nns_delegation_manager/test_utils",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/registry/fake",
@@ -60,6 +65,25 @@ rust_test(
         "@crate_index//:rand",
         "@crate_index//:rcgen",
         "@crate_index//:rustls",
+        "@crate_index//:tokio",
+    ],
+)
+
+rust_ic_bench(
+    name = "nns_delegation_reader_bench",
+    testonly = True,
+    srcs = ["benches/nns_delegation_reader.rs"],
+    deps = [
+        # Keep sorted.
+        ":nns_delegation_manager",
+        "//rs/crypto/tree_hash",
+        "//rs/http_endpoints/nns_delegation_manager/test_utils",
+        "//rs/monitoring/logger",
+        "//rs/test_utilities/types",
+        "//rs/types/types",
+        "@crate_index//:criterion",
+        "@crate_index//:pprof",
+        "@crate_index//:serde_cbor",
         "@crate_index//:tokio",
     ],
 )

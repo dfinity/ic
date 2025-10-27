@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "@crate_index//:clap",
     "@crate_index//:futures",
     "@crate_index//:hex",
+    "@crate_index//:maplit",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
@@ -15,6 +16,7 @@ DEPENDENCIES = [
     "@crate_index//:strum",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = [

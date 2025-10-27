@@ -31,8 +31,7 @@ pub mod util {
             assert_eq!(
                 crypto::individual_public_key(public_coefficients, index as NodeIndex),
                 crypto::public_key_from_secret_key(secret_key),
-                "Individual public key match failed for index {}",
-                index
+                "Individual public key match failed for index {index}"
             )
         }
     }
@@ -115,9 +114,7 @@ pub mod util {
             let some_individual_signature = signatures[0].clone();
             assert!(
                 !crypto::verify(message, &some_individual_signature, &public_key),
-                "Signature verification passed with incorrect signature: got {:?} expected {:?}",
-                some_individual_signature,
-                signature
+                "Signature verification passed with incorrect signature: got {some_individual_signature:?} expected {signature:?}"
             );
         }
         if public_coefficients.coefficients.len() > 1 {
@@ -241,7 +238,7 @@ fn test_combined_secret_key() {
     let rng = &mut reproducible_rng();
     for _trial in 0..3 {
         let num_receivers = rng.gen_range::<u8, _>(1..=u8::MAX) as NodeIndex;
-        let poly_degree = rng.gen::<u8>() as usize;
+        let poly_degree = rng.r#gen::<u8>() as usize;
 
         let polynomial = Polynomial::random(poly_degree, rng);
 

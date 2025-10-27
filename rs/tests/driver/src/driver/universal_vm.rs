@@ -1,26 +1,22 @@
 use crate::driver::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
-use crate::driver::farm::id_of_file;
 use crate::driver::farm::AttachImageSpec;
 use crate::driver::farm::ClaimResult;
 use crate::driver::farm::Farm;
 use crate::driver::farm::HostFeature;
+use crate::driver::farm::id_of_file;
 use crate::driver::ic::VmAllocationStrategy;
 use crate::driver::ic::VmResources;
 use crate::driver::resource::AllocatedVm;
 use crate::driver::resource::{
-    allocate_resources, get_resource_request_for_universal_vm, DiskImage,
+    DiskImage, allocate_resources, get_resource_request_for_universal_vm,
 };
 use crate::driver::test_env::SshKeyGen;
 use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::{
-    get_dependency_path, HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession,
+    HasTestEnv, HasVmName, RetrieveIpv4Addr, SshSession, get_dependency_path,
 };
 use crate::driver::test_setup::{GroupSetup, InfraProvider};
-use crate::k8s::datavolume::DataVolumeContentType;
-use crate::k8s::images::upload_image;
-use crate::k8s::tnet::TNet;
-use crate::util::block_on;
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use chrono::Duration;
 use chrono::Utc;
 use slog::info;
@@ -189,30 +185,6 @@ impl UniversalVm {
                     );
                 }
                 image_specs.push(file_spec);
-            } else {
-                let tnet = TNet::read_attribute(env);
-                let tnet_node = tnet.nodes.last().expect("no nodes");
-                info!(
-                    env.logger(),
-                    "Uploading image {} to {}",
-                    config_img.clone().display().to_string(),
-                    tnet_node.config_url.clone().expect("missing config url")
-                );
-                block_on(upload_image(
-                    config_img,
-                    &format!(
-                        "{}/{}",
-                        tnet_node.config_url.clone().expect("missing config url"),
-                        CONF_IMG_FNAME
-                    ),
-                ))?;
-                block_on(tnet_node.deploy_config_image(
-                    CONF_IMG_FNAME,
-                    "config",
-                    DataVolumeContentType::Kubevirt,
-                ))
-                .expect("deploying config image failed");
-                block_on(tnet_node.add_volume("config")).expect("deploying config image failed");
             }
         }
 
@@ -224,10 +196,6 @@ impl UniversalVm {
                 image_specs,
             )?;
             farm.start_vm(&pot_setup.infra_group_name, &self.name)?;
-        } else if InfraProvider::read_attribute(env) == InfraProvider::K8s {
-            let tnet = TNet::read_attribute(env);
-            let tnet_node = tnet.nodes.last().expect("no nodes");
-            block_on(tnet_node.start()).expect("starting vm failed");
         }
 
         Ok(())

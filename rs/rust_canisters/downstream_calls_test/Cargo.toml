@@ -1,7 +1,7 @@
 [package]
 name = "downstream-calls-test"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 
 [[bin]]
 name = "downstream-calls-test-canister"
@@ -10,5 +10,5 @@ path = "src/main.rs"
 [dependencies]
 candid = { workspace = true }
 ic-base-types = { path = "../../types/base_types" }
-ic-cdk = "^0.18.0-alpha.2"
+ic-cdk = { workspace = true }
 serde = { workspace = true }

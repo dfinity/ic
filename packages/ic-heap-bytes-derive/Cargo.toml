@@ -1,0 +1,17 @@
+[package]
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+edition.workspace = true
+name = "ic-heap-bytes-derive"
+version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+proc-macro = true
+
+[dependencies]
+darling = "0.20.11"
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { version = "2.0.100", features = ["derive"] }

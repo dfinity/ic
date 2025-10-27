@@ -10,13 +10,13 @@ use crate::logs::INFO;
 use crate::management::IcCanisterRuntime;
 use crate::management::{CallError, CanisterRuntime, Reason};
 use crate::state::{
-    mutate_state, read_state, Archive, Canister, Canisters, CanistersMetadata, Index, Ledger,
-    LedgerSuiteVersion, ManageSingleCanister, ManagedCanisterStatus, State, TokenId, TokenSymbol,
-    WasmHash,
+    Archive, Canister, Canisters, CanistersMetadata, Index, Ledger, LedgerSuiteVersion,
+    ManageSingleCanister, ManagedCanisterStatus, State, TokenId, TokenSymbol, WasmHash,
+    mutate_state, read_state,
 };
 use crate::storage::{
-    read_wasm_store, validate_wasm_hashes, wasm_store_contain, wasm_store_try_get, StorableWasm,
-    TaskQueue, WasmHashError, WasmStore, WasmStoreError, TASKS,
+    StorableWasm, TASKS, TaskQueue, WasmHashError, WasmStore, WasmStoreError, read_wasm_store,
+    validate_wasm_hashes, wasm_store_contain, wasm_store_try_get,
 };
 use candid::{CandidType, Encode, Nat, Principal};
 use futures::future;
@@ -178,7 +178,7 @@ pub fn global_timer() -> u64 {
 
 pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
     if let Some(task) = pop_if_ready(&runtime) {
-        ic_cdk::spawn(run_task(task, runtime));
+        ic_cdk::futures::spawn_017_compat(run_task(task, runtime));
     }
 }
 
@@ -459,14 +459,17 @@ impl UpgradeOrchestratorArgs {
         wasm_store: &WasmStore,
         arg: UpgradeArg,
     ) -> Result<UpgradeOrchestratorArgs, InvalidUpgradeArgError> {
-        let [ledger_compressed_wasm_hash, index_compressed_wasm_hash, archive_compressed_wasm_hash] =
-            validate_wasm_hashes(
-                wasm_store,
-                arg.ledger_compressed_wasm_hash.as_deref(),
-                arg.index_compressed_wasm_hash.as_deref(),
-                arg.archive_compressed_wasm_hash.as_deref(),
-            )
-            .map_err(InvalidUpgradeArgError::WasmHashError)?;
+        let [
+            ledger_compressed_wasm_hash,
+            index_compressed_wasm_hash,
+            archive_compressed_wasm_hash,
+        ] = validate_wasm_hashes(
+            wasm_store,
+            arg.ledger_compressed_wasm_hash.as_deref(),
+            arg.index_compressed_wasm_hash.as_deref(),
+            arg.archive_compressed_wasm_hash.as_deref(),
+        )
+        .map_err(InvalidUpgradeArgError::WasmHashError)?;
         Ok(UpgradeOrchestratorArgs {
             ledger_compressed_wasm_hash,
             index_compressed_wasm_hash,
@@ -725,7 +728,8 @@ async fn maybe_top_up<R: CanisterRuntime>(runtime: &R) -> Result<(), TaskError> 
         "[maybe_top_up]: Managed canisters {}. \
         Cycles management: {cycles_management:?}. \
     Required amount of cycles for orchestrator to be able to top-up: {minimum_orchestrator_cycles}. \
-    Monitored canister minimum target cycles balance {minimum_monitored_canister_cycles}", display_iter(&managed_principals)
+    Monitored canister minimum target cycles balance {minimum_monitored_canister_cycles}",
+        display_iter(&managed_principals)
     );
 
     let mut orchestrator_cycle_balance = match runtime.canister_cycles(runtime.id()).await {
@@ -1351,7 +1355,7 @@ fn display_iter<I: Display, T: IntoIterator<Item = I>>(v: T) -> String {
     format!(
         "[{}]",
         v.into_iter()
-            .map(|x| format!("{}", x))
+            .map(|x| format!("{x}"))
             .collect::<Vec<_>>()
             .join(", ")
     )

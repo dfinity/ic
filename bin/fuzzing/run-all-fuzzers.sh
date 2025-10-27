@@ -17,7 +17,7 @@ EOF
         exit 0
         ;;
     --libfuzzer)
-        bazel build --config=fuzzing --build_tag_filters=libfuzzer //rs/...
+        bazel build --config=lint --config=fuzzing --build_tag_filters=libfuzzer //rs/...
         LIST_OF_FUZZERS=$(bazel query 'attr(tags, "libfuzzer", //rs/...) except attr(tags, "sandbox_libfuzzer", //rs/...)')
         for FUZZER in $LIST_OF_FUZZERS; do
             bazel run --config=fuzzing $FUZZER -- -runs=$MAX_EXECUTIONS
@@ -30,7 +30,7 @@ EOF
 
     --afl)
         LIST_OF_FUZZERS=$(bazel query 'attr(tags, "afl", //rs/...)')
-        bazel build --config=afl //rs/...
+        bazel build --config=lint --config=afl //rs/...
         for FUZZER in $LIST_OF_FUZZERS; do
             AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1 bazel run --config=afl $FUZZER -- -E $MAX_EXECUTIONS
         done

@@ -18,7 +18,6 @@ DEPENDENCIES = [
     "@crate_index//:base64",
     "@crate_index//:cached",
     "@crate_index//:hex",
-    "@crate_index//:lazy_static",
     "@crate_index//:parking_lot",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",

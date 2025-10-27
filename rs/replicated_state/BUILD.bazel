@@ -1,123 +1,88 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_with_binary")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-error-types",
-    "//rs/bitcoin/replica_types",
-    "//rs/canonical_state/certification_version",
-    "//rs/config",
-    "//rs/crypto/sha2",
-    "//rs/interfaces",
-    "//rs/limits",
-    "//rs/monitoring/logger",
-    "//rs/monitoring/metrics",
-    "//rs/phantom_newtype",
-    "//rs/protobuf",
-    "//rs/registry/routing_table",
-    "//rs/registry/subnet_features",
-    "//rs/registry/subnet_type",
-    "//rs/sys",
-    "//rs/types/base_types",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
-    "//rs/types/wasm_types",
-    "//rs/utils",
-    "//rs/utils/validate_eq",
-    "@crate_index//:bit-vec",
-    "@crate_index//:cvt",
-    "@crate_index//:ic-btc-interface",
-    "@crate_index//:itertools",
-    "@crate_index//:lazy_static",
-    "@crate_index//:libc",
-    "@crate_index//:maplit",
-    "@crate_index//:nix",
-    "@crate_index//:num-traits",
-    "@crate_index//:prometheus",
-    "@crate_index//:prost",
-    "@crate_index//:rand",
-    "@crate_index//:rand_chacha",
-    "@crate_index//:rayon",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:slog",
-    "@crate_index//:static_assertions",
-    "@crate_index//:strum",
-    "@crate_index//:tempfile",
-    "@crate_index//:uuid",
-]
-
-MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/utils/validate_eq_derive",
-    "@crate_index//:strum_macros",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-ed25519",
-    "//rs/criterion_time",
-    "//rs/crypto/test_utils/canister_threshold_sigs",
-    "//rs/crypto/test_utils/keys",
-    "//rs/crypto/test_utils/reproducible_rng",
-    "//rs/test_utilities/io",
-    "//rs/test_utilities/metrics",
-    "//rs/test_utilities/state",
-    "//rs/test_utilities/time",
-    "//rs/test_utilities/types",
-    "@crate_index//:assert_matches",
-    "@crate_index//:criterion",
-    "@crate_index//:proptest",
-    "@crate_index//:scoped_threadpool",
-    "@crate_index//:serde_cbor",
-]
-
-MACRO_DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:test-strategy",
-]
-
-BIN_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/criterion_time",
-    "//rs/sys",
-    "@crate_index//:criterion",
-    "@crate_index//:scoped_threadpool",
-]
-
-ALIASES = {}
-
 rust_library(
     name = "replicated_state",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
     crate_features = select({
         "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
         "//conditions:default": [],
     }),
     crate_name = "ic_replicated_state",
-    proc_macro_deps = MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "//rs/utils/validate_eq_derive",
+        "@crate_index//:strum_macros",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES + select({
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//rs/bitcoin/replica_types",
+        "//rs/canonical_state/certification_version",
+        "//rs/config",
+        "//rs/crypto/sha2",
+        "//rs/interfaces",
+        "//rs/limits",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/phantom_newtype",
+        "//rs/protobuf",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_features",
+        "//rs/registry/subnet_type",
+        "//rs/sys",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/types/wasm_types",
+        "//rs/utils",
+        "//rs/utils/validate_eq",
+        "@crate_index//:bit-vec",
+        "@crate_index//:cvt",
+        "@crate_index//:itertools",
+        "@crate_index//:lazy_static",
+        "@crate_index//:libc",
+        "@crate_index//:maplit",
+        "@crate_index//:nix",
+        "@crate_index//:num-traits",
+        "@crate_index//:prometheus",
+        "@crate_index//:prost",
+        "@crate_index//:rand",
+        "@crate_index//:rand_chacha",
+        "@crate_index//:rayon",
+        "@crate_index//:serde",
+        "@crate_index//:slog",
+        "@crate_index//:static_assertions",
+        "@crate_index//:strum",
+        "@crate_index//:tempfile",
+    ] + select({
         "//bazel:fuzzing_code_enabled": [
             "//rs/test_utilities/io",
             "//rs/test_utilities/metrics",
             "@crate_index//:arbitrary",
             "@crate_index//:assert_matches",
-            "@crate_index//:proptest",
         ],
         "//conditions:default": [],
     }),
 )
 
-rust_binary(
+rust_bench(
     name = "replicated_state_allocator_bench",
+    testonly = True,
     srcs = [
         "benches/bench_allocator.rs",
     ],
-    deps = [":replicated_state"] + BIN_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":replicated_state",
+        "//rs/criterion_time",
+        "//rs/sys",
+        "@crate_index//:criterion",
+        "@crate_index//:scoped_threadpool",
+    ],
 )
 
 rust_bench(
@@ -126,22 +91,64 @@ rust_bench(
     srcs = [
         "benches/bench_intmap.rs",
     ],
-    deps = [":replicated_state"] + BIN_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        ":replicated_state",
+        "//rs/criterion_time",
+        "@crate_index//:criterion",
+    ],
 )
 
 rust_test_with_binary(
     name = "replicated_state_test",
-    aliases = ALIASES,
     binary_name = "replicated_state_test_binary",
     crate = ":replicated_state",
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
+    deps = [
+        # Keep sorted.
+        "//packages/ic-ed25519",
+        "//rs/crypto/test_utils/canister_threshold_sigs",
+        "//rs/crypto/test_utils/keys",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/protobuf",
+        "//rs/test_utilities/io",
+        "//rs/test_utilities/metrics",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/types",
+        "//rs/types/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:proptest",
+        "@crate_index//:serde",
+        "@crate_index//:serde_cbor",
+    ],
 )
 
 rust_test_suite(
     name = "replicated_state_integration",
     srcs = glob(["tests/**/*.rs"]),
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":replicated_state"] + DEPENDENCIES + DEV_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
+    deps = [
+        # Keep sorted.
+        ":replicated_state",
+        "//packages/ic-error-types",
+        "//rs/bitcoin/replica_types",
+        "//rs/protobuf",
+        "//rs/registry/routing_table",
+        "//rs/registry/subnet_type",
+        "//rs/test_utilities/state",
+        "//rs/test_utilities/types",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "@crate_index//:assert_matches",
+        "@crate_index//:maplit",
+        "@crate_index//:proptest",
+        "@crate_index//:strum",
+    ],
 )

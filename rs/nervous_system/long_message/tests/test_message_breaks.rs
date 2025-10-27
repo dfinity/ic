@@ -58,11 +58,7 @@ fn test_next_message_if_over_instructions() {
     )
     .unwrap_err();
     assert!(err.contains(
-        format!(
-            "Canister exceeded the limit of {} instructions",
-            instructions_limit
-        )
-        .as_str()
+        format!("Canister exceeded the limit of {instructions_limit} instructions").as_str()
     ));
 
     update_with_sender::<BreakMessageParams, ()>(
@@ -100,7 +96,7 @@ fn test_upper_bound() {
         PrincipalId::new_anonymous(),
     )
     .unwrap_err();
-    assert!(err.contains("OverCallContextError"), "Error was: {:?}", err);
+    assert!(err.contains("OverCallContextError"), "Error was: {err:?}");
 
     update_with_sender::<BreakMessageParams, ()>(
         &state_machine,

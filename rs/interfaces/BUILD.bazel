@@ -2,49 +2,44 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-error-types",
-    "//rs/crypto/interfaces/sig_verification",
-    "//rs/interfaces/state_manager",
-    "//rs/phantom_newtype",
-    "//rs/protobuf",
-    "//rs/registry/provisional_whitelist",
-    "//rs/registry/subnet_type",
-    "//rs/sys",
-    "//rs/types/base_types",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
-    "//rs/types/wasm_types",
-    "@crate_index//:prost",
-    "@crate_index//:serde",
-    "@crate_index//:strum",
-    "@crate_index//:thiserror",
-    "@crate_index//:tower",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/crypto/internal/crypto_service_provider/csp_proptest_utils",
-    "@crate_index//:proptest",
-]
-
-PROC_MACRO_DEPENDENCIES = [
-    # Keep sorted.
-    "@crate_index//:strum_macros",
-]
-
 rust_library(
     name = "interfaces",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_interfaces",
-    proc_macro_deps = PROC_MACRO_DEPENDENCIES,
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:strum_macros",
+    ],
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//packages/ic-heap-bytes",
+        "//rs/crypto/interfaces/sig_verification",
+        "//rs/interfaces/state_manager",
+        "//rs/phantom_newtype",
+        "//rs/protobuf",
+        "//rs/registry/provisional_whitelist",
+        "//rs/registry/subnet_type",
+        "//rs/sys",
+        "//rs/types/base_types",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/types/wasm_types",
+        "@crate_index//:prost",
+        "@crate_index//:serde",
+        "@crate_index//:strum",
+        "@crate_index//:thiserror",
+        "@crate_index//:tower",
+    ],
 )
 
 rust_test(
     name = "interfaces_test",
     crate = ":interfaces",
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/crypto/internal/crypto_service_provider/csp_proptest_utils",
+        "@crate_index//:proptest",
+    ],
 )

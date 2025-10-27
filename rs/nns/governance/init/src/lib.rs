@@ -9,6 +9,8 @@ use std::path::Path;
 
 use ic_base_types::PrincipalId;
 use ic_nns_common::types::NeuronId;
+#[cfg(not(target_arch = "wasm32"))]
+use ic_nns_governance_api::Visibility;
 use ic_nns_governance_api::{
     Governance, NetworkEconomics, Neuron, XdrConversionRate as XdrConversionRatePb,
 };
@@ -94,7 +96,7 @@ impl GovernanceCanisterInitPayloadBuilder {
             TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
             TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_ID, TEST_NEURON_3_OWNER_PRINCIPAL,
         };
-        use ic_nns_governance_api::{neuron::DissolveState, Neuron};
+        use ic_nns_governance_api::{Neuron, neuron::DissolveState};
         use std::time::SystemTime;
 
         // This assumption here is that with_current_time is used.
@@ -121,6 +123,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 account: subaccount,
                 not_for_profit: true,
                 voting_power_refreshed_timestamp_seconds,
+                visibility: Some(Visibility::Public as i32),
                 ..Default::default()
             }
         };
@@ -148,6 +151,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 account: subaccount,
                 not_for_profit: false,
                 voting_power_refreshed_timestamp_seconds,
+                visibility: Some(Visibility::Public as i32),
                 ..Default::default()
             }
         };
@@ -167,6 +171,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 account: subaccount,
                 not_for_profit: false,
                 voting_power_refreshed_timestamp_seconds,
+                visibility: Some(Visibility::Public as i32),
                 ..Default::default()
             }
         };
@@ -213,8 +218,7 @@ impl GovernanceCanisterInitPayloadBuilder {
             assert_eq!(
                 self.proto.neurons.insert(id, neuron),
                 None,
-                "There is more than one neuron with the same id ({:?}).",
-                id
+                "There is more than one neuron with the same id ({id:?})."
             );
         }
         self
@@ -224,6 +228,13 @@ impl GovernanceCanisterInitPayloadBuilder {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn with_network_economics(&mut self, network_economics: NetworkEconomics) -> &mut Self {
         self.proto.economics = Some(network_economics);
+        self
+    }
+
+    /// Initializes the governance canister with the given genesis timestamp.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_genesis_timestamp_seconds(&mut self, genesis_timestamp_seconds: u64) -> &mut Self {
+        self.proto.genesis_timestamp_seconds = genesis_timestamp_seconds;
         self
     }
 
@@ -242,15 +253,15 @@ impl GovernanceCanisterInitPayloadBuilder {
         use ic_nervous_system_common::ledger;
         use ic_nns_common::types::NeuronId;
         use ic_nns_governance_api::{
-            neuron::{DissolveState, Followees},
             Neuron, Topic,
+            neuron::{DissolveState, Followees},
         };
         use std::str::FromStr;
 
         let mut reader = ReaderBuilder::new()
             .delimiter(b';')
             .from_path(csv_file)
-            .unwrap_or_else(|_| panic!("error creating a csv reader at path: {:?}", csv_file));
+            .unwrap_or_else(|_| panic!("error creating a csv reader at path: {csv_file:?}"));
 
         {
             let headers = reader.headers().expect("error reading CSV header row");
@@ -303,7 +314,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                 })
                 .collect();
             if followees.len() > 1 {
-                println!("followees of {:?} : {:?}", principal_id, followees)
+                println!("followees of {principal_id:?} : {followees:?}")
             }
 
             let neuron_id = NeuronIdProto::from(neuron_id);
@@ -336,6 +347,7 @@ impl GovernanceCanisterInitPayloadBuilder {
                     .iter()
                     .cloned()
                     .collect(),
+                visibility: Some(Visibility::Public as i32),
                 ..Default::default()
             };
 

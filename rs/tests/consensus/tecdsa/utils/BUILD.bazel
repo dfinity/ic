@@ -35,7 +35,6 @@ rust_library(
         "@crate_index//:ed25519-dalek",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-cdk",
-        "@crate_index//:ic-management-canister-types",
         "@crate_index//:ic-vetkeys",
         "@crate_index//:ic_bls12_381",
         "@crate_index//:k256",

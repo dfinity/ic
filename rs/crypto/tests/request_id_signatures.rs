@@ -6,14 +6,14 @@ use ic_crypto_internal_csp::vault::vault_from_config;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_standalone_sig_verifier::{
-    ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der, user_public_key_from_bytes,
-    KeyBytesContentType,
+    KeyBytesContentType, ecdsa_p256_signature_from_der_bytes, ed25519_public_key_to_der,
+    user_public_key_from_bytes,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoError, UserPublicKey};
-use ic_types::crypto::{SignableMock, DOMAIN_IC_REQUEST};
+use ic_types::crypto::{DOMAIN_IC_REQUEST, SignableMock};
 use ic_types::messages::MessageId;
 use rand::{CryptoRng, Rng};
 use std::sync::Arc;
@@ -29,9 +29,11 @@ fn should_verify_request_id_ed25519_signature() {
     let (signature, public_key) = ed25519_signature_and_public_key(&request_id, rng);
     CryptoConfig::run_with_temp_config(|config| {
         let crypto = crypto_component(&config);
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&signature, &request_id, &public_key)
-            .is_ok());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&signature, &request_id, &public_key)
+                .is_ok()
+        );
     })
 }
 
@@ -80,9 +82,11 @@ fn should_correctly_verify_sig_with_der_encoded_ed25519_pk() {
         };
         CryptoConfig::run_with_temp_config(|config| {
             let crypto = crypto_component(&config);
-            assert!(crypto
-                .verify_basic_sig_by_public_key(&sig, &msg, &pk)
-                .is_ok());
+            assert!(
+                crypto
+                    .verify_basic_sig_by_public_key(&sig, &msg, &pk)
+                    .is_ok()
+            );
         })
     }
 }
@@ -129,9 +133,11 @@ fn should_fail_verifying_corrupted_sig_with_der_encoded_ed25519_pk() {
     };
     CryptoConfig::run_with_temp_config(|config| {
         let crypto = crypto_component(&config);
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&corrupted_sig, &msg, &pk)
-            .is_err());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&corrupted_sig, &msg, &pk)
+                .is_err()
+        );
     })
 }
 
@@ -149,9 +155,11 @@ fn should_fail_verifying_sig_on_wrong_msg_with_der_encoded_ed25519_pk() {
     };
     CryptoConfig::run_with_temp_config(|config| {
         let crypto = crypto_component(&config);
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&sig, &wrong_msg, &pk)
-            .is_err());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&sig, &wrong_msg, &pk)
+                .is_err()
+        );
     })
 }
 
@@ -162,9 +170,11 @@ fn should_verify_request_id_ecdsa_signature() {
     let (signature, public_key) = ecdsa_secp256k1_signature_and_public_key(&request_id, rng);
     CryptoConfig::run_with_temp_config(|config| {
         let crypto = crypto_component(&config);
-        assert!(crypto
-            .verify_basic_sig_by_public_key(&signature, &request_id, &public_key)
-            .is_ok());
+        assert!(
+            crypto
+                .verify_basic_sig_by_public_key(&signature, &request_id, &public_key)
+                .is_ok()
+        );
     });
     let (signature, public_key) = ecdsa_secp256r1_signature_and_public_key(&request_id, rng);
     CryptoConfig::run_with_temp_config(|config| {
@@ -203,8 +213,7 @@ fn should_correctly_parse_cose_encoded_der_wrapped_ecdsa_p256_pk() {
         assert_eq!(
             pk.algorithm_id,
             AlgorithmId::EcdsaP256,
-            "Failed for pk_hex: {}",
-            pk_cose_der_hex
+            "Failed for pk_hex: {pk_cose_der_hex}"
         );
         assert_eq!(
             bytes_type,
@@ -243,8 +252,7 @@ fn should_correctly_verify_sig_with_der_wrapped_cose_encoded_ecdsa_p256_pk() {
                 crypto
                     .verify_basic_sig_by_public_key(&sig, &msg, &pk)
                     .is_ok(),
-                "Failed for pk_hex: {}",
-                pk_der_hex
+                "Failed for pk_hex: {pk_der_hex}"
             );
         })
     }

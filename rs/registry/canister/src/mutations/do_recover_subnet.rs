@@ -11,7 +11,7 @@ use crate::{
     registry::{Registry, Version},
 };
 use candid::{CandidType, Deserialize, Encode};
-use dfn_core::api::{call, CanisterId};
+use dfn_core::api::{CanisterId, call};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
@@ -25,7 +25,7 @@ use ic_registry_keys::{
 };
 use ic_registry_subnet_features::KeyConfig as KeyConfigInternal;
 use ic_registry_transport::{
-    pb::v1::{registry_mutation, RegistryMutation},
+    pb::v1::{RegistryMutation, registry_mutation},
     upsert,
 };
 use on_wire::bytes;
@@ -36,7 +36,7 @@ use std::convert::TryFrom;
 impl Registry {
     /// Recover a subnet
     pub async fn do_recover_subnet(&mut self, payload: RecoverSubnetPayload) {
-        println!("{}do_recover_subnet: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_recover_subnet: {payload:?}");
 
         self.validate_recover_subnet_payload(&payload);
 
@@ -153,8 +153,7 @@ impl Registry {
                 pre_call_registry_version,
                 post_call_registry_version,
                 format!(
-                    "Subnet with ID {} was updated during the `setup_initial_dkg` call",
-                    subnet_id
+                    "Subnet with ID {subnet_id} was updated during the `setup_initial_dkg` call"
                 ),
             );
 
@@ -164,8 +163,7 @@ impl Registry {
                 pre_call_registry_version,
                 post_call_registry_version,
                 format!(
-                    "Threshold Signing Pubkey for Subnet {} was updated during the `setup_initial_dkg` call",
-                    subnet_id
+                    "Threshold Signing Pubkey for Subnet {subnet_id} was updated during the `setup_initial_dkg` call"
                 ),
             );
 
@@ -175,8 +173,7 @@ impl Registry {
                 pre_call_registry_version,
                 post_call_registry_version,
                 format!(
-                    "CUP for Subnet {} was updated during the `setup_initial_dkg` call",
-                    subnet_id
+                    "CUP for Subnet {subnet_id} was updated during the `setup_initial_dkg` call"
                 ),
             );
 
@@ -230,10 +227,7 @@ impl Registry {
         let initial_chain_key_config =
             InitialChainKeyConfigInternal::try_from(initial_chain_key_config.clone())
                 .unwrap_or_else(|err| {
-                    panic!(
-                        "{}Invalid RecoverSubnetPayload.chain_key_config: {}",
-                        LOG_PREFIX, err
-                    );
+                    panic!("{LOG_PREFIX}Invalid RecoverSubnetPayload.chain_key_config: {err}");
                 });
 
         let own_subnet_id = Some(payload.subnet_id);
@@ -328,8 +322,7 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
         if !key_config_validation_errors.is_empty() {
             let key_config_validation_errors = key_config_validation_errors.join(", ");
             return Err(format!(
-                "Invalid InitialChainKeyConfig.key_configs: {}",
-                key_config_validation_errors
+                "Invalid InitialChainKeyConfig.key_configs: {key_config_validation_errors}"
             ));
         }
 
@@ -437,7 +430,7 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
         };
 
         let key_config = KeyConfigInternal::try_from(key_config)
-            .map_err(|err| format!("Invalid KeyConfigRequest.key_config: {}", err))?;
+            .map_err(|err| format!("Invalid KeyConfigRequest.key_config: {err}"))?;
 
         Ok(Self {
             key_config,
@@ -472,10 +465,7 @@ fn get_record_version_as_of_registry_version(
         .get(record_key.as_bytes(), version)
         .map(|record| record.version)
         .unwrap_or_else(|| {
-            panic!(
-                "{}Record for {} not found in registry",
-                LOG_PREFIX, record_key
-            );
+            panic!("{LOG_PREFIX}Record for {record_key} not found in registry");
         })
 }
 
@@ -488,7 +478,7 @@ mod test {
             prepare_registry_with_nodes,
         },
         mutations::do_recover_subnet::{
-            panic_if_record_changed_across_versions, RecoverSubnetPayload,
+            RecoverSubnetPayload, panic_if_record_changed_across_versions,
         },
         registry::Registry,
     };

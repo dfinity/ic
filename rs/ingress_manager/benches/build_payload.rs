@@ -8,8 +8,9 @@
 //! We vary the pool size count between 15,000 and 105,000, with 10,000
 //! increments.
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
+use ic_crypto_temp_crypto::temp_crypto_component_with_fake_registry;
 use ic_ingress_manager::{IngressManager, RandomStateKind};
 use ic_interfaces::{
     ingress_manager::IngressSelector,
@@ -30,7 +31,7 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::{
-    artifact_pool_config::with_test_pool_config, crypto::temp_crypto_component_with_fake_registry,
+    artifact_pool_config::with_test_pool_config,
     cycles_account_manager::CyclesAccountManagerBuilder,
 };
 use ic_test_utilities_registry::test_subnet_record;
@@ -41,11 +42,11 @@ use ic_test_utilities_types::{
     messages::SignedIngressBuilder,
 };
 use ic_types::{
+    CanisterId, Cycles, Height, NumBytes, PrincipalId, RegistryVersion, SubnetId, Time,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     ingress::IngressStatus,
     malicious_flags::MaliciousFlags,
-    CanisterId, Cycles, Height, NumBytes, PrincipalId, RegistryVersion, SubnetId, Time,
 };
 use pprof::criterion::{Output, PProfProfiler};
 use std::{

@@ -51,13 +51,13 @@ impl std::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::IoError { source, io_error } => {
-                write!(f, "Failed to read config from {}: {}", source, io_error)
+                write!(f, "Failed to read config from {source}: {io_error}")
             }
             Self::ParseError { source, message } => {
-                write!(f, "Failed to parse config from {}: {}", source, message)
+                write!(f, "Failed to parse config from {source}: {message}")
             }
             Self::ValidationError { source, message } => {
-                write!(f, "Failed to validate config from {}: {}", source, message)
+                write!(f, "Failed to validate config from {source}: {message}")
             }
         }
     }
@@ -68,7 +68,7 @@ impl std::fmt::Display for ConfigSource {
         match self {
             ConfigSource::Default => write!(f, "Default"),
             ConfigSource::StdIn => write!(f, "<stdin>"),
-            ConfigSource::Literal(s) => write!(f, "string '{}'", s),
+            ConfigSource::Literal(s) => write!(f, "string '{s}'"),
             ConfigSource::File(path_buf) => write!(f, "file '{}'", path_buf.display()),
         }
     }

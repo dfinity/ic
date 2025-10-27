@@ -54,7 +54,9 @@ pub fn wait_until_sync_is_completed(
             return;
         }
     }
-    panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}", num_blocks_synced, chain_length);
+    panic!(
+        "The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {num_blocks_synced} but the Ledger chain length is {chain_length}"
+    );
 }
 
 fn get_blocks<I>(
@@ -79,7 +81,7 @@ where
         .unwrap();
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to get_blocks failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to get_blocks failed: {s:#?}"),
     };
     Decode!(&result, GetBlocksResponse).unwrap()
 }

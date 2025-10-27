@@ -1,10 +1,10 @@
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
-use prometheus::{Histogram, IntCounter};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
+use prometheus::{Histogram, HistogramVec, IntCounter};
 
 #[derive(Clone)]
 pub(crate) struct DelegationManagerMetrics {
     pub(crate) update_duration: Histogram,
-    pub(crate) delegation_size: Histogram,
+    pub(crate) delegation_size: HistogramVec,
     pub(crate) updates: IntCounter,
     pub(crate) errors: IntCounter,
 }
@@ -22,11 +22,12 @@ impl DelegationManagerMetrics {
                 // (1ms, 2ms, 5ms, ..., 10s, 20s, 50s)
                 decimal_buckets(-3, 1),
             ),
-            delegation_size: metrics_registry.histogram(
+            delegation_size: metrics_registry.histogram_vec(
                 "nns_delegation_manager_delegation_size_bytes",
                 "How big is the delegation, in bytes",
                 // (1, 2, 5, ..., 1MB, 2MB, 5MB)
                 decimal_buckets(0, 6),
+                &["delegation_format"],
             ),
             errors: metrics_registry.int_counter(
                 "nns_delegation_manager_errors_total",

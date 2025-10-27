@@ -65,7 +65,7 @@ fn are_in_the_same_subnet(ipv4_addresses: Vec<String>, prefix_length: u32) -> bo
 // Helper function to extract the IPv4 subnet bytes of the given IP address
 fn extract_subnet_bytes(ipv4_address: &str, subnet_mask: Ipv4Addr) -> Vec<u8> {
     Ipv4Addr::from_str(ipv4_address)
-        .unwrap_or_else(|_| panic!("Failed to parse IP address: {}", ipv4_address))
+        .unwrap_or_else(|_| panic!("Failed to parse IP address: {ipv4_address}"))
         .octets()
         .iter()
         .zip(subnet_mask.octets().iter())

@@ -2,8 +2,8 @@ use candid::{Decode, Encode, Principal};
 use colored::{ColoredString, Colorize};
 use ic_agent::Agent;
 use ic_neurons_fund::{
-    rescale_to_icp, rescale_to_icp_e8s, InvertibleFunction, MatchedParticipationFunction,
-    MatchingFunction, PolynomialNeuronsFundParticipation,
+    InvertibleFunction, MatchedParticipationFunction, MatchingFunction,
+    PolynomialNeuronsFundParticipation, rescale_to_icp, rescale_to_icp_e8s,
 };
 use ic_sns_governance::pb::v1::{GetMetadataRequest, GetMetadataResponse};
 use ic_sns_swap::pb::v1::{
@@ -11,8 +11,8 @@ use ic_sns_swap::pb::v1::{
 };
 use rgb::RGB8;
 use rust_decimal::{
-    prelude::{FromPrimitive, ToPrimitive},
     Decimal,
+    prelude::{FromPrimitive, ToPrimitive},
 };
 use textplots::{Chart, ColorPlot, Shape};
 
@@ -92,7 +92,7 @@ async fn main() -> Result<(), String> {
         swap_init.neurons_fund_participation_constraints.unwrap();
     let participation: PolynomialNeuronsFundParticipation =
         neurons_fund_participation_constraints.try_into().unwrap();
-    println!("{:#?}", participation);
+    println!("{participation:#?}");
 
     let ideal_matching_function = participation.ideal_matched_participation_function.clone();
     let max_x_value = dec_to_f32(rescale_to_icp(
@@ -119,21 +119,18 @@ async fn main() -> Result<(), String> {
         e8s_to_f32(participation.min_direct_participation_threshold_icp_e8s);
 
     println!(
-        "+----------------------- {} SNS Swap: neurons_fund_participation_icp = {} -----------------------+",
-        sns_name,
-        neurons_fund_participation_icp,
+        "+----------------------- {sns_name} SNS Swap: neurons_fund_participation_icp = {neurons_fund_participation_icp} -----------------------+",
     );
     println!(
         "| {}                         {}",
         colored(
             &format!(
-                "min_direct_participation_threshold_icp = {}",
-                min_direct_participation_threshold_icp
+                "min_direct_participation_threshold_icp = {min_direct_participation_threshold_icp}"
             ),
             MINT,
         ),
         colored(
-            &format!("direct_participation_icp = {}", direct_participation_icp),
+            &format!("direct_participation_icp = {direct_participation_icp}"),
             PINK,
         ),
     );
@@ -170,7 +167,7 @@ async fn main() -> Result<(), String> {
     )
     .display();
 
-    println!("{:#?}", swap_derived_state);
+    println!("{swap_derived_state:#?}");
 
     Ok(())
 }

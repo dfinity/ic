@@ -4,7 +4,7 @@
 [package]
 name = "ic-nervous-system-common-test-canister"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 build-info = { workspace = true }

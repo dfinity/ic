@@ -1,8 +1,8 @@
 mod csp_tests {
-    use crate::api::CspSigner;
     use crate::Csp;
     use crate::CspPublicKey;
     use crate::KeyId;
+    use crate::api::CspSigner;
     use ic_types::crypto::AlgorithmId;
 
     mod csp_public_key_store {

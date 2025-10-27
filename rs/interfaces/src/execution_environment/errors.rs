@@ -1,13 +1,14 @@
 use ic_base_types::{NumBytes, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
-use ic_types::{methods::WasmMethod, CanisterId, Cycles, MemoryDiskBytes, NumInstructions};
+use ic_heap_bytes::DeterministicHeapBytes;
+use ic_types::{CanisterId, Cycles, DiskBytes, NumInstructions, methods::WasmMethod};
 use ic_wasm_types::{
-    doc_ref, AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError,
+    AsErrorHelp, ErrorHelp, WasmEngineError, WasmInstrumentationError, WasmValidationError, doc_ref,
 };
 use serde::{Deserialize, Serialize};
 
 /// Various traps that a canister can create.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum TrapCode {
     StackOverflow,
     HeapOutOfBounds,
@@ -46,7 +47,7 @@ impl std::fmt::Display for TrapCode {
 ///
 /// Should be used as the wrapped error by various components that need to
 /// handle such cases.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
 pub struct CanisterOutOfCyclesError {
     pub canister_id: CanisterId,
     pub available: Cycles,
@@ -60,18 +61,21 @@ impl std::error::Error for CanisterOutOfCyclesError {}
 impl std::fmt::Display for CanisterOutOfCyclesError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let msg = if self.reveal_top_up {
-            format!("Canister {} is out of cycles: please top up the canister with at least {} additional cycles",
-            self.canister_id, (self.threshold + self.requested) - self.available)
+            format!(
+                "Canister {} is out of cycles: please top up the canister with at least {} additional cycles",
+                self.canister_id,
+                (self.threshold + self.requested) - self.available
+            )
         } else {
             format!("Canister {} is out of cycles", self.canister_id)
         };
-        write!(f, "{}", msg)
+        write!(f, "{msg}")
     }
 }
 
 /// Backtrace coming from canister code. Suitable for displaying to users for
 /// assistance in debugging canisters.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub struct CanisterBacktrace(pub Vec<(u32, Option<String>)>);
 
 impl std::fmt::Display for CanisterBacktrace {
@@ -79,8 +83,8 @@ impl std::fmt::Display for CanisterBacktrace {
         writeln!(f, "Canister Backtrace:")?;
         for (index, name) in &self.0 {
             match name {
-                Some(name) => writeln!(f, "{}", name)?,
-                None => writeln!(f, "unknown function at index {}", index)?,
+                Some(name) => writeln!(f, "{name}")?,
+                None => writeln!(f, "unknown function at index {index}")?,
             }
         }
         Ok(())
@@ -88,7 +92,7 @@ impl std::fmt::Display for CanisterBacktrace {
 }
 
 /// Errors returned by the Hypervisor.
-#[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
+#[derive(Clone, DeterministicHeapBytes, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum HypervisorError {
     /// The message sent to the canister refers a function not found in the
     /// table. The payload contains the index of the table and the index of the
@@ -220,8 +224,7 @@ impl std::fmt::Display for HypervisorError {
         match self {
             Self::FunctionNotFound(table_idx, func_idx) => write!(
                 f,
-                "Canister requested to invoke a non-existent Wasm function {} from table {}",
-                func_idx, table_idx
+                "Canister requested to invoke a non-existent Wasm function {func_idx} from table {table_idx}"
             ),
             Self::MethodNotFound(wasm_method) => {
                 let kind = match wasm_method {
@@ -239,25 +242,24 @@ impl std::fmt::Display for HypervisorError {
                 )
             }
             Self::ToolchainContractViolation { error, .. } => {
-                write!(f, "Canister violated contract: {}", error)
+                write!(f, "Canister violated contract: {error}")
             }
             Self::UserContractViolation { error, .. } => {
-                write!(f, "Canister violated contract: {}", error)
+                write!(f, "Canister violated contract: {error}")
             }
             Self::InstructionLimitExceeded(limit) => write!(
                 f,
-                "Canister exceeded the limit of {} instructions for single message execution.",
-                limit
+                "Canister exceeded the limit of {limit} instructions for single message execution."
             ),
-            Self::InvalidWasm(err) => write!(f, "Canister's Wasm module is not valid: {}", err),
+            Self::InvalidWasm(err) => write!(f, "Canister's Wasm module is not valid: {err}"),
             Self::InstrumentationFailed(err) => {
-                write!(f, "Could not instrument wasm module of canister: {}", err)
+                write!(f, "Could not instrument wasm module of canister: {err}")
             }
             Self::Trapped {
                 trap_code,
                 backtrace,
             } => {
-                write!(f, "Canister trapped: {}", trap_code)?;
+                write!(f, "Canister trapped: {trap_code}")?;
                 // TODO(EXC-1727):
                 // When the wasm_backtrace feature is enabled, we can provide a
                 // more helpful message on how to get backtraces. E.g.:
@@ -267,15 +269,15 @@ impl std::fmt::Display for HypervisorError {
                 // and call it from a canister with permission to view
                 // backtraces."
                 if let Some(bt) = backtrace {
-                    write!(f, "\n{}", bt)
+                    write!(f, "\n{bt}")
                 } else {
                     Ok(())
                 }
             }
             Self::CalledTrap { message, backtrace } => {
-                write!(f, "Canister called `ic0.trap` with message: '{}'", message)?;
+                write!(f, "Canister called `ic0.trap` with message: '{message}'")?;
                 if let Some(bt) = backtrace {
-                    write!(f, "\n{}", bt)
+                    write!(f, "\n{bt}")
                 } else {
                     Ok(())
                 }
@@ -290,22 +292,24 @@ impl std::fmt::Display for HypervisorError {
             }
             // `CANISTER_REJECT` reject code.
             Self::MessageRejected => write!(f, "Canister rejected the message"),
-            Self::InsufficientCyclesBalance(err) => write!(f, "{}", err),
+            Self::InsufficientCyclesBalance(err) => write!(f, "{err}"),
             Self::Cleanup {
                 callback_err,
                 cleanup_err,
             } => {
                 write!(
                     f,
-                    "{}\n\ncall_on_cleanup also failed:\n\n{}",
-                    callback_err, cleanup_err,
+                    "{callback_err}\n\ncall_on_cleanup also failed:\n\n{cleanup_err}",
                 )
             }
             Self::WasmEngineError(err) => {
-                write!(f, "Canister encountered a Wasm engine error: {}", err)
+                write!(f, "Canister encountered a Wasm engine error: {err}")
             }
             Self::ReservedPagesForOldMotoko => {
-                write!(f, "Canister tried to allocate pages reserved for upgrading older versions of Motoko.")
+                write!(
+                    f,
+                    "Canister tried to allocate pages reserved for upgrading older versions of Motoko."
+                )
             }
             Self::Aborted => {
                 // This error should never be visible to end users.
@@ -317,12 +321,11 @@ impl std::fmt::Display for HypervisorError {
             } => write!(
                 f,
                 "Canister attempted to perform \
-                a large memory operation that used {} instructions and \
-                exceeded the slice limit {}.",
-                instructions, limit
+                a large memory operation that used {instructions} instructions and \
+                exceeded the slice limit {limit}."
             ),
             Self::MemoryAccessLimitExceeded(s) => {
-                write!(f, "Canister exceeded memory access limits: {}", s)
+                write!(f, "Canister exceeded memory access limits: {s}")
             }
             Self::InsufficientCyclesInMemoryGrow {
                 bytes,
@@ -340,8 +343,7 @@ impl std::fmt::Display for HypervisorError {
                 };
                 write!(
                     f,
-                    "Canister cannot grow memory by {} bytes due to insufficient cycles.{}",
-                    bytes, msg
+                    "Canister cannot grow memory by {bytes} bytes due to insufficient cycles.{msg}"
                 )
             }
             Self::ReservedCyclesLimitExceededInMemoryGrow {
@@ -374,45 +376,37 @@ impl std::fmt::Display for HypervisorError {
                 };
                 write!(
                     f,
-                    "Canister cannot grow message memory by {} bytes due to insufficient cycles.{}",
-                    bytes, msg,
+                    "Canister cannot grow message memory by {bytes} bytes due to insufficient cycles.{msg}",
                 )
             }
             Self::WasmMemoryLimitExceeded { bytes, limit } => {
-                write!(f,
-                        "Canister exceeded its current Wasm memory limit of {} bytes. \
+                write!(
+                    f,
+                    "Canister exceeded its current Wasm memory limit of {} bytes. \
                         The peak Wasm memory usage was {} bytes. \
                         If the canister reaches 4GiB, then it may stop functioning and may become unrecoverable. \
                         Please reach out to the canister owner to investigate the reason for the increased memory usage. \
                         It might be necessary to move data from the Wasm memory to the stable memory. \
                         If such high Wasm memory usage is expected and safe, then the developer can increase \
                         the Wasm memory limit in the canister settings.",
-                        limit.get(), bytes.get()
+                    limit.get(),
+                    bytes.get()
                 )
             }
             Self::EnvironmentVariableIndexOutOfBounds { index, length } => {
                 write!(
                     f,
-                    "Environment variable index {} is out of bounds. The number of environment variables is {}.",
-                    index, length
+                    "Environment variable index {index} is out of bounds. The number of environment variables is {length}."
                 )
             }
             Self::EnvironmentVariableNotFound { name } => {
-                write!(f, "Environment variable {} not found.", name)
+                write!(f, "Environment variable {name} not found.")
             }
         }
     }
 }
 
-impl MemoryDiskBytes for HypervisorError {
-    fn memory_bytes(&self) -> usize {
-        std::mem::size_of::<Self>()
-    }
-
-    fn disk_bytes(&self) -> usize {
-        0
-    }
-}
+impl DiskBytes for HypervisorError {}
 
 impl AsErrorHelp for HypervisorError {
     fn error_help(&self) -> ErrorHelp {

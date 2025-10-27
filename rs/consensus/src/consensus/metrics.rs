@@ -1,17 +1,17 @@
 use ic_consensus_idkg::{
-    metrics::{key_id_label, CounterPerMasterPublicKeyId, IDkgPayloadStats, KEY_ID_LABEL},
+    metrics::{CounterPerMasterPublicKeyId, IDkgPayloadStats, KEY_ID_LABEL, key_id_label},
     utils::CRITICAL_ERROR_IDKG_RESOLVE_TRANSCRIPT_REFS,
 };
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_https_outcalls_consensus::payload_builder::CanisterHttpBatchStats;
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
+    buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
 };
 use ic_types::{
+    CountBytes, Height, Time,
     batch::BatchPayload,
     consensus::{Block, BlockPayload, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank},
-    CountBytes, Height, Time,
 };
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
@@ -533,22 +533,17 @@ impl ValidatorMetrics {
 
     pub(crate) fn observe_block(&self, pool_reader: &PoolReader, proposal: &BlockProposal) {
         let rank = proposal.rank().0 as usize;
-        if rank < RANKS_TO_RECORD.len() {
-            if let Some(start_time) = pool_reader.get_round_start_time(proposal.height()) {
-                if let Some(timestamp) = pool_reader
-                    .pool()
-                    .unvalidated()
-                    .get_timestamp(&proposal.get_id())
-                {
-                    if timestamp >= start_time {
-                        self.time_to_receive_block
-                            .with_label_values(&[RANKS_TO_RECORD[rank]])
-                            .observe(
-                                (timestamp.saturating_duration_since(start_time)).as_secs_f64(),
-                            );
-                    }
-                }
-            }
+        if rank < RANKS_TO_RECORD.len()
+            && let Some(start_time) = pool_reader.get_round_start_time(proposal.height())
+            && let Some(timestamp) = pool_reader
+                .pool()
+                .unvalidated()
+                .get_timestamp(&proposal.get_id())
+            && timestamp >= start_time
+        {
+            self.time_to_receive_block
+                .with_label_values(&[RANKS_TO_RECORD[rank]])
+                .observe((timestamp.saturating_duration_since(start_time)).as_secs_f64());
         }
     }
 

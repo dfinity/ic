@@ -14,7 +14,6 @@ documentation.workspace = true
 
 [dependencies]
 hmac = "0.12"
-lazy_static = { workspace = true }
 num-bigint = { workspace = true }
 p256 = { workspace = true }
 pem = "1.1.0"

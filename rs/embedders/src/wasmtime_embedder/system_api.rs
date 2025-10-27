@@ -6,35 +6,32 @@ use ic_error_types::RejectCode;
 use ic_interfaces::execution_environment::{
     ExecutionMode,
     HypervisorError::{self, *},
-    HypervisorResult, OutOfInstructionsHandler, PerformanceCounterType, StableGrowOutcome,
-    StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallCounters,
+    HypervisorResult, MessageMemoryUsage, OutOfInstructionsHandler, PerformanceCounterType,
+    StableGrowOutcome, StableMemoryApi, SubnetAvailableMemory, SystemApi, SystemApiCallCounters,
     TrapCode::{self, CyclesAmountTooBigFor64Bit},
 };
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error};
 use ic_management_canister_types_private::{
-    EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
-    VetKdKeyId, IC_00,
+    EcdsaCurve, EcdsaKeyId, IC_00, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
+    VetKdKeyId,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::{
-    canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request, Memory, MessageMemoryUsage,
-    NumWasmPages,
+    Memory, NumWasmPages, canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request,
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
-    ingress::WasmResult,
-    messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
-    methods::{SystemMethod, WasmClosure},
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
-    NumInstructions, NumOsPages, PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
+    NumInstructions, NumOsPages, PrincipalId, SubnetId, Time,
+    ingress::WasmResult,
+    messages::{CallContextId, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, RejectContext, Request},
+    methods::{SystemMethod, WasmClosure},
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use ic_wasm_types::doc_ref;
-use request_in_prep::{into_request, RequestInPrep};
-use sandbox_safe_system_state::{
-    CanisterStatusView, SandboxSafeSystemState, SystemStateModifications,
-};
+use request_in_prep::{RequestInPrep, into_request};
+use sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
 use std::{
@@ -69,7 +66,7 @@ pub const MAX_ENV_VAR_NAME_SIZE: usize = 100;
 
 // This macro is used in system calls for tracing.
 macro_rules! trace_syscall {
-    ($self:ident, $name:ident, $result:expr $( , $args:expr )*) => {{
+    ($self:ident, $name:ident, $result:expr_2021 $( , $args:expr_2021 )*) => {{
         if TRACE_SYSCALLS {
             // Output to both logger and stderr to simplify debugging.
             error!(
@@ -131,16 +128,12 @@ pub struct InstructionLimits {
 }
 
 impl InstructionLimits {
-    /// Returns the message and slice instruction limits based on the
-    /// deterministic time slicing flag.
-    pub fn new(dts: FlagStatus, message: NumInstructions, max_slice: NumInstructions) -> Self {
+    /// Returns the message and slice instruction limits.
+    pub fn new(message: NumInstructions, max_slice: NumInstructions) -> Self {
         Self {
             message,
             limit_to_report: message,
-            max_slice: match dts {
-                FlagStatus::Enabled => max_slice,
-                FlagStatus::Disabled => message,
-            },
+            max_slice,
         }
     }
 
@@ -753,7 +746,9 @@ impl ApiType {
                 | SystemMethod::CanisterPreUpgrade
                 | SystemMethod::CanisterPostUpgrade
                 | SystemMethod::CanisterInspectMessage => {
-                    panic!("Only `canister_heartbeat`, `canister_global_timer`, and `canister_on_low_wasm_memory` are allowed.")
+                    panic!(
+                        "Only `canister_heartbeat`, `canister_global_timer`, and `canister_on_low_wasm_memory` are allowed."
+                    )
                 }
             },
             ApiType::Update { .. } => "update",
@@ -808,6 +803,40 @@ impl ApiType {
             | ApiType::RejectCallback { time, .. }
             | ApiType::CompositeRejectCallback { time, .. }
             | ApiType::InspectMessage { time, .. } => time,
+        }
+    }
+
+    // Returns `true` if subnet available memory should be updated
+    // and storage cycles should be reserved for the given
+    // API type when growing memory.
+    fn should_update_available_memory_and_reserved_cycles(&self) -> bool {
+        match self {
+            ApiType::Update { .. }
+            | ApiType::SystemTask { .. }
+            | ApiType::ReplyCallback { .. }
+            | ApiType::RejectCallback { .. }
+            | ApiType::Cleanup { .. } => true,
+
+            ApiType::Start { .. } | ApiType::Init { .. } | ApiType::PreUpgrade { .. } => {
+                // Individual endpoints of install_code do not update subnet available memory
+                // and do not reserve storage cycles.
+                // Instead, subnet available memory is updated
+                // and storage cycles are reserved at the end of install_code.
+                false
+            }
+
+            ApiType::InspectMessage { .. }
+            | ApiType::ReplicatedQuery { .. }
+            | ApiType::NonReplicatedQuery { .. }
+            | ApiType::CompositeQuery { .. }
+            | ApiType::CompositeReplyCallback { .. }
+            | ApiType::CompositeRejectCallback { .. }
+            | ApiType::CompositeCleanup { .. } => {
+                // Queries do not update subnet available memory
+                // and do not reserve storage cycles because the state
+                // changes are discarded anyways.
+                false
+            }
         }
     }
 }
@@ -975,41 +1004,30 @@ impl MemoryUsage {
 
         match self.memory_allocation {
             MemoryAllocation::BestEffort => {
-                match self.subnet_available_memory.check_available_memory(
-                    execution_bytes,
-                    NumBytes::new(0),
-                    NumBytes::new(0),
-                ) {
-                    Ok(()) => {
-                        sandbox_safe_system_state.reserve_storage_cycles(
-                            execution_bytes,
-                            &subnet_memory_saturation.add(self.allocated_execution_memory.get()),
-                            api_type,
-                        )?;
-                        // All state changes after this point should not fail
-                        // because the cycles have already been reserved.
-                        self.subnet_available_memory
-                            .try_decrement(execution_bytes, NumBytes::new(0), NumBytes::new(0))
-                            .expect(
-                                "Decrementing subnet available memory is \
-                                 guaranteed to succeed by check_available_memory().",
-                            );
-                        self.current_usage = NumBytes::new(new_usage);
-                        self.allocated_execution_memory += execution_bytes;
+                if api_type.should_update_available_memory_and_reserved_cycles() {
+                    self.subnet_available_memory
+                        .try_decrement(execution_bytes, NumBytes::new(0), NumBytes::new(0))
+                        .map_err(|_err| HypervisorError::OutOfMemory)?;
 
-                        self.add_execution_memory(execution_bytes, execution_memory_type)?;
-
-                        sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
-                            None,
-                            self.wasm_memory_limit,
-                            self.current_usage,
-                            self.wasm_memory_usage,
-                        );
-
-                        Ok(())
-                    }
-                    Err(_err) => Err(HypervisorError::OutOfMemory),
+                    sandbox_safe_system_state.reserve_storage_cycles(
+                        execution_bytes,
+                        &subnet_memory_saturation.add(self.allocated_execution_memory.get()),
+                    )?;
                 }
+
+                self.current_usage = NumBytes::new(new_usage);
+                self.allocated_execution_memory += execution_bytes;
+
+                self.add_execution_memory(execution_bytes, execution_memory_type)?;
+
+                sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
+                    None,
+                    self.wasm_memory_limit,
+                    self.current_usage,
+                    self.wasm_memory_usage,
+                );
+
+                Ok(())
             }
             MemoryAllocation::Reserved(reserved_bytes) => {
                 // The canister can increase its memory usage up to the reserved bytes
@@ -1081,14 +1099,14 @@ impl MemoryUsage {
             new_message_usage,
         )?;
 
-        if message_memory_usage.guaranteed_response.get() != 0 {
-            if let Err(_err) = self.subnet_available_memory.try_decrement(
+        if message_memory_usage.guaranteed_response.get() != 0
+            && let Err(_err) = self.subnet_available_memory.try_decrement(
                 NumBytes::new(0),
                 message_memory_usage.guaranteed_response,
                 NumBytes::new(0),
-            ) {
-                return Err(HypervisorError::OutOfMemory);
-            }
+            )
+        {
+            return Err(HypervisorError::OutOfMemory);
         }
 
         self.allocated_message_memory += message_memory_usage;
@@ -1338,16 +1356,18 @@ impl SystemApiImpl {
             | ApiType::CompositeRejectCallback {
                 response_status, ..
             } => match response_status {
-                ResponseStatus::JustRepliedWith(ref mut result) => Ok(result.take()),
+                ResponseStatus::JustRepliedWith(result) => Ok(result.take()),
                 _ => Ok(None),
             },
         }
     }
 
-    /// Note that this function is made public only for the tests
-    #[doc(hidden)]
     pub fn get_current_memory_usage(&self) -> NumBytes {
         self.memory_usage.current_usage
+    }
+
+    pub fn get_current_message_memory_usage(&self) -> MessageMemoryUsage {
+        self.memory_usage.current_message_usage
     }
 
     /// Bytes allocated in the Wasm/stable memory.
@@ -1507,10 +1527,7 @@ impl SystemApiImpl {
             } => {
                 match outgoing_request {
                     None => Err(HypervisorError::ToolchainContractViolation {
-                        error: format!(
-                            "{} called when no call is under construction.",
-                            method_name
-                        ),
+                        error: format!("{method_name} called when no call is under construction."),
                     }),
                     Some(request) => {
                         self.sandbox_safe_system_state
@@ -1634,8 +1651,8 @@ impl SystemApiImpl {
                 trap_code,
                 backtrace,
             } => match backtrace {
-                Some(bt) => Some(format!("[TRAP]: {}\n{}", trap_code, bt)),
-                None => Some(format!("[TRAP]: {}", trap_code)),
+                Some(bt) => Some(format!("[TRAP]: {trap_code}\n{bt}")),
+                None => Some(format!("[TRAP]: {trap_code}")),
             },
             HypervisorError::CalledTrap { message, backtrace } => {
                 let message = if message.is_empty() {
@@ -1644,8 +1661,8 @@ impl SystemApiImpl {
                     message
                 };
                 match backtrace {
-                    Some(bt) => Some(format!("[TRAP]: {}\n{}", message, bt)),
-                    None => Some(format!("[TRAP]: {}", message)),
+                    Some(bt) => Some(format!("[TRAP]: {message}\n{bt}")),
+                    None => Some(format!("[TRAP]: {message}")),
                 }
             }
             _ => None,
@@ -2658,9 +2675,7 @@ impl SystemApi for SystemApiImpl {
                     let payload_size = data.len().saturating_add(size) as u64;
                     if payload_size > max_reply_size.get() {
                         let string = format!(
-                            "ic0.msg_reply_data_append: application payload size ({}) cannot be larger than {}.",
-                            payload_size,
-                            max_reply_size,
+                            "ic0.msg_reply_data_append: application payload size ({payload_size}) cannot be larger than {max_reply_size}.",
                         );
                         return Err(UserContractViolation {
                             error: string,
@@ -2705,8 +2720,7 @@ impl SystemApi for SystemApiImpl {
                 ResponseStatus::NotRepliedYet => {
                     if size as u64 > max_reply_size.get() {
                         let string = format!(
-                            "ic0.msg_reject: application payload size ({}) cannot be larger than {}.",
-                            size, max_reply_size
+                            "ic0.msg_reject: application payload size ({size}) cannot be larger than {max_reply_size}."
                         );
                         return Err(UserContractViolation {
                             error: string,
@@ -3371,6 +3385,7 @@ impl SystemApi for SystemApiImpl {
         &mut self,
         current_size: u64,
         additional_pages: u64,
+        max_size: u64,
         stable_memory_api: ic_interfaces::execution_environment::StableMemoryApi,
     ) -> HypervisorResult<StableGrowOutcome> {
         let resulting_size = current_size.saturating_add(additional_pages);
@@ -3385,14 +3400,16 @@ impl SystemApi for SystemApiImpl {
                 return Ok(StableGrowOutcome::Failure);
             }
         }
-        if resulting_size > MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64 {
+        if resulting_size > max_size {
             return Ok(StableGrowOutcome::Failure);
         }
-        match self.memory_usage.allocate_execution_memory(
-            // From the checks above we know that converting `additional_pages`
-            // to bytes will not overflow, so the `unwrap()` will succeed.
+        let Ok(execution_bytes) =
             ic_replicated_state::num_bytes_try_from(NumWasmPages::new(additional_pages as usize))
-                .unwrap(),
+        else {
+            return Ok(StableGrowOutcome::Failure);
+        };
+        match self.memory_usage.allocate_execution_memory(
+            execution_bytes,
             &self.api_type,
             &mut self.sandbox_safe_system_state,
             &self.execution_parameters.subnet_memory_saturation,
@@ -3553,11 +3570,11 @@ impl SystemApi for SystemApiImpl {
                 .into_parts();
             if high_amount != 0 {
                 error!(
-                self.log,
-                "ic0_msg_cycles_accept cannot accept more than max_amount {}; accepted amount {}",
-                max_amount,
-                Cycles::from_parts(high_amount, low_amount).get()
-            )
+                    self.log,
+                    "ic0_msg_cycles_accept cannot accept more than max_amount {}; accepted amount {}",
+                    max_amount,
+                    Cycles::from_parts(high_amount, low_amount).get()
+                )
             }
             Ok(low_amount)
         };
@@ -3841,8 +3858,7 @@ impl SystemApi for SystemApiImpl {
                     return Err(UserContractViolation {
                         error: format!(
                             "ic0_certified_data_set failed because the passed data must be \
-                    no larger than {} bytes. Found {} bytes.",
-                            CERTIFIED_DATA_MAX_LENGTH, size
+                    no larger than {CERTIFIED_DATA_MAX_LENGTH} bytes. Found {size} bytes."
                         ),
                         suggestion: "Try certifying just the hash of your data instead of \
                         the full contents."
@@ -3899,11 +3915,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback { .. }
             | ApiType::CompositeRejectCallback { .. }
             | ApiType::PreUpgrade { .. }
-            | ApiType::InspectMessage { .. } => match self.sandbox_safe_system_state.status {
-                CanisterStatusView::Running => Ok(1),
-                CanisterStatusView::Stopping => Ok(2),
-                CanisterStatusView::Stopped => Ok(3),
-            },
+            | ApiType::InspectMessage { .. } => Ok(self.sandbox_safe_system_state.status as u32),
         };
         trace_syscall!(self, CanisterStatus, result);
         result
@@ -3979,7 +3991,7 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn ic0_trap(&self, src: usize, size: usize, heap: &[u8]) -> HypervisorResult<()> {
-        const MAX_ERROR_MESSAGE_SIZE: usize = 16 * 1024;
+        const MAX_ERROR_MESSAGE_SIZE: usize = 32 * 1024;
         let size = size.min(MAX_ERROR_MESSAGE_SIZE);
         let result = {
             let message = valid_subslice(
@@ -4250,16 +4262,15 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::Ecdsa(EcdsaKeyId { curve, name });
-        let Some(subnet_size) = self
-            .sandbox_safe_system_state
-            .get_key_replication_factor(key)
+        let Some((subnet_size, cost_schedule, _)) =
+            self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .ecdsa_signature_fee(subnet_size);
+            .ecdsa_signature_fee(subnet_size, cost_schedule);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_ecdsa")?;
         trace_syscall!(self, CostSignWithEcdsa, cost);
         Ok(CostReturnCode::Success as u32)
@@ -4291,16 +4302,15 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::Schnorr(SchnorrKeyId { algorithm, name });
-        let Some(subnet_size) = self
-            .sandbox_safe_system_state
-            .get_key_replication_factor(key)
+        let Some((subnet_size, cost_schedule, _)) =
+            self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .schnorr_signature_fee(subnet_size);
+            .schnorr_signature_fee(subnet_size, cost_schedule);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_sign_with_schnorr")?;
         trace_syscall!(self, CostSignWithSchnorr, cost);
         Ok(CostReturnCode::Success as u32)
@@ -4332,16 +4342,15 @@ impl SystemApi for SystemApiImpl {
             return Ok(CostReturnCode::UnknownCurveOrAlgorithm as u32);
         };
         let key = MasterPublicKeyId::VetKd(VetKdKeyId { curve, name });
-        let Some(subnet_size) = self
-            .sandbox_safe_system_state
-            .get_key_replication_factor(key)
+        let Some((subnet_size, cost_schedule, _)) =
+            self.sandbox_safe_system_state.get_key_subnet_details(key)
         else {
             return Ok(CostReturnCode::UnknownKey as u32);
         };
         let cost = self
             .sandbox_safe_system_state
             .get_cycles_account_manager()
-            .vetkd_fee(subnet_size);
+            .vetkd_fee(subnet_size, cost_schedule);
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_vetkd_derive_key")?;
         trace_syscall!(self, CostVetkdDeriveEncryptedKey, cost);
         Ok(CostReturnCode::Success as u32)
@@ -4534,49 +4543,61 @@ mod test {
         assert!(valid_subslice("", InternalAddress::new(1), InternalAddress::new(0), &[1]).is_ok());
 
         // just some valid cases
-        assert!(valid_subslice(
-            "",
-            InternalAddress::new(0),
-            InternalAddress::new(4),
-            &[1, 2, 3, 4]
-        )
-        .is_ok());
-        assert!(valid_subslice(
-            "",
-            InternalAddress::new(1),
-            InternalAddress::new(3),
-            &[1, 2, 3, 4]
-        )
-        .is_ok());
-        assert!(valid_subslice(
-            "",
-            InternalAddress::new(2),
-            InternalAddress::new(2),
-            &[1, 2, 3, 4]
-        )
-        .is_ok());
+        assert!(
+            valid_subslice(
+                "",
+                InternalAddress::new(0),
+                InternalAddress::new(4),
+                &[1, 2, 3, 4]
+            )
+            .is_ok()
+        );
+        assert!(
+            valid_subslice(
+                "",
+                InternalAddress::new(1),
+                InternalAddress::new(3),
+                &[1, 2, 3, 4]
+            )
+            .is_ok()
+        );
+        assert!(
+            valid_subslice(
+                "",
+                InternalAddress::new(2),
+                InternalAddress::new(2),
+                &[1, 2, 3, 4]
+            )
+            .is_ok()
+        );
 
         // invalid longer-than-the-heap subslices
-        assert!(valid_subslice(
-            "",
-            InternalAddress::new(3),
-            InternalAddress::new(2),
-            &[1, 2, 3, 4]
-        )
-        .is_err());
-        assert!(valid_subslice(
-            "",
-            InternalAddress::new(0),
-            InternalAddress::new(5),
-            &[1, 2, 3, 4]
-        )
-        .is_err());
-        assert!(valid_subslice(
-            "",
-            InternalAddress::new(4),
-            InternalAddress::new(1),
-            &[1, 2, 3, 4]
-        )
-        .is_err());
+        assert!(
+            valid_subslice(
+                "",
+                InternalAddress::new(3),
+                InternalAddress::new(2),
+                &[1, 2, 3, 4]
+            )
+            .is_err()
+        );
+        assert!(
+            valid_subslice(
+                "",
+                InternalAddress::new(0),
+                InternalAddress::new(5),
+                &[1, 2, 3, 4]
+            )
+            .is_err()
+        );
+        assert!(
+            valid_subslice(
+                "",
+                InternalAddress::new(4),
+                InternalAddress::new(1),
+                &[1, 2, 3, 4]
+            )
+            .is_err()
+        );
     }
 }

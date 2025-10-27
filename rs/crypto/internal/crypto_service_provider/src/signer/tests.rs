@@ -258,9 +258,10 @@ mod verify_secp256k1 {
         let csp = Csp::builder_for_test()
             .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
             .build();
-        assert!(csp
-            .verify(&csp_sig, EMPTY_MSG, EcdsaSecp256k1, csp_pk)
-            .is_ok());
+        assert!(
+            csp.verify(&csp_sig, EMPTY_MSG, EcdsaSecp256k1, csp_pk)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -524,9 +525,10 @@ mod multi {
             .csp_vault
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
-        assert!(csp0
-            .verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key0)
-            .is_ok());
+        assert!(
+            csp0.verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key0)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -543,12 +545,14 @@ mod multi {
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
 
-        assert!(csp0
-            .verify_pop(&pop1, AlgorithmId::MultiBls12_381, public_key1)
-            .is_ok());
-        assert!(csp1
-            .verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key0)
-            .is_ok());
+        assert!(
+            csp0.verify_pop(&pop1, AlgorithmId::MultiBls12_381, public_key1)
+                .is_ok()
+        );
+        assert!(
+            csp1.verify_pop(&pop0, AlgorithmId::MultiBls12_381, public_key0)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -623,9 +627,11 @@ mod multi {
         let signature = csp
             .sign(AlgorithmId::MultiBls12_381, message.to_vec(), key_id)
             .expect("Signing failed");
-        assert!(verifier
-            .verify(&signature, message, AlgorithmId::MultiBls12_381, public_key)
-            .is_ok());
+        assert!(
+            verifier
+                .verify(&signature, message, AlgorithmId::MultiBls12_381, public_key)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -703,14 +709,16 @@ mod multi {
             )
             .expect("Failed to combine signatures");
 
-        assert!(verifier
-            .verify_multisig(
-                vec![public_key1, public_key2],
-                combined_signature,
-                message,
-                AlgorithmId::MultiBls12_381,
-            )
-            .is_ok());
+        assert!(
+            verifier
+                .verify_multisig(
+                    vec![public_key1, public_key2],
+                    combined_signature,
+                    message,
+                    AlgorithmId::MultiBls12_381,
+                )
+                .is_ok()
+        );
     }
 
     #[test]
@@ -801,7 +809,7 @@ fn vault_builder_with_different_seeds<const N: usize>() -> [LocalCspVaultBuilder
     let mut vault_builders = Vec::with_capacity(N);
     let mut seeds = HashSet::with_capacity(N);
     for _ in 0..N {
-        let seed: [u8; 32] = rng.gen();
+        let seed: [u8; 32] = rng.r#gen();
         vault_builders
             .push(LocalCspVault::builder_for_test().with_rng(Seed::from_bytes(&seed).into_rng()));
         assert!(seeds.insert(seed));

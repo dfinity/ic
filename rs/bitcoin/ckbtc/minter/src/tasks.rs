@@ -1,6 +1,7 @@
 #[cfg(test)]
 mod tests;
-use crate::{estimate_fee_per_vbyte, finalize_requests, submit_pending_requests, CanisterRuntime};
+use crate::reimbursement::reimburse_withdrawals;
+use crate::{CanisterRuntime, estimate_fee_per_vbyte, finalize_requests, submit_pending_requests};
 use scopeguard::guard;
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
@@ -13,7 +14,7 @@ thread_local! {
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub enum TaskType {
-    ProcessLogic,
+    ProcessLogic(bool),
     RefreshFeePercentiles,
 }
 
@@ -128,11 +129,11 @@ pub fn global_timer() -> u64 {
 
 pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
     match task.task_type {
-        TaskType::ProcessLogic => {
+        TaskType::ProcessLogic(force_resubmit_stuck_transactions) => {
             const INTERVAL_PROCESSING: Duration = Duration::from_secs(5);
 
             let _enqueue_followup_guard = guard((), |_| {
-                schedule_after(INTERVAL_PROCESSING, TaskType::ProcessLogic, &runtime)
+                schedule_after(INTERVAL_PROCESSING, TaskType::ProcessLogic(false), &runtime)
             });
 
             let _guard = match crate::guard::TimerLogicGuard::new() {
@@ -140,14 +141,14 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
                 None => return,
             };
 
-            submit_pending_requests().await;
-            finalize_requests().await;
+            submit_pending_requests(&runtime).await;
+            finalize_requests(&runtime, force_resubmit_stuck_transactions).await;
+            reimburse_withdrawals(&runtime).await;
         }
         TaskType::RefreshFeePercentiles => {
-            const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);
             let _enqueue_followup_guard = guard((), |_| {
                 schedule_after(
-                    FEE_ESTIMATE_DELAY,
+                    runtime.refresh_fee_percentiles_frequency(),
                     TaskType::RefreshFeePercentiles,
                     &runtime,
                 )
@@ -157,7 +158,7 @@ pub(crate) async fn run_task<R: CanisterRuntime>(task: Task, runtime: R) {
                 Some(guard) => guard,
                 None => return,
             };
-            let _ = estimate_fee_per_vbyte().await;
+            let _ = estimate_fee_per_vbyte(&runtime).await;
         }
     }
 }

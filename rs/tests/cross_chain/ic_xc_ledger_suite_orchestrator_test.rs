@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, Runtime, Wasm};
 use dfn_candid::candid_one;
@@ -18,7 +18,7 @@ use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_dependency_path, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCustomizations,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCustomizations, get_dependency_path,
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{block_on, runtime_from_url};
@@ -309,12 +309,7 @@ async fn add_erc_20_by_nns_proposal<'a>(
         }
     )
     .await
-    .unwrap_or_else(|e| {
-        panic!(
-            "Canisters for contract {:?} were not created: {}",
-            erc20_contract, e
-        )
-    });
+    .unwrap_or_else(|e| panic!("Canisters for contract {erc20_contract:?} were not created: {e}"));
     info!(
         &logger,
         "Created canister IDs: {} for contract {:?}", created_canister_ids, erc20_contract

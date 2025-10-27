@@ -1,13 +1,12 @@
-use crate::{
-    icrc1::account::Account,
-    icrc21::{errors::Icrc21Error, lib::Icrc21Function},
+use crate::icrc21::{
+    errors::Icrc21Error,
+    lib::{GenericMemo, Icrc21Function},
 };
 
 use super::requests::ConsentMessageMetadata;
 use candid::{CandidType, Deserialize, Nat};
 use num_traits::{Pow, ToPrimitive};
 use serde::Serialize;
-use serde_bytes::ByteBuf;
 
 #[derive(CandidType, Deserialize, Eq, PartialEq, Debug, Serialize, Clone)]
 pub enum Value {
@@ -49,7 +48,7 @@ impl ConsentMessage {
     pub fn add_intent(&mut self, intent: Icrc21Function, token_name: Option<String>) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => match intent {
-                Icrc21Function::Transfer => {
+                Icrc21Function::Transfer | Icrc21Function::GenericTransfer => {
                     assert!(token_name.is_some());
                     message.push_str(&format!("# Send {}", token_name.unwrap()));
                     message
@@ -70,7 +69,7 @@ impl ConsentMessage {
                 }
             },
             ConsentMessage::FieldsDisplayMessage(fields_display) => match intent {
-                Icrc21Function::Transfer => {
+                Icrc21Function::Transfer | Icrc21Function::GenericTransfer => {
                     assert!(token_name.is_some());
                     fields_display.intent = format!("Send {}", token_name.unwrap());
                 }
@@ -85,10 +84,10 @@ impl ConsentMessage {
         }
     }
 
-    pub fn add_account(&mut self, name: &str, account: &Account) {
+    pub fn add_account(&mut self, name: &str, account: String) {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => {
-                message.push_str(&format!("\n\n**{}:**\n`{}`", name, account))
+                message.push_str(&format!("\n\n**{name}:**\n`{account}`"))
             }
             ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display.fields.push((
                 name.to_string(),
@@ -112,7 +111,7 @@ impl ConsentMessage {
         match self {
             ConsentMessage::GenericDisplayMessage(message) => {
                 let amount = convert_tokens_to_string_representation(amount, decimals)?;
-                message.push_str(&format!("\n\n**Amount:** `{} {}`", amount, token_symbol));
+                message.push_str(&format!("\n\n**Amount:** `{amount} {token_symbol}`"));
             }
             ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display.fields.push((
                 "Amount".to_string(),
@@ -142,15 +141,13 @@ impl ConsentMessage {
                 let fee = convert_tokens_to_string_representation(amount, decimals)?;
                 match intent {
                     Icrc21Function::Approve => message.push_str(&format!(
-                        "\n\n**Approval fees:** `{} {}`\nCharged for processing the approval.",
-                        fee, token_symbol
+                        "\n\n**Approval fees:** `{fee} {token_symbol}`\nCharged for processing the approval."
                     )),
-                    Icrc21Function::Transfer | Icrc21Function::TransferFrom => {
-                        message.push_str(&format!(
-                            "\n\n**Fees:** `{} {}`\nCharged for processing the transfer.",
-                            fee, token_symbol
-                        ))
-                    }
+                    Icrc21Function::Transfer
+                    | Icrc21Function::TransferFrom
+                    | Icrc21Function::GenericTransfer => message.push_str(&format!(
+                        "\n\n**Fees:** `{fee} {token_symbol}`\nCharged for processing the transfer."
+                    )),
                 };
             }
             ConsentMessage::FieldsDisplayMessage(fields_display) => {
@@ -163,7 +160,9 @@ impl ConsentMessage {
                     Icrc21Function::Approve => fields_display
                         .fields
                         .push(("Approval fees".to_string(), token_amount)),
-                    Icrc21Function::Transfer | Icrc21Function::TransferFrom => fields_display
+                    Icrc21Function::Transfer
+                    | Icrc21Function::TransferFrom
+                    | Icrc21Function::GenericTransfer => fields_display
                         .fields
                         .push(("Fees".to_string(), token_amount)),
                 };
@@ -186,8 +185,7 @@ impl ConsentMessage {
             ConsentMessage::GenericDisplayMessage(message) => {
                 let amount = convert_tokens_to_string_representation(amount, decimals)?;
                 message.push_str(&format!(
-                            "\n\n**Requested allowance:** `{} {}`\nThis is the withdrawal limit that will apply upon approval.",
-                            amount, token_symbol
+                            "\n\n**Requested allowance:** `{amount} {token_symbol}`\nThis is the withdrawal limit that will apply upon approval."
                         ));
             }
             ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display.fields.push((
@@ -212,7 +210,7 @@ impl ConsentMessage {
             ConsentMessage::GenericDisplayMessage(message) => {
                 let expected_allowance =
                     convert_tokens_to_string_representation(expected_allowance, decimals)?;
-                message.push_str(&format!("\n\n**Existing allowance:** `{} {}`\nUntil approval, this allowance remains in effect.", expected_allowance, token_symbol));
+                message.push_str(&format!("\n\n**Existing allowance:** `{expected_allowance} {token_symbol}`\nUntil approval, this allowance remains in effect."));
             }
             ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display.fields.push((
                 "Existing allowance".to_string(),
@@ -237,12 +235,12 @@ impl ConsentMessage {
                         let utc_dt = match (match time::OffsetDateTime::from_unix_timestamp(seconds)
                         {
                             Ok(dt) => dt,
-                            Err(_) => return format!("Invalid timestamp: {}", ts),
+                            Err(_) => return format!("Invalid timestamp: {ts}"),
                         })
                         .replace_nanosecond(nanos)
                         {
                             Ok(dt) => dt,
-                            Err(_) => return format!("Invalid nanosecond: {}", nanos),
+                            Err(_) => return format!("Invalid nanosecond: {nanos}"),
                         };
 
                         // Apply the offset minutes
@@ -255,11 +253,11 @@ impl ConsentMessage {
                         // Format as a string including the offset
                         match offset_dt.format(&time::format_description::well_known::Rfc2822) {
                             Ok(formatted) => formatted,
-                            Err(_) => format!("Invalid timestamp: {}", ts),
+                            Err(_) => format!("Invalid timestamp: {ts}"),
                         }
                     })
                     .unwrap_or("This approval does not have an expiration.".to_owned());
-                message.push_str(&format!("\n\n**Approval expiration:**\n{}", expires_at));
+                message.push_str(&format!("\n\n**Approval expiration:**\n{expires_at}"));
             }
             ConsentMessage::FieldsDisplayMessage(fields_display) => {
                 match expires_at {
@@ -283,20 +281,37 @@ impl ConsentMessage {
         }
     }
 
-    pub fn add_memo(&mut self, memo: ByteBuf) {
-        // Check if the memo is a valid UTF-8 string and display it as such if it is.
-        let memo_str = match std::str::from_utf8(memo.as_slice()) {
-            Ok(valid_str) => valid_str.to_string(),
-            Err(_) => hex::encode(memo.as_slice()),
-        };
-        match self {
-            ConsentMessage::GenericDisplayMessage(message) => {
-                message.push_str(&format!("\n\n**Memo:**\n`{}`", memo_str));
+    pub fn add_memo(&mut self, memo: GenericMemo) {
+        match memo {
+            GenericMemo::Icrc1Memo(memo) => {
+                // Check if the memo is a valid UTF-8 string and display it as such if it is.
+                let memo_str = match std::str::from_utf8(memo.as_slice()) {
+                    Ok(valid_str) => valid_str.to_string(),
+                    Err(_) => hex::encode(memo.as_slice()),
+                };
+                match self {
+                    ConsentMessage::GenericDisplayMessage(message) => {
+                        message.push_str(&format!("\n\n**Memo:**\n`{memo_str}`"));
+                    }
+                    ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display
+                        .fields
+                        .push(("Memo".to_string(), Value::Text { content: memo_str })),
+                }
             }
-            ConsentMessage::FieldsDisplayMessage(fields_display) => fields_display
-                .fields
-                .push(("Memo".to_string(), Value::Text { content: memo_str })),
-        }
+            GenericMemo::IntMemo(memo) => match self {
+                ConsentMessage::GenericDisplayMessage(message) => {
+                    message.push_str(&format!("\n\n**Memo:**\n`{memo}`"));
+                }
+                ConsentMessage::FieldsDisplayMessage(fields_display) => {
+                    fields_display.fields.push((
+                        "Memo".to_string(),
+                        Value::Text {
+                            content: memo.to_string(),
+                        },
+                    ))
+                }
+            },
+        };
     }
 }
 

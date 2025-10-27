@@ -6,7 +6,7 @@ use ic_consensus_utils::{
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
 };
-use ic_logger::{error, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, trace};
 use ic_types::{
     consensus::{HasCommittee, RandomBeacon, RandomBeaconContent, RandomBeaconShare},
     replica_config::ReplicaConfig,
@@ -105,7 +105,7 @@ impl RandomBeaconMaker {
 mod tests {
     //! BeaconMaker unit tests
     use super::*;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
 
@@ -130,15 +130,19 @@ mod tests {
 
             // 2. Skip making another share
             pool.insert_validated(beacon_share);
-            assert!(beacon_maker
-                .on_state_change(&PoolReader::new(&pool))
-                .is_none());
+            assert!(
+                beacon_maker
+                    .on_state_change(&PoolReader::new(&pool))
+                    .is_none()
+            );
 
             // 3. Next next beacon can't be made due to missing notarized block
             pool.insert_validated(pool.make_next_beacon());
-            assert!(beacon_maker
-                .on_state_change(&PoolReader::new(&pool))
-                .is_none());
+            assert!(
+                beacon_maker
+                    .on_state_change(&PoolReader::new(&pool))
+                    .is_none()
+            );
 
             // 4. Next next beacon can be made once we have another block
             let beacon = pool.validated().random_beacon().get_highest().unwrap();

@@ -57,25 +57,33 @@ proptest! {
 
 #[test]
 fn conversion_to_public_key_fails_gracefully() {
-    let bad_point = PublicKeyBytes(hex_to_96_bytes("bbf62cf8f448af4fa2071cc31fcdbe56172d90b2a466ef0a66f3f72c063f4d29192f5f19b5ee7118ad2de65da489efac0366758ddfd009fe07afb6d02c0d201b337d0276d68e04c6c56f531a428c27abb94baaf388d36ecce932843b8ecd9042"));
+    let bad_point = PublicKeyBytes(hex_to_96_bytes(
+        "bbf62cf8f448af4fa2071cc31fcdbe56172d90b2a466ef0a66f3f72c063f4d29192f5f19b5ee7118ad2de65da489efac0366758ddfd009fe07afb6d02c0d201b337d0276d68e04c6c56f531a428c27abb94baaf388d36ecce932843b8ecd9042",
+    ));
     let converted: Result<PublicKey, _> = PublicKey::try_from(&bad_point);
     assert!(converted.is_err());
 }
 #[test]
 fn conversion_to_individual_signature_fails_gracefully() {
-    let bad_point = IndividualSignatureBytes(hex_to_48_bytes("100000000000000010000000000000001000000000000000100000000000000010000000000000001000000000000000"));
+    let bad_point = IndividualSignatureBytes(hex_to_48_bytes(
+        "100000000000000010000000000000001000000000000000100000000000000010000000000000001000000000000000",
+    ));
     let converted: Result<IndividualSignature, _> = IndividualSignature::try_from(&bad_point);
     assert!(converted.is_err());
 }
 #[test]
 fn conversion_to_pop_fails_gracefully() {
-    let bad_point = PopBytes(hex_to_48_bytes("100000000000000010000000000000001000000000000000100000000000000010000000000000001000000000000000"));
+    let bad_point = PopBytes(hex_to_48_bytes(
+        "100000000000000010000000000000001000000000000000100000000000000010000000000000001000000000000000",
+    ));
     let converted: Result<Pop, _> = Pop::try_from(&bad_point);
     assert!(converted.is_err());
 }
 #[test]
 fn conversion_to_combined_signature_fails_gracefully() {
-    let bad_point = CombinedSignatureBytes(hex_to_48_bytes("100000000000000010000000000000001000000000000000100000000000000010000000000000001000000000000000"));
+    let bad_point = CombinedSignatureBytes(hex_to_48_bytes(
+        "100000000000000010000000000000001000000000000000100000000000000010000000000000001000000000000000",
+    ));
     let converted: Result<CombinedSignature, _> = CombinedSignature::try_from(&bad_point);
     assert!(converted.is_err());
 }

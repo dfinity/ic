@@ -20,7 +20,7 @@ Runbook:
 
 end::catalog[] */
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use canister_test::{Canister, Wasm};
@@ -34,19 +34,19 @@ use ic_nns_test_utils::{
     itest_helpers::install_rust_canister_from_path,
 };
 use k256::elliptic_curve::SecretKey;
-use rand::{rngs::OsRng, SeedableRng};
+use rand::{SeedableRng, rngs::OsRng};
 use rand_chacha::ChaChaRng;
 use slog::info;
 use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::runtime::Runtime;
 
 use ic_agent::{
+    Agent, AgentError, Identity,
     agent::{
-        http_transport::reqwest_transport::reqwest::{Client, Request, Response},
         HttpService,
+        http_transport::reqwest_transport::reqwest::{Client, Request, Response},
     },
     identity::Secp256k1Identity,
-    Agent, AgentError, Identity,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::{
@@ -56,16 +56,16 @@ use ic_system_test_driver::{
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            get_dependency_path, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot,
-            IcNodeContainer,
+            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+            get_dependency_path,
         },
     },
     retry_with_msg_async, systest,
     util::runtime_from_url,
 };
 use rate_limits_api::{
-    v1::{Action, RateLimitRule},
     AddConfigResponse, InitArg, InputConfig, InputRule,
+    v1::{Action, RateLimitRule},
 };
 
 const RATE_LIMIT_CANISTER_ID: &str = "u637p-5aaaa-aaaaq-qaaca-cai";
@@ -320,10 +320,10 @@ async fn test_async(env: TestEnv) {
                 }
                 Err(error) => {
                     // We should observe 403 http error, as all requests are blocked
-                    if let AgentError::HttpError(ref payload) = error {
-                        if payload.status == 403 {
-                            return Ok(());
-                        }
+                    if let AgentError::HttpError(ref payload) = error
+                        && payload.status == 403
+                    {
+                        return Ok(());
                     }
                     bail!("update call failed with unexpected error: {error:?}");
                 }

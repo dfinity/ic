@@ -1,9 +1,11 @@
-use ic_metrics::{buckets::exponential_buckets, MetricsRegistry};
-use prometheus::{Histogram, IntCounter, IntCounterVec};
+use ic_metrics::{MetricsRegistry, buckets::exponential_buckets};
+use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
 
 #[derive(Clone, Debug)]
 pub(crate) struct PeerManagerMetrics {
     pub(crate) topology_updates: IntCounter,
+    pub(crate) earliest_registry_version: IntGauge,
+    pub(crate) latest_registry_version: IntGauge,
     pub(crate) topology_watcher_update_duration: Histogram,
     pub(crate) topology_update_duration: Histogram,
     // An alert will be triggered if this is incremented.
@@ -11,12 +13,20 @@ pub(crate) struct PeerManagerMetrics {
 }
 
 impl PeerManagerMetrics {
-    /// The constructor returns a [`PeerManagerMetrics`] instance.
+    /// The constructor returns a `PeerManagerMetrics` instance.
     pub(crate) fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
             topology_updates: metrics_registry.int_counter(
                 "peer_manager_topology_updates_total",
                 "Number of times registry is checked for topology updates.",
+            ),
+            earliest_registry_version: metrics_registry.int_gauge(
+                "peer_manager_topology_earliest_registry_version",
+                "Registry version of the earliest relevant subnet topology.",
+            ),
+            latest_registry_version: metrics_registry.int_gauge(
+                "peer_manager_topology_latest_registry_version",
+                "Registry version of the latest relevant subnet topology.",
             ),
             topology_watcher_update_duration: metrics_registry.histogram(
                 "peer_manager_topology_watcher_update_duration_seconds",

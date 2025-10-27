@@ -21,7 +21,7 @@ impl SystemdNotifier for DefaultSystemdNotifier {
 #[cfg(all(test, feature = "integration_tests"))]
 pub(crate) mod testing {
     use super::*;
-    use tokio::sync::watch::{channel, Receiver, Sender};
+    use tokio::sync::watch::{Receiver, Sender, channel};
 
     /// Mock implementation that records the notifications.
     pub struct MockSystemdNotifier {

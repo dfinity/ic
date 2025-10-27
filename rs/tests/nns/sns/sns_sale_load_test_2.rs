@@ -4,11 +4,11 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
 use sns_system_test_lib::sns_deployment::{
     add_one_participant, initiate_token_swap_with_oc_parameters, sns_setup,
+    workload_rps400_get_state_query, workload_rps400_get_state_update,
+    workload_rps400_refresh_buyer_tokens, workload_rps800_get_state_query,
+    workload_rps800_get_state_update, workload_rps800_refresh_buyer_tokens,
     workload_rps1200_get_state_query, workload_rps1200_get_state_update,
-    workload_rps1200_refresh_buyer_tokens, workload_rps400_get_state_query,
-    workload_rps400_get_state_update, workload_rps400_refresh_buyer_tokens,
-    workload_rps800_get_state_query, workload_rps800_get_state_update,
-    workload_rps800_refresh_buyer_tokens,
+    workload_rps1200_refresh_buyer_tokens,
 };
 use std::time::Duration;
 

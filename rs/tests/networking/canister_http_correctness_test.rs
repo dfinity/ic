@@ -14,15 +14,16 @@ Success::
 1. Received http response with status 200.
 
 end::catalog[] */
+#![allow(deprecated)]
 
 use anyhow::Result;
 use assert_matches::assert_matches;
-use candid::{decode_one, CandidType, Deserialize, Encode, Principal};
+use candid::{CandidType, Deserialize, Encode, Principal, decode_one};
 use canister_http::*;
 use canister_test::{Canister, Runtime};
 use ic_agent::{
-    agent::{RejectCode, RejectResponse},
     Agent, AgentError,
+    agent::{RejectCode, RejectResponse},
 };
 use ic_base_types::{CanisterId, NumBytes};
 use ic_cdk::api::call::RejectionCode;
@@ -148,7 +149,7 @@ fn main() -> Result<()> {
                 ))
                 // This section tests the url and ip scenarios
                 .add_test(systest!(test_non_ascii_url_is_accepted))
-                .add_test(systest!(test_invalid_ip_timeout))
+                .add_test(systest!(test_invalid_ip))
                 .add_test(systest!(test_invalid_domain_name))
                 .add_test(systest!(test_max_url_length))
                 .add_test(systest!(test_max_url_length_exceeded))
@@ -344,9 +345,10 @@ fn test_composite_transform_function_is_not_allowed(env: TestEnv) {
 
     let err = response.unwrap_err();
     assert_eq!(err.reject_code, RejectCode::CanisterError);
-    assert!(err
-        .reject_message
-        .contains("Composite query cannot be used as transform in canister http outcalls."));
+    assert!(
+        err.reject_message
+            .contains("Composite query cannot be used as transform in canister http outcalls.")
+    );
 }
 
 fn test_no_cycles_attached(env: TestEnv) {
@@ -826,7 +828,7 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n),
+                url: format!("https://[{webserver_ipv6}]:20443/bytes/{n}"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -911,7 +913,7 @@ fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n),
+                url: format!("https://[{webserver_ipv6}]:20443/bytes/{n}"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -1050,7 +1052,7 @@ fn test_http_calls_to_ic_fails(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{}]:9090", webserver_ipv6),
+                url: format!("https://[{webserver_ipv6}]:9090"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -1119,14 +1121,16 @@ fn test_invalid_domain_name(env: TestEnv) {
     );
 }
 
-fn test_invalid_ip_timeout(env: TestEnv) {
+fn test_invalid_ip(env: TestEnv) {
     let handlers = Handlers::new(&env);
 
     let (response, refunded_cycles) = block_on(submit_outcall(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: "https://240.0.0.0".to_string(),
+                // `2001:db8::1` is a reserved ipv6 address used in documentation and example source code.
+                // See https://www.rfc-editor.org/rfc/rfc3849
+                url: "https://[2001:db8::1]".to_string(),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -1146,12 +1150,10 @@ fn test_invalid_ip_timeout(env: TestEnv) {
 
     assert_matches!(
         response,
-        Err(
-            RejectResponse {
-            reject_code: RejectCode::SysFatal,
-            reject_message,
+        Err(RejectResponse {
+            reject_code: RejectCode::SysTransient,
             ..
-        }) => assert_eq!(reject_message, "Timeout expired")
+        })
     );
     assert_ne!(
         refunded_cycles,
@@ -1210,13 +1212,13 @@ fn test_request_header_total_size_within_the_48_kib_limit(env: TestEnv) {
 
     for i in 0..header_count {
         headers.push(HttpHeader {
-            name: format!("{}", i).repeat(MAX_HEADER_NAME_LENGTH),
+            name: format!("{i}").repeat(MAX_HEADER_NAME_LENGTH),
             value: "y".repeat(MAX_HEADER_VALUE_LENGTH),
         });
     }
 
     let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{}]:20443", webserver_ipv6),
+        url: format!("https://[{webserver_ipv6}]:20443"),
         headers,
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
@@ -1252,7 +1254,7 @@ fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
 
     for i in 0..header_count {
         headers.push(HttpHeader {
-            name: format!("{}", i).repeat(MAX_HEADER_NAME_LENGTH),
+            name: format!("{i}").repeat(MAX_HEADER_NAME_LENGTH),
             value: "y".repeat(MAX_HEADER_VALUE_LENGTH),
         });
     }
@@ -1263,7 +1265,7 @@ fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
     });
 
     let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{}]:20443", webserver_ipv6),
+        url: format!("https://[{webserver_ipv6}]:20443"),
         headers,
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
@@ -1301,8 +1303,7 @@ fn test_response_header_total_size_within_the_48_kib_limit(env: TestEnv) {
     // with the specified value length, after accounting also for the
     // overhead headers (e.g. content-length, date, etc.)
     let url = format!(
-        "https://[{}]:20443/large_response_total_header_size/{}/{}",
-        webserver_ipv6, MAX_HEADER_NAME_LENGTH, TOTAL_HEADER_NAME_AND_VALUE_LENGTH,
+        "https://[{webserver_ipv6}]:20443/large_response_total_header_size/{MAX_HEADER_NAME_LENGTH}/{TOTAL_HEADER_NAME_AND_VALUE_LENGTH}",
     );
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1338,8 +1339,7 @@ fn test_response_header_total_size_within_the_48_kib_limit(env: TestEnv) {
     // Ensure that the successful response contains the expected response headers.
     assert!(
         total_header_size <= 48 * 1024,
-        "Total header size ({} bytes) exceeds 48KiB limit",
-        total_header_size
+        "Total header size ({total_header_size} bytes) exceeds 48KiB limit"
     );
 }
 
@@ -1396,7 +1396,7 @@ fn test_request_header_name_and_value_within_limits(env: TestEnv) {
     }];
 
     let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{}]:20443", webserver_ipv6),
+        url: format!("https://[{webserver_ipv6}]:20443"),
         headers,
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
@@ -1427,7 +1427,7 @@ fn test_request_header_name_too_long(env: TestEnv) {
     }];
 
     let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{}]:20443", webserver_ipv6),
+        url: format!("https://[{webserver_ipv6}]:20443"),
         headers,
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
@@ -1467,7 +1467,7 @@ fn test_request_header_value_too_long(env: TestEnv) {
     }];
 
     let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{}]:20443", webserver_ipv6),
+        url: format!("https://[{webserver_ipv6}]:20443"),
         headers,
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
@@ -1502,8 +1502,7 @@ fn test_response_header_name_within_limit(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let url = format!(
-        "https://[{}]:20443/long_response_header_name/{}",
-        webserver_ipv6, MAX_HEADER_NAME_LENGTH,
+        "https://[{webserver_ipv6}]:20443/long_response_header_name/{MAX_HEADER_NAME_LENGTH}",
     );
 
     let (response, _) = block_on(submit_outcall(
@@ -1570,8 +1569,7 @@ fn test_response_header_value_within_limit(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let url = format!(
-        "https://[{}]:20443/long_response_header_value/{}",
-        webserver_ipv6, MAX_HEADER_VALUE_LENGTH,
+        "https://[{webserver_ipv6}]:20443/long_response_header_value/{MAX_HEADER_VALUE_LENGTH}",
     );
 
     let request = UnvalidatedCanisterHttpRequestArgs {
@@ -1869,7 +1867,7 @@ fn test_max_url_length(env: TestEnv) {
     let remaining_space = MAX_CANISTER_HTTP_URL_SIZE - base_url.len();
     let expected_body = "x".repeat(remaining_space);
 
-    let url = format!("{}{}", base_url, expected_body);
+    let url = format!("{base_url}{expected_body}");
     assert_eq!(url.len(), MAX_CANISTER_HTTP_URL_SIZE);
 
     let request = UnvalidatedCanisterHttpRequestArgs {
@@ -1904,7 +1902,7 @@ fn test_max_url_length_exceeded(env: TestEnv) {
     // Add one more character to exceed the limit.
     let expected_body = "x".repeat(remaining_space + 1);
 
-    let url = format!("{}{}", base_url, expected_body);
+    let url = format!("{base_url}{expected_body}");
 
     let request = UnvalidatedCanisterHttpRequestArgs {
         url,
@@ -2074,8 +2072,8 @@ fn test_max_number_of_request_headers(env: TestEnv) {
 
     let headers = (0..HTTP_HEADERS_MAX_NUMBER)
         .map(|i| HttpHeader {
-            name: format!("name{}", i),
-            value: format!("value{}", i),
+            name: format!("name{i}"),
+            value: format!("value{i}"),
         })
         .collect();
 
@@ -2106,8 +2104,8 @@ fn test_max_number_of_request_headers_exceeded(env: TestEnv) {
 
     let headers = (0..HTTP_HEADERS_MAX_NUMBER + 1)
         .map(|i| HttpHeader {
-            name: format!("name{}", i),
-            value: format!("value{}", i),
+            name: format!("name{i}"),
+            value: format!("value{i}"),
         })
         .collect();
 
@@ -2282,9 +2280,7 @@ fn assert_http_json_response(
 
     assert!(
         http_bin_server_received_all_outcall_headers,
-        "1. HTTP bin server did not receive all headers specified in the outcall. Specified headers: {:?}, received headers: {:?}",
-        request_headers,
-        http_bin_server_received_headers
+        "1. HTTP bin server did not receive all headers specified in the outcall. Specified headers: {request_headers:?}, received headers: {http_bin_server_received_headers:?}"
     );
 
     // Rule 2: Check that all headers received by the server was specified in outcall.
@@ -2302,10 +2298,10 @@ fn assert_http_json_response(
             })
             .all(|(name, value)| request_headers.contains(&(name.clone(), value.clone())));
 
-    assert!(http_bin_server_only_received_headers_specified_by_outcall,
-        "2. Http bin server received headers that were not specified in the outcall. Specified headers: {:?}, received headers: {:?}",
-        request_headers,
-        http_bin_server_received_headers);
+    assert!(
+        http_bin_server_only_received_headers_specified_by_outcall,
+        "2. Http bin server received headers that were not specified in the outcall. Specified headers: {request_headers:?}, received headers: {http_bin_server_received_headers:?}"
+    );
 
     let request_method = match request.method {
         HttpMethod::GET => "GET",
@@ -2369,7 +2365,7 @@ where
                 | AgentError::UncertifiedReject {
                     reject: response, ..
                 } => response,
-                _ => panic!("Unexpected error: {:?}", agent_error),
+                _ => panic!("Unexpected error: {agent_error:?}"),
             };
             // If an agent_error is returned then it means that the http_request failed before
             // performing the outcall on the canister, therefore the refund is not applicable.

@@ -48,7 +48,7 @@ impl fmt::Debug for TraceEntry {
             Self::EnterEdge(v) => write!(f, "edge {:?}", DebugBlob(&v[..])),
             Self::EndSubtree => write!(f, "end"),
             Self::VisitBlob(v) => write!(f, "blob [{:?}]", DebugBlob(&v[..])),
-            Self::VisitNum(n) => write!(f, "num {}", n),
+            Self::VisitNum(n) => write!(f, "num {n}"),
         }
     }
 }

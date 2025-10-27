@@ -1,0 +1,27 @@
+[Unit]
+Description=Generate IC Configuration
+After=bootstrap-ic-node.service
+Wants=bootstrap-ic-node.service
+# We must wait for storage permission fixup to have finished.
+After=setup-permissions.service
+Wants=setup-permissions.service
+# We must wait for the network to become online: We must
+# put the correct address(es) into the ic.json5, but in case
+# of dynamic assignment they only become available once all
+# network interfaces are up.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/ic/bin/config generate-ic-config
+Restart=on-failure
+RestartSec=10
+
+# All guestos services that networking depends on log their outputs to the
+# console to be piped to the host terminal if the verbose flag is enabled.
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

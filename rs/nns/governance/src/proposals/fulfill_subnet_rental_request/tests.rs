@@ -1,12 +1,9 @@
 use super::*;
-use crate::temporarily_enable_fulfill_subnet_rental_request_proposals;
 use ic_base_types::PrincipalId;
 
 #[test]
 fn test_validate_fulfill_subnet_rental_request() {
     // Step 1: Prepare the world.
-
-    let _restore_on_drop = temporarily_enable_fulfill_subnet_rental_request_proposals();
 
     // Step 2: Call the code under test.
 
@@ -67,18 +64,14 @@ fn test_validate_fulfill_subnet_rental_request() {
         } = &err;
 
         let error_type = ErrorType::try_from(*error_type);
-        assert_eq!(error_type, Ok(ErrorType::InvalidProposal), "{:?}", err);
+        assert_eq!(error_type, Ok(ErrorType::InvalidProposal), "{err:?}");
 
         for key_word in key_words {
             let ok = error_message
                 .to_lowercase()
                 .contains(&key_word.to_lowercase());
 
-            assert!(
-                ok,
-                "{:?} not in error message ({:?})",
-                key_word, error_message,
-            );
+            assert!(ok, "{key_word:?} not in error message ({error_message:?})",);
         }
     }
 

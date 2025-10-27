@@ -13,9 +13,9 @@ use ic_crypto_internal_csp::vault::remote_csp_vault::{
     RemoteCspVault, RemoteCspVaultBuilder, TarpcCspVaultServerImplBuilder,
 };
 use ic_crypto_temp_crypto_vault::RemoteVaultEnvironment;
-use ic_logger::{info, new_logger, new_replica_logger_from_config, ReplicaLogger};
-use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
+use ic_logger::{ReplicaLogger, info, new_logger, new_replica_logger_from_config};
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_types::crypto::AlgorithmId;
 use slog::Level;
 use std::sync::Arc;
@@ -80,8 +80,8 @@ fn should_reconnect_after_request_from_client_cannot_be_received_by_server_becau
 }
 
 #[test]
-fn should_unfortunately_be_dead_after_response_from_server_cannot_be_received_by_client_because_too_large(
-) {
+fn should_unfortunately_be_dead_after_response_from_server_cannot_be_received_by_client_because_too_large()
+ {
     activate_tracing();
     let (vault, _temp_dir) = local_vault_in_temp_dir();
     let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(vault));

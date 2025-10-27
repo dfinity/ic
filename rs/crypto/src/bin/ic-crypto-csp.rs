@@ -79,12 +79,44 @@ fn main() {
         start_metrics_grpc(global_metrics, logger.clone(), stream);
     }
 
+    // TODO(CRP-2915): remove canister SKS cleanup logic
+    cleanup_obsolete_canister_sks_file_if_it_exists(sks_dir, &logger, &metrics);
+
     rt.block_on(ic_crypto_internal_csp::run_csp_vault_server(
         sks_dir,
         systemd_socket_listener,
         logger,
         metrics,
     ));
+}
+
+fn cleanup_obsolete_canister_sks_file_if_it_exists(
+    sks_dir: &Path,
+    logger: &ReplicaLogger,
+    metrics: &CryptoMetrics,
+) {
+    // Clean up the obsolete canister SKS data file.
+    const CANISTER_SKS_DATA_FILENAME: &str = "canister_sks_data.pb";
+    log_cleanup_errors_and_observe_metrics(
+        overwrite_file_with_zeroes_and_delete_if_it_exists(
+            sks_dir.join(CANISTER_SKS_DATA_FILENAME),
+            logger,
+        ),
+        logger,
+        metrics,
+    );
+    // Clean up the respective .old file, although it is highly unlikely that this exists.
+    // Such a file only exists if the node crashes during the cleanup procedure after
+    // writing the canister SKS file.
+    const CANISTER_SKS_DATA_OLD_FILENAME: &str = "canister_sks_data.pb.old";
+    log_cleanup_errors_and_observe_metrics(
+        overwrite_file_with_zeroes_and_delete_if_it_exists(
+            sks_dir.join(CANISTER_SKS_DATA_OLD_FILENAME),
+            logger,
+        ),
+        logger,
+        metrics,
+    );
 }
 
 /// Aborts the whole program with a core dump if a single thread panics.
@@ -116,16 +148,14 @@ fn ensure_n_named_systemd_sockets(num_expected_sockets: usize) {
         .map(|socket_name| {
             if IC_CRYPTO_CSP_SOCKET_FILENAME != socket_name {
                 panic!(
-                    "Expected to receive {} systemd socket(s) named '{}' but instead got '{}'",
-                    num_expected_sockets, IC_CRYPTO_CSP_SOCKET_FILENAME, systemd_socket_names
+                    "Expected to receive {num_expected_sockets} systemd socket(s) named '{IC_CRYPTO_CSP_SOCKET_FILENAME}' but instead got '{systemd_socket_names}'"
                 );
             }
         })
         .count();
     if num_sockets != num_expected_sockets {
         panic!(
-            "Expected to receive {} systemd socket named '{}' but instead got {} ('{}')",
-            num_expected_sockets, IC_CRYPTO_CSP_SOCKET_FILENAME, num_sockets, systemd_socket_names
+            "Expected to receive {num_expected_sockets} systemd socket named '{IC_CRYPTO_CSP_SOCKET_FILENAME}' but instead got {num_sockets} ('{systemd_socket_names}')"
         );
     }
 }
@@ -151,4 +181,105 @@ fn listener_from_first_systemd_socket(
     let _enter_guard = rt_handle.enter();
     tokio::net::UnixListener::from_std(std_unix_listener)
         .expect("Failed to convert UnixListener into Tokio equivalent")
+}
+
+use ic_logger::{ReplicaLogger, warn};
+use std::io::{ErrorKind, Write};
+use std::path::Path;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+enum CleanupError {
+    #[error("error removing canister secret key store file {file}: {source:?}")]
+    CanisterSksFileRemoval {
+        file: String,
+        #[source]
+        source: std::io::Error,
+    },
+    #[error("error overwriting the old file: {0:?}")]
+    OldFileOverwriting(#[source] std::io::Error),
+    #[error("error getting the metadata of the old file: {0:?}")]
+    OldFileMetadataRetrieval(#[source] std::io::Error),
+    #[error("error opening file for writing: {0:?}")]
+    OpeningFileForWriting(#[source] std::io::Error),
+}
+
+fn log_cleanup_errors_and_observe_metrics(
+    cleanup_result: Result<(), Vec<CleanupError>>,
+    logger: &ReplicaLogger,
+    metrics: &CryptoMetrics,
+) {
+    if let Err(cleanup_error) = cleanup_result {
+        warn!(
+            logger,
+            "error(s) cleaning up old secret key store file: [{}]",
+            cleanup_error
+                .iter()
+                .map(|e| format!("{}", e))
+                .collect::<Vec<String>>()
+                .join(", ")
+        );
+        metrics.observe_secret_key_store_cleanup_error(cleanup_error.len() as u64);
+    }
+}
+
+fn overwrite_file_with_zeroes_and_delete_if_it_exists<P: AsRef<Path>>(
+    file: P,
+    logger: &ReplicaLogger,
+) -> Result<(), Vec<CleanupError>> {
+    let mut old_file_exists = true;
+    let mut result = match ic_sys::fs::open_existing_file_for_write(&file) {
+        Ok(mut f) => match f.metadata() {
+            Ok(metadata) => {
+                let len = metadata.len() as usize;
+                if len > 0 {
+                    let zeros = vec![0; len];
+                    f.write_all(&zeros)
+                        .map_err(|e| vec![CleanupError::OldFileOverwriting(e)])
+                } else {
+                    Ok(())
+                }
+            }
+            Err(e) => Err(vec![CleanupError::OldFileMetadataRetrieval(e)]),
+        },
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            old_file_exists = false;
+            Ok(())
+        }
+        Err(e) => Err(vec![CleanupError::OpeningFileForWriting(e)]),
+    };
+    if old_file_exists && result.is_ok() {
+        info!(
+            logger,
+            "Successfully zeroized canister secret key store file '{}'",
+            file.as_ref().to_string_lossy().to_string()
+        );
+    }
+    if old_file_exists {
+        let removal_result = ic_sys::fs::remove_file(&file).map_err(|e| {
+            vec![CleanupError::CanisterSksFileRemoval {
+                file: file.as_ref().to_string_lossy().to_string(),
+                source: e,
+            }]
+        });
+        if removal_result.is_ok() {
+            info!(
+                logger,
+                "Successfully deleted canister secret key store file '{}'",
+                file.as_ref().to_string_lossy().to_string()
+            );
+        }
+        result = combine_cleanup_results(result, removal_result);
+    }
+    result
+}
+
+fn combine_cleanup_results(
+    res1: Result<(), Vec<CleanupError>>,
+    res2: Result<(), Vec<CleanupError>>,
+) -> Result<(), Vec<CleanupError>> {
+    match (res1, res2) {
+        (Err(e1), Err(e2)) => Err(e1.into_iter().chain(e2).collect()),
+        (res1, res2) => res1.and(res2),
+    }
 }

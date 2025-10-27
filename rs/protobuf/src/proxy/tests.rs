@@ -68,6 +68,6 @@ fn missing_field() {
     b.encode(&mut bytes).unwrap();
     match <pb::Block as ProtoProxy<Block>>::proxy_decode(&bytes) {
         Err(ProxyDecodeError::MissingField("Block::payload")) => {}
-        other => panic!("Expected Err(MissingField), got {:?}", other),
+        other => panic!("Expected Err(MissingField), got {other:?}"),
     }
 }

@@ -117,7 +117,7 @@ EOT
 
     info!(logger, "Rotate keys on the unassigned node and restart it",);
     if let Err(e) = execute_bash_command(&s, script) {
-        panic!("Script execution failed: {:?}", e);
+        panic!("Script execution failed: {e:?}");
     }
 
     // Wait until the node registers itself and updates the registry, then check that we have

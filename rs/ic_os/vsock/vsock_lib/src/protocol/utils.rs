@@ -11,7 +11,7 @@ pub fn parse_response(json_str: &str) -> Response {
 /// Parse a request in a json string to `Request` struct.
 pub fn parse_request(json_str: &str) -> Result<Request, String> {
     serde_json::from_str::<Request>(json_str)
-        .map_err(|error| format!("Unable to parse guest request: {}: {}", json_str, error))
+        .map_err(|error| format!("Unable to parse guest request: {json_str}: {error}"))
 }
 
 #[cfg(test)]

@@ -1,14 +1,14 @@
 use super::*;
 use crate::sign::tests::{
-    dealing_encryption_pk_record_with, registry_with_records, REG_V1, REG_V2,
+    REG_V1, REG_V2, dealing_encryption_pk_record_with, registry_with_records,
 };
+use crate::sign::threshold_sig::ni_dkg::test_utils::REGISTRY_FS_ENC_PK_SIZE;
 use crate::sign::threshold_sig::ni_dkg::test_utils::csp_fs_enc_pk;
 use crate::sign::threshold_sig::ni_dkg::test_utils::dealing_enc_pk_record;
 use crate::sign::threshold_sig::ni_dkg::test_utils::map_of;
-use crate::sign::threshold_sig::ni_dkg::test_utils::REGISTRY_FS_ENC_PK_SIZE;
 use crate::sign::threshold_sig::ni_dkg::test_utils::{
-    csp_dealing, dkg_config, minimal_dkg_config_data_without_resharing, transcript, DKG_ID,
-    RESHARING_TRANSCRIPT_DKG_ID, THRESHOLD,
+    DKG_ID, RESHARING_TRANSCRIPT_DKG_ID, THRESHOLD, csp_dealing, dkg_config,
+    minimal_dkg_config_data_without_resharing, transcript,
 };
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::CspDkgCreateDealingError;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
@@ -16,12 +16,12 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_test_utils::set_of;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
+use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfigData;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::{
     FsEncryptionPublicKeyNotInRegistryError, MalformedFsEncryptionPublicKeyError, NotADealerError,
 };
-use ic_types::crypto::AlgorithmId;
 use ic_types::registry::RegistryClientError;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, NODE_42};
 
@@ -708,7 +708,7 @@ mod verify_dealing {
         csp.expect_verify_dealing()
             .withf(
                 move |_algorithm_id, _dealer_index, _threshold, _epoch, receiver_keys, _dealing| {
-                    println!("{:?}", receiver_keys);
+                    println!("{receiver_keys:?}");
                     *receiver_keys == expected_receiver_keys
                 },
             )

@@ -1,7 +1,7 @@
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::IDkgTranscriptInternal;
+use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptType::{Masked, Unmasked};
-use ic_types::crypto::canister_threshold_sig::MasterPublicKey;
 
 pub mod ecdsa;
 mod idkg;
@@ -11,7 +11,7 @@ pub(crate) mod test_utils;
 #[cfg(test)]
 mod tests;
 
-pub use idkg::{retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError};
+pub use idkg::{MegaKeyFromRegistryError, retrieve_mega_public_key_from_registry};
 
 #[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub enum MasterPublicKeyExtractionError {
@@ -29,7 +29,7 @@ pub fn get_master_public_key_from_transcript(
             Unmasked(_) => {
                 let internal_transcript = IDkgTranscriptInternal::try_from(idkg_transcript)
                     .map_err(|e| {
-                        MasterPublicKeyExtractionError::SerializationError(format!("{:?}", e))
+                        MasterPublicKeyExtractionError::SerializationError(format!("{e:?}"))
                     })?;
                 ecdsa::get_tecdsa_master_public_key_from_internal_transcript(&internal_transcript)
             }
@@ -40,7 +40,7 @@ pub fn get_master_public_key_from_transcript(
             Unmasked(_) => {
                 let internal_transcript = IDkgTranscriptInternal::try_from(idkg_transcript)
                     .map_err(|e| {
-                        MasterPublicKeyExtractionError::SerializationError(format!("{:?}", e))
+                        MasterPublicKeyExtractionError::SerializationError(format!("{e:?}"))
                     })?;
                 schnorr::get_tschnorr_master_public_key_from_internal_transcript(
                     &internal_transcript,

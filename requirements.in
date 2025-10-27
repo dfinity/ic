@@ -8,7 +8,7 @@ GitPython>=3.1.24
 https://github.com/rocklabs-io/ic-py/archive/53c375a1d6c1d09e8d24588142dece550b801cef.zip
 idracredfishsupport>=0.0.8
 invoke
-jira>=3.4.1
+jira>=3.10.5
 junit-xml
 loguru
 # Remove matplotlib as it does not appear to be actively used, only for one-off plotting

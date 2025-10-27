@@ -2,8 +2,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use ic_base_types::{CanisterId, NumBytes};
 use ic_config::flag_status::FlagStatus;
-use ic_logger::{error, ReplicaLogger};
-use ic_replicated_state::{canister_state::NextExecution, CanisterState};
+use ic_logger::{ReplicaLogger, error};
+use ic_replicated_state::{CanisterState, canister_state::NextExecution};
 use ic_types::{AccumulatedPriority, ComputeAllocation, ExecutionRound, LongExecutionMode};
 
 use crate::{
@@ -410,7 +410,9 @@ impl RoundSchedule {
         // Reset the accumulated priorities periodically.
         // We want to reset the scheduler regularly to safely support changes in the set
         // of canisters and their compute allocations.
-        let is_reset_round = (current_round.get() % accumulated_priority_reset_interval.get()) == 0;
+        let is_reset_round = current_round
+            .get()
+            .is_multiple_of(accumulated_priority_reset_interval.get());
 
         // Collect the priority of the canisters for this round.
         let mut accumulated_priority_invariant = AccumulatedPriority::default();

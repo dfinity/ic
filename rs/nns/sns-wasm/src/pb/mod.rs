@@ -1,13 +1,14 @@
+#![allow(deprecated)]
 use crate::{
     pb::v1::{
-        add_wasm_response, get_deployed_sns_by_proposal_id_response, AddWasmResponse, DeployedSns,
-        GetDeployedSnsByProposalIdResponse, GetNextSnsVersionResponse,
-        InsertUpgradePathEntriesResponse, ListUpgradeStep, PrettySnsVersion, SnsCanisterIds,
-        SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError,
-        StableCanisterState, UpdateSnsSubnetListResponse, UpgradePath as StableUpgradePath,
-        UpgradePath as UpgradePathPb,
+        AddWasmResponse, DeployedSns, GetDeployedSnsByProposalIdResponse,
+        GetNextSnsVersionResponse, InsertUpgradePathEntriesResponse, ListUpgradeStep,
+        PrettySnsVersion, SnsCanisterIds, SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade,
+        SnsVersion, SnsWasm, SnsWasmError, StableCanisterState, UpdateSnsSubnetListResponse,
+        UpgradePath as StableUpgradePath, UpgradePath as UpgradePathPb, add_wasm_response,
+        get_deployed_sns_by_proposal_id_response,
     },
-    sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath},
+    sns_wasm::{SnsWasmCanister, UpgradePath, vec_to_hash},
     stable_memory::SnsWasmStableMemory,
 };
 use ic_base_types::CanisterId;
@@ -121,9 +122,9 @@ impl std::fmt::Display for SnsVersion {
         versions_str.insert("Archive", hex::encode(&self.archive_wasm_hash));
 
         let json = serde_json::to_string(&versions_str)
-            .unwrap_or_else(|e| format!("Unable to serialize SnsVersion: {}", e));
+            .unwrap_or_else(|e| format!("Unable to serialize SnsVersion: {e}"));
 
-        write!(f, "{}", json)
+        write!(f, "{json}")
     }
 }
 
@@ -338,8 +339,7 @@ impl FromStr for SnsCanisterType {
             "archive" => Ok(SnsCanisterType::Archive),
             "index" => Ok(SnsCanisterType::Index),
             _ => Err(format!(
-                "from_str is not yet implemented or that is not a valid type: {}",
-                input
+                "from_str is not yet implemented or that is not a valid type: {input}"
             )),
         }
     }

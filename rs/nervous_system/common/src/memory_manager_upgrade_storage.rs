@@ -1,4 +1,4 @@
-use bytes::{buf::UninitSlice, Buf, BufMut};
+use bytes::{Buf, BufMut, buf::UninitSlice};
 use ic_stable_structures::Memory;
 use std::cmp::min;
 
@@ -333,9 +333,7 @@ impl<M: Memory> Buf for SizeAwareReader<'_, M> {
         let remaining = self.remaining();
         assert!(
             cnt <= remaining,
-            "Trying to advance {} bytes while only {} bytes remaining",
-            cnt,
-            remaining
+            "Trying to advance {cnt} bytes while only {remaining} bytes remaining"
         );
 
         // Why below is correct:
@@ -397,14 +395,14 @@ mod test {
     use crate::{
         assert_is_err,
         memory_manager_upgrade_storage::{
-            load_protobuf, read_size_bytes, store_protobuf, SizeAwareReader, SizeAwareWriter,
-            StorageEncoding, OBJECT_SIZE_BYTES_RESERVED, STABLE_STRUCTURES_WASM_PAGE_SIZE,
-            STORAGE_ENCODING_BYTES_RESERVED,
+            OBJECT_SIZE_BYTES_RESERVED, STABLE_STRUCTURES_WASM_PAGE_SIZE,
+            STORAGE_ENCODING_BYTES_RESERVED, SizeAwareReader, SizeAwareWriter, StorageEncoding,
+            load_protobuf, read_size_bytes, store_protobuf,
         },
     };
     use bytes::{Buf, BufMut};
     use ic_nns_gtc::pb::v1::{AccountState, Gtc};
-    use ic_stable_structures::{vec_mem::VectorMemory, Memory};
+    use ic_stable_structures::{Memory, vec_mem::VectorMemory};
     use prost::Message;
 
     fn allocate_gtc(num_accounts: u64) -> Gtc {

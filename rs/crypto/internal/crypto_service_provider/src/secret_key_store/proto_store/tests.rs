@@ -3,7 +3,7 @@ use crate::canister_threshold::IDKG_MEGA_SCOPE;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::test_utils::{make_key_id, make_secret_key};
 use crate::secret_key_store::{
-    scope::ConstScope, Scope, SecretKeyStore, SecretKeyStoreInsertionError,
+    Scope, SecretKeyStore, SecretKeyStoreInsertionError, scope::ConstScope,
 };
 use crate::types::CspSecretKey;
 use assert_matches::assert_matches;
@@ -23,8 +23,8 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
-use std::panic::{catch_unwind, AssertUnwindSafe};
-use tempfile::{tempdir as tempdir_deleted_at_end_of_scope, TempDir};
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use tempfile::{TempDir, tempdir as tempdir_deleted_at_end_of_scope};
 
 #[test]
 #[should_panic]
@@ -280,8 +280,7 @@ fn should_deserialize_all_existing_secret_key_stores() {
     for version in SecretKeyStoreVersion::all_versions() {
         let (_temp_dir, secret_key_store) =
             open_existing_secret_key_store_in_temp_dir(&version, CryptoMetrics::none(), None);
-        let guard = secret_key_store.keys.read();
-        assert_eq!(guard.keys().len(), 5);
+        assert_eq!(secret_key_store.keys.len(), 5);
 
         let test_vecs = vec![
             TestVector::mega_encryption(),
@@ -351,11 +350,11 @@ fn should_have_scope_for_mega_private_key_that_had_no_scope_before_migration() {
         CryptoMetrics::none(),
         None,
     );
-    let (_csp_key, scope) = with_read_lock(&secret_key_store.keys, |keys| {
-        keys.get(&TestVector::mega_encryption().key_id)
-            .map(|(csp_key, scope)| (csp_key.to_owned(), scope.to_owned()))
-    })
-    .expect("missing MEGa private key");
+    let (_csp_key, scope) = secret_key_store
+        .keys
+        .get(&TestVector::mega_encryption().key_id)
+        .map(|(csp_key, scope)| (csp_key.to_owned(), scope.to_owned()))
+        .expect("missing MEGa private key");
 
     assert_eq!(scope, Some(IDKG_MEGA_SCOPE));
 }
@@ -365,8 +364,7 @@ fn should_be_idempotent_when_opening_secret_key_store() {
     for version in SecretKeyStoreVersion::all_versions() {
         let (temp_dir, secret_key_store) =
             open_existing_secret_key_store_in_temp_dir(&version, CryptoMetrics::none(), None);
-        let secret_keys_after_first_opening =
-            with_read_lock(&secret_key_store.keys, |keys| Some(keys.clone()));
+        let secret_keys_after_first_opening = secret_key_store.keys.clone();
 
         let secret_key_store = ProtoSecretKeyStore::open(
             temp_dir.path(),
@@ -379,8 +377,7 @@ fn should_be_idempotent_when_opening_secret_key_store() {
             None,
             Arc::new(CryptoMetrics::none()),
         );
-        let secret_keys_after_second_opening =
-            with_read_lock(&secret_key_store.keys, |keys| Some(keys.clone()));
+        let secret_keys_after_second_opening = secret_key_store.keys.clone();
 
         assert_eq!(
             secret_keys_after_first_opening,
@@ -397,9 +394,9 @@ fn should_fail_to_write_to_read_only_secret_key_store_directory() {
         None,
     );
     let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.gen::<[u8; 32]>());
+    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.gen()),
+        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
     ));
 
     // make the crypto root directory non-writeable, causing the subsequent call to insert a
@@ -427,9 +424,9 @@ fn should_fail_to_write_to_secret_key_store_directory_without_execute_permission
         None,
     );
     let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.gen::<[u8; 32]>());
+    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.gen()),
+        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
     ));
 
     // make the crypto root directory non-executable, causing the subsequent call to insert a
@@ -457,9 +454,9 @@ fn should_fail_to_write_to_secret_key_store_directory_without_write_permissions(
         None,
     );
     let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.gen::<[u8; 32]>());
+    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.gen()),
+        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
     ));
 
     // make the crypto root directory non-writeable, causing the subsequent call to insert a
@@ -489,9 +486,9 @@ fn should_successfully_write_to_secret_key_store_directory_with_write_and_execut
     fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700))
         .expect("Could not set the permissions of the temp dir.");
     let mut seed = ChaCha20Rng::seed_from_u64(42);
-    let key_id = KeyId::from(seed.gen::<[u8; 32]>());
+    let key_id = KeyId::from(seed.r#gen::<[u8; 32]>());
     let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-        SecretArray::new_and_dont_zeroize_argument(&seed.gen()),
+        SecretArray::new_and_dont_zeroize_argument(&seed.r#gen()),
     ));
     assert_matches!(secret_key_store.insert(key_id, key, None), Ok(()));
 }
@@ -502,8 +499,8 @@ mod retain {
     use std::time::UNIX_EPOCH;
 
     #[test]
-    fn should_retain_expected_keys_with_specified_scope_and_not_remove_keys_with_non_matching_scope(
-    ) {
+    fn should_retain_expected_keys_with_specified_scope_and_not_remove_keys_with_non_matching_scope()
+     {
         let mut key_store = proto_key_store();
         let rng = &mut reproducible_rng();
         let mut next_key = || (make_key_id(rng), make_secret_key(rng));
@@ -529,12 +526,14 @@ mod retain {
 
         let id_to_retain = key_with_id_to_retain.0;
         let value_to_retain = key_with_value_to_retain.1;
-        assert!(key_store
-            .retain(
-                move |id, value| (id == &id_to_retain) || (value == &value_to_retain),
-                selected_scope,
-            )
-            .is_ok());
+        assert!(
+            key_store
+                .retain(
+                    move |id, value| (id == &id_to_retain) || (value == &value_to_retain),
+                    selected_scope,
+                )
+                .is_ok()
+        );
 
         assert!(
             key_store.contains(&key_with_id_to_retain.0),
@@ -569,11 +568,11 @@ mod retain {
         assert_eq!(key_store.retain(|_, _| true, selected_scope), Ok(()));
         assert_eq!(key_store.retain(|_, _| false, selected_scope), Ok(()));
         assert_eq!(
-            key_store.retain(move |id, _| (id == &id_to_retain), selected_scope),
+            key_store.retain(move |id, _| id == &id_to_retain, selected_scope),
             Ok(())
         );
         assert_eq!(
-            key_store.retain(move |_, value| (value == &value_to_retain), selected_scope),
+            key_store.retain(move |_, value| value == &value_to_retain, selected_scope),
             Ok(())
         );
     }
@@ -592,7 +591,7 @@ mod retain {
         let initial_modified_time = file_modified_time_in_nanoseconds(&file);
 
         assert_eq!(
-            key_store.retain(move |id, _| (id == &key_id), selected_scope),
+            key_store.retain(move |id, _| id == &key_id, selected_scope),
             Ok(())
         );
         assert!(key_store.contains(&key_id));
@@ -616,7 +615,7 @@ mod retain {
             .expect("insert should succeed");
 
         assert_eq!(
-            key_store.retain(move |id, _| (id == &key_id_to_retain), selected_scope),
+            key_store.retain(move |id, _| id == &key_id_to_retain, selected_scope),
             Ok(())
         );
         assert!(!key_store.contains(&key_id));
@@ -637,7 +636,7 @@ mod retain {
 
         assert_eq!(
             key_store.retain(
-                move |_, value| (value == &key_value_to_retain),
+                move |_, value| value == &key_value_to_retain,
                 selected_scope
             ),
             Ok(())
@@ -659,7 +658,7 @@ mod retain {
             .expect("insert should succeed");
 
         assert_eq!(
-            key_store.retain(move |id, _| (id == &key_id), different_scope),
+            key_store.retain(move |id, _| id == &key_id, different_scope),
             Ok(())
         );
         assert!(key_store.contains(&key_id));
@@ -756,10 +755,12 @@ mod retain_would_modify_keystore {
 
         assert!(!key_store.retain_would_modify_keystore(|_, _| true, selected_scope));
         assert!(!key_store.retain_would_modify_keystore(|_, _| false, selected_scope));
-        assert!(!key_store
-            .retain_would_modify_keystore(move |id, _| (id == &id_to_retain), selected_scope));
+        assert!(
+            !key_store
+                .retain_would_modify_keystore(move |id, _| id == &id_to_retain, selected_scope)
+        );
         assert!(!key_store.retain_would_modify_keystore(
-            move |_, value| (value == &value_to_retain),
+            move |_, value| value == &value_to_retain,
             selected_scope
         ));
     }
@@ -777,8 +778,10 @@ mod retain_would_modify_keystore {
             .insert(key_id, key_value, Some(selected_scope))
             .expect("insert should succeed");
 
-        assert!(key_store
-            .retain_would_modify_keystore(move |id, _| (id == &key_id_to_retain), selected_scope));
+        assert!(
+            key_store
+                .retain_would_modify_keystore(move |id, _| id == &key_id_to_retain, selected_scope)
+        );
     }
 
     #[test]
@@ -795,7 +798,7 @@ mod retain_would_modify_keystore {
             .expect("insert should succeed");
 
         assert!(key_store.retain_would_modify_keystore(
-            move |_, value| (value == &key_value_to_retain),
+            move |_, value| value == &key_value_to_retain,
             selected_scope
         ));
     }
@@ -814,7 +817,7 @@ mod retain_would_modify_keystore {
             .expect("insert should succeed");
 
         assert!(
-            !key_store.retain_would_modify_keystore(move |id, _| (id == &key_id), different_scope)
+            !key_store.retain_would_modify_keystore(move |id, _| id == &key_id, different_scope)
         );
     }
 
@@ -931,8 +934,8 @@ mod zeroize_old_secret_key_store {
     }
 
     #[test]
-    fn should_overwrite_leftover_backup_copy_with_zeroes_when_opening_non_existing_secret_key_store(
-    ) {
+    fn should_overwrite_leftover_backup_copy_with_zeroes_when_opening_non_existing_secret_key_store()
+     {
         let setup = Setup::new();
         fs::copy(
             &setup.secret_key_store.proto_file,
@@ -955,8 +958,10 @@ mod zeroize_old_secret_key_store {
         );
 
         assert_contains_only_zeroes(&setup.hard_link_to_test_zeroization);
-        assert!(!Path::try_exists(&setup.secret_key_store.proto_file)
-            .expect("error checking if secret key store file exists"));
+        assert!(
+            !Path::try_exists(&setup.secret_key_store.proto_file)
+                .expect("error checking if secret key store file exists")
+        );
     }
 
     #[test]
@@ -1016,8 +1021,10 @@ mod zeroize_old_secret_key_store {
         );
 
         assert_contains_only_zeroes(&setup.hard_link_to_test_zeroization);
-        assert!(Path::try_exists(&setup.secret_key_store.proto_file)
-            .expect("error checking if secret key store file exists"));
+        assert!(
+            Path::try_exists(&setup.secret_key_store.proto_file)
+                .expect("error checking if secret key store file exists")
+        );
     }
 
     mod metrics {
@@ -1025,8 +1032,8 @@ mod zeroize_old_secret_key_store {
         use ic_crypto_test_utils_metrics::assertions::MetricsObservationsAssert;
 
         #[test]
-        fn should_not_observe_any_metrics_if_zeroization_and_cleanup_succeeds_for_existing_keystore(
-        ) {
+        fn should_not_observe_any_metrics_if_zeroization_and_cleanup_succeeds_for_existing_keystore()
+         {
             // Perform setup that sets up an existing SKS
             let mut setup = Setup::new();
 
@@ -1083,8 +1090,8 @@ mod zeroize_old_secret_key_store {
         }
 
         #[test]
-        fn should_observe_cleanup_error_metrics_on_write_if_inode_of_current_and_old_sks_are_the_same(
-        ) {
+        fn should_observe_cleanup_error_metrics_on_write_if_inode_of_current_and_old_sks_are_the_same()
+         {
             let mut setup = Setup::new();
             // Make the current and old SKS files point to the same inode. This is a reasonable
             // situation if e.g., the vault process crashed during
@@ -1222,8 +1229,8 @@ fn should_fail_to_read_from_secret_key_store_with_no_read_permissions() {
 
 mod insert_or_replace {
     use super::*;
-    use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+    use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use proptest::option;
     use slog::Level;
 
@@ -1232,7 +1239,7 @@ mod insert_or_replace {
         fn should_insert_secret_key(seed: [u8; 32], scope in option::of(arb_scope())) {
             let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = proto_key_store();
-            let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
+            let key_id: KeyId = KeyId::from(rng.r#gen::<[u8; 32]>());
             let secret_key = secret_key(rng);
 
             assert!(key_store.insert_or_replace(key_id, secret_key.clone(), scope).is_ok());
@@ -1249,7 +1256,7 @@ mod insert_or_replace {
         ) {
             let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = proto_key_store();
-            let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
+            let key_id: KeyId = KeyId::from(rng.r#gen::<[u8; 32]>());
             let first_secret_key = secret_key(rng);
             assert!(key_store.insert(key_id, first_secret_key.clone(), scope_first_key).is_ok());
 
@@ -1269,7 +1276,7 @@ mod insert_or_replace {
         ) {
             let rng = &mut ChaCha20Rng::from_seed(seed);
             let mut key_store = proto_key_store();
-            let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
+            let key_id: KeyId = KeyId::from(rng.r#gen::<[u8; 32]>());
             let secret_key = secret_key(rng);
             assert!(key_store.insert(key_id, secret_key.clone(), scope1).is_ok());
 
@@ -1286,7 +1293,7 @@ mod insert_or_replace {
             let replica_logger = ReplicaLogger::from(&in_memory_logger);
             let mut key_store = ProtoSecretKeyStore::open(temp_dir.path(), "sks_data.pb", Some(replica_logger), Arc::new(CryptoMetrics::none()));
             let rng = &mut ChaCha20Rng::from_seed(seed);
-            let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
+            let key_id: KeyId = KeyId::from(rng.r#gen::<[u8; 32]>());
             let secret_key = secret_key(rng);
 
             assert!(key_store.insert(key_id, secret_key.clone(), scope).is_ok()); // 1 overwrite
@@ -1300,7 +1307,7 @@ mod insert_or_replace {
 
     fn secret_key<R: Rng>(rng: &mut R) -> CspSecretKey {
         CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
-            SecretArray::new_and_dont_zeroize_argument(&rng.gen()),
+            SecretArray::new_and_dont_zeroize_argument(&rng.r#gen()),
         ))
     }
 

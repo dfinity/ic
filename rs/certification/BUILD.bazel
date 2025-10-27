@@ -24,6 +24,7 @@ DEV_DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:assert_matches",
     "@crate_index//:rand",
+    "@crate_index//:rstest",
 ]
 
 rust_library(

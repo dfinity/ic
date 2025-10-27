@@ -14,6 +14,7 @@ path = "src/lib.rs"
 bytes = { workspace = true }
 candid = { workspace = true }
 comparable = { version = "0.5", features = ["derive"] }
+hex = { workspace = true }
 ic-base-types = { path = "../../../types/base_types" }
 ic-crypto-sha2 = { path = "../../../crypto/sha2" }
 ic-nervous-system-clients = { path = "../../../nervous_system/clients" }
@@ -22,8 +23,8 @@ ic-nervous-system-common-validation = { path = "../../../nervous_system/common/v
 ic-nervous-system-proto = { path = "../../../nervous_system/proto" }
 ic-nns-common = { path = "../../common" }
 ic-protobuf = { path = "../../../protobuf" }
-ic-sns-root = { path = "../../../sns/root" }                             # This is just for a couple of PB definitions.
-ic-sns-swap = { path = "../../../sns/swap" }                             # This is just for a couple of PB definitions.
+ic-sns-root = { path = "../../../sns/root" }                                                 # This is just for a couple of PB definitions.
+ic-sns-swap = { path = "../../../sns/swap" }                                                 # This is just for a couple of PB definitions.
 ic-types = { path = "../../../types/types" }
 ic-utils = { path = "../../../utils" }
 icp-ledger = { path = "../../../ledger_suite/icp" }

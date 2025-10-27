@@ -67,19 +67,19 @@ impl fmt::Display for DisplayAmount {
             let frac_prefix: u64 = {
                 // The fraction part without trailing zeros.
                 let mut f = frac;
-                while f % 10 == 0 {
+                while f.is_multiple_of(10) {
                     f /= 10
                 }
                 f
             };
 
-            write!(fmt, "{}.", int)?;
+            write!(fmt, "{int}.")?;
             for _ in 0..(8 - frac_width) {
                 write!(fmt, "0")?;
             }
-            write!(fmt, "{}", frac_prefix)
+            write!(fmt, "{frac_prefix}")
         } else {
-            write!(fmt, "{}.0", int)
+            write!(fmt, "{int}.0")
         }
     }
 }
@@ -196,7 +196,7 @@ pub fn write_compact_size(n: usize, buf: &mut impl Buffer) {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct SignedInput {
     pub previous_output: OutPoint,
     pub sequence: u32,
@@ -357,7 +357,7 @@ impl UnsignedTransaction {
     }
 }
 
-#[derive(Eq, PartialEq, Debug)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct SignedTransaction {
     pub inputs: Vec<SignedInput>,
     pub outputs: Vec<TxOut>,

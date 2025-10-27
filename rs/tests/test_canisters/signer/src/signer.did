@@ -1,3 +1,4 @@
+type Bip341 = record { merkle_root_hash : blob };
 type EcdsaCurve = variant { secp256k1 };
 type EcdsaKeyId = record { name : text; curve : EcdsaCurve };
 type GenEcdsaParams = record {
@@ -6,6 +7,7 @@ type GenEcdsaParams = record {
   derivation_path_element_size : nat64;
 };
 type GenSchnorrParams = record {
+  aux : opt SchnorrAux;
   key_id : SchnorrKeyId;
   derivation_path_length : nat64;
   derivation_path_element_size : nat64;
@@ -16,14 +18,21 @@ type GenVetkdParams = record {
   input_size : nat64;
   context_size : nat64;
 };
-type ManualReply = record { signature : blob };
-type ManualReply_1 = record { encrypted_key : blob };
 type SchnorrAlgorithm = variant { ed25519; bip340secp256k1 };
+type SchnorrAux = variant { bip341 : Bip341 };
 type SchnorrKeyId = record { algorithm : SchnorrAlgorithm; name : text };
+type SignWithEcdsaResult = record { signature : blob };
 type VetKDCurve = variant { bls12_381_g2 };
+type VetKDDeriveKeyResult = record { encrypted_key : blob };
 type VetKDKeyId = record { name : text; curve : VetKDCurve };
 service : {
-  gen_ecdsa_sig : (GenEcdsaParams) -> (ManualReply);
-  gen_schnorr_sig : (GenSchnorrParams) -> (ManualReply);
-  gen_vetkd_key : (GenVetkdParams) -> (ManualReply_1);
+  // Generates a dummy ECDSA signature of given size parameters.
+  // The call does not verify the signature, it only generates it.
+  gen_ecdsa_sig : (GenEcdsaParams) -> (SignWithEcdsaResult);
+  // Generates a dummy Schnorr signature of given size parameters.
+  // The call does not verify the signature, it only generates it.
+  gen_schnorr_sig : (GenSchnorrParams) -> (SignWithEcdsaResult);
+  // Generates a dummy VetKD key of given size parameters.
+  // The call does not verify the encrypted key, it only generates it.
+  gen_vetkd_key : (GenVetkdParams) -> (VetKDDeriveKeyResult);
 }

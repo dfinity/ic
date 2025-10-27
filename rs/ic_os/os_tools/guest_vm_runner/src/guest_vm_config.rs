@@ -1,12 +1,11 @@
 use crate::GuestVMType;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use askama::Template;
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config::hostos::guestos_config::generate_guestos_config;
 use config_types::{GuestOSConfig, HostOSConfig};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, IpVariant};
-use ic_sev::host::HostSevCertificateProvider;
+use deterministic_ips::{IpVariant, calculate_deterministic_mac};
 use std::path::{Path, PathBuf};
 
 // See build.rs
@@ -17,6 +16,12 @@ const UPGRADE_GUEST_VM_DOMAIN_NAME: &str = "upgrade-guestos";
 
 const DEFAULT_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/guestos-serial.log";
 const UPGRADE_SERIAL_LOG_PATH: &str = "/var/log/libvirt/qemu/upgrade-guestos-serial.log";
+
+#[cfg(not(feature = "dev"))]
+const DEFAULT_VM_MEMORY_GB: u32 = 490;
+#[cfg(not(feature = "dev"))]
+const DEFAULT_VM_VCPUS: u32 = 64;
+const UPGRADE_VM_MEMORY_GB: u32 = 4;
 
 #[derive(Debug)]
 pub struct DirectBootConfig {
@@ -33,13 +38,13 @@ pub struct DirectBootConfig {
 pub fn assemble_config_media(
     hostos_config: &HostOSConfig,
     guest_vm_type: GuestVMType,
-    sev_certificate_provider: &mut HostSevCertificateProvider,
+    sev_certificate_chain_pem: Option<String>,
     media_path: &Path,
 ) -> Result<()> {
     let guestos_config = generate_guestos_config(
         hostos_config,
         guest_vm_type.to_config_type(),
-        sev_certificate_provider,
+        sev_certificate_chain_pem,
     )
     .context("Failed to generate GuestOS config")?;
 
@@ -65,13 +70,16 @@ fn make_bootstrap_options(
     };
 
     #[cfg(feature = "dev")]
-    if hostos_config.icos_settings.use_ssh_authorized_keys {
-        bootstrap_options.accounts_ssh_authorized_keys =
-            Some(PathBuf::from("/boot/config/ssh_authorized_keys"));
-    }
+    {
+        if hostos_config.icos_settings.use_ssh_authorized_keys {
+            bootstrap_options.accounts_ssh_authorized_keys =
+                Some(PathBuf::from("/boot/config/ssh_authorized_keys"));
+        }
 
-    if hostos_config.icos_settings.use_nns_public_key {
-        bootstrap_options.nns_public_key = Some(PathBuf::from("/boot/config/nns_public_key.pem"));
+        let nns_key_override_path = PathBuf::from("/boot/config/nns_public_key_override.pem");
+        if nns_key_override_path.exists() {
+            bootstrap_options.nns_public_key_override = Some(nns_key_override_path);
+        }
     }
 
     if hostos_config.icos_settings.use_node_operator_private_key {
@@ -101,20 +109,29 @@ pub fn generate_vm_config(
         node_type,
     );
 
-    let cpu_domain = if config.hostos_settings.vm_cpu == "qemu" {
-        "qemu"
-    } else {
-        "kvm"
+    let (cpu_domain, total_vm_memory, nr_of_vcpus) = vm_resources(config);
+
+    // We need 4GB for the upgrade VM. We subtract that from the total memory. This is not
+    // necessary when SEV is disabled (since no upgrade VM is needed) but mixed subnets that
+    // contain nodes with and without SEV should have the same memory settings for consistency
+    // across nodes.
+    ensure!(
+        total_vm_memory >= UPGRADE_VM_MEMORY_GB,
+        "GuestOS VM memory must be at least {UPGRADE_VM_MEMORY_GB}GB but is {total_vm_memory}GB."
+    );
+    let vm_memory = match guest_vm_type {
+        GuestVMType::Default => total_vm_memory - UPGRADE_VM_MEMORY_GB,
+        GuestVMType::Upgrade => UPGRADE_VM_MEMORY_GB,
     };
 
     GuestOSTemplateProps {
         domain_name: vm_domain_name(guest_vm_type).to_string(),
         domain_uuid: vm_domain_uuid(guest_vm_type).to_string(),
         disk_device: disk_device.to_path_buf(),
-        cpu_domain: cpu_domain.to_string(),
+        cpu_domain,
         console_log_path: serial_log_path(guest_vm_type).display().to_string(),
-        vm_memory: config.hostos_settings.vm_memory,
-        nr_of_vcpus: config.hostos_settings.vm_nr_of_vcpus,
+        vm_memory,
+        nr_of_vcpus,
         mac_address,
         config_media_path: media_path.to_path_buf(),
         direct_boot,
@@ -122,6 +139,25 @@ pub fn generate_vm_config(
     }
     .render()
     .context("Failed to render GuestOS VM XML template")
+}
+
+#[cfg(feature = "dev")]
+fn vm_resources(config: &HostOSConfig) -> (String, u32, u32) {
+    let cpu_domain = if config.hostos_settings.hostos_dev_settings.vm_cpu == "qemu" {
+        "qemu".to_string()
+    } else {
+        "kvm".to_string()
+    };
+
+    let total_vm_memory = config.hostos_settings.hostos_dev_settings.vm_memory;
+    let vm_nr_of_vcpus = config.hostos_settings.hostos_dev_settings.vm_nr_of_vcpus;
+
+    (cpu_domain, total_vm_memory, vm_nr_of_vcpus)
+}
+
+#[cfg(not(feature = "dev"))]
+fn vm_resources(_config: &HostOSConfig) -> (String, u32, u32) {
+    ("kvm".to_string(), DEFAULT_VM_MEMORY_GB, DEFAULT_VM_VCPUS)
 }
 
 pub fn vm_domain_name(guest_vm_type: GuestVMType) -> &'static str {
@@ -149,8 +185,8 @@ pub fn serial_log_path(guest_vm_type: GuestVMType) -> &'static Path {
 mod tests {
     use super::*;
     use config_types::{
-        DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSSettings, ICOSSettings,
-        Ipv4Config, Ipv6Config, Logging, NetworkSettings,
+        DeploymentEnvironment, DeterministicIpv6Config, HostOSConfig, HostOSDevSettings,
+        HostOSSettings, ICOSSettings, Ipv4Config, Ipv6Config, Logging, NetworkSettings,
     };
     use goldenfile::Mint;
     use std::env;
@@ -185,11 +221,17 @@ mod tests {
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
             },
+            #[allow(deprecated)]
             hostos_settings: HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 16,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
                 verbose: false,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
             },
             guestos_settings: Default::default(),
         }
@@ -198,16 +240,11 @@ mod tests {
     #[test]
     fn test_make_bootstrap_options() {
         let mut config = create_test_hostos_config();
-        config.icos_settings.use_nns_public_key = true;
         config.icos_settings.use_ssh_authorized_keys = true;
         config.icos_settings.use_node_operator_private_key = true;
 
-        let guestos_config = generate_guestos_config(
-            &config,
-            config_types::GuestVMType::Default,
-            &mut HostSevCertificateProvider::new_disabled(),
-        )
-        .unwrap();
+        let guestos_config =
+            generate_guestos_config(&config, config_types::GuestVMType::Default, None).unwrap();
 
         let options = make_bootstrap_options(&config, guestos_config.clone()).unwrap();
 
@@ -215,7 +252,7 @@ mod tests {
             options,
             BootstrapOptions {
                 guestos_config: Some(guestos_config),
-                nns_public_key: Some(PathBuf::from("/boot/config/nns_public_key.pem")),
+                nns_public_key_override: None,
                 node_operator_private_key: Some(PathBuf::from(
                     "/boot/config/node_operator_private_key.pem"
                 )),
@@ -274,10 +311,16 @@ mod tests {
     fn test_generate_vm_config_qemu() {
         test_vm_config(
             "guestos_vm_qemu.xml",
+            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 16,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ false,
@@ -290,10 +333,16 @@ mod tests {
     fn test_generate_vm_config_upgrade_guestos() {
         test_vm_config(
             "upgrade_guestos.xml",
+            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 16,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 64,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 64,
+                },
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ true,
@@ -306,10 +355,16 @@ mod tests {
     fn test_generate_vm_config_kvm() {
         test_vm_config(
             "guestos_vm_kvm.xml",
+            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 16,
                 vm_cpu: "kvm".to_string(),
                 vm_nr_of_vcpus: 56,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "kvm".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ false,
@@ -322,10 +377,16 @@ mod tests {
     fn test_generate_vm_config_sev() {
         test_vm_config(
             "guestos_vm_sev.xml",
+            #[allow(deprecated)]
             HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 16,
                 vm_cpu: "kvm".to_string(),
                 vm_nr_of_vcpus: 56,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "kvm".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
                 ..HostOSSettings::default()
             },
             /*enable_trusted_execution_environment=*/ true,
@@ -340,12 +401,7 @@ mod tests {
         let media_path = temp_dir.path().join("config.img");
         let config = create_test_hostos_config();
 
-        let result = assemble_config_media(
-            &config,
-            GuestVMType::Upgrade,
-            &mut HostSevCertificateProvider::new_disabled(),
-            &media_path,
-        );
+        let result = assemble_config_media(&config, GuestVMType::Upgrade, None, &media_path);
 
         assert!(
             result.is_ok(),

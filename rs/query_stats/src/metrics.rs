@@ -1,4 +1,4 @@
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_types::batch::QueryStats;
 use prometheus::{HistogramVec, IntCounter, IntGauge};
 
@@ -20,19 +20,19 @@ impl QueryStatsMetricsSet {
     pub fn new(metrics_registry: &MetricsRegistry, name: &str) -> Self {
         Self {
             num_calls: metrics_registry.int_gauge(
-                format!("query_stats_{}_num_calls", name),
+                format!("query_stats_{name}_num_calls"),
                 "Sum of calls".to_string(),
             ),
             num_instructions: metrics_registry.int_gauge(
-                format!("query_stats_{}_num_instructions", name),
+                format!("query_stats_{name}_num_instructions"),
                 "Sum of instructions".to_string(),
             ),
             request_bytes: metrics_registry.int_gauge(
-                format!("query_stats_{}_request_bytes", name),
+                format!("query_stats_{name}_request_bytes"),
                 "Sum of request bytes".to_string(),
             ),
             response_bytes: metrics_registry.int_gauge(
-                format!("query_stats_{}_response_bytes", name),
+                format!("query_stats_{name}_response_bytes"),
                 "Sum of response bytes".to_string(),
             ),
         }

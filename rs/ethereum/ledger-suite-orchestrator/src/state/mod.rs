@@ -5,11 +5,11 @@ mod tests;
 
 use crate::candid::{CyclesManagement, InitArg};
 use crate::scheduler::{Erc20Token, InvalidManageInstalledCanistersError, Task};
-use crate::storage::memory::{state_memory, StableMemory};
 use crate::storage::WasmHashError;
+use crate::storage::memory::{StableMemory, state_memory};
 use candid::Principal;
 use ic_cdk::trap;
-use ic_stable_structures::{storable::Bound, Cell, Storable};
+use ic_stable_structures::{Cell, Storable, storable::Bound};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_bytes::ByteArray;
 use std::borrow::Cow;
@@ -100,7 +100,7 @@ impl<const N: usize> FromStr for Hash<N> {
             ));
         }
         let mut bytes = [0u8; N];
-        hex::decode_to_slice(s, &mut bytes).map_err(|e| format!("Invalid hex string: {}", e))?;
+        hex::decode_to_slice(s, &mut bytes).map_err(|e| format!("Invalid hex string: {e}"))?;
         Ok(Self(bytes))
     }
 }
@@ -112,12 +112,12 @@ impl<const N: usize> Display for Hash<N> {
 }
 
 impl<const N: usize> Storable for Hash<N> {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::from(self.as_ref())
     }
 
     fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
-        assert_eq!(bytes.len(), N, "Hash representation is {}-bytes long", N);
+        assert_eq!(bytes.len(), N, "Hash representation is {N}-bytes long");
         let mut be_bytes = [0u8; N];
         be_bytes.copy_from_slice(bytes.as_ref());
         Self(be_bytes)
@@ -153,7 +153,7 @@ impl WasmHash {
                 Some(hash) => {
                     let hash = WasmHash::from_str(hash)?;
                     if !duplicates.insert(hash.clone()) {
-                        return Err(format!("Duplicate hash: {}", hash));
+                        return Err(format!("Duplicate hash: {hash}"));
                     }
                     result.push(Some(hash));
                 }
@@ -241,8 +241,7 @@ impl ManagedCanisters {
         assert_eq!(
             self.find_by_id(&token_id),
             None,
-            "BUG: token {:?} is already managed",
-            token_id
+            "BUG: token {token_id:?} is already managed"
         );
         let previous_element = match token_id {
             TokenId::Erc20(contract) => self.canisters.insert(contract, canisters),
@@ -295,13 +294,13 @@ impl TokenId {
     pub fn into_erc20_unchecked(self) -> Erc20Token {
         match self {
             TokenId::Erc20(token) => token,
-            TokenId::Other(symbol) => panic!("BUG: token id {:?} is not an ERC-20 token", symbol),
+            TokenId::Other(symbol) => panic!("BUG: token id {symbol:?} is not an ERC-20 token"),
         }
     }
 
     pub fn into_other_unchecked(self) -> TokenSymbol {
         match self {
-            TokenId::Erc20(token) => panic!("BUG: token id {:?} is an ERC-20 token", token),
+            TokenId::Erc20(token) => panic!("BUG: token id {token:?} is an ERC-20 token"),
             TokenId::Other(symbol) => symbol,
         }
     }
@@ -488,7 +487,7 @@ impl ConfigState {
 }
 
 impl Storable for ConfigState {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         match &self {
             ConfigState::Uninitialized => Cow::Borrowed(&[]),
             ConfigState::Initialized(config) => Cow::Owned(encode(config)),
@@ -615,7 +614,7 @@ impl State {
     pub fn record_archives(&mut self, token_id: &TokenId, archives: Vec<Principal>) {
         let canisters = self
             .managed_canisters_mut(token_id)
-            .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", token_id));
+            .unwrap_or_else(|| panic!("BUG: token {token_id:?} is not managed"));
         canisters.archives = archives;
     }
 
@@ -629,7 +628,7 @@ impl State {
         let token_id = TokenId::from(contract.clone());
         let canisters = self
             .managed_canisters_mut(&token_id)
-            .unwrap_or_else(|| panic!("BUG: token {:?} is not managed", token_id));
+            .unwrap_or_else(|| panic!("BUG: token {token_id:?} is not managed"));
         canisters
             .try_insert(Canister::<T>::new(ManagedCanisterStatus::Created {
                 canister_id,

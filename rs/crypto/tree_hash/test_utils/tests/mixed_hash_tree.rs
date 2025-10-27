@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use ic_crypto_tree_hash::MixedHashTree;
 use ic_crypto_tree_hash_test_utils::{
-    mixed_hash_tree_digest_recursive, TooDeepRecursion, MAX_HASH_TREE_DEPTH,
+    MAX_HASH_TREE_DEPTH, TooDeepRecursion, mixed_hash_tree_digest_recursive,
 };
 
 #[test]

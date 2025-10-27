@@ -17,6 +17,4 @@ on the process that this file is part of, see
 
 ## Fixed
 
-* Fixed a bug with the topic follower index.
-
 ## Security

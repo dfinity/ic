@@ -7,10 +7,9 @@ fn main() {
         Err(VarError::NotPresent) => PathBuf::from("../wasm/ledger-archive-node-canister.wasm")
             .canonicalize()
             .expect("failed to canonicalize a path"),
-        Err(VarError::NotUnicode(path)) => panic!(
-            "Ledger archive node Wasm path contains non-unicode characters: {:?}",
-            path
-        ),
+        Err(VarError::NotUnicode(path)) => {
+            panic!("Ledger archive node Wasm path contains non-unicode characters: {path:?}")
+        }
     };
     let ledger_did_path = PathBuf::from("../ledger.did").canonicalize().unwrap();
 

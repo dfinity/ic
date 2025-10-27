@@ -1,4 +1,4 @@
-use crate::pb::v1::{neuron::FolloweesForTopic, Followee};
+use crate::pb::v1::{Followee, neuron::FolloweesForTopic};
 use ic_nervous_system_common::E8;
 use itertools::Itertools;
 use maplit::btreeset;
@@ -287,40 +287,35 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
             "Trivial case: One neuron votes; no following involved.",
             Action::DeregisterDappCanisters(Default::default()),
             Topic::CriticalDappOperations,
-            vec![
-                voting_neuron.clone(),
-            ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            vec![voting_neuron.clone()],
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
             "Two neurons:  One neuron votes, another one does not follow and thus does not vote.",
             Action::DeregisterDappCanisters(Default::default()),
             Topic::CriticalDappOperations,
-            vec![
-                voting_neuron.clone(),
-                neuron(
-                    nid(1),
-                    btreemap! {},
-                    None,
-                ),
-            ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: Vote::Unspecified as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            vec![voting_neuron.clone(), neuron(nid(1), btreemap! {}, None)],
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: Vote::Unspecified as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -338,21 +333,23 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                                 topic: Some(Topic::ApplicationBusinessLogic as i32),
                                 followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
                             },
-                        }
-                    })
+                        },
+                    }),
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: Vote::Unspecified as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: Vote::Unspecified as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -371,17 +368,19 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                     None,
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: Vote::Unspecified as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: Vote::Unspecified as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -399,21 +398,23 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                                 topic: Some(Topic::CriticalDappOperations as i32),
                                 followees: vec![Followee { neuron_id: Some(nid(2)), alias: None }],
                             },
-                        }
-                    })
+                        },
+                    }),
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: Vote::Unspecified as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: Vote::Unspecified as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -432,17 +433,19 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                     None,
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: Vote::Unspecified as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: Vote::Unspecified as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -460,21 +463,23 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                                 topic: Some(Topic::CriticalDappOperations as i32),
                                 followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
                             },
-                        }
-                    })
+                        },
+                    }),
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -493,17 +498,19 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                     None,
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -522,17 +529,19 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                     None,
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -554,21 +563,23 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                                 topic: Some(Topic::CriticalDappOperations as i32),
                                 followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
                             },
-                        }
+                        },
                     }),
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -590,21 +601,23 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                                 topic: Some(Topic::ApplicationBusinessLogic as i32),
                                 followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
                             },
-                        }
+                        },
                     }),
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -626,21 +639,23 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                                 topic: Some(Topic::CriticalDappOperations as i32),
                                 followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
                             },
-                        }
+                        },
                     }),
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -658,7 +673,7 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                                 topic: Some(Topic::CriticalDappOperations as i32),
                                 followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
                             },
-                        }
+                        },
                     }),
                 ),
                 neuron(
@@ -670,26 +685,28 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                                 topic: Some(Topic::CriticalDappOperations as i32),
                                 followees: vec![Followee { neuron_id: Some(nid(1)), alias: None }],
                             },
-                        }
+                        },
                     }),
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(2).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(2).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -707,7 +724,7 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                                 topic: Some(Topic::CriticalDappOperations as i32),
                                 followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
                             },
-                        }
+                        },
                     }),
                 ),
                 neuron(
@@ -720,22 +737,24 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                     None,
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(2).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(2).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -762,26 +781,28 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                                 topic: Some(Topic::CriticalDappOperations as i32),
                                 followees: vec![Followee { neuron_id: Some(nid(1)), alias: None }],
                             },
-                        }
+                        },
                     }),
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(2).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(2).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -809,22 +830,24 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                     None,
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(2).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(2).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -835,47 +858,47 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                 voting_neuron.clone(),
                 neuron(
                     nid(1),
-                    btreemap! {
-                    },
+                    btreemap! {},
                     Some(TopicFollowees {
                         topic_id_to_followees: btreemap! {
                             Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                                 topic: Some(Topic::CriticalDappOperations as i32),
                                 followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
                             },
-                        }
+                        },
                     }),
                 ),
                 neuron(
                     nid(2),
-                    btreemap! {
-                    },
+                    btreemap! {},
                     Some(TopicFollowees {
                         topic_id_to_followees: btreemap! {
                             Topic::CriticalDappOperations as i32 => FolloweesForTopic {
                                 topic: Some(Topic::CriticalDappOperations as i32),
                                 followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
                             },
-                        }
+                        },
                     }),
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(2).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(2).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -893,7 +916,7 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                                 topic: Some(Topic::CriticalDappOperations as i32),
                                 followees: vec![Followee { neuron_id: Some(nid(0)), alias: None }],
                             },
-                        }
+                        },
                     }),
                 ),
                 neuron(
@@ -906,22 +929,24 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                     None,
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(2).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(2).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
         (
@@ -949,22 +974,24 @@ fn test_cast_vote_and_cascade_follow_with_topic_and_proposal_following() {
                     None,
                 ),
             ],
-            Box::new(|directly_cast_vote| btreemap! {
-                nid(0).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(1).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
-                nid(2).to_string() => Ballot {
-                    vote: directly_cast_vote as i32,
-                    voting_power,
-                    cast_timestamp_seconds,
-                },
+            Box::new(|directly_cast_vote| {
+                btreemap! {
+                    nid(0).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(1).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                    nid(2).to_string() => Ballot {
+                        vote: directly_cast_vote as i32,
+                        voting_power,
+                        cast_timestamp_seconds,
+                    },
+                }
             }),
         ),
     ];
@@ -1064,7 +1091,7 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
                                     topic: Some(Topic::CriticalDappOperations as i32),
                                     followees: vec![Followee { neuron_id: Some(nid(1)), alias: None }],
                                 },
-                            }
+                            },
                         }),
                     ),
                     Vote::Unspecified,
@@ -1113,7 +1140,7 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
                                     topic: Some(Topic::CriticalDappOperations as i32),
                                     followees: vec![Followee { neuron_id: Some(nid(1)), alias: None }],
                                 },
-                            }
+                            },
                         }),
                     ),
                     Vote::Unspecified,
@@ -1162,7 +1189,7 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
                                     topic: Some(Topic::CriticalDappOperations as i32),
                                     followees: vec![Followee { neuron_id: Some(nid(1)), alias: None }],
                                 },
-                            }
+                            },
                         }),
                     ),
                     Vote::Unspecified,
@@ -1211,7 +1238,7 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
                                     topic: Some(Topic::CriticalDappOperations as i32),
                                     followees: vec![Followee { neuron_id: Some(nid(1)), alias: None }],
                                 },
-                            }
+                            },
                         }),
                     ),
                     Vote::Unspecified,
@@ -1259,7 +1286,7 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
                                         Followee { neuron_id: Some(nid(1)), alias: None },
                                     ],
                                 },
-                            }
+                            },
                         }),
                     ),
                     Vote::Unspecified,
@@ -1305,7 +1332,7 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
                                         Followee { neuron_id: Some(nid(1)), alias: None },
                                     ],
                                 },
-                            }
+                            },
                         }),
                     ),
                     Vote::Unspecified,
@@ -1357,7 +1384,7 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
                                         Followee { neuron_id: Some(nid(1)), alias: None },
                                     ],
                                 },
-                            }
+                            },
                         }),
                     ),
                     Vote::Unspecified,
@@ -1382,7 +1409,7 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
                     voting_power: E8,
                     cast_timestamp_seconds,
                 },
-            }
+            },
         ),
         (
             "Three neurons:  N0:YES -- topic --> N2; \
@@ -1405,7 +1432,7 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
                                         Followee { neuron_id: Some(nid(1)), alias: None },
                                     ],
                                 },
-                            }
+                            },
                         }),
                     ),
                     Vote::Unspecified,
@@ -1471,8 +1498,7 @@ fn test_cast_vote_and_cascade_follow_with_multiple_followees() {
         assert_ne!(
             actively_voting_neurons.len(),
             0,
-            "There must be at least one actively voting neuron. {}",
-            label
+            "There must be at least one actively voting neuron. {label}"
         );
 
         // The order of votes should not matter, as the `cast_vote_and_cascade_follow` function

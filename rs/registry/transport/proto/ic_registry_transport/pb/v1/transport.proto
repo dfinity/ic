@@ -25,83 +25,37 @@ syntax = "proto3";
 // Note that registry versions are always strictly >= 0, a -1 value is used
 // to signal that no version was assigned.
 //
-// # Migrating to Large Values/High-Capacity Types
+// # High-Capacity Types
 //
-// Clients need to migrate if they fetch `CatchUpPackageContents`(s) via one (or
-// more) of the following methods:
+// At some point we introduced various HighCapacity${T} types, based on existing
+// ${T} types. In this section, we call the former "high-capacity" types, and
+// the latter "legacy" types. For example, this file used to define
+// RegistryValue, and later, HighCapacityRegistryValue was added. High-capacity
+// and legacy types existed side by side for a while in order to let clients to
+// migrate. That migration has now been completed. See earlier versions of this
+// file for a detailed description of the migraiton plan.
 //
-//     1. get_certified_changes_since
-//     2. get_value
-//     3. get_changes_since
+// As indicated by the name, the difference between these is that HighCapacity
+// types allow clients to fetch "large" values from the Registry. Large values
+// requrie follow up calls to the Registry's get_chunk method.
 //
-// (Such entries have keys of the form `catch_up_package_contents_${subnet_id}`.)
+// Most of the original legacy types have now been removed from this file.
+// However, the corresponding legacy Rust types remain for use WITHIN the
+// Registry canister (the legacy Rust types have shed support for Protocol
+// Buffers encoding and decoding, since they are now only used internally).
 //
-// Many types here have corresponding "high-capacity" types. E.g. we define both
-// RegistryValue and HighCapacityRegistryValue. We refer to the former as the
-// "legacy" type; whereas, we call the later the "high-capacity" type. We are
-// transitioning to the high-capacity types. Although clients need to do some
-// work, the migration will be "nice and gradual". This section explains what
-// clients can and must do, and when.
+// ## Secondary Migration/Clean Up
 //
-// The key observation is that as long as
-//
-//     1. the `large_value_chunk_keys` field is not populated, and
-//     2. whenever `deletion_marker` is true, `value` is empty
-//
-// then, it is possible to convert from a high-capacity object to a equivalent
-// legacy object by encoding, and then decoding. Furthermore, the other
-// direction also works. This allows a window during which clients can start
-// using high-capacity types at any time.
-//
-// Once the high-capacity type definitions are in the master branch of the ic
-// GitHub repo, the migration window has "opened". An announcement will be sent
-// shortly after this event. This will occur as soon as possible to give clients
-// as much time as possible to migrate.
-//
-// At this point, client CAN migrate. That is, they can (develop and) deploy
-// versions of their application that use high-capacity types instead of legacy
-// types. Once they do that, they will be ready for the Registry canister to
-// start emiting large data.
-//
-// During this time, Registry will also migrate to high-capacity types, but will
-// not actually start emitting large data right away.
-//
-// After clients have had a "reasonable" amount of time to migrate, large data
-// will start appearing in Registry. At that point, the migration window is
-// "closed", and clients will need to have migrated. An announcement will be
-// sent shortly before this event. The appearance of large data might be delayed
-// if clients need more time to migrate.
-//
-// After the migration window, the legacy types will be obsolete. Therefore, it
-// will be a bit silly for "HighCapacity" to be in the name of the types, and it
-// will be confusing for the legacy types to be retained. Therefore, what will
-// happen shortly after the migration window is that the legacy type definitions
-// will be replaced/modified with a copy of the high-capacity type definitions.
-// After a "long" time has passed, the "HighCapacity" names will go away.
-//
-// To ease this secondary/cleanup transition (where "HighCapacity" is deleted),
-// it is recommended that clients create some aliases. E.g. in Rust,
-//
-// ```rust
-// use ic_registry_transport::pb::v1::{
-//     HighCapacityRegistryValue as RegistryValue,
-// };
-// ```
-//
-// Then, when the legacy definitions are replaced, clients can change the above
-// line to this:
-//
-// ```rust
-// use ic_registry_transport::pb::v1::{
-//     RegistryValue,
-// };
-// ```
-//
-// Once all clients have made such changes, it will be possible to delete
-// "HighCapacity" definitions from this file. (Ofc, such clean up is not
-// strictly necessary, and can easily be deferred for a long time.)
-//
-// TODO(NNS1-3679): Delete this section once all the steps here are completed.
+// After the migration described above, the legacy types were no longer needed
+// here, and most of them have been removed from this file (but as the previous
+// section states, the legacy Rust type definitions remain for internal use by
+// the Registry canister). Therefore, it is a bit silly for "HighCapacity" to be
+// in the name of the remaining types defined here, but now you know why these
+// funny names exist. We could try to remove "HighCapacity" from the names of
+// these types, but there is no intention to do that. Instead, the plan is to
+// simply retain this vestigial naming, since the harm is minimal (sometimes, it
+// is better to leave shrapnel in the body, rather than try to remove it).
+
 package ic_registry_transport.pb.v1;
 
 import "google/protobuf/wrappers.proto";
@@ -200,49 +154,9 @@ message HighCapacityRegistryGetChangesSinceResponse {
   repeated HighCapacityRegistryDelta deltas = 3;
 }
 
-// A single change made to a key in the registry.
-message RegistryValue {
-  // The value that was set in this mutation. If the
-  // mutation is a deletion, the field has no meaning.
-  bytes value = 1;
-
-  // The version at which this mutation happened.
-  uint64 version = 2;
-
-  // If true, this change represents a deletion.
-  bool deletion_marker = 3;
-
-  // The timestamp at which the registry mutation happened.
-  uint64 timestamp_nanoseconds = 4;
-}
-
-// A sequence of changes made to a key in the registry.
-message RegistryDelta {
-  bytes key = 1;
-  repeated RegistryValue values = 2;
-}
-
 // Message to retrieve all the changes from the registry
 // since 'version'.
 message RegistryGetChangesSinceRequest { uint64 version = 1; }
-
-// Deprecated; instead, use HighCapacityRegistryGetChangesSinceResponse. See the
-// "Migrating to Large Values/High-Capacity Types" section in the file-level
-// comments.
-//
-// Message corresponding to the response from the registry
-// canister to a get_latest_version() request.
-message RegistryGetChangesSinceResponse {
-  // If anything went wrong, the registry canister
-  // will set this error.
-  RegistryError error = 1;
-  // The last version of the registry.
-  uint64 version = 2;
-  // A list of all the keys and all the values that change
-  // and all the intermediate changes since the version
-  // requested.
-  repeated RegistryDelta deltas = 3;
-}
 
 // Message to retrieve a version of some registry key
 // from the registry canister.
@@ -282,28 +196,6 @@ message HighCapacityRegistryGetValueResponse {
 
   // The timestamp at which the registry mutation happened.
   uint64 timestamp_nanoseconds = 5;
-}
-
-// Deprecated; instead, use HighCapacityRegistryGetValueResponse. See the
-// "Migrating to Large Values/High-Capacity Types" section in the file-level
-// comments.
-//
-// Message corresponding to the response from the canister
-// to a get_value() request.
-//
-// Both 'version' and 'value' are mandatorily set if 'error'
-// is not set.
-message RegistryGetValueResponse {
-  // If anything went wrong, the registry canister
-  // will set this error.
-  RegistryError error = 1;
-  // the version at which the value corresponding to the queried
-  // key was last mutated (inserted, updated, or deleted)
-  // before at or at the version specified
-  // in the RegistryGetValueRequest.
-  uint64 version = 2;
-  // The value retrieved from the registry.
-  bytes value = 3;
 }
 
 // Message corresponding to the response from the canister

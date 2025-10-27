@@ -3,7 +3,7 @@ mod agent;
 mod cbor;
 mod http_client;
 
-pub use agent::{query_path, read_state_path, update_path, Agent};
+pub use agent::{Agent, query_path, read_state_path, update_path};
 /// Exported functions from the 'cbor' module contain lower level
 /// parsing and conversion utilities. Ideally users of this crate should
 /// mainly use the 'Agent'.

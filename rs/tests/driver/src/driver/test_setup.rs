@@ -31,7 +31,7 @@ impl GroupSetup {
             .duration_since(std::time::UNIX_EPOCH)
             .expect("bad things")
             .as_millis();
-        res.infra_group_name = format!("{}--{:?}", group_base_name, time).replace('_', "-");
+        res.infra_group_name = format!("{group_base_name}--{time:?}").replace('_', "-");
         res.group_timeout = timeout;
         res
     }
@@ -46,7 +46,6 @@ impl TestEnvAttribute for GroupSetup {
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
 pub enum InfraProvider {
     Farm,
-    K8s,
 }
 
 impl TestEnvAttribute for InfraProvider {

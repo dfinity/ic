@@ -6,17 +6,17 @@ use ic_interfaces::{
     validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
     consensus::{Block, BlockProposal, HasCommittee, HasHeight, HasRank, Threshold},
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
         CryptoHash, CryptoHashable, Signed,
+        threshold_sig::ni_dkg::{NiDkgId, NiDkgReceivers, NiDkgTag, NiDkgTranscript},
     },
-    Height, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -459,6 +459,17 @@ pub fn get_oldest_idkg_state_registry_version(state: &ReplicatedState) -> Option
         .min()
 }
 
+/// Calculate the number of heights in the given range (inclusive)
+pub fn range_len(start: Height, end: Height) -> usize {
+    if end >= start {
+        (end.get() - start.get())
+            .checked_add(1)
+            .expect("We should never reach the maximum number of heights") as usize
+    } else {
+        0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use assert_matches::assert_matches;
@@ -468,13 +479,13 @@ mod tests {
     };
 
     use super::*;
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_management_canister_types_private::MasterPublicKeyId;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithThresholdContext;
     use ic_test_utilities_state::ReplicatedStateBuilder;
     use ic_test_utilities_types::ids::node_test_id;
     use ic_types::{
-        consensus::{get_faults_tolerated, idkg::PreSigId, Rank},
+        consensus::{Rank, get_faults_tolerated, idkg::PreSigId},
         crypto::{ThresholdSigShare, ThresholdSigShareOf},
         messages::CallbackId,
         signature::ThresholdSignatureShare,
@@ -667,5 +678,17 @@ mod tests {
                 }
             }
         });
+    }
+
+    #[test]
+    fn test_range_len() {
+        assert_eq!(range_len(Height::new(0), Height::new(0)), 1);
+        assert_eq!(range_len(Height::new(0), Height::new(1)), 2);
+        assert_eq!(range_len(Height::new(0), Height::new(10)), 11);
+        assert_eq!(range_len(Height::new(5), Height::new(10)), 6);
+        assert_eq!(range_len(Height::new(10), Height::new(10)), 1);
+        assert_eq!(range_len(Height::new(10), Height::new(5)), 0);
+        assert_eq!(range_len(Height::new(10), Height::new(0)), 0);
+        assert_eq!(range_len(Height::new(1), Height::new(0)), 0);
     }
 }

@@ -8,15 +8,14 @@ set -ue
 ## some benchmarks.
 ##
 
-DEPENDENCIES="awk rg sed"
+DEPENDENCIES="awk egrep fgrep sed"
 which ${DEPENDENCIES} >/dev/null || (echo "Error checking dependencies: ${DEPENDENCIES}" >&2 && exit 1)
 
-NOISE_THRESHOLD_PCT="${NOISE_THRESHOLD_PCT:-2}"
-TOP_N="${TOP_N:-10}"
-
-printf "    %-12s := %s\n" \
+printf "    %-19s := %s\n" \
+    "BASELINE_DIR" "${BASELINE_DIR:=${0%/*}/baseline}" \
     "MIN_FILE" "${MIN_FILE:=${0##*/}.min}" \
-    "BASELINE_DIR" "${BASELINE_DIR:=${0%/*}/baseline}" >&2
+    "NOISE_THRESHOLD_PCT" "${NOISE_THRESHOLD_PCT:=2}" \
+    "TOP_N" "${TOP_N:=10}" >&2
 
 NAME="${NAME:-${MIN_FILE%.*}}"
 TMP_FILE="${TMP_FILE:-${MIN_FILE%.*}.tmp}"
@@ -66,7 +65,7 @@ while read min_bench; do
     new_result_ns="${new_result_ns% ns/iter*}"
     total_ns=$((total_ns + new_result_ns))
 
-    baseline_bench=$(rg -F "test ${name} ... bench:" "${BASELINE_FILE}" || true)
+    baseline_bench=$(fgrep "test ${name} ... bench:" "${BASELINE_FILE}" || true)
     baseline_result_ns="${baseline_bench#* ... bench: }"
     baseline_result_ns="${baseline_result_ns% ns/iter*}"
 
@@ -96,20 +95,20 @@ esac
 
 # Always produce top regressed/improved details.
 echo "  Top ${TOP_N} by time:"
-cat "${TMP_FILE}" | sort -rn | rg '^[1-9]' | head -${TOP_N} \
+cat "${TMP_FILE}" | sort -rn | egrep '^[1-9]' | head -${TOP_N} \
     | while read diff_ms diff_pct baseline_ms new_ms name; do
         echo "  + ${name} time regressed by ${diff_ms} ms (${baseline_ms} -> ${new_ms} ms)"
     done
-cat "${TMP_FILE}" | sort -n | rg '^-' | head -${TOP_N} \
+cat "${TMP_FILE}" | sort -n | egrep '^-' | head -${TOP_N} \
     | while read diff_ms diff_pct baseline_ms new_ms name; do
         echo "  - ${name} time improved by ${diff_ms} ms (${baseline_ms} -> ${new_ms} ms)"
     done
 echo "  Top ${TOP_N} by percentage:"
-cat "${TMP_FILE}" | sort -rnk 2 | rg '^[1-9]' | head -${TOP_N} \
+cat "${TMP_FILE}" | sort -rnk 2 | egrep '^[1-9]' | head -${TOP_N} \
     | while read diff_ms diff_pct baseline_ms new_ms name; do
         echo "  + ${name} time regressed by ${diff_pct}% (${baseline_ms} -> ${new_ms} ms)"
     done
-cat "${TMP_FILE}" | sort -nk 2 | rg '^-' | head -${TOP_N} \
+cat "${TMP_FILE}" | sort -nk 2 | egrep '^-' | head -${TOP_N} \
     | while read diff_ms diff_pct baseline_ms new_ms name; do
         echo "  - ${name} time improved by ${diff_pct}% (${baseline_ms} -> ${new_ms} ms)"
     done

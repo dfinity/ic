@@ -1,9 +1,9 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use ic_types::NumBytes;
 use memory_tracker::*;
 
 use libc::{self, c_void};
-use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 use std::ptr;
 use std::time::Duration;
 

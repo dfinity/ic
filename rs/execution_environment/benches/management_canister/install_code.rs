@@ -1,6 +1,6 @@
-use crate::utils::{expect_error, expect_reply, setup, CANISTERS_PER_BATCH};
+use crate::utils::{CANISTERS_PER_BATCH, expect_error, expect_reply, setup};
 use candid::{CandidType, Encode, Principal};
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
+use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_state_machine_tests::{ErrorCode, UserError, WasmResult};
 use serde::{Deserialize, Serialize};
 

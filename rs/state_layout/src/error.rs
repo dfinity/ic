@@ -49,19 +49,17 @@ impl fmt::Display for LayoutError {
                 path.display(),
                 message,
             ),
-            Self::NotFound(height) => write!(f, "no checkpoint @{} found", height),
+            Self::NotFound(height) => write!(f, "no checkpoint @{height} found"),
             Self::AlreadyExists(height) => write!(
                 f,
-                "failed to create checkpoint at height {} because it already exists",
-                height
+                "failed to create checkpoint at height {height} because it already exists"
             ),
             Self::LatestCheckpoint(height) => write!(
                 f,
-                "Trying to remove the latest checkpoint at height @{}",
-                height
+                "Trying to remove the latest checkpoint at height @{height}"
             ),
             Self::CheckpointUnverified(height) => {
-                write!(f, "Checkpoint @{} is not verified", height)
+                write!(f, "Checkpoint @{height} is not verified")
             }
         }
     }

@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use candid::candid_method;
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
@@ -86,6 +87,16 @@ fn set_tip_height(tip_height: u32) {
 #[candid_method(update)]
 #[update]
 fn bitcoin_get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
+    get_utxos(utxos_request)
+}
+
+#[candid_method(update)]
+#[update]
+fn dogecoin_get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
+    get_utxos(utxos_request)
+}
+
+fn get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
     read_state(|s| {
         assert_eq!(Network::from(utxos_request.network), s.network);
 
@@ -154,6 +165,14 @@ fn bitcoin_get_current_fee_percentiles(
 
 #[candid_method(update)]
 #[update]
+fn dogecoin_get_current_fee_percentiles(
+    _: GetCurrentFeePercentilesRequest,
+) -> Vec<MillisatoshiPerByte> {
+    read_state(|s| s.fee_percentiles.clone())
+}
+
+#[candid_method(update)]
+#[update]
 fn set_fee_percentiles(fee_percentiles: Vec<MillisatoshiPerByte>) {
     mutate_state(|s| s.fee_percentiles = fee_percentiles);
 }
@@ -215,14 +234,13 @@ fn check_candid_interface_compatibility() {
             Ok(_) => {}
             Err(e) => {
                 eprintln!(
-                    "{} is not compatible with {}!\n\n\
-            {}:\n\
-            {}\n\n\
-            {}:\n\
-            {}\n",
-                    new_name, old_name, new_name, new_str, old_name, old_str
+                    "{new_name} is not compatible with {old_name}!\n\n\
+            {new_name}:\n\
+            {new_str}\n\n\
+            {old_name}:\n\
+            {old_str}\n"
                 );
-                panic!("{:?}", e);
+                panic!("{e:?}");
             }
         }
     }

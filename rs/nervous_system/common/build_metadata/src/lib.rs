@@ -38,17 +38,16 @@ const BUILD_INFO_FORMAT: &str = r#"
 pub fn define_get_build_metadata_candid_method(_: TokenStream) -> TokenStream {
     format!(
         r#"
-            #[export_name = "canister_query get_build_metadata"]
+            #[unsafe(export_name = "canister_query get_build_metadata")]
             fn get_build_metadata() {{
                 dfn_core::over(dfn_candid::candid_one, |()| get_build_metadata_())
             }}
 
             #[candid::candid_method(query, rename = "get_build_metadata")]
             fn get_build_metadata_() -> &'static str {{
-                {}
+                {BUILD_INFO_FORMAT}
             }}
         "#,
-        BUILD_INFO_FORMAT,
     )
     .parse()
     .unwrap()
@@ -62,10 +61,9 @@ pub fn define_get_build_metadata_candid_method_cdk(_: TokenStream) -> TokenStrea
             #[candid::candid_method(query)]
             #[ic_cdk::query]
             fn get_build_metadata() -> &'static str {{
-                {}
+                {BUILD_INFO_FORMAT}
             }}
         "#,
-        BUILD_INFO_FORMAT,
     )
     .parse()
     .unwrap()

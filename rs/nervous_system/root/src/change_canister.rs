@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::LOG_PREFIX;
 use candid::{CandidType, Deserialize, Encode, Principal};
 use dfn_core::api::CanisterId;
@@ -5,15 +6,10 @@ use dfn_core::api::CanisterId;
 use dfn_core::println;
 use ic_crypto_sha2::Sha256;
 use ic_management_canister_types_private::{
-    CanisterInstallMode, CanisterInstallModeV2, ChunkHash, InstallChunkedCodeArgs, InstallCodeArgs,
-    IC_00,
+    CanisterInstallMode, CanisterInstallModeV2, ChunkHash, IC_00, InstallChunkedCodeArgs,
+    InstallCodeArgs,
 };
-use ic_nervous_system_clients::{
-    canister_id_record::CanisterIdRecord,
-    canister_status::{
-        canister_status, CanisterStatusResultFromManagementCanister, CanisterStatusType,
-    },
-};
+use ic_nervous_system_clients::canister_id_record::CanisterIdRecord;
 use ic_nervous_system_lock::acquire_for;
 use ic_nervous_system_runtime::Runtime;
 use serde::Serialize;
@@ -88,9 +84,9 @@ impl ChangeCanisterRequest {
             .field("stop_before_installing", &self.stop_before_installing)
             .field("mode", &self.mode)
             .field("canister_id", &self.canister_id)
-            .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
+            .field("wasm_module_sha256", &format!("{wasm_sha:x?}"))
             .field("chunked_canister_wasm", &self.chunked_canister_wasm)
-            .field("arg_sha256", &format!("{:x?}", arg_sha))
+            .field("arg_sha256", &format!("{arg_sha:x?}"))
             .finish()
     }
 }
@@ -185,8 +181,8 @@ impl AddCanisterRequest {
 
         f.debug_struct("AddCanisterRequest")
             .field("name", &self.name)
-            .field("wasm_module_sha256", &format!("{:x?}", wasm_sha))
-            .field("arg_sha256", &format!("{:x?}", arg_sha))
+            .field("wasm_module_sha256", &format!("{wasm_sha:x?}"))
+            .field("arg_sha256", &format!("{arg_sha:x?}"))
             .field("compute_allocation", &self.compute_allocation)
             .field("memory_allocation", &self.memory_allocation)
             .field("initial_cycles", &self.initial_cycles)
@@ -239,8 +235,7 @@ where
         Ok(guard) => guard,
         Err(conflicting_request) => {
             return Err(format!(
-                "Canister {} is currently locked by another change operation. Conflicting request: {:?}",
-                canister_id, conflicting_request
+                "Canister {canister_id} is currently locked by another change operation. Conflicting request: {conflicting_request:?}"
             ));
         }
     };
@@ -248,23 +243,22 @@ where
     if stop_before_installing {
         let stop_result = stop_canister::<Rt>(canister_id).await;
         if stop_result.is_err() {
-            println!(
-                "{}change_canister: Failed to stop canister, trying to restart...",
-                LOG_PREFIX
-            );
+            println!("{LOG_PREFIX}change_canister: Failed to stop canister, trying to restart...");
             return match start_canister::<Rt>(canister_id).await {
-                Ok(_) => {
-                    Err(format!("Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and succeeded in that."))
-                }
+                Ok(_) => Err(format!(
+                    "Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and succeeded in that."
+                )),
                 Err(_) => {
-                    println!("{}change_canister: Failed to restart canister.", LOG_PREFIX);
-                    Err(format!("Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and failed in that."))
+                    println!("{LOG_PREFIX}change_canister: Failed to restart canister.");
+                    Err(format!(
+                        "Failed to stop canister {canister_id:?}. After failing to stop, attempted to start it, and failed in that."
+                    ))
                 }
             };
         }
     }
 
-    let request_str = format!("{:?}", request);
+    let request_str = format!("{request:?}");
 
     // Ship code to the canister.
     //
@@ -366,15 +360,17 @@ where
     .await;
 
     if res.is_ok() {
-        println!("{}start_canister call successful. {res:?}", LOG_PREFIX);
+        println!("{LOG_PREFIX}start_canister call successful. {res:?}");
     }
     res
 }
 
-/// Stops the given canister, and polls until the `Stopped` state is reached.
-///
-/// Warning: there's no guarantee that this ever finishes!
-/// TODO(IC-1099)
+/// Stops the given canister.  If 'stop_canister' times out, this returns an Err.  Otherwise,
+/// the canister has reached the "Stopped" state.  If 'stop_canister' times out, the canister
+/// may later reach a "Stopped" state.  Therefore, if this method returns an Err,
+/// the caller should usually call "start_canister" to avoid leaving the canister in a Stopped state.
+/// Alternately, the caller can retry "stop_canister", which will again return Ok when the canister
+/// stops, and an error if it times out.
 pub async fn stop_canister<Rt>(canister_id: CanisterId) -> Result<(), (i32, String)>
 where
     Rt: Runtime,
@@ -388,21 +384,10 @@ where
     )
     .await?;
 
-    loop {
-        let status: CanisterStatusResultFromManagementCanister =
-            canister_status::<Rt>(CanisterIdRecord::from(canister_id))
-                .await
-                .unwrap();
-
-        if status.status == CanisterStatusType::Stopped {
-            return Ok(());
-        }
-
-        println!(
-            "{}Waiting for {:?} to stop. Current status: {}",
-            LOG_PREFIX, canister_id, status.status
-        );
-    }
+    // If we successfully get here, we know the canister is stopped.  While a canister could be in
+    // "Stopping" state, "stop_canister" does not successfully return until it is "Stopped".
+    // Therefore, we do not check canister status.
+    Ok(())
 }
 
 // Use a serde field attribute to custom serialize the Nat candid type.
@@ -517,6 +502,6 @@ mod tests {
         assert!(result.is_err());
         let error_msg = result.unwrap_err();
         assert!(error_msg.contains("currently locked by another change operation"));
-        assert!(error_msg.contains(&format!("{}", canister_id)));
+        assert!(error_msg.contains(&format!("{canister_id}")));
     }
 }

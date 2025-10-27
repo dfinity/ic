@@ -43,36 +43,36 @@ pub fn traverse<V: Visitor>(state: &ReplicatedState, mut v: V) -> V::Output {
 mod tests {
     use super::*;
     use crate::{
-        encoding::{encode_stream_header, types::SystemMetadata, CborProxyEncoder},
+        encoding::{CborProxyEncoder, encode_stream_header, types::SystemMetadata},
         test_visitors::{NoopVisitor, TraceEntry as E, TracingVisitor},
     };
     use ic_base_types::{NumBytes, NumSeconds};
     use ic_certification_version::{
-        all_supported_versions,
         CertificationVersion::{self, *},
+        all_supported_versions,
     };
     use ic_management_canister_types_private::Global;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_features::SubnetFeatures;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
+        Memory,
         canister_state::{
-            execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
             ExecutionState, ExportedFunctions, NumWasmPages,
+            execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         },
         metadata_state::{ApiBoundaryNodeEntry, SubnetTopology},
         page_map::PageMap,
         testing::ReplicatedStateTesting,
-        Memory,
     };
     use ic_test_utilities_state::new_canister_state;
     use ic_test_utilities_types::ids::{
         canister_test_id, node_test_id, subnet_test_id, user_test_id,
     };
     use ic_types::{
+        CanisterId, Cycles,
         batch::CanisterCyclesCostSchedule,
         xnet::{StreamFlags, StreamHeader},
-        CanisterId, Cycles,
     };
     use ic_wasm_types::CanisterModule;
     use maplit::btreemap;
@@ -156,8 +156,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -233,8 +232,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -349,8 +347,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -450,8 +447,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -472,6 +468,7 @@ mod tests {
             message_test_id(1),
             IngressStatus::Unknown,
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(2),
@@ -482,6 +479,7 @@ mod tests {
                 state: IngressState::Processing,
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(3),
@@ -492,6 +490,7 @@ mod tests {
                 state: IngressState::Received,
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(4),
@@ -505,6 +504,7 @@ mod tests {
                 )),
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(5),
@@ -515,6 +515,7 @@ mod tests {
                 state: IngressState::Completed(WasmResult::Reply(b"reply".to_vec())),
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(6),
@@ -525,6 +526,7 @@ mod tests {
                 state: IngressState::Completed(WasmResult::Reject("reject".to_string())),
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
         state.set_ingress_status(
             message_test_id(7),
@@ -535,6 +537,7 @@ mod tests {
                 state: IngressState::Done,
             },
             NumBytes::from(u64::MAX),
+            |_| {},
         );
 
         for certification_version in all_supported_versions() {
@@ -617,8 +620,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -673,8 +675,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -847,8 +848,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -1075,8 +1075,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }
@@ -1168,8 +1167,7 @@ mod tests {
             assert_eq!(
                 expected_traversal,
                 traverse(&state, visitor).0,
-                "unexpected traversal for certification_version: {:?}",
-                certification_version
+                "unexpected traversal for certification_version: {certification_version:?}"
             );
         }
     }

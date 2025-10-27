@@ -1,8 +1,8 @@
-use axum::extract::State;
-use axum::http::{header, StatusCode};
-use axum::response::IntoResponse;
 use axum::Router;
-use ic_tracing::{utils::SharedBuffer, ReloadHandles};
+use axum::extract::State;
+use axum::http::{StatusCode, header};
+use axum::response::IntoResponse;
+use ic_tracing::{ReloadHandles, utils::SharedBuffer};
 use std::io::BufReader;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -54,7 +54,7 @@ pub(crate) async fn tracing_flamegraph_handle(
     let data = rx.await.map_err(|err| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Internal error: {}", err),
+            format!("Internal error: {err}"),
         )
             .into_response()
     })?;
@@ -65,7 +65,7 @@ pub(crate) async fn tracing_flamegraph_handle(
         .map_err(|err| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Internal error: {}", err),
+                format!("Internal error: {err}"),
             )
                 .into_response()
         })
