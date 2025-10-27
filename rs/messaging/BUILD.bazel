@@ -82,16 +82,17 @@ rust_ic_test_suite_with_extra_srcs(
     srcs = [
         "tests/call_tree_tests.rs",
         "tests/memory_tests.rs",
+        "tests/messaging.rs",
         "tests/queue_tests.rs",
     ],
     data = [
         "//rs/rust_canisters/downstream_calls_test:downstream-calls-test-canister",
-        "//rs/rust_canisters/random_traffic_test:random-traffic-test-canister",
+        "//rs/rust_canisters/messaging_test:messaging-test-canister",
         "//rs/rust_canisters/xnet_test:xnet-test-canister",
     ],
     env = {
         "DOWNSTREAM_CALLS_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/downstream_calls_test:downstream-calls-test-canister)",
-        "RANDOM_TRAFFIC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/random_traffic_test:random-traffic-test-canister)",
+        "MESSAGING_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/messaging_test:messaging-test-canister)",
         "XNET_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/xnet_test:xnet-test-canister)",
     },
     extra_srcs = [
@@ -111,7 +112,7 @@ rust_ic_test_suite_with_extra_srcs(
         "//rs/replicated_state",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/downstream_calls_test",
-        "//rs/rust_canisters/random_traffic_test",
+        "//rs/rust_canisters/messaging_test",
         "//rs/rust_canisters/xnet_test",
         "//rs/state_machine_tests",
         "//rs/test_utilities",
