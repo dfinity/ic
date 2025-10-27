@@ -4,11 +4,12 @@ use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_replicated_state::CanisterState;
+use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_state_machine_tests::{StateMachine, StateMachineConfig, SubmitIngressError, UserError};
 use ic_types::{
     Cycles, SubnetId,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{MessageId, StreamMessage},
+    messages::{MessageId, RequestOrResponse, StreamMessage},
     xnet::StreamHeader,
 };
 use messaging_test::{Call, Response};
@@ -54,7 +55,13 @@ impl TestSubnet {
     /// Executes a round on this state machine and advances time by one second.
     pub fn execute_round(&self) {
         self.env.execute_round();
-        self.env.advance_time(std::time::Duration::from_secs(1));
+        self.advance_time_by_secs(1);
+    }
+
+    /// Advances time on the `StateMachine` by `duration` seconds.
+    pub fn advance_time_by_secs(&self, duration: u64) {
+        self.env
+            .advance_time(std::time::Duration::from_secs(duration));
     }
 
     /// Attempts to subnet a new `Call` as ingress.
@@ -131,6 +138,25 @@ impl TestSubnet {
             .canister_states
             .get(id)
             .map(|state| state.status())
+    }
+
+    /// Returns a snapshot of an output queue of from_canister` to `to_canister`.
+    pub fn output_queue_snapshot(
+        &self,
+        from_canister: CanisterId,
+        to_canister: CanisterId,
+    ) -> Option<Vec<RequestOrResponse>> {
+        Some(
+            self.env
+                .get_latest_state()
+                .canister_states
+                .get(&from_canister)?
+                .system_state
+                .queues()
+                .output_queue_iter_for_testing(&to_canister)?
+                .cloned()
+                .collect::<Vec<_>>(),
+        )
     }
 
     /// Returns a snapshot of a XNet stream to another subnet.

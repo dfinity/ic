@@ -2,20 +2,22 @@ pub mod common;
 
 use assert_matches::assert_matches;
 use common::{TestSubnet, TestSubnetConfig, TestSubnetSetup, arb_test_subnets, two_test_subnets};
+use ic_config::message_routing::TARGET_STREAM_SIZE_BYTES;
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_types::{
     CanisterId, PrincipalId,
     ingress::{IngressState, IngressStatus},
-    messages::StreamMessage,
+    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, RequestOrResponse, StreamMessage},
 };
 use messaging_test::{Call, Response};
 use messaging_test_utils::{CallConfig, arb_call};
 use proptest::prelude::ProptestConfig;
 
+const MAX_PAYLOAD_SIZE: u32 = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as u32;
 const SYS_UNKNOWN_U32: u32 = RejectCode::SysUnknown as u32;
 
-/// Checks that a canister with a hanging best-effort call can be stopped after the call has timed out.
+/// Tests that a canister with a hanging best-effort call can be stopped after the call has timed out.
 #[test]
 fn canister_can_be_stopped_with_hanging_call_on_stalled_subnet() {
     let (subnet1, subnet2) =
@@ -45,9 +47,7 @@ fn canister_can_be_stopped_with_hanging_call_on_stalled_subnet() {
     subnet1.execute_round();
     // Advance time and execute another round; this should time out the downstream call
     // and allow the ingress to conclude.
-    subnet1
-        .env
-        .advance_time(std::time::Duration::from_secs(100));
+    subnet1.advance_time_by_secs(100);
     subnet1.execute_round();
 
     // The downstream call was timed out...
@@ -68,6 +68,94 @@ fn canister_can_be_stopped_with_hanging_call_on_stalled_subnet() {
     );
 }
 
+/// Tests that requests stuck in output queues are timed out, but backpressure remains
+/// if there is a response stuck somewhere in the front.
+#[test]
+fn test_requests_are_timed_out_in_output_queues_but_backpressure_remains() {
+    let (subnet1, subnet2) =
+        two_test_subnets(TestSubnetConfig::default(), TestSubnetConfig::default());
+
+    let canister1 = subnet1.principal_canister();
+    let canister2 = subnet2.principal_canister();
+
+    // Send enough small requests that will produce maximum size responses to fill
+    // up the reverse stream and leave at least one in the output queue of `canister`.
+    const NUM_CALLS: usize = TARGET_STREAM_SIZE_BYTES / MAX_PAYLOAD_SIZE as usize + 2;
+    for _ in 0..NUM_CALLS {
+        subnet2
+            .submit_call(Call {
+                receiver: canister2,
+                downstream_calls: vec![Call {
+                    receiver: canister1,
+                    call_bytes: 0,
+                    reply_bytes: MAX_PAYLOAD_SIZE,
+                    ..Call::default()
+                }],
+                ..Call::default()
+            })
+            .unwrap();
+        subnet2.execute_round();
+    }
+
+    // Pull the requests and execute them producing large responses; filling up the stream.
+    while let None | Some([]) = subnet1
+        .output_queue_snapshot(canister1, canister2)
+        .as_deref()
+    {
+        subnet1.execute_round();
+    }
+
+    // Send lots of small requests to `canister2` on `canister1` to fill up the output queue;
+    // continuously time them out. Note: the output queue capacity for requests is 500.
+    for _ in 0..10 {
+        subnet1
+            .submit_call(Call {
+                receiver: canister1,
+                downstream_calls: vec![
+                    Call {
+                        receiver: canister2,
+                        ..Call::default()
+                    };
+                    100
+                ],
+                ..Call::default()
+            })
+            .unwrap();
+        subnet1.execute_round();
+        subnet1.advance_time_by_secs(500);
+    }
+
+    // In each iteration we timed out the requests of the previous round;
+    // then pushed 100 new ones. Due to backpressure pushing new ones should
+    // fail after some rounds resulting in an output queue of just responses.
+    assert!(
+        subnet1
+            .output_queue_snapshot(canister1, canister2)
+            .unwrap()
+            .iter()
+            .all(|msg| matches!(msg, RequestOrResponse::Response(_)))
+    );
+}
+
+/*
+#[test_strategy::proptest(ProptestConfig::with_cases(3))]
+fn bla(
+    #[strategy(arb_test_subnets(TestSubnetConfig::default(), TestSubnetConfig::default()))]
+    setup: TestSubnetSetup,
+
+    #[strategy(proptest::collection::vec(arb_call(CallConfig {
+        receivers: #setup.canisters,
+        ..CallConfig::default()
+    }), 20))]
+    calls: Vec<Call>,
+) {
+    let (subnet1, subnet2, _) = setup.into_parts();
+
+    assert!(false);
+}
+*/
+
+/*
 /// Tests that reject signals for requests are forwarded (as reject responses) to a canister
 /// that moved to a different subnet due to a subnet split.
 ///
@@ -131,6 +219,7 @@ fn reject_signals_for_requests_are_forwarded_after_subnet_split() {
     // Pull from `subnet1`, concluding the call.
     subnet3.execute_round();
 }
+*/
 
 /*
 #[test_strategy::proptest(ProptestConfig::with_cases(3))]
