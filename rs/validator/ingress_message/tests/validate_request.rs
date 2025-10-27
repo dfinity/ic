@@ -740,7 +740,7 @@ mod authenticated_requests_direct_canister_signature {
     use ic_validator_http_request_test_utils::{HttpRequestEnvelopeFactory, flip_a_bit_mut};
 
     #[test]
-    fn should_validate_request_signed_by_canister() {
+    fn should_validate_request_signed_by_canister_with_nonempty_seed() {
         let rng = &mut reproducible_rng();
         let root_of_trust = RootOfTrust::new_random(rng);
         let verifier = default_verifier()
@@ -773,9 +773,67 @@ mod authenticated_requests_direct_canister_signature {
             Verifier: HttpRequestVerifier<ReqContent>,
         {
             let builder_info = format!("{builder:?}");
+
+            let signer_with_nonempty_seed = CanisterSigner {
+                seed: b"nonempty_seed".to_vec(),
+                canister_id: CANISTER_ID_SIGNER,
+                root_public_key: root_of_trust.public_key,
+                root_secret_key: root_of_trust.secret_key,
+            };
             let request = builder
                 .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(Direct(canister_signature(root_of_trust)))
+                .with_authentication(Direct(CanisterSignature(signer_with_nonempty_seed)))
+                .build();
+
+            let result = verifier.validate_request(&request);
+
+            assert_eq!(result, Ok(()), "Test with {builder_info} failed");
+        }
+    }
+
+    #[test]
+    fn should_validate_request_signed_by_canister_with_empty_seed() {
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
+        let verifier = default_verifier()
+            .with_root_of_trust(root_of_trust.public_key)
+            .build();
+
+        test(
+            &verifier,
+            HttpRequestBuilder::new_update_call(),
+            root_of_trust.clone(),
+        );
+        test(
+            &verifier,
+            HttpRequestBuilder::new_query(),
+            root_of_trust.clone(),
+        );
+        test(
+            &verifier,
+            HttpRequestBuilder::new_read_state(),
+            root_of_trust,
+        );
+
+        fn test<ReqContent, EnvContent, Verifier>(
+            verifier: &Verifier,
+            builder: HttpRequestBuilder<EnvContent>,
+            root_of_trust: RootOfTrust,
+        ) where
+            ReqContent: HttpRequestContent,
+            EnvContent: EnvelopeContent<ReqContent>,
+            Verifier: HttpRequestVerifier<ReqContent>,
+        {
+            let builder_info = format!("{builder:?}");
+            let signer_with_empty_seed = CanisterSigner {
+                seed: vec![],
+                canister_id: CANISTER_ID_SIGNER,
+                root_public_key: root_of_trust.public_key,
+                root_secret_key: root_of_trust.secret_key,
+            };
+            let request = builder
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(Direct(CanisterSignature(signer_with_empty_seed)))
                 .build();
 
             let result = verifier.validate_request(&request);
@@ -1031,6 +1089,7 @@ mod authenticated_requests_delegations {
         AuthenticationScheme, DelegationChain, DelegationChainBuilder,
         HttpRequestEnvelopeContentWithCanisterId,
     };
+    use rand::SeedableRng;
     use rand::{CryptoRng, Rng};
     use std::time::Duration;
 
@@ -1099,25 +1158,57 @@ mod authenticated_requests_delegations {
         let verifier = default_verifier()
             .with_root_of_trust(root_of_trust.public_key)
             .build();
-        let delegation_chain = delegation_chain_with_a_canister_signature(
-            MAXIMUM_NUMBER_OF_DELEGATIONS,
-            CURRENT_TIME,
-            root_of_trust,
-            rng,
-        )
-        .build();
+        for number_of_delegations in 1..=MAXIMUM_NUMBER_OF_DELEGATIONS {
+            let delegation_chain = delegation_chain_with_a_canister_signature(
+                number_of_delegations,
+                CURRENT_TIME,
+                &root_of_trust,
+                rng,
+            )
+            .build();
 
-        test_all_request_types_with_delegation_chain(
-            &verifier,
-            delegation_chain.clone(),
-            |result, builder_info| {
-                assert_eq!(
-                    result,
-                    Ok(()),
-                    "verification of delegation chain {delegation_chain:?} for request builder {builder_info} failed"
-                );
-            },
-        );
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                delegation_chain.clone(),
+                |result, builder_info| {
+                    assert_eq!(
+                        result,
+                        Ok(()),
+                        "verification of delegation chain {delegation_chain:?} for request builder {builder_info} failed"
+                    );
+                },
+            );
+        }
+    }
+
+    #[test]
+    fn should_validate_delegation_chains_of_length_up_to_20_rooted_at_a_canister_signature() {
+        let rng = &mut reproducible_rng();
+        let root_of_trust = RootOfTrust::new_random(rng);
+        let verifier = default_verifier()
+            .with_root_of_trust(root_of_trust.public_key)
+            .build();
+        for number_of_delegations in 1..=MAXIMUM_NUMBER_OF_DELEGATIONS {
+            let delegation_chain = delegation_chain_rooted_at_canister_signature(
+                number_of_delegations,
+                CURRENT_TIME,
+                &root_of_trust,
+                rng,
+            )
+            .build();
+
+            test_all_request_types_with_delegation_chain(
+                &verifier,
+                delegation_chain.clone(),
+                |result, builder_info| {
+                    assert_eq!(
+                        result,
+                        Ok(()),
+                        "verification of delegation chain {delegation_chain:?} for request builder {builder_info} failed"
+                    );
+                },
+            );
+        }
     }
 
     #[test]
@@ -1317,7 +1408,7 @@ mod authenticated_requests_delegations {
         let delegation_chain = delegation_chain_with_a_canister_signature(
             MAXIMUM_NUMBER_OF_DELEGATIONS - 1,
             CURRENT_TIME,
-            root_of_trust,
+            &root_of_trust,
             rng,
         )
         .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
@@ -1791,7 +1882,7 @@ mod authenticated_requests_delegations {
     fn delegation_chain_with_a_canister_signature<R: Rng + CryptoRng>(
         number_of_delegations: usize,
         delegation_expiration: Time,
-        root_of_trust: RootOfTrust,
+        root_of_trust: &RootOfTrust,
         rng: &mut R,
     ) -> DelegationChainBuilder {
         let canister_delegation_index = rng.gen_range(1..=number_of_delegations);
@@ -1806,6 +1897,23 @@ mod authenticated_requests_delegations {
                 )
             },
             |builder| builder.delegate_to(random_user_key_pair(rng), delegation_expiration),
+        )
+    }
+
+    fn delegation_chain_rooted_at_canister_signature<R: Rng + CryptoRng>(
+        number_of_delegations: usize,
+        delegation_expiration: Time,
+        root_of_trust: &RootOfTrust,
+        rng: &mut R,
+    ) -> DelegationChainBuilder {
+        let canister_delegation_index = rng.gen_range(1..=number_of_delegations);
+        let rng2 = &mut rand::rngs::StdRng::from_seed(rng.r#gen());
+        grow_delegation_chain(
+            DelegationChain::rooted_at(canister_signature(root_of_trust.clone())),
+            number_of_delegations,
+            |index| index == canister_delegation_index,
+            |builder| builder.delegate_to(random_user_key_pair(rng), delegation_expiration),
+            |builder| builder.delegate_to(random_user_key_pair(rng2), delegation_expiration),
         )
     }
 
