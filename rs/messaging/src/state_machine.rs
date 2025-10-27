@@ -122,7 +122,12 @@ impl StateMachine for StateMachineImpl {
         }
 
         // Time out expired messages.
+        #[cfg(debug_assertions)]
+        let balance_before_time_out = state.balance_with_messages();
         state.time_out_messages(&self.metrics);
+        #[cfg(debug_assertions)]
+        state.assert_balance_with_messages(balance_before_time_out);
+
         self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
 
         // Time out expired callbacks.
@@ -161,13 +166,13 @@ impl StateMachine for StateMachineImpl {
 
         self.observe_phase_duration(PHASE_INDUCTION, &since);
 
+        let since = Instant::now();
         let execution_round_type = if batch.requires_full_state_hash {
             ExecutionRoundType::CheckpointRound
         } else {
             ExecutionRoundType::OrdinaryRound
         };
 
-        let since = Instant::now();
         // Process messages from the induction pool through the Scheduler.
         let round_summary = batch.batch_summary.map(|b| ExecutionRoundSummary {
             next_checkpoint_round: ExecutionRound::from(b.next_checkpoint_height.get()),
@@ -195,6 +200,8 @@ impl StateMachine for StateMachineImpl {
         self.observe_phase_duration(PHASE_EXECUTION, &since);
 
         let since = Instant::now();
+        #[cfg(debug_assertions)]
+        let balance_before_routing = state_after_execution.balance_with_messages();
         // Postprocess the state: route messages into streams.
         let mut state_after_stream_builder =
             self.stream_builder.build_streams(state_after_execution);
@@ -206,6 +213,8 @@ impl StateMachine for StateMachineImpl {
             self.best_effort_message_memory_capacity,
             &self.metrics,
         );
+        #[cfg(debug_assertions)]
+        state_after_stream_builder.assert_balance_with_messages(balance_before_routing);
         self.observe_phase_duration(PHASE_SHED_MESSAGES, &since);
 
         // Take out any refunds in the refund pool and observe them as lost cycles.

@@ -1925,7 +1925,7 @@ impl SystemState {
     /// cycles were lost or duplicated while inducting, timing out or shedding
     /// messages.
     #[cfg(debug_assertions)]
-    fn balance_with_messages(
+    pub(crate) fn balance_with_messages(
         &self,
         refunds: Option<&RefundPool>,
         extra_cycles: Option<Cycles>,

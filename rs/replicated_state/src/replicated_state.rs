@@ -1560,6 +1560,54 @@ impl ReplicatedState {
             .subnet_metrics
             .observe_consumed_cycles_with_use_case(CyclesUseCase::DroppedMessages, cycles.into());
     }
+
+    /// Computes the subnet's total cycle balance including cycles attached to
+    /// messages in queues and streams; plus pooled refunds; plus cycles lost by
+    /// dropping messages.
+    ///
+    /// To be used together with `assert_balance_with_messages()` to ensure that no
+    /// cycles were lost or duplicated while inducting, routing, timing out or
+    /// shedding messages.
+    #[cfg(debug_assertions)]
+    pub fn balance_with_messages(&self) -> Cycles {
+        let canister_cycles = self
+            .canister_states
+            .values()
+            .map(|canister| canister.system_state.balance_with_messages(None, None))
+            .sum::<Cycles>();
+        let stream_cycles: Cycles = self
+            .metadata
+            .streams
+            .values()
+            .flat_map(|stream| stream.messages().iter())
+            .map(|(_, msg)| msg.cycles())
+            .sum();
+        let dropped_message_cycles = self
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_by_use_case()
+            .get(&CyclesUseCase::DroppedMessages)
+            .map(ic_types::nominal_cycles::NominalCycles::get)
+            .unwrap_or_default()
+            .into();
+        canister_cycles
+            + stream_cycles
+            + dropped_message_cycles
+            + self.subnet_queues.attached_cycles()
+            + self.refunds.compute_total()
+    }
+
+    /// Validates that the subnet's total cycle balance including cycles attached to
+    /// messages in queues; plus pooled refunds is the same as `balance_before`
+    /// (computed before induction / routing).
+    #[cfg(debug_assertions)]
+    pub fn assert_balance_with_messages(&self, balance_before: Cycles) {
+        let balance_after = self.balance_with_messages();
+        assert_eq!(
+            balance_before, balance_after,
+            "Cycles lost or duplicated: before = {balance_before}, after = {balance_after}",
+        );
+    }
 }
 
 /// Converts a `CanisterInput` popped from a subnet input queue into a
