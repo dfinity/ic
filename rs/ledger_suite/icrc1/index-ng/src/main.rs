@@ -955,6 +955,12 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
 
                 debit(block_index, from, fee);
             }
+            Operation::FeeCollector {
+                fee_collector,
+                caller,
+            } => {
+                panic!("not implemented")
+            }
         },
     );
 }
