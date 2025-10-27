@@ -11,10 +11,9 @@ use ic_interfaces::time_source::system_time_now;
 use ic_logger::{ReplicaLogger, error, fatal};
 use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase::DroppedMessages;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::batch::Batch;
-use ic_types::{ExecutionRound, NumBytes};
+use ic_types::{Cycles, ExecutionRound, NumBytes};
 use std::time::Instant;
 
 #[cfg(test)]
@@ -123,11 +122,12 @@ impl StateMachine for StateMachineImpl {
         }
 
         // Time out expired messages.
-        let lost_cycles = state.time_out_messages(&self.metrics);
-        state
-            .metadata
-            .subnet_metrics
-            .observe_consumed_cycles_with_use_case(DroppedMessages, lost_cycles.into());
+        #[cfg(debug_assertions)]
+        let balance_before_time_out = state.balance_with_messages();
+        state.time_out_messages(&self.metrics);
+        #[cfg(debug_assertions)]
+        state.assert_balance_with_messages(balance_before_time_out);
+
         self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
 
         // Time out expired callbacks.
@@ -166,13 +166,13 @@ impl StateMachine for StateMachineImpl {
 
         self.observe_phase_duration(PHASE_INDUCTION, &since);
 
+        let since = Instant::now();
         let execution_round_type = if batch.requires_full_state_hash {
             ExecutionRoundType::CheckpointRound
         } else {
             ExecutionRoundType::OrdinaryRound
         };
 
-        let since = Instant::now();
         // Process messages from the induction pool through the Scheduler.
         let round_summary = batch.batch_summary.map(|b| ExecutionRoundSummary {
             next_checkpoint_round: ExecutionRound::from(b.next_checkpoint_height.get()),
@@ -200,6 +200,8 @@ impl StateMachine for StateMachineImpl {
         self.observe_phase_duration(PHASE_EXECUTION, &since);
 
         let since = Instant::now();
+        #[cfg(debug_assertions)]
+        let balance_before_routing = state_after_execution.balance_with_messages();
         // Postprocess the state: route messages into streams.
         let mut state_after_stream_builder =
             self.stream_builder.build_streams(state_after_execution);
@@ -207,15 +209,23 @@ impl StateMachine for StateMachineImpl {
 
         let since = Instant::now();
         // Shed enough messages to stay below the best-effort message memory limit.
-        let lost_cycles = state_after_stream_builder.enforce_best_effort_message_limit(
+        state_after_stream_builder.enforce_best_effort_message_limit(
             self.best_effort_message_memory_capacity,
             &self.metrics,
         );
-        state_after_stream_builder
-            .metadata
-            .subnet_metrics
-            .observe_consumed_cycles_with_use_case(DroppedMessages, lost_cycles.into());
+        #[cfg(debug_assertions)]
+        state_after_stream_builder.assert_balance_with_messages(balance_before_routing);
         self.observe_phase_duration(PHASE_SHED_MESSAGES, &since);
+
+        // Take out all refunds from the refund pool and observe them as lost cycles.
+        if !state_after_stream_builder.refunds().is_empty() {
+            let mut lost_cycles = Cycles::new(0);
+            state_after_stream_builder.take_refunds(|refund| {
+                lost_cycles += refund.amount();
+                true
+            });
+            state_after_stream_builder.observe_lost_cycles_due_to_dropped_messages(lost_cycles);
+        }
 
         state_after_stream_builder
     }
