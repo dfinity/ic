@@ -1,17 +1,26 @@
+use crate::{
+    eth_rpc::Hash,
+    eth_rpc_client::{
+        responses::{TransactionReceipt, TransactionStatus},
+        ToReducedWithStrategy,
+    },
+    numeric::{BlockNumber, GasAmount, TransactionCount, WeiPerGas},
+};
+use assert_matches::assert_matches;
 use candid::Nat;
 use evm_rpc_types::{EthMainnetService, FeeHistory, RpcService as EvmRpcService};
+use proptest::proptest;
+use std::str::FromStr;
 
 const BLOCK_PI: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::BlockPi);
 const PUBLIC_NODE: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::PublicNode);
 const LLAMA_NODES: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::Llama);
 
 mod multi_call_results {
+    use super::*;
 
     mod reduce_with_min_by_key {
-        use crate::eth_rpc_client::tests::{BLOCK_PI, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MinByKey, ToReducedWithStrategy};
-        use crate::numeric::TransactionCount;
-        use evm_rpc_types::{MultiRpcResult, Nat256};
+        use super::*;
 
         #[test]
         fn should_get_minimum_tx_count() {
@@ -29,14 +38,7 @@ mod multi_call_results {
     }
 
     mod reduce_with_stable_majority_by_key {
-        use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
-        use crate::eth_rpc_client::{
-            MultiCallError, MultiCallResults, StrictMajorityByKey, ToReducedWithStrategy,
-        };
-        use candid::Nat;
-        use evm_rpc_types::{
-            FeeHistory, HttpOutcallError, JsonRpcError, LegacyRejectionCode, MultiRpcResult,
-        };
+        use super::*;
 
         #[test]
         fn should_get_unanimous_fee_history() {
@@ -273,11 +275,7 @@ mod multi_call_results {
     }
 
     mod has_http_outcall_error_matching {
-        use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
-        use evm_rpc_types::{HttpOutcallError, JsonRpcError, LegacyRejectionCode, RpcError};
-        use proptest::prelude::any;
-        use proptest::proptest;
+        use super::*;
 
         proptest! {
             #[test]
@@ -344,12 +342,7 @@ mod multi_call_results {
 }
 
 mod eth_get_transaction_receipt {
-    use crate::eth_rpc::Hash;
-    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-    use crate::numeric::{BlockNumber, GasAmount, WeiPerGas};
-    use assert_matches::assert_matches;
-    use proptest::proptest;
-    use std::str::FromStr;
+    use super::*;
 
     #[test]
     fn should_deserialize_transaction_receipt() {
@@ -431,7 +424,7 @@ mod eth_get_transaction_receipt {
 }
 
 mod eth_get_transaction_count {
-    use crate::numeric::TransactionCount;
+    use super::*;
 
     #[test]
     fn should_deserialize_transaction_count() {
