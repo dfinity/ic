@@ -891,12 +891,14 @@ pub fn load_canister_state(
     )?;
     durations.insert("wasm_chunk_store", starting_time.elapsed());
 
+    let starting_time = Instant::now();
     let log_memory_store_layout = canister_layout.log_memory_store();
     let log_memory_store_data = PageMap::open(
         Box::new(log_memory_store_layout),
         height,
         Arc::clone(&fd_factory),
     )?;
+    durations.insert("log_memory_store", starting_time.elapsed());
 
     let system_state = SystemState::new_from_checkpoint(
         canister_state_bits.controllers,
