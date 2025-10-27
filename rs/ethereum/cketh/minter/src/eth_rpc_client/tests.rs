@@ -1,4 +1,4 @@
-use evm_rpc_types::{EthMainnetService, RpcService as EvmRpcService};
+use evm_rpc_types::{EthMainnetService, FeeHistory, RpcService as EvmRpcService};
 
 const BLOCK_PI: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::BlockPi);
 const PUBLIC_NODE: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::PublicNode);
@@ -42,9 +42,7 @@ mod multi_call_results {
             let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Consistent(Ok(fee_history()));
 
             let reduced: Result<FeeHistory, _> =
-                results.reduce_with_strategy(StrictMajorityByKey::new(
-                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
-                ));
+                results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -72,9 +70,7 @@ mod multi_call_results {
                 ]);
 
                 let reduced: Result<FeeHistory, _> =
-                    results.reduce_with_strategy(StrictMajorityByKey::new(
-                        |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
-                    ));
+                    results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
                 assert_eq!(reduced, Ok(majority_fee));
             }
@@ -96,9 +92,7 @@ mod multi_call_results {
             ]);
 
             let reduced: Result<FeeHistory, _> =
-                results.reduce_with_strategy(StrictMajorityByKey::new(
-                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
-                ));
+                results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -125,9 +119,7 @@ mod multi_call_results {
                 ]);
 
             let reduced: Result<FeeHistory, _> =
-                three_distinct_results.reduce_with_strategy(StrictMajorityByKey::new(
-                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
-                ));
+                three_distinct_results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(
                 reduced,
@@ -146,9 +138,7 @@ mod multi_call_results {
                 ]);
 
             let reduced: Result<FeeHistory, _> =
-                two_distinct_results.reduce_with_strategy(StrictMajorityByKey::new(
-                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
-                ));
+                two_distinct_results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(
                 reduced,
@@ -206,9 +196,7 @@ mod multi_call_results {
             ]);
 
             let reduced: Result<FeeHistory, _> =
-                results.reduce_with_strategy(StrictMajorityByKey::new(
-                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
-                ));
+                results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(
                 reduced,
@@ -449,4 +437,8 @@ mod eth_get_transaction_count {
         let count: TransactionCount = serde_json::from_str("\"0x3d8\"").unwrap();
         assert_eq!(count, TransactionCount::from(0x3d8_u32));
     }
+}
+
+fn oldest_block(fee_history: &FeeHistory) -> Nat {
+    Nat::from(fee_history.oldest_block.clone())
 }
