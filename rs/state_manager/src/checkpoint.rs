@@ -250,7 +250,7 @@ impl PageMapType {
                 .map(|can| can.system_state.wasm_chunk_store.page_map()),
             PageMapType::LogMemoryStore(id) => state
                 .canister_state(id)
-                .and_then(|can| can.system_state.log_memory_store.page_map()),
+                .map(|can| can.system_state.log_memory_store.page_map()),
             PageMapType::SnapshotWasmMemory(id) => state
                 .canister_snapshots
                 .get(*id)
@@ -891,6 +891,13 @@ pub fn load_canister_state(
     )?;
     durations.insert("wasm_chunk_store", starting_time.elapsed());
 
+    let log_memory_store_layout = canister_layout.log_memory_store();
+    let log_memory_store_data = PageMap::open(
+        Box::new(log_memory_store_layout),
+        height,
+        Arc::clone(&fd_factory),
+    )?;
+
     let system_state = SystemState::new_from_checkpoint(
         canister_state_bits.controllers,
         *canister_id,
@@ -914,6 +921,7 @@ pub fn load_canister_state(
         canister_state_bits.log_visibility,
         canister_state_bits.log_memory_limit,
         canister_state_bits.canister_log,
+        log_memory_store_data,
         canister_state_bits.wasm_memory_limit,
         canister_state_bits.next_snapshot_id,
         canister_state_bits.snapshots_memory_usage,

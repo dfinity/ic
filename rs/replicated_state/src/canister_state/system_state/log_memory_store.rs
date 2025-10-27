@@ -24,6 +24,10 @@ impl LogMemoryStore {
         }
     }
 
+    pub fn from_checkpoint(data: PageMap) -> Self {
+        Self { data }
+    }
+
     pub fn page_map(&self) -> &PageMap {
         &self.data
     }
