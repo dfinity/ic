@@ -88,7 +88,7 @@ impl CanisterAccess {
         canister_id: CanisterId,
         root_key: Option<Vec<u8>>,
     ) -> Result<Self, AgentError> {
-        let agent = make_agent(url, Some(Duration::from_secs(1u64)), root_key).await?;
+        let agent = make_agent(url, Some(Duration::from_secs(10u64)), root_key).await?;
 
         Ok(Self {
             agent,
@@ -196,10 +196,13 @@ impl CanisterAccess {
         if let Some(a) = a
             && a != start
         {
-            warn!("Requested for {} ignoring queries at {}.", start, a);
+            debug!(
+                "Detected stale queries at {} while requesting {}. Clearing and continuing.",
+                a, start
+            );
             drop(ongoing);
             self.clear_outstanding_queries().await;
-            return Err("Removed stale block queries".to_string());
+            ongoing = self.ongoing_block_queries.lock().await;
         }
 
         let (a, b, jh) = {
