@@ -171,9 +171,7 @@ mod multi_call_results {
                 ]);
 
             let reduced: Result<FeeHistory, _> = two_distinct_results_and_error
-                .reduce_with_strategy(StrictMajorityByKey::new(|fee_history: &FeeHistory| {
-                    Nat::from(fee_history.oldest_block.clone())
-                }));
+                .reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(
                 reduced,
@@ -232,9 +230,7 @@ mod multi_call_results {
             let reduced: Result<FeeHistory, _> =
                 results
                     .clone()
-                    .reduce_with_strategy(StrictMajorityByKey::new(|fee_history: &FeeHistory| {
-                        Nat::from(fee_history.oldest_block.clone())
-                    }));
+                    .reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(
                 reduced,
