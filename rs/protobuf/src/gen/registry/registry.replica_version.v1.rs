@@ -31,8 +31,8 @@ pub struct GuestLaunchMeasurement {
     #[prost(message, optional, tag = "2")]
     pub metadata: ::core::option::Option<GuestLaunchMeasurementMetadata>,
     /// encoded SEV-SNP measurement (base64)
-    #[prost(string, optional, tag = "3")]
-    pub encoded_measurement: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, tag = "3")]
+    pub encoded_measurement: ::prost::alloc::string::String,
 }
 #[derive(
     serde::Serialize, serde::Deserialize, candid::CandidType, Eq, Clone, PartialEq, ::prost::Message,

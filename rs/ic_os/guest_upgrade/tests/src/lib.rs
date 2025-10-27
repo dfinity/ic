@@ -109,15 +109,11 @@ impl DiskEncryptionKeyExchangeTestFixture {
                         guest_launch_measurements: vec![
                             GuestLaunchMeasurement {
                                 metadata: None,
-                                encoded_measurement: Some(base64::encode(
-                                    DEFAULT_CLIENT_MEASUREMENT,
-                                )),
+                                encoded_measurement: base64::encode(DEFAULT_CLIENT_MEASUREMENT),
                             },
                             GuestLaunchMeasurement {
                                 metadata: None,
-                                encoded_measurement: Some(base64::encode(
-                                    DEFAULT_SERVER_MEASUREMENT,
-                                )),
+                                encoded_measurement: base64::encode(DEFAULT_SERVER_MEASUREMENT),
                             },
                         ],
                     }),
