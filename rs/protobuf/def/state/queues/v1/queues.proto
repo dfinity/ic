@@ -112,6 +112,10 @@ message Refund {
   Cycles amount = 2;
 }
 
+message Refunds {
+  repeated Refund refunds = 1;
+}
+
 message StreamMessage {
   oneof message {
     Request request = 1;

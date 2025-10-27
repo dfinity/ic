@@ -40,6 +40,7 @@ runs:
         $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
         $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
         $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
+        df -h
       env:
         SHELL_WRAPPER: "/usr/bin/time"
         CI_PIPELINE_ID: ${{ github.run_id }}

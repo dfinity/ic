@@ -2704,33 +2704,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "consensus-subnet-recovery-system-tests"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "candid",
- "canister-test",
- "canister_http",
- "ic-agent",
- "ic-base-types",
- "ic-management-canister-types-private",
- "ic-nns-constants",
- "ic-protobuf",
- "ic-recovery",
- "ic-registry-subnet-features",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "ic-types",
- "ic_consensus_system_test_utils",
- "ic_consensus_threshold_sig_system_test_utils",
- "prost 0.13.4",
- "serde",
- "serde_json",
- "slog",
- "url",
-]
-
-[[package]]
 name = "consensus-tecdsa-system-tests"
 version = "0.9.0"
 dependencies = [
@@ -4693,6 +4666,7 @@ dependencies = [
  "serde_cbor",
  "slog",
  "tokio",
+ "tokio-util",
  "wat",
 ]
 
@@ -7457,6 +7431,7 @@ dependencies = [
  "ic-cdk",
  "ic-ckbtc-minter",
  "ic-ckdoge-minter-test-utils",
+ "ic-http-types",
  "ic-secp256k1 0.3.0",
  "icrc-ledger-types",
  "pocket-ic",
@@ -7471,12 +7446,16 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "candid",
+ "canlog 0.2.0",
  "ic-bitcoin-canister-mock",
  "ic-ckdoge-minter",
+ "ic-http-types",
  "ic-icrc1-ledger",
  "ic-management-canister-types",
+ "ic-metrics-assert",
  "icrc-ledger-types",
  "pocket-ic",
+ "serde_json",
 ]
 
 [[package]]
@@ -7910,6 +7889,7 @@ dependencies = [
  "num-traits",
  "prometheus 0.13.4",
  "prost 0.13.4",
+ "rayon",
  "slog",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -10178,7 +10158,6 @@ dependencies = [
  "proptest",
  "scopeguard",
  "serde",
- "serde_bytes",
  "serde_json",
 ]
 
@@ -10668,6 +10647,8 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-types",
  "num-traits",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]
@@ -15439,6 +15420,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic_consensus_system_test_subnet_recovery"
+version = "0.9.0"
+dependencies = [
+ "anyhow",
+ "candid",
+ "canister-test",
+ "canister_http",
+ "ic-agent",
+ "ic-base-types",
+ "ic-management-canister-types-private",
+ "ic-nns-constants",
+ "ic-protobuf",
+ "ic-recovery",
+ "ic-registry-subnet-features",
+ "ic-registry-subnet-type",
+ "ic-system-test-driver",
+ "ic-types",
+ "ic_consensus_system_test_utils",
+ "ic_consensus_threshold_sig_system_test_utils",
+ "prost 0.13.4",
+ "serde",
+ "serde_json",
+ "slog",
+ "ssh2",
+ "url",
+]
+
+[[package]]
 name = "ic_consensus_system_test_utils"
 version = "0.9.0"
 dependencies = [
@@ -15608,6 +15617,7 @@ dependencies = [
  "anyhow",
  "ic-recovery",
  "ic-system-test-driver",
+ "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
  "nested",
  "rand 0.8.5",
@@ -19179,6 +19189,7 @@ dependencies = [
  "ic-certification 3.0.3",
  "ic-error-types 0.2.0",
  "ic-management-canister-types",
+ "ic-migration-canister",
  "ic-nns-governance-api",
  "ic-registry-client",
  "ic-registry-client-helpers",
@@ -20896,6 +20907,7 @@ dependencies = [
  "ic-base-types",
  "ic-protobuf",
  "itertools 0.12.1",
+ "lazy_static",
  "maplit",
  "rust_decimal",
  "rust_decimal_macros",
@@ -23377,11 +23389,11 @@ dependencies = [
  "candid",
  "ic-base-types",
  "ic-limits",
- "ic-recovery",
  "ic-registry-subnet-features",
  "ic-registry-subnet-type",
  "ic-system-test-driver",
  "ic-xrc-types",
+ "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
  "ic_nested_nns_recovery_common",
  "nested",

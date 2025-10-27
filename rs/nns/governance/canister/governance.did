@@ -816,6 +816,7 @@ type GetNeuronIndexResult = variant {
 // As such, the meaning of each field in this type is generally the same as the
 // one of the same (or at least similar) name in Neuron.
 type NeuronInfo = record {
+  id: opt NeuronId;
   dissolve_delay_seconds : nat64;
   recent_ballots : vec BallotInfo;
   neuron_type : opt int32;

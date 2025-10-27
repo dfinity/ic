@@ -335,7 +335,7 @@ impl From<&StreamMessage> for SerializableStreamMessage {
         match msg {
             StreamMessage::Request(req) => SerializableStreamMessage::Request((**req).clone()),
             StreamMessage::Response(rep) => SerializableStreamMessage::Response((**rep).clone()),
-            StreamMessage::Refund(refund) => SerializableStreamMessage::Refund((**refund).clone()),
+            StreamMessage::Refund(refund) => SerializableStreamMessage::Refund(**refund),
         }
     }
 }
