@@ -3783,7 +3783,8 @@ fn subnet_available_memory_is_not_updated_by_canister_pre_upgrade_wasm_memory() 
         (module
             (func (export "canister_pre_upgrade")
                 ;; Growing WASM memory by 2GiB and
-                ;; thereby exceeding subnet memory capacity.
+                ;; thereby exceeding subnet memory capacity
+                ;; (at least by the size of the WASM module).
                 (drop (memory.grow (i32.const 32768)))
             )
             (memory 1)

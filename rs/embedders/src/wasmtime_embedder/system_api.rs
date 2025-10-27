@@ -820,9 +820,9 @@ impl ApiType {
 
             ApiType::Start { .. } | ApiType::Init { .. } | ApiType::PreUpgrade { .. } => {
                 // Individual endpoints of install_code do not update subnet available memory
-                // and do not reserve cycles.
+                // and do not reserve storage cycles.
                 // Instead, subnet available memory is updated
-                // and cycles are reserved at the end of install_code.
+                // and storage cycles are reserved at the end of install_code.
                 false
             }
 
