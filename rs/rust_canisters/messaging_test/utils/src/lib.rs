@@ -44,8 +44,8 @@ impl Default for CallConfig {
 /// Starts with a list of `counts` and a correspondingly sized list of simple calls,
 /// then recursively generates one call with nested downstream calls from that.
 ///
-/// `receiver` is used to such that an arbitrary `Call` can be generated aimed at a specific
-/// canister, `config.receivers` are then used for downstream calls.
+/// `receiver` is used such that an arbitrary `Call` can be generated aimed at a specific
+/// canister, `config.receivers` is then used for downstream calls.
 ///
 /// This is useful because the call is sent to `receiver` as a trigger via an ingress message
 /// to then make downstream calls to other canisters.
