@@ -19,7 +19,7 @@ bazel_dep(name = "rules_shell", version = "0.6.1")
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
-bazel_dep(name = "rules_cc", version = "0.0.13")
+bazel_dep(name = "rules_cc", version = "0.0.16")
 bazel_dep(name = "platforms", version = "0.0.11")
 bazel_dep(name = "hermetic_cc_toolchain", version = "3.1.1")
 archive_override(
@@ -76,7 +76,7 @@ use_repo(pip, "python_deps")
 # Protobuf dependencies
 bazel_dep(
     name = "protobuf",
-    version = "28.2",
+    version = "29.1",
     # We rename it to keep the legacy name used throughout our bazel files
     repo_name = "com_google_protobuf",
 )
