@@ -122,6 +122,11 @@ impl StateMachine for StateMachineImpl {
         }
 
         // Time out expired messages.
+        //
+        // Preservation of cycles is validated (in debug builds) here for timing out and
+        // below for routing + shedding. Validation for induction is only done for each
+        // inducted message separately, as doing it for induction as a whole would
+        // require separate accounting for GC-ed and rejected messages.
         #[cfg(debug_assertions)]
         let balance_before_time_out = state.balance_with_messages();
         state.time_out_messages(&self.metrics);
