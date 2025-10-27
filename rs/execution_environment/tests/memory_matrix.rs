@@ -363,6 +363,12 @@ where
     // Return result.
     let total_cycles_balance =
         test.canister_state(canister_id).system_state.balance() + newly_reserved_cycles;
+    match scenario_params.scenario {
+        // Cycles for response callback execution are prepaid and thus it is expected
+        // that the final cycles balance can be larger than the initial cycles balance.
+        Scenario::CanisterCallback(_) => (),
+        _ => assert!(run_params.initial_cycles >= total_cycles_balance),
+    };
     let cycles_used = run_params.initial_cycles - total_cycles_balance;
     let minimum_initial_cycles =
         cycles_used + max(newly_reserved_cycles, freezing_limit_cycles) + unused_cycles_prepayment;
