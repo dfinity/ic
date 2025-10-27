@@ -1,15 +1,18 @@
 use crate::{
     eth_rpc::Hash,
     eth_rpc_client::{
-        ToReducedWithStrategy,
+        MinByKey, MultiCallError, MultiCallResults, StrictMajorityByKey, ToReducedWithStrategy,
         responses::{TransactionReceipt, TransactionStatus},
     },
     numeric::{BlockNumber, GasAmount, TransactionCount, WeiPerGas},
 };
 use assert_matches::assert_matches;
 use candid::Nat;
-use evm_rpc_types::{EthMainnetService, FeeHistory, RpcService as EvmRpcService};
-use proptest::proptest;
+use evm_rpc_types::{
+    EthMainnetService, FeeHistory, HttpOutcallError, JsonRpcError, LegacyRejectionCode,
+    MultiRpcResult, Nat256, RpcError, RpcService as EvmRpcService,
+};
+use proptest::{prelude::any, proptest};
 use std::str::FromStr;
 
 const BLOCK_PI: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::BlockPi);
