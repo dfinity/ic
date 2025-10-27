@@ -178,7 +178,11 @@ pkg_tar(
     testonly = True,
     srcs = [
         ":sns-testing",
-        ":sns-testing-init",
+        # TODO(NNS1-4259): Revert to:
+        # ":sns-testing-init",
+        # The next line is a hack to temporarily work around a mistake that we made
+        # where required fields were added to the Register canister's init args.
+        ":sns-testing-init-head-nns",
         "dfx.json",
         # TODO: Add the README.md file to the tarball once if is re-written in terms of the bundle.
         # "README.md",
