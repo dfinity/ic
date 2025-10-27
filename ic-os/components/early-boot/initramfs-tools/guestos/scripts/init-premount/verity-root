@@ -15,6 +15,9 @@ case $1 in
         ;;
 esac
 
+# Without this, error exit codes are ignored and the boot continues
+trap 'panic "fatal: verity-root failed"' ERR
+
 . /scripts/functions
 
 echo "Original root: ${ROOT}"
@@ -29,10 +32,7 @@ done
 
 echo "Root hash: ${ROOT_HASH}"
 
-if ! veritysetup open "${ROOT}" vroot "${ROOT}" "${ROOT_HASH}" --hash-offset 10603200512; then
-    echo "Fatal: veritysetup failed"
-    panic
-fi
+veritysetup open "${ROOT}" vroot "${ROOT}" "${ROOT_HASH}" --hash-offset 10603200512
 
 echo "ROOT=/dev/mapper/vroot" >/conf/param.conf
 
