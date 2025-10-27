@@ -291,5 +291,7 @@ system_test(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
     ],
 )
