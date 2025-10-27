@@ -1,6 +1,7 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use ic_types::NumBytes;
-use memory_tracker::*;
+use memory_tracker::prefetch::{PrefetchMemoryTracker, sigsegv_fault_handler_old};
+use memory_tracker::{DirtyPageTracking, MemoryTracker};
 
 use libc::{self, c_void};
 use nix::sys::mman::{MapFlags, ProtFlags, mmap};
@@ -19,7 +20,7 @@ lazy_static! {
 
 struct BenchData {
     ptr: *mut c_void,
-    tracker: SigsegvMemoryTracker,
+    tracker: PrefetchMemoryTracker,
     page_map: PageMap,
 }
 
@@ -48,7 +49,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
                 let page_map = PageMap::new_for_testing();
                 BenchData {
                     ptr,
-                    tracker: SigsegvMemoryTracker::new(
+                    tracker: PrefetchMemoryTracker::new(
                         ptr,
                         NumBytes::new(PAGE_SIZE as u64),
                         no_op_logger(),
@@ -96,7 +97,7 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
                 let page_map = PageMap::new_for_testing();
                 let data = BenchData {
                     ptr,
-                    tracker: SigsegvMemoryTracker::new(
+                    tracker: PrefetchMemoryTracker::new(
                         ptr,
                         NumBytes::new(PAGE_SIZE as u64),
                         no_op_logger(),

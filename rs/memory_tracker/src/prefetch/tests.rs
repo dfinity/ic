@@ -16,10 +16,11 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use crate::{
-    AccessKind, DirtyPageTracking, PageBitmap, SigsegvMemoryTracker, new_signal_handler_available,
+    AccessKind, DirtyPageTracking, MemoryTracker,
+    prefetch::{PageBitmap, PrefetchMemoryTracker, new_signal_handler_available},
 };
 
-/// Sets up the SigsegvMemoryTracker to track accesses to a region of memory. Returns:
+/// Sets up the PrefetchMemoryTracker to track accesses to a region of memory. Returns:
 /// 1. The tracker.
 /// 2. A PageMap with the memory contents.
 /// 3. A pointer to the tracked region.
@@ -29,7 +30,7 @@ fn setup(
     memory_pages: usize,
     page_delta: Vec<PageIndex>,
     dirty_page_tracking: DirtyPageTracking,
-) -> (SigsegvMemoryTracker, PageMap, *mut c_void, Vec<u8>) {
+) -> (PrefetchMemoryTracker, PageMap, *mut c_void, Vec<u8>) {
     let mut vec = vec![0_u8; memory_pages * PAGE_SIZE];
     let tmpfile = tempfile::Builder::new().prefix("test").tempfile().unwrap();
     for page in 0..checkpoint_pages {
@@ -70,7 +71,7 @@ fn setup(
         .unwrap()
     };
 
-    let tracker = SigsegvMemoryTracker::new(
+    let tracker = PrefetchMemoryTracker::new(
         memory,
         NumBytes::new((memory_pages * PAGE_SIZE) as u64),
         no_op_logger(),
@@ -88,7 +89,7 @@ fn with_setup<F>(
     dirty_page_tracking: DirtyPageTracking,
     f: F,
 ) where
-    F: FnOnce(SigsegvMemoryTracker, PageMap),
+    F: FnOnce(PrefetchMemoryTracker, PageMap),
 {
     let (tracker, page_map, _memory, _vec) = setup(
         checkpoint_pages,
@@ -99,8 +100,8 @@ fn with_setup<F>(
     f(tracker, page_map);
 }
 
-fn sigsegv(tracker: &SigsegvMemoryTracker, page_index: PageIndex, access_kind: AccessKind) {
-    let memory = tracker.memory_area.addr as *mut u8;
+fn sigsegv(tracker: &PrefetchMemoryTracker, page_index: PageIndex, access_kind: AccessKind) {
+    let memory = tracker.memory_area.start as *mut u8;
     let page_addr = unsafe { memory.add(page_index.get() as usize * PAGE_SIZE) };
     tracker.handle_sigsegv(Some(access_kind), page_addr as *mut c_void);
 }
@@ -863,7 +864,7 @@ mod random_ops {
     use proptest::prelude::*;
 
     thread_local! {
-        static TRACKER: RefCell<Option<SigsegvMemoryTracker>> = const { RefCell::new(None) };
+        static TRACKER: RefCell<Option<PrefetchMemoryTracker>> = const { RefCell::new(None) };
     }
 
     fn with_registered_handler_setup<F, G>(
@@ -875,7 +876,7 @@ mod random_ops {
         final_tracker_checks: G,
     ) where
         F: FnOnce(&mut [u8], Vec<u8>),
-        G: FnOnce(SigsegvMemoryTracker),
+        G: FnOnce(PrefetchMemoryTracker),
     {
         let (tracker, _page_map, memory, vec) = setup(
             checkpoint_pages,
@@ -895,7 +896,7 @@ mod random_ops {
     struct RegisteredHandler();
 
     impl RegisteredHandler {
-        unsafe fn new(tracker: SigsegvMemoryTracker) -> Self {
+        unsafe fn new(tracker: PrefetchMemoryTracker) -> Self {
             unsafe {
                 TRACKER.with(|cell| {
                     let previous = cell.replace(Some(tracker));
@@ -925,7 +926,7 @@ mod random_ops {
             }
         }
 
-        fn take_tracker(&mut self) -> Option<SigsegvMemoryTracker> {
+        fn take_tracker(&mut self) -> Option<PrefetchMemoryTracker> {
             TRACKER.with(|cell| {
                 let previous = cell.replace(None);
                 unsafe {
@@ -1050,7 +1051,7 @@ mod random_ops {
                     }
                     assert_eq!(memory, vec_memory);
                 },
-                |_tracker: SigsegvMemoryTracker| {}
+                |_tracker: PrefetchMemoryTracker| {}
             )
         }
 
@@ -1078,7 +1079,7 @@ mod random_ops {
                     }
                     assert_eq!(memory, vec_memory);
                 },
-                |_tracker: SigsegvMemoryTracker| {}
+                |_tracker: PrefetchMemoryTracker| {}
             )
         }
 
@@ -1117,7 +1118,7 @@ mod random_ops {
                         }
                     }
                 },
-                |tracker: SigsegvMemoryTracker| {
+                |tracker: PrefetchMemoryTracker| {
                     let tracker_accessed = tracker.accessed_pages().borrow();
                     for page in accessed.borrow().iter() {
                         assert!(tracker_accessed.is_marked(PageIndex::new(*page as u64)));
@@ -1165,7 +1166,7 @@ mod random_ops {
                         }
                     }
                 },
-                |tracker: SigsegvMemoryTracker| {
+                |tracker: PrefetchMemoryTracker| {
                     let tracker_accessed = tracker.accessed_pages().borrow();
                     for page in accessed.borrow().iter() {
                         assert!(tracker_accessed.is_marked(PageIndex::new(*page as u64)));
