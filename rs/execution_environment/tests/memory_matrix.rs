@@ -52,8 +52,10 @@ const DEFAULT_SUBNET_MEMORY_USAGE_BEFORE_OP: u64 =
 enum Scenario {
     /// Update method.
     CanisterEntryPoint,
-    /// Reply/cleanup callback.
-    CanisterCallback(Payload),
+    /// Reply callback.
+    CanisterReplyCallback(Payload),
+    /// Cleanup callback.
+    CanisterCleanupCallback(Payload),
     /// Management canister method `install_code`.
     InstallCode,
     /// Management canister method `update_settings` increasing memory allocation.
@@ -173,7 +175,9 @@ where
     // Refund for response transmission is credited before running the operation under test
     // and thus we subtract it from the initial cycles before running the operation under test.
     let refund_for_response_transmission = match &scenario_params.scenario {
-        Scenario::CanisterCallback(response) => test.refund_for_response_transmission(response),
+        Scenario::CanisterReplyCallback(response) | Scenario::CanisterCleanupCallback(response) => {
+            test.refund_for_response_transmission(response)
+        }
         _ => Cycles::zero(),
     };
     assert!(run_params.initial_cycles >= refund_for_response_transmission);
@@ -366,7 +370,7 @@ where
     match scenario_params.scenario {
         // Cycles for response callback execution are prepaid and thus it is expected
         // that the final cycles balance can be larger than the initial cycles balance.
-        Scenario::CanisterCallback(_) => (),
+        Scenario::CanisterReplyCallback(_) | Scenario::CanisterCleanupCallback(_) => (),
         _ => assert!(run_params.initial_cycles >= total_cycles_balance),
     };
     let cycles_used = run_params.initial_cycles - total_cycles_balance;
@@ -445,16 +449,15 @@ where
                 };
                 let res = run(&scenario_params, run_params);
                 let err = res.err.unwrap();
-                match err.code() {
-                    ErrorCode::ReservedCyclesLimitExceededInMemoryGrow => (),
-                    ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation => (),
-                    ErrorCode::CanisterCalledTrap => {
-                        assert!(
-                            err.description()
-                                .contains("due to its reserved cycles limit.")
-                        );
-                    }
-                    _ => panic!("Unexpected error: {:?}", err),
+                match scenario_params.scenario {
+                    Scenario::IncreaseMemoryAllocation => assert_eq!(
+                        err.code(),
+                        ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
+                    ),
+                    _ => assert_eq!(
+                        err.code(),
+                        ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+                    ),
                 };
 
                 // Test that the operation succeeds if the canister is as close as possible to its freezing threshold
@@ -475,19 +478,34 @@ where
                 let res = run(&scenario_params, run_params);
                 // Freezing threshold is not checked in canister response callbacks.
                 if frozen_at_minimum_initial_cycles
-                    && matches!(scenario_params.scenario, Scenario::CanisterCallback(_))
+                    && matches!(
+                        scenario_params.scenario,
+                        Scenario::CanisterReplyCallback(_) | Scenario::CanisterCleanupCallback(_)
+                    )
                 {
                     assert!(res.err.is_none());
                 } else {
                     let err = res.err.unwrap();
-                    assert!(
-                        err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
-                            || err.code() == ErrorCode::InsufficientCyclesInMemoryAllocation
-                            || (err.code() == ErrorCode::CanisterCalledTrap
-                                && err.description().contains("cannot grow memory"))
-                            || (err.code() == ErrorCode::CanisterOutOfCycles
-                                && frozen_at_minimum_initial_cycles)
-                    );
+                    match scenario_params.scenario {
+                        Scenario::IncreaseMemoryAllocation => {
+                            assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation)
+                        }
+                        Scenario::OtherManagement => {
+                            if frozen_at_minimum_initial_cycles {
+                                assert!(
+                                    err.code() == ErrorCode::CanisterOutOfCycles
+                                        || err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
+                                );
+                            } else {
+                                assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
+                            }
+                        }
+                        Scenario::CanisterCleanupCallback(_) => {
+                            assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+                            assert!(err.description().contains("cannot grow memory"));
+                        }
+                        _ => assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow),
+                    };
                     assert!(err.description().contains("least 1 additional cycles"));
                 }
 
@@ -498,16 +516,23 @@ where
                 };
                 let res = run(&scenario_params, run_params);
                 let err = res.err.unwrap();
-                match err.code() {
-                    ErrorCode::CanisterOutOfMemory | ErrorCode::SubnetOversubscribed => (),
-                    ErrorCode::CanisterCalledTrap => {
+                match scenario_params.scenario {
+                    Scenario::CanisterEntryPoint | Scenario::CanisterReplyCallback(_) => {
+                        assert!(
+                            err.code() == ErrorCode::CanisterOutOfMemory
+                                || (err.code() == ErrorCode::CanisterCalledTrap
+                                    && err.description().contains("ic0.stable64_grow failed"))
+                        );
+                    }
+                    Scenario::CanisterCleanupCallback(_) => {
+                        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
                         assert!(
                             err.description()
                                 .contains("Canister cannot grow its memory usage.")
                                 || err.description().contains("ic0.stable64_grow failed")
                         );
                     }
-                    _ => panic!("Unexpected error: {:?}", err),
+                    _ => assert_eq!(err.code(), ErrorCode::SubnetOversubscribed),
                 };
             }
         }
@@ -556,7 +581,7 @@ fn test_memory_suite_grow_memory_entry_point() {
     }
 }
 
-fn test_memory_suite_grow_memory_callback(call_args: CallArgs, response: Payload) {
+fn test_memory_suite_grow_memory_callback(call_args: CallArgs, scenario: Scenario) {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
         let payload = wasm()
@@ -584,7 +609,7 @@ fn test_memory_suite_grow_memory_callback(call_args: CallArgs, response: Payload
         test.ingress_result(&msg_id).err()
     };
     let params = ScenarioParams {
-        scenario: Scenario::CanisterCallback(response),
+        scenario,
         memory_usage_change: MemoryUsageChange::Increase,
         setup,
         op,
@@ -602,7 +627,8 @@ fn test_memory_suite_grow_memory_reply_callback() {
             .other_side(wasm().reply().build())
             .on_reply(grow_payload);
         let response = Payload::Data(vec![]);
-        test_memory_suite_grow_memory_callback(call_args, response);
+        let scenario = Scenario::CanisterReplyCallback(response);
+        test_memory_suite_grow_memory_callback(call_args, scenario);
     }
 }
 
@@ -617,7 +643,8 @@ fn test_memory_suite_grow_memory_cleanup_callback() {
             .on_reply(wasm().trap_with_blob(b"This is an expected trap!").build())
             .on_cleanup(grow_payload);
         let response = Payload::Data(vec![]);
-        test_memory_suite_grow_memory_callback(call_args, response);
+        let scenario = Scenario::CanisterCleanupCallback(response);
+        test_memory_suite_grow_memory_callback(call_args, scenario);
     }
 }
 
