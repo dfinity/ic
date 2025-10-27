@@ -303,7 +303,7 @@ fn correct_charging_source_canister_for_a_request() {
     let refund_cycles = cycles_account_manager.refund_for_response_transmission(
         &no_op_logger(),
         &no_op_counter,
-        &response,
+        &response.response_payload,
         prepayment_for_response_transmission,
         SMALL_APP_SUBNET_MAX_SIZE,
         cost_schedule,
