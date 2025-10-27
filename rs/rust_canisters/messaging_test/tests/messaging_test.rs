@@ -1,10 +1,14 @@
 use canister_test::{Cycles, PrincipalId, Project};
 use ic_state_machine_tests::two_subnets_simple;
-use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
+use ic_types::{
+    CanisterId,
+    ingress::{IngressState, IngressStatus, WasmResult},
+};
 use ic_types_test_utils::ids::canister_test_id;
+use maplit::btreemap;
 use messaging_test::{Call, Message, decode, encode};
 use messaging_test_utils::{
-    CallConfig, Stats, arb_call, from_blob, stats_call_vs_response, to_encoded_ingress,
+    CallConfig, Stats, arb_call, from_blob, stats_from, to_encoded_ingress,
 };
 use proptest::prop_assert_eq;
 
@@ -66,7 +70,7 @@ fn smoke_test() {
 
     // A call to be sent to `canister1` as an ingress that then calls `canister3`
     // as a XNet inter canister call; that then makes a call to self.
-    let call1 = Call {
+    let (receiver, payload) = to_encoded_ingress(Call {
         receiver: canister1,
         call_bytes: 456,
         reply_bytes: 789,
@@ -84,12 +88,11 @@ fn smoke_test() {
                 downstream_calls: vec![],
             }],
         }],
-    };
-    let (receiver1, payload) = to_encoded_ingress(call1.clone());
+    });
     let msg_id1 = env1
         .submit_ingress_as(
             PrincipalId::new_anonymous(),
-            receiver1,
+            receiver,
             "handle_call",
             payload,
         )
@@ -97,7 +100,7 @@ fn smoke_test() {
 
     // A call to be sent to `canister2` as an ingress that then calls `canister1`
     // on the same subnet.
-    let call2 = Call {
+    let (receiver, payload) = to_encoded_ingress(Call {
         receiver: canister2,
         call_bytes: 312,
         reply_bytes: 546,
@@ -109,12 +112,11 @@ fn smoke_test() {
             timeout_secs: None,
             downstream_calls: vec![],
         }],
-    };
-    let (receiver2, payload) = to_encoded_ingress(call2.clone());
+    });
     let msg_id2 = env1
         .submit_ingress_as(
             PrincipalId::new_anonymous(),
-            receiver2,
+            receiver,
             "handle_call",
             payload,
         )
@@ -131,18 +133,29 @@ fn smoke_test() {
     // Check the response to the first call.
     match env1.ingress_status(&msg_id1) {
         IngressStatus::Known {
+            receiver,
             state: IngressState::Completed(WasmResult::Reply(blob)),
             ..
         } => {
             assert_eq!(
-                Stats {
-                    successful_calls_count: 3,
-                    call_bytes_match_count: 3,
-                    reply_bytes_match_count: 3,
-                    rejected_calls_count: 0,
-                    missed_downstream_calls_count: 0
+                btreemap! {
+                    0 => Stats {
+                        successful_calls_count: 1,
+                        ..Stats::default()
+                    },
+                    1 => Stats {
+                        successful_calls_count: 1,
+                        ..Stats::default()
+                    },
+                    2 => Stats {
+                        successful_calls_count: 1,
+                        ..Stats::default()
+                    }
                 },
-                stats_call_vs_response(call1, from_blob(receiver1, blob)),
+                stats_from(&from_blob(
+                    CanisterId::unchecked_from_principal(receiver),
+                    blob
+                )),
             );
         }
         _ => unreachable!("the first call did not conclude successfully"),
@@ -151,18 +164,25 @@ fn smoke_test() {
     // Check the response to the second call.
     match env1.ingress_status(&msg_id2) {
         IngressStatus::Known {
+            receiver,
             state: IngressState::Completed(WasmResult::Reply(blob)),
             ..
         } => {
             assert_eq!(
-                Stats {
-                    successful_calls_count: 2,
-                    call_bytes_match_count: 2,
-                    reply_bytes_match_count: 1,
-                    rejected_calls_count: 0,
-                    missed_downstream_calls_count: 0
+                btreemap! {
+                    0 => Stats {
+                        successful_calls_count: 1,
+                        ..Stats::default()
+                    },
+                    1 => Stats {
+                        successful_calls_count: 1,
+                        ..Stats::default()
+                    },
                 },
-                stats_call_vs_response(call2, from_blob(receiver2, blob)),
+                stats_from(&from_blob(
+                    CanisterId::unchecked_from_principal(receiver),
+                    blob
+                )),
             );
         }
         _ => unreachable!("the first call did not conclude successfully"),
