@@ -324,11 +324,11 @@ mod tests {
         ApiType, ExecutionParameters, InstructionLimits,
         sandbox_safe_system_state::SandboxSafeSystemState,
     };
-    use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
-    use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{
-        Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages, PageMap, SystemState,
+    use ic_interfaces::execution_environment::{
+        ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
     };
+    use ic_registry_subnet_type::SubnetType;
+    use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap, SystemState};
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{
         ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId, Time,

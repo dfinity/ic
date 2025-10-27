@@ -1,10 +1,10 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_index_ng::{GetBlocksResponse, IndexArg, InitArg as IndexInitArg, Log, Status};
 use ic_icrc1_ledger::{FeatureFlags, InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_state_machine_tests::{StateMachine, WasmResult};
+use ic_ledger_suite_state_machine_helpers::get_logs;
+use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc1::account::Account;
 #[cfg(feature = "icrc3_disabled")]
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
@@ -234,7 +234,7 @@ pub fn wait_until_sync_is_completed(
             return;
         }
     }
-    let log = get_logs(env, index_id);
+    let log = parse_index_logs(&get_logs(env, index_id));
     let mut log_lines = String::new();
     for entry in log.entries {
         log_lines.push_str(&format!(
@@ -290,31 +290,8 @@ fn archive_get_all_blocks(
     res
 }
 
-fn assert_reply(result: WasmResult) -> Vec<u8> {
-    match result {
-        WasmResult::Reply(bytes) => bytes,
-        WasmResult::Reject(reject) => {
-            panic!("Expected a successful reply, got a reject: {}", reject)
-        }
-    }
-}
-
-pub fn get_logs(env: &StateMachine, index_id: CanisterId) -> Log {
-    let request = HttpRequest {
-        method: "".to_string(),
-        url: "/logs".to_string(),
-        headers: vec![],
-        body: serde_bytes::ByteBuf::new(),
-    };
-    let response = Decode!(
-        &assert_reply(
-            env.execute_ingress(index_id, "http_request", Encode!(&request).unwrap(),)
-                .expect("failed to get index-ng info")
-        ),
-        HttpResponse
-    )
-    .unwrap();
-    serde_json::from_slice(&response.body).expect("failed to parse index-ng log")
+pub(crate) fn parse_index_logs(logs: &[u8]) -> Log {
+    serde_json::from_slice(logs).expect("failed to parse index-ng log")
 }
 
 #[cfg(not(feature = "icrc3_disabled"))]

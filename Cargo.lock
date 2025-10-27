@@ -7453,6 +7453,7 @@ dependencies = [
  "ic-http-types",
  "ic-icrc1-ledger",
  "ic-management-canister-types",
+ "ic-metrics-assert",
  "icrc-ledger-types",
  "pocket-ic",
  "serde_json",
@@ -7889,6 +7890,7 @@ dependencies = [
  "num-traits",
  "prometheus 0.13.4",
  "prost 0.13.4",
+ "rayon",
  "slog",
  "strum 0.26.3",
  "strum_macros 0.26.4",
@@ -10157,7 +10159,6 @@ dependencies = [
  "proptest",
  "scopeguard",
  "serde",
- "serde_bytes",
  "serde_json",
 ]
 
@@ -10647,6 +10648,8 @@ dependencies = [
  "icp-ledger",
  "icrc-ledger-types",
  "num-traits",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]
@@ -19178,6 +19181,7 @@ dependencies = [
  "ic-certification 3.0.3",
  "ic-error-types 0.2.0",
  "ic-management-canister-types",
+ "ic-migration-canister",
  "ic-nns-governance-api",
  "ic-registry-client",
  "ic-registry-client-helpers",

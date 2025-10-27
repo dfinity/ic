@@ -4,6 +4,7 @@
 
 use std::{cell::RefCell, collections::BTreeSet};
 
+use candid::Principal;
 use ic_stable_structures::{
     BTreeMap, Cell, DefaultMemoryImpl,
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
@@ -14,6 +15,7 @@ use crate::{DEFAULT_MAX_ACTIVE_REQUESTS, Event, RequestState};
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 thread_local! {
+    static ALLOWLIST: RefCell<Option<Vec<Principal>>> = const { RefCell::new(None) };
 
     static LOCKS: RefCell<Locks> = const {RefCell::new(Locks{ids: BTreeSet::new()}) };
 
@@ -53,6 +55,17 @@ pub fn num_active_requests() -> u64 {
 
 pub fn max_active_requests() -> u64 {
     MAX_ACTIVE_REQUESTS.with_borrow(|x| *x.get())
+}
+
+pub fn set_allowlist(arg: Option<Vec<Principal>>) {
+    ALLOWLIST.set(arg);
+}
+
+pub fn caller_allowed(id: &Principal) -> bool {
+    ALLOWLIST.with_borrow(|allowlist| match allowlist {
+        Some(allowlist) => allowlist.contains(id),
+        None => true,
+    })
 }
 
 // ============================== Privileged API ============================== //

@@ -854,6 +854,55 @@ http_file(
     url = "https://github.com/dfinity/pocketic/releases/download/9.0.1/pocket-ic-x86_64-linux.gz",
 )
 
+## Rosetta CLI
+
+http_archive(
+    name = "rosetta-cli-x86_64-darwin",
+    build_file = "@//third_party:BUILD.rosetta-cli.bazel",
+    sha256 = "6426d69d8ce6851a00eb47c4b3bb5a5f2f792daca58a58d077ac5ade7c07f42b",
+    url = "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-darwin-amd64.tar.gz",
+)
+
+http_archive(
+    name = "rosetta-cli-aarch64-darwin",
+    build_file = "@//third_party:BUILD.rosetta-cli.bazel",
+    sha256 = "41eaa23bc2a34568549e7c0d99c3471fd0c20959ffb7a1e9fd2acc658f500b20",
+    url = "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-darwin-arm64.tar.gz",
+)
+
+http_archive(
+    name = "rosetta-cli-x86_64-linux",
+    build_file = "@//third_party:BUILD.rosetta-cli.bazel",
+    sha256 = "1ea96b427dfa69a93d2915bc57669014b58d66a9ee7d761509d50b66486d42f8",
+    url = "https://github.com/coinbase/mesh-cli/releases/download/v0.10.3/rosetta-cli-0.10.3-linux-amd64.tar.gz",
+)
+
+# ruff, python linter & formatter
+
+http_archive(
+    name = "ruff-x86_64-linux",
+    build_file = "@//third_party:BUILD.ruff.bazel",
+    sha256 = "7edce7075bf6d43b1ef2a9383b76a43310bbf5d70fa4471330fd5aaf655192b0",
+    strip_prefix = "ruff-x86_64-unknown-linux-gnu",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.6.8/ruff-x86_64-unknown-linux-gnu.tar.gz",
+)
+
+http_archive(
+    name = "ruff-aarch64-darwin",
+    build_file = "@//third_party:BUILD.ruff.bazel",
+    sha256 = "e554d55281391138e44b30ccd38c666388e4aeb05417c9ffb98a6cbb014aef0d",
+    strip_prefix = "ruff-aarch64-apple-darwin",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.6.8/ruff-aarch64-apple-darwin.tar.gz",
+)
+
+http_archive(
+    name = "ruff-x86_64-darwin",
+    build_file = "@//third_party:BUILD.ruff.bazel",
+    sha256 = "44039cea2aed4787cedcda0c35e5b352530d6ca2178f39c8bd4ff63526c43aef",
+    strip_prefix = "ruff-x86_64-apple-darwin",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.6.8/ruff-x86_64-apple-darwin.tar.gz",
+)
+
 http_archive(
     name = "rclone-x86_64-darwin",
     build_file = "@//third_party:BUILD.rclone.bazel",
@@ -900,6 +949,32 @@ http_file(
     executable = True,
     sha256 = "5df9a457c5ede103c7d017c23a4c1abce4d17db50442a9407724a9006db2f710",
     url = "https://github.com/dfinity/candid/releases/download/2023-11-16/didc-macos",
+)
+
+## shfmt, for formatting bash code
+
+http_file(
+    name = "shfmt-x86_64-linux",
+    downloaded_file_path = "shfmt",
+    executable = True,
+    sha256 = "5741a02a641de7e56b8da170e71a97e58050d66a3cf485fb268d6a5a8bb74afb",
+    url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_linux_amd64",
+)
+
+http_file(
+    name = "shfmt-aarch64-darwin",
+    downloaded_file_path = "shfmt",
+    executable = True,
+    sha256 = "633f242246ee0a866c5f5df25cbf61b6af0d5e143555aca32950059cf13d91e0",
+    url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_darwin_arm64",
+)
+
+http_file(
+    name = "shfmt-x86_64-darwin",
+    downloaded_file_path = "shfmt",
+    executable = True,
+    sha256 = "b8c9c025b498e2816b62f0b717f6032e9ab49e725a45b8205f52f66318f17185",
+    url = "https://github.com/mvdan/sh/releases/download/v3.6.0/shfmt_v3.6.0_darwin_amd64",
 )
 
 # Management canister candid interface
