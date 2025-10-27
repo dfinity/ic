@@ -875,6 +875,34 @@ fn test_memory_suite_upload_chunk() {
     test_memory_suite(params);
 }
 
+#[test]
+fn test_memory_suite_upload_chunk_idempotent() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister(test, canister_id);
+        let upload_chunk_args = UploadChunkArgs {
+            canister_id: canister_id.get(),
+            chunk: vec![42; 1 << 20],
+        };
+        test.subnet_message(Method::UploadChunk, upload_chunk_args.encode())
+            .unwrap();
+    };
+    let op = |test: &mut ExecutionTest, canister_id: CanisterId, ()| {
+        let upload_chunk_args = UploadChunkArgs {
+            canister_id: canister_id.get(),
+            chunk: vec![42; 1 << 20],
+        };
+        test.subnet_message(Method::UploadChunk, upload_chunk_args.encode())
+            .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::None,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
 fn take_snapshot_and_read_metadata(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
