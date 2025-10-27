@@ -12,4 +12,12 @@ impl LogMemoryStore {
     pub fn new(page_map: PageMap) -> Self {
         Self { page_map }
     }
+
+    pub fn page_map(&self) -> &PageMap {
+        &self.page_map
+    }
+
+    pub fn page_map_mut(&mut self) -> &mut PageMap {
+        &mut self.page_map
+    }
 }
