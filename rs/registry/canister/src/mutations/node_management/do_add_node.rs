@@ -1138,7 +1138,7 @@ mod tests {
         let (template_payload, _) = prepare_add_node_payload(1);
 
         let now = now_system_time();
-        let test_ip = connection_endpoint_from_string(&payload_1.http_endpoint).ip_addr;
+        let test_ip = connection_endpoint_from_string(&template_payload.http_endpoint).ip_addr;
 
         let add_node_payload_with_same_ip = |i| {
             let (mut new_payload, _) = prepare_add_node_payload(i);
