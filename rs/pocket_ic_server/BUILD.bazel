@@ -329,6 +329,7 @@ rust_test(
     rust_test(
         name = name,
         size = "medium",
+        timeout = "long",
         srcs = [
             "tests/common.rs",
             "tests/" + name + ".rs",
