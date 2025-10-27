@@ -1,8 +1,8 @@
 use crate::{
     eth_rpc::Hash,
     eth_rpc_client::{
-        responses::{TransactionReceipt, TransactionStatus},
         ToReducedWithStrategy,
+        responses::{TransactionReceipt, TransactionStatus},
     },
     numeric::{BlockNumber, GasAmount, TransactionCount, WeiPerGas},
 };
