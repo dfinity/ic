@@ -1330,11 +1330,7 @@ impl SandboxSafeSystemState {
         &mut self,
         allocated_bytes: NumBytes,
         subnet_memory_saturation: &ResourceSaturation,
-        api_type: &ApiType,
     ) -> HypervisorResult<()> {
-        if !self.should_reserve_storage_cycles(api_type) {
-            return Ok(());
-        }
         match self.memory_allocation {
             MemoryAllocation::Reserved(_) => Ok(()),
             MemoryAllocation::BestEffort => {
@@ -1397,36 +1393,6 @@ impl SandboxSafeSystemState {
 
         self.system_state_modifications
             .on_low_wasm_memory_hook_condition_check_result = Some(is_condition_satisfied);
-    }
-
-    // Returns `true` if storage cycles need to be reserved for the given
-    // API type when growing memory.
-    fn should_reserve_storage_cycles(&self, api_type: &ApiType) -> bool {
-        match api_type {
-            ApiType::Update { .. }
-            | ApiType::SystemTask { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. }
-            | ApiType::Cleanup { .. } => true,
-
-            ApiType::Start { .. } | ApiType::Init { .. } | ApiType::PreUpgrade { .. } => {
-                // Individual endpoints of install_code do not reserve cycles.
-                // Instead, it is reserved at the end of install_code.
-                false
-            }
-
-            ApiType::InspectMessage { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::CompositeQuery { .. }
-            | ApiType::CompositeReplyCallback { .. }
-            | ApiType::CompositeRejectCallback { .. }
-            | ApiType::CompositeCleanup { .. } => {
-                // Queries do not reserve storage cycles because the state
-                // changes are discarded anyways.
-                false
-            }
-        }
     }
 
     /// Appends a log record to the system state changes.

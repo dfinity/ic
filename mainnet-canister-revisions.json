@@ -64,8 +64,8 @@
     "sha256": "9637743e1215a4db376a62ee807a0986faf20833be2b332df09b3d5dbdd7339e"
   },
   "cycles-minting": {
-    "rev": "286295f0397521cd59ca7792df446c57379204fa",
-    "sha256": "ff2039efba2137ae9c90756de97c89cd978ec0268265e7e626494ea91ef49a93"
+    "rev": "c558689f2aed7dbd745474a3cbda84ba0825b4a8",
+    "sha256": "bf6089c779b5c3359f7264f73154a03eeacd3b81b19fd2adc2ee9dbb17f74ada"
   },
   "cycles_ledger": {
     "sha256": "ed99402535bb4f58e4ab469acc40c903f2fdeea409be16623d5c6a9131cbf120",
@@ -80,20 +80,20 @@
     "sha256": "f897870b7b6d6c15f657496bc731b0e341c34468ddbb8fa0722ec7beb6b51cee"
   },
   "governance": {
-    "rev": "286295f0397521cd59ca7792df446c57379204fa",
-    "sha256": "1d2919f71e53548b9b1716b76eb72d5cbab36d7ff2e9605a5947995810047dcb"
+    "rev": "c558689f2aed7dbd745474a3cbda84ba0825b4a8",
+    "sha256": "8ce63f937693e7155f1470346283dd7fbe1a64ca3a49e341d8e7cbbd49684f47"
   },
   "governance-canister_test": {
-    "rev": "286295f0397521cd59ca7792df446c57379204fa",
-    "sha256": "40648a757a41dd18d4285950fe1654cb9ed8b024d16bd97d545c5b68587a9f61"
+    "rev": "c558689f2aed7dbd745474a3cbda84ba0825b4a8",
+    "sha256": "f5053e64280a7112b717806f84a48f79ac227c8ba9c0501d80befa77b09f3937"
   },
   "index": {
     "rev": "3ae3649a2366aaca83404b692fc58e4c6e604a25",
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_test": {
-    "sha256": "fee16eafa54e5b15e58b48af7e2c4e755e66a00491089fd0b1199332bd0bd87e",
-    "tag": "release-2025-10-22"
+    "sha256": "2b3bbd49e378bbe720e9ec7f6d234eb6870628dabfa8230ec957c1f2fda97711",
+    "tag": "release-2025-10-24"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -104,20 +104,20 @@
     "sha256": "8c8eb285de53ca5609abd7dc41ba3ec8eeb67708b81469311fd670e6738d7d0a"
   },
   "nns_dapp_test": {
-    "sha256": "08010fcd3089be0fc75698a27f08308119960b2dfc1c9a322b4ca07078c92bbc",
-    "tag": "proposal-138994"
+    "sha256": "f631bbeea9c39f4d9641975f10e376e5f081e31318af4016a65d279efc8c9d86",
+    "tag": "proposal-139084"
   },
   "node-rewards": {
     "rev": "82120869afaca1dee5da0c92c3ca871c451d7dfa",
     "sha256": "9e5d0dced02d34de30fbcbeef5196fd2f7ce36480d7eab09383050d03fd0f084"
   },
   "registry": {
-    "rev": "286295f0397521cd59ca7792df446c57379204fa",
-    "sha256": "9a3fcc1afe97387341aa99f367ac3095c636be67b65d84e58ab236760e5510f5"
+    "rev": "c558689f2aed7dbd745474a3cbda84ba0825b4a8",
+    "sha256": "95e310fe507f91fa3fe711e6c8f15e1d9db157a7a8cc4f94df8780b06999795f"
   },
   "root": {
-    "rev": "2407385056dbcd1d5eb15b84a9c0cd5f511ff997",
-    "sha256": "b296fa62644f46cd30f852835a562a47b9bcf79e5772aa26625ba7e1d878613b"
+    "rev": "c558689f2aed7dbd745474a3cbda84ba0825b4a8",
+    "sha256": "8a20146911216bd7bbd902c724e2a81d1503358eb07c5b92bb736278d2d0549f"
   },
   "sns-wasm": {
     "rev": "ff761f361981cff6a760b7d181f696551878b92a",
