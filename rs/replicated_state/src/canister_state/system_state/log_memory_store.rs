@@ -5,11 +5,11 @@ use ic_validate_eq_derive::ValidateEq;
 #[derive(Clone, ValidateEq)]
 pub struct LogMemoryStore {
     #[validate_eq(Ignore)]
-    pub buffer: page_map::Buffer,
+    pub page_map: PageMap,
 }
 
 impl LogMemoryStore {
-    pub fn new(buffer: page_map::Buffer) -> Self {
-        Self { buffer }
+    pub fn new(page_map: PageMap) -> Self {
+        Self { page_map }
     }
 }
