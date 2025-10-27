@@ -201,14 +201,14 @@ rust_test(
         data = [
             "//rs/ledger_suite/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz",
             "//rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm.gz",
-            "@" + mainnet_ledger + "//file",
-            "@" + mainnet_index + "//file",
+            mainnet_ledger,
+            mainnet_index,
         ],
         env = {
             "CARGO_MANIFEST_DIR": "rs/ledger_suite/icrc1",
-            "IC_ICRC1_INDEX_NG_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @" + mainnet_index + "//file)",
+            "IC_ICRC1_INDEX_NG_DEPLOYED_VERSION_WASM_PATH": "$(rootpath " + mainnet_index + ")",
             "IC_ICRC1_INDEX_NG_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/index-ng:index_ng_canister" + name_suffix + ".wasm.gz)",
-            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @" + mainnet_ledger + "//file)",
+            "IC_ICRC1_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath " + mainnet_ledger + ")",
             "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath //rs/ledger_suite/icrc1/ledger:ledger_canister" + name_suffix + ".wasm.gz)",
         },
         deps = [
@@ -239,15 +239,15 @@ rust_test(
     for (name_suffix, mainnet_ledger, mainnet_index, features, extra_deps) in [
         (
             "",
-            "mainnet_ckbtc_ic-icrc1-ledger",
-            "mainnet_ckbtc-index-ng",
+            "@mainnet_ckbtc_ic-icrc1-ledger//file",
+            "@mainnet_ckbtc-index-ng//file",
             [],
             ["//rs/ledger_suite/icrc1/tokens_u64"],
         ),
         (
             "_u256",
-            "mainnet_cketh_ic-icrc1-ledger-u256",
-            "mainnet_cketh-index-ng",
+            "@mainnet_cketh_ic-icrc1-ledger-u256//file",
+            "@mainnet_cketh-index-ng//file",
             ["u256-tokens"],
             ["//rs/ledger_suite/icrc1/tokens_u256"],
         ),
