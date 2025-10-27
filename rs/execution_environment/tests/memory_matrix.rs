@@ -118,7 +118,7 @@ impl MemoryAllocation {
     fn get(&self) -> u64 {
         match self {
             MemoryAllocation::BestEffort => 0,
-            MemoryAllocation::Large => 100 * GIB,
+            MemoryAllocation::Large => 80 * GIB,
         }
     }
 }
