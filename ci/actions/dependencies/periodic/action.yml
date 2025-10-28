@@ -21,6 +21,7 @@ runs:
         nvm install ${DEFAULT_NODE_VERSION}
         nvm install ${OISY_NODE_VERSION}
         nvm use ${DEFAULT_NODE_VERSION}
+        nvm install-latest-npm
         node --version
         npm --version
       env:
