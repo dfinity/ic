@@ -588,6 +588,9 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
         let effective_fee = match &transaction.operation {
             Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
             Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
+            Operation::FeeCollector { .. } => {
+                panic!("not implemented")
+            }
             _ => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {
