@@ -313,6 +313,11 @@ mod tests {
                 .join("authorized_keys")
                 .exists()
         );
+        assert!(
+            state_root
+                .join("data/node_operator_private_key.pem")
+                .exists()
+        );
 
         // Verify file contents
         assert_eq!(
@@ -540,7 +545,7 @@ mod tests {
         let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
         assert!(result.is_ok());
 
-        // Verify that the override key was copied
+        // Verify that dev files were copied
         assert!(state_root.join("data/nns_public_key.pem").exists());
         assert_eq!(
             fs::read_to_string(state_root.join("data/nns_public_key.pem")).unwrap(),
@@ -571,7 +576,7 @@ mod tests {
         let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
         assert!(result.is_ok());
 
-        // Verify that the override key was not copied
+        // Verify that the dev files were not copied
         assert!(!state_root.join("data/nns_public_key.pem").exists());
     }
 }
