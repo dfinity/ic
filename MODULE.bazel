@@ -1141,7 +1141,7 @@ canisters(
 bazel_dep(name = "rules_motoko", version = "1.0.0")
 archive_override(
     module_name = "rules_motoko",
-    urls = ["https://github.com/dfinity/rules_motoko/archive/d44263a29c7446d0739d9ff5aa6898265c37e16d.tar.gz"],
-    strip_prefix = "rules_motoko-d44263a29c7446d0739d9ff5aa6898265c37e16d",
-    integrity = "sha256-BNVijU+JP5SaRGbpvBEWkCEEYn/Mu3Tce/oYhTtz6wY=",
+    urls = ["https://github.com/dfinity/rules_motoko/archive/a713645c0ebf3b5e1ccf5d6a92a56928c9dcc04f.tar.gz"],
+    strip_prefix = "rules_motoko-a713645c0ebf3b5e1ccf5d6a92a56928c9dcc04f",
+    integrity = "sha256-RYa3IpXToLM1Ys2DuQuOaUt8/HGYnXoWk8QOQbFhqOE=",
 )
