@@ -13,7 +13,6 @@ use strum_macros::Display;
 use crate::{
     canister_state::{
         events::num_successes_in_past_24_h, max_active_requests, num_active_requests,
-        num_ongoing_validations,
     },
     processing::{
         process_accepted, process_all_by_predicate, process_all_failed, process_all_succeeded,
@@ -34,7 +33,6 @@ mod tests;
 mod validation;
 
 const DEFAULT_MAX_ACTIVE_REQUESTS: u64 = 50;
-const MAX_ONGOING_VALIDATIONS: u64 = 100;
 /// 10 Trillion Cycles
 const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
 

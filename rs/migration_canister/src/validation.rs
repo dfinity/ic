@@ -13,7 +13,7 @@ use ic_cdk::api::canister_self;
 
 use crate::{
     CYCLES_COST_PER_MIGRATION, Request, ValidationError,
-    canister_state::{ValidationGuard, requests::list_by},
+    canister_state::requests::list_by,
     external_interfaces::{
         management::{CanisterStatusType, assert_no_snapshots, canister_status},
         registry::get_subnet_for_canister,

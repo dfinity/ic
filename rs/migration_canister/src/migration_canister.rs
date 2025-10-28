@@ -14,7 +14,7 @@ use crate::{
     canister_state::{
         ValidationGuard, caller_allowed,
         events::find_event,
-        max_active_requests, migrations_disabled,
+        migrations_disabled,
         requests::{find_request, insert_request},
         set_allowlist,
     },

@@ -63,10 +63,6 @@ pub fn max_active_requests() -> u64 {
     MAX_ACTIVE_REQUESTS.with_borrow(|x| *x.get())
 }
 
-pub fn num_ongoing_validations() -> u64 {
-    ONGOING_VALIDATIONS.with_borrow(|x| *x)
-}
-
 pub fn set_allowlist(arg: Option<Vec<Principal>>) {
     ALLOWLIST.set(arg);
 }
