@@ -3847,10 +3847,10 @@ dependencies = [
  "walrus 0.23.3",
  "warp",
  "wasm-bindgen",
- "wasm-encoder 0.235.0",
+ "wasm-encoder 0.239.0",
  "wasm-smith",
- "wasmparser 0.235.0",
- "wasmprinter 0.235.0",
+ "wasmparser 0.239.0",
+ "wasmprinter",
  "wasmtime",
  "wasmtime-environ",
  "wast 235.0.0",
@@ -3926,7 +3926,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users 0.5.0",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -14282,15 +14282,15 @@ dependencies = [
 
 [[package]]
 name = "wasm-smith"
-version = "0.235.0"
+version = "0.239.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c3be2ca016817c0732fdb615d41183ecd6fee1a0052c838b3cdffaa66e141883"
+checksum = "740315856034a7417b7d291bdfe0d7ff34a6b08541fa10af47d7a00c694cac1e"
 dependencies = [
  "anyhow",
  "arbitrary",
  "flagset",
- "wasm-encoder 0.235.0",
- "wasmparser 0.235.0",
+ "wasm-encoder 0.239.0",
+ "wasmparser 0.239.0",
 ]
 
 [[package]]
@@ -14373,17 +14373,6 @@ dependencies = [
 
 [[package]]
 name = "wasmprinter"
-version = "0.235.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75aa8e9076de6b9544e6dab4badada518cca0bf4966d35b131bbd057aed8fa0a"
-dependencies = [
- "anyhow",
- "termcolor",
- "wasmparser 0.235.0",
-]
-
-[[package]]
-name = "wasmprinter"
 version = "0.239.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b3981f3d51f39f24f5fc90f93049a90f08dbbca8deba602cd46bb8ca67a94718"
@@ -14457,7 +14446,7 @@ dependencies = [
  "target-lexicon",
  "wasm-encoder 0.239.0",
  "wasmparser 0.239.0",
- "wasmprinter 0.239.0",
+ "wasmprinter",
 ]
 
 [[package]]
