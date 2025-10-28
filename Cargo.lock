@@ -2612,6 +2612,7 @@ dependencies = [
  "fs_extra",
  "get_if_addrs",
  "ic-config",
+ "ic_sev",
  "linux_kernel_command_line",
  "macaddr",
  "network",

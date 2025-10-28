@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use fs_extra;
+use ic_sev::guest::is_sev_active;
 use std::fs::{self, File};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -99,8 +100,7 @@ fn validate_bootstrap_contents(extracted_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Copy select bootstrap files from extracted directory to their destinations
-fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
+fn copy_state_injection_files(extracted_dir: &Path, state_root: &Path) -> Result<()> {
     let ic_crypto_src = extracted_dir.join("ic_crypto");
     let ic_crypto_dst = state_root.join("crypto");
     if ic_crypto_src.exists() {
@@ -122,6 +122,11 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
         copy_directory_recursive(&ic_registry_src, &ic_registry_dst)?;
     }
 
+    Ok(())
+}
+
+/// Copy select bootstrap files from extracted directory to their destinations
+fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
     let node_op_key_src = extracted_dir.join("node_operator_private_key.pem");
     let node_op_key_dst = state_root.join("data/node_operator_private_key.pem");
     if node_op_key_src.exists() {
@@ -145,6 +150,25 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
         copy_file_with_parent_dir(nns_key_src, &nns_key_dst)?;
         fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))?;
     }
+
+    // Check if SEV is active - only copy state injection if SEV is not active
+    let sev_active = is_sev_active()?;
+
+    if !sev_active {
+        println!("SEV is not active - copying state injection files");
+        copy_state_injection_files(extracted_dir, state_root)?;
+    } else {
+        #[cfg(not(feature = "dev"))]
+        {
+            println!("SEV is active - skipping state injection files for production variant");
+        }
+        #[cfg(feature = "dev")]
+        {
+            println!("SEV is active - copying state injection files for dev variant");
+            copy_state_injection_files(extracted_dir, state_root)?;
+        }
+    }
+
     #[cfg(feature = "dev")]
     {
         let nns_key_override_src = extracted_dir.join("nns_public_key_override.pem");
