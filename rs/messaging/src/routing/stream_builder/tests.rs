@@ -802,8 +802,8 @@ fn build_streams_with_refunds_impl(
 
         // Set the subnet type of the remote subnet.
         provided_state.metadata.network_topology.subnets = btreemap! {
-            LOCAL_SUBNET => SubnetTopology {subnet_type: subnet_type, ..Default::default()},
-            REMOTE_SUBNET => SubnetTopology {subnet_type: subnet_type, ..Default::default()},
+            LOCAL_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
+            REMOTE_SUBNET => SubnetTopology {subnet_type, ..Default::default()},
         };
 
         // Map local canisters to `LOCAL_SUBNET`, remote canisters to `REMOTE_SUBNET`.
