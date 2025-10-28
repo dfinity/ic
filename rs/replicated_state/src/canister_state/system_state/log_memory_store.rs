@@ -12,6 +12,7 @@ const V1_LOOKUP_TABLE_OFFSET: usize = HEADER_OFFSET + V1_HEADER_SIZE;
 const TMP_LOG_MEMORY_CAPACITY: usize = 4 * 1024 * 1024; // 4 MiB
 
 #[derive(Debug, PartialEq)]
+#[repr(C, packed)]
 struct HeaderV1 {
     version: u8,
 
@@ -28,7 +29,7 @@ struct HeaderV1 {
     next_idx: u64,
 }
 const V1_PACKED_HEADER_SIZE: usize = 53;
-//const _: () = assert!(std::mem::size_of::<HeaderV1>() == V1_PACKED_HEADER_SIZE);
+const _: () = assert!(std::mem::size_of::<HeaderV1>() == V1_PACKED_HEADER_SIZE);
 type HeaderV1Bytes = [u8; V1_PACKED_HEADER_SIZE];
 
 impl From<&HeaderV1> for HeaderV1Bytes {
