@@ -461,10 +461,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                     return Err(e);
                 }
             }
-            Operation::FeeCollector {
-                fee_collector,
-                caller,
-            } => {
+            Operation::FeeCollector { .. } => {
                 panic!("not implemented")
             }
         }

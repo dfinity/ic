@@ -578,10 +578,7 @@ impl TransactionsAndBalances {
                     .or_insert(amount);
                 self.debit(from, fee);
             }
-            Operation::FeeCollector {
-                fee_collector,
-                caller,
-            } => {
+            Operation::FeeCollector { .. } => {
                 panic!("not implemented")
             }
         };
@@ -611,10 +608,7 @@ impl TransactionsAndBalances {
                 // (allowance was added/modified for this account)
                 self.check_and_update_account_validity(*from, default_fee);
             }
-            Operation::FeeCollector {
-                fee_collector,
-                caller,
-            } => {
+            Operation::FeeCollector { .. } => {
                 panic!("not implemented")
             }
         }
