@@ -294,7 +294,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
 
             StepType::DownloadState => {
                 if let Some(node_ip) = self.params.download_node {
-                    Ok(Box::new(self.recovery.get_download_state_step(
+                    Ok(Box::new(self.recovery.get_download_cup_checkpoint(
                         node_ip,
                         SshUser::Admin,
                         self.recovery.admin_key_file.clone(),

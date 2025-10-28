@@ -332,23 +332,16 @@ impl Recovery {
         includes
     }
 
-    /// Return the list of paths to include when downloading the ic_state with rsync.
-    /// These are the paths leading to the latest CUP checkpoint.
-    fn get_state_includes(&self, ssh_helper: &SshHelper) -> RecoveryResult<Vec<PathBuf>> {
-        let cup_checkpoint_name = Recovery::get_checkpoint_name_for_latest_cup_height(
-            &self.logger,
-            &self.work_dir,
-            Some(ssh_helper),
-        )?;
-
-        Ok(vec![
+    /// Return the list of paths to include when downloading the given checkpoint with rsync.
+    fn get_checkpoint_includes(&self, checkpoint_name: &str) -> Vec<PathBuf> {
+        vec![
             PathBuf::from(IC_STATE).join(""),
             PathBuf::from(IC_STATE).join(CHECKPOINTS).join(""),
             PathBuf::from(IC_STATE)
                 .join(CHECKPOINTS)
-                .join(cup_checkpoint_name)
+                .join(checkpoint_name)
                 .join("***"),
-        ])
+        ]
     }
 
     /// Return a [DownloadIcDataStep] downloading the consensus pool of the given
@@ -369,20 +362,25 @@ impl Recovery {
 
     /// Return a [DownloadIcDataStep] downloading the ic_state of the given
     /// node to the recovery data directory using the given account.
-    pub fn get_download_state_step(
+    pub fn get_download_cup_checkpoint(
         &self,
         node_ip: IpAddr,
         ssh_user: SshUser,
         key_file: Option<PathBuf>,
         keep_downloaded_state: bool,
     ) -> RecoveryResult<impl Step + use<>> {
-        let includes = self.get_state_includes(&SshHelper::new(
-            self.logger.clone(),
-            ssh_user.to_string(),
-            node_ip,
-            self.ssh_confirmation,
-            key_file.clone(),
-        ))?;
+        let cup_checkpoint_name = Recovery::get_checkpoint_name_for_latest_cup_height(
+            &self.logger,
+            &self.work_dir,
+            Some(&SshHelper::new(
+                self.logger.clone(),
+                ssh_user.to_string(),
+                node_ip,
+                self.ssh_confirmation,
+                key_file.clone(),
+            )),
+        )?;
+        let includes = self.get_checkpoint_includes(&cup_checkpoint_name);
 
         Ok(self.get_download_data_step(
             node_ip,
@@ -396,21 +394,36 @@ impl Recovery {
 
     /// Return a [DownloadIcDataStep] downloading the ic_state and CUPs of the
     /// given node to the recovery data directory using the given account.
-    pub fn get_download_state_and_cups_step(
+    pub fn get_download_latest_checkpoint_and_cups(
         &self,
         node_ip: IpAddr,
         ssh_user: SshUser,
         key_file: Option<PathBuf>,
         keep_downloaded_data: bool,
     ) -> RecoveryResult<impl Step + use<>> {
-        let mut includes = self.get_state_includes(&SshHelper::new(
+        let ssh_helper = SshHelper::new(
             self.logger.clone(),
             ssh_user.to_string(),
             node_ip,
             self.ssh_confirmation,
             key_file.clone(),
-        ))?;
-
+        );
+        let latest_checkpoint_name = ssh_helper
+            .ssh(format!(
+                "ls {} | sort | tail -1",
+                PathBuf::from(IC_DATA_PATH)
+                    .join(IC_CHECKPOINTS_PATH)
+                    .display()
+            ))?
+            .ok_or_else(|| {
+                RecoveryError::invalid_output_error(format!(
+                    "No checkpoints found on node {}",
+                    node_ip
+                ))
+            })?
+            .trim()
+            .to_string();
+        let mut includes = self.get_checkpoint_includes(&latest_checkpoint_name);
         includes.push(PathBuf::from(CUPS_DIR).join("***"));
 
         Ok(self.get_download_data_step(
