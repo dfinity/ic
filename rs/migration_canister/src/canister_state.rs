@@ -11,7 +11,7 @@ use ic_stable_structures::{
 };
 
 use crate::{
-    DEFAULT_MAX_ACTIVE_REQUESTS, Event, RequestState,
+    DEFAULT_MAX_ACTIVE_REQUESTS, Event, MAX_ONGOING_VALIDATIONS, RequestState,
     canister_state::events::num_successes_in_past_24_h,
 };
 
@@ -206,14 +206,7 @@ impl ValidationGuard {
         ONGOING_VALIDATIONS.with_borrow_mut(|num| {
             // Rate limit validations:
             // Validation requires many xnet calls, so we don't want too many validations at once.
-            // If the active request rate limit is almost reached, it does not make sense to
-            // validate lots of requests. But it does make sense to validate slightly more than
-            // we can fulfill, because validations may fail.
-            if *num
-                >= max_active_requests().saturating_sub(
-                    (num_active_requests() + num_successes_in_past_24_h()).saturating_sub(10),
-                )
-            {
+            if *num >= MAX_ONGOING_VALIDATIONS {
                 Err("Rate limited".to_string())
             } else {
                 *num += 1;

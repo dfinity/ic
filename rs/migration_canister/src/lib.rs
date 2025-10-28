@@ -33,6 +33,7 @@ mod tests;
 mod validation;
 
 const DEFAULT_MAX_ACTIVE_REQUESTS: u64 = 50;
+const MAX_ONGOING_VALIDATIONS: u64 = 500;
 /// 10 Trillion Cycles
 const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
 

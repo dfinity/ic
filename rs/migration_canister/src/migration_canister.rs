@@ -64,6 +64,9 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
     let Ok(_guard) = ValidationGuard::new() else {
         return Err(ValidationError::RateLimited);
     };
+    if rate_limited() {
+        return Err(ValidationError::RateLimited);
+    }
     let caller = msg_caller();
     // For soft rollout purposes
     if !caller_allowed(&caller) {
