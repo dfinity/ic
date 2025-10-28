@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use canister_test::{Cycles, PrincipalId, Project};
 use ic_state_machine_tests::two_subnets_simple;
 use ic_types::{
@@ -5,10 +6,9 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
 };
 use ic_types_test_utils::ids::canister_test_id;
-use maplit::btreemap;
-use messaging_test::{Call, Message, decode, encode};
+use messaging_test::{Call, Message, Response, decode, encode};
 use messaging_test_utils::{
-    CallConfig, Stats, arb_call, from_blob, stats_from, to_encoded_ingress,
+    CallConfig, arb_call, for_each_depth_first, from_blob, to_encoded_ingress,
 };
 use proptest::prop_assert_eq;
 
@@ -137,25 +137,11 @@ fn smoke_test() {
             state: IngressState::Completed(WasmResult::Reply(blob)),
             ..
         } => {
-            assert_eq!(
-                btreemap! {
-                    0 => Stats {
-                        successful_calls_count: 1,
-                        ..Stats::default()
-                    },
-                    1 => Stats {
-                        successful_calls_count: 1,
-                        ..Stats::default()
-                    },
-                    2 => Stats {
-                        successful_calls_count: 1,
-                        ..Stats::default()
-                    }
+            for_each_depth_first(
+                &from_blob(CanisterId::unchecked_from_principal(receiver), blob),
+                |response, _| {
+                    assert_matches!(response, Response::Success { .. });
                 },
-                stats_from(&from_blob(
-                    CanisterId::unchecked_from_principal(receiver),
-                    blob
-                )),
             );
         }
         _ => unreachable!("the first call did not conclude successfully"),
@@ -168,21 +154,11 @@ fn smoke_test() {
             state: IngressState::Completed(WasmResult::Reply(blob)),
             ..
         } => {
-            assert_eq!(
-                btreemap! {
-                    0 => Stats {
-                        successful_calls_count: 1,
-                        ..Stats::default()
-                    },
-                    1 => Stats {
-                        successful_calls_count: 1,
-                        ..Stats::default()
-                    },
+            for_each_depth_first(
+                &from_blob(CanisterId::unchecked_from_principal(receiver), blob),
+                |response, _| {
+                    assert_matches!(response, Response::Success { .. });
                 },
-                stats_from(&from_blob(
-                    CanisterId::unchecked_from_principal(receiver),
-                    blob
-                )),
             );
         }
         _ => unreachable!("the first call did not conclude successfully"),

@@ -17,11 +17,11 @@ serde = { workspace = true }
 serde_bytes = { workspace = true }
 
 [dev-dependencies]
+assert_matches = { workspace = true }
 canister-test = { path = "../canister_test" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
 ic-types = {path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
-maplit = "1.0.2"
 messaging-test-utils = { path = "./utils" }
 proptest = { workspace = true }
 test-strategy = "0.4.0"

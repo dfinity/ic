@@ -1,8 +1,7 @@
 use ic_types::{CanisterId, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
 use messaging_test::{Call, Message, Reply, Response, decode, encode};
 use proptest::prelude::*;
-use std::collections::BTreeMap;
-use std::ops::{Add, RangeInclusive};
+use std::ops::RangeInclusive;
 
 const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 
@@ -156,63 +155,27 @@ pub fn from_blob(respondent: CanisterId, blob: Vec<u8>) -> Response {
     }
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct Stats {
-    pub successful_calls_count: usize,
-    pub sync_rejected_calls_count: usize,
-    pub async_rejected_calls_count: usize,
-    pub traps_count: usize,
-}
-
-impl Add for Stats {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self {
-        Self {
-            successful_calls_count: self.successful_calls_count + rhs.successful_calls_count,
-            sync_rejected_calls_count: self.sync_rejected_calls_count
-                + rhs.sync_rejected_calls_count,
-            async_rejected_calls_count: self.async_rejected_calls_count
-                + rhs.async_rejected_calls_count,
-            traps_count: self.traps_count + rhs.traps_count,
-        }
-    }
-}
-
-/// Computes `Stats` by call depth.
-pub fn stats_from(response: &Response) -> BTreeMap<usize, Stats> {
-    fn collect_recursively(
-        response: &Response,
-        stats: &mut BTreeMap<usize, Stats>,
-        call_depth: usize,
-    ) {
-        match response {
-            Response::Success {
-                downstream_responses,
-                ..
-            } => {
-                stats.entry(call_depth).or_default().successful_calls_count += 1;
-                for response in downstream_responses.iter() {
-                    collect_recursively(response, stats, call_depth + 1);
-                }
-            }
-            Response::SyncReject { .. } => {
-                stats
-                    .entry(call_depth)
-                    .or_default()
-                    .sync_rejected_calls_count += 1;
-            }
-            Response::AsyncReject { reject_message, .. } => {
-                let s = stats.entry(call_depth).or_default();
-                s.async_rejected_calls_count += 1;
-                if reject_message.contains("trapped") {
-                    s.traps_count += 1;
-                }
+/// Traverses the `Response` and its downstream responses recursively,
+/// depth first and calls `f` on each `Response`.
+pub fn for_each_depth_first<F>(response: &Response, f: F)
+where
+    F: Fn(&Response, usize),
+{
+    fn traverse<F>(response: &Response, call_depth: usize, f: &F)
+    where
+        F: Fn(&Response, usize),
+    {
+        f(response, call_depth);
+        if let Response::Success {
+            downstream_responses,
+            ..
+        } = response
+        {
+            for response in downstream_responses.iter() {
+                traverse(response, call_depth + 1, f);
             }
         }
     }
 
-    let mut stats = BTreeMap::new();
-    collect_recursively(response, &mut stats, 0);
-    stats
+    traverse(response, 0, &f);
 }
