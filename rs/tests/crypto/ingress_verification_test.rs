@@ -213,32 +213,6 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                 canister_id,
             };
 
-            let rng_for_delegation = &mut rng.fork();
-
-            let mut test_delegation_with_targets =
-                async |targets: &[Vec<Principal>]| -> (StatusCode, StatusCode) {
-                    let delegation_count = targets.len();
-
-                    let mut identities = Vec::with_capacity(delegation_count + 1);
-
-                    for _ in 0..(delegation_count + 1) {
-                        let id_type = GenericIdentityType::random(rng_for_delegation);
-                        identities.push(GenericIdentity::new(id_type, rng_for_delegation));
-                    }
-
-                    let delegations = create_delegations_with_targets(&identities, &targets);
-
-                    let sender = &identities[0];
-                    let signer = &identities[identities.len() - 1];
-
-                    let query_result =
-                        query_delegation(&test_info, sender, signer, &delegations).await;
-                    let update_result =
-                        update_delegation(&test_info, sender, signer, &delegations).await;
-
-                    (query_result, update_result)
-                };
-
             struct DelegationTest {
                 note: &'static str,
                 targets: Vec<Vec<Principal>>,
@@ -332,24 +306,42 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
             ];
 
             for scenario in &scenarios {
-                let result = test_delegation_with_targets(&scenario.targets).await;
+                let delegation_count = scenario.targets.len();
+
+                let mut identities = Vec::with_capacity(delegation_count + 1);
+
+                for _ in 0..(delegation_count + 1) {
+                    let id_type = GenericIdentityType::random(rng);
+                    identities.push(GenericIdentity::new(id_type, rng));
+                }
+
+                let delegations = create_delegations_with_targets(&identities, &scenario.targets);
+
+                let sender = &identities[0];
+                let signer = &identities[identities.len() - 1];
+
+                let query_result = query_delegation(&test_info, sender, signer, &delegations).await;
+                let update_result =
+                    update_delegation(&test_info, sender, signer, &delegations).await;
+
                 info!(
                     logger,
-                    "Testing scenario '{}' got {:?}", scenario.note, result
+                    "Testing scenario '{}' got {:?}/{:?}",
+                    scenario.note,
+                    query_result,
+                    update_result,
                 );
 
-                let expected_result = match (scenario.expect_success, test_info.api_ver) {
-                    (false, _) => (400, 400),
-                    (true, 2) => (200, 202),
-                    (true, _) => (200, 200),
-                };
-
-                let expected_result = (
-                    StatusCode::from_u16(expected_result.0).unwrap(),
-                    StatusCode::from_u16(expected_result.1).unwrap(),
-                );
-
-                assert_eq!(result, expected_result);
+                if scenario.expect_success {
+                    assert_eq!(query_result, 200);
+                    assert_eq!(
+                        update_result,
+                        if test_info.api_ver == 2 { 202 } else { 200 }
+                    );
+                } else {
+                    assert_eq!(query_result, 400);
+                    assert_eq!(update_result, 400);
+                }
             }
         }
     });
