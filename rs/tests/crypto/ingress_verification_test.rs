@@ -206,6 +206,8 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                 canister_id,
             };
 
+            let rng_for_delegation = &mut rng.fork();
+
             let mut test_delegation_with_targets =
                 async |targets: &[Vec<Principal>]| -> (StatusCode, StatusCode) {
                     let delegation_count = targets.len();
@@ -213,8 +215,8 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                     let mut identities = Vec::with_capacity(delegation_count + 1);
 
                     for _ in 0..(delegation_count + 1) {
-                        let id_type = GenericIdentityType::random(rng);
-                        identities.push(GenericIdentity::new(id_type, rng));
+                        let id_type = GenericIdentityType::random(rng_for_delegation);
+                        identities.push(GenericIdentity::new(id_type, rng_for_delegation));
                     }
 
                     let delegations = create_delegations_with_targets(&identities, &targets);
@@ -268,9 +270,13 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
             // Test Scenario:
             //
             // Up to 1000 different targets (incl. arbitrary principals) containing the requested canister ID;
-
-            // TODO
-            // test_delegation_with_targets(&[vec![random_principals_including(canister_id, 1000)]]);
+            for targets in [10, 100, 500, 1000] {
+                test_delegation_with_targets(&[random_principals_including(
+                    &canister_id,
+                    targets,
+                    rng,
+                )]);
+            }
 
             // TODO
             // with the mgmt canister principal as the target for mgmt canister calls.
@@ -332,6 +338,27 @@ fn create_delegations_with_targets(
     }
 
     delegations
+}
+
+fn random_principals_including<R: Rng + CryptoRng>(
+    canister_id: &Principal,
+    cnt: usize,
+    rng: &mut R,
+) -> Vec<Principal> {
+    assert!(cnt > 0);
+
+    let mut result = Vec::with_capacity(cnt);
+
+    for _ in 0..cnt {
+        result.push(Principal::from(PrincipalId::new_user_test_id(
+            rng.r#gen::<u64>(),
+        )));
+    }
+
+    // Overwrite one of the random canister IDs with our desired target
+    result[rng.r#gen::<usize>() % cnt] = *canister_id;
+
+    result
 }
 
 fn sign_delegation(delegation: Delegation, identity: &GenericIdentity) -> SignedDelegation {
