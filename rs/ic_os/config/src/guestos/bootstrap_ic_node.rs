@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use fs_extra;
-use ic_sev::guest::is_sev_active;
 use std::fs::{self, File};
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
@@ -43,6 +42,24 @@ pub fn bootstrap_ic_node(bootstrap_tar_path: &Path) -> Result<()> {
 
 /// Process the bootstrap package to copy config contents
 fn process_bootstrap(bootstrap_tar: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
+    process_bootstrap_with_sev_checker(
+        bootstrap_tar,
+        config_root,
+        state_root,
+        ic_sev::guest::is_sev_active,
+    )
+}
+
+/// Process the bootstrap package to copy config contents with custom SEV checker
+fn process_bootstrap_with_sev_checker<F>(
+    bootstrap_tar: &Path,
+    config_root: &Path,
+    state_root: &Path,
+    sev_checker: F,
+) -> Result<()>
+where
+    F: Fn() -> anyhow::Result<bool>,
+{
     let tmpdir = TempDir::new().context("Failed to create temporary directory")?;
 
     let status = Command::new("tar")
@@ -59,7 +76,7 @@ fn process_bootstrap(bootstrap_tar: &Path, config_root: &Path, state_root: &Path
 
     validate_bootstrap_contents(tmpdir.path()).context("Bootstrap validation failed")?;
 
-    copy_bootstrap_files(tmpdir.path(), config_root, state_root)?;
+    copy_bootstrap_files_with_sev_checker(tmpdir.path(), config_root, state_root, sev_checker)?;
 
     // Fix up permissions. Ideally this is specific to only what is copied. If
     // we do make this change, we need to make sure `data` itself has the
@@ -125,8 +142,16 @@ fn copy_state_injection_files(extracted_dir: &Path, state_root: &Path) -> Result
     Ok(())
 }
 
-/// Copy select bootstrap files from extracted directory to their destinations
-fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
+/// Copy select bootstrap files from extracted directory to their destinations with custom SEV checker
+fn copy_bootstrap_files_with_sev_checker<F>(
+    extracted_dir: &Path,
+    config_root: &Path,
+    state_root: &Path,
+    sev_checker: F,
+) -> Result<()>
+where
+    F: Fn() -> anyhow::Result<bool>,
+{
     let node_op_key_src = extracted_dir.join("node_operator_private_key.pem");
     let node_op_key_dst = state_root.join("data/node_operator_private_key.pem");
     if node_op_key_src.exists() {
@@ -152,7 +177,7 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
     }
 
     // Restrict state injection on SEV production nodes
-    if !is_sev_active()? {
+    if !sev_checker()? {
         println!("SEV is not active - copying state injection files");
         copy_state_injection_files(extracted_dir, state_root)?;
     } else {
@@ -210,7 +235,17 @@ fn copy_directory_recursive(src: &Path, dst: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use tempfile::TempDir;
+
+    // Mock SEV checker for tests
+    static MOCK_SEV_ACTIVE: AtomicBool = AtomicBool::new(false);
+    fn set_mock_sev_active(value: bool) {
+        MOCK_SEV_ACTIVE.store(value, Ordering::SeqCst);
+    }
+    fn mock_sev_checker() -> anyhow::Result<bool> {
+        Ok(MOCK_SEV_ACTIVE.load(Ordering::SeqCst))
+    }
 
     #[test]
     fn test_copy_directory_recursive() {
@@ -317,7 +352,14 @@ mod tests {
         fs::create_dir_all(&config_root).unwrap();
         fs::create_dir_all(&state_root).unwrap();
 
-        let result = process_bootstrap(&bootstrap_tar, &config_root, &state_root);
+        set_mock_sev_active(false);
+
+        let result = process_bootstrap_with_sev_checker(
+            &bootstrap_tar,
+            &config_root,
+            &state_root,
+            mock_sev_checker,
+        );
         assert!(result.is_ok());
 
         // Verify files were copied correctly
@@ -486,8 +528,13 @@ mod tests {
         )
         .unwrap();
 
-        // Call copy_bootstrap_files
-        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
+        set_mock_sev_active(false);
+        let result = copy_bootstrap_files_with_sev_checker(
+            &extracted_dir,
+            &config_root,
+            &state_root,
+            mock_sev_checker,
+        );
         assert!(result.is_ok());
 
         // Verify files were copied correctly
@@ -563,8 +610,13 @@ mod tests {
         )
         .unwrap();
 
-        // Call copy_bootstrap_files
-        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
+        set_mock_sev_active(false);
+        let result = copy_bootstrap_files_with_sev_checker(
+            &extracted_dir,
+            &config_root,
+            &state_root,
+            mock_sev_checker,
+        );
         assert!(result.is_ok());
 
         // Verify that dev files were copied
@@ -594,8 +646,13 @@ mod tests {
         )
         .unwrap();
 
-        // Call copy_bootstrap_files
-        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
+        set_mock_sev_active(false);
+        let result = copy_bootstrap_files_with_sev_checker(
+            &extracted_dir,
+            &config_root,
+            &state_root,
+            mock_sev_checker,
+        );
         assert!(result.is_ok());
 
         // Verify that the dev files were not copied
