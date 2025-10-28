@@ -680,3 +680,5 @@ jobs:
   pocket-ic-tests-windows:
     if: github.event_name == 'pull_request'
     uses: ./.github/workflows/pocket-ic-tests-windows.yml
+    with:
+      commit-sha: ${{ github.sha }}

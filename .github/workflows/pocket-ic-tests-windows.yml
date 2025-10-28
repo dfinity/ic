@@ -2,7 +2,11 @@ name: PocketIC Windows
 on:
   # called from ci-main and schedule-daily workflows
   workflow_call:
-  # Todo: add commit sha here once we make other changes for accepting external contributions
+    inputs:
+      commit-sha:
+        description: The commit sha to run the CI on
+        required: true
+        type: string
 
 jobs:
   run-pocket-ic-tests:
@@ -55,6 +59,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
+          with:
+            ref: ${{ inputs.commit-sha }}
       - name: Build PocketIC server
         run: |
           bazel build //rs/pocket_ic_server:pocket-ic-server

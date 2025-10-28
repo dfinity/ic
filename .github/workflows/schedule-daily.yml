@@ -230,3 +230,5 @@ jobs:
 
   pocket-ic-tests-windows:
     uses: ./.github/workflows/pocket-ic-tests-windows.yml
+    with:
+      commit-sha: ${{ github.sha }}
