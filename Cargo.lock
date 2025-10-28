@@ -17557,6 +17557,7 @@ dependencies = [
 name = "messaging-test"
 version = "0.9.0"
 dependencies = [
+ "assert_matches",
  "candid",
  "canister-test",
  "futures",
@@ -17565,7 +17566,6 @@ dependencies = [
  "ic-state-machine-tests",
  "ic-types",
  "ic-types-test-utils",
- "maplit",
  "messaging-test-utils",
  "proptest",
  "serde",

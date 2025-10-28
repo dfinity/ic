@@ -55,7 +55,7 @@ rust_ic_test_suite(
         "//rs/state_machine_tests",
         "//rs/types/types",
         "//rs/types/types_test_utils",
-        "@crate_index//:maplit",
+        "@crate_index//:assert_matches",
         "@crate_index//:proptest",
     ],
 )
