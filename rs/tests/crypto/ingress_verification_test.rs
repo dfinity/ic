@@ -232,62 +232,110 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                     (query_result, update_result)
                 };
 
-            let accepted = (
-                StatusCode::from_u16(200).unwrap(),
-                StatusCode::from_u16(202).unwrap(),
-            );
-
-            // Test Scenario:
-            //
-            // Two delegations each with a singleton target containing the requested canister ID;
-            assert_eq!(
-                test_delegation_with_targets(&[vec![canister_id], vec![canister_id]]).await,
-                accepted
-            );
-
-            // Test Scenario:
-            //
-            // Delegation targets containing the requested canister ID multiple times;
-            assert_eq!(
-                test_delegation_with_targets(&[vec![canister_id, canister_id]]).await,
-                accepted
-            );
-
-            // Test Scenario:
-            //
-            // One delegation containing a singleton target containing the requested
-            // canister ID and one delegation containing no target restriction (for both
-            // ordering of these two delegations);
-            assert_eq!(
-                test_delegation_with_targets(&[vec![canister_id], vec![]]).await,
-                accepted
-            );
-            assert_eq!(
-                test_delegation_with_targets(&[vec![], vec![canister_id]]).await,
-                accepted
-            );
-
-            // Test Scenario:
-            //
-            // Up to 1000 different targets (incl. arbitrary principals) containing the requested canister ID;
-            for targets in [10, 100, 500, 1000] {
-                let targets = random_principals_including(&canister_id, targets, 1, rng);
-                assert_eq!(test_delegation_with_targets(&[targets]).await, accepted);
+            struct DelegationTest {
+                note: &'static str,
+                targets: Vec<Vec<Principal>>,
+                expected_result: (StatusCode, StatusCode),
             }
 
-            // Test Scenario:
-            //
-            // With targets containing the requested canister ID multiple times
-            for targets in [10, 100, 500, 1000] {
-                for duplicated in [2, 5] {
-                    let targets =
-                        random_principals_including(&canister_id, targets, duplicated, rng);
-                    assert_eq!(test_delegation_with_targets(&[targets]).await, accepted);
+            impl DelegationTest {
+                fn accept(note: &'static str, targets: Vec<Vec<Principal>>) -> Self {
+                    let expected_result = (
+                        StatusCode::from_u16(200).unwrap(),
+                        StatusCode::from_u16(202).unwrap(),
+                    );
+                    Self {
+                        note,
+                        targets,
+                        expected_result,
+                    }
+                }
+
+                fn reject(note: &'static str, targets: Vec<Vec<Principal>>) -> Self {
+                    let expected_result = (
+                        StatusCode::from_u16(400).unwrap(),
+                        StatusCode::from_u16(400).unwrap(),
+                    );
+                    Self {
+                        note,
+                        targets,
+                        expected_result,
+                    }
                 }
             }
 
-            // TODO
-            // with the mgmt canister principal as the target for mgmt canister calls.
+            let scenarios = [
+                DelegationTest::accept(
+                    "Two delegations each with a singleton target containing the requested canister ID",
+                    vec![vec![canister_id], vec![canister_id]],
+                ),
+                DelegationTest::accept(
+                    "One delegation with no target restriction and one with the canister ID",
+                    vec![vec![], vec![canister_id]],
+                ),
+                DelegationTest::accept(
+                    "One delegation with the canister ID and one with no target restriction",
+                    vec![vec![], vec![canister_id]],
+                ),
+                DelegationTest::accept(
+                    "Delegation with different targets (10), including the canister ID",
+                    vec![random_principals_including(&canister_id, 10, 1, rng)],
+                ),
+                DelegationTest::accept(
+                    "Delegation with different targets (100), including the canister ID",
+                    vec![random_principals_including(&canister_id, 100, 1, rng)],
+                ),
+                DelegationTest::accept(
+                    "Delegation with different targets (1000), including the canister ID",
+                    vec![random_principals_including(&canister_id, 1000, 1, rng)],
+                ),
+                DelegationTest::accept(
+                    "Delegation with different targets (10), including the canister ID, with repetition",
+                    vec![random_principals_including(&canister_id, 10, 2, rng)],
+                ),
+                DelegationTest::accept(
+                    "Delegation with different targets (100), including the canister ID, with repetition",
+                    vec![random_principals_including(&canister_id, 100, 10, rng)],
+                ),
+                DelegationTest::accept(
+                    "Delegation with different targets (1000), including the canister ID, with repetition",
+                    vec![random_principals_including(&canister_id, 1000, 50, rng)],
+                ),
+                // TODO: with the mgmt canister principal as the target for mgmt canister calls.
+                DelegationTest::reject(
+                    "Not containing the requested canister ID",
+                    vec![vec![random_canister_id(rng)]],
+                ),
+                DelegationTest::reject(
+                    "With more than 1000 different targets containing the requested canister ID (1001)",
+                    vec![random_principals_including(&canister_id, 1001, 1, rng)],
+                ),
+                DelegationTest::reject(
+                    "With more than 1000 different targets containing the requested canister ID (2000)",
+                    vec![random_principals_including(&canister_id, 2000, 1, rng)],
+                ),
+                DelegationTest::reject(
+                    "With an empty target intersection of multiple delegations with non-empty sets of targets",
+                    vec![
+                        vec![random_canister_id(rng)],
+                        vec![canister_id, random_canister_id(rng)],
+                    ],
+                ),
+                DelegationTest::reject(
+                    "With an empty target intersection of multiple delegations",
+                    vec![vec![random_canister_id(rng)], vec![random_canister_id(rng)]],
+                ),
+                // TODO: with a self-loop in delegations
+
+                // TODO: with an indirect cycle in delegations
+
+                // TODO: with an empty set of targets or a set of targets containing the requested canister ID for mgmt canister calls.
+            ];
+
+            for scenario in &scenarios {
+                let result = test_delegation_with_targets(&scenario.targets).await;
+                assert_eq!(result, scenario.expected_result);
+            }
         }
     });
 }
@@ -348,6 +396,10 @@ fn create_delegations_with_targets(
     delegations
 }
 
+fn random_canister_id<R: Rng + CryptoRng>(rng: &mut R) -> Principal {
+    Principal::from(PrincipalId::new_user_test_id(rng.r#gen::<u64>()))
+}
+
 fn random_principals_including<R: Rng + CryptoRng>(
     canister_id: &Principal,
     total_cnt: usize,
@@ -360,9 +412,7 @@ fn random_principals_including<R: Rng + CryptoRng>(
     let mut result = Vec::with_capacity(total_cnt);
 
     for _ in 0..total_cnt {
-        result.push(Principal::from(PrincipalId::new_user_test_id(
-            rng.r#gen::<u64>(),
-        )));
+        result.push(random_canister_id(rng));
     }
 
     // Overwrite some of the random canister IDs with our desired target
