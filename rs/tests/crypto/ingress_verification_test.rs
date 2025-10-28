@@ -271,8 +271,19 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
             //
             // Up to 1000 different targets (incl. arbitrary principals) containing the requested canister ID;
             for targets in [10, 100, 500, 1000] {
-                let targets = random_principals_including(&canister_id, targets, rng);
-                test_delegation_with_targets(&[targets]);
+                let targets = random_principals_including(&canister_id, targets, 1, rng);
+                assert_eq!(test_delegation_with_targets(&[targets]).await, accepted);
+            }
+
+            // Test Scenario:
+            //
+            // With targets containing the requested canister ID multiple times
+            for targets in [10, 100, 500, 1000] {
+                for duplicated in [2, 5] {
+                    let targets =
+                        random_principals_including(&canister_id, targets, duplicated, rng);
+                    assert_eq!(test_delegation_with_targets(&[targets]).await, accepted);
+                }
             }
 
             // TODO
@@ -339,21 +350,25 @@ fn create_delegations_with_targets(
 
 fn random_principals_including<R: Rng + CryptoRng>(
     canister_id: &Principal,
-    cnt: usize,
+    total_cnt: usize,
+    include_cnt: usize,
     rng: &mut R,
 ) -> Vec<Principal> {
-    assert!(cnt > 0);
+    assert!(total_cnt > 0);
+    assert!(include_cnt > 0 && include_cnt < total_cnt);
 
-    let mut result = Vec::with_capacity(cnt);
+    let mut result = Vec::with_capacity(total_cnt);
 
-    for _ in 0..cnt {
+    for _ in 0..total_cnt {
         result.push(Principal::from(PrincipalId::new_user_test_id(
             rng.r#gen::<u64>(),
         )));
     }
 
-    // Overwrite one of the random canister IDs with our desired target
-    result[rng.r#gen::<usize>() % cnt] = *canister_id;
+    // Overwrite some of the random canister IDs with our desired target
+    for i in rand::seq::index::sample(rng, total_cnt, include_cnt) {
+        result[i] = *canister_id;
+    }
 
     result
 }
