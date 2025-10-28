@@ -10,7 +10,10 @@ use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 
-use crate::{DEFAULT_MAX_ACTIVE_REQUESTS, Event, RequestState};
+use crate::{
+    DEFAULT_MAX_ACTIVE_REQUESTS, Event, RequestState,
+    canister_state::events::num_successes_in_past_24_h,
+};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -19,12 +22,15 @@ thread_local! {
 
     static LOCKS: RefCell<Locks> = const {RefCell::new(Locks{ids: BTreeSet::new()}) };
 
+    static ONGOING_VALIDATIONS: RefCell<u64> = const { RefCell::new(0)};
+
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
     static DISABLED: RefCell<Cell<bool, Memory>> =
         RefCell::new(Cell::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))), false));
 
+    /// Interpreted as: Max number of requests in a 24 hour sliding window.
     static MAX_ACTIVE_REQUESTS: RefCell<Cell<u64, Memory>>
         = RefCell::new(Cell::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1))), DEFAULT_MAX_ACTIVE_REQUESTS));
 
@@ -55,6 +61,10 @@ pub fn num_active_requests() -> u64 {
 
 pub fn max_active_requests() -> u64 {
     MAX_ACTIVE_REQUESTS.with_borrow(|x| *x.get())
+}
+
+pub fn num_ongoing_validations() -> u64 {
+    ONGOING_VALIDATIONS.with_borrow(|x| *x)
 }
 
 pub fn set_allowlist(arg: Option<Vec<Principal>>) {
@@ -115,7 +125,7 @@ pub mod requests {
 
 // ============================== Events API ============================== //
 pub mod events {
-    use crate::{Event, EventType, canister_state::HISTORY};
+    use crate::{Event, EventType, Request, canister_state::HISTORY};
     use candid::Principal;
     use ic_cdk::api::time;
 
@@ -128,6 +138,25 @@ pub mod events {
     pub fn list_events(_page_index: u64, _page_size: u64) -> Vec<Event> {
         // TODO: implement pagination
         HISTORY.with_borrow(|h| h.keys().collect())
+    }
+
+    pub fn num_successes_in_past_24_h() -> u64 {
+        let now = time();
+        let nanos_in_24_h = 24 * 60 * 60 * 1_000_000_000;
+        HISTORY.with_borrow(|h| {
+            let mut count = 0;
+            for event in h.iter_from_prev_key(&Event {
+                time: now.saturating_sub(nanos_in_24_h),
+                event: EventType::Succeeded {
+                    request: Request::low_bound(),
+                },
+            }) {
+                if matches!(event.key().event, EventType::Succeeded { .. }) {
+                    count += 1;
+                }
+            }
+            count
+        })
     }
 
     pub fn find_event(source: Principal, target: Principal) -> Vec<Event> {
@@ -171,5 +200,35 @@ impl MethodGuard {
 impl Drop for MethodGuard {
     fn drop(&mut self) {
         LOCKS.with_borrow_mut(|locks| locks.ids.remove(&self.id));
+    }
+}
+
+pub struct ValidationGuard;
+
+impl ValidationGuard {
+    pub fn new() -> Result<Self, String> {
+        ONGOING_VALIDATIONS.with_borrow_mut(|num| {
+            // Rate limit validations:
+            // Validation requires many xnet calls, so we don't want too many validations at once.
+            // If the active request rate limit is almost reached, it does not make sense to
+            // validate lots of requests. But it does make sense to validate slightly more than
+            // we can fulfill, because validations may fail.
+            if *num
+                >= max_active_requests().saturating_sub(
+                    (num_active_requests() + num_successes_in_past_24_h()).saturating_sub(10),
+                )
+            {
+                Err("Rate limited".to_string())
+            } else {
+                *num += 1;
+                Ok(Self)
+            }
+        })
+    }
+}
+
+impl Drop for ValidationGuard {
+    fn drop(&mut self) {
+        ONGOING_VALIDATIONS.with_borrow_mut(|num| *num -= 1)
     }
 }
