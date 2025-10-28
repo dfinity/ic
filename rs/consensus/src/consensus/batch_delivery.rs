@@ -31,10 +31,10 @@ use ic_protobuf::{
 use ic_types::{
     Height, PrincipalId, Randomness, SubnetId,
     batch::{
-        Batch, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData, ConsensusResponse,
+        Batch, BatchContent, BatchSummary, BlockmakerMetrics, ChainKeyData, ConsensusResponse,
     },
     consensus::{
-        Block, HasVersion,
+        Block, BlockPayload, HasVersion,
         idkg::{self},
     },
     crypto::threshold_sig::{
@@ -187,19 +187,22 @@ pub fn deliver_batches(
         // limit.  In this case we also want to have a checkpoint for that last height.
         let persist_batch = Some(height) == max_batch_height_to_deliver;
         let requires_full_state_hash = block.payload.is_summary() || persist_batch;
-        let batch_messages = if block.payload.is_summary() {
-            BatchMessages::default()
-        } else {
-            let batch_payload = &block.payload.as_ref().as_data().batch;
-            batch_stats.add_from_payload(batch_payload);
-            batch_payload
-                .clone()
-                .into_messages()
-                .map_err(|err| {
-                    error!(log, "batch payload deserialization failed: {:?}", err);
-                    err
-                })
-                .unwrap_or_default()
+        let batch_content = match block.payload.as_ref() {
+            BlockPayload::Summary(_summary_payload) => BatchContent::Summary,
+            BlockPayload::Data(data_payload) => {
+                batch_stats.add_from_payload(&data_payload.batch);
+                BatchContent::Data(
+                    data_payload
+                        .batch
+                        .clone()
+                        .into_messages()
+                        .map_err(|err| {
+                            error!(log, "batch payload deserialization failed: {:?}", err);
+                            err
+                        })
+                        .unwrap_or_default(),
+                )
+            }
         };
 
         let Some(previous_beacon) = pool.get_random_beacon(last_delivered_batch_height) else {
@@ -242,7 +245,7 @@ pub fn deliver_batches(
                 current_interval_length,
             }),
             requires_full_state_hash,
-            messages: batch_messages,
+            content: batch_content,
             randomness,
             chain_key_data: ChainKeyData {
                 master_public_keys: chain_key_subnet_public_keys,

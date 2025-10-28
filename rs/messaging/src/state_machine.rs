@@ -13,7 +13,7 @@ use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase::DroppedMessages;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
-use ic_types::batch::Batch;
+use ic_types::batch::{Batch, BatchContent, BatchMessages};
 use ic_types::{ExecutionRound, NumBytes};
 use std::time::Instant;
 
@@ -91,8 +91,15 @@ impl StateMachine for StateMachineImpl {
     ) -> ReplicatedState {
         let since = Instant::now();
 
+        let batch_messages = match batch.content {
+            BatchContent::Data(batch_messages) => batch_messages,
+            BatchContent::Summary | BatchContent::Splitting { new_subnet_id: _ } => {
+                BatchMessages::default()
+            }
+        };
+
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.
-        if let Some(query_stats) = &batch.messages.query_stats {
+        if let Some(query_stats) = &batch_messages.query_stats {
             deliver_query_stats(
                 query_stats,
                 &mut state,
@@ -150,7 +157,8 @@ impl StateMachine for StateMachineImpl {
 
         // Preprocess messages and add messages to the induction pool through the Demux.
         let since = Instant::now();
-        let mut state_with_messages = self.demux.process_payload(state, batch.messages);
+
+        let mut state_with_messages = self.demux.process_payload(state, batch_messages);
         // Batch creation time is essentially wall time (on some replica), so the median
         // duration should be meaningful.
         self.metrics.induct_batch_latency.observe(
