@@ -176,7 +176,7 @@ fn test_memory_accounting_and_sequence_errors(
     let (subnet1, subnet2, _) = setup.into_parts();
 
     // Submit all the calls into the ingress pool.
-    let mut call_registry: BTreeMap<MessageId, (Call, Option<Response>)> = calls
+    let mut call_registry: BTreeMap<MessageId, Option<Response>> = calls
         .into_iter()
         .map(|call| {
             (
@@ -186,6 +186,10 @@ fn test_memory_accounting_and_sequence_errors(
         })
         .collect();
 
+    // Stats accumulated at each iteration.
+    let mut running_stats = Stats::default();
+
+    // Execute rounds on both subnets; check memory accounting in each iteration.
     subnet1.execute_round();
     subnet2.execute_round();
 }
