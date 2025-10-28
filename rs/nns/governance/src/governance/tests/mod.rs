@@ -21,6 +21,7 @@ use lazy_static::lazy_static;
 use maplit::hashmap;
 use std::{convert::TryFrom, time::Duration};
 
+mod get_neuron_index;
 mod list_neurons;
 mod list_proposals;
 mod neurons_fund;

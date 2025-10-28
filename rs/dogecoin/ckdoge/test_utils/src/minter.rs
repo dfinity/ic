@@ -10,6 +10,7 @@ use ic_ckdoge_minter::candid_api::{
 };
 use ic_ckdoge_minter::{UpdateBalanceArgs, UpdateBalanceError};
 use ic_management_canister_types::CanisterId;
+use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
 use pocket_ic::{PocketIc, RejectResponse};
 use std::sync::Arc;
 
@@ -109,6 +110,10 @@ impl MinterCanister {
         }
     }
 
+    pub fn assert_that_metrics(&self) -> MetricsAssert<&Self> {
+        MetricsAssert::from_http_query(self)
+    }
+
     pub fn get_all_events(&self) -> Vec<Event> {
         const FIRST_BATCH_SIZE: u64 = 100;
         let mut all_events = self.get_events(0, FIRST_BATCH_SIZE);
@@ -135,5 +140,14 @@ impl MinterCanister {
             )
             .expect("BUG: failed to call get_events");
         Decode!(&call_result, Vec<Event>).unwrap()
+    }
+}
+
+impl PocketIcHttpQuery for &MinterCanister {
+    fn get_pocket_ic(&self) -> &pocket_ic::PocketIc {
+        &self.env
+    }
+    fn get_canister_id(&self) -> candid::Principal {
+        self.id
     }
 }
