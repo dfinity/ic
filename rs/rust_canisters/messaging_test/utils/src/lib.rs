@@ -154,28 +154,3 @@ pub fn from_blob(respondent: CanisterId, blob: Vec<u8>) -> Response {
         downstream_responses: reply.downstream_responses,
     }
 }
-
-/// Traverses the `Response` and its downstream responses recursively,
-/// depth first and calls `f` on each `Response`.
-pub fn for_each_depth_first<F>(response: &Response, f: F)
-where
-    F: Fn(&Response, usize),
-{
-    fn traverse<F>(response: &Response, call_depth: usize, f: &F)
-    where
-        F: Fn(&Response, usize),
-    {
-        f(response, call_depth);
-        if let Response::Success {
-            downstream_responses,
-            ..
-        } = response
-        {
-            for response in downstream_responses.iter() {
-                traverse(response, call_depth + 1, f);
-            }
-        }
-    }
-
-    traverse(response, 0, &f);
-}
