@@ -206,49 +206,64 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
                 canister_id,
             };
 
-            let mut test_delegation_with_targets = async |targets: &[Vec<Principal>]| -> (StatusCode, StatusCode) {
-                let delegation_count = targets.len();
+            let mut test_delegation_with_targets =
+                async |targets: &[Vec<Principal>]| -> (StatusCode, StatusCode) {
+                    let delegation_count = targets.len();
 
-                let mut identities = Vec::with_capacity(delegation_count + 1);
+                    let mut identities = Vec::with_capacity(delegation_count + 1);
 
-                for _ in 0..(delegation_count + 1) {
-                    let id_type = GenericIdentityType::random(rng);
-                    identities.push(GenericIdentity::new(id_type, rng));
-                }
+                    for _ in 0..(delegation_count + 1) {
+                        let id_type = GenericIdentityType::random(rng);
+                        identities.push(GenericIdentity::new(id_type, rng));
+                    }
 
-                let delegations = create_delegations_with_targets(&identities, &targets);
+                    let delegations = create_delegations_with_targets(&identities, &targets);
 
-                let sender = &identities[0];
-                let signer = &identities[identities.len() - 1];
+                    let sender = &identities[0];
+                    let signer = &identities[identities.len() - 1];
 
-                let query_result = query_delegation(&test_info, sender, signer, &delegations).await;
-                let update_result =
-                    update_delegation(&test_info, sender, signer, &delegations).await;
+                    let query_result =
+                        query_delegation(&test_info, sender, signer, &delegations).await;
+                    let update_result =
+                        update_delegation(&test_info, sender, signer, &delegations).await;
 
-                (query_result, update_result)
-            };
+                    (query_result, update_result)
+                };
 
-            let accepted = (StatusCode::from_u16(200).unwrap(), StatusCode::from_u16(202).unwrap());
+            let accepted = (
+                StatusCode::from_u16(200).unwrap(),
+                StatusCode::from_u16(202).unwrap(),
+            );
 
             // Test Scenario:
             //
             // Two delegations each with a singleton target containing the requested canister ID;
-            assert_eq!(test_delegation_with_targets(&[vec![canister_id], vec![canister_id]]).await,
-                       accepted);
+            assert_eq!(
+                test_delegation_with_targets(&[vec![canister_id], vec![canister_id]]).await,
+                accepted
+            );
 
             // Test Scenario:
             //
             // Delegation targets containing the requested canister ID multiple times;
-            assert_eq!(test_delegation_with_targets(&[vec![canister_id, canister_id]]).await,
-                       accepted);
+            assert_eq!(
+                test_delegation_with_targets(&[vec![canister_id, canister_id]]).await,
+                accepted
+            );
 
             // Test Scenario:
             //
             // One delegation containing a singleton target containing the requested
             // canister ID and one delegation containing no target restriction (for both
             // ordering of these two delegations);
-            assert_eq!(test_delegation_with_targets(&[vec![canister_id], vec![]]).await, accepted);
-            assert_eq!(test_delegation_with_targets(&[vec![], vec![canister_id]]).await, accepted);
+            assert_eq!(
+                test_delegation_with_targets(&[vec![canister_id], vec![]]).await,
+                accepted
+            );
+            assert_eq!(
+                test_delegation_with_targets(&[vec![], vec![canister_id]]).await,
+                accepted
+            );
 
             // Test Scenario:
             //
@@ -298,9 +313,7 @@ fn create_delegations_with_targets(
     if delegation_count > 0 {
         for i in 1..=delegation_count {
             let delegation = if targets[i - 1].is_empty() {
-                Delegation::new(
-                    identities[i].public_key(),
-                    delegation_expiry)
+                Delegation::new(identities[i].public_key(), delegation_expiry)
             } else {
                 Delegation::new_with_targets(
                     identities[i].public_key(),
@@ -308,7 +321,7 @@ fn create_delegations_with_targets(
                     targets[i - 1]
                         .iter()
                         .map(canister_id_from_principal)
-                        .collect::<Vec<CanisterId>>()
+                        .collect::<Vec<CanisterId>>(),
                 )
             };
 
