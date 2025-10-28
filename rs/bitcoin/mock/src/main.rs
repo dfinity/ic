@@ -87,6 +87,16 @@ fn set_tip_height(tip_height: u32) {
 #[candid_method(update)]
 #[update]
 fn bitcoin_get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
+    get_utxos(utxos_request)
+}
+
+#[candid_method(update)]
+#[update]
+fn dogecoin_get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
+    get_utxos(utxos_request)
+}
+
+fn get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
     read_state(|s| {
         assert_eq!(Network::from(utxos_request.network), s.network);
 
@@ -148,6 +158,14 @@ fn remove_utxo(utxo: Utxo) {
 #[candid_method(update)]
 #[update]
 fn bitcoin_get_current_fee_percentiles(
+    _: GetCurrentFeePercentilesRequest,
+) -> Vec<MillisatoshiPerByte> {
+    read_state(|s| s.fee_percentiles.clone())
+}
+
+#[candid_method(update)]
+#[update]
+fn dogecoin_get_current_fee_percentiles(
     _: GetCurrentFeePercentilesRequest,
 ) -> Vec<MillisatoshiPerByte> {
     read_state(|s| s.fee_percentiles.clone())

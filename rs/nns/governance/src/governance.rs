@@ -12,13 +12,13 @@ use crate::{
         HeapGovernanceData, XdrConversionRate, initialize_governance, reassemble_governance_proto,
         split_governance_proto,
     },
-    is_known_neuron_voting_history_enabled, is_neuron_follow_restrictions_enabled,
+    is_comprehensive_neuron_list_enabled, is_neuron_follow_restrictions_enabled,
     is_set_subnet_operational_level_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
-        NeuronMetrics, NeuronStore, approve_genesis_kyc, metrics::NeuronSubsetMetrics,
-        prune_some_following,
+        MAX_NEURON_PAGE_SIZE, NeuronMetrics, NeuronStore, approve_genesis_kyc,
+        metrics::NeuronSubsetMetrics, prune_some_following,
     },
     neurons_fund::{
         NeuronsFund, NeuronsFundNeuronPortion, NeuronsFundSnapshot,
@@ -101,8 +101,9 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-    ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse, ListProposalInfoResponse,
-    ManageNeuronResponse, NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
+    GetNeuronIndexRequest, ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse,
+    ListProposalInfoResponse, ManageNeuronResponse, NeuronIndexData, NeuronInfo, NeuronVote,
+    NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
@@ -3514,6 +3515,42 @@ impl Governance {
         self.with_neuron(id, |neuron| {
             neuron.get_neuron_info(self.voting_power_economics(), now, requester, false)
         })
+    }
+
+    /// Returns a paginated list of neurons.
+    /// The list has an exclusive lower bound on the neuron id, and a maximum
+    /// number of neurons to be returned.
+    /// The number of neurons to be returned is capped by `MAX_NEURON_PAGE_SIZE`.
+    pub fn get_neuron_index(
+        &self,
+        req: GetNeuronIndexRequest,
+        requester: PrincipalId,
+    ) -> Result<NeuronIndexData, GovernanceError> {
+        if !is_comprehensive_neuron_list_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Comprehensive neuron list is not enabled.",
+            ));
+        }
+
+        let now = self.env.now();
+
+        let exclusive_start_neuron_id = req.exclusive_start_neuron_id.unwrap_or(NeuronId { id: 0 });
+
+        let page_size = req
+            .page_size
+            .unwrap_or(MAX_NEURON_PAGE_SIZE)
+            .min(MAX_NEURON_PAGE_SIZE);
+
+        let neurons = self.neuron_store.list_all_neurons_paginated(
+            exclusive_start_neuron_id,
+            page_size,
+            requester,
+            now,
+            self.voting_power_economics(),
+        );
+
+        Ok(NeuronIndexData { neurons })
     }
 
     /// Returns the neuron info for a neuron identified by id or subaccount.
@@ -7071,12 +7108,7 @@ impl Governance {
                     };
                     p.reward_event_round = new_reward_event.day_after_genesis;
                     let ballots = std::mem::take(&mut p.ballots);
-                    record_known_neuron_abstentions(
-                        &known_neuron_ids,
-                        *pid,
-                        ballots,
-                        self.heap_data.first_proposal_id_to_record_voting_history,
-                    );
+                    record_known_neuron_abstentions(&known_neuron_ids, *pid, ballots);
                 }
             };
         }
@@ -8382,25 +8414,14 @@ fn record_known_neuron_abstentions(
     known_neuron_ids: &[NeuronId],
     proposal_id: ProposalId,
     ballots: HashMap<u64, Ballot>,
-    first_proposal_id_to_record_voting_history: ProposalId,
 ) {
-    // TODO(NNS1-4227): clean up `first_proposal_id_to_record_voting_history` after all proposals
-    // before this id have votes finalized.
-    if is_known_neuron_voting_history_enabled()
-        && proposal_id >= first_proposal_id_to_record_voting_history
-    {
-        for known_neuron_id in known_neuron_ids {
-            if let Some(ballot) = ballots.get(&known_neuron_id.id)
-                && ballot.vote() == Vote::Unspecified
-            {
-                with_voting_history_store_mut(|voting_history_store| {
-                    voting_history_store.record_vote(
-                        *known_neuron_id,
-                        proposal_id,
-                        Vote::Unspecified,
-                    );
-                });
-            }
+    for known_neuron_id in known_neuron_ids {
+        if let Some(ballot) = ballots.get(&known_neuron_id.id)
+            && ballot.vote() == Vote::Unspecified
+        {
+            with_voting_history_store_mut(|voting_history_store| {
+                voting_history_store.record_vote(*known_neuron_id, proposal_id, Vote::Unspecified);
+            });
         }
     }
 }
@@ -8443,6 +8464,14 @@ fn modify_followees(
         return Ok(updated_followees);
     }
 
+    if topic == Topic::NeuronManagement as i32 {
+        // Neuron management followees are not subject to the follow restrictions.
+        // This exception doesn't expose any security issue, as it doesn't reveal
+        // any ballots regardging non-neuron-management proposals of the followees.
+        updated_followees.insert(topic, new_followees);
+        return Ok(updated_followees);
+    }
+
     // Otherwise, update the entry with the new followees list.
     // A new can follow another neuron if:
     // 1. the followee neuron is a public neuron
@@ -8452,7 +8481,7 @@ fn modify_followees(
     // If in the list of followees, there are any follow relationships
     // that don't adhere to the aforementioned rules, return a GovernanceError
     // including all the invalid followees.
-    let mut invalid_followees = 0_i32;
+    let mut invalid_followees = 0_u32;
     let mut error_message = String::new();
 
     // To avoid looking up the already existing followees of the neuron
@@ -8484,7 +8513,7 @@ fn modify_followees(
                 || followee_hot_keys.contains(&controller);
 
             if !allowed_to_follow {
-                invalid_followees += 1;
+                invalid_followees = invalid_followees.saturating_add(1);
                 error_message.push_str(&format!(
                                 "{}: Neuron {} is a private neuron.\n\
                                 If you control neuron {}, you can follow it after adding your principal {} to its list of hotkeys or setting the neuron to public.",
@@ -8495,7 +8524,7 @@ fn modify_followees(
                             ));
             }
         } else {
-            invalid_followees += 1;
+            invalid_followees = invalid_followees.saturating_add(1);
             error_message.push_str(&format!(
                             "{}: The neuron with ID {} does not exist. Make sure that you copied the neuron ID correctly.\n",
                             invalid_followees,

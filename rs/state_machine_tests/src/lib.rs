@@ -16,6 +16,7 @@ use ic_config::{
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
 use ic_consensus_cup_utils::{make_registry_cup, make_registry_cup_from_cup_contents};
 use ic_consensus_utils::crypto::SignVerify;
+use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_test_utils_ni_dkg::{
     SecretKeyBytes, dummy_initial_dkg_transcript_with_master_key, sign_message,
 };
@@ -114,7 +115,6 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
-use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::{FakeConsensusPoolCache, batch::MockBatchPayloadBuilder};
 use ic_test_utilities_metrics::{
     Labels, fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
@@ -2659,8 +2659,9 @@ impl StateMachine {
             next_checkpoint_height: next_checkpoint_height.into(),
             current_interval_length: checkpoint_interval_length.into(),
         }));
-        let requires_full_state_hash =
-            batch_number.get() % checkpoint_interval_length_plus_one == 0;
+        let requires_full_state_hash = batch_number
+            .get()
+            .is_multiple_of(checkpoint_interval_length_plus_one);
 
         let current_time = self.get_time();
         let time_of_next_round = if current_time == *self.time_of_last_round.read().unwrap() {
@@ -4815,7 +4816,8 @@ fn multi_subnet_setup(
         .build_with_subnets(subnets)
 }
 
-/// Sets up two `StateMachine` configured with a `StateMachineConfig` that can communicate with each other.
+/// Sets up two `StateMachine` as application subnets and configured with a
+/// `StateMachineConfig` that can communicate with each other.
 pub fn two_subnets_with_config(
     config1: StateMachineConfig,
     config2: StateMachineConfig,

@@ -26,6 +26,7 @@ BlockContent = {
 MintTx = (
   op: "mint",
   to: Account,
+  ? fee: Amount,
   TxCommon
 )
 
@@ -33,6 +34,7 @@ BurnTx = (
   op: "burn",
   from: Account,
   ? spender: Account,
+  ? fee: Amount,
   TxCommon
 )
 

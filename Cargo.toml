@@ -115,6 +115,7 @@ members = [
     "rs/crypto/test_utils",
     "rs/crypto/test_utils/canister_sigs",
     "rs/crypto/test_utils/canister_threshold_sigs",
+    "rs/crypto/test_utils/crypto_returning_ok",
     "rs/crypto/test_utils/csp",
     "rs/crypto/test_utils/keygen",
     "rs/crypto/test_utils/keys",
@@ -597,7 +598,7 @@ assert_cmd = "2.0.16"
 assert_matches = "1.5.0"
 async-recursion = "1.0.5"
 async-stream = "0.3.6"
-async-trait = "0.1.83"
+async-trait = "0.1.89"
 axum = { version = "0.8.4", features = ["ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
@@ -686,14 +687,14 @@ ic-cdk = "0.18.7"
 ic-cdk-timers = "0.12.2"
 ic-certificate-verification = "3"
 ic-certification = "3"
-ic-ed25519 = "0.3.0"
+ic-ed25519 = "0.4.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.3.0"
 ic-identity-hsm = "0.40.1"
 ic-management-canister-types = "0.3.0"
 ic-response-verification = "3"
-ic-secp256k1 = "0.2.0"
+ic-secp256k1 = "0.3.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.40.1" }
@@ -713,7 +714,7 @@ indoc = "1.0.9"
 inferno = "0.12.0"
 ipnet = { version = "2.10.1", features = ["serde"] }
 itertools = "0.12.0"
-jsonrpc = { version = "0.18.0", features = ["minreq_http"] }
+jsonrpc = "0.18.0"
 k256 = { version = "0.13.4", default-features = false, features = [
     "arithmetic",
     "ecdsa",
@@ -723,9 +724,6 @@ k256 = { version = "0.13.4", default-features = false, features = [
     "schnorr",
     "std",
 ] }
-# kube is used by our test driver
-k8s-openapi = { version = "0.22.0", features = ["v1_28", "schemars"] }
-kube = { version = "0.94.0", features = ["client", "derive"] }
 lazy_static = "1.4.0"
 leb128 = "0.2.5"
 libc = "0.2.158"
@@ -898,9 +896,9 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
-wasm-encoder = { version = "0.235.0", features = ["wasmparser"] }
-wasmparser = "0.235.0"
-wasmprinter = "0.235.0"
+wasm-encoder = { version = "0.239.0", features = ["wasmparser"] }
+wasmparser = "0.239.0"
+wasmprinter = "0.239.0"
 wast = "235.0.0"
 wat = "1.235.0"
 which = "6.0.3"
