@@ -106,10 +106,10 @@ fn test_header_v1_roundtrip_serialization() {
 //     content: Vec<u8>,
 // }
 
-fn init(page_map: PageMap, data_capacity: usize) -> PageMap {
+fn init(data_capacity: usize) -> HeaderV1 {
     let lookup_table_pages = 1;
     let data_offset = V1_LOOKUP_TABLE_OFFSET + lookup_table_pages * PAGE_SIZE;
-    let header = HeaderV1 {
+    HeaderV1 {
         version: 1,
         lookup_table_pages: lookup_table_pages as u16,
         lookup_slots_count: 0,
@@ -119,12 +119,7 @@ fn init(page_map: PageMap, data_capacity: usize) -> PageMap {
         data_tail: 0,
         data_size: 0,
         next_idx: 0,
-    };
-    let bytes = HeaderV1Bytes::from(&header);
-
-    let mut buffer = Buffer::new(page_map.clone());
-    buffer.write(&bytes, HEADER_OFFSET);
-    buffer.into_page_map()
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
@@ -135,17 +130,23 @@ pub struct LogMemoryStore {
 
 impl LogMemoryStore {
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
-        Self {
-            data: init(PageMap::new(fd_factory), TMP_LOG_MEMORY_CAPACITY),
-        }
+        let mut store = Self {
+            data: PageMap::new(fd_factory),
+        };
+        let header = init(TMP_LOG_MEMORY_CAPACITY);
+        store.write_header(&header);
+        store
     }
 
     /// Creates a new `LogMemoryStore` that will use the temp file system for
     /// allocating new pages.
     pub fn new_for_testing() -> Self {
-        Self {
-            data: init(PageMap::new_for_testing(), TMP_LOG_MEMORY_CAPACITY),
-        }
+        let mut store = Self {
+            data: PageMap::new_for_testing(),
+        };
+        let header = init(TMP_LOG_MEMORY_CAPACITY);
+        store.write_header(&header);
+        store
     }
 
     pub fn from_checkpoint(data: PageMap) -> Self {
@@ -160,28 +161,41 @@ impl LogMemoryStore {
         &mut self.data
     }
 
+    fn write_header(&mut self, header: &HeaderV1) {
+        let mut buffer = Buffer::new(self.data.clone());
+        buffer.write(&HeaderV1Bytes::from(header), HEADER_OFFSET);
+        self.data.update(&buffer.dirty_pages().collect::<Vec<_>>());
+    }
+
+    fn read_header(&self) -> HeaderV1 {
+        let buffer = Buffer::new(self.data.clone());
+        let mut bytes = [0; V1_PACKED_HEADER_SIZE];
+        buffer.read(&mut bytes, HEADER_OFFSET);
+        HeaderV1::from(&bytes)
+    }
+
     pub fn clear(&mut self) {
         // TODO.
     }
 
     pub fn capacity(&self) -> usize {
-        0 // TODO.
+        self.read_header().data_capacity as usize
     }
 
     pub fn used_space(&self) -> usize {
-        0 // TODO.
+        self.read_header().data_size as usize
     }
 
     pub fn next_id(&self) -> u64 {
-        0 // TODO.
-    }
-
-    pub fn records(&self, _filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
-        vec![] // TODO.
+        self.read_header().next_idx
     }
 
     pub fn append_delta_log(&mut self, _delta_log: &mut CanisterLog) {
         // TODO: preserve record sizes, advance next_idx, append records.
+    }
+
+    pub fn records(&self, _filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
+        vec![] // TODO.
     }
 
     // fn push_delta_log_size(&mut self, _size: usize) {
