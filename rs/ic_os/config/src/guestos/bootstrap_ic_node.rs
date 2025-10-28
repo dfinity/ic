@@ -151,10 +151,8 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
         fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))?;
     }
 
-    // Check if SEV is active - only copy state injection if SEV is not active
-    let sev_active = is_sev_active()?;
-
-    if !sev_active {
+    // Restrict state injection on SEV production nodes
+    if !is_sev_active()? {
         println!("SEV is not active - copying state injection files");
         copy_state_injection_files(extracted_dir, state_root)?;
     } else {
