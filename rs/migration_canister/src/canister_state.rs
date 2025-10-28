@@ -104,7 +104,6 @@ pub mod requests {
     }
 
     pub fn find_request(source: Principal, target: Principal) -> Vec<RequestState> {
-        // TODO: should do a range scan for efficiency.
         REQUESTS.with_borrow(|r| {
             r.keys()
                 .filter(|x| x.request().source == source && x.request().target == target)
@@ -127,6 +126,7 @@ pub mod events {
 
     pub fn list_events(_page_index: u64, _page_size: u64) -> Vec<Event> {
         // TODO: implement pagination
+        ...
         HISTORY.with_borrow(|h| h.keys().collect())
     }
 
