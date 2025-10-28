@@ -3,11 +3,16 @@ use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsF
 use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 const HEADER_OFFSET: usize = 0;
 const V1_HEADER_SIZE: usize = PAGE_SIZE;
 const V1_LOOKUP_TABLE_OFFSET: usize = HEADER_OFFSET + V1_HEADER_SIZE;
+
+/// Upper bound on how many delta log sizes is retained.
+/// Prevents unbounded growth of `delta_log_sizes`.
+const DELTA_LOG_SIZES_CAP: usize = 100;
 
 const TMP_LOG_MEMORY_CAPACITY: usize = 4 * 1024 * 1024; // 4 MiB
 
@@ -50,25 +55,16 @@ impl From<&HeaderV1> for HeaderV1Bytes {
 
 impl From<&HeaderV1Bytes> for HeaderV1 {
     fn from(bytes: &HeaderV1Bytes) -> Self {
-        let version = bytes[0];
-        let lookup_table_pages = u16::from_le_bytes(bytes[1..3].try_into().unwrap());
-        let lookup_slots_count = u16::from_le_bytes(bytes[3..5].try_into().unwrap());
-        let data_offset = u64::from_le_bytes(bytes[5..13].try_into().unwrap());
-        let data_capacity = u64::from_le_bytes(bytes[13..21].try_into().unwrap());
-        let data_head = u64::from_le_bytes(bytes[21..29].try_into().unwrap());
-        let data_tail = u64::from_le_bytes(bytes[29..37].try_into().unwrap());
-        let data_size = u64::from_le_bytes(bytes[37..45].try_into().unwrap());
-        let next_idx = u64::from_le_bytes(bytes[45..53].try_into().unwrap());
-        HeaderV1 {
-            version,
-            lookup_table_pages,
-            lookup_slots_count,
-            data_offset,
-            data_capacity,
-            data_head,
-            data_tail,
-            data_size,
-            next_idx,
+        Self {
+            version: bytes[0],
+            lookup_table_pages: u16::from_le_bytes(bytes[1..3].try_into().unwrap()),
+            lookup_slots_count: u16::from_le_bytes(bytes[3..5].try_into().unwrap()),
+            data_offset: u64::from_le_bytes(bytes[5..13].try_into().unwrap()),
+            data_capacity: u64::from_le_bytes(bytes[13..21].try_into().unwrap()),
+            data_head: u64::from_le_bytes(bytes[21..29].try_into().unwrap()),
+            data_tail: u64::from_le_bytes(bytes[29..37].try_into().unwrap()),
+            data_size: u64::from_le_bytes(bytes[37..45].try_into().unwrap()),
+            next_idx: u64::from_le_bytes(bytes[45..53].try_into().unwrap()),
         }
     }
 }
@@ -126,12 +122,20 @@ fn init(data_capacity: usize) -> HeaderV1 {
 pub struct LogMemoryStore {
     #[validate_eq(Ignore)]
     pub data: PageMap,
+
+    /// (!) No need to preserve across checkpoints.
+    /// Tracks the size of each delta log appended during a round.
+    /// Multiple logs can be appended in one round (e.g. heartbeat, timers, or message executions).
+    /// The collected sizes are used to expose per-round memory usage metrics
+    /// and the record is cleared at the end of the round.
+    delta_log_sizes: VecDeque<usize>,
 }
 
 impl LogMemoryStore {
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
         let mut store = Self {
             data: PageMap::new(fd_factory),
+            delta_log_sizes: VecDeque::new(),
         };
         let header = init(TMP_LOG_MEMORY_CAPACITY);
         store.write_header(&header);
@@ -143,6 +147,7 @@ impl LogMemoryStore {
     pub fn new_for_testing() -> Self {
         let mut store = Self {
             data: PageMap::new_for_testing(),
+            delta_log_sizes: VecDeque::new(),
         };
         let header = init(TMP_LOG_MEMORY_CAPACITY);
         store.write_header(&header);
@@ -150,7 +155,10 @@ impl LogMemoryStore {
     }
 
     pub fn from_checkpoint(data: PageMap) -> Self {
-        Self { data }
+        Self {
+            data,
+            delta_log_sizes: VecDeque::new(),
+        }
     }
 
     pub fn page_map(&self) -> &PageMap {
@@ -190,19 +198,27 @@ impl LogMemoryStore {
         self.read_header().next_idx
     }
 
-    pub fn append_delta_log(&mut self, _delta_log: &mut CanisterLog) {
-        // TODO: preserve record sizes, advance next_idx, append records.
+    pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
+        // Record the size of the appended delta log for metrics.
+        self.push_delta_log_size(delta_log.used_space());
+
+        // TODO: advance next_idx, append records.
     }
 
     pub fn records(&self, _filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         vec![] // TODO.
     }
 
-    // fn push_delta_log_size(&mut self, _size: usize) {
-    //     // TODO.
-    // }
+    /// Records the size of the appended delta log.
+    fn push_delta_log_size(&mut self, size: usize) {
+        if self.delta_log_sizes.len() >= DELTA_LOG_SIZES_CAP {
+            self.delta_log_sizes.pop_front();
+        }
+        self.delta_log_sizes.push_back(size);
+    }
 
-    // pub fn take_delta_log_sizes(&mut self) -> Vec<usize> {
-    //     vec![] // TODO.
-    // }
+    /// Atomically snapshot and clear the per-round delta_log sizes — use at end of round.
+    pub fn take_delta_log_sizes(&mut self) -> Vec<usize> {
+        self.delta_log_sizes.drain(..).collect()
+    }
 }
