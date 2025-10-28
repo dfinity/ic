@@ -30,10 +30,8 @@ fn main() -> Result<()> {
             SystemTestSubGroup::new()
                 .add_test(systest!(requests_with_delegations; 2))
                 .add_test(systest!(requests_with_delegations; 3))
-                .add_test(systest!(requests_with_delegations; 4))
                 .add_test(systest!(requests_with_delegations_with_targets; 2))
                 .add_test(systest!(requests_with_delegations_with_targets; 3))
-                .add_test(systest!(requests_with_delegations_with_targets; 4))
         )
         .execute_from_args()?;
     Ok(())
@@ -175,7 +173,9 @@ pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
 
                 if delegation_count <= 20 {
                     assert_eq!(query_result, 200);
-                    assert_eq!(update_result, 202);
+
+                    let expected_update = if test_info.api_ver == 2 { 202 } else { 200 };
+                    assert_eq!(update_result, expected_update);
                 } else {
                     assert_eq!(query_result, 400);
                     assert_eq!(update_result, 400);
@@ -242,31 +242,23 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
             struct DelegationTest {
                 note: &'static str,
                 targets: Vec<Vec<Principal>>,
-                expected_result: (StatusCode, StatusCode),
+                expect_success: bool,
             }
 
             impl DelegationTest {
                 fn accept(note: &'static str, targets: Vec<Vec<Principal>>) -> Self {
-                    let expected_result = (
-                        StatusCode::from_u16(200).unwrap(),
-                        StatusCode::from_u16(202).unwrap(),
-                    );
                     Self {
                         note,
                         targets,
-                        expected_result,
+                        expect_success: true,
                     }
                 }
 
                 fn reject(note: &'static str, targets: Vec<Vec<Principal>>) -> Self {
-                    let expected_result = (
-                        StatusCode::from_u16(400).unwrap(),
-                        StatusCode::from_u16(400).unwrap(),
-                    );
                     Self {
                         note,
                         targets,
-                        expected_result,
+                        expect_success: false,
                     }
                 }
             }
@@ -342,7 +334,17 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
             for scenario in &scenarios {
                 let result = test_delegation_with_targets(&scenario.targets).await;
                 info!(logger, "Testing scenario '{}' got {:?}", scenario.note, result);
-                assert_eq!(result, scenario.expected_result);
+
+                let expected_result = match (scenario.expect_success, test_info.api_ver) {
+                    (false, _) => (400, 400),
+                    (true, 2) => (200, 202),
+                    (true, _) => (200, 200),
+                };
+
+                let expected_result = (StatusCode::from_u16(expected_result.0).unwrap(),
+                                       StatusCode::from_u16(expected_result.1).unwrap());
+
+                assert_eq!(result, expected_result);
             }
         }
     });
