@@ -26,7 +26,9 @@ use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use virt::connect::Connect;
 use virt::domain::Domain;
-use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING};
+use virt::sys::{
+    VIR_DOMAIN_CRASHED, VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING,
+};
 
 mod boot_args;
 mod guest_direct_boot;
@@ -193,22 +195,6 @@ impl VirtualMachine {
         Ok(())
     }
 
-    /// Checks if the virtual machine is currently running
-    fn is_running(&self) -> bool {
-        let Ok(domain) = self.get_domain() else {
-            eprintln!("Failed to get domain");
-            return false;
-        };
-
-        match domain.get_state() {
-            Ok((state, _reason)) => state == VIR_DOMAIN_RUNNING,
-            Err(err) => {
-                eprintln!("Failed to get domain state: {err}");
-                false
-            }
-        }
-    }
-
     fn get_domain(&self) -> Result<Domain> {
         Domain::lookup_by_id(&self.libvirt_connect, self.domain_id)
             .context("Domain no longer exists")
@@ -216,7 +202,31 @@ impl VirtualMachine {
 
     /// Returns once the VM is no longer running.
     async fn wait_for_shutdown(&self) {
-        while self.is_running() {
+        loop {
+            let domain = match self.get_domain() {
+                Ok(domain) => domain,
+                Err(e) => {
+                    eprintln!("Failed to get domain: {e}");
+                    break;
+                }
+            };
+            match domain.get_state() {
+                Ok((VIR_DOMAIN_RUNNING, _reason)) => {
+                    // all good, VM is running
+                }
+                Ok((VIR_DOMAIN_CRASHED, reason)) => {
+                    eprintln!("VM crashed, reason: {reason}");
+                    break;
+                }
+                Ok((state, reason)) => {
+                    eprintln!("VM is in state {state}, reason: {reason}");
+                }
+                Err(e) => {
+                    eprintln!("Failed to get domain state: {e}");
+                    break;
+                }
+            }
+
             // Poll every 1s in production and 50ms in tests to speed up tests (in prod, we can
             // wait 1s between polls and we save some CPU cycles).
             #[cfg(not(test))]
@@ -230,14 +240,10 @@ impl VirtualMachine {
 impl Drop for VirtualMachine {
     /// Ensures the VM is properly shut down when the object is dropped
     fn drop(&mut self) {
-        if self.is_running() {
+        if let Ok(domain) = self.get_domain() {
             println!("Shutting down {} domain gracefully", self.domain_name);
-            if let Err(e) = self.get_domain().and_then(|domain| {
-                domain
-                    .destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL)
-                    .context("Failed to gracefully destroy domain")
-            }) {
-                eprintln!("{e}");
+            if let Err(e) = domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
+                eprintln!("Failed to gracefully destroy domain: {e}");
             }
         }
     }
@@ -698,7 +704,7 @@ mod tests {
                 result = &mut self.task => {
                     panic!("{} stopped before becoming ready. Status: {result:?}", self.vm_domain_name);
                 }
-            };
+            }
         }
 
         async fn wait_for_vm_shutdown(&mut self) {
