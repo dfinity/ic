@@ -145,9 +145,7 @@ impl VirtualMachine {
         vm_domain_name: &str,
     ) -> Result<Self> {
         // Check if a domain with the same name already exists and, if so, try to destroy it
-        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name).with_context(|| {
-            format!("Unable to create new domain while existing domain '{vm_domain_name}' exists.")
-        })?;
+        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
 
         let mut retries = 3;
         let domain = loop {
@@ -165,7 +163,7 @@ impl VirtualMachine {
                             "VM domain '{}' exists even though create_xml failed, attempting to destroy it before retry",
                             vm_domain_name
                         );
-                        let _ = Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
+                        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
                     }
                     retries -= 1;
                     continue;
@@ -182,17 +180,18 @@ impl VirtualMachine {
         })
     }
 
-    fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) -> Result<()> {
+    fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) {
         if let Ok(existing_domain) = Domain::lookup_by_name(libvirt_connect, vm_domain_name) {
             eprintln!("Attempting to destroy existing '{vm_domain_name}' domain");
-            existing_domain
+            let _ = existing_domain
                 .destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL)
-                .context("Failed to destroy existing domain")?;
-            eprintln!("Successfully destroyed existing domain");
+                .inspect_err(|err| eprintln!("destroy_flags failed: {err}"));
+            let _ = existing_domain
+                .undefine()
+                .inspect_err(|err| eprintln!("undefine failed: {err}"));
         } else {
             eprintln!("No existing domain found to destroy");
         }
-        Ok(())
     }
 
     fn get_domain(&self) -> Result<Domain> {
