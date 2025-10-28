@@ -201,12 +201,14 @@ class NPMDependencyManager(DependencyManager):
             )
 
         npm_audit_output = self.__npm_audit_output(engine_version, path)
+        logging.info(f"NPM audit output:\n\n{npm_audit_output}")
 
         # no vulnerabilities
         if "vulnerabilities" not in npm_audit_output or len(npm_audit_output["vulnerabilities"]) == 0:
             return finding_builder
 
         npm_list_output = self.__npm_list_output(engine_version, path)
+        logging.info(f"NPM list output:\n\n{npm_list_output}")
 
         for dependency_key, dependency_value in npm_audit_output["vulnerabilities"].items():
             vulnerable_dependencies = self.__get_vulnerable_dependency_from_npm_list(
