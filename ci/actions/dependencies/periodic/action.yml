@@ -18,8 +18,8 @@ runs:
         source "${NVM_DIR}/nvm.sh"
         nvm install ${DEFAULT_NODE_VERSION}
         nvm install ${OISY_NODE_VERSION}
-        nvm use ${DEFAULT_NODE_VERSION}
         nvm install-latest-npm
+        nvm use ${DEFAULT_NODE_VERSION}
         node --version
         npm --version
       env:
