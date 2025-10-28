@@ -8,7 +8,7 @@ use ic_embedders::{
     wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::HypervisorError;
+use ic_interfaces::execution_environment::{HypervisorError, MessageMemoryUsage};
 use ic_management_canister_types_private::Global;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterHttpResponsePayload, CanisterStatusType, CanisterUpgradeOptions,
@@ -21,7 +21,7 @@ use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
-    ExportedFunctions, MessageMemoryUsage, NumWasmPages, PageIndex, PageMap,
+    ExportedFunctions, NumWasmPages, PageIndex, PageMap,
     canister_state::execution_state::CustomSectionType,
 };
 use ic_state_machine_tests::StateMachine;
@@ -3770,13 +3770,24 @@ fn subnet_available_memory_is_updated_by_canister_pre_upgrade() {
 
 #[test]
 fn subnet_available_memory_is_not_updated_by_canister_pre_upgrade_wasm_memory() {
-    let mut test = ExecutionTestBuilder::new().build();
+    const GIB: u64 = 1 << 30;
+    const SUBNET_EXECUTION_MEMORY: u64 = 2 * GIB;
+    const SUBNET_MEMORY_THRESHOLD: u64 = 2 * GIB;
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(SUBNET_EXECUTION_MEMORY)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(SUBNET_MEMORY_THRESHOLD)
+        .with_resource_saturation_scaling(1)
+        .build();
     let wat = r#"
         (module
             (func (export "canister_pre_upgrade")
-                (drop (memory.grow (i32.const 10)))
+                ;; Growing WASM memory by 2GiB and
+                ;; thereby exceeding subnet memory capacity
+                ;; (at least by the size of the WASM module).
+                (drop (memory.grow (i32.const 32768)))
             )
-            (memory 1 20)
+            (memory 1)
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let initial_subnet_available_memory = test.subnet_available_memory();
@@ -3796,13 +3807,24 @@ fn subnet_available_memory_is_not_updated_by_canister_pre_upgrade_wasm_memory() 
 
 #[test]
 fn subnet_available_memory_is_updated_by_canister_post_upgrade() {
-    let mut test = ExecutionTestBuilder::new().build();
+    const GIB: u64 = 1 << 30;
+    const SUBNET_EXECUTION_MEMORY: u64 = 3 * GIB;
+    const SUBNET_MEMORY_THRESHOLD: u64 = 3 * GIB;
+    let mut test = ExecutionTestBuilder::new()
+        .with_subnet_execution_memory(SUBNET_EXECUTION_MEMORY)
+        .with_subnet_memory_reservation(0)
+        .with_subnet_memory_threshold(SUBNET_MEMORY_THRESHOLD)
+        .with_resource_saturation_scaling(1)
+        .build();
     let wat = r#"
         (module
-            (func (export "canister_post_upgrade")
-                (drop (memory.grow (i32.const 10)))
+            (func (export "canister_init")
+                (drop (memory.grow (i32.const 16384)))
             )
-            (memory 1 20)
+            (func (export "canister_post_upgrade")
+                (drop (memory.grow (i32.const 32768)))
+            )
+            (memory 1)
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
     let initial_subnet_available_memory = test.subnet_available_memory();
@@ -3811,7 +3833,7 @@ fn subnet_available_memory_is_updated_by_canister_post_upgrade() {
     let extra_canister_history_memory = size_of::<CanisterChange>() as i64;
     assert_eq!(
         initial_subnet_available_memory.get_execution_memory()
-            - 10 * WASM_PAGE_SIZE as i64
+            - 16384 * WASM_PAGE_SIZE as i64
             - extra_canister_history_memory,
         test.subnet_available_memory().get_execution_memory()
     );

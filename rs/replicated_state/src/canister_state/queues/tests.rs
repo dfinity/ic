@@ -3888,4 +3888,55 @@ mod mainnet_compatibility_tests {
             assert!(!queues.has_input());
         }
     }
+
+    #[cfg(test)]
+    mod refunds_test {
+
+        use super::super::*;
+        use super::*;
+
+        const OUTPUT_NAME: &str = "refunds.pbuf";
+        const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
+        const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
+
+        fn make_refund_pool() -> refunds::RefundPool {
+            let mut refund_pool = refunds::RefundPool::new();
+
+            refund_pool.add(CANISTER_ID, Cycles::new(100));
+            refund_pool.add(OTHER_CANISTER_ID, Cycles::new(200));
+            refund_pool.add(CANISTER_ID, Cycles::new(200));
+
+            refund_pool
+        }
+
+        #[test]
+        #[ignore]
+        fn serialize() {
+            let refund_pool = make_refund_pool();
+
+            let proto_refunds: pb_queues::Refunds = (&refund_pool).into();
+            let serialized = proto_refunds.encode_to_vec();
+
+            let output_path = std::path::Path::new(OUTPUT_NAME);
+            File::create(output_path)
+                .unwrap()
+                .write_all(&serialized)
+                .unwrap();
+        }
+
+        #[test]
+        #[ignore]
+        fn deserialize() {
+            let serialized = std::fs::read(OUTPUT_NAME).expect("Could not read file");
+            let proto_refunds = pb_queues::Refunds::decode(&serialized as &[u8])
+                .expect("Failed to deserialize the protobuf");
+            let refunds = refunds::RefundPool::try_from((
+                proto_refunds,
+                &StrictMetrics as &dyn CheckpointLoadingMetrics,
+            ))
+            .expect("Failed to convert the protobuf to RefundPool");
+
+            assert_eq!(make_refund_pool(), refunds);
+        }
+    }
 }

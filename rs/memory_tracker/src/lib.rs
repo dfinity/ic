@@ -949,12 +949,13 @@ mod checksum {
             access_kind: AccessKind,
         ) {
             self.index += 1;
-            self.value += self.index
-                * (access_addr as usize - base_addr)
-                * match access_kind {
+            self.value += self
+                .index
+                .wrapping_mul(access_addr as usize - base_addr)
+                .wrapping_mul(match access_kind {
                     AccessKind::Read => 1,
                     AccessKind::Write => 1 << 32,
-                };
+                });
         }
     }
 
