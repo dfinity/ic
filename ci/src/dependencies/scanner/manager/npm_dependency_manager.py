@@ -87,7 +87,8 @@ class NPMDependencyManager(DependencyManager):
         cwd = path
         command = f"bash -c 'source {nvm_dir}/nvm.sh && nvm use default {engine_version} --silent && npm ci'"
         logging.info(f"Performing npm ci {cwd.resolve()}")
-        _ = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
+        npm_ci_out = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
+        logging.info(f"NPM CI output:\n\n{npm_ci_out}")
 
         command = (
             f"bash -c 'source {nvm_dir}/nvm.sh && nvm use default {engine_version} --silent && npm list --all --json'"

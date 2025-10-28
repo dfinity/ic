@@ -40,5 +40,5 @@ class ProcessExecutor:
                 logging.info("Process Executor succeeded for " + str(command))
             else:
                 logging.info("Process Executor succeeded")
-            logging.debug(result.stderr)
+            logging.info(f"CMD stderr output:\n\n{result.stderr}")
             return result.stdout.strip()
