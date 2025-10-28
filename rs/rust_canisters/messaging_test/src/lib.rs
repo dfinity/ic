@@ -61,33 +61,6 @@ pub enum Response {
     },
 }
 
-impl Response {
-    /// Traverses the `Response` and its downstream responses recursively,
-    /// depth first and calls `f` each time.
-    pub fn for_each_depth_first<F>(&self, f: F)
-    where
-        F: Fn(&Self, usize),
-    {
-        fn traverse<F>(response: &Self, call_depth: usize, f: &F)
-        where
-            F: Fn(&Self, usize),
-        {
-            f(response, call_depth);
-            if let Self::Success {
-                downstream_responses,
-                ..
-            } = response
-            {
-                for response in downstream_responses.iter() {
-                    traverse(response, call_depth + 1, f);
-                }
-            }
-        }
-
-        traverse(self, 0, &f);
-    }
-}
-
 /// The reply received from this canister to an ingress or an inter canister message.
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
 pub struct Reply {
