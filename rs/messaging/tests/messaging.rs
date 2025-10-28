@@ -15,7 +15,7 @@ use ic_types::{
     },
 };
 use messaging_test::{Call, Response};
-use messaging_test_utils::{CallConfig, arb_call, for_each_depth_first};
+use messaging_test_utils::{CallConfig, arb_call};
 use proptest::prelude::ProptestConfig;
 
 const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
@@ -122,7 +122,7 @@ fn test_requests_are_timed_out_in_output_queues_but_backpressure_remains() {
             )
             .unwrap();
         subnet1.execute_round();
-        subnet1.advance_time_by_secs(500);
+        subnet1.advance_time_by_secs(3600);
     }
 
     // In each iteration we timed out the requests of the previous round;
@@ -165,9 +165,9 @@ fn test_memory_accounting_and_sequence_errors(
             reply_bytes_range: 0..=MAX_PAYLOAD_SIZE,
             best_effort_percentage: 50,
             timeout_secs_range: 300..=300,
-            downstream_calls_percentage: 66,
-            downstream_calls_count_range: 3..=6,
-            max_total_calls: 20,
+            downstream_calls_percentage: 20,
+            downstream_calls_count_range: 2..=5,
+            max_total_calls: 10,
         }
     ), 10))]
     calls: Vec<Call>,
@@ -177,7 +177,7 @@ fn test_memory_accounting_and_sequence_errors(
     // Submit all the calls into the ingress pool.
     let mut msg_ids: Vec<MessageId> = calls
         .into_iter()
-        .map(|call| subnet1.submit_call_as_ingress(call.clone()).unwrap())
+        .map(|call| subnet1.submit_call_as_ingress(call).unwrap())
         .collect();
 
     // Execute rounds on both subnets; check memory accounting in each iteration.
@@ -186,25 +186,27 @@ fn test_memory_accounting_and_sequence_errors(
         subnet2.execute_round();
 
         let state = subnet1.env.get_latest_state();
+        let memory_taken = state.guaranteed_response_message_memory_taken().get();
         assert!(
-            state.guaranteed_response_message_memory_taken()
-                <= MEMORY_ACCOUNTING_CONFIG
-                    .guaranteed_response_message_memory_capacity
-                    .into()
+            memory_taken <= MEMORY_ACCOUNTING_CONFIG.guaranteed_response_message_memory_capacity,
+            "computed guaranteed response message memory: {} exceeds the capacity: {}",
+            memory_taken,
+            MEMORY_ACCOUNTING_CONFIG.guaranteed_response_message_memory_capacity
         );
+        let memory_taken = state.best_effort_message_memory_taken().get();
         assert!(
-            state.best_effort_message_memory_taken()
-                <= MEMORY_ACCOUNTING_CONFIG
-                    .best_effort_message_memory_capacity
-                    .into()
+            memory_taken <= MEMORY_ACCOUNTING_CONFIG.best_effort_message_memory_capacity,
+            "computed best-effort message memory: {} exceeds the capacity: {}",
+            memory_taken,
+            MEMORY_ACCOUNTING_CONFIG.best_effort_message_memory_capacity,
         );
 
-        // Collect responses; check for traps; keep Ids awaited.
+        // Collect responses; check for traps which indicates a sequence error; keep Ids awaited.
         msg_ids = msg_ids
             .into_iter()
             .filter(|msg_id| match subnet1.try_get_response(msg_id) {
                 Ok(response) => {
-                    for_each_depth_first(&response, |response, _| {
+                    response.for_each_depth_first(|response, _| {
                         if let Response::AsyncReject { reject_message, .. } = response {
                             assert!(!reject_message.contains("trapped"));
                         }

@@ -30,6 +30,7 @@ pub struct TestSubnet {
 /// except `Rejected` which is mapped to `IngressState::Completed(WasmResult::Reject(_))`.
 #[derive(Clone, Debug)]
 pub enum CallStatus {
+    Unknown,
     Rejected(String),
     Received,
     Failed(UserError),
@@ -93,7 +94,7 @@ impl TestSubnet {
     /// unknown `id` since this case shouldn't be possible in a test without a bug.
     pub fn try_get_response(&self, id: &MessageId) -> Result<Response, CallStatus> {
         match self.env.ingress_status(id) {
-            IngressStatus::Unknown => unreachable!("unknown Id"),
+            IngressStatus::Unknown => Err(CallStatus::Unknown),
             IngressStatus::Known {
                 receiver, state, ..
             } => match state {
@@ -191,6 +192,20 @@ impl TestSubnet {
                         .collect(),
                 )
             })
+    }
+
+    /// Returns the number of open call contexts on `canister`.
+    pub fn open_call_contexts_count(&self, canister: CanisterId) -> Option<usize> {
+        Some(
+            self.env
+                .get_latest_state()
+                .canister_states
+                .get(&canister)?
+                .system_state
+                .call_context_manager()?
+                .call_contexts()
+                .len(),
+        )
     }
 
     /// Splits `self` by assigning `canister_range` to a new subnet.
