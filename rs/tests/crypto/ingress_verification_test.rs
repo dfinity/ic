@@ -28,8 +28,12 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_parallel(
             SystemTestSubGroup::new()
-                .add_test(systest!(requests_with_delegations))
-                .add_test(systest!(requests_with_delegations_with_targets)),
+                .add_test(systest!(requests_with_delegations; 2))
+                .add_test(systest!(requests_with_delegations; 3))
+                .add_test(systest!(requests_with_delegations; 4))
+                .add_test(systest!(requests_with_delegations_with_targets; 2))
+                .add_test(systest!(requests_with_delegations_with_targets; 3))
+                .add_test(systest!(requests_with_delegations_with_targets; 4))
         )
         .execute_from_args()?;
     Ok(())
@@ -45,6 +49,7 @@ pub fn setup(env: TestEnv) {
 
 #[derive(Clone, Debug)]
 struct TestInformation {
+    api_ver: usize,
     url: Url,
     canister_id: Principal,
 }
@@ -120,7 +125,7 @@ impl GenericIdentity {
     }
 }
 
-pub fn requests_with_delegations(env: TestEnv) {
+pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
@@ -141,6 +146,7 @@ pub fn requests_with_delegations(env: TestEnv) {
             );
 
             let test_info = TestInformation {
+                api_ver,
                 url: node_url,
                 canister_id: canister.canister_id(),
             };
@@ -179,7 +185,7 @@ pub fn requests_with_delegations(env: TestEnv) {
     });
 }
 
-pub fn requests_with_delegations_with_targets(env: TestEnv) {
+pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
@@ -202,6 +208,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
             let canister_id = canister.canister_id();
 
             let test_info = TestInformation {
+                api_ver,
                 url: node_url,
                 canister_id,
             };
@@ -334,6 +341,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
 
             for scenario in &scenarios {
                 let result = test_delegation_with_targets(&scenario.targets).await;
+                info!(logger, "Testing scenario '{}' got {:?}", scenario.note, result);
                 assert_eq!(result, scenario.expected_result);
             }
         }
@@ -450,8 +458,8 @@ async fn status_of_request<C: serde::ser::Serialize>(
     let client = reqwest::Client::new();
 
     let url = format!(
-        "{}api/v2/canister/{}/{}",
-        test.url, test.canister_id, req_type
+        "{}api/v{}/canister/{}/{}",
+        test.url, test.api_ver, test.canister_id, req_type
     );
 
     let res = client
