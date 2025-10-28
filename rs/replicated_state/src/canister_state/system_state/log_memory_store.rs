@@ -202,7 +202,21 @@ impl LogMemoryStore {
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.used_space());
 
-        // TODO: advance next_idx, append records.
+        // Assume records sorted cronologically (with increasing idx) and
+        // update the system state's next index with the each record's index.
+        let mut buffer = Buffer::new(self.data.clone());
+        let mut header_bytes = [0; V1_PACKED_HEADER_SIZE];
+        for record in delta_log.records().iter() {
+            buffer.read(&mut header_bytes, HEADER_OFFSET);
+            let mut header = HeaderV1::from(&header_bytes);
+
+            header.next_idx = record.idx + 1;
+
+            // TODO: append the record to the log memory store.
+
+            buffer.write(&HeaderV1Bytes::from(&header), HEADER_OFFSET);
+        }
+        self.data.update(&buffer.dirty_pages().collect::<Vec<_>>());
     }
 
     pub fn records(&self, _filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
