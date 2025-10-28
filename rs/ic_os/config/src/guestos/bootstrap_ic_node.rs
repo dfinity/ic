@@ -658,4 +658,79 @@ mod tests {
         // Verify that the dev files were not copied
         assert!(!state_root.join("data/nns_public_key.pem").exists());
     }
+
+    #[test]
+    #[cfg(not(feature = "dev"))]
+    fn test_sev_active_prod_state_injection_blocked() {
+        // Create extracted directory structure
+        let temp_dir = TempDir::new().unwrap();
+        let extracted_dir = temp_dir.path().join("extracted");
+        let config_root = temp_dir.path().join("config");
+        let state_root = temp_dir.path().join("state");
+        fs::create_dir_all(&extracted_dir).unwrap();
+        fs::create_dir_all(&config_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+
+        // Create state injection files that should be blocked when SEV is active in production
+        fs::create_dir_all(extracted_dir.join("ic_crypto")).unwrap();
+        fs::write(
+            extracted_dir.join("ic_crypto").join("key.pem"),
+            "test_crypto_key",
+        )
+        .unwrap();
+        fs::create_dir_all(extracted_dir.join("ic_state")).unwrap();
+        fs::write(
+            extracted_dir.join("ic_state").join("state.dat"),
+            "test_state_data",
+        )
+        .unwrap();
+        fs::create_dir_all(extracted_dir.join("ic_registry_local_store")).unwrap();
+        fs::write(
+            extracted_dir
+                .join("ic_registry_local_store")
+                .join("registry.dat"),
+            "test_registry_data",
+        )
+        .unwrap();
+
+        // Create other bootstrap files that should still be copied
+        fs::write(
+            extracted_dir.join("node_operator_private_key.pem"),
+            "test_node_op_key",
+        )
+        .unwrap();
+
+        // Set SEV as active (simulating production environment with SEV)
+        set_mock_sev_active(true);
+        let result = copy_bootstrap_files_with_sev_checker(
+            &extracted_dir,
+            &config_root,
+            &state_root,
+            mock_sev_checker,
+        );
+        assert!(result.is_ok());
+
+        // Verify that state injection files were NOT copied when SEV is active in production
+        assert!(!state_root.join("crypto").join("key.pem").exists());
+        assert!(!state_root.join("data/ic_state").join("state.dat").exists());
+        assert!(
+            !state_root
+                .join("data/ic_registry_local_store")
+                .join("registry.dat")
+                .exists()
+        );
+
+        // Verify that other bootstrap files were still copied
+        assert!(
+            state_root
+                .join("data/node_operator_private_key.pem")
+                .exists()
+        );
+
+        // Verify file contents for copied files
+        assert_eq!(
+            fs::read_to_string(state_root.join("data/node_operator_private_key.pem")).unwrap(),
+            "test_node_op_key"
+        );
+    }
 }
