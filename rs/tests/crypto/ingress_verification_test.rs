@@ -271,11 +271,8 @@ pub fn requests_with_delegations_with_targets(env: TestEnv) {
             //
             // Up to 1000 different targets (incl. arbitrary principals) containing the requested canister ID;
             for targets in [10, 100, 500, 1000] {
-                test_delegation_with_targets(&[random_principals_including(
-                    &canister_id,
-                    targets,
-                    rng,
-                )]);
+                let targets = random_principals_including(&canister_id, targets, rng);
+                test_delegation_with_targets(&[targets]);
             }
 
             // TODO
