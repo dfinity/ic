@@ -9,6 +9,9 @@ II_DEV_CANISTER_RUNTIME_DEPS = [
 ]
 
 DEPENDENCIES = [
+    "//packages/ic-ed25519",
+    "//packages/ic-secp256k1",
+    "//packages/ic-secp256r1",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/ic_os/fstrim_tool",
     "//rs/registry/subnet_type",
@@ -20,6 +23,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
     "@crate_index//:k256",
+    "@crate_index//:p256",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
     "@crate_index//:serde",

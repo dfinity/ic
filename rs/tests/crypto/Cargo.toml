@@ -17,6 +17,9 @@ ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
+ic-ed25519 = { path = "../../../packages/ic-ed25519" }
+ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
+ic-secp256r1 = { path = "../../../packages/ic-secp256r1" }
 k256 = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }

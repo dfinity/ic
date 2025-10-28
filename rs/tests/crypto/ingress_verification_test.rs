@@ -1,8 +1,8 @@
 /* tag::catalog[]
 end::catalog[] */
 use anyhow::Result;
+use ic_agent::Identity;
 use ic_agent::export::Principal;
-use ic_agent::{Identity, identity::Secp256k1Identity};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::{SystemTestGroup, SystemTestSubGroup};
@@ -11,7 +11,7 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    UniversalCanister, block_on, expiry_time, random_ed25519_identity, sign_query, sign_update,
+    UniversalCanister, block_on, expiry_time, sign_query, sign_update,
 };
 use ic_types::crypto::SignedBytesWithoutDomainSeparator;
 use ic_types::messages::{
@@ -31,7 +31,9 @@ fn main() -> Result<()> {
                 .add_test(systest!(requests_with_delegations; 2))
                 .add_test(systest!(requests_with_delegations; 3))
                 .add_test(systest!(requests_with_delegations_with_targets; 2))
-                .add_test(systest!(requests_with_delegations_with_targets; 3)),
+                .add_test(systest!(requests_with_delegations_with_targets; 3))
+                .add_test(systest!(requests_with_delegation_loop; 2))
+                .add_test(systest!(requests_with_delegation_loop; 3)),
         )
         .execute_from_args()?;
     Ok(())
@@ -56,46 +58,62 @@ struct TestInformation {
 enum GenericIdentityType {
     Ed25519,
     EcdsaSecp256k1,
-    // TODO ECDSA secp256r1
-    // TODO webauthn
+    EcdsaSecp256r1,
+    // TODO webauthn RSA
+    // TODO webauthn EC
 }
 
 impl GenericIdentityType {
     fn random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        if rng.r#gen::<bool>() {
-            Self::EcdsaSecp256k1
-        } else {
-            Self::Ed25519
+        match rng.r#gen::<usize>() % 3 {
+            0 => Self::EcdsaSecp256k1,
+            1 => Self::EcdsaSecp256r1,
+            _ => Self::Ed25519,
         }
     }
 }
 
+#[derive(Clone)]
+enum GenericIdentityInner {
+    K256(ic_secp256k1::PrivateKey),
+    P256(ic_secp256r1::PrivateKey),
+    Ed25519(ic_ed25519::PrivateKey),
+}
+
+#[derive(Clone)]
 struct GenericIdentity {
-    identity: Box<dyn Identity>,
+    inner: GenericIdentityInner,
+    public_key: Vec<u8>,
     principal: Principal,
 }
 
 impl GenericIdentity {
     fn new<R: Rng + CryptoRng>(typ: GenericIdentityType, rng: &mut R) -> Self {
-        let identity: Box<dyn Identity> = match typ {
-            GenericIdentityType::Ed25519 => Box::new(random_ed25519_identity()),
-            GenericIdentityType::EcdsaSecp256k1 => Box::new(Secp256k1Identity::from_private_key(
-                k256::SecretKey::random(rng),
-            )),
+        let (inner, public_key) = match typ {
+            GenericIdentityType::Ed25519 => {
+                let sk = ic_ed25519::PrivateKey::generate_using_rng(rng);
+                let pk = sk.public_key().serialize_rfc8410_der();
+                (GenericIdentityInner::Ed25519(sk), pk)
+            }
+            GenericIdentityType::EcdsaSecp256k1 => {
+                let sk = ic_secp256k1::PrivateKey::generate_using_rng(rng);
+                let pk = sk.public_key().serialize_der();
+                (GenericIdentityInner::K256(sk), pk)
+            }
+            GenericIdentityType::EcdsaSecp256r1 => {
+                let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
+                let pk = sk.public_key().serialize_der();
+                (GenericIdentityInner::P256(sk), pk)
+            }
         };
 
-        let principal = identity
-            .sender()
-            .expect("Identity somehow has no principal");
+        let principal = Principal::self_authenticating(&public_key);
 
         Self {
-            identity,
+            inner,
+            public_key,
             principal,
         }
-    }
-
-    fn identity(&self) -> &dyn Identity {
-        &self.identity
     }
 
     fn principal(&self) -> &Principal {
@@ -103,23 +121,63 @@ impl GenericIdentity {
     }
 
     fn public_key(&self) -> Vec<u8> {
-        self.identity
-            .public_key()
-            .expect("Public key missing from identity")
+        self.public_key.clone()
     }
 
     fn sign_query(&self, query: &HttpQueryContent) -> Vec<u8> {
-        sign_query(query, &self.identity())
+        sign_query(query, self)
             .signature
             .clone()
             .expect("Signature missing")
     }
 
     fn sign_update(&self, update: &HttpCallContent) -> Vec<u8> {
-        sign_update(update, &self.identity())
+        sign_update(update, self)
             .signature
             .clone()
             .expect("Signature missing")
+    }
+
+    fn sign_bytes(&self, bytes: &[u8]) -> Vec<u8> {
+        match &self.inner {
+            GenericIdentityInner::Ed25519(sk) => sk.sign_message(bytes).to_vec(),
+            GenericIdentityInner::K256(sk) => sk.sign_message_with_ecdsa(bytes).to_vec(),
+            GenericIdentityInner::P256(sk) => sk.sign_message(bytes).to_vec(),
+        }
+    }
+}
+
+impl Identity for GenericIdentity {
+    fn sender(&self) -> Result<Principal, String> {
+        Ok(self.principal)
+    }
+
+    fn public_key(&self) -> Option<Vec<u8>> {
+        Some(self.public_key.clone())
+    }
+
+    fn sign(
+        &self,
+        content: &ic_agent::agent::EnvelopeContent,
+    ) -> Result<ic_agent::Signature, String> {
+        self.sign_arbitrary(&content.to_request_id().signable())
+    }
+
+    fn sign_delegation(
+        &self,
+        content: &ic_agent::identity::Delegation,
+    ) -> Result<ic_agent::Signature, String> {
+        self.sign_arbitrary(&content.signable())
+    }
+
+    fn sign_arbitrary(&self, content: &[u8]) -> Result<ic_agent::Signature, String> {
+        let signature = self.sign_bytes(content);
+
+        Ok(ic_agent::Signature {
+            public_key: Some(self.public_key()),
+            signature: Some(signature),
+            delegations: None,
+        })
     }
 }
 
@@ -150,11 +208,6 @@ pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
             };
 
             for delegation_count in 0..32 {
-                info!(
-                    logger,
-                    "Testing request with {} delegations", delegation_count
-                );
-
                 let mut identities = Vec::with_capacity(delegation_count + 1);
 
                 for _ in 0..(delegation_count + 1) {
@@ -263,18 +316,17 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                     vec![random_principals_including(&canister_id, 1000, 1, rng)],
                 ),
                 DelegationTest::accept(
-                    "Delegation with different targets (10), including the canister ID, with repetition",
+                    "Delegation with different targets (10), including the canister ID multiple times",
                     vec![random_principals_including(&canister_id, 10, 2, rng)],
                 ),
                 DelegationTest::accept(
-                    "Delegation with different targets (100), including the canister ID, with repetition",
+                    "Delegation with different targets (100), including the canister ID multiple times",
                     vec![random_principals_including(&canister_id, 100, 10, rng)],
                 ),
                 DelegationTest::accept(
-                    "Delegation with different targets (1000), including the canister ID, with repetition",
+                    "Delegation with different targets (1000), including the canister ID multiple times",
                     vec![random_principals_including(&canister_id, 1000, 50, rng)],
                 ),
-                // TODO: with the mgmt canister principal as the target for mgmt canister calls.
                 DelegationTest::reject(
                     "Not containing the requested canister ID",
                     vec![vec![random_canister_id(rng)]],
@@ -298,10 +350,6 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                     "With an empty target intersection of multiple delegations",
                     vec![vec![random_canister_id(rng)], vec![random_canister_id(rng)]],
                 ),
-                // TODO: with a self-loop in delegations
-
-                // TODO: with an indirect cycle in delegations
-
                 // TODO: with an empty set of targets or a set of targets containing the requested canister ID for mgmt canister calls.
             ];
 
@@ -347,6 +395,62 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
     });
 }
 
+pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
+    let logger = env.logger();
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    let rng = &mut reproducible_rng();
+    block_on({
+        async move {
+            let node_url = node.get_public_url();
+            debug!(logger, "Selected replica"; "url" => format!("{}", node_url));
+
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+
+            debug!(
+                logger,
+                "Installed Universal Canister";
+                "canister_id" => format!("{:?}", canister.canister_id())
+            );
+
+            let canister_id = canister.canister_id();
+
+            let test_info = TestInformation {
+                api_ver,
+                url: node_url,
+                canister_id,
+            };
+
+            // Test case: A self-loop in delegations should be detected and rejected
+
+            let mut identities = vec![];
+
+            for _ in 0..4 {
+                let id_type = GenericIdentityType::random(rng);
+                identities.push(GenericIdentity::new(id_type, rng));
+            }
+
+            // Duplicate the identity, causing a delegation loop
+            identities.push(identities[identities.len() - 1].clone());
+
+            let delegations = create_delegations(&identities);
+
+            let sender = &identities[0];
+            let signer = &identities[identities.len() - 1];
+
+            let query_result = query_delegation(&test_info, sender, signer, &delegations).await;
+            let update_result = update_delegation(&test_info, sender, signer, &delegations).await;
+
+            assert_eq!(query_result, 400);
+            assert_eq!(update_result, 400);
+
+            // TODO Test case: An indirect cycle in delegations should be detected and rejected
+        }
+    });
+}
+
 fn create_delegations(identities: &[GenericIdentity]) -> Vec<SignedDelegation> {
     let delegation_expiry = Time::from_nanos_since_unix_epoch(expiry_time().as_nanos() as u64);
 
@@ -356,9 +460,7 @@ fn create_delegations(identities: &[GenericIdentity]) -> Vec<SignedDelegation> {
     if delegation_count > 0 {
         for i in 1..=delegation_count {
             let delegation = Delegation::new(identities[i].public_key(), delegation_expiry);
-
             let signed_delegation = sign_delegation(delegation, &identities[i - 1]);
-
             delegations.push(signed_delegation);
         }
     }
@@ -433,9 +535,8 @@ fn random_principals_including<R: Rng + CryptoRng>(
 fn sign_delegation(delegation: Delegation, identity: &GenericIdentity) -> SignedDelegation {
     let mut msg = b"\x1Aic-request-auth-delegation".to_vec();
     msg.extend(&delegation.as_signed_bytes_without_domain_separator());
-    let signature = identity.identity().sign_arbitrary(&msg).unwrap();
-
-    SignedDelegation::new(delegation, signature.signature.unwrap())
+    let signature = identity.sign_bytes(&msg);
+    SignedDelegation::new(delegation, signature)
 }
 
 async fn status_of_request<C: serde::ser::Serialize>(
