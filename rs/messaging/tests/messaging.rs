@@ -141,13 +141,13 @@ fn test_requests_are_timed_out_in_output_queues_but_backpressure_remains() {
 const MEMORY_ACCOUNTING_CONFIG: TestSubnetConfig = TestSubnetConfig {
     canisters_count: 2,
     max_instructions_per_round: 3_000_000_000,
-    guaranteed_response_message_memory_capacity: 30 * MB as u64,
-    best_effort_message_memory_capacity: 30 * MB as u64,
+    guaranteed_response_message_memory_capacity: 20 * MB as u64,
+    best_effort_message_memory_capacity: 20 * MB as u64,
 };
 
 /// Tests the memory accounting is upheld during random traffic at all times.
 /// Also check the outcome of each ingress trigger to make sure there are no
-/// sequencing error and sync rejections due to out of memory actually occurred.
+/// sequencing errors.
 ///
 /// Ingress triggers are only sent to the principal canister on `subnet1`, which
 /// will then send downstream calls to all canisters. Through downstream calls,
@@ -165,9 +165,9 @@ fn test_memory_accounting_and_sequence_errors(
             reply_bytes_range: 0..=MAX_PAYLOAD_SIZE,
             best_effort_percentage: 50,
             timeout_secs_range: 300..=300,
-            downstream_calls_percentage: 20,
-            downstream_calls_count_range: 2..=5,
-            max_total_calls: 10,
+            downstream_calls_percentage: 66,
+            downstream_calls_count_range: 1..=3,
+            max_total_calls: 20,
         }
     ), 10))]
     calls: Vec<Call>,
