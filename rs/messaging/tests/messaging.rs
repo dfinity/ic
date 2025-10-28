@@ -17,7 +17,7 @@ use ic_types::{
 };
 use messaging_test::{Call, Reply};
 use messaging_test_utils::{CallConfig, arb_call};
-use proptest::prelude::ProptestConfig;
+use proptest::prelude::{Just, ProptestConfig, Strategy};
 
 const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 const SYS_UNKNOWN_U32: u32 = RejectCode::SysUnknown as u32;
@@ -345,4 +345,44 @@ fn test_memory_accounting_and_sequence_errors(
             })
             .collect();
     }
+}
+
+/// Tests that all calls are concluded successfully and whilst upholding ordering guarantees.
+///
+/// The setup is one subnet with canister; this is the subnet that will undergo the split;
+/// and another subnet with one canister. All canisters produce random traffic to all the other
+/// canisters.
+///
+/// The registry is updated at a random point to reflect the split in the routing table
+/// and the canister migrations list in the same version. When each subnet observed this new
+/// registry version is random, but upon doing so the first subnet will undergo the split and
+/// the second subnet will change its routing and rules for accepting messages.
+#[test_strategy::proptest(ProptestConfig::with_cases(3))]
+fn subnet_splitting_smoke_test(
+    #[strategy(arb_test_subnets(
+        TestSubnetConfig { canisters_count: 2, ..TestSubnetConfig::default() },
+        TestSubnetConfig::default()
+    ))]
+    setup: TestSubnetSetup,
+
+    #[strategy(
+        Just(#setup.canisters)
+        .prop_flat_map(|canisters| {
+            let config = CallConfig {
+                receivers: canisters.clone(),
+                ..CallConfig::default()
+            };
+            (
+                proptest::collection::vec(arb_call(canisters[0], config.clone()), 10),
+                proptest::collection::vec(arb_call(canisters[1], config.clone()), 10),
+                proptest::collection::vec(arb_call(canisters[2], config.clone()), 10),
+            )
+        })
+    )]
+    calls: (Vec<Call>, Vec<Call>, Vec<Call>),
+) {
+    let (subnet1, subnet2, _) = setup.into_parts();
+    let (calls_for_canister1, calls_for_canister2, calls_for_canister3) = calls;
+
+    // TBD
 }
