@@ -1089,7 +1089,6 @@ mod authenticated_requests_delegations {
         AuthenticationScheme, DelegationChain, DelegationChainBuilder,
         HttpRequestEnvelopeContentWithCanisterId,
     };
-    use rand::SeedableRng;
     use rand::{CryptoRng, Rng};
     use std::time::Duration;
 
@@ -1132,7 +1131,7 @@ mod authenticated_requests_delegations {
         let rng = &mut reproducible_rng();
         let verifier = verifier_at_time(CURRENT_TIME).build();
         let mut chain_builder = DelegationChain::rooted_at(random_user_key_pair(rng));
-        for number_of_delegations in 1..=20 {
+        for number_of_delegations in 1..=MAXIMUM_NUMBER_OF_DELEGATIONS {
             chain_builder = chain_builder.delegate_to(random_user_key_pair(rng), CURRENT_TIME);
             let chain = chain_builder.clone().build();
             assert_eq!(chain.len(), number_of_delegations);
@@ -1188,23 +1187,20 @@ mod authenticated_requests_delegations {
         let verifier = default_verifier()
             .with_root_of_trust(root_of_trust.public_key)
             .build();
+        let mut chain_builder = DelegationChain::rooted_at(canister_signature(root_of_trust));
         for number_of_delegations in 1..=MAXIMUM_NUMBER_OF_DELEGATIONS {
-            let delegation_chain = delegation_chain_rooted_at_canister_signature(
-                number_of_delegations,
-                CURRENT_TIME,
-                &root_of_trust,
-                rng,
-            )
-            .build();
+            chain_builder = chain_builder.delegate_to(random_user_key_pair(rng), CURRENT_TIME);
+            let chain = chain_builder.clone().build();
+            assert_eq!(chain.len(), number_of_delegations);
 
             test_all_request_types_with_delegation_chain(
                 &verifier,
-                delegation_chain.clone(),
+                chain.clone(),
                 |result, builder_info| {
                     assert_eq!(
                         result,
                         Ok(()),
-                        "verification of delegation chain {delegation_chain:?} for request builder {builder_info} failed"
+                        "verification of delegation chain {chain:?} for request builder {builder_info} failed"
                     );
                 },
             );
@@ -1897,23 +1893,6 @@ mod authenticated_requests_delegations {
                 )
             },
             |builder| builder.delegate_to(random_user_key_pair(rng), delegation_expiration),
-        )
-    }
-
-    fn delegation_chain_rooted_at_canister_signature<R: Rng + CryptoRng>(
-        number_of_delegations: usize,
-        delegation_expiration: Time,
-        root_of_trust: &RootOfTrust,
-        rng: &mut R,
-    ) -> DelegationChainBuilder {
-        let canister_delegation_index = rng.gen_range(1..=number_of_delegations);
-        let rng2 = &mut rand::rngs::StdRng::from_seed(rng.r#gen());
-        grow_delegation_chain(
-            DelegationChain::rooted_at(canister_signature(root_of_trust.clone())),
-            number_of_delegations,
-            |index| index == canister_delegation_index,
-            |builder| builder.delegate_to(random_user_key_pair(rng), delegation_expiration),
-            |builder| builder.delegate_to(random_user_key_pair(rng2), delegation_expiration),
         )
     }
 
