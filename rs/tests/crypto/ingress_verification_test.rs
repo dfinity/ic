@@ -31,7 +31,7 @@ fn main() -> Result<()> {
                 .add_test(systest!(requests_with_delegations; 2))
                 .add_test(systest!(requests_with_delegations; 3))
                 .add_test(systest!(requests_with_delegations_with_targets; 2))
-                .add_test(systest!(requests_with_delegations_with_targets; 3))
+                .add_test(systest!(requests_with_delegations_with_targets; 3)),
         )
         .execute_from_args()?;
     Ok(())
@@ -333,7 +333,10 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
 
             for scenario in &scenarios {
                 let result = test_delegation_with_targets(&scenario.targets).await;
-                info!(logger, "Testing scenario '{}' got {:?}", scenario.note, result);
+                info!(
+                    logger,
+                    "Testing scenario '{}' got {:?}", scenario.note, result
+                );
 
                 let expected_result = match (scenario.expect_success, test_info.api_ver) {
                     (false, _) => (400, 400),
@@ -341,8 +344,10 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                     (true, _) => (200, 200),
                 };
 
-                let expected_result = (StatusCode::from_u16(expected_result.0).unwrap(),
-                                       StatusCode::from_u16(expected_result.1).unwrap());
+                let expected_result = (
+                    StatusCode::from_u16(expected_result.0).unwrap(),
+                    StatusCode::from_u16(expected_result.1).unwrap(),
+                );
 
                 assert_eq!(result, expected_result);
             }
