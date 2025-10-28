@@ -10,10 +10,7 @@ use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 
-use crate::{
-    DEFAULT_MAX_ACTIVE_REQUESTS, Event, MAX_ONGOING_VALIDATIONS, RequestState,
-    canister_state::events::num_successes_in_past_24_h,
-};
+use crate::{DEFAULT_MAX_ACTIVE_REQUESTS, Event, MAX_ONGOING_VALIDATIONS, RequestState};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
