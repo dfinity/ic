@@ -20,6 +20,7 @@ runs:
         source "${NVM_DIR}/nvm.sh"
         nvm install ${NODE_VERSION_22}
         nvm install-latest-npm
+        # for oisy we use a separate node version for which we won't bump npm to v11 (not supported by oisy)
         nvm install ${OISY_NODE_VERSION}
         nvm install ${NODE_VERSION_20}
         node --version
