@@ -51,5 +51,5 @@ jobs:
       - uses: ./.github/actions/post-commit-status
         with:
           # on pull requests the github.sha is the merge commit - here we use the head commit so that it will show up on PRs
-          commit-sha: ${{ github.event.pull_request.head.commit.sha || github.sha }}
+          commit-sha: ${{ github.event.pull_request.head.sha || github.sha }}
           run-result: ${{ needs.ci-main.result }}
