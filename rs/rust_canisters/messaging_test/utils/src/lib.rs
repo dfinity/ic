@@ -58,13 +58,12 @@ pub fn arb_call(receiver: CanisterId, config: CallConfig) -> impl Strategy<Value
         config.max_total_calls,
     )
     .prop_flat_map(move |counts| {
-        let s: usize = counts.iter().sum();
         (
             arb_simple_call(CallConfig {
                 receivers: vec![receiver],
                 ..config.clone()
             }),
-            proptest::collection::vec(arb_simple_call(config.clone()), s),
+            proptest::collection::vec(arb_simple_call(config.clone()), config.max_total_calls),
             Just(counts),
         )
     })

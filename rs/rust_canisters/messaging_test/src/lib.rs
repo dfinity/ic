@@ -63,7 +63,7 @@ pub enum Response {
 
 impl Response {
     /// Traverses the `Response` and its downstream responses recursively,
-    /// depth first and calls `f` each time.
+    /// depth first and calls `f` on each `Response` and call depth.
     pub fn for_each_depth_first<F>(&self, f: F)
     where
         F: Fn(&Self, usize),
