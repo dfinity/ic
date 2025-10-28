@@ -7,9 +7,7 @@ use ic_types::{
 };
 use ic_types_test_utils::ids::canister_test_id;
 use messaging_test::{Call, Message, Response, decode, encode};
-use messaging_test_utils::{
-    CallConfig, arb_call, for_each_depth_first, from_blob, to_encoded_ingress,
-};
+use messaging_test_utils::{CallConfig, arb_call, from_blob, to_encoded_ingress};
 use proptest::prop_assert_eq;
 
 // Tests payloads can be encoded and decoded into the same message again while producing
@@ -137,8 +135,7 @@ fn smoke_test() {
             state: IngressState::Completed(WasmResult::Reply(blob)),
             ..
         } => {
-            for_each_depth_first(
-                &from_blob(CanisterId::unchecked_from_principal(receiver), blob),
+            from_blob(CanisterId::unchecked_from_principal(receiver), blob).for_each_depth_first(
                 |response, _| {
                     assert_matches!(response, Response::Success { .. });
                 },
@@ -154,8 +151,7 @@ fn smoke_test() {
             state: IngressState::Completed(WasmResult::Reply(blob)),
             ..
         } => {
-            for_each_depth_first(
-                &from_blob(CanisterId::unchecked_from_principal(receiver), blob),
+            from_blob(CanisterId::unchecked_from_principal(receiver), blob).for_each_depth_first(
                 |response, _| {
                     assert_matches!(response, Response::Success { .. });
                 },
