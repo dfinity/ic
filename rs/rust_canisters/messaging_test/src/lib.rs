@@ -32,7 +32,7 @@ impl Default for Call {
 
 /// The message sent to this canister by an ingress or an inter canister message.
 #[derive(Serialize, Deserialize, CandidType, Debug, Eq, PartialEq)]
-pub struct Message {
+pub struct CallMessage {
     /// The call index for this call, i.e. a strictly increasing integer (with each call).
     pub call_index: u32,
     /// The number of bytes the reply to this call should have.
@@ -41,15 +41,15 @@ pub struct Message {
     pub downstream_calls: Vec<Call>,
 }
 
-/// Includes all the information for a response from this canister.
+/// Includes all the information for a reply from this canister.
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
-pub enum Response {
+pub enum Reply {
     /// The call to `respondent` was successful.
     Success {
         respondent: CanisterId,
         bytes_received_on_call: u32,
         bytes_sent_on_reply: u32,
-        downstream_responses: Vec<Response>,
+        downstream_replies: Vec<Reply>,
     },
     /// A synchronous reject occurred, i.e. perform call failed.
     SyncReject { call: Call },
@@ -61,25 +61,24 @@ pub enum Response {
     },
 }
 
-impl Response {
-    /// Traverses the `Response` and its downstream responses recursively,
-    /// depth first and calls `f` on each `Response` and call depth.
+impl Reply {
+    /// Traverses the `Reply` and its downstream replies recursively,
+    /// depth first and calls `f` on each `Reply` and call depth.
     pub fn for_each_depth_first<F>(&self, f: F)
     where
         F: Fn(&Self, usize),
     {
-        fn traverse<F>(response: &Response, call_depth: usize, f: &F)
+        fn traverse<F>(reply: &Reply, call_depth: usize, f: &F)
         where
-            F: Fn(&Response, usize),
+            F: Fn(&Reply, usize),
         {
-            f(response, call_depth);
-            if let Response::Success {
-                downstream_responses,
-                ..
-            } = response
+            f(reply, call_depth);
+            if let Reply::Success {
+                downstream_replies, ..
+            } = reply
             {
-                for response in downstream_responses.iter() {
-                    traverse(response, call_depth + 1, f);
+                for reply in downstream_replies.iter() {
+                    traverse(reply, call_depth + 1, f);
                 }
             }
         }
@@ -88,11 +87,11 @@ impl Response {
     }
 }
 
-/// The reply received from this canister to an ingress or an inter canister message.
+/// The reply message received from this canister to an ingress or an inter canister message.
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
-pub struct Reply {
+pub struct ReplyMessage {
     pub bytes_received_on_call: u32,
-    pub downstream_responses: Vec<Response>,
+    pub downstream_replies: Vec<Reply>,
 }
 
 /// Encodes a message of type `T` using Candid and appropriate padding
