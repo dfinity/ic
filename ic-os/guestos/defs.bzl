@@ -110,6 +110,10 @@ def image_deps(mode, malicious = False):
         # Dev guest_upgrade client
         deps["rootfs"].pop("//rs/ic_os/guest_upgrade/client", None)
         deps["rootfs"].update({"//rs/ic_os/guest_upgrade/client:client_dev": "/opt/ic/bin/guest_upgrade_client:0755"})
+    else:
+        deps["component_files"].update({
+            Label("//ic-os/components:misc/serial-getty@/guestos-prod/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
+        })
 
     # Update recovery component_files
     # Service files and SELinux policies must be added to components instead of rootfs so that they are processed by the Dockerfile
