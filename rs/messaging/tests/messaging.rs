@@ -15,7 +15,7 @@ use ic_types::{
     },
 };
 use messaging_test::{Call, Response};
-use messaging_test_utils::{CallConfig, arb_call};
+use messaging_test_utils::{CallConfig, arb_call, for_each_depth_first};
 use proptest::prelude::ProptestConfig;
 
 const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
@@ -177,12 +177,7 @@ fn test_memory_accounting_and_sequence_errors(
     // Submit all the calls into the ingress pool.
     let mut msg_ids: Vec<MessageId> = calls
         .into_iter()
-        .map(|call| {
-            (
-                subnet1.submit_call_as_ingress(call.clone()).unwrap(),
-                (call, None),
-            )
-        })
+        .map(|call| subnet1.submit_call_as_ingress(call.clone()).unwrap())
         .collect();
 
     // Execute rounds on both subnets; check memory accounting in each iteration.
@@ -199,18 +194,33 @@ fn test_memory_accounting_and_sequence_errors(
         );
         assert!(
             state.best_effort_message_memory_taken()
-                <= MEMORT_ACCOUNTING_CONFIG
+                <= MEMORY_ACCOUNTING_CONFIG
                     .best_effort_message_memory_capacity
                     .into()
         );
 
         // Collect responses; check for traps; keep Ids awaited.
-        msg_ids = msg_ids.into_iter().filter(|msg_id)| match subnet1.try_get_response(msg_id) {
-            Ok(response) => {
+        msg_ids = msg_ids
+            .into_iter()
+            .filter(|msg_id| match subnet1.try_get_response(msg_id) {
+                Ok(response) => {
+                    for_each_depth_first(&response, |response, _| {
+                        if let Response::AsyncReject { reject_message, .. } = response {
+                            assert!(!reject_message.contains("trapped"));
+                        }
+                    });
+                    false
+                }
+                Err(_) => {
+                    // Still awaiting, keep the Id.
+                    true
+                }
+            })
+            .collect();
 
-                false
-            }
-            Err(_) => true,
+        if msg_ids.is_empty() {
+            // All calls have concluded; stop executing.
+            break;
         }
     }
 }
