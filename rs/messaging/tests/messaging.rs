@@ -17,7 +17,6 @@ use ic_types::{
 use messaging_test::{Call, Response};
 use messaging_test_utils::{CallConfig, arb_call};
 use proptest::prelude::ProptestConfig;
-use std::collections::BTreeMap;
 
 const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 const SYS_UNKNOWN_U32: u32 = RejectCode::SysUnknown as u32;
@@ -176,7 +175,7 @@ fn test_memory_accounting_and_sequence_errors(
     let (subnet1, subnet2, _) = setup.into_parts();
 
     // Submit all the calls into the ingress pool.
-    let mut call_registry: BTreeMap<MessageId, Option<Response>> = calls
+    let mut msg_ids: Vec<MessageId> = calls
         .into_iter()
         .map(|call| {
             (
@@ -186,12 +185,34 @@ fn test_memory_accounting_and_sequence_errors(
         })
         .collect();
 
-    // Stats accumulated at each iteration.
-    let mut running_stats = Stats::default();
-
     // Execute rounds on both subnets; check memory accounting in each iteration.
-    subnet1.execute_round();
-    subnet2.execute_round();
+    for _ in 0..100 {
+        subnet1.execute_round();
+        subnet2.execute_round();
+
+        let state = subnet1.env.get_latest_state();
+        assert!(
+            state.guaranteed_response_message_memory_taken()
+                <= MEMORY_ACCOUNTING_CONFIG
+                    .guaranteed_response_message_memory_capacity
+                    .into()
+        );
+        assert!(
+            state.best_effort_message_memory_taken()
+                <= MEMORT_ACCOUNTING_CONFIG
+                    .best_effort_message_memory_capacity
+                    .into()
+        );
+
+        // Collect responses; check for traps; keep Ids awaited.
+        msg_ids = msg_ids.into_iter().filter(|msg_id)| match subnet1.try_get_response(msg_id) {
+            Ok(response) => {
+
+                false
+            }
+            Err(_) => true,
+        }
+    }
 }
 
 /*
