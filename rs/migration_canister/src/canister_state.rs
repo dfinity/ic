@@ -10,7 +10,7 @@ use ic_stable_structures::{
     memory_manager::{MemoryId, MemoryManager, VirtualMemory},
 };
 
-use crate::{DEFAULT_MAX_ACTIVE_REQUESTS, Event, MAX_ONGOING_VALIDATIONS, RequestState};
+use crate::{Event, MAX_ONGOING_VALIDATIONS, RequestState};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -27,15 +27,11 @@ thread_local! {
     static DISABLED: RefCell<Cell<bool, Memory>> =
         RefCell::new(Cell::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))), false));
 
-    /// Interpreted as: Max number of requests in a 24 hour sliding window.
-    static MAX_ACTIVE_REQUESTS: RefCell<Cell<u64, Memory>>
-        = RefCell::new(Cell::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1))), DEFAULT_MAX_ACTIVE_REQUESTS));
-
     static REQUESTS: RefCell<BTreeMap<RequestState, (), Memory>> =
-        RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))));
+        RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1)))));
 
     static HISTORY: RefCell<BTreeMap<Event, (), Memory>> =
-        RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3)))));
+        RefCell::new(BTreeMap::init(MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))));
 
     // TODO: consider a fail counter for active requests.
     // This way we see if a request never makes progress which would
@@ -56,10 +52,6 @@ pub fn num_active_requests() -> u64 {
     })
 }
 
-pub fn max_active_requests() -> u64 {
-    MAX_ACTIVE_REQUESTS.with_borrow(|x| *x.get())
-}
-
 pub fn set_allowlist(arg: Option<Vec<Principal>>) {
     ALLOWLIST.set(arg);
 }
@@ -74,14 +66,10 @@ pub fn caller_allowed(id: &Principal) -> bool {
 // ============================== Privileged API ============================== //
 pub mod privileged {
     //! This API is only for controllers.
-    use crate::canister_state::{DISABLED, MAX_ACTIVE_REQUESTS};
+    use crate::canister_state::DISABLED;
 
     pub fn set_disabled_flag(flag: bool) {
         DISABLED.with_borrow_mut(|x| x.set(flag));
-    }
-
-    pub fn set_max_active_requests(value: u64) {
-        MAX_ACTIVE_REQUESTS.with_borrow_mut(|x| x.set(value));
     }
 }
 
