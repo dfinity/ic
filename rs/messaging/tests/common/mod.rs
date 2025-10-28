@@ -12,7 +12,7 @@ use ic_types::{
     messages::{MessageId, RequestOrResponse, StreamMessage},
     xnet::StreamHeader,
 };
-use messaging_test::{Call, Response};
+use messaging_test::{Call, Reply};
 use messaging_test_utils::{CallConfig, arb_call, from_blob, to_encoded_ingress};
 use proptest::prelude::*;
 use std::ops::RangeInclusive;
@@ -26,8 +26,9 @@ pub struct TestSubnet {
     pub env: Arc<StateMachine>,
 }
 
-/// The status a `Call` submitted as an ingress can have. For documentation see `IngressState`,
-/// except `Rejected` which is mapped to `IngressState::Completed(WasmResult::Reject(_))`.
+/// The status a `Call` submitted as an ingress can have. For documentation see `IngressStatus`
+/// and then `IngressState`, except `CallStatus::Rejected` which is mapped to
+/// `IngressState::Completed(WasmResult::Reject(_))`.
 #[derive(Clone, Debug)]
 pub enum CallStatus {
     Unknown,
@@ -90,9 +91,8 @@ impl TestSubnet {
         })
     }
 
-    /// Attempts to get the `Response` for a `Call` submitted with `id`; panics for an
-    /// unknown `id` since this case shouldn't be possible in a test without a bug.
-    pub fn try_get_response(&self, id: &MessageId) -> Result<Response, CallStatus> {
+    /// Attempts to get the `Reply` for a `Call` submitted with `id`.
+    pub fn try_get_reply(&self, id: &MessageId) -> Result<Reply, CallStatus> {
         match self.env.ingress_status(id) {
             IngressStatus::Unknown => Err(CallStatus::Unknown),
             IngressStatus::Known {

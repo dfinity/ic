@@ -15,7 +15,7 @@ use ic_types::{
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MessageId, RequestOrResponse, StreamMessage,
     },
 };
-use messaging_test::{Call, Response};
+use messaging_test::{Call, Reply};
 use messaging_test_utils::{CallConfig, arb_call};
 use proptest::prelude::ProptestConfig;
 
@@ -56,11 +56,11 @@ fn canister_can_be_stopped_with_hanging_call_on_stalled_subnet() {
 
     // The downstream call was timed out...
     assert_matches!(
-        subnet1.try_get_response(&msg_id),
-        Ok(Response::Success {
-            downstream_responses,
+        subnet1.try_get_reply(&msg_id),
+        Ok(Reply::Success {
+            downstream_replies,
             ..
-        }) if matches!(downstream_responses[..], [Response::AsyncReject {
+        }) if matches!(downstream_replies[..], [Reply::AsyncReject {
             reject_code: SYS_UNKNOWN_U32,
             ..
         }])
@@ -226,7 +226,8 @@ fn test_call_tree_metrics() {
         )
         .unwrap();
 
-    while let Err(_) = subnet1.try_get_response(&msg_id) {
+    // Execute until all calls complete.
+    while let Err(_) = subnet1.try_get_reply(&msg_id) {
         subnet1.execute_round();
         subnet2.execute_round();
     }
@@ -333,9 +334,9 @@ fn test_memory_accounting_and_sequence_errors(
         msg_ids = msg_ids
             .into_iter()
             .filter(|msg_id| {
-                subnet1.try_get_response(msg_id).map_or(false, |response| {
-                    response.for_each_depth_first(|response, _| {
-                        if let Response::AsyncReject { reject_message, .. } = response {
+                subnet1.try_get_reply(msg_id).map_or(false, |reply| {
+                    reply.for_each_depth_first(|reply, _| {
+                        if let Reply::AsyncReject { reject_message, .. } = reply {
                             assert!(!reject_message.contains("trapped"));
                         }
                     });
