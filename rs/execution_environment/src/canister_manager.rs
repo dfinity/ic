@@ -19,7 +19,9 @@ use ic_embedders::{
     wasm_utils::decoding::decode_wasm, wasmtime_embedder::system_api::ExecutionParameters,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{IngressHistoryWriter, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    IngressHistoryWriter, MessageMemoryUsage, SubnetAvailableMemory,
+};
 use ic_logger::{ReplicaLogger, error, fatal, info};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallModeV2, CanisterMetadataResponse,
@@ -38,8 +40,7 @@ use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
 };
 use ic_replicated_state::page_map::Buffer;
 use ic_replicated_state::{
-    CallOrigin, CanisterState, MessageMemoryUsage, NetworkTopology, ReplicatedState,
-    SchedulerState, SystemState,
+    CallOrigin, CanisterState, NetworkTopology, ReplicatedState, SchedulerState, SystemState,
     canister_snapshots::CanisterSnapshot,
     canister_state::{
         NextExecution,

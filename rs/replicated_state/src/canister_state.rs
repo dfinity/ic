@@ -7,10 +7,12 @@ mod tests;
 use crate::canister_state::execution_state::WasmExecutionMode;
 use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{ExecutionTask, SystemState};
-use crate::{InputQueueType, MessageMemoryUsage, StateError};
+use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
 use ic_config::embedders::Config as HypervisorConfig;
-use ic_interfaces::execution_environment::SubnetAvailableExecutionMemoryChange;
+use ic_interfaces::execution_environment::{
+    MessageMemoryUsage, SubnetAvailableExecutionMemoryChange,
+};
 use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType, LogVisibilityV2,
 };

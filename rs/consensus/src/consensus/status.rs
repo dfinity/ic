@@ -7,7 +7,7 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{Height, ReplicaVersion, SubnetId};
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
-pub enum Status {
+pub(crate) enum Status {
     /// The Consensus is running normally.
     Running,
     /// The Consensus is halting, meaning we will produce *empty* blocks but no batches will be
@@ -27,7 +27,7 @@ pub enum Status {
 ///   the registry instructs the subnet to halt;
 /// * [Status::Running] when there is no upgrade and the registry doesn't instruct the subnet to
 ///   halt.
-pub fn get_status(
+pub(crate) fn get_status(
     height: Height,
     registry_client: &(impl RegistryClient + ?Sized),
     subnet_id: SubnetId,
@@ -52,7 +52,7 @@ pub fn get_status(
     Some(Status::Running)
 }
 
-pub fn should_halt(
+pub(crate) fn should_halt(
     height: Height,
     registry_client: &(impl RegistryClient + ?Sized),
     subnet_id: SubnetId,

@@ -10,6 +10,30 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+
+# 2025-10-24: Proposal 139086
+
+http://dashboard.internetcomputer.org/proposal/139086
+
+## Added
+
+* New proposal types:
+
+    * `PauseCanisterMigrations` & `UnpauseCanisterMigrations`
+
+    * `SetSubnetOperationalLevel`
+
+        * Mainly, this sets the `is_halted` field in `SubnetRecord`.
+
+        * This also sets a couple other things:
+            * `ssh_readonly_access` - Also in `SubnetRecord`.
+            * `ssh_node_state_write_access` - In `NodeRecord` (not `SubnetRecord`!).
+
+        * Motivation: This will be used in a slightly enhanced subnet recovery
+          procedure. This is needed before we can fully enable SEV.
+
+* A new API function `get_neuron_index` is added. It accepts an exclusive lower bound on the neuron ID and a page size, and returns all neurons whose IDs are greater than the specified lower bound.
+
 # 2025-10-17: Proposal 138991
 
 https://dashboard.internetcomputer.org/proposal/138991
