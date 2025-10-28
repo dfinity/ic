@@ -32,7 +32,7 @@ fn main() {
         nns_url: args.nns_url,
         replica_version: args.replica_version,
         admin_key_file: args.admin_key_file,
-        test_mode: args.test,
+        test_mode: args.test_mode,
         skip_prompts: args.skip_prompts,
         use_local_binaries: args.use_local_binaries,
     };

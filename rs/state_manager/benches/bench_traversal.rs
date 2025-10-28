@@ -120,7 +120,7 @@ fn bench_traversal(c: &mut Criterion<ProcessTime>) {
             5 => Unknown,
             _ => unreachable!(),
         };
-        state.set_ingress_status(message_test_id(i), status, NumBytes::from(u64::MAX));
+        state.set_ingress_status(message_test_id(i), status, NumBytes::from(u64::MAX), |_| {});
     }
 
     assert_eq!(

@@ -574,7 +574,7 @@ pub(crate) fn finish_call_with_error(
                 // We could improve the rate limiting using some kind of exponential backoff.
                 let log_count = SYSTEM_TASK_ERROR_COUNT.fetch_add(1, Ordering::SeqCst);
                 if log_count < LOG_FIRST_N_SYSTEM_TASKS
-                    || log_count % LOG_ONE_SYSTEM_TASK_OUT_OF == 0
+                    || log_count.is_multiple_of(LOG_ONE_SYSTEM_TASK_OUT_OF)
                 {
                     warn!(
                         log,

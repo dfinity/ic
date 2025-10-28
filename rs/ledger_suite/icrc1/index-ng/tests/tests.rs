@@ -1,7 +1,7 @@
 use crate::common::{
     ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
-    get_logs, index_ng_wasm, install_icrc3_test_ledger, install_index_ng, install_ledger,
-    ledger_get_all_blocks, ledger_wasm, wait_until_sync_is_completed,
+    index_ng_wasm, install_icrc3_test_ledger, install_index_ng, install_ledger,
+    ledger_get_all_blocks, ledger_wasm, parse_index_logs, wait_until_sync_is_completed,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
@@ -18,7 +18,9 @@ use ic_icrc1_test_utils::{
     ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
     valid_transactions_strategy,
 };
-use ic_ledger_suite_state_machine_helpers::{add_block, archive_blocks, set_icrc3_enabled};
+use ic_ledger_suite_state_machine_helpers::{
+    add_block, archive_blocks, get_logs, set_icrc3_enabled,
+};
 use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_value::ICRC3Value;
@@ -356,7 +358,11 @@ fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_i
         }
     }
     // Verify there are no errors in the index log.
-    assert!(get_logs(env, index_id).entries.is_empty());
+    assert!(
+        parse_index_logs(&get_logs(env, index_id))
+            .entries
+            .is_empty()
+    );
 }
 
 #[cfg(any(feature = "get_blocks_disabled", feature = "icrc3_disabled"))]
@@ -519,7 +525,7 @@ fn verify_unknown_block_handling(
         bad_block_index
     );
 
-    let logs = get_logs(env, index_id);
+    let logs = parse_index_logs(&get_logs(env, index_id));
     let mut error_count = 0;
     let mut stopping_message = false;
     for entry in logs.entries {
