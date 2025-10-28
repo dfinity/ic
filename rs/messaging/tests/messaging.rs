@@ -160,9 +160,9 @@ fn test_call_tree_metrics() {
     //
     // call_depth                    call tree
     //
-    //     3                   C1
-    //                        /
-    //                       /
+    //     3                   C1        .
+    //                        /          .
+    //                       /           .
     //     2               C2            .                C4
     //                      \_________________________   /
     //                                   .            \ /
@@ -176,48 +176,47 @@ fn test_call_tree_metrics() {
     // ------------------------------------------------------
     //                     Subnet1       .       Subnet2
     //
+
+    // The subtree starting at C3 on `subnet2`.
+    let calls_made_on_subnet2 = vec![
+        // The left arm.
+        Call {
+            receiver: canister2,
+            downstream_calls: vec![Call {
+                receiver: canister1,
+                ..Call::default()
+            }],
+            ..Call::default()
+        },
+        // The right arm.
+        Call {
+            receiver: canister4,
+            ..Call::default()
+        },
+    ];
+
+    // The tree starting as an ingress to C1 on `subnet1`.
     let msg_id = subnet1
         .submit_ingress(
             canister1,
             vec![
-                // A call to self.
+                // The left arm.
+                Call {
+                    receiver: canister2,
+                    downstream_calls: vec![Call {
+                        receiver: canister2,
+                        ..Call::default()
+                    }],
+                    ..Call::default()
+                },
+                // The right arm.
                 Call {
                     receiver: canister1,
                     downstream_calls: vec![
-                        // A XNet call to `subnet2`.
+                        // Calling into `subnet2`.
                         Call {
                             receiver: canister3,
-                            downstream_calls: vec![
-                                // A call back to `subnet1`.
-                                Call {
-                                    receiver: canister2,
-                                    downstream_calls: vec![
-                                        // A call to the other canister on `subnet1`.
-                                        Call {
-                                            receiver: canister1,
-                                            ..Call::default()
-                                        },
-                                    ],
-                                    ..Call::default()
-                                },
-                                // A call the other canister on `subnet2`.
-                                Call {
-                                    receiver: canister4,
-                                    ..Call::default()
-                                },
-                            ],
-                            ..Call::default()
-                        },
-                    ],
-                    ..Call::default()
-                },
-                // A call to the other canister on `subnet1`.
-                Call {
-                    receiver: canister2,
-                    downstream_calls: vec![
-                        // A call to self.
-                        Call {
-                            receiver: canister2,
+                            downstream_calls: calls_made_on_subnet2,
                             ..Call::default()
                         },
                     ],
@@ -241,9 +240,8 @@ fn test_call_tree_metrics() {
         metric_vec(&[(
             &[("class", "guaranteed response")],
             HistogramStats {
-                count: 5, // In total 5 calls are made on `subnet1`.
-                sum: 5 as f64, // 3 calls, two on call depth 1 and 1 on call depth 3, i.e. 1+1+3.
-                          // Note: those on call depth 0 do not appear in the sum.
+                count: 5,      // In total 5 calls are made on `subnet1`...
+                sum: 5 as f64, //... two on depth 0, two on depth 1, one on depth 3, i.e. 0+0+1+1+3
             }
         )]),
         stats
@@ -258,8 +256,8 @@ fn test_call_tree_metrics() {
         metric_vec(&[(
             &[("class", "guaranteed response")],
             HistogramStats {
-                count: 2,      // In total 2 calls are made on `subnet2`.
-                sum: 4 as f64, // 2 calls, both at call depth 2, i.e. 2+2
+                count: 2,      // In total 2 calls are made on `subnet2`...
+                sum: 4 as f64, // ...both at call depth 2, i.e. 2+2
             }
         )]),
         stats
@@ -310,7 +308,7 @@ fn test_memory_accounting_and_sequence_errors(
         .collect();
 
     // Execute rounds on both subnets; check memory accounting in each iteration.
-    for _ in 0..100 {
+    while !msg_ids.is_empty() {
         subnet1.execute_round();
         subnet2.execute_round();
 
@@ -330,28 +328,20 @@ fn test_memory_accounting_and_sequence_errors(
             MEMORY_ACCOUNTING_CONFIG.best_effort_message_memory_capacity,
         );
 
-        // Collect responses; check for traps which indicates a sequence error; keep Ids awaited.
+        // Collect responses; check for traps which indicates a sequence error;
+        // keep Ids we are still awaiting the result of.
         msg_ids = msg_ids
             .into_iter()
-            .filter(|msg_id| match subnet1.try_get_response(msg_id) {
-                Ok(response) => {
+            .filter(|msg_id| {
+                subnet1.try_get_response(msg_id).map_or(false, |response| {
                     response.for_each_depth_first(|response, _| {
                         if let Response::AsyncReject { reject_message, .. } = response {
                             assert!(!reject_message.contains("trapped"));
                         }
                     });
-                    false
-                }
-                Err(_) => {
-                    // Still awaiting, keep the Id.
                     true
-                }
+                })
             })
             .collect();
-
-        if msg_ids.is_empty() {
-            // All calls have concluded; stop executing.
-            break;
-        }
     }
 }
