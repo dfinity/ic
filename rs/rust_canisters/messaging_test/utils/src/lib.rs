@@ -1,5 +1,5 @@
 use ic_types::{CanisterId, messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64};
-use messaging_test::{Call, Message, Reply, Response, decode, encode};
+use messaging_test::{Call, CallMessage, Reply, ReplyMessage, decode, encode};
 use proptest::prelude::*;
 use std::ops::RangeInclusive;
 
@@ -133,7 +133,7 @@ fn to_nested_call(call: &mut Call, simple_calls: &mut Vec<Call>, counts: &mut Ve
 /// Turns a `Call` into a receiver and an encoded payload ready to be enqueued in the ingress pool.
 pub fn to_encoded_ingress(call: Call) -> (CanisterId, Vec<u8>) {
     let (payload, _) = encode(
-        &Message {
+        &CallMessage {
             call_index: 0,
             reply_bytes: call.reply_bytes,
             downstream_calls: call.downstream_calls,
@@ -144,12 +144,12 @@ pub fn to_encoded_ingress(call: Call) -> (CanisterId, Vec<u8>) {
 }
 
 /// Decodes a blob into a `Response`.
-pub fn from_blob(respondent: CanisterId, blob: Vec<u8>) -> Response {
-    let (reply, bytes_sent_on_reply, _) = decode::<Reply>(blob);
-    Response::Success {
+pub fn from_blob(respondent: CanisterId, blob: Vec<u8>) -> Reply {
+    let (reply, bytes_sent_on_reply, _) = decode::<ReplyMessage>(blob);
+    Reply::Success {
         respondent,
         bytes_received_on_call: reply.bytes_received_on_call,
         bytes_sent_on_reply,
-        downstream_responses: reply.downstream_responses,
+        downstream_replies: reply.downstream_replies,
     }
 }

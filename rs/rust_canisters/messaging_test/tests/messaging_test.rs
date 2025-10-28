@@ -6,7 +6,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
 };
 use ic_types_test_utils::ids::canister_test_id;
-use messaging_test::{Call, Message, Response, decode, encode};
+use messaging_test::{Call, CallMessage, Reply, decode, encode};
 use messaging_test_utils::{CallConfig, arb_call, from_blob, to_encoded_ingress};
 use proptest::prop_assert_eq;
 
@@ -23,7 +23,7 @@ fn test_message_roundtrip_with_payload_size(
     ))]
     call: Call,
 ) {
-    let test_message = Message {
+    let test_message = CallMessage {
         call_index: 23,
         reply_bytes: call.reply_bytes,
         downstream_calls: call.downstream_calls,
@@ -43,7 +43,7 @@ fn test_message_roundtrip_with_payload_size(
 
     // Check the roundtrip yields the same message and size bytes information.
     let blob_size_bytes = blob.len();
-    let (decoded_test_message, blob_size_bytes_, payload_size_bytes_) = decode::<Message>(blob);
+    let (decoded_test_message, blob_size_bytes_, payload_size_bytes_) = decode::<CallMessage>(blob);
     prop_assert_eq!(test_message, decoded_test_message);
     prop_assert_eq!(blob_size_bytes as u32, blob_size_bytes_);
     prop_assert_eq!(payload_size_bytes, payload_size_bytes_);
@@ -128,7 +128,7 @@ fn smoke_test() {
         env2.advance_time(std::time::Duration::from_secs(1));
     }
 
-    // Check the response to the first call.
+    // Check the reply to the first call.
     match env1.ingress_status(&msg_id1) {
         IngressStatus::Known {
             receiver,
@@ -136,15 +136,15 @@ fn smoke_test() {
             ..
         } => {
             from_blob(CanisterId::unchecked_from_principal(receiver), blob).for_each_depth_first(
-                |response, _| {
-                    assert_matches!(response, Response::Success { .. });
+                |reply, _| {
+                    assert_matches!(reply, Reply::Success { .. });
                 },
             );
         }
         _ => unreachable!("the first call did not conclude successfully"),
     }
 
-    // Check the response to the second call.
+    // Check the reply to the second call.
     match env1.ingress_status(&msg_id2) {
         IngressStatus::Known {
             receiver,
@@ -152,8 +152,8 @@ fn smoke_test() {
             ..
         } => {
             from_blob(CanisterId::unchecked_from_principal(receiver), blob).for_each_depth_first(
-                |response, _| {
-                    assert_matches!(response, Response::Success { .. });
+                |reply, _| {
+                    assert_matches!(reply, Reply::Success { .. });
                 },
             );
         }
