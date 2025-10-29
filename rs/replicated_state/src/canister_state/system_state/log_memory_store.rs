@@ -152,25 +152,23 @@ pub struct LogMemoryStore {
 
 impl LogMemoryStore {
     pub fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
-        let mut store = Self {
-            data: PageMap::new(fd_factory),
-            delta_log_sizes: VecDeque::new(),
-        };
-        let header = init(TMP_LOG_MEMORY_CAPACITY);
-        store.write_header(&header);
-        store
+        Self::new_inner(PageMap::new(fd_factory))
     }
 
     /// Creates a new `LogMemoryStore` that will use the temp file system for
     /// allocating new pages.
     pub fn new_for_testing() -> Self {
-        let mut store = Self {
-            data: PageMap::new_for_testing(),
-            delta_log_sizes: VecDeque::new(),
-        };
+        Self::new_inner(PageMap::new_for_testing())
+    }
+
+    pub fn new_inner(page_map: PageMap) -> Self {
+        let mut ring_buffer = RingBuffer::new(page_map);
         let header = init(TMP_LOG_MEMORY_CAPACITY);
-        store.write_header(&header);
-        store
+        ring_buffer.write_header(&header);
+        Self {
+            data: ring_buffer.into_page_map(),
+            delta_log_sizes: VecDeque::new(),
+        }
     }
 
     pub fn from_checkpoint(data: PageMap) -> Self {
@@ -188,33 +186,20 @@ impl LogMemoryStore {
         &mut self.data
     }
 
-    fn read_header(&self) -> HeaderV1 {
-        let buffer = Buffer::new(self.data.clone());
-        let mut bytes = [0; V1_PACKED_HEADER_SIZE];
-        buffer.read(&mut bytes, HEADER_OFFSET);
-        HeaderV1::from(&bytes)
-    }
-
-    fn write_header(&mut self, header: &HeaderV1) {
-        let mut buffer = Buffer::new(self.data.clone());
-        buffer.write(&HeaderV1Bytes::from(header), HEADER_OFFSET);
-        self.data.update(&buffer.dirty_pages().collect::<Vec<_>>());
-    }
-
     pub fn clear(&mut self) {
         // TODO.
     }
 
     pub fn capacity(&self) -> usize {
-        self.read_header().data_capacity as usize
+        RingBuffer::new(self.data.clone()).capacity()
     }
 
     pub fn used_space(&self) -> usize {
-        self.read_header().data_size as usize
+        RingBuffer::new(self.data.clone()).used_space()
     }
 
     pub fn next_id(&self) -> u64 {
-        self.read_header().next_idx
+        RingBuffer::new(self.data.clone()).next_id()
     }
 
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
@@ -233,10 +218,6 @@ impl LogMemoryStore {
         self.data.update(&ring_buffer.dirty_pages());
     }
 
-    pub fn records(&self, _filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
-        vec![] // TODO.
-    }
-
     /// Records the size of the appended delta log.
     fn push_delta_log_size(&mut self, size: usize) {
         if self.delta_log_sizes.len() >= DELTA_LOG_SIZES_CAP {
@@ -248,6 +229,10 @@ impl LogMemoryStore {
     /// Atomically snapshot and clear the per-round delta_log sizes — use at end of round.
     pub fn take_delta_log_sizes(&mut self) -> Vec<usize> {
         self.delta_log_sizes.drain(..).collect()
+    }
+
+    pub fn records(&self, _filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
+        vec![] // TODO.
     }
 }
 
@@ -275,6 +260,10 @@ impl RingBuffer {
 
     fn dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
         self.buffer.dirty_pages().collect()
+    }
+
+    fn into_page_map(self) -> PageMap {
+        self.buffer.into_page_map()
     }
 
     pub fn capacity(&self) -> usize {
