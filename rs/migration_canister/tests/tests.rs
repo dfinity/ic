@@ -956,7 +956,6 @@ async fn success_controllers_restored() {
 }
 
 // parallel processing
-
 #[tokio::test]
 async fn parallel_migrations() {
     const NUM_MIGRATIONS: usize = 51;
@@ -1014,4 +1013,70 @@ async fn parallel_migrations() {
         };
         assert_eq!(status, "SourceDeleted");
     }
+}
+
+#[tokio::test]
+async fn parallel_validations() {
+    const NUM_MIGRATIONS: usize = 550;
+    let Setup {
+        pic,
+        sources,
+        targets,
+        source_controllers,
+        ..
+    } = setup(Settings {
+        num_migrations: NUM_MIGRATIONS as u64,
+        ..Settings::default()
+    })
+    .await;
+    let sender = source_controllers[0];
+
+    for i in 0..45 {
+        migrate_canister(
+            &pic,
+            source_controllers[0],
+            &MigrateCanisterArgs {
+                source: sources[i],
+                target: targets[i],
+            },
+        )
+        .await
+        .unwrap();
+    }
+    // We have 5 slots left. Attempt to validate 505 calls.
+    // Of those, 5 should fail due to validation limit and 495 should fail due to
+    // rate limit.
+    let mut msg_ids = vec![];
+    for i in 45..NUM_MIGRATIONS {
+        let id = pic
+            .submit_call(
+                MIGRATION_CANISTER_ID.into(),
+                sender,
+                "migrate_canister",
+                Encode!(&MigrateCanisterArgs {
+                    source: sources[i],
+                    target: targets[i],
+                })
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        msg_ids.push(id);
+    }
+    advance(&pic).await;
+
+    let mut success_counter = 0;
+    let mut fail_counter = 0;
+    for i in 45..NUM_MIGRATIONS {
+        let res = pic.await_call(msg_ids[i - 45].clone()).await.unwrap();
+        let res = Decode!(&res, Result<(), ValidationError>).unwrap();
+        match res {
+            Ok(_) => success_counter += 1,
+            Err(ValidationError::RateLimited) => fail_counter += 1,
+            _ => panic!(),
+        }
+    }
+    assert_eq!(success_counter, 5);
+    assert_eq!(fail_counter, 500);
 }
