@@ -803,7 +803,7 @@ fn test_shed_inbound_response() {
 }
 
 #[test]
-fn test_shed_largest_message_reports_lost_cycles() {
+fn test_shed_largest_message_generates_refunds() {
     let mut canister_queues = CanisterQueues::default();
 
     // Cartesian product of best-effort inbound / outbound, request / response; with
@@ -3621,7 +3621,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
 }
 
 #[test]
-fn time_out_messages_reports_lost_cycles() {
+fn time_out_messages_produces_refunds() {
     let mut canister_queues = CanisterQueues::default();
 
     // Cartesian product of inbound / outbound, best-effort / guaranteed, request /
