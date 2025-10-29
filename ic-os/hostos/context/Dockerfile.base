@@ -66,6 +66,8 @@ RUN echo "deb http://archive.ubuntu.com/ubuntu plucky main universe restricted m
 ARG PACKAGE_FILES=packages.common
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
+# Add rate limiting to prevent 429 errors
+RUN echo 'Acquire::http::Dl-Limit "5000000";' > /etc/apt/apt.conf.d/99ratelimit
 # NODE-1718: libvirt-daemon-config-network must be installed early to avoid a broken dependency ordering
 RUN apt-get -y update && \
     apt-get -y upgrade && \
