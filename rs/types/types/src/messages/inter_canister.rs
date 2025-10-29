@@ -547,10 +547,11 @@ impl Hash for Response {
 /// XNet message type (like `Request` and `Response`) for guaranteed delivery of
 /// refunds for best-effort calls.
 ///
-/// Represents an _anonymous refund_.
+/// Represents either an _anonymous refund_ (when `refund_id` is `None`) or a
+/// _refund notification_ (when `refund_id` is `Some(_)`).
 ///
 /// Refunds are ordered by amount (larger amounts first). Ties are broken by
-/// canister ID (smaller IDs first).
+/// canister ID (smaller IDs first) and refund ID (smaller IDs first).
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, ValidateEq)]
 #[cfg_attr(test, derive(ExhaustiveSet))]
 pub struct Refund {
@@ -559,6 +560,11 @@ pub struct Refund {
 
     /// The amount of cycles being refunded. Non-zero for anonymous refunds.
     amount: Cycles,
+
+    /// If set, identifies a _refund notification_. If not set, this is an
+    /// _anonymous refund_ that may be aggregated with other _anonymous refunds_
+    /// having the same recipient.
+    refund_id: Option<u64>,
 }
 
 impl Refund {
@@ -566,7 +572,22 @@ impl Refund {
     /// amount.
     pub fn anonymous(recipient: CanisterId, amount: Cycles) -> Self {
         debug_assert!(!amount.is_zero());
-        Self { recipient, amount }
+        Self {
+            recipient,
+            amount,
+            refund_id: None,
+        }
+    }
+
+    /// Creates a new refund notification for the given recipient with the given
+    /// refund ID, in the given amount.
+    pub fn notification(recipient: CanisterId, refund_id: u64, amount: Cycles) -> Self {
+        assert!(!amount.is_zero());
+        Self {
+            recipient,
+            amount,
+            refund_id: Some(refund_id),
+        }
     }
 
     pub fn recipient(&self) -> CanisterId {
@@ -575,6 +596,14 @@ impl Refund {
 
     pub fn amount(&self) -> Cycles {
         self.amount
+    }
+
+    pub fn is_notification(&self) -> bool {
+        self.refund_id.is_some()
+    }
+
+    pub fn refund_id(&self) -> Option<u64> {
+        self.refund_id
     }
 }
 
@@ -586,8 +615,49 @@ impl PartialOrd for Refund {
 
 impl Ord for Refund {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // Order by amount decreasing, then by recipient increasing.
-        (Reverse(self.amount), &self.recipient).cmp(&(Reverse(other.amount), &other.recipient))
+        // Order by amount decreasing, then by recipient increasing, then by.refund ID.
+        (Reverse(self.amount), &self.recipient, self.refund_id).cmp(&(
+            Reverse(other.amount),
+            &other.recipient,
+            other.refund_id,
+        ))
+    }
+}
+
+impl From<&Request> for Option<Refund> {
+    fn from(req: &Request) -> Option<Refund> {
+        if !req.payment.is_zero() {
+            Some(Refund {
+                recipient: req.sender,
+                amount: req.payment,
+                refund_id: None,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl From<&Response> for Option<Refund> {
+    fn from(resp: &Response) -> Option<Refund> {
+        if !resp.refund.is_zero() {
+            Some(Refund {
+                recipient: resp.originator,
+                amount: resp.refund,
+                refund_id: None,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl From<&RequestOrResponse> for Option<Refund> {
+    fn from(msg: &RequestOrResponse) -> Option<Refund> {
+        match msg {
+            RequestOrResponse::Request(req) => (&**req).into(),
+            RequestOrResponse::Response(resp) => (&**resp).into(),
+        }
     }
 }
 
@@ -934,6 +1004,7 @@ impl From<&Refund> for pb_queues::Refund {
         Self {
             recipient: Some(pb_types::CanisterId::from(refund.recipient)),
             amount: Some((refund.amount).into()),
+            refund_id: refund.refund_id,
         }
     }
 }
@@ -945,6 +1016,7 @@ impl TryFrom<pb_queues::Refund> for Refund {
         Ok(Self {
             recipient: try_from_option_field(refund.recipient, "Refund::recipient")?,
             amount: try_from_option_field(refund.amount, "Refund::amount")?,
+            refund_id: refund.refund_id,
         })
     }
 }

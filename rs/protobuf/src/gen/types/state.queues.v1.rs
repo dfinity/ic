@@ -137,6 +137,8 @@ pub struct Refund {
     pub recipient: ::core::option::Option<super::super::super::types::v1::CanisterId>,
     #[prost(message, optional, tag = "2")]
     pub amount: ::core::option::Option<Cycles>,
+    #[prost(uint64, optional, tag = "3")]
+    pub refund_id: ::core::option::Option<u64>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Refunds {

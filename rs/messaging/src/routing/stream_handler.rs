@@ -667,6 +667,14 @@ impl StreamHandlerImpl {
                     stream.signals_end(),
                     stream_index
                 );
+
+                #[cfg(debug_assertions)]
+                let (balance_before, msg_cycles, reject_signals_before) = (
+                    state.balance_with_messages(),
+                    msg.cycles(),
+                    stream.reject_signals().len(),
+                );
+
                 self.induct_message(
                     msg,
                     remote_subnet_id,
@@ -674,6 +682,19 @@ impl StreamHandlerImpl {
                     stream,
                     available_guaranteed_response_memory,
                 );
+
+                #[cfg(debug_assertions)]
+                {
+                    let expected_balance = if stream.reject_signals().len() > reject_signals_before
+                    {
+                        // Message was rejected; balance should be unchanged.
+                        balance_before
+                    } else {
+                        // Message was accepted; balance should increase by msg.cycles().
+                        balance_before + msg_cycles
+                    };
+                    state.assert_balance_with_messages(expected_balance);
+                }
             }
         }
 
