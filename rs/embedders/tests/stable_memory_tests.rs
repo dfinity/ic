@@ -2,7 +2,7 @@ use canister_test::{Cycles, PrincipalId, WasmResult};
 use ic_embedders::wasmtime_embedder::system_api::ApiType;
 use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::HypervisorResult;
-use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
+use ic_sys::WASM_PAGE_SIZE;
 use ic_test_utilities_embedders::WasmtimeInstanceBuilder;
 use ic_test_utilities_execution_environment::ExecutionTestBuilder;
 use ic_types::methods::{FuncRef, WasmMethod};
@@ -164,7 +164,7 @@ fn stable_write_traps_after_failed_stable_grow_due_to_subnet_memory() {
             )
         )
     "#,
-        (20 * GIB) / (WASM_PAGE_SIZE_IN_BYTES as u64)
+        (20 * GIB) / (WASM_PAGE_SIZE as u64)
     );
 
     let canister_id = test

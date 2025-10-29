@@ -124,7 +124,7 @@ mod tests {
             structs::SandboxExecInput,
         },
     };
-    use ic_base_types::{NumSeconds, PrincipalId};
+    use ic_base_types::{NumSeconds, NumWasmPages, PrincipalId};
     use ic_config::embedders::Config as EmbeddersConfig;
     use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig};
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
@@ -142,7 +142,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::Global;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{NetworkTopology, NumWasmPages, PageIndex, PageMap};
+    use ic_replicated_state::{NetworkTopology, PageIndex, PageMap};
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
         CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,

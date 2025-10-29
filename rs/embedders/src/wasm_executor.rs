@@ -7,9 +7,10 @@ use crate::wasmtime_embedder::system_api::{
     SystemApiImpl,
     sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications},
 };
+use ic_base_types::NumWasmPages;
 use ic_management_canister_types_private::Global;
 use ic_replicated_state::{
-    ExportedFunctions, Memory, NumWasmPages, PageMap, canister_state::execution_state::WasmBinary,
+    ExportedFunctions, Memory, PageMap, canister_state::execution_state::WasmBinary,
     canister_state::execution_state::WasmExecutionMode, page_map::PageAllocatorFileDescriptor,
 };
 use ic_types::NumOsPages;
@@ -34,14 +35,12 @@ use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_replicated_state::{EmbedderCache, ExecutionState};
-use ic_sys::{PAGE_SIZE, PageBytes, PageIndex, page_bytes_from_ptr};
+use ic_sys::{PAGE_SIZE, PageBytes, PageIndex, WASM_PAGE_SIZE, page_bytes_from_ptr};
 use ic_types::ExecutionRound;
 use ic_types::{CanisterId, NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, CanisterModule};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 // Please enable only for debugging.
 // If enabled, will collect and log checksums of execution results.
@@ -317,10 +316,7 @@ impl WasmExecutor for WasmExecutorImpl {
             wasm_binary,
             exports: ExportedFunctions::new(initial_state_data.exported_functions),
             wasm_memory: Memory::new(wasm_page_map, wasm_memory_size),
-            stable_memory: Memory::new(
-                stable_memory_page_map,
-                ic_replicated_state::NumWasmPages::from(0),
-            ),
+            stable_memory: Memory::new(stable_memory_page_map, NumWasmPages::from(0)),
             exported_globals: globals,
             metadata: initial_state_data.wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
@@ -736,9 +732,8 @@ pub fn process(
     // The error below can only happen for Wasm32.
     if instance.is_wasm32() {
         let wasm_heap_size_after = instance.heap_size(CanisterMemoryType::Heap);
-        let wasm32_max_pages = NumWasmPages::from(
-            wasmtime_environ::WASM32_MAX_SIZE as usize / WASM_PAGE_SIZE as usize,
-        );
+        let wasm32_max_pages =
+            NumWasmPages::from(wasmtime_environ::WASM32_MAX_SIZE as usize / WASM_PAGE_SIZE);
         let wasm_heap_limit = wasm32_max_pages - wasm_reserved_pages;
 
         if wasm_heap_size_after > wasm_heap_limit {

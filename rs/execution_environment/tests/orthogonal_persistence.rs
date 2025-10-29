@@ -1,3 +1,4 @@
+use ic_sys::WASM_PAGE_SIZE;
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::{CanisterId, ingress::WasmResult};
 use proptest::{
@@ -104,7 +105,7 @@ fn buf_apply_write(heap: &mut [u8], write: &Write) {
     heap[write.dst as usize..(write.dst as usize + write.bytes.len())].copy_from_slice(&write.bytes)
 }
 
-const TEST_HEAP_SIZE_BYTES: usize = WASM_PAGE_SIZE_BYTES * TEST_NUM_PAGES;
+const TEST_HEAP_SIZE_BYTES: usize = WASM_PAGE_SIZE * TEST_NUM_PAGES;
 // This limit is reduced to 32 pages to ensure that the maximum query response
 // is not larger than 2MB. This is required because currently the size of the
 // query response is bounded by the MAX_INTER_CANISTER_MESSAGE_IN_BYTES. To fix
@@ -114,7 +115,6 @@ const TEST_HEAP_SIZE_BYTES: usize = WASM_PAGE_SIZE_BYTES * TEST_NUM_PAGES;
 //const TEST_NUM_PAGES: usize = 400;
 const TEST_NUM_PAGES: usize = 32;
 const TEST_NUM_WRITES: usize = 20;
-const WASM_PAGE_SIZE_BYTES: usize = 65536;
 
 #[test]
 // generate multiple writes of varying size to random memory locations, apply them both to a

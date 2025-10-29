@@ -1,14 +1,13 @@
 use std::{fs::File, os::unix::fs::FileExt};
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use memmap2::MmapOptions;
 use rayon::prelude::*;
 
 const DATA: &str = "rs/memory_tracker/benches/test-data/64KiB.txt";
 const OPS: [usize; 1] = [100];
 const THREADS: [usize; 4] = [1, 2, 4, 8];
-const PAGE_SIZE: usize = 4096;
-const WASM_PAGE_SIZE: usize = 64 * 1024;
 
 fn mmap(file: &File) {
     // Calls `mmap` with `PROT_READ` and `MAP_PRIVATE`.

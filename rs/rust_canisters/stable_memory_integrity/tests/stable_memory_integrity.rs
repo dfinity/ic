@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
+use ic_sys::WASM_PAGE_SIZE;
 use proptest::prelude::*;
 
 use ic_base_types::CanisterId;
@@ -8,7 +9,6 @@ use ic_state_machine_tests::StateMachine;
 use ic_types::{Cycles, MAX_STABLE_MEMORY_IN_BYTES, ingress::WasmResult};
 
 const KB: u64 = 1024;
-const WASM_PAGE_SIZE_IN_BYTES: usize = 64 * KB as usize;
 
 lazy_static::lazy_static! {
     static ref STABLE_MEMORY_INTEGRITY_WASM: Vec<u8> =
@@ -37,13 +37,13 @@ impl StableState {
     fn get_operation_result(&self, op: &StableOperation) -> Result<StableOperationResult, ()> {
         match op {
             StableOperation::Size => Ok(StableOperationResult::Size(
-                self.contents.len() as u64 / WASM_PAGE_SIZE_IN_BYTES as u64,
+                self.contents.len() as u64 / WASM_PAGE_SIZE as u64,
             )),
             StableOperation::Grow(new_pages) => {
-                let current_pages = (self.contents.len() / WASM_PAGE_SIZE_IN_BYTES) as u64;
+                let current_pages = (self.contents.len() / WASM_PAGE_SIZE) as u64;
                 let result = if current_pages
                     .saturating_add(*new_pages)
-                    .saturating_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
+                    .saturating_mul(WASM_PAGE_SIZE as u64)
                     <= MAX_STABLE_MEMORY_IN_BYTES
                 {
                     Ok(current_pages)
@@ -88,11 +88,11 @@ impl StableState {
             StableOperation::Size | StableOperation::Read { .. } => {}
             StableOperation::Grow(new_pages) => {
                 if new_pages
-                    .saturating_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
+                    .saturating_mul(WASM_PAGE_SIZE as u64)
                     .saturating_add(self.contents.len() as u64)
                     <= MAX_STABLE_MEMORY_IN_BYTES
                 {
-                    self.grow(*new_pages as usize * WASM_PAGE_SIZE_IN_BYTES);
+                    self.grow(*new_pages as usize * WASM_PAGE_SIZE);
                 }
             }
             StableOperation::Write { start, contents } => {
@@ -126,7 +126,7 @@ impl StableState {
         };
 
         assert_eq!(
-            (self.contents.len() / WASM_PAGE_SIZE_IN_BYTES) as u64,
+            (self.contents.len() / WASM_PAGE_SIZE) as u64,
             Decode!(&result, u64).unwrap()
         );
     }
@@ -352,7 +352,7 @@ fn generate_operation(
         }
     }
     let range_start = if concentrate_ops {
-        state.contents.len().saturating_sub(WASM_PAGE_SIZE_IN_BYTES)
+        state.contents.len().saturating_sub(WASM_PAGE_SIZE)
     } else {
         0
     };
@@ -403,8 +403,8 @@ fn generate_invalid_operation(
     match ty {
         StableOperationType::Size => StableOperation::Size,
         StableOperationType::Grow => {
-            let max_pages_to_grow = (MAX_STABLE_MEMORY_IN_BYTES - state.contents.len() as u64)
-                / WASM_PAGE_SIZE_IN_BYTES as u64;
+            let max_pages_to_grow =
+                (MAX_STABLE_MEMORY_IN_BYTES - state.contents.len() as u64) / WASM_PAGE_SIZE as u64;
             StableOperation::Grow(max_pages_to_grow.saturating_add(rng.r#gen::<u64>()))
         }
         StableOperationType::Read => {

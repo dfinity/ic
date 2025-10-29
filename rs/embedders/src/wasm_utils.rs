@@ -3,14 +3,14 @@ use std::{
     time::Instant,
 };
 
+use ic_base_types::NumWasmPages;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_heap_bytes::DeterministicHeapBytes;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_replicated_state::{
-    EmbedderCache, NumWasmPages, PageIndex,
-    canister_state::{WASM_PAGE_SIZE_IN_BYTES, execution_state::WasmMetadata},
+    EmbedderCache, PageIndex, canister_state::execution_state::WasmMetadata,
 };
-use ic_sys::{PAGE_SIZE, PageBytes};
+use ic_sys::{PAGE_SIZE, PageBytes, WASM_PAGE_SIZE};
 use ic_types::{NumBytes, NumInstructions, methods::WasmMethod};
 use ic_wasm_types::{BinaryEncodedWasm, WasmInstrumentationError};
 use serde::{Deserialize, Serialize};
@@ -89,7 +89,7 @@ impl Segments {
         &self,
         initial_wasm_pages: NumWasmPages,
     ) -> Result<(), WasmInstrumentationError> {
-        let initial_memory_size = initial_wasm_pages.get() * WASM_PAGE_SIZE_IN_BYTES;
+        let initial_memory_size = initial_wasm_pages.get() * WASM_PAGE_SIZE;
         for Segment { offset, bytes } in self.0.iter() {
             let out_of_bounds = match offset.checked_add(bytes.len()) {
                 None => true,

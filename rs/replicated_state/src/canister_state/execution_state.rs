@@ -1,9 +1,10 @@
 pub mod proto;
 
 use crate::hash::ic_hashtree_leaf_hash;
-use crate::{NumWasmPages, PageMap, canister_state::WASM_PAGE_SIZE_IN_BYTES, num_bytes_try_from};
+use crate::{PageMap, num_bytes_try_from};
+use ic_base_types::NumWasmPages;
 use ic_management_canister_types_private::Global;
-use ic_sys::PAGE_SIZE;
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use ic_types::{
     CountBytes, ExecutionRound, NumBytes,
     methods::{SystemMethod, WasmMethod},
@@ -192,7 +193,7 @@ impl Memory {
     ///  - otherwise, charging for storage will be inaccurate.
     pub fn verify_size(&self) -> Result<(), String> {
         let page_map_bytes = self.page_map.num_host_pages() * PAGE_SIZE;
-        let memory_bytes = self.size.get() * WASM_PAGE_SIZE_IN_BYTES;
+        let memory_bytes = self.size.get() * WASM_PAGE_SIZE;
         if page_map_bytes <= memory_bytes {
             Ok(())
         } else {

@@ -6,6 +6,7 @@ use crate::protocol::sbxsvc::MemorySerialization;
 use crate::protocol::structs::{SandboxExecInput, SandboxExecOutput, StateModifications};
 use crate::sandbox_service::SandboxService;
 use crate::{protocol, rpc};
+use ic_base_types::NumWasmPages;
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::{
@@ -1226,10 +1227,7 @@ impl WasmExecutor for SandboxedExecutionController {
                 .inc();
         }
 
-        let stable_memory = Memory::new(
-            stable_memory_page_map,
-            ic_replicated_state::NumWasmPages::from(0),
-        );
+        let stable_memory = Memory::new(stable_memory_page_map, NumWasmPages::from(0));
 
         let initial_state_data = serialized_module.initial_state_data();
         let execution_state = ExecutionState {

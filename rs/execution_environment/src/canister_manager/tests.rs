@@ -63,6 +63,7 @@ use ic_replicated_state::{
 use ic_state_machine_tests::{
     StateMachine, StateMachineBuilder, StateMachineConfig, two_subnets_simple,
 };
+use ic_sys::WASM_PAGE_SIZE;
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder,
     state_manager::FakeStateManager,
@@ -117,7 +118,6 @@ const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000
 const DEFAULT_PROVISIONAL_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 const MEMORY_CAPACITY: NumBytes = NumBytes::new(8 * 1024 * 1024 * 1024); // 8GiB
 const MAX_CONTROLLERS: usize = 10;
-const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KiB
 const MAX_NUMBER_OF_CANISTERS: u64 = 0;
 // The simplest valid Wasm binary: "(module)"
 const MINIMAL_WASM: [u8; 8] = [
@@ -2915,7 +2915,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
 
     // canister history memory usage at the beginning of attempted upgrade
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
-    let memory_allocation = WASM_PAGE_SIZE_IN_BYTES + 100 + canister_history_memory as u64;
+    let memory_allocation = WASM_PAGE_SIZE as u64 + 100 + canister_history_memory as u64;
     let canister_id = test
         .create_canister_with_allocation(*INITIAL_CYCLES, None, Some(memory_allocation))
         .unwrap();
@@ -2959,7 +2959,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
     // Update memory allocation to a big enough value via canister settings. The
     // upgrade should succeed.
-    let memory_allocation = WASM_PAGE_SIZE_IN_BYTES * 2 + 100 + canister_history_memory as u64;
+    let memory_allocation = WASM_PAGE_SIZE as u64 * 2 + 100 + canister_history_memory as u64;
     test.canister_update_allocations_settings(canister_id, None, Some(memory_allocation))
         .unwrap();
 
@@ -4432,7 +4432,7 @@ fn install_does_not_reserve_cycles_on_system_subnet() {
     test.install_canister(
         canister_id,
         wat_canister()
-            .init(wat_fn().stable_grow((USAGE / WASM_PAGE_SIZE_IN_BYTES) as i32 - 1))
+            .init(wat_fn().stable_grow((USAGE / WASM_PAGE_SIZE as u64) as i32 - 1))
             .build_wasm(),
     )
     .unwrap();
@@ -5760,7 +5760,7 @@ fn helper_update_settings_updates_hook_status(
 #[test]
 fn update_wasm_memory_threshold_updates_hook_status_ready_to_not_satisfied() {
     let used_wasm_memory_pages = 1;
-    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE as u64;
     let wasm_memory_limit = used_wasm_memory + 100;
 
     let initial_wasm_memory_threshold = 150;
@@ -5795,7 +5795,7 @@ fn update_wasm_memory_threshold_updates_hook_status_ready_to_not_satisfied() {
 #[test]
 fn update_wasm_memory_threshold_updates_hook_status_not_satisfied_to_ready() {
     let used_wasm_memory_pages = 1;
-    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE as u64;
     let wasm_memory_limit = used_wasm_memory + 100;
 
     let initial_wasm_memory_threshold = 50;
@@ -5830,7 +5830,7 @@ fn update_wasm_memory_threshold_updates_hook_status_not_satisfied_to_ready() {
 #[test]
 fn update_wasm_memory_threshold_updates_hook_status_executed_to_not_satisfied() {
     let used_wasm_memory_pages = 1;
-    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE as u64;
     let wasm_memory_limit = used_wasm_memory + 100;
 
     let initial_wasm_memory_threshold = 150;
@@ -5869,7 +5869,7 @@ fn update_wasm_memory_threshold_updates_hook_status_executed_to_not_satisfied() 
 #[test]
 fn update_wasm_memory_threshold_updates_hook_status_executed_is_remembered() {
     let used_wasm_memory_pages = 1;
-    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE as u64;
     let wasm_memory_limit = used_wasm_memory + 100;
 
     let initial_wasm_memory_threshold = 150;
@@ -5910,7 +5910,7 @@ fn update_wasm_memory_threshold_updates_hook_status_executed_is_remembered() {
 #[test]
 fn update_wasm_memory_limit_updates_hook_status_not_satisfied_to_ready() {
     let used_wasm_memory_pages = 1;
-    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE as u64;
     let wasm_memory_threshold = 100;
 
     let initial_wasm_memory_limit = used_wasm_memory + 150;
@@ -5945,7 +5945,7 @@ fn update_wasm_memory_limit_updates_hook_status_not_satisfied_to_ready() {
 #[test]
 fn update_wasm_memory_limit_updates_hook_status_ready_to_not_satisfied() {
     let used_wasm_memory_pages = 1;
-    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE as u64;
     let wasm_memory_threshold = 100;
 
     let initial_wasm_memory_limit = used_wasm_memory + 50;
@@ -5980,7 +5980,7 @@ fn update_wasm_memory_limit_updates_hook_status_ready_to_not_satisfied() {
 #[test]
 fn update_memory_allocation_updates_hook_status_not_satisfied_to_ready() {
     let used_wasm_memory_pages = 1;
-    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE as u64;
     let wasm_memory_threshold = 1_000;
     let wasm_memory_limit = 100_000;
 
@@ -6022,7 +6022,7 @@ fn update_memory_allocation_updates_hook_status_not_satisfied_to_ready() {
 #[test]
 fn update_memory_allocation_updates_hook_status_ready_to_not_satisfied() {
     let used_wasm_memory_pages = 1;
-    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE_IN_BYTES;
+    let used_wasm_memory = used_wasm_memory_pages * WASM_PAGE_SIZE as u64;
     let wasm_memory_threshold = 1_000;
     let wasm_memory_limit = 100_000;
 

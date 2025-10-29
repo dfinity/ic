@@ -1,9 +1,8 @@
 use assert_matches::assert_matches;
-use ic_base_types::{NumBytes, NumSeconds};
+use ic_base_types::{NumBytes, NumSeconds, NumWasmPages};
 use ic_error_types::ErrorCode;
 use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::CanisterStatusType;
-use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_test_utilities_execution_environment::{

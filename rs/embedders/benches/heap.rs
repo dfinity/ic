@@ -9,8 +9,7 @@
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use embedders_bench::SetupAction;
-use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-use ic_sys::PAGE_SIZE;
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use strum::IntoEnumIterator;
 use strum_macros::{Display, EnumIter};
 
@@ -62,9 +61,9 @@ enum Step {
     #[strum(serialize = "step_8k")]
     TwoPages = 2 * PAGE_SIZE as isize,
     #[strum(serialize = "step_64k")]
-    WasmPage = WASM_PAGE_SIZE_IN_BYTES as isize,
+    WasmPage = WASM_PAGE_SIZE as isize,
     #[strum(serialize = "step_128k")]
-    TwoWasmPages = 2 * WASM_PAGE_SIZE_IN_BYTES as isize,
+    TwoWasmPages = 2 * WASM_PAGE_SIZE as isize,
     #[strum(serialize = "step_2m")]
     HugePage = 2 * 1024 * 1024,
     #[strum(serialize = "step_4m")]
@@ -164,7 +163,7 @@ fn loop_body(op: &str, dir: Dir, offset: usize, size: Size, step: Step) -> Strin
 /// The code is executed right before the main benchmark loop, and hence
 /// its execution time is INCLUDED in the benchmark results.
 fn bench_init_body(mem: Mem, size: Size, src: Src) -> String {
-    let wasm_pages = (size as usize).div_ceil(WASM_PAGE_SIZE_IN_BYTES);
+    let wasm_pages = (size as usize).div_ceil(WASM_PAGE_SIZE);
     match src {
         Src::Checkpoint | Src::PageDelta | Src::Mix => String::new(),
         // Grow (allocate) the heap memory by the specified number of pages.
@@ -215,7 +214,7 @@ fn bench_setup_body(mem: Mem, dir: Dir, size: Size, src: Src) -> String {
 
 /// Returns a Wasm code snippet to initialize heap memory.
 fn heap_memory_body(mem: Mem, size: Size, src: Src) -> String {
-    let wasm_pages = (size as usize).div_ceil(WASM_PAGE_SIZE_IN_BYTES);
+    let wasm_pages = (size as usize).div_ceil(WASM_PAGE_SIZE);
     match src {
         Src::Checkpoint | Src::PageDelta | Src::Mix => format!("i{mem} {wasm_pages}"),
         // The `new_allocation` page source will grow the memory during the benchmark.

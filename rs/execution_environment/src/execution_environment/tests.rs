@@ -16,11 +16,10 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable, canister_id_into_
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterStatus, ReplicatedState, SystemState,
-    canister_state::{
-        DEFAULT_QUEUE_CAPACITY, WASM_PAGE_SIZE_IN_BYTES, system_state::CyclesUseCase,
-    },
+    canister_state::{DEFAULT_QUEUE_CAPACITY, system_state::CyclesUseCase},
     testing::{CanisterQueuesTesting, SystemStateTesting},
 };
+use ic_sys::WASM_PAGE_SIZE;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, check_ingress_status, expect_canister_did_not_reply,
@@ -950,7 +949,7 @@ fn get_canister_status_memory_metrics_stable_memory_size() {
         "update",
         wasm()
             .stable64_grow(1)
-            .stable64_read(WASM_PAGE_SIZE_IN_BYTES as u64 - 1, 1)
+            .stable64_read(WASM_PAGE_SIZE as u64 - 1, 1)
             .push_bytes(&[])
             .append_and_reply()
             .build(),
@@ -960,7 +959,7 @@ fn get_canister_status_memory_metrics_stable_memory_size() {
         test.canister_status(canister_id)
             .unwrap()
             .stable_memory_size(),
-        csr.stable_memory_size() + NumBytes::from(WASM_PAGE_SIZE_IN_BYTES as u64)
+        csr.stable_memory_size() + NumBytes::from(WASM_PAGE_SIZE as u64)
     );
 }
 
@@ -2733,7 +2732,7 @@ fn test_allocating_memory_reduces_subnet_available_memory() {
     let result = test.ingress(id, "test_without_trap", vec![]);
     expect_canister_did_not_reply(result);
     // The canister allocates 10 pages in Wasm memory and stable memory.
-    let new_memory_allocated = 20 * WASM_PAGE_SIZE_IN_BYTES as i64;
+    let new_memory_allocated = 20 * WASM_PAGE_SIZE as i64;
     let memory = test.subnet_available_memory();
     assert_eq!(
         memory.get_execution_memory() + new_memory_allocated + memory_after_create,

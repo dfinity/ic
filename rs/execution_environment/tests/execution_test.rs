@@ -1,7 +1,7 @@
 use assert_matches::assert_matches;
 use candid::Encode;
 use canister_test::CanisterInstallMode;
-use ic_base_types::PrincipalId;
+use ic_base_types::{NumWasmPages, PrincipalId};
 use ic_config::{
     execution_environment::{Config as HypervisorConfig, DEFAULT_WASM_MEMORY_LIMIT},
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
@@ -14,10 +14,10 @@ use ic_management_canister_types_private::{
     SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NumWasmPages;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
+use ic_sys::WASM_PAGE_SIZE;
 use ic_test_utilities_metrics::{
     fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter, labels,
 };
@@ -150,8 +150,6 @@ const TEST_CANISTER: &str = r#"
     (export "canister_update grow_page" (func $grow_page))
     (export "canister_update grow_mem" (func $grow_mem))
 )"#;
-
-const WASM_PAGE_SIZE_IN_BYTES: u64 = 64 * 1024; // 64KiB
 
 /// Converts an integer into the representation expected by the TEST_CANISTER
 /// canister.
@@ -1054,7 +1052,7 @@ fn exceeding_memory_capacity_fails_during_message_execution() {
     // capacity in the best case scenario and then should fail after that point because
     // the capacity split over 4 threads will be less than 1MiB (keep in mind the wasm
     // module of the canister also takes some space).
-    let memory_to_allocate = MIB / WASM_PAGE_SIZE_IN_BYTES; // 1MiB in Wasm pages.
+    let memory_to_allocate = MIB / WASM_PAGE_SIZE as u64; // 1MiB in Wasm pages.
     let mut expected_result = 0;
     let mut iterations = 0;
     loop {
@@ -1801,7 +1799,7 @@ fn test_consensus_queue_invariant_on_exceeding_heap_delta_limit() {
         canister_id,
         "update",
         wasm()
-            .stable64_grow((heap_delta_limit / WASM_PAGE_SIZE_IN_BYTES) + 1)
+            .stable64_grow((heap_delta_limit / WASM_PAGE_SIZE as u64) + 1)
             .stable64_fill(0, 42, heap_delta_limit + 1)
             .build(),
     );
@@ -2038,10 +2036,9 @@ fn current_interval_length_works_on_system_subnets() {
 #[ignore]
 fn system_subnets_are_not_rate_limited() {
     const GIB: u64 = 1024 * MIB;
-    const WASM_PAGE_SIZE: u64 = 65_536;
     const SUBNET_HEAP_DELTA_CAPACITY: u64 = 140 * GIB;
     // It's a bit less than 2GiB, otherwise the vector allocation in canister traps.
-    const DIRTY_2G_CHUNK: u64 = 2 * GIB - WASM_PAGE_SIZE;
+    const DIRTY_2G_CHUNK: u64 = 2 * GIB - WASM_PAGE_SIZE as u64;
 
     fn send_2g_ingress(i: u64, env: &StateMachine, canister_id: &CanisterId) -> MessageId {
         env.send_ingress(
@@ -2049,7 +2046,7 @@ fn system_subnets_are_not_rate_limited() {
             *canister_id,
             "update",
             wasm()
-                .stable64_grow(DIRTY_2G_CHUNK / WASM_PAGE_SIZE)
+                .stable64_grow(DIRTY_2G_CHUNK / WASM_PAGE_SIZE as u64)
                 // Stable fill allocates a vector first, so there will be ~4GiB
                 // of dirty pages in the first round.
                 .stable64_fill(i * DIRTY_2G_CHUNK, 1, DIRTY_2G_CHUNK)
@@ -2778,7 +2775,7 @@ fn initialize_default_wasm_memory_limit_with_high_memory_usage() {
     // usage and the hard limit of 4GiB.
     assert_eq!(
         wasm_memory_limit,
-        NumBytes::new((49152 + 65536) / 2 * WASM_PAGE_SIZE_IN_BYTES)
+        NumBytes::new((49152 + 65536) / 2 * WASM_PAGE_SIZE as u64)
     );
 }
 
@@ -2847,7 +2844,7 @@ fn no_critical_error_on_empty_data_segment() {
 
 #[test]
 fn failed_stable_memory_grow_cost_and_time_single_canister() {
-    let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE_IN_BYTES;
+    let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE as u64;
 
     let env = StateMachineBuilder::new()
         .with_subnet_type(SubnetType::Application)
@@ -2877,7 +2874,7 @@ fn failed_stable_memory_grow_cost_and_time_single_canister() {
 
 #[test]
 fn failed_stable_memory_grow_cost_and_time_multiple_canisters() {
-    let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE_IN_BYTES;
+    let num_wasm_pages = 116 * GIB / WASM_PAGE_SIZE as u64;
     let num_canisters = 128;
 
     let env = StateMachineBuilder::new()

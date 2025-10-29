@@ -14,16 +14,14 @@ use wasmtime::{
 };
 
 pub use host_memory::WasmtimeMemoryCreator;
+use ic_base_types::NumWasmPages;
 use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_interfaces::execution_environment::{
     CanisterBacktrace, HypervisorError, HypervisorResult, InstanceStats, SystemApi, TrapCode,
 };
 use ic_logger::{ReplicaLogger, debug, error, fatal};
-use ic_replicated_state::{
-    EmbedderCache, NumWasmPages, PageIndex, PageMap,
-    canister_state::{WASM_PAGE_SIZE_IN_BYTES, execution_state},
-};
-use ic_sys::PAGE_SIZE;
+use ic_replicated_state::{EmbedderCache, PageIndex, PageMap, canister_state::execution_state};
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use ic_types::{
     CanisterId, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
     methods::{FuncRef, WasmMethod},
@@ -658,7 +656,7 @@ impl WasmtimeEmbedder {
             Some((instance_memory, current_memory_size_in_pages)) => {
                 let addr = instance_memory.data_ptr(store) as usize;
                 let size_in_bytes =
-                    current_memory_size_in_pages.load(Ordering::SeqCst) * WASM_PAGE_SIZE_IN_BYTES;
+                    current_memory_size_in_pages.load(Ordering::SeqCst) * WASM_PAGE_SIZE;
                 use nix::sys::mman;
                 // SAFETY: This is the array we created in the host_memory creator, so we know it is a valid memory region that we own.
                 unsafe {
@@ -1302,7 +1300,7 @@ impl WasmtimeInstance {
     }
 }
 
-const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE;
+const OS_PAGES_PER_WASM_PAGE: usize = WASM_PAGE_SIZE / PAGE_SIZE;
 fn accessed_os_and_wasm_pages(accessed_pages: &[PageIndex]) -> (usize, usize) {
     let wasm_pages: HashSet<u64> = accessed_pages
         .iter()

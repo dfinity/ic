@@ -9,6 +9,7 @@ use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::canister_state::system_state::{ExecutionTask, SystemState};
 use crate::{InputQueueType, StateError};
 pub use execution_state::{EmbedderCache, ExecutionState, ExportedFunctions};
+use ic_base_types::NumWasmPages;
 use ic_config::embedders::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
     MessageMemoryUsage, SubnetAvailableExecutionMemoryChange,
@@ -17,6 +18,7 @@ use ic_management_canister_types_private::{
     CanisterChangeDetails, CanisterChangeOrigin, CanisterStatusType, LogVisibilityV2,
 };
 use ic_registry_subnet_type::SubnetType;
+use ic_sys::WASM_PAGE_SIZE;
 use ic_types::batch::TotalQueryStats;
 use ic_types::methods::SystemMethod;
 use ic_types::time::UNIX_EPOCH;
@@ -29,7 +31,6 @@ use ic_types::{
 use ic_types::{LongExecutionMode, NumInstructions};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
-use phantom_newtype::AmountOf;
 pub use queues::{CanisterQueues, DEFAULT_QUEUE_CAPACITY, refunds::RefundPool};
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -682,15 +683,8 @@ pub enum NextExecution {
     ContinueInstallCode,
 }
 
-pub struct NumWasmPagesTag;
-/// Count of number of Wasm Pages (which can be of different size than host
-/// page).
-pub type NumWasmPages = AmountOf<NumWasmPagesTag, usize>;
-
-pub const WASM_PAGE_SIZE_IN_BYTES: usize = 64 * 1024; // 64KB
-
 pub fn num_bytes_try_from(pages: NumWasmPages) -> Result<NumBytes, String> {
-    let (bytes, overflow) = pages.get().overflowing_mul(WASM_PAGE_SIZE_IN_BYTES);
+    let (bytes, overflow) = pages.get().overflowing_mul(WASM_PAGE_SIZE);
     if overflow {
         return Err("Could not convert from wasm pages to number of bytes".to_string());
     }

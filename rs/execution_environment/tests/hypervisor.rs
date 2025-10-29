@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumSeconds, NumWasmPages};
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
@@ -17,15 +17,14 @@ use ic_management_canister_types_private::{
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
-use ic_replicated_state::canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES};
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
 use ic_replicated_state::{
-    ExportedFunctions, NumWasmPages, PageIndex, PageMap,
-    canister_state::execution_state::CustomSectionType,
+    ExportedFunctions, PageIndex, PageMap, canister_state::execution_state::CustomSectionType,
 };
 use ic_state_machine_tests::StateMachine;
-use ic_sys::PAGE_SIZE;
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, bytes_and_logging_cost, check_ingress_status,
@@ -408,7 +407,7 @@ fn ic0_stable64_grow_beyond_max_pages_returns_neg_one() {
                 )
             )
         )"#,
-        (MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64) + 1
+        (MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE as u64) + 1
     );
     let canister_id = test.canister_from_wat(wat).unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
@@ -4953,8 +4952,6 @@ fn memory_module_wat(wasm_pages: i32) -> String {
     )
 }
 
-const WASM_PAGE_SIZE: i32 = 65536;
-
 // A helper for executing read/write/grow operations.
 struct MemoryAccessor {
     test: ExecutionTest,
@@ -5008,7 +5005,7 @@ impl MemoryAccessor {
 #[test]
 fn write_last_page() {
     let wasm_pages = 1;
-    let memory_size = WASM_PAGE_SIZE * wasm_pages;
+    let memory_size = WASM_PAGE_SIZE as i32 * wasm_pages;
     let mut memory_accessor = MemoryAccessor::new(wasm_pages);
     memory_accessor.write(memory_size - 8, &[42; 8]);
 }
@@ -5016,7 +5013,7 @@ fn write_last_page() {
 #[test]
 fn read_last_page() {
     let wasm_pages = 1;
-    let memory_size = WASM_PAGE_SIZE * wasm_pages;
+    let memory_size = WASM_PAGE_SIZE as i32 * wasm_pages;
     let mut memory_accessor = MemoryAccessor::new(wasm_pages);
     assert_eq!(vec![0; 8], memory_accessor.read(memory_size - 8, 8));
 }
@@ -5024,7 +5021,7 @@ fn read_last_page() {
 #[test]
 fn write_and_read_last_page() {
     let wasm_pages = 1;
-    let memory_size = WASM_PAGE_SIZE * wasm_pages;
+    let memory_size = WASM_PAGE_SIZE as i32 * wasm_pages;
     let mut memory_accessor = MemoryAccessor::new(wasm_pages);
     memory_accessor.write(memory_size - 8, &[42; 8]);
     assert_eq!(vec![42; 8], memory_accessor.read(memory_size - 8, 8));
@@ -5035,7 +5032,7 @@ fn read_after_grow() {
     let wasm_pages = 1;
     let mut memory_accessor = MemoryAccessor::new(wasm_pages);
     // Skip the beginning of the memory because it is used as a scratchpad.
-    memory_accessor.write(100, &[42; WASM_PAGE_SIZE as usize - 100]);
+    memory_accessor.write(100, &[42; WASM_PAGE_SIZE - 100]);
     // The new page should have only zeros.
     assert_eq!(vec![0; 65536], memory_accessor.grow_and_read());
 }
@@ -5044,10 +5041,10 @@ fn read_after_grow() {
 fn write_after_grow() {
     let wasm_pages = 1;
     let mut memory_accessor = MemoryAccessor::new(wasm_pages);
-    memory_accessor.grow_and_write(&[42; WASM_PAGE_SIZE as usize]);
+    memory_accessor.grow_and_write(&[42; WASM_PAGE_SIZE]);
     assert_eq!(
-        vec![42; WASM_PAGE_SIZE as usize],
-        memory_accessor.read(wasm_pages * WASM_PAGE_SIZE, 65536),
+        vec![42; WASM_PAGE_SIZE],
+        memory_accessor.read(wasm_pages * WASM_PAGE_SIZE as i32, 65536),
     );
 }
 
@@ -5093,7 +5090,7 @@ fn random_memory_accesses() {
     let mut runner = TestRunner::new_with_rng(config, TestRng::deterministic_rng(algorithm));
     runner
         .run(&random_operations(10, 100), |operations| {
-            const PAGES_PER_WASM_PAGE: i32 = WASM_PAGE_SIZE / 4096;
+            const PAGES_PER_WASM_PAGE: i32 = WASM_PAGE_SIZE as i32 / 4096;
             let mut pages = vec![0_u8; 10 * PAGES_PER_WASM_PAGE as usize];
             let mut dirty = vec![false; 10 * PAGES_PER_WASM_PAGE as usize];
             let mut memory_accessor = MemoryAccessor::new(10);
@@ -5133,11 +5130,11 @@ fn random_memory_accesses() {
                         // doesn't necessarily dirty them. Avoid zeros to make
                         // dirty page tracking in the test precise.
                         prop_assert!(value > 0);
-                        memory_accessor.grow_and_write(&[value; WASM_PAGE_SIZE as usize]);
+                        memory_accessor.grow_and_write(&[value; WASM_PAGE_SIZE]);
                         // Confirm that the write was correct by reading the pages.
                         prop_assert_eq!(
-                            vec![value; WASM_PAGE_SIZE as usize],
-                            memory_accessor.read(pages.len() as i32 * 4096, WASM_PAGE_SIZE)
+                            vec![value; WASM_PAGE_SIZE],
+                            memory_accessor.read(pages.len() as i32 * 4096, WASM_PAGE_SIZE as i32)
                         );
                         pages.extend(vec![value; PAGES_PER_WASM_PAGE as usize]);
                         dirty.extend(vec![true; PAGES_PER_WASM_PAGE as usize]);
@@ -6954,7 +6951,7 @@ fn grow_memory_and_write_to_new_pages() {
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.canister_from_wat(wat).unwrap();
 
-    let num_pages = |n| (n * WASM_PAGE_SIZE as usize / PAGE_SIZE) as u64;
+    let num_pages = |n| (n * WASM_PAGE_SIZE / PAGE_SIZE) as u64;
 
     // memory.size = 3
     test.ingress(canister_id, "grow_by_one", vec![])
@@ -8379,7 +8376,7 @@ fn declaring_too_many_tables_fails() {
 // produces a reply from `bytes`.
 fn use_wasm_memory_and_reply(bytes: u64) -> Vec<u8> {
     wasm()
-        .stable64_grow(bytes.div_ceil(WASM_PAGE_SIZE_IN_BYTES as u64))
+        .stable64_grow(bytes.div_ceil(WASM_PAGE_SIZE as u64))
         .stable64_read(0, bytes)
         .blob_length()
         .reply_int()
@@ -8391,7 +8388,7 @@ fn use_wasm_memory_and_reply(bytes: u64) -> Vec<u8> {
 /// - `wasm_memory_limit = wasm_memory_usage + allowance`
 fn set_wasm_memory_limit(test: &mut ExecutionTest, canister_id: CanisterId, allowance: NumBytes) {
     let wasm_memory_usage =
-        { test.execution_state(canister_id).wasm_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES };
+        { test.execution_state(canister_id).wasm_memory.size.get() * WASM_PAGE_SIZE };
 
     test.canister_update_wasm_memory_limit(
         canister_id,
@@ -9605,7 +9602,7 @@ fn page_metrics_are_recorded(
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(err.code(), expected_code);
 
-    const OS_PAGES_PER_WASM_PAGE: f64 = (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE) as f64;
+    const OS_PAGES_PER_WASM_PAGE: f64 = (WASM_PAGE_SIZE / PAGE_SIZE) as f64;
     let (
         api_type,
         wasm_dirty_os_pages,

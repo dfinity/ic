@@ -1,10 +1,10 @@
 [package]
-name = "ic-state-machine-tests"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "ic-state-machine-tests"
+version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -16,13 +16,13 @@ ed25519-dalek = { workspace = true }
 fs_extra = { workspace = true }
 hex = { workspace = true }
 ic-artifact-pool = { path = "../artifact_pool" }
+ic-base-types = { path = "../types/base_types" }
 ic-btc-adapter-client = { path = "../bitcoin/client" }
 ic-btc-consensus = { path = "../bitcoin/consensus" }
 ic-config = { path = "../config" }
 ic-consensus = { path = "../consensus" }
 ic-consensus-cup-utils = { path = "../consensus/cup_utils" }
 ic-consensus-utils = { path = "../consensus/utils" }
-ic-limits = { path = "../limits" }
 ic-crypto-iccsa = { path = "../crypto/iccsa" }
 ic-crypto-interfaces-sig-verification = { path = "../crypto/interfaces/sig_verification" }
 ic-crypto-test-utils-crypto-returning-ok = { path = "../crypto/test_utils/crypto_returning_ok" }
@@ -41,6 +41,7 @@ ic-interfaces = { path = "../interfaces" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
+ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-messaging = { path = "../messaging" }
@@ -58,6 +59,7 @@ ic-replicated-state = { path = "../replicated_state" }
 ic-secp256k1 = { path = "../../packages/ic-secp256k1" }
 ic-state-layout = { path = "../state_layout" }
 ic-state-manager = { path = "../state_manager" }
+ic-sys = { path = "../sys" }
 ic-test-state-machine-client = "3.0"
 ic-test-utilities-consensus = { path = "../test_utilities/consensus" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
@@ -82,7 +84,6 @@ tower = { workspace = true }
 wat = { workspace = true }
 
 [dev-dependencies]
-ic-base-types = { path = "../types/base_types" }
 ic-universal-canister = { path = "../universal_canister/lib" }
 proptest = { workspace = true }
 test-strategy = "0.4.0"

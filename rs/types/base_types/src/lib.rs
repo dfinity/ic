@@ -86,6 +86,11 @@ pub enum NumOsPagesTag {}
 /// A number of OS-sized pages.
 pub type NumOsPages = AmountOf<NumOsPagesTag, u64>;
 
+pub struct NumWasmPagesTag;
+/// Count of number of Wasm Pages (which can be of different size than host
+/// page).
+pub type NumWasmPages = AmountOf<NumWasmPagesTag, usize>;
+
 impl DisplayerOf<NumBytes> for NumBytesTag {
     /// Formats the number of bytes using the most appropriate binary power unit
     /// (kiB, MiB, GiB, etc), with up 2 decimals (e.g., 123.45 MiB).

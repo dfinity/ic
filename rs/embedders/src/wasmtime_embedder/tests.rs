@@ -15,7 +15,7 @@ use crate::{
         OS_PAGES_PER_WASM_PAGE, accessed_os_and_wasm_pages, dirty_os_and_wasm_pages,
     },
 };
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumSeconds, NumWasmPages};
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
     subnet_config::SchedulerConfig,
@@ -37,7 +37,6 @@ use ic_types::{
 };
 use ic_wasm_types::BinaryEncodedWasm;
 
-use ic_replicated_state::NumWasmPages;
 use lazy_static::lazy_static;
 use wasmtime::{Engine, Module, Store, StoreLimits, Val};
 

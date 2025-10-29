@@ -7,6 +7,7 @@ use ic_config::{embedders::Config as EmbeddersConfig, flag_status::FlagStatus};
 use ic_replicated_state::canister_state::execution_state::{
     CustomSection, CustomSectionType, WasmMetadata,
 };
+use ic_sys::WASM_PAGE_SIZE;
 use ic_types::{MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions};
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 use std::{
@@ -36,8 +37,6 @@ use wirm::{
     },
     wasmparser::{ExternalKind, Operator, TypeRef, ValType},
 };
-
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 /// Symbols that are reserved and cannot be exported by canisters.
 #[doc(hidden)] // pub for usage in tests

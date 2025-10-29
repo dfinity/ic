@@ -11,6 +11,7 @@ use ic_embedders::{
 };
 use ic_interfaces::execution_environment::HypervisorError;
 use ic_logger::replica_logger::no_op_logger;
+use ic_sys::WASM_PAGE_SIZE;
 use ic_wasm_types::{BinaryEncodedWasm, WasmValidationError};
 
 use ic_replicated_state::canister_state::execution_state::{
@@ -19,7 +20,6 @@ use ic_replicated_state::canister_state::execution_state::{
 use ic_types::{NumBytes, NumInstructions};
 use maplit::btreemap;
 
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 const KB: u32 = 1024;
 
 fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
@@ -1242,7 +1242,7 @@ fn complex_function_rejected() {
 /// (may be off by a few bytes).
 fn wasm_with_fixed_sizes(code_section_size: u32, data_section_size: u32) -> BinaryEncodedWasm {
     // Initial memory needs to be large enough to fit the data
-    let memory_size = data_section_size / WASM_PAGE_SIZE + 1;
+    let memory_size = data_section_size / WASM_PAGE_SIZE as u32 + 1;
     let mut wat = "(module (func".to_string();
     // Each (block) is 3 bytes: 2 bytes for "block" and 1 for "end"
     for _ in 0..code_section_size / 3 {

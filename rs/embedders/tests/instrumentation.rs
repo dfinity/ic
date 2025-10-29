@@ -7,8 +7,7 @@ use ic_embedders::{
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
-use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-use ic_sys::{PAGE_SIZE, PageIndex};
+use ic_sys::{PAGE_SIZE, PageIndex, WASM_PAGE_SIZE};
 use ic_wasm_types::BinaryEncodedWasm;
 use insta::assert_snapshot;
 use pretty_assertions::assert_eq;
@@ -1420,7 +1419,7 @@ fn test_heap_existing_memory_limit_too_large() {
         (module
             (memory 1 {})
         )"#,
-        4 * GB / WASM_PAGE_SIZE_IN_BYTES as u64
+        4 * GB / WASM_PAGE_SIZE as u64
     ));
 }
 
@@ -1451,6 +1450,6 @@ fn test_64bit_heap_existing_memory_limit_too_large() {
         (module
             (memory i64 1 {})
         )"#,
-        10 * GB / WASM_PAGE_SIZE_IN_BYTES as u64
+        10 * GB / WASM_PAGE_SIZE as u64
     ))
 }
