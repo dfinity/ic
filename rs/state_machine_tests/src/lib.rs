@@ -3096,6 +3096,10 @@ impl StateMachine {
     /// This is intended to be used before calling `split` simulating a split of this subnet. Having
     /// this as a separate step allows for other subnets to observe this update before this subnet
     /// undergoes the split, which is a highly likely situation in a real subnet split.
+    ///
+    /// Note: An actual observation is done only after updating the registry client to the newest version.
+    ///       Since this functions does not update the registry client, this can be done at any point on
+    ///       any subnet in the same subnet pool as this one, i.e. before, at or after the actual split.
     pub fn make_registry_entries_for_subnet_split(
         &self,
         seed: [u8; 32],
