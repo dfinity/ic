@@ -402,7 +402,7 @@ fn create_accept_fw_rules_via_proposal(env: &TestEnv, target_socket_addr: Socket
     }
 }
 
-//helper
+// helper
 fn await_rule_execution_with_backoff(
     log: &slog::Logger,
     test: &dyn Fn() -> bool,
@@ -442,15 +442,14 @@ fn check_port_connectable(target: SocketAddr) -> bool {
     // Note: reqwest usually needs a scheme like http/https.
     // If just checking TCP, std::net::TcpStream::connect_timeout might be better.
     // This is a placeholder - adapt based on your actual check_port logic.
-    let url_str = format!("http://{}", target); // Use http for simplicity if allowed
+    let url_str = format!("https://{}", target); 
     let url = Url::parse(&url_str).unwrap();
 
     let client = reqwest::blocking::ClientBuilder::new()
-        .timeout(Duration::from_secs(2)) // Short timeout for check
+        .timeout(Duration::from_secs(2)) 
         .build()
         .expect("Could not build reqwest client.");
 
-    // Attempt a simple request (HEAD is lightweight)
     client.head(url).send().is_ok()
 }
 
