@@ -4,7 +4,7 @@ import Prim "mo:prim";
 import Root "canister:root";
 import Governance "canister:governance";
 
-actor {
+persistent actor {
     private let governanceCanister : Principal = Prim.principalOfActor Governance;
     private let root : Principal = Prim.principalOfActor Root;
 
