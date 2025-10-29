@@ -1,5 +1,6 @@
-use crate::page_map::{Buffer, PAGE_SIZE, PageAllocatorFileDescriptor, PageMap};
-use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCanisterLogsFilter};
+use crate::page_map::{Buffer, PAGE_SIZE, PageAllocatorFileDescriptor, PageIndex, PageMap};
+use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
+use ic_sys::PageBytes;
 use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -220,15 +221,16 @@ impl LogMemoryStore {
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.used_space());
 
-        let mut buffer = Buffer::new(self.data.clone());
-        let mut header = self.read_header();
-        for record in delta_log.records().iter() {
-            // Advance the next_idx to one past the appended record.
-            header.next_idx = record.idx + 1;
-
-            // TODO: append the record to the log memory store.
+        let mut ring_buffer = RingBuffer::new(self.data.clone());
+        for record in delta_log.records() {
+            ring_buffer.push_back(&DataEntry {
+                idx: ring_buffer.next_id(),
+                ts_nanos: record.timestamp_nanos,
+                len: record.content.len() as u32,
+                content: record.content.clone(),
+            });
         }
-        self.write_header(&header);
+        self.data.update(&ring_buffer.dirty_pages());
     }
 
     pub fn records(&self, _filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
@@ -254,7 +256,7 @@ struct RingBuffer {
 }
 
 impl RingBuffer {
-    pub fn new(page_map: PageMap, capacity: usize) -> Self {
+    pub fn new(page_map: PageMap) -> Self {
         Self {
             buffer: Buffer::new(page_map),
         }
@@ -271,9 +273,9 @@ impl RingBuffer {
             .write(&HeaderV1Bytes::from(header), HEADER_OFFSET);
     }
 
-    // fn dirty_pages(&self) -> impl Iterator<Item = usize> + '_ {
-    //     self.buffer.dirty_pages()
-    // }
+    fn dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
+        self.buffer.dirty_pages().collect()
+    }
 
     pub fn capacity(&self) -> usize {
         self.read_header().data_capacity as usize
@@ -283,21 +285,47 @@ impl RingBuffer {
         self.read_header().data_size as usize
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.used_space() == 0
-    }
-
     pub fn next_id(&self) -> u64 {
         self.read_header().next_idx
     }
 
-    fn get(&self, offset: u64) -> Option<DataEntry> {
-        None // TODO.
+    fn read_u64(&self, offset: u64) -> u64 {
+        let mut bytes = [0; 8];
+        self.buffer.read(&mut bytes, offset as usize);
+        u64::from_le_bytes(bytes)
+    }
+
+    fn read_u32(&self, offset: u64) -> u32 {
+        let mut bytes = [0; 4];
+        self.buffer.read(&mut bytes, offset as usize);
+        u32::from_le_bytes(bytes)
+    }
+
+    fn read_bytes(&self, offset: u64, len: usize) -> Vec<u8> {
+        let mut bytes = vec![0; len];
+        self.buffer.read(&mut bytes, offset as usize);
+        bytes
+    }
+
+    fn get(&self, offset: u64) -> DataEntry {
+        let idx = self.read_u64(offset);
+        let ts_nanos = self.read_u64(offset + 8);
+        let len = self.read_u32(offset + 16);
+        let content = self.read_bytes(offset + 20, len as usize);
+        DataEntry {
+            idx,
+            ts_nanos,
+            len,
+            content,
+        }
     }
 
     fn pop_front(&mut self) -> Option<DataEntry> {
         let mut header = self.read_header();
-        let entry = self.get(header.data_head)?;
+        if header.data_size == 0 {
+            return None;
+        }
+        let entry = self.get(header.data_offset + header.data_head);
         let removed_size = entry.data_size() as u64;
         header.data_head = (header.data_head + removed_size) % header.data_capacity;
         header.data_size = header.data_size.saturating_sub(removed_size);
@@ -322,15 +350,15 @@ impl RingBuffer {
         // 2) we need to wrap around
         let bytes: Vec<u8> = entry.into();
         let mut header = self.read_header();
-        let data_tail_address = (header.data_offset + header.data_tail) as usize;
+        let data_tail_offset = (header.data_offset + header.data_tail) as usize;
         if header.data_tail + added_size <= header.data_capacity {
             // case 1
-            self.buffer.write(&bytes, data_tail_address);
+            self.buffer.write(&bytes, data_tail_offset);
         } else {
             // case 2
             let first_part_size = header.data_capacity - header.data_tail;
             self.buffer
-                .write(&bytes[..first_part_size as usize], data_tail_address);
+                .write(&bytes[..first_part_size as usize], data_tail_offset);
             self.buffer.write(
                 &bytes[first_part_size as usize..],
                 header.data_offset as usize,
