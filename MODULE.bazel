@@ -1145,5 +1145,6 @@ archive_override(
     strip_prefix = "rules_motoko-3c4ae45687664ab3d4281d1ff6c49b2be9ca2753",
     urls = ["https://github.com/dfinity/rules_motoko/archive/3c4ae45687664ab3d4281d1ff6c49b2be9ca2753.tar.gz"],
 )
+
 motoko = use_extension("@rules_motoko//motoko:extensions.bzl", "motoko")
 motoko.toolchain(version = "0.16.3")
