@@ -11,7 +11,7 @@ use ic_system_test_driver::driver::simulate_network::SimulateNetwork;
 use ic_system_test_driver::driver::test_env_api::{
     HasTopologySnapshot, IcNodeContainer, RetrieveIpv4Addr,
 };
-use ic_system_test_driver::nns::vote_execute_proposal_assert_executed;
+use ic_system_test_driver::nns::{vote_execute_proposal_assert_executed, await_proposal_execution, submit_external_proposal_with_test_id};
 use ic_system_test_driver::driver::test_setup::InfraProvider;
 use ic_system_test_driver::driver::universal_vm::*;
 use ic_system_test_driver::driver::{
@@ -297,18 +297,25 @@ async fn execute_proposal<T: Clone + CandidType>(
     let nns_runtime =
         util::runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     let governance_canister = ic_system_test_driver::nns::get_governance_canister(&nns_runtime);
-    let proposal_id = ic_system_test_driver::nns::submit_external_proposal_with_test_id(
-        &governance_canister,
-        function,
-        proposal_payload.clone(),
-    )
-    .await;
-    vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
-    // Note: Removed await_proposal_execution for brevity as per example's usage in setup
-    info!(
-        log,
-        "Proposal to add firewall rule submitted and executed: {}", proposal_id
-    );
+    let nns = util::runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+    let governance = ic_system_test_driver::nns::get_governance_canister(&nns);
+
+    info!(log, "Submitting proposal to add firewall rules...");
+
+    let proposal_id =
+        submit_external_proposal_with_test_id(&governance, function, proposal_payload.clone())
+            .await;
+
+    info!(log, "Proposal submitted with ID {}", proposal_id);
+    
+    vote_execute_proposal_assert_executed(&governance, proposal_id).await;
+
+    info!(log, "Proposal with ID {} executed.", proposal_id);
+
+    // wait until proposal is executed
+    await_proposal_execution(log, &governance, proposal_id, BACKOFF_DELAY, WAIT_TIMEOUT).await;
+
+    info!(log, "Proposal with ID {} is fully executed.", proposal_id);
 }
 
 // helper
@@ -384,22 +391,6 @@ fn create_accept_fw_rules_via_proposal(env: &TestEnv, target_socket_addr: Socket
         "Proposal to add firewall rule to allow access to {} executed.",
         target_socket_addr
     );
-
-    let rule_applied = await_rule_execution_with_backoff(
-        &log,
-        &|| {
-            check_port_connectable(target_socket_addr)
-        },
-        INITIAL_WAIT,  
-        BACKOFF_DELAY, 
-        MAX_WAIT       
-    );
-    
-    if rule_applied {
-        info!(log, "Firewall rule appears active.");
-    } else {
-        slog::warn!(log, "Timed out waiting for firewall rule to become active.");
-    }
 }
 
 // helper
