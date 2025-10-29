@@ -1,3 +1,6 @@
+//! This is the currently used prefetching signal handler. Its functionality
+//! was moved into this module from the root `lib.rs` to facilitate
+//! switching to the deterministic memory tracker.
 use bit_vec::BitVec;
 use ic_logger::{ReplicaLogger, debug};
 use ic_replicated_state::{
@@ -19,20 +22,20 @@ use crate::{AccessKind, DirtyPageTracking, MemoryTracker, print_enomem_help};
 #[cfg(test)]
 mod tests;
 
-// The upper bound on the number of pages that are memory mapped from the
-// checkpoint file per signal handler call. Higher value gives higher
-// throughput in memory intensive workloads, but may regress performance
-// in other workloads because it increases work per signal handler call.
+/// The upper bound on the number of pages that are memory mapped from the
+/// checkpoint file per signal handler call. Higher value gives higher
+/// throughput in memory intensive workloads, but may regress performance
+/// in other workloads because it increases work per signal handler call.
 const MAX_PAGES_TO_MAP: usize = 128;
 
-// The new signal handler requires `AccessKind` which currently available only
-// on Linux without WSL.
-pub fn new_signal_handler_available() -> bool {
+/// The prefetching signal handler requires `AccessKind` which currently
+/// available only on Linux without WSL.
+pub fn prefetching_signal_handler_available() -> bool {
     cfg!(target_os = "linux") && cfg!(target_arch = "x86_64") && !*ic_sys::IS_WSL
 }
 
-// Represents a memory area: address + size. Address must be page-aligned and
-// size must be a multiple of PAGE_SIZE.
+/// Represents a memory area: address + size. Address must be page-aligned and
+/// size must be a multiple of PAGE_SIZE.
 #[derive(Clone)]
 struct MemoryArea {
     // Start address of the tracked memory area.
@@ -99,8 +102,8 @@ impl PageBitmap {
         }
     }
 
-    // Returns the largest range around the faulting page such that all pages there have
-    // not been marked yet.
+    /// Returns the largest range around the faulting page such that all pages there have
+    /// not been marked yet.
     fn restrict_range_to_unmarked(
         &self,
         faulting_page: PageIndex,
@@ -132,8 +135,8 @@ impl PageBitmap {
         PageIndex::new(start)..PageIndex::new(end)
     }
 
-    // Returns the largest range around the faulting page such that
-    // all pages there have been already marked.
+    /// Returns the largest range around the faulting page such that
+    /// all pages there have been already marked.
     fn restrict_range_to_marked(
         &self,
         faulting_page: PageIndex,
@@ -166,8 +169,8 @@ impl PageBitmap {
         PageIndex::new(start)..PageIndex::new(end)
     }
 
-    // Returns the range of pages that are predicted to be marked in the future
-    // based on the marked pages before the start of the given range or after the end.
+    /// Returns the range of pages that are predicted to be marked in the future
+    /// based on the marked pages before the start of the given range or after the end.
     fn restrict_range_to_predicted(
         &self,
         faulting_page: PageIndex,
@@ -219,7 +222,7 @@ impl PageBitmap {
 }
 
 #[derive(Default)]
-pub struct PrefetchMemoryTrackerMetrics {
+pub struct PrefetchingMemoryTrackerMetrics {
     read_before_write_count: AtomicUsize,
     direct_write_count: AtomicUsize,
     sigsegv_count: AtomicUsize,
@@ -229,7 +232,7 @@ pub struct PrefetchMemoryTrackerMetrics {
     sigsegv_handler_duration_nanos: AtomicU64,
 }
 
-pub struct PrefetchMemoryTracker {
+pub struct PrefetchingMemoryTracker {
     memory_area: MemoryArea,
     accessed_bitmap: RefCell<PageBitmap>,
     accessed_pages: RefCell<Vec<PageIndex>>,
@@ -238,13 +241,13 @@ pub struct PrefetchMemoryTracker {
     speculatively_dirty_pages: RefCell<Vec<PageIndex>>,
     dirty_page_tracking: DirtyPageTracking,
     page_map: PageMap,
-    use_new_signal_handler: bool,
+    use_prefetching_signal_handler: bool,
     #[cfg(feature = "sigsegv_handler_checksum")]
     checksum: RefCell<checksum::SigsegChecksum>,
-    pub metrics: PrefetchMemoryTrackerMetrics,
+    pub metrics: PrefetchingMemoryTrackerMetrics,
 }
 
-impl MemoryTracker for PrefetchMemoryTracker {
+impl MemoryTracker for PrefetchingMemoryTracker {
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     fn new(
         start: *mut libc::c_void,
@@ -260,7 +263,10 @@ impl MemoryTracker for PrefetchMemoryTracker {
         let num_pages = NumOsPages::new(size.get() / PAGE_SIZE as u64);
         debug!(
             log,
-            "PrefetchMemoryTracker::new: start={:?}, size={}, num_pages={}", start, size, num_pages
+            "PrefetchingMemoryTracker::new: start={:?}, size={}, num_pages={}",
+            start,
+            size,
+            num_pages
         );
 
         let memory_area = MemoryArea::new(start, size);
@@ -269,8 +275,8 @@ impl MemoryTracker for PrefetchMemoryTracker {
         let dirty_bitmap = RefCell::new(PageBitmap::new(num_pages));
         let dirty_pages = RefCell::new(Vec::new());
         let speculatively_dirty_pages = RefCell::new(Vec::new());
-        let use_new_signal_handler = new_signal_handler_available();
-        let tracker = PrefetchMemoryTracker {
+        let use_prefetching_signal_handler = prefetching_signal_handler_available();
+        let tracker = PrefetchingMemoryTracker {
             memory_area,
             accessed_bitmap,
             accessed_pages,
@@ -279,14 +285,14 @@ impl MemoryTracker for PrefetchMemoryTracker {
             speculatively_dirty_pages,
             dirty_page_tracking,
             page_map,
-            use_new_signal_handler,
+            use_prefetching_signal_handler,
             #[cfg(feature = "sigsegv_handler_checksum")]
             checksum: RefCell::new(checksum::SigsegChecksum::default()),
-            metrics: PrefetchMemoryTrackerMetrics::default(),
+            metrics: PrefetchingMemoryTrackerMetrics::default(),
         };
 
         // Map the memory and make the range inaccessible to track it with SIGSEGV.
-        if tracker.use_new_signal_handler {
+        if tracker.use_prefetching_signal_handler {
             let mut instructions = tracker.page_map.get_base_memory_instructions();
 
             // Restrict to tracked range before applying
@@ -310,10 +316,10 @@ impl MemoryTracker for PrefetchMemoryTracker {
         fault_address: *mut libc::c_void,
     ) -> bool {
         self.metrics.sigsegv_count.fetch_add(1, Ordering::Relaxed);
-        if self.use_new_signal_handler {
-            sigsegv_fault_handler_new(self, access_kind.unwrap(), fault_address)
+        if self.use_prefetching_signal_handler {
+            prefetching_signal_handler(self, access_kind.unwrap(), fault_address)
         } else {
-            sigsegv_fault_handler_old(self, &self.page_map, fault_address)
+            basic_signal_handler(self, &self.page_map, fault_address)
         }
     }
 
@@ -415,7 +421,7 @@ impl MemoryTracker for PrefetchMemoryTracker {
     }
 }
 
-impl PrefetchMemoryTracker {
+impl PrefetchingMemoryTracker {
     fn page_index_from(&self, addr: *mut libc::c_void) -> PageIndex {
         let page_start_mask = !(PAGE_SIZE - 1);
         let page_start_addr = (addr as usize) & page_start_mask;
@@ -461,11 +467,11 @@ impl PrefetchMemoryTracker {
     }
 }
 
-/// This is the old (unoptimized) signal handler. We keep it for use on MacOS
-/// where the new signal handler doesn't work because the [`AccessKind`] is not
+/// This is the basic (unoptimized) signal handler. We keep it for use on MacOS
+/// where the prefetching signal handler doesn't work because the [`AccessKind`] is not
 /// available.
-pub fn sigsegv_fault_handler_old(
-    tracker: &PrefetchMemoryTracker,
+pub fn basic_signal_handler(
+    tracker: &PrefetchingMemoryTracker,
     page_map: &PageMap,
     fault_address: *mut libc::c_void,
 ) -> bool {
@@ -547,9 +553,9 @@ pub fn sigsegv_fault_handler_old(
     true
 }
 
-/// This is the new (optimized) signal handler.
+/// This is the prefetching signal handler.
 ///
-/// Differences to the old signal handler:
+/// Differences to the basic signal handler:
 /// 1. It can set up mapping for multiple pages in one go (prefetching).
 /// 2. It uses the checkpoint file in `PageMap` for copy-on-write mapping.
 /// 3. It uses the new access kind bit to optimize the case when the first
@@ -596,13 +602,13 @@ pub fn sigsegv_fault_handler_old(
 /// is done both for read and write access. In the latter case the prefetched
 /// pages are marked as speculatively dirty.
 ///
-/// The third case is handled similar to the old implementation with one
+/// The third case is handled similar to the basic implementation with one
 /// important optimization: if the faulting access is a write access and the
 /// page has not been accessed yet, then it is mapped as `READ_WRITE` right away
 /// without going through `READ_WRITE` => copy content => `READ` => `READ_WRITE`
-/// like the old signal handler does.
-pub fn sigsegv_fault_handler_new(
-    tracker: &PrefetchMemoryTracker,
+/// like the basic signal handler does.
+pub fn prefetching_signal_handler(
+    tracker: &PrefetchingMemoryTracker,
     access_kind: AccessKind,
     fault_address: *mut libc::c_void,
 ) -> bool {
@@ -736,7 +742,7 @@ pub fn sigsegv_fault_handler_new(
 ///    * Any data read from the tracker's memory within the result range will be equal
 ///      to the pages according to the PageMap.
 fn map_unaccessed_pages(
-    tracker: &PrefetchMemoryTracker,
+    tracker: &PrefetchingMemoryTracker,
     page_protection_flags: ProtFlags,
     min_prefetch_range: Range<PageIndex>,
     max_prefetch_range: Range<PageIndex>,
@@ -761,7 +767,7 @@ fn map_unaccessed_pages(
 /// Apply the given MemoryInstructions to a range and mprotect the entire range
 /// Precondition: The protection level of the entire `prefetch_range` is PROT_NONE
 fn apply_memory_instructions(
-    tracker: &PrefetchMemoryTracker,
+    tracker: &PrefetchingMemoryTracker,
     page_protection_flags: ProtFlags,
     memory_instructions: MemoryInstructions,
 ) {

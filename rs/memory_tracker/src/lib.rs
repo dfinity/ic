@@ -5,9 +5,9 @@ use ic_types::NumBytes;
 use nix::errno::Errno;
 use std::time::Duration;
 
-use crate::prefetch::PrefetchMemoryTracker;
+use crate::prefetching::PrefetchingMemoryTracker;
 
-pub mod prefetch;
+pub mod prefetching;
 
 /// Specifies whether the currently running message execution needs to know
 /// which pages were dirtied or not. Dirty page tracking comes with a large
@@ -116,7 +116,7 @@ pub fn new(
     dirty_page_tracking: DirtyPageTracking,
     page_map: PageMap,
 ) -> nix::Result<SigsegvMemoryTracker> {
-    Ok(Box::new(PrefetchMemoryTracker::new(
+    Ok(Box::new(PrefetchingMemoryTracker::new(
         start,
         size,
         log,

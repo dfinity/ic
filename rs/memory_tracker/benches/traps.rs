@@ -1,6 +1,6 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use ic_types::NumBytes;
-use memory_tracker::prefetch::{PrefetchMemoryTracker, sigsegv_fault_handler_old};
+use memory_tracker::prefetching::{PrefetchingMemoryTracker, legacy_signal_handler};
 use memory_tracker::{DirtyPageTracking, MemoryTracker};
 
 use libc::{self, c_void};
@@ -20,7 +20,7 @@ lazy_static! {
 
 struct BenchData {
     ptr: *mut c_void,
-    tracker: PrefetchMemoryTracker,
+    tracker: PrefetchingMemoryTracker,
     page_map: PageMap,
 }
 
@@ -49,7 +49,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
                 let page_map = PageMap::new_for_testing();
                 BenchData {
                     ptr,
-                    tracker: PrefetchMemoryTracker::new(
+                    tracker: PrefetchingMemoryTracker::new(
                         ptr,
                         NumBytes::new(PAGE_SIZE as u64),
                         no_op_logger(),
@@ -62,7 +62,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
             },
             // Do the actual measurement
             |data| {
-                sigsegv_fault_handler_old(
+                legacy_signal_handler(
                     black_box(&data.tracker),
                     &data.page_map,
                     black_box(data.ptr),
@@ -97,7 +97,7 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
                 let page_map = PageMap::new_for_testing();
                 let data = BenchData {
                     ptr,
-                    tracker: PrefetchMemoryTracker::new(
+                    tracker: PrefetchingMemoryTracker::new(
                         ptr,
                         NumBytes::new(PAGE_SIZE as u64),
                         no_op_logger(),
@@ -108,13 +108,13 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
                     page_map,
                 };
 
-                sigsegv_fault_handler_old(&data.tracker, &data.page_map, data.ptr);
+                legacy_signal_handler(&data.tracker, &data.page_map, data.ptr);
 
                 data
             },
             // Do the actual measurement
             |data| {
-                sigsegv_fault_handler_old(
+                legacy_signal_handler(
                     black_box(&data.tracker),
                     &data.page_map,
                     black_box(data.ptr),

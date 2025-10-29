@@ -17,10 +17,10 @@ use std::sync::Mutex;
 
 use crate::{
     AccessKind, DirtyPageTracking, MemoryTracker,
-    prefetch::{PageBitmap, PrefetchMemoryTracker, new_signal_handler_available},
+    prefetching::{PageBitmap, PrefetchingMemoryTracker, prefetching_signal_handler_available},
 };
 
-/// Sets up the PrefetchMemoryTracker to track accesses to a region of memory. Returns:
+/// Sets up the PrefetchingMemoryTracker to track accesses to a region of memory. Returns:
 /// 1. The tracker.
 /// 2. A PageMap with the memory contents.
 /// 3. A pointer to the tracked region.
@@ -30,7 +30,7 @@ fn setup(
     memory_pages: usize,
     page_delta: Vec<PageIndex>,
     dirty_page_tracking: DirtyPageTracking,
-) -> (PrefetchMemoryTracker, PageMap, *mut c_void, Vec<u8>) {
+) -> (PrefetchingMemoryTracker, PageMap, *mut c_void, Vec<u8>) {
     let mut vec = vec![0_u8; memory_pages * PAGE_SIZE];
     let tmpfile = tempfile::Builder::new().prefix("test").tempfile().unwrap();
     for page in 0..checkpoint_pages {
@@ -71,7 +71,7 @@ fn setup(
         .unwrap()
     };
 
-    let tracker = PrefetchMemoryTracker::new(
+    let tracker = PrefetchingMemoryTracker::new(
         memory,
         NumBytes::new((memory_pages * PAGE_SIZE) as u64),
         no_op_logger(),
@@ -89,7 +89,7 @@ fn with_setup<F>(
     dirty_page_tracking: DirtyPageTracking,
     f: F,
 ) where
-    F: FnOnce(PrefetchMemoryTracker, PageMap),
+    F: FnOnce(PrefetchingMemoryTracker, PageMap),
 {
     let (tracker, page_map, _memory, _vec) = setup(
         checkpoint_pages,
@@ -100,7 +100,7 @@ fn with_setup<F>(
     f(tracker, page_map);
 }
 
-fn sigsegv(tracker: &PrefetchMemoryTracker, page_index: PageIndex, access_kind: AccessKind) {
+fn sigsegv(tracker: &PrefetchingMemoryTracker, page_index: PageIndex, access_kind: AccessKind) {
     let memory = tracker.memory_area.start as *mut u8;
     let page_addr = unsafe { memory.add(page_index.get() as usize * PAGE_SIZE) };
     tracker.handle_sigsegv(Some(access_kind), page_addr as *mut c_void);
@@ -116,7 +116,7 @@ fn prefetch_for_read_checkpoint_forward() {
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(5), AccessKind::Read);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // Faulting at page 5 prefetches pages 0-24 since pages 25..75 are dirty.
                 assert_eq!(tracker.num_accessed_pages(), 25);
             } else {
@@ -137,7 +137,7 @@ fn prefetch_for_read_checkpoint_backward() {
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(20), AccessKind::Read);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // Faulting at page 20 prefetches pages 5-24 since pages
                 // 0..5 and 25..75 are dirty.
                 assert_eq!(tracker.num_accessed_pages(), 20);
@@ -159,7 +159,7 @@ fn prefetch_for_read_zeros_forward() {
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(80), AccessKind::Read);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // We prefetch to the end of the memory region at most, so faulting at page 80
                 // prefetches pages 75..100.
                 assert_eq!(tracker.num_accessed_pages(), 25);
@@ -181,7 +181,7 @@ fn prefetch_for_read_zeros_backward() {
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(95), AccessKind::Read);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // We prefetch to the end of the memory region at most, so faulting at page 95
                 // prefetches pages 75..100.
                 assert_eq!(tracker.num_accessed_pages(), 25);
@@ -218,14 +218,14 @@ fn prefetch_for_read_page_delta_different_pages() {
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(20), AccessKind::Read);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // Faulting at page 20 prefetches pages 0..25.
                 assert_eq!(tracker.num_accessed_pages(), 25);
             } else {
                 assert_eq!(tracker.num_accessed_pages(), 1);
             }
             sigsegv(&tracker, PageIndex::new(50), AccessKind::Read);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // There are no accessed pages immediately before or after the faulting page.
                 assert_eq!(tracker.num_accessed_pages(), 25 + 1);
             } else {
@@ -248,7 +248,7 @@ fn prefetch_for_read_page_delta_contiguous_forward() {
             // Faulting at page 26 prefetches only page 26.
             assert_eq!(tracker.num_accessed_pages(), 1);
             sigsegv(&tracker, PageIndex::new(27), AccessKind::Read);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // Faulting at page 27 prefetches pages 27..29 because of the previously
                 // accessed page 26.
                 assert_eq!(tracker.num_accessed_pages(), 3);
@@ -256,7 +256,7 @@ fn prefetch_for_read_page_delta_contiguous_forward() {
                 assert_eq!(tracker.num_accessed_pages(), 2);
             }
             sigsegv(&tracker, PageIndex::new(29), AccessKind::Read);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // Because the previous 3 pages have been accessed, we prefetch
                 // at least that much again, plus 1 for the actually accessed page.
                 assert_eq!(tracker.num_accessed_pages(), 7);
@@ -280,7 +280,7 @@ fn prefetch_for_read_page_delta_contiguous_backward() {
             // Faulting at page 50 prefetches only page 50.
             assert_eq!(tracker.num_accessed_pages(), 1);
             sigsegv(&tracker, PageIndex::new(49), AccessKind::Read);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // Faulting at page 49 prefetches pages 48..50 because of the previously
                 // accessed page 50.
                 assert_eq!(tracker.num_accessed_pages(), 3);
@@ -288,7 +288,7 @@ fn prefetch_for_read_page_delta_contiguous_backward() {
                 assert_eq!(tracker.num_accessed_pages(), 2);
             }
             sigsegv(&tracker, PageIndex::new(47), AccessKind::Read);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // Because the previous 3 pages have been accessed, we prefetch
                 // at least that much again, plus 1 for the actually accessed page.
                 assert_eq!(tracker.num_accessed_pages(), 7);
@@ -309,7 +309,7 @@ fn prefetch_for_write_checkpoint_ignore_dirty() {
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(5), AccessKind::Write);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // Faulting at page 5 prefetches pages 0..25.
                 assert_eq!(tracker.num_accessed_pages(), 25);
             } else {
@@ -330,7 +330,7 @@ fn prefetch_for_write_zeros_ignore_dirty() {
         |tracker, _| {
             assert_eq!(tracker.num_accessed_pages(), 0);
             sigsegv(&tracker, PageIndex::new(80), AccessKind::Write);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // There are no dirty pages so pages 75..100 are mapped.
                 assert_eq!(tracker.num_accessed_pages(), 25);
             } else {
@@ -353,7 +353,7 @@ fn prefetch_for_write_page_delta_single_page_ignore_dirty() {
             sigsegv(&tracker, PageIndex::new(50), AccessKind::Write);
             // There are no accessed pages immediately before the faulting page.
             // So only the minimum should be fetched
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 assert_eq!(tracker.num_accessed_pages(), 1);
             } else {
                 // The old signal handler does not have prefetching.
@@ -392,7 +392,7 @@ fn prefetch_for_write_page_delta_contiguous_ignore_dirty() {
             sigsegv(&tracker, PageIndex::new(50), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 1);
             sigsegv(&tracker, PageIndex::new(50 + 1), AccessKind::Write);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // One page was accessed immediately before the faulting page, so that many
                 // additional pages should be prefetched.
                 let prefetched = 1 + 1;
@@ -427,7 +427,7 @@ fn prefetch_for_write_checkpoint() {
             sigsegv(&tracker, PageIndex::new(5), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 1);
             assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 assert_eq!(tracker.take_dirty_pages().len(), 1);
             } else {
                 // The old signal handler detects dirty pages on the second signal.
@@ -449,7 +449,7 @@ fn prefetch_for_write_zeros() {
             sigsegv(&tracker, PageIndex::new(80), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 1);
             assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 assert_eq!(tracker.take_dirty_pages().len(), 1);
             } else {
                 // The old signal handler detects dirty pages on the second signal.
@@ -471,7 +471,7 @@ fn prefetch_for_write_page_delta_single_page() {
             sigsegv(&tracker, PageIndex::new(50), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 1);
             assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 assert_eq!(tracker.take_dirty_pages().len(), 1);
             } else {
                 // The old signal handler detects dirty pages on the second signal.
@@ -495,7 +495,7 @@ fn prefetch_for_write_page_delta_different_pages() {
             sigsegv(&tracker, PageIndex::new(52), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 2);
             assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 assert_eq!(tracker.take_dirty_pages().len(), 2);
             } else {
                 // The old signal handler detects dirty pages on the second signal.
@@ -517,7 +517,7 @@ fn prefetch_for_write_page_delta_contiguous() {
             sigsegv(&tracker, PageIndex::new(50), AccessKind::Write);
             assert_eq!(tracker.num_accessed_pages(), 1);
             sigsegv(&tracker, PageIndex::new(51), AccessKind::Write);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 let prefetched_at_51 = 2;
                 assert_eq!(tracker.num_accessed_pages(), 1 + prefetched_at_51);
                 sigsegv(
@@ -561,7 +561,7 @@ fn prefetch_for_write_after_read_stop_at_dirty_forward() {
             sigsegv(&tracker, PageIndex::new(52), AccessKind::Write);
             // Page 53 should be prefetched now.
             sigsegv(&tracker, PageIndex::new(54), AccessKind::Write);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // Only page 53 is speculatively dirty, other pages are dirty.
                 assert_eq!(tracker.take_speculatively_dirty_pages().len(), 1);
             } else {
@@ -590,7 +590,7 @@ fn prefetch_for_write_after_read_stop_at_dirty_backward() {
             sigsegv(&tracker, PageIndex::new(54), AccessKind::Write);
             // Page 53 should be prefetched now.
             sigsegv(&tracker, PageIndex::new(52), AccessKind::Write);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 // Only page 53 is speculatively dirty, other pages are dirty.
                 assert_eq!(tracker.take_speculatively_dirty_pages().len(), 1);
             } else {
@@ -621,7 +621,7 @@ fn prefetch_for_write_after_read_stop_at_unaccessed_forward() {
             sigsegv(&tracker, PageIndex::new(52), AccessKind::Write);
             // The following should prefetch only page 55 because it is the last accessed page.
             sigsegv(&tracker, PageIndex::new(54), AccessKind::Write);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 assert_eq!(tracker.take_speculatively_dirty_pages().len(), 2);
             } else {
                 assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
@@ -649,7 +649,7 @@ fn prefetch_for_write_after_read_stop_at_unaccessed_backward() {
             sigsegv(&tracker, PageIndex::new(54), AccessKind::Write);
             // The following should prefetch only page 51 because it is the first accessed page.
             sigsegv(&tracker, PageIndex::new(52), AccessKind::Write);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 assert_eq!(tracker.take_speculatively_dirty_pages().len(), 2);
             } else {
                 assert_eq!(tracker.take_speculatively_dirty_pages().len(), 0);
@@ -677,7 +677,7 @@ fn prefetch_for_write_with_other_dirty_pages_forward() {
             sigsegv(&tracker, PageIndex::new(51), AccessKind::Write);
             // This should prefetch only 54, and not 55.
             sigsegv(&tracker, PageIndex::new(53), AccessKind::Write);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 assert_eq!(tracker.num_accessed_pages(), 1 + 5);
                 // Only pages 52 and 54 are speculatively dirty, other pages are dirty.
                 assert_eq!(tracker.take_speculatively_dirty_pages().len(), 2);
@@ -710,7 +710,7 @@ fn prefetch_for_write_with_other_dirty_pages_backward() {
             sigsegv(&tracker, PageIndex::new(54), AccessKind::Write);
             // This should prefetch only 51, and not 50.
             sigsegv(&tracker, PageIndex::new(52), AccessKind::Write);
-            if new_signal_handler_available() {
+            if prefetching_signal_handler_available() {
                 assert_eq!(tracker.num_accessed_pages(), 1 + 5);
                 // Only pages 53 and 51 are speculatively dirty, other pages are dirty.
                 assert_eq!(tracker.take_speculatively_dirty_pages().len(), 2);
@@ -864,7 +864,7 @@ mod random_ops {
     use proptest::prelude::*;
 
     thread_local! {
-        static TRACKER: RefCell<Option<PrefetchMemoryTracker>> = const { RefCell::new(None) };
+        static TRACKER: RefCell<Option<PrefetchingMemoryTracker>> = const { RefCell::new(None) };
     }
 
     fn with_registered_handler_setup<F, G>(
@@ -876,7 +876,7 @@ mod random_ops {
         final_tracker_checks: G,
     ) where
         F: FnOnce(&mut [u8], Vec<u8>),
-        G: FnOnce(PrefetchMemoryTracker),
+        G: FnOnce(PrefetchingMemoryTracker),
     {
         let (tracker, _page_map, memory, vec) = setup(
             checkpoint_pages,
@@ -896,7 +896,7 @@ mod random_ops {
     struct RegisteredHandler();
 
     impl RegisteredHandler {
-        unsafe fn new(tracker: PrefetchMemoryTracker) -> Self {
+        unsafe fn new(tracker: PrefetchingMemoryTracker) -> Self {
             unsafe {
                 TRACKER.with(|cell| {
                     let previous = cell.replace(Some(tracker));
@@ -926,7 +926,7 @@ mod random_ops {
             }
         }
 
-        fn take_tracker(&mut self) -> Option<PrefetchMemoryTracker> {
+        fn take_tracker(&mut self) -> Option<PrefetchingMemoryTracker> {
             TRACKER.with(|cell| {
                 let previous = cell.replace(None);
                 unsafe {
@@ -1051,7 +1051,7 @@ mod random_ops {
                     }
                     assert_eq!(memory, vec_memory);
                 },
-                |_tracker: PrefetchMemoryTracker| {}
+                |_tracker: PrefetchingMemoryTracker| {}
             )
         }
 
@@ -1079,7 +1079,7 @@ mod random_ops {
                     }
                     assert_eq!(memory, vec_memory);
                 },
-                |_tracker: PrefetchMemoryTracker| {}
+                |_tracker: PrefetchingMemoryTracker| {}
             )
         }
 
@@ -1118,7 +1118,7 @@ mod random_ops {
                         }
                     }
                 },
-                |tracker: PrefetchMemoryTracker| {
+                |tracker: PrefetchingMemoryTracker| {
                     let tracker_accessed = tracker.accessed_pages().borrow();
                     for page in accessed.borrow().iter() {
                         assert!(tracker_accessed.is_marked(PageIndex::new(*page as u64)));
@@ -1166,7 +1166,7 @@ mod random_ops {
                         }
                     }
                 },
-                |tracker: PrefetchMemoryTracker| {
+                |tracker: PrefetchingMemoryTracker| {
                     let tracker_accessed = tracker.accessed_pages().borrow();
                     for page in accessed.borrow().iter() {
                         assert!(tracker_accessed.is_marked(PageIndex::new(*page as u64)));
