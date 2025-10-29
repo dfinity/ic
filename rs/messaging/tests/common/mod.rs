@@ -208,14 +208,27 @@ impl TestSubnet {
         )
     }
 
-    /// Splits `self` by assigning `canister_range` to a new subnet.
-    ///
-    /// Note: This uses a fixed seed for the new subnet which won't work for multiple splits.
-    ///       Until we support multiple subnet splits at the same time, it should be ok.
-    pub fn split(&self, canister_range: RangeInclusive<CanisterId>) -> Result<TestSubnet, String> {
-        self.env
-            .split([123_u8; 32], canister_range)
-            .map(|env| Self { env })
+    /// Tries to fetch completed calls from the ingress history; filters out the
+    /// completed calls but first runs `for_each_breath_first`; keeps and returns
+    /// the Ids for which the call is not yet complete.
+    pub fn await_or_check_completed<F>(&self, msg_ids: Vec<MessageId>, f: F) -> Vec<MessageId>
+    where
+        F: Fn(&Reply, usize) + Clone,
+    {
+        msg_ids
+            .into_iter()
+            .filter(|msg_id| {
+                self.try_get_reply(msg_id).map_or(false, |reply| {
+                    reply.for_each_depth_first(f.clone());
+                    true
+                })
+            })
+            .collect()
+    }
+
+    /// Attempts to split `self` and returns the split off `Self`.
+    pub fn split(&self, seed: [u8; 32]) -> Result<Self, String> {
+        self.env.split(seed).map(|env| Self { env })
     }
 }
 

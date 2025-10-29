@@ -329,21 +329,12 @@ fn test_memory_accounting_and_sequence_errors(
             MEMORY_ACCOUNTING_CONFIG.best_effort_message_memory_capacity,
         );
 
-        // Collect responses; check for traps which indicates a sequence error;
-        // keep Ids we are still awaiting the result of.
-        msg_ids = msg_ids
-            .into_iter()
-            .filter(|msg_id| {
-                subnet1.try_get_reply(msg_id).map_or(false, |reply| {
-                    reply.for_each_depth_first(|reply, _| {
-                        if let Reply::AsyncReject { reject_message, .. } = reply {
-                            assert!(!reject_message.contains("trapped"));
-                        }
-                    });
-                    true
-                })
-            })
-            .collect();
+        // Filter out completed calls, check there are no traps on the completed ones.
+        msg_ids = subnet1.await_or_check_completed(msg_ids, |reply, _| {
+            if let Reply::AsyncReject { reject_message, .. } = reply {
+                assert!(!reject_message.contains("trapped"));
+            }
+        });
     }
 }
 
@@ -385,33 +376,92 @@ fn subnet_splitting_smoke_test(
 
     #[strategy(5..=15_usize)] subnet2_routing_table_update_index: usize,
 ) {
+    const SEED: [u8; 32] = [123; 32];
+
     let (subnet1, subnet2, _) = setup.into_parts();
     let (mut calls1, mut calls2, mut calls3) = calls;
+    let [canister1, canister2] = subnet1.canisters()[..] else {
+        unreachable!();
+    };
+    let canister3 = subnet2.principal_canister();
 
     // Inject triggers into the ingress pool; keep 2 for after the split / routing table update.
-    let inject_calls = |calls: &mut Vec<Call>, subnet: &TestSubnet| -> Vec<MessageId> {
-        calls
-            .split_off(calls.len() - 2)
-            .into_iter()
-            .map(|call| subnet.submit_call_as_ingress(call).unwrap())
-            .collect()
-    };
-    let mut msg_ids1 = inject_calls(&mut calls1, &subnet1);
-    let mut msg_ids2 = inject_calls(&mut calls2, &subnet1);
-    let mut msg_ids3 = inject_calls(&mut calls3, &subnet2);
+    let inject_calls =
+        |calls: &mut Vec<Call>, retain: usize, subnet: &TestSubnet| -> Vec<MessageId> {
+            calls
+                .split_off(calls.len() - retain)
+                .into_iter()
+                .map(|call| subnet.submit_call_as_ingress(call).unwrap())
+                .collect()
+        };
+    let mut msg_ids1 = inject_calls(&mut calls1, 2, &subnet1);
+    let mut msg_ids2 = inject_calls(&mut calls2, 2, &subnet1);
+    let mut msg_ids3 = inject_calls(&mut calls3, 2, &subnet2);
+
+    // Make the registry changes for the split in the data provider; Not yet visible on either subnet.
+    subnet1
+        .env
+        .make_registry_entries_for_subnet_split(SEED.clone(), canister2..=canister2);
+
+    println!(
+        "BLABLA: {}, {}",
+        subnet1_split_index, subnet2_routing_table_update_index
+    );
+    println!("BLUB: {:?}, {:?}", subnet1.id(), subnet2.id());
 
     // Execute rounds at split / update the routing table at the given index.
-    for round_index in 0..=15 {
+    let mut subnet3: Option<TestSubnet> = None;
+    for round_index in 0..=20 {
         if round_index == subnet1_split_index {
-            // split subnet1.
+            subnet3 = Some(subnet1.split(SEED.clone()).unwrap());
         }
         if round_index == subnet2_routing_table_update_index {
-            // update routing table on subnet.
+            subnet2.env.reload_registry();
+            subnet2.env.registry_client.update_to_latest_version();
         }
 
         subnet1.execute_round();
         subnet2.execute_round();
+        if let Some(ref subnet3) = subnet3 {
+            subnet3.execute_round();
+        }
+    }
+
+    // Inject the rest of the calls; not `canister2` is now on `subnet3`.
+    let subnet3 = subnet3.unwrap();
+    msg_ids1.append(&mut inject_calls(&mut calls1, 0, &subnet1));
+    msg_ids2.append(&mut inject_calls(&mut calls2, 0, &subnet3));
+    msg_ids3.append(&mut inject_calls(&mut calls1, 0, &subnet2));
+
+    // Execute a bit to allow the new calls to get started.
+    for _ in 0..10 {
+        subnet1.execute_round();
+        subnet2.execute_round();
+        subnet3.execute_round();
     }
 
     // Send canisters into stopping state; then execute rounds until all are stopped.
+    let stop_id1 = subnet1.env.stop_canister_non_blocking(canister1);
+    let stop_id2 = subnet3.env.stop_canister_non_blocking(canister2);
+    let stop_id3 = subnet2.env.stop_canister_non_blocking(canister3);
+
+    let check_traps = |reply: &Reply, _| {
+        if let Reply::AsyncReject { reject_message, .. } = reply {
+            assert!(!reject_message.contains("trapped"));
+        }
+    };
+
+    while !msg_ids1.is_empty() || !msg_ids2.is_empty() || !msg_ids3.is_empty() {
+        msg_ids1 = subnet1.await_or_check_completed(msg_ids1, check_traps);
+        msg_ids2 = subnet3.await_or_check_completed(msg_ids2, check_traps);
+        msg_ids3 = subnet2.await_or_check_completed(msg_ids3, check_traps);
+    }
+
+    /*
+    subnet1.execute_round();
+    subnet2.execute_round();
+    subnet3.execute_round();
+
+    subnet1.env.ingress_status(&stop_id1)
+    */
 }
