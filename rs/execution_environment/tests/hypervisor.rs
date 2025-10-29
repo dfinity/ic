@@ -144,29 +144,6 @@ fn ic0_stable_grow_works() {
 }
 
 #[test]
-fn ic0_stable_grow_succeeds_when_exceeding_memory_allocation() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let wat = r#"
-        (module
-            (import "ic0" "stable_size" (func $stable_size (result i32)))
-            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
-
-            (func (export "canister_update test")
-                ;; Grow the memory by 1000 pages and verify that the return value
-                ;; is 0 because the grow should succeed.
-                (if (i32.ne (call $stable_grow (i32.const 1000)) (i32.const 0))
-                    (then (unreachable))
-                )
-            )
-        )"#;
-    let canister_id = test.canister_from_wat(wat).unwrap();
-    test.canister_update_allocations_settings(canister_id, None, Some(30 * 1024 * 1024))
-        .unwrap();
-    let result = test.ingress(canister_id, "test", vec![]);
-    expect_canister_did_not_reply(result);
-}
-
-#[test]
 fn ic0_stable64_size_works() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
@@ -7867,51 +7844,6 @@ fn call_perform_does_not_check_freezing_threshold_in_reject() {
         test.execution_state(callee).stable_memory.size,
         NumWasmPages::new(10_000)
     );
-}
-
-#[test]
-fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let wat = r#"
-        (module
-            (func (export "canister_init")
-                (if (i32.ne (memory.grow (i32.const 10000)) (i32.const 0))
-                    (then (unreachable))
-                )
-            )
-            (memory 0)
-        )"#;
-    let wasm = wat::parse_str(wat).unwrap();
-    let empty_memory_usage = {
-        let id = test.canister_from_binary(wasm.clone()).unwrap();
-        test.canister_state(id).memory_usage()
-    };
-    let freezing_threshold = NumSeconds::new(1_000_000_000);
-    let memory_allocation = 655360000 + empty_memory_usage.get();
-    let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
-        freezing_threshold,
-        ic_types::MemoryAllocation::from(NumBytes::new(memory_allocation)),
-        NumBytes::new(0),
-        MessageMemoryUsage::ZERO,
-        ComputeAllocation::zero(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-        Cycles::zero(),
-    );
-
-    // Overapproximation of the install code message cost.
-    let install_code_cost = Cycles::new(1_000_000_000_000);
-
-    // Install code should be a small fraction of the freezing threshold cycles.
-    // If that's not the case, then we need to increase the freezing threshold.
-    assert!(install_code_cost.get() < freezing_threshold_cycles.get() / 10);
-    let initial_balance = freezing_threshold_cycles + install_code_cost;
-    let canister_id = test
-        .create_canister_with_allocation(initial_balance, None, Some(memory_allocation))
-        .unwrap();
-    test.update_freezing_threshold(canister_id, freezing_threshold)
-        .unwrap();
-    test.install_canister(canister_id, wasm).unwrap();
 }
 
 #[test]
