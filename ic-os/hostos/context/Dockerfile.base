@@ -82,7 +82,13 @@ RUN echo "Starting apt-get update..." && \
     echo "Starting package installation..." && \
     for i in {1..3}; do \
         echo "Attempt $i of package installation..."; \
-        apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && break || (echo "Package installation failed, retrying in 15s..." && sleep 15); \
+        if apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done); then \
+            echo "Package installation succeeded on attempt $i"; \
+            break; \
+        else \
+            echo "Package installation failed on attempt $i, retrying in 15s..."; \
+            sleep 15; \
+        fi; \
     done && \
     rm /tmp/packages.*
 
