@@ -529,12 +529,6 @@ message AddOrRemoveNodeProvider {
   }
 }
 
-message DateUtc {
-  uint32 year = 1;
-  uint32 month = 2;
-  uint32 day = 3;
-}
-
 // This proposal payload is used to reward a node provider by minting
 // ICPs directly to the node provider's ledger account, or into a new
 // neuron created on behalf of the node provider.
@@ -2271,28 +2265,38 @@ message MonthlyNodeProviderRewards {
   repeated NodeProvider node_providers = 7;
 }
 
-// The monthly Node Provider rewards as of a point in time.
-message NodeProviderRewards {
-  // Day start for which the rewards were calculated.
-  DateUtc from_day = 1;
+// Date UTC used in NodeProviderRewards to define their validity boundaries
+message DateUtc {
+  uint32 year = 1;
+  uint32 month = 2;
+  uint32 day = 3;
+}
 
-  // Day end for which the rewards were calculated.
-  DateUtc to_day = 2;
+// Node Providers' rewards for the period spanning from `from` to `to`, inclusive of both endpoints.
+message NodeProviderRewards {
+  // The time when the rewards were calculated.
+  uint64 timestamp = 1;
+
+  // Date from for which the rewards were calculated.
+  DateUtc from = 2;
+
+  // Date to for which the rewards were calculated.
+  DateUtc to = 3;
 
   // The Rewards calculated and rewarded.
-  repeated RewardNodeProvider rewards = 3;
+  repeated RewardNodeProvider rewards = 4;
 
   // The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.
   // This field snapshots the actual rate used by governance when the rewards were calculated.
-  optional XdrConversionRate xdr_conversion_rate = 4;
+  optional XdrConversionRate xdr_conversion_rate = 5;
 
   // The minimum xdr permyriad per icp at the time when the rewards were calculated.  This is useful for understanding
   // why the rewards were what they were if the xdr_conversion_rate falls below this threshold.
-  optional uint64 minimum_xdr_permyriad_per_icp = 5;
+  optional uint64 minimum_xdr_permyriad_per_icp = 6;
 
   // The maximum amount of ICP e8s that can be awarded to a single node provider in one event.  This is snapshotted
   // from the value in network economics.
-  optional uint64 maximum_node_provider_rewards_e8s = 6;
+  optional uint64 maximum_node_provider_rewards_e8s = 7;
 
   // The list of node_provieders at the time when the rewards were calculated.
   repeated NodeProvider node_providers = 8;

@@ -1,8 +1,11 @@
+#[cfg(not(feature = "performance-based-rewards"))]
+use crate::pb::v1::MonthlyNodeProviderRewards;
+#[cfg(feature = "performance-based-rewards")]
 use crate::pb::v1::NodeProviderRewards;
 use crate::{
     pb::v1::{
-        ArchivedMonthlyNodeProviderRewards, MonthlyNodeProviderRewards,
-        archived_monthly_node_provider_rewards, archived_monthly_node_provider_rewards::Version,
+        ArchivedMonthlyNodeProviderRewards, archived_monthly_node_provider_rewards,
+        archived_monthly_node_provider_rewards::Version,
     },
     storage::with_node_provider_rewards_log,
 };
@@ -24,6 +27,7 @@ impl From<ic_nns_governance_api::DateRangeFilter> for DateRangeFilter {
     }
 }
 
+#[cfg(not(feature = "performance-based-rewards"))]
 pub(crate) fn record_node_provider_rewards(most_recent_rewards: MonthlyNodeProviderRewards) {
     let rewards = ArchivedMonthlyNodeProviderRewards {
         version: Some(archived_monthly_node_provider_rewards::Version::Version1(
@@ -38,7 +42,8 @@ pub(crate) fn record_node_provider_rewards(most_recent_rewards: MonthlyNodeProvi
     })
 }
 
-pub(crate) fn record_node_provider_rewards_v2(most_recent_rewards: NodeProviderRewards) {
+#[cfg(feature = "performance-based-rewards")]
+pub(crate) fn record_node_provider_rewards(most_recent_rewards: NodeProviderRewards) {
     let rewards = ArchivedMonthlyNodeProviderRewards {
         version: Some(archived_monthly_node_provider_rewards::Version::Version2(
             archived_monthly_node_provider_rewards::V2 {

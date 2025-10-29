@@ -11645,6 +11645,7 @@ dependencies = [
  "canbench-rs",
  "candid",
  "candid_parser",
+ "chrono",
  "comparable",
  "criterion",
  "csv",

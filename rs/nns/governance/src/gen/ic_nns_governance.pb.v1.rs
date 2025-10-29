@@ -255,24 +255,6 @@ pub mod add_or_remove_node_provider {
         ToRemove(super::NodeProvider),
     }
 }
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    Copy,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct DateUtc {
-    #[prost(uint32, tag = "1")]
-    pub year: u32,
-    #[prost(uint32, tag = "2")]
-    pub month: u32,
-    #[prost(uint32, tag = "3")]
-    pub day: u32,
-}
 /// This proposal payload is used to reward a node provider by minting
 /// ICPs directly to the node provider's ledger account, or into a new
 /// neuron created on behalf of the node provider.
@@ -379,6 +361,7 @@ pub struct RewardNodeProviders {
     pub rewards: ::prost::alloc::vec::Vec<RewardNodeProvider>,
     /// If true, reward Node Providers with the rewards returned by the Registry's
     /// get_node_providers_monthly_xdr_rewards method
+    /// TODO: Change it to add DateUtc as input
     #[prost(bool, optional, tag = "2")]
     pub use_registry_derived_rewards: ::core::option::Option<bool>,
 }
@@ -3289,7 +3272,26 @@ pub struct MonthlyNodeProviderRewards {
     #[prost(message, repeated, tag = "7")]
     pub node_providers: ::prost::alloc::vec::Vec<NodeProvider>,
 }
-/// The monthly Node Provider rewards as of a point in time.
+/// Date UTC used in NodeProviderRewards to define their validity boundaries
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct DateUtc {
+    #[prost(uint32, tag = "1")]
+    pub year: u32,
+    #[prost(uint32, tag = "2")]
+    pub month: u32,
+    #[prost(uint32, tag = "3")]
+    pub day: u32,
+}
+/// Node Providers' rewards for the period spanning from `from` to `to`, inclusive of both endpoints.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3300,26 +3302,29 @@ pub struct MonthlyNodeProviderRewards {
     ::prost::Message,
 )]
 pub struct NodeProviderRewards {
-    /// Day start for which the rewards were calculated.
-    #[prost(message, optional, tag = "1")]
-    pub from_day: ::core::option::Option<DateUtc>,
-    /// Day end for which the rewards were calculated.
+    /// The time when the rewards were calculated.
+    #[prost(uint64, tag = "1")]
+    pub timestamp: u64,
+    /// Date from for which the rewards were calculated.
     #[prost(message, optional, tag = "2")]
-    pub to_day: ::core::option::Option<DateUtc>,
+    pub from: ::core::option::Option<DateUtc>,
+    /// Date to for which the rewards were calculated.
+    #[prost(message, optional, tag = "3")]
+    pub to: ::core::option::Option<DateUtc>,
     /// The Rewards calculated and rewarded.
-    #[prost(message, repeated, tag = "3")]
+    #[prost(message, repeated, tag = "4")]
     pub rewards: ::prost::alloc::vec::Vec<RewardNodeProvider>,
     /// The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.
     /// This field snapshots the actual rate used by governance when the rewards were calculated.
-    #[prost(message, optional, tag = "4")]
+    #[prost(message, optional, tag = "5")]
     pub xdr_conversion_rate: ::core::option::Option<XdrConversionRate>,
     /// The minimum xdr permyriad per icp at the time when the rewards were calculated.  This is useful for understanding
     /// why the rewards were what they were if the xdr_conversion_rate falls below this threshold.
-    #[prost(uint64, optional, tag = "5")]
+    #[prost(uint64, optional, tag = "6")]
     pub minimum_xdr_permyriad_per_icp: ::core::option::Option<u64>,
     /// The maximum amount of ICP e8s that can be awarded to a single node provider in one event.  This is snapshotted
     /// from the value in network economics.
-    #[prost(uint64, optional, tag = "6")]
+    #[prost(uint64, optional, tag = "7")]
     pub maximum_node_provider_rewards_e8s: ::core::option::Option<u64>,
     /// The list of node_provieders at the time when the rewards were calculated.
     #[prost(message, repeated, tag = "8")]

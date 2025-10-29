@@ -75,6 +75,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
+use chrono::NaiveDate;
 use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
 use disburse_maturity::initiate_maturity_disbursement;
 #[cfg(not(target_arch = "wasm32"))]
@@ -158,7 +159,6 @@ pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
 
-use crate::node_provider_rewards::record_node_provider_rewards_v2;
 use crate::pb::v1::{AddOrRemoveNodeProvider, DateUtc, NodeProviderRewards};
 use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
@@ -4277,23 +4277,11 @@ impl Governance {
         // Acquire the lock before doing anything meaningful.
         self.minting_node_provider_rewards = true;
 
-        #[cfg(not(feature = "performance-based-rewards"))]
-        {
-            let node_provider_rewards = self.get_node_providers_rewards().await?;
-            let _ = self
-                .reward_node_providers(&node_provider_rewards.rewards)
-                .await;
-            self.update_most_recent_node_provider_rewards(node_provider_rewards);
-        }
-
-        #[cfg(feature = "performance-based-rewards")]
-        {
-            let node_provider_rewards = self.get_node_providers_rewards().await?;
-            let _ = self
-                .reward_node_providers(&node_provider_rewards.rewards)
-                .await;
-            self.update_most_recent_node_provider_rewards(node_provider_rewards);
-        }
+        let monthly_node_provider_rewards = self.get_monthly_node_provider_rewards().await?;
+        let _ = self
+            .reward_node_providers(&monthly_node_provider_rewards.rewards)
+            .await;
+        self.update_most_recent_monthly_node_provider_rewards(monthly_node_provider_rewards);
 
         // Release the lock before committing the result.
         self.minting_node_provider_rewards = false;
@@ -4311,6 +4299,7 @@ impl Governance {
         Ok(())
     }
 
+    #[cfg(not(feature = "performance-based-rewards"))]
     fn update_most_recent_monthly_node_provider_rewards(
         &mut self,
         most_recent_rewards: MonthlyNodeProviderRewards,
@@ -4319,12 +4308,45 @@ impl Governance {
         self.heap_data.most_recent_monthly_node_provider_rewards = Some(most_recent_rewards);
     }
 
+    #[cfg(feature = "performance-based-rewards")]
     fn update_most_recent_node_provider_rewards(
         &mut self,
         most_recent_rewards: NodeProviderRewards,
     ) {
-        record_node_provider_rewards_v2(most_recent_rewards.clone());
-        self.heap_data.most_recent_monthly_node_provider_rewards_v2 = Some(most_recent_rewards);
+        record_node_provider_rewards(most_recent_rewards.clone());
+        self.heap_data.most_recent_node_provider_rewards = Some(most_recent_rewards);
+    }
+
+    /// Mint and transfer node provider rewards
+    async fn mint_node_provider_rewards(&mut self) -> Result<(), GovernanceError> {
+        if self.minting_node_provider_rewards {
+            // There is an ongoing attempt to mint node provider rewards. Do nothing.
+            return Ok(());
+        }
+
+        // Acquire the lock before doing anything meaningful.
+        self.minting_node_provider_rewards = true;
+
+        let monthly_node_provider_rewards = self.get_node_providers_rewards().await?;
+        let _ = self
+            .reward_node_providers(&monthly_node_provider_rewards.rewards)
+            .await;
+        self.update_most_recent_node_provider_rewards(monthly_node_provider_rewards);
+
+        // Release the lock before committing the result.
+        self.minting_node_provider_rewards = false;
+
+        // Commit the minting status by making a canister call.
+        let _unused_canister_status_response = self
+            .env
+            .call_canister_method(
+                GOVERNANCE_CANISTER_ID,
+                "get_build_metadata",
+                Encode!().unwrap_or_default(),
+            )
+            .await;
+
+        Ok(())
     }
 
     pub fn list_node_provider_rewards(
@@ -4377,6 +4399,19 @@ impl Governance {
                         archived_monthly_node_provider_rewards::V1 { rewards },
                     )),
             }) => rewards.as_ref().map(|r| r.timestamp),
+            Some(ArchivedMonthlyNodeProviderRewards {
+                version:
+                    Some(archived_monthly_node_provider_rewards::Version::Version2(
+                        archived_monthly_node_provider_rewards::V2 { rewards },
+                    )),
+            }) => rewards.as_ref().map(|r| {
+                let date_to = r.to.expect("date_to exists");
+                let timestamp =
+                    NaiveDate::from_ymd_opt(date_to.year as i32, date_to.month, date_to.day)
+                        .map(|date| date.and_hms(0, 0, 0).timestamp())
+                        .unwrap() as u64;
+                timestamp
+            }),
             Some(_) => panic!("Should not be possible!"),
         }
     }
@@ -6573,10 +6608,19 @@ impl Governance {
 
         // First try to mint node provider rewards (once per month).
         if self.is_time_to_mint_monthly_node_provider_rewards() {
+            #[cfg(not(feature = "performance-based-rewards"))]
             match self.mint_monthly_node_provider_rewards().await {
                 Ok(()) => (),
                 Err(e) => println!(
                     "{}Error when minting monthly node provider rewards in run_periodic_tasks: {}",
+                    LOG_PREFIX, e,
+                ),
+            }
+            #[cfg(feature = "performance-based-rewards")]
+            match self.mint_monthly_node_provider_rewards().await {
+                Ok(()) => (),
+                Err(e) => println!(
+                    "{}Error when minting node provider rewards in run_periodic_tasks: {}",
                     LOG_PREFIX, e,
                 ),
             }
@@ -7850,9 +7894,9 @@ impl Governance {
             })
     }
 
-    /// Return the rewards that node providers should be awarded
+    /// Return the rewards that node providers should be awarded with.
     ///
-    /// Fetches the map from node provider to XDR rewards from the
+    /// Fetches the map from node provider to XDR rewards valid between 'from' and 'to' boundaries from the
     /// Node Rewards Canister, then fetches the average XDR to ICP conversion rate for
     /// the last 30 days, then applies this conversion rate to convert each
     /// node provider's XDR rewards to ICP.
@@ -7861,7 +7905,6 @@ impl Governance {
     ) -> Result<NodeProviderRewards, GovernanceError> {
         let mut rewards = vec![];
 
-        let yesterday_timestamp_seconds = self.env.now().saturating_sub(ONE_DAY_SECONDS);
         let latest_rewards_timestamp_seconds = self
             .get_most_recent_node_provider_rewards_timestamp()
             .ok_or(GovernanceError::new_with_message(
@@ -7869,12 +7912,17 @@ impl Governance {
                 "No rewards found for the last month.",
             ))?;
 
-        let from_day = ApiDateUtc::from_unix_timestamp_seconds(latest_rewards_timestamp_seconds);
-        let to_day = ApiDateUtc::from_unix_timestamp_seconds(yesterday_timestamp_seconds);
+        let from_timestamp_seconds =
+            latest_rewards_timestamp_seconds.saturating_add(ONE_DAY_SECONDS);
+        // To yesterday, since today we have collected up to and included node metrics of yesterday
+        // in the node rewards canister.
+        let to_timestamp_seconds = self.env.now().saturating_sub(ONE_DAY_SECONDS);
 
+        let from = ApiDateUtc::from_unix_timestamp_seconds(from_timestamp_seconds);
+        let to = ApiDateUtc::from_unix_timestamp_seconds(to_timestamp_seconds);
         // Maps node providers to their rewards in XDR
         let rewards_per_node_provider = self
-            .get_node_providers_xdr_permyriad_rewards(from_day, to_day)
+            .get_node_providers_xdr_permyriad_rewards(from, to)
             .await?;
 
         // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
@@ -7911,8 +7959,8 @@ impl Governance {
         };
 
         Ok(NodeProviderRewards {
-            from_day: Some(DateUtc::try_from(from_day).expect("from_day exists")),
-            to_day: Some(DateUtc::try_from(to_day).expect("to_day exists")),
+            from: Some(DateUtc::try_from(from).expect("from date exists")),
+            to: Some(DateUtc::try_from(to).expect("to date exists")),
             rewards,
             xdr_conversion_rate: Some(xdr_conversion_rate.into()),
             minimum_xdr_permyriad_per_icp: Some(minimum_xdr_permyriad_per_icp),
@@ -7990,15 +8038,19 @@ impl Governance {
     /// A helper for the Node Rewards Canister get_node_providers_rewards method
     async fn get_node_providers_xdr_permyriad_rewards(
         &self,
-        from_day: ApiDateUtc,
-        to_day: ApiDateUtc,
+        from: ApiDateUtc,
+        to: ApiDateUtc,
     ) -> Result<BTreeMap<PrincipalId, u64>, GovernanceError> {
         let response: Vec<u8> = self
             .env
             .call_canister_method(
                 NODE_REWARDS_CANISTER_ID,
                 "get_node_providers_rewards",
-                Encode!(&GetNodeProvidersRewardsRequest { from_day, to_day }).unwrap(),
+                Encode!(&GetNodeProvidersRewardsRequest {
+                    from_day: from,
+                    to_day: to
+                })
+                .unwrap(),
             )
             .await
             .map_err(|(code, msg)| {
