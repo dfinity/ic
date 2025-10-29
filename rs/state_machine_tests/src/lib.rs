@@ -3096,6 +3096,10 @@ impl StateMachine {
     /// This is intended to be used before calling `split` simulating a split of this subnet. Having
     /// this as a separate step allows for other subnets to observe this update before this subnet
     /// undergoes the split, which is a highly likely situation in a real subnet split.
+    ///
+    /// Note: An actual observation is done only after updating the registry client to the newest version.
+    ///       Since this functions does not update the registry client, this can be done at any point on
+    ///       any subnet in the same subnet pool as this one, i.e. before, at or after the actual split.
     pub fn make_registry_entries_for_subnet_split(
         &self,
         seed: [u8; 32],
@@ -4944,15 +4948,6 @@ pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
         HypervisorConfig::default(),
     );
     two_subnets_with_config(config.clone(), config)
-}
-
-/// Generates the subnet ID from `seed`.
-pub fn subnet_id_from(seed: [u8; 32]) -> SubnetId {
-    let (ni_dkg_transcript, _) =
-        dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
-    let public_key = (&ni_dkg_transcript).try_into().unwrap();
-    let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
-    PrincipalId::new_self_authenticating(&public_key_der).into()
 }
 
 // This test should panic on a critical error due to non-monotone timestamps.
