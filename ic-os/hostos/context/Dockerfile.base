@@ -67,10 +67,23 @@ ARG PACKAGE_FILES=packages.common
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
 # NODE-1718: libvirt-daemon-config-network must be installed early to avoid a broken dependency ordering
-RUN for i in {1..3}; do apt-get -y update && break || sleep 10; done && \
+RUN echo "Starting apt-get update..." && \
+    for i in {1..3}; do \
+        echo "Attempt $i of apt-get update..."; \
+        apt-get -y update && break || (echo "apt-get update failed, retrying in 10s..." && sleep 10); \
+    done && \
+    echo "Starting apt-get upgrade..." && \
     apt-get -y upgrade && \
-    apt-get -y --no-install-recommends install libvirt-daemon-config-network && \
-    apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && \
+    echo "Installing libvirt-daemon-config-network..." && \
+    for i in {1..3}; do \
+        echo "Attempt $i of libvirt installation..."; \
+        apt-get -y --no-install-recommends install libvirt-daemon-config-network && break || (echo "libvirt installation failed, retrying in 15s..." && sleep 15); \
+    done && \
+    echo "Starting package installation..." && \
+    for i in {1..3}; do \
+        echo "Attempt $i of package installation..."; \
+        apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) && break || (echo "Package installation failed, retrying in 15s..." && sleep 15); \
+    done && \
     rm /tmp/packages.*
 
 # Install node_exporter
