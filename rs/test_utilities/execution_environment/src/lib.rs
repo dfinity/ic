@@ -8,7 +8,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
-use ic_cycles_account_manager::CyclesAccountManager;
+use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::{
     WasmtimeEmbedder,
     wasm_utils::{compile, decoding::decode_wasm},
@@ -47,6 +47,7 @@ use ic_replicated_state::{
     PageIndex, ReplicatedState, SubnetTopology,
     canister_state::{
         NextExecution, execution_state::SandboxMemory, execution_state::WasmExecutionMode,
+        system_state::CyclesUseCase,
     },
     page_map::{
         PAGE_SIZE, PageMap, TestPageAllocatorFileDescriptorImpl,
@@ -68,8 +69,8 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{
         CallbackId, CanisterCall, CanisterMessage, CanisterTask,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Query, QuerySource, RequestOrResponse,
-        Response,
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MessageId, Payload as ResponsePayload, Query,
+        QuerySource, RequestOrResponse, Response,
     },
     time::UNIX_EPOCH,
 };
@@ -78,6 +79,7 @@ use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::{UNIVERSAL_CANISTER_SERIALIZED_MODULE, UNIVERSAL_CANISTER_WASM};
 use ic_wasm_types::BinaryEncodedWasm;
 use maplit::{btreemap, btreeset};
+use prometheus::IntCounter;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     convert::TryFrom,
@@ -325,6 +327,10 @@ impl ExecutionTest {
             .unwrap()
     }
 
+    pub fn max_instructions_per_message(&self) -> NumInstructions {
+        self.instruction_limits.message()
+    }
+
     pub fn canister_wasm_execution_mode(&self, canister_id: CanisterId) -> WasmExecutionMode {
         // In case of any error or missing state, default to Wasm32.
         if let Some(state) = self.state.as_ref()
@@ -389,6 +395,14 @@ impl ExecutionTest {
 
     pub fn idle_cycles_burned_per_day(&self, canister_id: CanisterId) -> Cycles {
         let memory_usage = self.canister_state(canister_id).memory_usage();
+        self.idle_cycles_burned_per_day_for_memory_usage(canister_id, memory_usage)
+    }
+
+    pub fn idle_cycles_burned_per_day_for_memory_usage(
+        &self,
+        canister_id: CanisterId,
+        memory_usage: NumBytes,
+    ) -> Cycles {
         let memory_allocation = self
             .canister_state(canister_id)
             .system_state
@@ -482,11 +496,19 @@ impl ExecutionTest {
 
     pub fn reduced_wasm_compilation_fee(&self, wasm: &[u8]) -> Cycles {
         let cost = wasm_compilation_cost(wasm);
+        self.convert_instructions_to_cycles(
+            cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost),
+            WasmExecutionMode::Wasm32, // In this case it does not matter if it is a Wasm64 or Wasm32 canister.
+        )
+    }
+
+    pub fn convert_instructions_to_cycles(
+        &self,
+        instructions: NumInstructions,
+        mode: WasmExecutionMode,
+    ) -> Cycles {
         self.cycles_account_manager()
-            .convert_instructions_to_cycles(
-                cost - CompilationCostHandling::CountReducedAmount.adjusted_compilation_cost(cost),
-                WasmExecutionMode::Wasm32, // In this case it does not matter if it is a Wasm64 or Wasm32 canister.
-            )
+            .convert_instructions_to_cycles(instructions, mode)
     }
 
     pub fn install_code_reserved_execution_cycles(&self) -> Cycles {
@@ -539,6 +561,14 @@ impl ExecutionTest {
 
     pub fn ingress_status(&self, message_id: &MessageId) -> IngressStatus {
         self.state().get_ingress_status(message_id).clone()
+    }
+
+    pub fn ingress_result(&self, message_id: &MessageId) -> Result<WasmResult, UserError> {
+        match self.ingress_state(message_id) {
+            IngressState::Completed(res) => Ok(res),
+            IngressState::Failed(err) => Err(err),
+            status => panic!("Unexpected ingress status: {:?}", status),
+        }
     }
 
     pub fn ingress_state(&self, message_id: &MessageId) -> IngressState {
@@ -774,6 +804,21 @@ impl ExecutionTest {
             Ok(WasmResult::Reject(err)) => panic!("Unexpected reject: {}", err),
             Err(err) => Err(err),
         }
+    }
+
+    /// Updates the settings of the given canister.
+    pub fn update_settings(
+        &mut self,
+        canister_id: CanisterId,
+        settings: CanisterSettingsArgs,
+    ) -> Result<WasmResult, UserError> {
+        let payload = UpdateSettingsArgs {
+            canister_id: canister_id.into(),
+            settings,
+            sender_canister_version: None,
+        }
+        .encode();
+        self.subnet_message(Method::UpdateSettings, payload)
     }
 
     /// Updates the freezing threshold of the given canister.
@@ -1813,16 +1858,59 @@ impl ExecutionTest {
         self.cycles_account_manager.get_subnet_id()
     }
 
-    pub fn expected_storage_reservation_cycles(&self, allocated_bytes: NumBytes) -> Cycles {
-        let subnet_memory_saturation = self
-            .exec_env
-            .subnet_memory_saturation(&self.subnet_available_memory);
+    pub fn subnet_memory_saturation(&self) -> ResourceSaturation {
+        self.exec_env
+            .subnet_memory_saturation(&self.subnet_available_memory)
+    }
+
+    pub fn expected_storage_reservation_cycles(
+        &self,
+        subnet_memory_saturation: &ResourceSaturation,
+        allocated_bytes: NumBytes,
+    ) -> Cycles {
         self.cycles_account_manager.storage_reservation_cycles(
             allocated_bytes,
-            &subnet_memory_saturation,
+            subnet_memory_saturation,
             self.subnet_size(),
             self.cost_schedule(),
         )
+    }
+
+    pub fn prepayment_for_response_execution(&self, mode: WasmExecutionMode) -> Cycles {
+        self.cycles_account_manager
+            .prepayment_for_response_execution(self.subnet_size(), self.cost_schedule(), mode)
+    }
+
+    pub fn refund_for_response_transmission(&self, response: &ResponsePayload) -> Cycles {
+        let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
+        let prepayment_for_response_transmission = self
+            .cycles_account_manager
+            .prepayment_for_response_transmission(self.subnet_size(), self.cost_schedule());
+        self.cycles_account_manager
+            .refund_for_response_transmission(
+                &no_op_logger(),
+                &no_op_counter,
+                response,
+                prepayment_for_response_transmission,
+                self.subnet_size(),
+                self.cost_schedule(),
+            )
+    }
+
+    pub fn consume_cycles(&mut self, canister_id: CanisterId, cycles: Cycles) {
+        let cost_schedule = self.cost_schedule();
+        let cycles_account_manager = self.cycles_account_manager.clone();
+        let system_state = &mut self.canister_state_mut(canister_id).system_state;
+        cycles_account_manager
+            .consume_with_threshold(
+                system_state,
+                cycles,
+                Cycles::zero(),
+                CyclesUseCase::Memory,
+                false,
+                cost_schedule,
+            )
+            .unwrap();
     }
 }
 

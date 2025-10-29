@@ -4223,6 +4223,7 @@ impl ExecutionEnvironment {
 
     // Returns the subnet memory saturation based on the given subnet available memory
     // which is assumed to be scaled with the scaling factor `self.scheduler_cores`.
+    // Public for use in tests.
     #[doc(hidden)]
     pub fn subnet_memory_saturation(
         &self,
