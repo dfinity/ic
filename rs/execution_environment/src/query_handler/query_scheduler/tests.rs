@@ -12,20 +12,14 @@ use ic_types_test_utils::ids::canister_test_id;
 use crate::query_handler::query_scheduler::internal::DEFAULT_QUERY_DURATION;
 
 use super::{
-    QueryScheduler, QuerySchedulerFlag,
+    QueryScheduler,
     internal::{Query, QuerySchedulerInternal},
 };
 
 #[test]
 fn query_scheduler_does_not_starve_canisters() {
     let metrics_registry = MetricsRegistry::new();
-    let scheduler = QueryScheduler::new(
-        1,
-        1,
-        Duration::from_millis(1),
-        &metrics_registry,
-        QuerySchedulerFlag::UseNewSchedulingAlgorithm,
-    );
+    let scheduler = QueryScheduler::new(1, 1, Duration::from_millis(1), &metrics_registry);
     let canister_count = 3;
     let execution_count = Arc::new(AtomicU32::default());
     let schedule = Arc::new(Mutex::new(vec![]));
@@ -57,13 +51,7 @@ fn query_scheduler_does_not_starve_canisters() {
 #[test]
 fn query_scheduler_with_single_threaded_canister() {
     let metrics_registry = MetricsRegistry::new();
-    let scheduler = QueryScheduler::new(
-        4,
-        1,
-        Duration::from_millis(1),
-        &metrics_registry,
-        QuerySchedulerFlag::UseNewSchedulingAlgorithm,
-    );
+    let scheduler = QueryScheduler::new(4, 1, Duration::from_millis(1), &metrics_registry);
     let execution_count = Arc::new(AtomicU32::default());
     let thread_count = Arc::new(AtomicU32::default());
     for _ in 0..100 {
