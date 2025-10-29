@@ -2,7 +2,7 @@ use crate::wasmtime_embedder::host_memory::MemoryPageSize;
 
 use ic_types::NumBytes;
 use libc::c_void;
-use memory_tracker::{MemoryTracker, SigsegvMemoryTracker, signal_access_kind_and_address};
+use memory_tracker::{SigsegvMemoryTracker, signal_access_kind_and_address};
 use std::convert::TryFrom;
 use std::sync::MutexGuard;
 use std::sync::{Arc, Mutex, atomic::Ordering};

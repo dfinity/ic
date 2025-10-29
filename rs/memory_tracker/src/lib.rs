@@ -104,161 +104,25 @@ pub trait MemoryTracker {
     fn add_sigsegv_handler_duration(&self, elapsed: Duration);
 }
 
-/// Manual dispatch is used to minimize code changes.
-/// Remove this dispatch mechanism once we switch to the deterministic memory tracker.
-pub enum SigsegvMemoryTracker {
-    Prefetch(PrefetchMemoryTracker),
-}
+/// Dynamic dispatch is used to minimize code changes.
+/// Remove this dispatch mechanism once we have fully switched to
+/// the deterministic memory tracker.
+pub type SigsegvMemoryTracker = Box<dyn MemoryTracker + Send>;
 
-impl MemoryTracker for SigsegvMemoryTracker {
-    fn new(
-        start: *mut libc::c_void,
-        size: NumBytes,
-        log: ReplicaLogger,
-        dirty_page_tracking: DirtyPageTracking,
-        page_map: PageMap,
-    ) -> nix::Result<Self>
-    where
-        Self: Sized,
-    {
-        Ok(SigsegvMemoryTracker::Prefetch(PrefetchMemoryTracker::new(
-            start,
-            size,
-            log,
-            dirty_page_tracking,
-            page_map,
-        )?))
-    }
-
-    fn handle_sigsegv(
-        &self,
-        access_kind: Option<AccessKind>,
-        fault_address: *mut libc::c_void,
-    ) -> bool {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => {
-                tracker.handle_sigsegv(access_kind, fault_address)
-            }
-        }
-    }
-
-    fn contains(&self, address: *const libc::c_void) -> bool {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.contains(address),
-        }
-    }
-
-    fn start(&self) -> usize {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.start(),
-        }
-    }
-
-    fn size(&self) -> NumBytes {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.size(),
-        }
-    }
-
-    fn expand(&self, delta: NumBytes) {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.expand(delta),
-        }
-    }
-
-    fn num_accessed_pages(&self) -> usize {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.num_accessed_pages(),
-        }
-    }
-
-    fn take_accessed_pages(&self) -> Vec<PageIndex> {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.take_accessed_pages(),
-        }
-    }
-
-    fn take_dirty_pages(&self) -> Vec<PageIndex> {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.take_dirty_pages(),
-        }
-    }
-
-    fn take_speculatively_dirty_pages(&self) -> Vec<PageIndex> {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.take_speculatively_dirty_pages(),
-        }
-    }
-
-    fn validate_speculatively_dirty_page(&self, page_idx: PageIndex) -> Option<PageIndex> {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => {
-                tracker.validate_speculatively_dirty_page(page_idx)
-            }
-        }
-    }
-
-    fn is_accessed(&self, page_idx: PageIndex) -> bool {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.is_accessed(page_idx),
-        }
-    }
-
-    fn get_page(&self, page_idx: PageIndex) -> &PageBytes {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.get_page(page_idx),
-        }
-    }
-
-    fn read_before_write_count(&self) -> usize {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.read_before_write_count(),
-        }
-    }
-
-    fn direct_write_count(&self) -> usize {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.direct_write_count(),
-        }
-    }
-
-    fn sigsegv_count(&self) -> usize {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.sigsegv_count(),
-        }
-    }
-
-    fn mmap_count(&self) -> usize {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.mmap_count(),
-        }
-    }
-
-    fn mprotect_count(&self) -> usize {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.mprotect_count(),
-        }
-    }
-
-    fn copy_page_count(&self) -> usize {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.copy_page_count(),
-        }
-    }
-
-    fn sigsegv_handler_duration(&self) -> Duration {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => tracker.sigsegv_handler_duration(),
-        }
-    }
-
-    fn add_sigsegv_handler_duration(&self, elapsed: Duration) {
-        match self {
-            SigsegvMemoryTracker::Prefetch(tracker) => {
-                tracker.add_sigsegv_handler_duration(elapsed)
-            }
-        }
-    }
+pub fn new(
+    start: *mut libc::c_void,
+    size: NumBytes,
+    log: ReplicaLogger,
+    dirty_page_tracking: DirtyPageTracking,
+    page_map: PageMap,
+) -> nix::Result<SigsegvMemoryTracker> {
+    Ok(Box::new(PrefetchMemoryTracker::new(
+        start,
+        size,
+        log,
+        dirty_page_tracking,
+        page_map,
+    )?))
 }
 
 /// Prints a help message on ENOMEM error.

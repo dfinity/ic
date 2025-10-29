@@ -29,7 +29,7 @@ use ic_types::{
     methods::{FuncRef, WasmMethod},
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use memory_tracker::{DirtyPageTracking, MemoryTracker, SigsegvMemoryTracker};
+use memory_tracker::{DirtyPageTracking, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
@@ -721,7 +721,7 @@ fn sigsegv_memory_tracker<S>(
             }
 
             Arc::new(Mutex::new(
-                SigsegvMemoryTracker::new(
+                memory_tracker::new(
                     base,
                     NumBytes::new(size as u64),
                     log.clone(),
