@@ -2,12 +2,13 @@
 //! distributed consensus.
 
 pub mod batch_delivery;
-pub(crate) mod block_maker;
+mod block_maker;
 pub mod bounds;
 mod catchup_package_maker;
 mod finalizer;
+#[cfg(feature = "malicious_code")]
 pub mod malicious_consensus;
-pub(crate) mod metrics;
+mod metrics;
 mod notary;
 mod payload;
 pub mod payload_builder;
@@ -57,7 +58,6 @@ use ic_types::{
     malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
     replica_version::ReplicaVersion,
 };
-pub use metrics::ValidatorMetrics;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
     cell::RefCell,
@@ -128,14 +128,11 @@ pub fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
 /// [ConsensusImpl] holds all consensus subcomponents, and implements the
 /// Consensus trait by calling each subcomponent in round-robin manner.
 pub struct ConsensusImpl {
-    /// Notary
-    pub notary: Notary,
-    /// Finalizer
-    pub finalizer: Finalizer,
+    notary: Notary,
+    finalizer: Finalizer,
     random_beacon_maker: RandomBeaconMaker,
     random_tape_maker: RandomTapeMaker,
-    /// Blockmaker
-    pub block_maker: BlockMaker,
+    block_maker: BlockMaker,
     catch_up_package_maker: CatchUpPackageMaker,
     validator: Validator,
     aggregator: ShareAggregator,
@@ -282,7 +279,7 @@ impl ConsensusImpl {
                 dkg_pool,
                 thread_pool,
                 logger.clone(),
-                ValidatorMetrics::new(metrics_registry.clone()),
+                &metrics_registry,
                 Arc::clone(&time_source),
             ),
             aggregator: ShareAggregator::new(
@@ -564,14 +561,10 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
 
         #[cfg(feature = "malicious_code")]
         if self.malicious_flags.is_consensus_malicious() {
-            crate::consensus::malicious_consensus::maliciously_alter_changeset(
+            self.maliciously_alter_changeset(
                 &pool_reader,
                 changeset,
                 &self.malicious_flags,
-                &self.block_maker,
-                &self.finalizer,
-                &self.notary,
-                &self.log,
                 self.time_source.get_relative_time(),
             )
         } else {

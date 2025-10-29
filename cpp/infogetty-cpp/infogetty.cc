@@ -83,7 +83,7 @@ open_tty(const std::string& tty_dev, struct termios* term)
 }
 
 void
-loop_print_sysinfo(const std::string& tty_dev, bool allow_root_login, const struct termios& saved_tios)
+loop_print_sysinfo(const std::string& tty_dev, const std::string& login_user, const struct termios& saved_tios)
 {
     struct termios cbreak_tios = saved_tios;
     cbreak_tios.c_lflag = cbreak_tios.c_lflag & ~ (ICANON | ECHO);
@@ -91,9 +91,12 @@ loop_print_sysinfo(const std::string& tty_dev, bool allow_root_login, const stru
     cbreak_tios.c_cc[VTIME] = 0;
     check_panic_errno(::tcsetattr(0, TCSANOW, &cbreak_tios), tty_dev, "tcsetattr(cbreak) failed");
 
+    // Allow login if a user is specified
+    bool allow_login = !login_user.empty();
+
     for (;;) {
         auto info = format_network_info(read_network_info());
-        if (allow_root_login) {
+        if (allow_login) {
             info += "Press ENTER to activate console\n";
         }
         info += "\n";
@@ -113,7 +116,7 @@ loop_print_sysinfo(const std::string& tty_dev, bool allow_root_login, const stru
             if (::read(0, buffer, 1024) < 0 && errno != EAGAIN) {
                 check_panic_errno(-1, tty_dev, "read to drain terminal failed");
             }
-            if (allow_root_login) {
+            if (allow_login) {
                 break;
             }
         }
@@ -128,7 +131,7 @@ loop_print_sysinfo(const std::string& tty_dev, bool allow_root_login, const stru
 
 struct options {
     std::string tty_dev;
-    bool allow_root_login = false;
+    std::string login_user;
 };
 
 options
@@ -139,21 +142,13 @@ parse_commandline_options(int argc, char** argv)
     for (int n = 1; n < argc; ++n) {
         auto arg = std::string_view(argv[n]);
 
-        // -r points to a (potential) file. If it exists,
-        // allow root login on console.
-        if (arg == "-r") {
+        if (arg == "-u") {
             ++n;
             if (n >= argc) {
-                sd_journal_print(LOG_ERR, "missing argument to -r switch");
+                sd_journal_print(LOG_ERR, "missing argument to -u switch");
                 _exit(1);
             }
-
-            struct stat st;
-            int res = ::stat(argv[n], &st);
-            if (res == 0) {
-                // File exists, allow root login.
-                opts.allow_root_login = true;
-            }
+            opts.login_user = argv[n];
         } else {
             opts.tty_dev = arg;
         }
@@ -187,7 +182,7 @@ main(int argc, char** argv)
     open_tty(opts.tty_dev, &tios);
 
     // System info loop, until user requests to activate terminal.
-    loop_print_sysinfo(opts.tty_dev, opts.allow_root_login, tios);
+    loop_print_sysinfo(opts.tty_dev, opts.login_user, tios);
 
 
     // Restore signal dispositions before executing shell.
@@ -203,7 +198,7 @@ main(int argc, char** argv)
         "/usr/bin/login",
         "-f",
         "-p",
-        "root",
+        opts.login_user.c_str(),
         0
     };
     check_panic_errno(::execve(cmdline[0], const_cast<char**>(cmdline), environ), opts.tty_dev, "execve login failed");
