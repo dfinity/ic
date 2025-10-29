@@ -2,19 +2,14 @@ pub mod common;
 
 use assert_matches::assert_matches;
 use common::{
-    MB, TestSubnet, TestSubnetConfig, TestSubnetSetup, arb_test_subnets, two_test_subnets,
+    MB, TestSubnet, TestSubnetConfig, TestSubnetSetup, arb_test_subnets, check_for_traps,
+    two_test_subnets,
 };
 use ic_config::message_routing::TARGET_STREAM_SIZE_BYTES;
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_test_utilities_metrics::{HistogramStats, fetch_histogram_vec_stats, metric_vec};
-use ic_types::{
-    CanisterId, PrincipalId,
-    ingress::{IngressState, IngressStatus},
-    messages::{
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MessageId, RequestOrResponse, StreamMessage,
-    },
-};
+use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MessageId, RequestOrResponse};
 use messaging_test::{Call, Reply};
 use messaging_test_utils::{CallConfig, arb_call};
 use proptest::prelude::{Just, ProptestConfig, Strategy};
@@ -227,7 +222,7 @@ fn test_call_tree_metrics() {
         .unwrap();
 
     // Execute until all calls complete.
-    while let Err(_) = subnet1.try_get_reply(&msg_id) {
+    while subnet1.try_get_reply(&msg_id).is_err() {
         subnet1.execute_round();
         subnet2.execute_round();
     }
@@ -241,8 +236,8 @@ fn test_call_tree_metrics() {
         metric_vec(&[(
             &[("class", "guaranteed response")],
             HistogramStats {
-                count: 5,      // In total 5 calls are made on `subnet1`,
-                sum: 5 as f64, // two on depth 0, two on depth 1, one on depth 3, i.e. 0+0+1+1+3
+                count: 5,   // In total 5 calls are made on `subnet1`,
+                sum: 5_f64, // two on depth 0, two on depth 1, one on depth 3, i.e. 0+0+1+1+3
             }
         )]),
         stats
@@ -257,8 +252,8 @@ fn test_call_tree_metrics() {
         metric_vec(&[(
             &[("class", "guaranteed response")],
             HistogramStats {
-                count: 2,      // In total 2 calls are made on `subnet2`,
-                sum: 4 as f64, // both at call depth 2, i.e. 2+2
+                count: 2,   // In total 2 calls are made on `subnet2`,
+                sum: 4_f64, // both at call depth 2, i.e. 2+2
             }
         )]),
         stats
@@ -330,24 +325,31 @@ fn test_memory_accounting_and_sequence_errors(
         );
 
         // Filter out completed calls, check there are no traps on the completed ones.
-        msg_ids = subnet1.await_or_check_completed(msg_ids, |reply, _| {
-            if let Reply::AsyncReject { reject_message, .. } = reply {
-                assert!(!reject_message.contains("trapped"));
-            }
-        });
+        msg_ids = subnet1.await_or_check_completed(msg_ids, check_for_traps);
     }
 }
 
-/// Tests that all calls are concluded successfully and whilst upholding ordering guarantees.
+/// Tests that all calls are concluded successfully during subnet splitting and whilst upholding
+/// ordering guarantees.
 ///
-/// The setup is one subnet with canister; this is the subnet that will undergo the split;
+/// The setup is one subnet with two canisters; this is the subnet that will undergo the split;
 /// and another subnet with one canister. All canisters produce random traffic to all the other
 /// canisters.
 ///
-/// The registry is updated at a random point to reflect the split in the routing table
-/// and the canister migrations list in the same version. When each subnet observed this new
-/// registry version is random, but upon doing so the first subnet will undergo the split and
-/// the second subnet will change its routing and rules for accepting messages.
+/// The changes reflecting the subnet split are made up front, but the registry in either subnet
+/// is updated only later at a random index through the split of `subnet1` and at a different
+/// random index through a regular registry update to the newest version on `subnet2`.
+///
+/// These two random indices produce all the cases relevant for subnet splitting:
+/// - `subnet1` splits before `subnet2` observes the changes in the registry.
+/// - `subnet2` observed the changes on the registry before `subnet1` splits, i.e. before
+///    the new `subnet3` even exists (but is referred to in the routing table).
+/// -  The two events happen in the same round.
+///
+/// After both these events have occurred a few more calls are made. If after some more rounds
+/// all calls conclude (without any canister trapping which indicates a sequencing error)
+/// and the canisters can be stopped, correct routing is implied because hanging calls would
+/// prevent stopping at least one canister and no sequencing errors have occurred.
 #[test_strategy::proptest(ProptestConfig::with_cases(3))]
 fn subnet_splitting_smoke_test(
     #[strategy(arb_test_subnets(
@@ -361,20 +363,21 @@ fn subnet_splitting_smoke_test(
         .prop_flat_map(|canisters| {
             let config = CallConfig {
                 receivers: canisters.clone(),
+                max_total_calls: 10,
                 ..CallConfig::default()
             };
             (
-                proptest::collection::vec(arb_call(canisters[0], config.clone()), 10),
-                proptest::collection::vec(arb_call(canisters[1], config.clone()), 10),
-                proptest::collection::vec(arb_call(canisters[2], config.clone()), 10),
+                proptest::collection::vec(arb_call(canisters[0], config.clone()), 6),
+                proptest::collection::vec(arb_call(canisters[1], config.clone()), 6),
+                proptest::collection::vec(arb_call(canisters[2], config.clone()), 6),
             )
         })
     )]
     calls: (Vec<Call>, Vec<Call>, Vec<Call>),
 
-    #[strategy(5..=15_usize)] subnet1_split_index: usize,
+    #[strategy(5..=10_usize)] subnet1_split_index: usize,
 
-    #[strategy(5..=15_usize)] subnet2_routing_table_update_index: usize,
+    #[strategy(5..=10_usize)] subnet2_routing_table_update_index: usize,
 ) {
     const SEED: [u8; 32] = [123; 32];
 
@@ -389,7 +392,7 @@ fn subnet_splitting_smoke_test(
     let inject_calls =
         |calls: &mut Vec<Call>, retain: usize, subnet: &TestSubnet| -> Vec<MessageId> {
             calls
-                .split_off(calls.len() - retain)
+                .split_off(retain)
                 .into_iter()
                 .map(|call| subnet.submit_call_as_ingress(call).unwrap())
                 .collect()
@@ -401,25 +404,19 @@ fn subnet_splitting_smoke_test(
     // Make the registry changes for the split in the data provider; Not yet visible on either subnet.
     subnet1
         .env
-        .make_registry_entries_for_subnet_split(SEED.clone(), canister2..=canister2);
+        .make_registry_entries_for_subnet_split(SEED, canister2..=canister2);
 
-    println!(
-        "BLABLA: {}, {}",
-        subnet1_split_index, subnet2_routing_table_update_index
-    );
-    println!("BLUB: {:?}, {:?}", subnet1.id(), subnet2.id());
-
-    // Execute rounds at split / update the routing table at the given index.
+    // Execute rounds; split / update the routing table at the given index.
     let mut subnet3: Option<TestSubnet> = None;
-    for round_index in 0..=20 {
+    for round_index in 0..=15 {
         if round_index == subnet1_split_index {
-            subnet3 = Some(subnet1.split(SEED.clone()).unwrap());
-            println!("HALO\n\n");
+            subnet3 = Some(subnet1.split(SEED).unwrap());
+            assert_matches!(subnet1.canisters()[..], [c] if c == canister1);
+            assert_matches!(subnet3.as_ref().unwrap().canisters()[..], [c] if c == canister2);
         }
         if round_index == subnet2_routing_table_update_index {
             subnet2.env.reload_registry();
             subnet2.env.registry_client.update_to_latest_version();
-            println!("OLAH\n\n");
         }
 
         subnet1.execute_round();
@@ -429,45 +426,24 @@ fn subnet_splitting_smoke_test(
         }
     }
 
-    println!("\n\nOMG\n\n");
-
-    /*
-    // Inject the rest of the calls; not `canister2` is now on `subnet3`.
+    // Inject the rest of the calls; note `canister2` is now on `subnet3`.
     let subnet3 = subnet3.unwrap();
     msg_ids1.append(&mut inject_calls(&mut calls1, 0, &subnet1));
     msg_ids2.append(&mut inject_calls(&mut calls2, 0, &subnet3));
-    msg_ids3.append(&mut inject_calls(&mut calls1, 0, &subnet2));
+    msg_ids3.append(&mut inject_calls(&mut calls3, 0, &subnet2));
 
-    // Execute a bit to allow the new calls to get started.
-    for _ in 0..10 {
+    while !msg_ids1.is_empty() || !msg_ids2.is_empty() || !msg_ids3.is_empty() {
         subnet1.execute_round();
         subnet2.execute_round();
         subnet3.execute_round();
+
+        msg_ids1 = subnet1.await_or_check_completed(msg_ids1, check_for_traps);
+        msg_ids2 = subnet3.await_or_check_completed(msg_ids2, check_for_traps);
+        msg_ids3 = subnet2.await_or_check_completed(msg_ids3, check_for_traps);
     }
 
-    // Send canisters into stopping state; then execute rounds until all are stopped.
-    let stop_id1 = subnet1.env.stop_canister_non_blocking(canister1);
-    let stop_id2 = subnet3.env.stop_canister_non_blocking(canister2);
-    let stop_id3 = subnet2.env.stop_canister_non_blocking(canister3);
-
-    let check_traps = |reply: &Reply, _| {
-        if let Reply::AsyncReject { reject_message, .. } = reply {
-            assert!(!reject_message.contains("trapped"));
-        }
-    };
-
-    while !msg_ids1.is_empty() || !msg_ids2.is_empty() || !msg_ids3.is_empty() {
-        msg_ids1 = subnet1.await_or_check_completed(msg_ids1, check_traps);
-        msg_ids2 = subnet3.await_or_check_completed(msg_ids2, check_traps);
-        msg_ids3 = subnet2.await_or_check_completed(msg_ids3, check_traps);
-    }
-    */
-
-    /*
-    subnet1.execute_round();
-    subnet2.execute_round();
-    subnet3.execute_round();
-
-    subnet1.env.ingress_status(&stop_id1)
-    */
+    // All calls have concluded without trapping; we should be able to stop them now.
+    subnet1.env.stop_canister(canister1).unwrap();
+    subnet2.env.stop_canister(canister3).unwrap();
+    subnet3.env.stop_canister(canister2).unwrap();
 }

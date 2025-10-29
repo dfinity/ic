@@ -3,19 +3,16 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig};
 use ic_management_canister_types_private::CanisterStatusType;
-use ic_replicated_state::CanisterState;
 use ic_replicated_state::testing::CanisterQueuesTesting;
 use ic_state_machine_tests::{StateMachine, StateMachineConfig, SubmitIngressError, UserError};
 use ic_types::{
     Cycles, SubnetId,
     ingress::{IngressState, IngressStatus, WasmResult},
-    messages::{MessageId, RequestOrResponse, StreamMessage},
-    xnet::StreamHeader,
+    messages::{MessageId, RequestOrResponse},
 };
 use messaging_test::{Call, Reply};
-use messaging_test_utils::{CallConfig, arb_call, from_blob, to_encoded_ingress};
+use messaging_test_utils::{from_blob, to_encoded_ingress};
 use proptest::prelude::*;
-use std::ops::RangeInclusive;
 use std::sync::Arc;
 
 pub const KB: u32 = 1024;
@@ -137,15 +134,6 @@ impl TestSubnet {
             .unwrap()
     }
 
-    /// Returns `true` if `self` hosts the canister with `id`.
-    pub fn has_canister(&self, id: &CanisterId) -> bool {
-        self.env
-            .get_latest_state()
-            .canister_states
-            .get(id)
-            .is_some()
-    }
-
     /// Returns the status of the canister if any, e.g. running, stopping, stopped.
     pub fn canister_status(&self, id: &CanisterId) -> Option<CanisterStatusType> {
         self.env
@@ -174,40 +162,6 @@ impl TestSubnet {
         )
     }
 
-    /// Returns a snapshot of a XNet stream to another subnet.
-    pub fn stream_snapshot(
-        &self,
-        to_subnet: SubnetId,
-    ) -> Option<(StreamHeader, Vec<StreamMessage>)> {
-        self.env
-            .get_latest_state()
-            .get_stream(&to_subnet)
-            .map(|stream| {
-                (
-                    stream.header(),
-                    stream
-                        .messages()
-                        .iter()
-                        .map(|(_, msg)| msg.clone())
-                        .collect(),
-                )
-            })
-    }
-
-    /// Returns the number of open call contexts on `canister`.
-    pub fn open_call_contexts_count(&self, canister: CanisterId) -> Option<usize> {
-        Some(
-            self.env
-                .get_latest_state()
-                .canister_states
-                .get(&canister)?
-                .system_state
-                .call_context_manager()?
-                .call_contexts()
-                .len(),
-        )
-    }
-
     /// Tries to fetch completed calls from the ingress history; filters out the
     /// completed calls but first runs `for_each_breath_first`; keeps and returns
     /// the Ids for which the call is not yet complete.
@@ -218,9 +172,9 @@ impl TestSubnet {
         msg_ids
             .into_iter()
             .filter(|msg_id| {
-                self.try_get_reply(msg_id).map_or(false, |reply| {
+                self.try_get_reply(msg_id).map_or(true, |reply| {
                     reply.for_each_depth_first(f.clone());
-                    true
+                    false
                 })
             })
             .collect()
@@ -229,6 +183,15 @@ impl TestSubnet {
     /// Attempts to split `self` and returns the split off `Self`.
     pub fn split(&self, seed: [u8; 32]) -> Result<Self, String> {
         self.env.split(seed).map(|env| Self { env })
+    }
+}
+
+/// Checks for an async rejection in the `Reply` that indicates the canister trapped.
+///
+/// Intended for use as `f` in `await_or_check_completed`.
+pub fn check_for_traps(reply: &Reply, _call_depth: usize) {
+    if let Reply::AsyncReject { reject_message, .. } = reply {
+        assert!(!reject_message.contains("trapped"));
     }
 }
 
