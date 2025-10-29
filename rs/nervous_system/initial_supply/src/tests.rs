@@ -76,6 +76,7 @@ async fn test_initial_supply() {
                     burn: None,
                     approve: None,
                     transfer: None,
+                    fee_collector: None,
                 }
             };
 
