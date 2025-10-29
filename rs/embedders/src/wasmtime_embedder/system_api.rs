@@ -887,7 +887,7 @@ struct MemoryUsage {
     subnet_available_memory: SubnetAvailableMemory,
 
     /// Execution memory allocated during this message execution, i.e.,
-    /// extra wasm/stable memory usage beyond
+    /// wasm/stable memory usage growth beyond
     /// the memory allocation of the canister.
     allocated_execution_memory: NumBytes,
 
@@ -972,9 +972,9 @@ impl MemoryUsage {
     /// Tries to allocate the requested amount of the Wasm or stable memory.
     ///
     /// If the canister has memory allocation, then this function only allocates
-    /// bytes for extra memory usage beyond the memory allocation.
+    /// bytes for memory usage growth beyond the memory allocation.
     /// Nevertheless, this function always increases `current_usage`
-    /// by the full amount of extra memory usage.
+    /// by the full amount of memory usage growth.
     ///
     /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
     /// if the subnet memory limit would be exceeded.
@@ -984,7 +984,7 @@ impl MemoryUsage {
     /// given API type and canister would be frozen after the allocation.
     fn allocate_execution_memory(
         &mut self,
-        extra_usage_bytes: NumBytes,
+        usage_growth_bytes: NumBytes,
         api_type: &ApiType,
         sandbox_safe_system_state: &mut SandboxSafeSystemState,
         subnet_memory_saturation: &ResourceSaturation,
@@ -993,7 +993,7 @@ impl MemoryUsage {
         let (new_usage, overflow) = self
             .current_usage
             .get()
-            .overflowing_add(extra_usage_bytes.get());
+            .overflowing_add(usage_growth_bytes.get());
         if overflow {
             return Err(HypervisorError::OutOfMemory);
         }
@@ -1026,7 +1026,7 @@ impl MemoryUsage {
         self.current_usage = NumBytes::new(new_usage);
         self.allocated_execution_memory += allocated_bytes;
 
-        self.add_execution_memory(extra_usage_bytes, execution_memory_type)?;
+        self.add_execution_memory(usage_growth_bytes, execution_memory_type)?;
 
         sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
             self.wasm_memory_limit,
@@ -1352,7 +1352,7 @@ impl SystemApiImpl {
     }
 
     /// Execution memory allocated during this message execution, i.e.,
-    /// extra wasm/stable memory usage beyond
+    /// wasm/stable memory usage growth beyond
     /// the memory allocation of the canister.
     pub fn get_allocated_bytes(&self) -> NumBytes {
         self.memory_usage.allocated_execution_memory
