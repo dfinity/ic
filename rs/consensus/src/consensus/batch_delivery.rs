@@ -31,7 +31,8 @@ use ic_protobuf::{
 use ic_types::{
     Height, PrincipalId, Randomness, SubnetId,
     batch::{
-        Batch, BatchContent, BatchSummary, BlockmakerMetrics, ChainKeyData, ConsensusResponse,
+        Batch, BatchContent, BatchMessages, BatchSummary, BlockmakerMetrics, ChainKeyData,
+        ConsensusResponse,
     },
     consensus::{
         Block, BlockPayload, HasVersion,
@@ -215,7 +216,7 @@ pub(crate) fn deliver_batches_with_result_processor(
         let persist_batch = Some(height) == max_batch_height_to_deliver;
         let requires_full_state_hash = block.payload.is_summary() || persist_batch;
         let batch_content = match block.payload.as_ref() {
-            BlockPayload::Summary(_summary_payload) => BatchContent::Summary,
+            BlockPayload::Summary(_summary_payload) => BatchContent::Data(BatchMessages::default()),
             BlockPayload::Data(data_payload) => {
                 batch_stats.add_from_payload(&data_payload.batch);
                 BatchContent::Data(

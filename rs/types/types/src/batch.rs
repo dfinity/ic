@@ -46,8 +46,6 @@ use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
 pub enum BatchContent {
     /// The payload messages to be processed.
     Data(BatchMessages),
-    /// The summary payload doesn't have any other information to be processed.
-    Summary,
     /// During subnet splitting we don't include any messages with the batch.
     Splitting {
         /// The id of the subnet the replica is assigned to after subnet splitting.
