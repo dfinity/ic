@@ -3170,6 +3170,19 @@ impl StateMachine {
         add_subnet_list_record(&self.registry_data_provider, next_version.get(), subnet_ids);
     }
 
+    /// Simulates a subnet split where the corresponding registry entries are assumed to be done
+    /// beforehand, i.e. `make_registry_entries_for_subnet_split` should be called first using the
+    /// same `seed`.
+    ///
+    /// The process has the following steps:
+    /// - Write a checkpoint on `self`.
+    /// - Clone its enire state directory into a new `state_dir`.
+    /// - Create a new `StateMachine` using this `state_dir` and the provided `seed`.
+    /// - Reloads the registry und updates it to the latest version.
+    /// - Get the routing table from the registry and use it to perform the split.
+    ///
+    /// Returns an error if the routing table does not contain the subnet Id of the new `env` that
+    /// was just created or if the split itself fails.
     pub fn split(&self, seed: [u8; 32]) -> Result<Arc<StateMachine>, String> {
         use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
 
