@@ -418,6 +418,175 @@ where
     }
 }
 
+fn test_subnet_memory_capacity<F, G, H>(
+    scenario_params: &ScenarioParams<F, G>,
+    default_run_params: RunParams,
+    allocated_bytes: NumBytes,
+) where
+    F: Fn(&mut ExecutionTest, CanisterId) -> H + Copy,
+    G: Fn(&mut ExecutionTest, CanisterId, H) -> Option<UserError> + Copy,
+{
+    let maximum_subnet_memory_usage = NumBytes::from(SUBNET_EXECUTION_MEMORY) - allocated_bytes;
+
+    // Test that the operation succeeds if the subnet is as close as possible to its memory capacity.
+    let run_params = RunParams {
+        subnet_memory_usage: maximum_subnet_memory_usage,
+        ..default_run_params
+    };
+    let res = run(&scenario_params, run_params);
+    assert!(res.err.is_none());
+
+    if allocated_bytes > NumBytes::from(0) {
+        // Test that the operation fails if the subnet is too close to its memory capacity.
+        let run_params = RunParams {
+            subnet_memory_usage: maximum_subnet_memory_usage + NumBytes::from(1),
+            ..default_run_params
+        };
+        let res = run(&scenario_params, run_params);
+        let err = res.err.unwrap();
+        match scenario_params.scenario {
+            Scenario::CanisterEntryPoint | Scenario::CanisterReplyCallback(_) => {
+                assert!(
+                    err.code() == ErrorCode::CanisterOutOfMemory
+                        || (err.code() == ErrorCode::CanisterCalledTrap
+                            && err.description().contains("ic0.stable64_grow failed"))
+                );
+            }
+            Scenario::CanisterCleanupCallback(_) => {
+                assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+                assert!(
+                    err.description()
+                        .contains("Canister cannot grow its memory usage.")
+                        || err.description().contains("ic0.stable64_grow failed")
+                );
+            }
+            _ => assert_eq!(err.code(), ErrorCode::SubnetOversubscribed),
+        };
+    }
+}
+
+fn test_reserved_cycles_limit<F, G, H>(
+    scenario_params: &ScenarioParams<F, G>,
+    default_run_params: RunParams,
+    reserved_cycles_limit: Cycles,
+) where
+    F: Fn(&mut ExecutionTest, CanisterId) -> H + Copy,
+    G: Fn(&mut ExecutionTest, CanisterId, H) -> Option<UserError> + Copy,
+{
+    // Test that the operation succeeds if the canister is as close as possible to its reserved cycles limit.
+    let run_params = RunParams {
+        reserved_cycles_limit,
+        ..default_run_params
+    };
+    let res = run(&scenario_params, run_params);
+    assert!(res.err.is_none());
+
+    // Test that the operation fails if the canister would exceed its reserved cycles limit.
+    let run_params = RunParams {
+        reserved_cycles_limit: Cycles::from(1_u128),
+        ..default_run_params
+    };
+    let res = run(&scenario_params, run_params);
+    let err = res.err.unwrap();
+    match scenario_params.scenario {
+        Scenario::IncreaseMemoryAllocation => assert_eq!(
+            err.code(),
+            ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
+        ),
+        _ => assert_eq!(
+            err.code(),
+            ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+        ),
+    };
+}
+
+fn test_freezing_threshold<F, G, H>(
+    scenario_params: &ScenarioParams<F, G>,
+    default_run_params: RunParams,
+    minimum_initial_cycles: Cycles,
+) where
+    F: Fn(&mut ExecutionTest, CanisterId) -> H + Copy,
+    G: Fn(&mut ExecutionTest, CanisterId, H) -> Option<UserError> + Copy,
+{
+    // Test that the operation succeeds if the canister is as close as possible to its freezing threshold.
+    let run_params = RunParams {
+        initial_cycles: minimum_initial_cycles,
+        ..default_run_params
+    };
+    let res = run(&scenario_params, run_params);
+    assert!(res.err.is_none());
+
+    // Test that the operation fails if the canister is too close to its freezing threshold.
+    let run_params = RunParams {
+        initial_cycles: minimum_initial_cycles - Cycles::from(1_u128),
+        ..default_run_params
+    };
+    let res = run(&scenario_params, run_params);
+    // Freezing threshold is not checked in canister response callbacks.
+    if matches!(
+        scenario_params.scenario,
+        Scenario::CanisterReplyCallback(_) | Scenario::CanisterCleanupCallback(_)
+    ) {
+        assert!(res.err.is_none());
+    } else {
+        let err = res.err.unwrap();
+        match scenario_params.scenario {
+            Scenario::IncreaseMemoryAllocation => {
+                assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation)
+            }
+            Scenario::OtherManagement => {
+                assert!(
+                    err.code() == ErrorCode::CanisterOutOfCycles
+                        || err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
+                );
+            }
+            Scenario::CanisterCleanupCallback(_) => {
+                assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+                assert!(err.description().contains("cannot grow memory"));
+            }
+            _ => assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow),
+        };
+        assert!(err.description().contains("least 1 additional cycles"));
+    }
+}
+
+fn test_minimum_cycles_balance<F, G, H>(
+    scenario_params: &ScenarioParams<F, G>,
+    default_run_params: RunParams,
+    minimum_initial_cycles: Cycles,
+) where
+    F: Fn(&mut ExecutionTest, CanisterId) -> H + Copy,
+    G: Fn(&mut ExecutionTest, CanisterId, H) -> Option<UserError> + Copy,
+{
+    // Test that the operation succeeds if the canister is still able to reserve cycles.
+    let run_params = RunParams {
+        initial_cycles: minimum_initial_cycles,
+        ..default_run_params
+    };
+    let res = run(&scenario_params, run_params);
+    assert!(res.err.is_none());
+
+    // Test that the operation fails if the canister cannot reserve cycles
+    // due to its insufficient cycles balance.
+    let run_params = RunParams {
+        initial_cycles: minimum_initial_cycles - Cycles::from(1_u128),
+        ..default_run_params
+    };
+    let res = run(&scenario_params, run_params);
+    let err = res.err.unwrap();
+    match scenario_params.scenario {
+        Scenario::IncreaseMemoryAllocation => {
+            assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation)
+        }
+        Scenario::CanisterCleanupCallback(_) => {
+            assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
+            assert!(err.description().contains("cannot grow memory"));
+        }
+        _ => assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow),
+    };
+    assert!(err.description().contains("least 1 additional cycles"));
+}
+
 fn test_memory_suite<F, G, H>(scenario_params: ScenarioParams<F, G>)
 where
     F: Fn(&mut ExecutionTest, CanisterId) -> H + Copy,
@@ -440,134 +609,38 @@ where
                 freezing_threshold,
             };
 
-            // (Successful) dry-run to collect stats
-            // and check that subnet available memory is updated properly
+            // (Successful) dry-run to collect stats and check that
+            // subnet available memory is updated properly
             // after running the operation under test.
             let run_params = default_run_params.clone();
             let res = run(&scenario_params, run_params);
             assert!(res.err.is_none());
 
-            let allocated_bytes = res.allocated_bytes;
-            let reserved_cycles = res.reserved_cycles;
-            let minimum_initial_cycles = res.minimum_initial_cycles;
-            let maximum_subnet_memory_usage =
-                NumBytes::from(SUBNET_EXECUTION_MEMORY) - allocated_bytes;
+            test_subnet_memory_capacity(
+                &scenario_params,
+                default_run_params.clone(),
+                res.allocated_bytes,
+            );
 
-            // Test that the operation succeeds if the subnet is as close as possible to its memory capacity.
-            let run_params = RunParams {
-                subnet_memory_usage: maximum_subnet_memory_usage,
-                ..default_run_params
-            };
-            let res = run(&scenario_params, run_params);
-            assert!(res.err.is_none());
+            if res.allocated_bytes > NumBytes::from(0) {
+                test_reserved_cycles_limit(
+                    &scenario_params,
+                    default_run_params.clone(),
+                    res.reserved_cycles,
+                );
 
-            if allocated_bytes > NumBytes::from(0) {
-                // The minimum initial cycles are only applicable if `allocated_bytes` is not zero:
-                // the canister is frozen if freezing limit in cycles dominates the reserved cycles,
-                // i.e., if freezing threshold is "long".
-                let frozen_at_minimum_initial_cycles =
-                    matches!(freezing_threshold, FreezingThreshold::Long);
-
-                // Test that the operation succeeds if the canister is as close as possible to its reserved cycles limit.
-                let run_params = RunParams {
-                    reserved_cycles_limit: reserved_cycles,
-                    ..default_run_params
-                };
-                let res = run(&scenario_params, run_params);
-                assert!(res.err.is_none());
-
-                // Test that the operation fails if the canister would exceed its reserved cycles limit.
-                let run_params = RunParams {
-                    reserved_cycles_limit: Cycles::from(1_u128),
-                    ..default_run_params
-                };
-                let res = run(&scenario_params, run_params);
-                let err = res.err.unwrap();
-                match scenario_params.scenario {
-                    Scenario::IncreaseMemoryAllocation => assert_eq!(
-                        err.code(),
-                        ErrorCode::ReservedCyclesLimitExceededInMemoryAllocation
+                match freezing_threshold {
+                    FreezingThreshold::Long => test_freezing_threshold(
+                        &scenario_params,
+                        default_run_params.clone(),
+                        res.minimum_initial_cycles,
                     ),
-                    _ => assert_eq!(
-                        err.code(),
-                        ErrorCode::ReservedCyclesLimitExceededInMemoryGrow
+                    FreezingThreshold::Short => test_minimum_cycles_balance(
+                        &scenario_params,
+                        default_run_params.clone(),
+                        res.minimum_initial_cycles,
                     ),
-                };
-
-                // Test that the operation succeeds if the canister is as close as possible to its freezing threshold
-                // while still being able to reserve cycles.
-                let run_params = RunParams {
-                    initial_cycles: minimum_initial_cycles,
-                    ..default_run_params
-                };
-                let res = run(&scenario_params, run_params);
-                assert!(res.err.is_none());
-
-                // Tests that the operation fails if the canister is too close to its freezing threshold
-                // or unable to reserve cycles.
-                let run_params = RunParams {
-                    initial_cycles: minimum_initial_cycles - Cycles::from(1_u128),
-                    ..default_run_params
-                };
-                let res = run(&scenario_params, run_params);
-                // Freezing threshold is not checked in canister response callbacks.
-                if frozen_at_minimum_initial_cycles
-                    && matches!(
-                        scenario_params.scenario,
-                        Scenario::CanisterReplyCallback(_) | Scenario::CanisterCleanupCallback(_)
-                    )
-                {
-                    assert!(res.err.is_none());
-                } else {
-                    let err = res.err.unwrap();
-                    match scenario_params.scenario {
-                        Scenario::IncreaseMemoryAllocation => {
-                            assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryAllocation)
-                        }
-                        Scenario::OtherManagement => {
-                            if frozen_at_minimum_initial_cycles {
-                                assert!(
-                                    err.code() == ErrorCode::CanisterOutOfCycles
-                                        || err.code() == ErrorCode::InsufficientCyclesInMemoryGrow
-                                );
-                            } else {
-                                assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow);
-                            }
-                        }
-                        Scenario::CanisterCleanupCallback(_) => {
-                            assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-                            assert!(err.description().contains("cannot grow memory"));
-                        }
-                        _ => assert_eq!(err.code(), ErrorCode::InsufficientCyclesInMemoryGrow),
-                    };
-                    assert!(err.description().contains("least 1 additional cycles"));
                 }
-
-                // Test that the operation fails if the subnet is too close to its memory capacity.
-                let run_params = RunParams {
-                    subnet_memory_usage: maximum_subnet_memory_usage + NumBytes::from(1),
-                    ..default_run_params
-                };
-                let res = run(&scenario_params, run_params);
-                let err = res.err.unwrap();
-                match scenario_params.scenario {
-                    Scenario::CanisterEntryPoint | Scenario::CanisterReplyCallback(_) => {
-                        assert!(
-                            err.code() == ErrorCode::CanisterOutOfMemory
-                                || (err.code() == ErrorCode::CanisterCalledTrap
-                                    && err.description().contains("ic0.stable64_grow failed"))
-                        );
-                    }
-                    Scenario::CanisterCleanupCallback(_) => {
-                        assert_eq!(err.code(), ErrorCode::CanisterCalledTrap);
-                        assert!(
-                            err.description()
-                                .contains("Canister cannot grow its memory usage.")
-                                || err.description().contains("ic0.stable64_grow failed")
-                        );
-                    }
-                    _ => assert_eq!(err.code(), ErrorCode::SubnetOversubscribed),
-                };
             }
         }
     }
