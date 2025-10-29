@@ -1,9 +1,10 @@
 use crate::page_map::{Buffer, PAGE_SIZE, PageAllocatorFileDescriptor, PageMap};
-use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
+use ic_management_canister_types_private::{CanisterLogRecord, DataSize, FetchCanisterLogsFilter};
 use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::VecDeque;
+use std::convert::From;
 use std::sync::Arc;
 
 const HEADER_OFFSET: usize = 0;
@@ -95,12 +96,29 @@ fn test_header_v1_roundtrip_serialization() {
 // const SLOT_SIZE: usize = 24;
 //const _: () = assert!(std::mem::size_of::<LookupSlot>() == SLOT_SIZE);
 
-// struct DataEntry {
-//     idx: u64,
-//     ts_nanos: u64,
-//     len: u32,
-//     content: Vec<u8>,
-// }
+struct DataEntry {
+    idx: u64,
+    ts_nanos: u64,
+    len: u32,
+    content: Vec<u8>,
+}
+
+impl DataEntry {
+    fn data_size(&self) -> usize {
+        8 + 8 + 4 + self.content.len()
+    }
+}
+
+impl From<&DataEntry> for Vec<u8> {
+    fn from(entry: &DataEntry) -> Self {
+        let mut bytes = Vec::with_capacity(entry.data_size());
+        bytes.extend_from_slice(&entry.idx.to_le_bytes());
+        bytes.extend_from_slice(&entry.ts_nanos.to_le_bytes());
+        bytes.extend_from_slice(&entry.len.to_le_bytes());
+        bytes.extend_from_slice(&entry.content);
+        bytes
+    }
+}
 
 fn init(data_capacity: usize) -> HeaderV1 {
     let lookup_table_pages = 1;
@@ -169,17 +187,17 @@ impl LogMemoryStore {
         &mut self.data
     }
 
-    fn write_header(&mut self, header: &HeaderV1) {
-        let mut buffer = Buffer::new(self.data.clone());
-        buffer.write(&HeaderV1Bytes::from(header), HEADER_OFFSET);
-        self.data.update(&buffer.dirty_pages().collect::<Vec<_>>());
-    }
-
     fn read_header(&self) -> HeaderV1 {
         let buffer = Buffer::new(self.data.clone());
         let mut bytes = [0; V1_PACKED_HEADER_SIZE];
         buffer.read(&mut bytes, HEADER_OFFSET);
         HeaderV1::from(&bytes)
+    }
+
+    fn write_header(&mut self, header: &HeaderV1) {
+        let mut buffer = Buffer::new(self.data.clone());
+        buffer.write(&HeaderV1Bytes::from(header), HEADER_OFFSET);
+        self.data.update(&buffer.dirty_pages().collect::<Vec<_>>());
     }
 
     pub fn clear(&mut self) {
@@ -203,19 +221,14 @@ impl LogMemoryStore {
         self.push_delta_log_size(delta_log.used_space());
 
         let mut buffer = Buffer::new(self.data.clone());
-        let mut header = {
-            let mut header_bytes = [0; V1_PACKED_HEADER_SIZE];
-            buffer.read(&mut header_bytes, HEADER_OFFSET);
-            HeaderV1::from(&header_bytes)
-        };
+        let mut header = self.read_header();
         for record in delta_log.records().iter() {
             // Advance the next_idx to one past the appended record.
             header.next_idx = record.idx + 1;
 
             // TODO: append the record to the log memory store.
         }
-        buffer.write(&HeaderV1Bytes::from(&header), HEADER_OFFSET);
-        self.data.update(&buffer.dirty_pages().collect::<Vec<_>>());
+        self.write_header(&header);
     }
 
     pub fn records(&self, _filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
@@ -233,5 +246,99 @@ impl LogMemoryStore {
     /// Atomically snapshot and clear the per-round delta_log sizes — use at end of round.
     pub fn take_delta_log_sizes(&mut self) -> Vec<usize> {
         self.delta_log_sizes.drain(..).collect()
+    }
+}
+
+struct RingBuffer {
+    buffer: Buffer,
+}
+
+impl RingBuffer {
+    pub fn new(page_map: PageMap, capacity: usize) -> Self {
+        Self {
+            buffer: Buffer::new(page_map),
+        }
+    }
+
+    fn read_header(&self) -> HeaderV1 {
+        let mut bytes = [0; V1_PACKED_HEADER_SIZE];
+        self.buffer.read(&mut bytes, HEADER_OFFSET);
+        HeaderV1::from(&bytes)
+    }
+
+    fn write_header(&mut self, header: &HeaderV1) {
+        self.buffer
+            .write(&HeaderV1Bytes::from(header), HEADER_OFFSET);
+    }
+
+    // fn dirty_pages(&self) -> impl Iterator<Item = usize> + '_ {
+    //     self.buffer.dirty_pages()
+    // }
+
+    pub fn capacity(&self) -> usize {
+        self.read_header().data_capacity as usize
+    }
+
+    pub fn used_space(&self) -> usize {
+        self.read_header().data_size as usize
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.used_space() == 0
+    }
+
+    pub fn next_id(&self) -> u64 {
+        self.read_header().next_idx
+    }
+
+    fn get(&self, offset: u64) -> Option<DataEntry> {
+        None // TODO.
+    }
+
+    fn pop_front(&mut self) -> Option<DataEntry> {
+        let mut header = self.read_header();
+        let entry = self.get(header.data_head)?;
+        let removed_size = entry.data_size() as u64;
+        header.data_head = (header.data_head + removed_size) % header.data_capacity;
+        header.data_size = header.data_size.saturating_sub(removed_size);
+        self.write_header(&header);
+        Some(entry)
+    }
+
+    fn make_free_space_within_limit(&mut self, new_data_size: u64) {
+        // Removes old records to make enough free space for new data within the limit.
+        while self.used_space() + new_data_size as usize > self.capacity() {
+            if self.pop_front().is_none() {
+                break; // No more records to pop, limit reached.
+            }
+        }
+    }
+
+    fn push_back(&mut self, entry: &DataEntry) {
+        let added_size = entry.data_size() as u64;
+        self.make_free_space_within_limit(added_size);
+        // writing new entry into the buffer has 2 cases:
+        // 1) there is enough space at the end of the buffer
+        // 2) we need to wrap around
+        let bytes: Vec<u8> = entry.into();
+        let mut header = self.read_header();
+        let data_tail_address = (header.data_offset + header.data_tail) as usize;
+        if header.data_tail + added_size <= header.data_capacity {
+            // case 1
+            self.buffer.write(&bytes, data_tail_address);
+        } else {
+            // case 2
+            let first_part_size = header.data_capacity - header.data_tail;
+            self.buffer
+                .write(&bytes[..first_part_size as usize], data_tail_address);
+            self.buffer.write(
+                &bytes[first_part_size as usize..],
+                header.data_offset as usize,
+            );
+        }
+        header.data_tail = (header.data_tail + added_size) % header.data_capacity;
+        header.data_size = header.data_size.saturating_add(added_size);
+        header.next_idx += 1; // It's ok to overflow here, since it's a unique ID for _stored_ logs.
+        self.write_header(&header);
     }
 }
