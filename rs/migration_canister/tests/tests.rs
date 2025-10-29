@@ -589,40 +589,6 @@ async fn validation_fails_not_stopped() {
 }
 
 #[tokio::test]
-async fn validation_fails_rate_limited() {
-    let Setup {
-        pic,
-        source,
-        target,
-        source_controllers,
-        system_controller,
-        ..
-    } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    // rate limit canister
-    #[derive(Clone, Debug, CandidType, Deserialize)]
-    struct SetRateLimitArgs {
-        pub max_active_requests: u64,
-    }
-    pic.update_call(
-        MIGRATION_CANISTER_ID.into(),
-        system_controller,
-        "set_rate_limit",
-        Encode!(&SetRateLimitArgs {
-            max_active_requests: 0
-        })
-        .unwrap(),
-    )
-    .await
-    .unwrap();
-
-    assert!(matches!(
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
-        Err(ValidationError::RateLimited)
-    ));
-}
-
-#[tokio::test]
 async fn validation_fails_disabled() {
     let Setup {
         pic,
@@ -972,7 +938,7 @@ async fn success_controllers_restored() {
 
 #[tokio::test]
 async fn parallel_migrations() {
-    const NUM_MIGRATIONS: usize = 20;
+    const NUM_MIGRATIONS: usize = 51;
     let pic = PocketIcBuilder::new()
         .with_icp_features(IcpFeatures {
             registry: Some(IcpFeaturesConfig::DefaultConfig),
@@ -1089,7 +1055,7 @@ async fn parallel_migrations() {
     }
     // --------------------------------------------------------------------- //
     // setup done
-    for i in 0..NUM_MIGRATIONS / 2 {
+    for i in 0..NUM_MIGRATIONS - 1 {
         migrate_canister(
             &pic,
             source_controllers[0],
@@ -1101,24 +1067,22 @@ async fn parallel_migrations() {
         .await
         .unwrap();
     }
+    // The last one should fail due to rate limit
+    let err = migrate_canister(
+        &pic,
+        source_controllers[0],
+        &MigrateCanisterArgs {
+            source: sources[NUM_MIGRATIONS - 1],
+            target: targets[NUM_MIGRATIONS - 1],
+        },
+    )
+    .await;
+    assert!(matches!(err, Err(ValidationError::RateLimited)));
 
-    for i in (NUM_MIGRATIONS / 2)..NUM_MIGRATIONS {
-        advance(&pic).await;
-        migrate_canister(
-            &pic,
-            source_controllers[0],
-            &MigrateCanisterArgs {
-                source: sources[i],
-                target: targets[i],
-            },
-        )
-        .await
-        .unwrap();
-    }
     for _ in 0..10 {
         advance(&pic).await;
     }
-    for i in 0..NUM_MIGRATIONS {
+    for i in 0..NUM_MIGRATIONS - 1 {
         let status = get_status(
             &pic,
             source_controllers[0],
