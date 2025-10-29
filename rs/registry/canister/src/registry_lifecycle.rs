@@ -3,11 +3,16 @@ use crate::{
     certification::recertify_registry, mutations::node_management::common::get_key_family,
     pb::v1::RegistryCanisterStableStorage, registry::Registry,
 };
-use ic_base_types::PrincipalId;
+use ic_base_types::{NodeId, PrincipalId};
+use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_registry_keys::{NODE_OPERATOR_RECORD_KEY_PREFIX, make_node_operator_record_key};
+use ic_registry_keys::{
+    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, make_node_operator_record_key,
+    make_node_record_key,
+};
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
 use prost::Message;
+use std::str::FromStr;
 
 pub fn canister_post_upgrade(
     registry: &mut Registry,
@@ -25,8 +30,11 @@ pub fn canister_post_upgrade(
 
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
-        let mutations = fill_node_operators_max_rewardable_nodes(registry);
-        let mutations = migrate_xph6u_nodes_to_type0(registry);
+        let mutations: Vec<_> = fill_node_operators_max_rewardable_nodes(registry)
+            .into_iter()
+            .chain(migrate_xph6u_nodes_to_type0(registry))
+            .collect();
+
         if mutations.is_empty() {
             0 // No mutations required for this data migration.
         } else {
@@ -261,67 +269,13 @@ mod test {
     }
 
     #[test]
-    fn test_migrate_node_reward_type1_type0_to_type1dot1_works_correctly() {
-        let mut registry = invariant_compliant_registry(0);
-
-        let mut node_additions = Vec::new();
-        for (idx, test_id) in enumerate(0..10) {
-            let node_reward_type = if idx < 5 {
-                NodeRewardType::Type0
-            } else {
-                NodeRewardType::Type1
-            };
-            let record = NodeRecord {
-                node_operator_id: PrincipalId::new_user_test_id(test_id).to_vec(),
-                hostos_version_id: Some(format!("dummy_version_{test_id}")),
-                domain: Some(format!("dummy_domain_{test_id}")),
-                node_reward_type: Some(node_reward_type as i32),
-                ..NodeRecord::default()
-            };
-
-            node_additions.push(insert(
-                make_node_record_key(NodeId::new(PrincipalId::new_node_test_id(test_id))),
-                record.encode_to_vec(),
-            ));
-        }
-
-        registry.apply_mutations_for_test(node_additions);
-        let mutations = migrate_node_reward_type1_type0_to_type1dot1(&registry);
-        assert_eq!(mutations.len(), 10);
-
-        registry.apply_mutations_for_test(mutations);
-
-        for test_id in 0..10 {
-            let record =
-                registry.get_node_or_panic(NodeId::from(PrincipalId::new_node_test_id(test_id)));
-
-            let expected_record = NodeRecord {
-                xnet: None,
-                http: None,
-                node_operator_id: PrincipalId::new_user_test_id(test_id).to_vec(),
-                chip_id: None,
-                hostos_version_id: Some(format!("dummy_version_{test_id}")),
-                public_ipv4_config: None,
-                domain: Some(format!("dummy_domain_{test_id}")),
-                node_reward_type: Some(NodeRewardType::Type1dot1 as i32),
-                ssh_node_state_write_access: vec![],
-            };
-
-            assert_eq!(
-                record, expected_record,
-                "Assertion for Node {test_id} failed"
-            );
-        }
-    }
-
-    #[test]
     fn test_migrate_xph6u_nodes_to_type0_works_correctly() {
         let mut registry = invariant_compliant_registry(0);
         let node_operator_id = PrincipalId::from_str(
             "xph6u-z3z2t-s7hh7-gtlxh-bbgbx-aatlm-eab4o-bsank-nqruh-3ub4q-sae",
         )
-            .unwrap()
-            .to_vec();
+        .unwrap()
+        .to_vec();
 
         let mut node_additions = Vec::new();
         for (idx, test_id) in enumerate(0..10) {
@@ -381,7 +335,7 @@ mod test {
         let no_1 = PrincipalId::from_str(
             "5dwhe-vpbuf-zz5ml-ylu6k-7y2z2-36ywv-5e4wf-advxd-3endk-icvg4-cae",
         )
-            .unwrap();
+        .unwrap();
 
         let record_no_1 = NodeOperatorRecord {
             node_operator_principal_id: no_1.clone().to_vec(),
@@ -426,7 +380,7 @@ mod test {
         let no_1 = PrincipalId::from_str(
             "ukji3-ju5bx-ty5r7-qwk4p-eobil-isp26-fsomg-44kwf-j4ew7-ozkqy-wqe",
         )
-            .unwrap();
+        .unwrap();
 
         let record_no_1 = NodeOperatorRecord {
             node_operator_principal_id: no_1.clone().to_vec(),
