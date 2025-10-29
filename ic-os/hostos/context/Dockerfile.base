@@ -68,7 +68,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
 # NODE-1718: libvirt-daemon-config-network must be installed early to avoid a broken dependency ordering
 RUN echo "Starting apt-get update..." && \
-    (for i in 1 2 3; do \
+    (for i in 1 2 3 4 5; do \
         echo "Attempt $i of apt-get update..."; \
         if apt-get -y update; then \
             echo "apt-get update succeeded on attempt $i"; \
@@ -81,7 +81,7 @@ RUN echo "Starting apt-get update..." && \
     echo "Starting apt-get upgrade..." && \
     apt-get -y upgrade && \
     echo "Installing libvirt-daemon-config-network..." && \
-    (for i in 1 2 3; do \
+    (for i in 1 2 3 4 5; do \
         echo "Attempt $i of libvirt installation..."; \
         if apt-get -y --no-install-recommends install libvirt-daemon-config-network; then \
             echo "libvirt installation succeeded on attempt $i"; \
@@ -92,7 +92,7 @@ RUN echo "Starting apt-get update..." && \
         fi; \
     done; echo "All libvirt installation attempts failed!" && exit 1) && \
     echo "Starting package installation..." && \
-    (for i in 1 2 3; do \
+    (for i in 1 2 3 4 5; do \
         echo "Attempt $i of package installation..."; \
         if apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done); then \
             echo "Package installation succeeded on attempt $i"; \

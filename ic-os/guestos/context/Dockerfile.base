@@ -60,7 +60,7 @@ ARG _KERNEL_PACKAGE=linux-image-virtual-hwe-24.04
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
 RUN echo "Starting apt-get update..." && \
-    (for i in 1 2 3; do \
+    (for i in 1 2 3 4 5; do \
         echo "Attempt $i of apt-get update..."; \
         if apt-get -y update; then \
             echo "apt-get update succeeded on attempt $i"; \
@@ -73,7 +73,7 @@ RUN echo "Starting apt-get update..." && \
     echo "Starting apt-get upgrade..." && \
     apt-get -y upgrade && \
     echo "Starting package installation..." && \
-    (for i in 1 2 3; do \
+    (for i in 1 2 3 4 5; do \
         echo "Attempt $i of package installation..."; \
         if apt-get -y --no-install-recommends install $(for P in ${PACKAGE_FILES}; do cat /tmp/$P | sed -e "s/#.*//" ; done) \
             ${_KERNEL_PACKAGE} \

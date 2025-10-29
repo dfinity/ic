@@ -31,7 +31,7 @@ ARG PACKAGE_FILES=packages.common
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY packages.* /tmp/
 RUN echo "Starting apt-get update..." && \
-    (for i in 1 2 3; do \
+    (for i in 1 2 3 4 5; do \
         echo "Attempt $i of apt-get update..."; \
         if apt-get -y update; then \
             echo "apt-get update succeeded on attempt $i"; \
