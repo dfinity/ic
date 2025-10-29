@@ -182,6 +182,7 @@ impl Identity for GenericIdentity {
 
 // Test requests with delegations without targets
 //
+// This tests with various numbers of delegations (including no delegations)
 pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
@@ -242,6 +243,7 @@ pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
     });
 }
 
+// Tests for ingress messages with delegations using canister targets
 pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
@@ -402,6 +404,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
     });
 }
 
+// Tests for handling of delegation loops
 pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
