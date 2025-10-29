@@ -30,8 +30,11 @@ mod processing;
 mod tests;
 mod validation;
 
-/// Interpreted as: Max number of requests in a 24 hour sliding window.
-const MAX_ACTIVE_REQUESTS: u64 = 50;
+/// The max number of requests in a 24 hour sliding window. Requests are either
+/// - active (in REQUESTS)
+/// - succeeded (in HISTORY) and not older than 24 hours.
+const RATE_LIMIT: u64 = 50;
+/// Validations cause xnet calls, so we limit them.
 const MAX_ONGOING_VALIDATIONS: u64 = 500;
 /// 10 Trillion Cycles
 const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
@@ -297,6 +300,7 @@ impl EventType {
 
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 struct Event {
+    // This field MUST be the first in the struct so that Ord works as intended.
     /// IC time in nanos since epoch.
     pub time: u64,
     pub event: EventType,
@@ -438,7 +442,7 @@ pub fn start_timers() {
 /// Within a sliding 24h window, we don't want to exceed some maximum of migrations.
 /// Therefore, we add currently active requests and successes in the past 24 hours.
 pub fn rate_limited() -> bool {
-    num_active_requests() + num_successes_in_past_24_h() >= MAX_ACTIVE_REQUESTS
+    num_active_requests() + num_successes_in_past_24_h() >= RATE_LIMIT
 }
 
 #[allow(dead_code)]
