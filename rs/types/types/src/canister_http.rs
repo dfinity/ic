@@ -144,9 +144,6 @@ pub enum Replication {
     NonReplicated(NodeId),
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct UnknownPricingVersion(u32);
-
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize, FromRepr)]
 #[repr(u32)]
 pub enum PricingVersion {

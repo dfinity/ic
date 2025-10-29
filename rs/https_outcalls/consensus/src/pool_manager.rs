@@ -290,14 +290,6 @@ impl CanisterHttpPoolManagerImpl {
                 continue;
             }
 
-            if context.pricing_version == PricingVersion::PayAsYouGo {
-                warn!(
-                    self.log,
-                    "Canister HTTP request with ID {:?} uses PayAsYouGo pricing, which is not supported yet. Defaulting to Legacy pricing.",
-                    id
-                );
-            }
-
             if !request_ids_already_made.contains(id) {
                 let timeout = context.time + Duration::from_secs(5 * 60);
                 if let Err(err) = self
