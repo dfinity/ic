@@ -1,5 +1,5 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use ic_types::NumBytes;
+use ic_types::{NumBytes, NumOsPages};
 use memory_tracker::*;
 
 use libc::{self, c_void};
@@ -54,6 +54,12 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
                         no_op_logger(),
                         DirtyPageTracking::Track,
                         page_map.clone(),
+                        None,
+                        MemoryLimits {
+                            max_memory_size: NumBytes::new(PAGE_SIZE as u64),
+                            max_accessed_pages: NumOsPages::new(1),
+                            max_dirty_pages: NumOsPages::new(1),
+                        },
                     )
                     .unwrap(),
                     page_map,
@@ -102,6 +108,12 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
                         no_op_logger(),
                         DirtyPageTracking::Track,
                         page_map.clone(),
+                        None,
+                        MemoryLimits {
+                            max_memory_size: NumBytes::new(PAGE_SIZE as u64),
+                            max_accessed_pages: NumOsPages::new(1),
+                            max_dirty_pages: NumOsPages::new(1),
+                        },
                     )
                     .unwrap(),
                     page_map,

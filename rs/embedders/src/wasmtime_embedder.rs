@@ -26,11 +26,13 @@ use ic_replicated_state::{
 };
 use ic_sys::PAGE_SIZE;
 use ic_types::{
-    CanisterId, MAX_STABLE_MEMORY_IN_BYTES, NumBytes, NumInstructions,
+    CanisterId, NumBytes, NumInstructions, NumOsPages,
     methods::{FuncRef, WasmMethod},
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
+use memory_tracker::{
+    DirtyPageTracking, MemoryLimits, MissingPageHandlerKind, PageBitmap, SigsegvMemoryTracker,
+};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
@@ -417,6 +419,21 @@ impl WasmtimeEmbedder {
             ),
         };
 
+        let stable_memory_limits = MemoryLimits {
+            max_memory_size: self.config.max_stable_memory_size,
+            max_accessed_pages: current_accessed_limit,
+            max_dirty_pages: current_dirty_page_limit,
+        };
+        let max_heap_memory_size = self
+            .config
+            .max_wasm_memory_size
+            .max(self.config.max_wasm64_memory_size);
+        let heap_memory_limits = MemoryLimits {
+            max_memory_size: max_heap_memory_size,
+            max_accessed_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
+            max_dirty_pages: NumOsPages::new(max_heap_memory_size.get() / PAGE_SIZE as u64),
+        };
+
         let mut store = Store::new(
             instance_pre.module().engine(),
             StoreData {
@@ -424,7 +441,7 @@ impl WasmtimeEmbedder {
                 num_instructions_global: None,
                 log: self.log.clone(),
                 limits: StoreLimitsBuilder::new()
-                    .memory_size(MAX_STABLE_MEMORY_IN_BYTES as usize)
+                    .memory_size(self.config.max_stable_memory_size.get() as usize)
                     .tables(MAX_STORE_TABLES)
                     .table_elements(MAX_STORE_TABLE_ELEMENTS)
                     .build(),
@@ -526,14 +543,28 @@ impl WasmtimeEmbedder {
 
         let mut memories = HashMap::new();
         for mem_info in self.list_memory_infos(modification_tracking, heap_memory, stable_memory) {
-            if let Err(e) =
-                self.instantiate_memory(mem_info, &instance, &mut store, &mut memories, canister_id)
-            {
+            let memory_limits = match mem_info.memory_type {
+                CanisterMemoryType::Heap => &heap_memory_limits,
+                CanisterMemoryType::Stable => &stable_memory_limits,
+            };
+            if let Err(e) = self.instantiate_memory(
+                mem_info,
+                &instance,
+                &mut store,
+                &mut memories,
+                canister_id,
+                memory_limits,
+            ) {
                 return Err((e, store.into_data().system_api));
             }
         }
 
-        let memory_trackers = sigsegv_memory_tracker(memories, &mut store, self.log.clone());
+        let memory_trackers = sigsegv_memory_tracker(
+            memories,
+            &mut store,
+            self.log.clone(),
+            self.config.feature_flags.deterministic_memory_tracker,
+        );
 
         let signal_stack = WasmtimeSignalStack::new();
         let mut main_memory_type = WasmMemoryType::Wasm32;
@@ -574,6 +605,7 @@ impl WasmtimeEmbedder {
         mut store: &mut Store<StoreData>,
         memories_to_track: &mut HashMap<CanisterMemoryType, MemorySigSegvInfo>,
         canister_id: CanisterId,
+        memory_limits: &MemoryLimits,
     ) -> HypervisorResult<()> {
         if let Some(instance_memory) = instance.get_memory(&mut store, memory_info.name) {
             let current_size = instance_memory.size(&store);
@@ -608,6 +640,7 @@ impl WasmtimeEmbedder {
                     current_memory_size_in_pages: current_size,
                     page_map: memory_info.memory.page_map.clone(),
                     dirty_page_tracking: memory_info.dirty_page_tracking,
+                    memory_limits: memory_limits.clone(),
                 },
             );
 
@@ -685,13 +718,19 @@ pub struct MemorySigSegvInfo {
     current_memory_size_in_pages: MemoryPageSize,
     page_map: PageMap,
     dirty_page_tracking: DirtyPageTracking,
+    memory_limits: MemoryLimits,
 }
 
 fn sigsegv_memory_tracker<S>(
     memories: HashMap<CanisterMemoryType, MemorySigSegvInfo>,
     store: &mut wasmtime::Store<S>,
     log: ReplicaLogger,
+    deterministic_memory_tracker: FlagStatus,
 ) -> HashMap<CanisterMemoryType, Arc<Mutex<SigsegvMemoryTracker>>> {
+    let maybe_missing_page_handler_kind = match deterministic_memory_tracker {
+        FlagStatus::Enabled => Some(MissingPageHandlerKind::Deterministic),
+        FlagStatus::Disabled => None,
+    };
     let mut tracked_memories = vec![];
     let mut result = HashMap::new();
     for (
@@ -701,6 +740,7 @@ fn sigsegv_memory_tracker<S>(
             current_memory_size_in_pages,
             page_map,
             dirty_page_tracking,
+            memory_limits,
         },
     ) in memories
     {
@@ -728,6 +768,8 @@ fn sigsegv_memory_tracker<S>(
                     log.clone(),
                     dirty_page_tracking,
                     page_map,
+                    maybe_missing_page_handler_kind,
+                    memory_limits,
                 )
                 .expect("failed to instantiate SIGSEGV memory tracker"),
             ))

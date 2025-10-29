@@ -3,6 +3,7 @@ use std::{convert::TryFrom, rc::Rc};
 
 use ic_base_types::NumBytes;
 use ic_config::execution_environment::Config as HypervisorConfig;
+use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
@@ -122,6 +123,15 @@ impl WasmtimeInstanceBuilder {
             environment_variables,
             ..self
         }
+    }
+
+    pub fn with_deterministic_memory_tracker_enabled(mut self, enabled: bool) -> Self {
+        if enabled {
+            self.config.feature_flags.deterministic_memory_tracker = FlagStatus::Enabled;
+        } else {
+            self.config.feature_flags.deterministic_memory_tracker = FlagStatus::Disabled;
+        }
+        self
     }
 
     #[allow(clippy::result_large_err)]
