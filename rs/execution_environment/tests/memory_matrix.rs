@@ -216,7 +216,12 @@ where
     };
     assert!(run_params.initial_cycles >= refund_for_response_transmission);
     let initial_cycles = run_params.initial_cycles - refund_for_response_transmission;
-    test.consume_cycles_down_to(canister_id, initial_cycles);
+    let consume_cycles = test.canister_state(canister_id).system_state.balance() - initial_cycles;
+    test.consume_cycles(canister_id, consume_cycles);
+    assert_eq!(
+        test.canister_state(canister_id).system_state.balance(),
+        initial_cycles
+    );
 
     // Deploy a dummy canister to fill the subnet memory up to the provided subnet memory usage.
     let dummy_canister_initial_cycles: Cycles = DEFAULT_INITIAL_CYCLES.into();

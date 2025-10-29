@@ -1915,24 +1915,20 @@ impl ExecutionTest {
             )
     }
 
-    pub fn consume_cycles_down_to(&mut self, canister_id: CanisterId, cycles: Cycles) {
-        let balance = self.canister_state(canister_id).system_state.balance();
-        assert!(balance >= cycles);
-        let consume_cycles = balance - cycles;
+    pub fn consume_cycles(&mut self, canister_id: CanisterId, cycles: Cycles) {
         let cost_schedule = self.cost_schedule();
         let cycles_account_manager = self.cycles_account_manager.clone();
         let system_state = &mut self.canister_state_mut(canister_id).system_state;
         cycles_account_manager
             .consume_with_threshold(
                 system_state,
-                consume_cycles,
+                cycles,
                 Cycles::zero(),
                 CyclesUseCase::Memory,
                 false,
                 cost_schedule,
             )
             .unwrap();
-        assert_eq!(system_state.balance(), cycles);
     }
 }
 
