@@ -13,7 +13,6 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     UniversalCanister, block_on, expiry_time, sign_query, sign_update,
 };
-use ic_types::crypto::SignedBytesWithoutDomainSeparator;
 use ic_types::messages::{
     Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope,
     HttpUserQuery, SignedDelegation,
@@ -51,7 +50,7 @@ pub fn setup(env: TestEnv) {
 struct TestInformation {
     api_ver: usize,
     url: Url,
-    canister_id: Principal,
+    canister_id: CanisterId,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -83,13 +82,13 @@ enum GenericIdentityInner {
 #[derive(Clone)]
 struct GenericIdentity {
     inner: GenericIdentityInner,
-    public_key: Vec<u8>,
+    public_key_der: Vec<u8>,
     principal: Principal,
 }
 
 impl GenericIdentity {
     fn new<R: Rng + CryptoRng>(typ: GenericIdentityType, rng: &mut R) -> Self {
-        let (inner, public_key) = match typ {
+        let (inner, public_key_der) = match typ {
             GenericIdentityType::Ed25519 => {
                 let sk = ic_ed25519::PrivateKey::generate_using_rng(rng);
                 let pk = sk.public_key().serialize_rfc8410_der();
@@ -107,11 +106,11 @@ impl GenericIdentity {
             }
         };
 
-        let principal = Principal::self_authenticating(&public_key);
+        let principal = Principal::self_authenticating(&public_key_der);
 
         Self {
             inner,
-            public_key,
+            public_key_der,
             principal,
         }
     }
@@ -120,8 +119,8 @@ impl GenericIdentity {
         &self.principal
     }
 
-    fn public_key(&self) -> Vec<u8> {
-        self.public_key.clone()
+    fn public_key_der(&self) -> Vec<u8> {
+        self.public_key_der.clone()
     }
 
     fn sign_query(&self, query: &HttpQueryContent) -> Vec<u8> {
@@ -153,7 +152,7 @@ impl Identity for GenericIdentity {
     }
 
     fn public_key(&self) -> Option<Vec<u8>> {
-        Some(self.public_key.clone())
+        Some(self.public_key_der.clone())
     }
 
     fn sign(
@@ -174,13 +173,15 @@ impl Identity for GenericIdentity {
         let signature = self.sign_bytes(content);
 
         Ok(ic_agent::Signature {
-            public_key: Some(self.public_key()),
+            public_key: Some(self.public_key_der()),
             signature: Some(signature),
             delegations: None,
         })
     }
 }
 
+// Test requests with delegations without targets
+//
 pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
@@ -204,13 +205,13 @@ pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
             let test_info = TestInformation {
                 api_ver,
                 url: node_url,
-                canister_id: canister.canister_id(),
+                canister_id: canister_id_from_principal(&canister.canister_id()),
             };
 
             for delegation_count in 0..32 {
                 let mut identities = Vec::with_capacity(delegation_count + 1);
 
-                for _ in 0..(delegation_count + 1) {
+                for _ in 0..=delegation_count {
                     let id_type = GenericIdentityType::random(rng);
                     identities.push(GenericIdentity::new(id_type, rng));
                 }
@@ -220,9 +221,12 @@ pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
                 let sender = &identities[0];
                 let signer = &identities[identities.len() - 1];
 
-                let query_result = query_delegation(&test_info, sender, signer, &delegations).await;
+                let query_result =
+                    perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
+                        .await;
                 let update_result =
-                    update_delegation(&test_info, sender, signer, &delegations).await;
+                    perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
+                        .await;
 
                 if delegation_count <= 20 {
                     assert_eq!(query_result, 200);
@@ -258,7 +262,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                 "canister_id" => format!("{:?}", canister.canister_id())
             );
 
-            let canister_id = canister.canister_id();
+            let canister_id = canister_id_from_principal(&canister.canister_id());
 
             let test_info = TestInformation {
                 api_ver,
@@ -268,12 +272,12 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
 
             struct DelegationTest {
                 note: &'static str,
-                targets: Vec<Vec<Principal>>,
+                targets: Vec<Vec<CanisterId>>,
                 expect_success: bool,
             }
 
             impl DelegationTest {
-                fn accept(note: &'static str, targets: Vec<Vec<Principal>>) -> Self {
+                fn accept(note: &'static str, targets: Vec<Vec<CanisterId>>) -> Self {
                     Self {
                         note,
                         targets,
@@ -281,7 +285,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                     }
                 }
 
-                fn reject(note: &'static str, targets: Vec<Vec<Principal>>) -> Self {
+                fn reject(note: &'static str, targets: Vec<Vec<CanisterId>>) -> Self {
                     Self {
                         note,
                         targets,
@@ -305,27 +309,27 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                 ),
                 DelegationTest::accept(
                     "Delegation with different targets (10), including the canister ID",
-                    vec![random_principals_including(&canister_id, 10, 1, rng)],
+                    vec![random_canister_ids_including(&canister_id, 10, 1, rng)],
                 ),
                 DelegationTest::accept(
                     "Delegation with different targets (100), including the canister ID",
-                    vec![random_principals_including(&canister_id, 100, 1, rng)],
+                    vec![random_canister_ids_including(&canister_id, 100, 1, rng)],
                 ),
                 DelegationTest::accept(
                     "Delegation with different targets (1000), including the canister ID",
-                    vec![random_principals_including(&canister_id, 1000, 1, rng)],
+                    vec![random_canister_ids_including(&canister_id, 1000, 1, rng)],
                 ),
                 DelegationTest::accept(
                     "Delegation with different targets (10), including the canister ID multiple times",
-                    vec![random_principals_including(&canister_id, 10, 2, rng)],
+                    vec![random_canister_ids_including(&canister_id, 10, 2, rng)],
                 ),
                 DelegationTest::accept(
                     "Delegation with different targets (100), including the canister ID multiple times",
-                    vec![random_principals_including(&canister_id, 100, 10, rng)],
+                    vec![random_canister_ids_including(&canister_id, 100, 10, rng)],
                 ),
                 DelegationTest::accept(
                     "Delegation with different targets (1000), including the canister ID multiple times",
-                    vec![random_principals_including(&canister_id, 1000, 50, rng)],
+                    vec![random_canister_ids_including(&canister_id, 1000, 50, rng)],
                 ),
                 DelegationTest::reject(
                     "Not containing the requested canister ID",
@@ -333,11 +337,11 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                 ),
                 DelegationTest::reject(
                     "With more than 1000 different targets containing the requested canister ID (1001)",
-                    vec![random_principals_including(&canister_id, 1001, 1, rng)],
+                    vec![random_canister_ids_including(&canister_id, 1001, 1, rng)],
                 ),
                 DelegationTest::reject(
                     "With more than 1000 different targets containing the requested canister ID (2000)",
-                    vec![random_principals_including(&canister_id, 2000, 1, rng)],
+                    vec![random_canister_ids_including(&canister_id, 2000, 1, rng)],
                 ),
                 DelegationTest::reject(
                     "With an empty target intersection of multiple delegations with non-empty sets of targets",
@@ -358,7 +362,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
 
                 let mut identities = Vec::with_capacity(delegation_count + 1);
 
-                for _ in 0..(delegation_count + 1) {
+                for _ in 0..=delegation_count {
                     let id_type = GenericIdentityType::random(rng);
                     identities.push(GenericIdentity::new(id_type, rng));
                 }
@@ -368,9 +372,12 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                 let sender = &identities[0];
                 let signer = &identities[identities.len() - 1];
 
-                let query_result = query_delegation(&test_info, sender, signer, &delegations).await;
+                let query_result =
+                    perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
+                        .await;
                 let update_result =
-                    update_delegation(&test_info, sender, signer, &delegations).await;
+                    perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
+                        .await;
 
                 info!(
                     logger,
@@ -415,7 +422,7 @@ pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
                 "canister_id" => format!("{:?}", canister.canister_id())
             );
 
-            let canister_id = canister.canister_id();
+            let canister_id = canister_id_from_principal(&canister.canister_id());
 
             let test_info = TestInformation {
                 api_ver,
@@ -440,8 +447,11 @@ pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
             let sender = &identities[0];
             let signer = &identities[identities.len() - 1];
 
-            let query_result = query_delegation(&test_info, sender, signer, &delegations).await;
-            let update_result = update_delegation(&test_info, sender, signer, &delegations).await;
+            let query_result =
+                perform_query_call_with_delegations(&test_info, sender, signer, &delegations).await;
+            let update_result =
+                perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
+                    .await;
 
             assert_eq!(query_result, 400);
             assert_eq!(update_result, 400);
@@ -459,7 +469,7 @@ fn create_delegations(identities: &[GenericIdentity]) -> Vec<SignedDelegation> {
 
     if delegation_count > 0 {
         for i in 1..=delegation_count {
-            let delegation = Delegation::new(identities[i].public_key(), delegation_expiry);
+            let delegation = Delegation::new(identities[i].public_key_der(), delegation_expiry);
             let signed_delegation = sign_delegation(delegation, &identities[i - 1]);
             delegations.push(signed_delegation);
         }
@@ -469,12 +479,12 @@ fn create_delegations(identities: &[GenericIdentity]) -> Vec<SignedDelegation> {
 }
 
 fn canister_id_from_principal(p: &Principal) -> CanisterId {
-    CanisterId::unchecked_from_principal(PrincipalId::from(*p))
+    CanisterId::try_from_principal_id(PrincipalId::from(*p)).expect("invalid canister ID")
 }
 
 fn create_delegations_with_targets(
     identities: &[GenericIdentity],
-    targets: &[Vec<Principal>],
+    targets: &[Vec<CanisterId>],
 ) -> Vec<SignedDelegation> {
     let delegation_expiry = Time::from_nanos_since_unix_epoch(expiry_time().as_nanos() as u64);
 
@@ -484,15 +494,12 @@ fn create_delegations_with_targets(
     if delegation_count > 0 {
         for i in 1..=delegation_count {
             let delegation = if targets[i - 1].is_empty() {
-                Delegation::new(identities[i].public_key(), delegation_expiry)
+                Delegation::new(identities[i].public_key_der(), delegation_expiry)
             } else {
                 Delegation::new_with_targets(
-                    identities[i].public_key(),
+                    identities[i].public_key_der(),
                     delegation_expiry,
-                    targets[i - 1]
-                        .iter()
-                        .map(canister_id_from_principal)
-                        .collect::<Vec<CanisterId>>(),
+                    targets[i - 1].clone(),
                 )
             };
 
@@ -505,16 +512,16 @@ fn create_delegations_with_targets(
     delegations
 }
 
-fn random_canister_id<R: Rng + CryptoRng>(rng: &mut R) -> Principal {
-    Principal::from(PrincipalId::new_user_test_id(rng.r#gen::<u64>()))
+fn random_canister_id<R: Rng + CryptoRng>(rng: &mut R) -> CanisterId {
+    CanisterId::from_u64(rng.r#gen::<u64>())
 }
 
-fn random_principals_including<R: Rng + CryptoRng>(
-    canister_id: &Principal,
+fn random_canister_ids_including<R: Rng + CryptoRng>(
+    canister_id: &CanisterId,
     total_cnt: usize,
     include_cnt: usize,
     rng: &mut R,
-) -> Vec<Principal> {
+) -> Vec<CanisterId> {
     assert!(total_cnt > 0);
     assert!(include_cnt > 0 && include_cnt < total_cnt);
 
@@ -533,13 +540,12 @@ fn random_principals_including<R: Rng + CryptoRng>(
 }
 
 fn sign_delegation(delegation: Delegation, identity: &GenericIdentity) -> SignedDelegation {
-    let mut msg = b"\x1Aic-request-auth-delegation".to_vec();
-    msg.extend(&delegation.as_signed_bytes_without_domain_separator());
-    let signature = identity.sign_bytes(&msg);
+    use ic_types::crypto::Signable;
+    let signature = identity.sign_bytes(&delegation.as_signed_bytes());
     SignedDelegation::new(delegation, signature)
 }
 
-async fn status_of_request<C: serde::ser::Serialize>(
+async fn send_request<C: serde::ser::Serialize>(
     test: &TestInformation,
     req_type: &'static str,
     content: C,
@@ -573,7 +579,7 @@ async fn status_of_request<C: serde::ser::Serialize>(
     res.status()
 }
 
-async fn query_delegation(
+async fn perform_query_call_with_delegations(
     test: &TestInformation,
     sender: &GenericIdentity,
     signer: &GenericIdentity,
@@ -581,7 +587,7 @@ async fn query_delegation(
 ) -> StatusCode {
     let content = HttpQueryContent::Query {
         query: HttpUserQuery {
-            canister_id: Blob(test.canister_id.as_slice().to_vec()),
+            canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
             method_name: "query".to_string(),
             arg: Blob(vec![]),
             sender: Blob(sender.principal().as_slice().to_vec()),
@@ -592,18 +598,18 @@ async fn query_delegation(
 
     let signature = signer.sign_query(&content);
 
-    status_of_request(
+    send_request(
         test,
         "query",
         content,
-        sender.public_key(),
+        sender.public_key_der(),
         Some(delegations.to_vec()),
         signature,
     )
     .await
 }
 
-async fn update_delegation(
+async fn perform_update_call_with_delegations(
     test: &TestInformation,
     sender: &GenericIdentity,
     signer: &GenericIdentity,
@@ -611,7 +617,7 @@ async fn update_delegation(
 ) -> StatusCode {
     let content = HttpCallContent::Call {
         update: HttpCanisterUpdate {
-            canister_id: Blob(test.canister_id.as_slice().to_vec()),
+            canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
             method_name: "update".to_string(),
             arg: Blob(vec![]),
             sender: Blob(sender.principal().as_slice().to_vec()),
@@ -622,11 +628,11 @@ async fn update_delegation(
 
     let signature = signer.sign_update(&content);
 
-    status_of_request(
+    send_request(
         test,
         "call",
         content,
-        sender.public_key(),
+        sender.public_key_der(),
         Some(delegations.to_vec()),
         signature,
     )
