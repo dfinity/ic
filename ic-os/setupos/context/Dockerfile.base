@@ -33,8 +33,14 @@ COPY packages.* /tmp/
 RUN echo "Starting apt-get update..." && \
     (for i in 1 2 3; do \
         echo "Attempt $i of apt-get update..."; \
-        apt-get -y update && break || (echo "apt-get update failed, retrying in 10s..." && sleep 10); \
-    done) && \
+        if apt-get -y update; then \
+            echo "apt-get update succeeded on attempt $i"; \
+            exit 0; \
+        else \
+            echo "apt-get update failed on attempt $i, retrying in 10s..."; \
+            sleep 10; \
+        fi; \
+    done; echo "All apt-get update attempts failed!" && exit 1) && \
     echo "Starting apt-get upgrade..." && \
     apt-get -y upgrade && \
     echo "Starting package installation..." && \
@@ -44,8 +50,8 @@ RUN echo "Starting apt-get update..." && \
             echo "Package installation succeeded on attempt $i"; \
             exit 0; \
         else \
-            echo "Package installation failed on attempt $i, retrying in 15s..."; \
-            sleep 15; \
+            echo "Package installation failed on attempt $i, retrying in 10s..."; \
+            sleep 10; \
         fi; \
     done; echo "All package installation attempts failed!" && exit 1) && \
     rm /tmp/packages.*
