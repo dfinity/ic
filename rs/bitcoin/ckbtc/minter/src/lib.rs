@@ -1439,6 +1439,9 @@ pub trait CanisterRuntime {
     /// Address controlled by the minter (via threshold ECDSA) for a given user.
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
 
+    /// Derive address controlled by the minter.
+    fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress;
+
     /// Returns the frequency at which fee percentiles are refreshed.
     fn refresh_fee_percentiles_frequency(&self) -> Duration;
 
@@ -1564,6 +1567,18 @@ impl CanisterRuntime for IcCanisterRuntime {
 
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String {
         get_btc_address::account_to_p2wpkh_address_from_state(state, account)
+    }
+
+    fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress {
+        let main_account = Account {
+            owner: ic_cdk::api::canister_self(),
+            subaccount: None,
+        };
+        let ecdsa_public_key = state
+            .ecdsa_public_key
+            .as_ref()
+            .expect("bug: the ECDSA public key must be initialized");
+        address::account_to_bitcoin_address(ecdsa_public_key, &main_account)
     }
 
     async fn check_address(
