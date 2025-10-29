@@ -440,7 +440,7 @@ fn test_subnet_memory_capacity<F, G, H>(
         subnet_memory_usage: maximum_subnet_memory_usage,
         ..default_run_params
     };
-    let res = run(&scenario_params, run_params);
+    let res = run(scenario_params, run_params);
     assert!(res.err.is_none());
 
     if allocated_bytes > NumBytes::from(0) {
@@ -449,7 +449,7 @@ fn test_subnet_memory_capacity<F, G, H>(
             subnet_memory_usage: maximum_subnet_memory_usage + NumBytes::from(1),
             ..default_run_params
         };
-        let res = run(&scenario_params, run_params);
+        let res = run(scenario_params, run_params);
         let err = res.err.unwrap();
         match scenario_params.scenario {
             Scenario::CanisterEntryPoint | Scenario::CanisterReplyCallback(_) => {
@@ -485,7 +485,7 @@ fn test_reserved_cycles_limit<F, G, H>(
         reserved_cycles_limit,
         ..default_run_params
     };
-    let res = run(&scenario_params, run_params);
+    let res = run(scenario_params, run_params);
     assert!(res.err.is_none());
 
     // Test that the operation fails if the canister would exceed its reserved cycles limit.
@@ -493,7 +493,7 @@ fn test_reserved_cycles_limit<F, G, H>(
         reserved_cycles_limit: Cycles::from(1_u128),
         ..default_run_params
     };
-    let res = run(&scenario_params, run_params);
+    let res = run(scenario_params, run_params);
     let err = res.err.unwrap();
     match scenario_params.scenario {
         Scenario::IncreaseMemoryAllocation => assert_eq!(
@@ -520,7 +520,7 @@ fn test_freezing_threshold<F, G, H>(
         initial_cycles: minimum_initial_cycles,
         ..default_run_params
     };
-    let res = run(&scenario_params, run_params);
+    let res = run(scenario_params, run_params);
     assert!(res.err.is_none());
 
     // Test that the operation fails if the canister is too close to its freezing threshold.
@@ -528,7 +528,7 @@ fn test_freezing_threshold<F, G, H>(
         initial_cycles: minimum_initial_cycles - Cycles::from(1_u128),
         ..default_run_params
     };
-    let res = run(&scenario_params, run_params);
+    let res = run(scenario_params, run_params);
     // Freezing threshold is not checked in canister response callbacks.
     if matches!(
         scenario_params.scenario,
@@ -570,7 +570,7 @@ fn test_minimum_cycles_balance<F, G, H>(
         initial_cycles: minimum_initial_cycles,
         ..default_run_params
     };
-    let res = run(&scenario_params, run_params);
+    let res = run(scenario_params, run_params);
     assert!(res.err.is_none());
 
     // Test that the operation fails if the canister cannot reserve cycles
@@ -579,7 +579,7 @@ fn test_minimum_cycles_balance<F, G, H>(
         initial_cycles: minimum_initial_cycles - Cycles::from(1_u128),
         ..default_run_params
     };
-    let res = run(&scenario_params, run_params);
+    let res = run(scenario_params, run_params);
     let err = res.err.unwrap();
     match scenario_params.scenario {
         Scenario::IncreaseMemoryAllocation => {
