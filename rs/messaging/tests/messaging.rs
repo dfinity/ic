@@ -380,9 +380,38 @@ fn subnet_splitting_smoke_test(
         })
     )]
     calls: (Vec<Call>, Vec<Call>, Vec<Call>),
+
+    #[strategy(5..=15_usize)] subnet1_split_index: usize,
+
+    #[strategy(5..=15_usize)] subnet2_routing_table_update_index: usize,
 ) {
     let (subnet1, subnet2, _) = setup.into_parts();
-    let (calls_for_canister1, calls_for_canister2, calls_for_canister3) = calls;
+    let (mut calls1, mut calls2, mut calls3) = calls;
 
-    // TBD
+    // Inject triggers into the ingress pool; keep 2 for after the split / routing table update.
+    let inject_calls = |calls: &mut Vec<Call>, subnet: &TestSubnet| -> Vec<MessageId> {
+        calls
+            .split_off(calls.len() - 2)
+            .into_iter()
+            .map(|call| subnet.submit_call_as_ingress(call).unwrap())
+            .collect()
+    };
+    let mut msg_ids1 = inject_calls(&mut calls1, &subnet1);
+    let mut msg_ids2 = inject_calls(&mut calls2, &subnet1);
+    let mut msg_ids3 = inject_calls(&mut calls3, &subnet2);
+
+    // Execute rounds at split / update the routing table at the given index.
+    for round_index in 0..=15 {
+        if round_index == subnet1_split_index {
+            // split subnet1.
+        }
+        if round_index == subnet2_routing_table_update_index {
+            // update routing table on subnet.
+        }
+
+        subnet1.execute_round();
+        subnet2.execute_round();
+    }
+
+    // Send canisters into stopping state; then execute rounds until all are stopped.
 }
