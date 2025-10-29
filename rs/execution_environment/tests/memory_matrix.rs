@@ -293,8 +293,8 @@ where
     let newly_allocated_bytes = final_allocated_bytes.saturating_sub(&initial_allocated_bytes);
     // Note. The cycles prepayment in `install_code` is refunded before cycles are reserved
     // and freezing threshold checked and thus we can ignore it here.
-    // The cycles prepayment for response callback execution is charged
-    // before running the operation under test and thus we can also ignore it here.
+    // The cycles prepayment for response callback execution is charged during setup
+    // and thus we can also ignore it here.
     let unused_cycles_prepayment = match scenario_params.scenario {
         Scenario::CanisterEntryPoint => {
             let used_instructions = final_executed_instructions - initial_executed_instructions;
@@ -315,7 +315,8 @@ where
         idle_cycles_burned_per_day * (run_params.freezing_threshold.get() / (24 * 3600));
 
     // Checks after running the operation.
-    // Cycles are reserved if and only if new bytes are allocated.
+    // Cycles are reserved if and only if new bytes are allocated
+    // (this is a property of this test suite, not a general protocol property).
     assert_eq!(
         newly_reserved_cycles.get() > 0,
         newly_allocated_bytes.get() > 0
@@ -332,7 +333,7 @@ where
             MemoryUsageChange::None => assert_eq!(initial_memory_usage, final_memory_usage),
             MemoryUsageChange::Decrease => assert!(initial_memory_usage > final_memory_usage),
         };
-        if newly_reserved_cycles > Cycles::zero() {
+        if newly_allocated_bytes.get() > 0 {
             // The freezing threshold has the property that either
             // freezing limit in cycles or reserved cycles dominate.
             match run_params.freezing_threshold {
@@ -398,15 +399,17 @@ where
             + dummy_canister_allocated_bytes.get() as i64
     );
 
-    // Return result.
+    // Check that the total amount of cycles did not increase.
     let total_cycles_balance =
         test.canister_state(canister_id).system_state.balance() + newly_reserved_cycles;
     match scenario_params.scenario {
-        // Cycles for response callback execution are prepaid and thus it is expected
+        // Cycles for response callback execution are prepaid during setup and thus it is expected
         // that the final cycles balance can be larger than the initial cycles balance.
         Scenario::CanisterReplyCallback(_) | Scenario::CanisterCleanupCallback(_) => (),
         _ => assert!(run_params.initial_cycles >= total_cycles_balance),
     };
+
+    // Return result.
     let cycles_used = run_params.initial_cycles - total_cycles_balance;
     let minimum_initial_cycles =
         cycles_used + max(newly_reserved_cycles, freezing_limit_cycles) + unused_cycles_prepayment;
