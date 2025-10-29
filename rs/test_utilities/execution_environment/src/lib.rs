@@ -1894,6 +1894,11 @@ impl ExecutionTest {
         )
     }
 
+    pub fn prepayment_for_response_execution(&self, mode: WasmExecutionMode) -> Cycles {
+        self.cycles_account_manager
+            .prepayment_for_response_execution(self.subnet_size(), self.cost_schedule(), mode)
+    }
+
     pub fn refund_for_response_transmission(&self, response: &ResponsePayload) -> Cycles {
         let no_op_counter: IntCounter = IntCounter::new("no_op", "no_op").unwrap();
         let prepayment_for_response_transmission = self

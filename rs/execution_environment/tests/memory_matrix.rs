@@ -399,15 +399,19 @@ where
             + dummy_canister_allocated_bytes.get() as i64
     );
 
+    // Refund for response execution is credited after running the operation under test
+    // and thus we add it to the initial cycles before running the operation under test
+    // when checking that the total amount of cycles did not increase.
+    let refund_for_response_execution = match &scenario_params.scenario {
+        Scenario::CanisterReplyCallback(_) | Scenario::CanisterCleanupCallback(_) => {
+            test.prepayment_for_response_execution(WasmExecutionMode::Wasm32)
+        }
+        _ => Cycles::zero(),
+    };
     // Check that the total amount of cycles did not increase.
     let total_cycles_balance =
         test.canister_state(canister_id).system_state.balance() + newly_reserved_cycles;
-    match scenario_params.scenario {
-        // Cycles for response callback execution are prepaid during setup and thus it is expected
-        // that the final cycles balance can be larger than the initial cycles balance.
-        Scenario::CanisterReplyCallback(_) | Scenario::CanisterCleanupCallback(_) => (),
-        _ => assert!(run_params.initial_cycles >= total_cycles_balance),
-    };
+    assert!(run_params.initial_cycles + refund_for_response_execution >= total_cycles_balance);
 
     // Return result.
     let cycles_used = run_params.initial_cycles - total_cycles_balance;
