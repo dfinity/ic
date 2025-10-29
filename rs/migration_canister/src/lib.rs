@@ -19,6 +19,8 @@ use crate::{
     },
 };
 
+pub use crate::migration_canister::{MigrateCanisterArgs, MigrationStatus};
+
 mod canister_state;
 mod external_interfaces;
 mod migration_canister;

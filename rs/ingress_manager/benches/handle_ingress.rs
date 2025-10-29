@@ -34,7 +34,8 @@ use ic_registry_keys::make_subnet_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterQueues, ReplicatedState, SystemMetadata, canister_snapshots::CanisterSnapshots,
+    CanisterQueues, RefundPool, ReplicatedState, SystemMetadata,
+    canister_snapshots::CanisterSnapshots,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_registry::test_subnet_record;
@@ -191,6 +192,7 @@ where
                         BTreeMap::new(),
                         metadata,
                         CanisterQueues::default(),
+                        RefundPool::default(),
                         RawQueryStats::default(),
                         CanisterSnapshots::default(),
                     )),

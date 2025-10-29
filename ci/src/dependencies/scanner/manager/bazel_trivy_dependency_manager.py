@@ -18,7 +18,7 @@ from scanner.manager.dependency_manager import DependencyManager
 from scanner.process_executor import ProcessExecutor
 
 TRIVY_SCANNER_ID = "BAZEL_TRIVY_CS"
-TRIVY_SCAN_RETRIES = 50
+TRIVY_SCAN_RETRIES = 10
 RE_SHA256_HASH = re.compile(r"^[\da-fA-F]{64}$")
 RE_ROOTFS_FILE = re.compile(r"^/tmp/tmp\.\w+/tmp_rootfs/(.+)$")
 RE_VULNERABLE_DEPENDENCY_ID_REPLACEMENTS = [re.compile(r"^(?P<dependency_id>linux-modules-[^-]+).*$")]

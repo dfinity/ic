@@ -6,9 +6,6 @@ edition.workspace = true
 name = "ic-migration-canister"
 version.workspace = true
 
-[lib]
-crate-type = ["cdylib"]
-
 [dependencies]
 candid = { workspace = true }
 futures = { workspace = true }
