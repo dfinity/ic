@@ -103,6 +103,7 @@ async fn make_request(
                     method: HttpMethod::GET,
                     max_response_bytes: None,
                     is_replicated: Some(is_replicated),
+                    pricing_version: None,
                 },
                 cycles: 500_000_000_000,
             },
