@@ -47,8 +47,22 @@ const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(4 * GIB);
 /// sections on a given subnet.
 const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * GIB);
 
+// The gen 1 production machines should have 64 cores.
+// We could in theory use 32 threads, leaving other threads for query handling,
+// Wasm compilation, and other replica components. We currently use only four
+// threads for two reasons:
+// 1) Due to poor scaling of syscalls and signals with the number of threads
+//    in a process, four threads yield the maximum overall execution throughput.
+// 2) The memory capacity of a subnet is divided between the number of threads.
+//    We needs to ensure:
+//    `SUBNET_MEMORY_CAPACITY / number_of_threads >= max_canister_memory`
+//    If you change this number please adjust other constants as well.
+pub(crate) const NUMBER_OF_EXECUTION_THREADS: usize = 4;
+
 /// The number of bytes reserved for response callback executions.
-const SUBNET_MEMORY_RESERVATION: NumBytes = NumBytes::new(10 * GIB);
+/// For each thread, we reserve 2.5GiB of memory or, equivalently, 2560MiB.
+pub const SUBNET_MEMORY_RESERVATION: NumBytes =
+    NumBytes::new(2560 * MIB * NUMBER_OF_EXECUTION_THREADS as u64);
 
 /// The soft limit on the subnet-wide number of callbacks.
 pub const SUBNET_CALLBACK_SOFT_LIMIT: usize = 1_000_000;

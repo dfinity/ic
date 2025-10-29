@@ -148,6 +148,7 @@ impl<'a> QueryContext<'a> {
             subnet_available_callbacks,
             // Ignore compute allocation
             compute_allocation_used: 0,
+            subnet_memory_reservation: NumBytes::from(0),
         };
         Self {
             log,
