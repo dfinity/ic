@@ -127,6 +127,7 @@ use ic_test_utilities_time::FastForwardTimeSource;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
     CanisterId, CryptoHashOfState, Cycles, NumBytes, PrincipalId, SubnetId, UserId,
+    batch::BatchContent,
     canister_http::{
         CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponseMetadata,
     },
@@ -2679,7 +2680,7 @@ impl StateMachine {
             batch_summary,
             requires_full_state_hash,
             blockmaker_metrics,
-            messages: BatchMessages {
+            content: BatchContent::Data(BatchMessages {
                 signed_ingress_msgs: payload.ingress_messages,
                 certified_stream_slices: payload.xnet_payload.stream_slices,
                 bitcoin_adapter_responses: payload
@@ -2687,7 +2688,7 @@ impl StateMachine {
                     .map(|p| p.get().to_vec())
                     .unwrap_or_default(),
                 query_stats: payload.query_stats,
-            },
+            }),
             randomness: Randomness::from(seed),
             chain_key_data: ChainKeyData {
                 master_public_keys: self.chain_key_subnet_public_keys.clone(),

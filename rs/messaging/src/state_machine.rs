@@ -93,9 +93,7 @@ impl StateMachine for StateMachineImpl {
 
         let batch_messages = match batch.content {
             BatchContent::Data(batch_messages) => batch_messages,
-            BatchContent::Summary | BatchContent::Splitting { new_subnet_id: _ } => {
-                BatchMessages::default()
-            }
+            BatchContent::Summary | BatchContent::Splitting { .. } => BatchMessages::default(),
         };
 
         // Get query stats from blocks and add them to the state, so that they can be aggregated later.

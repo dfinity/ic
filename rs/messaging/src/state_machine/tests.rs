@@ -72,12 +72,17 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
 
     let mut seq = Sequence::new();
 
+    let messages = match &provided_batch.content {
+        BatchContent::Data(batch_messages) => batch_messages.clone(),
+        BatchContent::Summary | BatchContent::Splitting { .. } => BatchMessages::default(),
+    };
+
     let mut demux = Box::new(MockDemux::new());
     demux
         .expect_process_payload()
         .times(1)
         .in_sequence(&mut seq)
-        .with(always(), eq(provided_batch.messages.clone()))
+        .with(always(), eq(messages))
         .returning(|state, _| state);
 
     let mut scheduler = Box::new(MockScheduler::new());

@@ -48,7 +48,6 @@ use std::collections::BTreeMap;
 /// Deliver all finalized blocks from
 /// `message_routing.expected_batch_height` to `finalized_height` via
 /// `MessageRouting` and return the last delivered batch height.
-#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn deliver_batches(
     message_routing: &dyn MessageRouting,
     membership: &Membership,
@@ -76,7 +75,7 @@ pub fn deliver_batches(
 /// Deliver all finalized blocks from
 /// `message_routing.expected_batch_height` to `finalized_height` via
 /// `MessageRouting` and return the last delivered batch height.
-#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+#[allow(clippy::type_complexity)]
 pub(crate) fn deliver_batches_with_result_processor(
     message_routing: &dyn MessageRouting,
     membership: &Membership,

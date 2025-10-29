@@ -1429,7 +1429,7 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         // Get only ingress out of the batch_messages
         let signed_ingress_msgs = match batch.content {
             BatchContent::Data(batch_messages) => batch_messages.signed_ingress_msgs,
-            BatchContent::Summary | BatchContent::Splitting { new_subnet_id: _ } => vec![],
+            BatchContent::Summary | BatchContent::Splitting { .. } => vec![],
         };
 
         // Treat all ingress messages as already executed.

@@ -50,6 +50,8 @@ pub enum BatchContent {
     Summary,
     Splitting {
         new_subnet_id: SubnetId,
+        // Used for sanity checks
+        other_subnet_id: SubnetId,
     },
 }
 
