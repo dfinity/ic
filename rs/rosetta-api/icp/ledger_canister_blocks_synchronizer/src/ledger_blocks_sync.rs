@@ -374,8 +374,10 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                     .await
                     .map_err(Error::InternalError);
                 if batch.is_ok() || retry == MAX_RETRY {
-                    self.rosetta_metrics
-                        .add_blocks_fetched(batch.as_ref().unwrap().len() as u64);
+                    if let Ok(encoded_blocks) = &batch {
+                        self.rosetta_metrics
+                            .add_blocks_fetched(encoded_blocks.len() as u64);
+                    }
                     break batch;
                 }
                 self.rosetta_metrics.inc_fetch_retries();
@@ -416,7 +418,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 i += 1;
             }
             self.rosetta_metrics.set_synced_height(i - 1);
-            if (i - range.start) % DATABASE_WRITE_BLOCKS_BATCH_SIZE == 0 {
+            if (i - range.start).is_multiple_of(DATABASE_WRITE_BLOCKS_BATCH_SIZE) {
                 blockchain.push_batch(block_batch)?;
                 if print_progress {
                     info!("Synced up to {}", i - 1);

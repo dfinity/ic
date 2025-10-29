@@ -481,6 +481,14 @@ pub(crate) enum CanisterManagerError {
         canister_id: CanisterId,
         section_name: String,
     },
+    CanisterLogMemoryLimitIsTooLow {
+        bytes: NumBytes,
+        limit: NumBytes,
+    },
+    CanisterLogMemoryLimitIsTooHigh {
+        bytes: NumBytes,
+        limit: NumBytes,
+    },
 }
 
 impl AsErrorHelp for CanisterManagerError {
@@ -724,7 +732,15 @@ impl AsErrorHelp for CanisterManagerError {
             CanisterManagerError::CallerNotAuthorized => ErrorHelp::UserError {
                 suggestion: "The caller is not authorized to call this method.".to_string(),
                 doc_link: "".to_string(),
-            }
+            },
+            CanisterManagerError::CanisterLogMemoryLimitIsTooLow { .. } => ErrorHelp::UserError {
+                suggestion: "Set a higher canister log memory limit.".to_string(),
+                doc_link: "".to_string(),
+            },
+            CanisterManagerError::CanisterLogMemoryLimitIsTooHigh { .. } => ErrorHelp::UserError {
+                suggestion: "Set a lower canister log memory limit.".to_string(),
+                doc_link: "".to_string(),
+            },
         }
     }
 }
@@ -1108,6 +1124,18 @@ impl From<CanisterManagerError> for UserError {
             CallerNotAuthorized => Self::new(
                 ErrorCode::CanisterRejectedMessage,
                 "The caller is not authorized to call this method.".to_string(),
+            ),
+            CanisterLogMemoryLimitIsTooLow { bytes, limit } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister log memory limit {bytes} is too low. It must be at least {limit}."
+                ),
+            ),
+            CanisterLogMemoryLimitIsTooHigh { bytes, limit } => Self::new(
+                ErrorCode::CanisterRejectedMessage,
+                format!(
+                    "The canister log memory limit {bytes} is too high. It must be at most {limit}."
+                ),
             ),
         }
     }

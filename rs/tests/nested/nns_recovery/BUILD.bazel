@@ -28,6 +28,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//rs/recovery",
+        "//rs/tests/consensus/subnet_recovery:lib",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
@@ -98,7 +99,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "nr_no_bless",
+    name = "nr_no_bless_fix_like_np",
     env = ENV,
     flaky = True,
     tags = ["long_test"],

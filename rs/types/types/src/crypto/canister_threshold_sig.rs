@@ -1,12 +1,11 @@
 //! Defines canister threshold signature types.
+use crate::NumberOfNodes;
 use crate::crypto::AlgorithmId;
-use crate::crypto::ExtendedDerivationPath;
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptType,
     IDkgUnmaskedTranscriptOrigin,
 };
 use crate::crypto::impl_display_using_debug;
-use crate::{NumberOfNodes, Randomness};
 use core::fmt;
 use ic_base_types::NodeId;
 use ic_base_types::PrincipalId;
@@ -516,26 +515,25 @@ impl fmt::Debug for ThresholdSchnorrCombinedSignature {
 }
 
 /// All inputs required to generate a canister threshold signature.
-#[derive(Clone, Eq, PartialEq, Hash, Deserialize, Serialize)]
-pub struct ThresholdSchnorrSigInputs {
-    derivation_path: ExtendedDerivationPath,
-    #[serde(with = "serde_bytes")]
-    message: Vec<u8>,
-    #[serde(with = "serde_bytes")]
-    taproot_tree_root: Option<Vec<u8>>,
-    nonce: Randomness,
-    presig_transcript: SchnorrPreSignatureTranscript,
-    key_transcript: IDkgTranscript,
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct ThresholdSchnorrSigInputs<'a> {
+    caller: &'a PrincipalId,
+    derivation_path: &'a [Vec<u8>],
+    message: &'a [u8],
+    taproot_tree_root: Option<&'a [u8]>,
+    nonce: &'a [u8; 32],
+    presig_transcript: &'a SchnorrPreSignatureTranscript,
+    key_transcript: &'a IDkgTranscript,
 }
 
-impl_display_using_debug!(ThresholdSchnorrSigInputs);
+impl_display_using_debug!(ThresholdSchnorrSigInputs<'_>);
 
-impl fmt::Debug for ThresholdSchnorrSigInputs {
+impl fmt::Debug for ThresholdSchnorrSigInputs<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "ThresholdSchnorrSigInputs {{ ")?;
         write!(f, "derivation_path: {:?}", self.derivation_path)?;
-        write!(f, ", message: 0x{}", hex::encode(&self.message))?;
-        if let Some(ttr) = &self.taproot_tree_root {
+        write!(f, ", message: 0x{}", hex::encode(self.message))?;
+        if let Some(ttr) = self.taproot_tree_root {
             write!(f, ", taproot_tree_root: 0x{}", hex::encode(ttr))?;
         }
         write!(f, ", nonce: 0x{}", hex::encode(self.nonce.as_ref()))?;
@@ -546,13 +544,13 @@ impl fmt::Debug for ThresholdSchnorrSigInputs {
     }
 }
 
-impl AsRef<IDkgReceivers> for ThresholdSchnorrSigInputs {
+impl AsRef<IDkgReceivers> for ThresholdSchnorrSigInputs<'_> {
     fn as_ref(&self) -> &IDkgReceivers {
         self.receivers()
     }
 }
 
-impl ThresholdSchnorrSigInputs {
+impl<'a> ThresholdSchnorrSigInputs<'a> {
     /// Creates the inputs to the threshold Schnorr signing protocol.
     ///
     /// A `ThresholdSchnorrSigInputs` can only be created if the following invariants hold:
@@ -564,51 +562,57 @@ impl ThresholdSchnorrSigInputs {
     /// * The `blinder_unmasked` transcript of the `presig_transcript` is a random
     ///   unmasked transcript (error: `InvalidPreSignatureOrigin`)
     pub fn new(
-        derivation_path: &ExtendedDerivationPath,
-        message: &[u8],
-        taproot_tree_root: Option<&[u8]>,
-        nonce: Randomness,
-        presig_transcript: SchnorrPreSignatureTranscript,
-        key_transcript: IDkgTranscript,
+        caller: &'a PrincipalId,
+        derivation_path: &'a [Vec<u8>],
+        message: &'a [u8],
+        taproot_tree_root: Option<&'a [u8]>,
+        nonce: &'a [u8; 32],
+        presig_transcript: &'a SchnorrPreSignatureTranscript,
+        key_transcript: &'a IDkgTranscript,
     ) -> Result<Self, error::ThresholdSchnorrSigInputsCreationError> {
-        Self::check_algorithm_id_consistency(&presig_transcript, &key_transcript)?;
+        Self::check_algorithm_id_consistency(presig_transcript, key_transcript)?;
         Self::check_algorithm_id_validity(key_transcript.algorithm_id)?;
-        Self::check_receivers_consistency(&presig_transcript, &key_transcript)?;
-        Self::check_presig_transcript_origin(&presig_transcript)?;
+        Self::check_receivers_consistency(presig_transcript, key_transcript)?;
+        Self::check_presig_transcript_origin(presig_transcript)?;
         Self::check_taproot_tree_root_argument(key_transcript.algorithm_id, taproot_tree_root)?;
 
         Ok(Self {
-            derivation_path: derivation_path.clone(),
-            message: message.to_vec(),
-            taproot_tree_root: taproot_tree_root.map(Vec::from),
+            caller,
+            derivation_path,
+            message,
+            taproot_tree_root,
             nonce,
             presig_transcript,
             key_transcript,
         })
     }
 
-    pub fn derivation_path(&self) -> &ExtendedDerivationPath {
-        &self.derivation_path
+    pub fn caller(&self) -> &PrincipalId {
+        self.caller
+    }
+
+    pub fn derivation_path(&self) -> &[Vec<u8>] {
+        self.derivation_path
     }
 
     pub fn message(&self) -> &[u8] {
-        &self.message
+        self.message
     }
 
     pub fn taproot_tree_root(&self) -> Option<&[u8]> {
-        self.taproot_tree_root.as_deref()
+        self.taproot_tree_root
     }
 
-    pub fn nonce(&self) -> &Randomness {
-        &self.nonce
+    pub fn nonce(&self) -> &[u8; 32] {
+        self.nonce
     }
 
     pub fn presig_transcript(&self) -> &SchnorrPreSignatureTranscript {
-        &self.presig_transcript
+        self.presig_transcript
     }
 
     pub fn key_transcript(&self) -> &IDkgTranscript {
-        &self.key_transcript
+        self.key_transcript
     }
 
     /// Number of contributions needed to reconstruct a sharing.

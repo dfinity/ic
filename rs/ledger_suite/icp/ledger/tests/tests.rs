@@ -463,6 +463,14 @@ fn test_mint_burn() {
 }
 
 #[test]
+fn test_mint_burn_fee_rejected() {
+    ic_ledger_suite_state_machine_tests::test_mint_burn_fee_rejected(
+        ledger_wasm(),
+        encode_init_args,
+    );
+}
+
+#[test]
 fn test_anonymous_transfers() {
     ic_ledger_suite_state_machine_tests::test_anonymous_transfers(ledger_wasm(), encode_init_args);
 }
@@ -2064,8 +2072,17 @@ fn test_archiving_respects_num_blocks_to_archive_upper_limit() {
 }
 
 #[test]
-fn test_archiving_fails_if_ledger_does_not_have_enough_cycles_to_attach() {
-    ic_ledger_suite_state_machine_tests::archiving::test_archiving_fails_if_ledger_does_not_have_enough_cycles_to_attach(
+fn test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_fails_on_app_subnet_if_ledger_does_not_have_enough_cycles(
+        ledger_wasm(), encode_init_args,
+        icp_archives,
+        ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,
+    );
+}
+
+#[test]
+fn test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_any_cycles() {
+    ic_ledger_suite_state_machine_tests::archiving::test_archiving_succeeds_on_system_subnet_if_ledger_does_not_have_any_cycles(
         ledger_wasm(), encode_init_args,
         icp_archives,
         ic_ledger_suite_state_machine_tests::archiving::query_encoded_blocks,

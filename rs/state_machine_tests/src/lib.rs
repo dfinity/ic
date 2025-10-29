@@ -2659,8 +2659,9 @@ impl StateMachine {
             next_checkpoint_height: next_checkpoint_height.into(),
             current_interval_length: checkpoint_interval_length.into(),
         }));
-        let requires_full_state_hash =
-            batch_number.get() % checkpoint_interval_length_plus_one == 0;
+        let requires_full_state_hash = batch_number
+            .get()
+            .is_multiple_of(checkpoint_interval_length_plus_one);
 
         let current_time = self.get_time();
         let time_of_next_round = if current_time == *self.time_of_last_round.read().unwrap() {
@@ -4804,16 +4805,19 @@ fn multi_subnet_setup(
     subnets: Arc<dyn Subnets>,
     subnet_seed: u8,
     config: StateMachineConfig,
+    subnet_type: SubnetType,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) -> Arc<StateMachine> {
     StateMachineBuilder::new()
         .with_config(Some(config))
         .with_subnet_seed([subnet_seed; 32])
+        .with_subnet_type(subnet_type)
         .with_registry_data_provider(registry_data_provider)
         .build_with_subnets(subnets)
 }
 
-/// Sets up two `StateMachine` configured with a `StateMachineConfig` that can communicate with each other.
+/// Sets up two `StateMachine` as application subnets and configured with a
+/// `StateMachineConfig` that can communicate with each other.
 pub fn two_subnets_with_config(
     config1: StateMachineConfig,
     config2: StateMachineConfig,
@@ -4823,8 +4827,20 @@ pub fn two_subnets_with_config(
 
     // Set up the two state machines for the two (app) subnets.
     let subnets = Arc::new(SubnetsImpl::new());
-    let env1 = multi_subnet_setup(subnets.clone(), 1, config1, registry_data_provider.clone());
-    let env2 = multi_subnet_setup(subnets.clone(), 2, config2, registry_data_provider.clone());
+    let env1 = multi_subnet_setup(
+        subnets.clone(),
+        1,
+        config1,
+        SubnetType::Application,
+        registry_data_provider.clone(),
+    );
+    let env2 = multi_subnet_setup(
+        subnets.clone(),
+        2,
+        config2,
+        SubnetType::Application,
+        registry_data_provider.clone(),
+    );
 
     // Set up routing table with two subnets.
     let subnet_id1 = env1.get_subnet_id();

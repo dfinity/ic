@@ -5,6 +5,9 @@ use cycles_minting_canister::{
 };
 use flate2::read::GzDecoder;
 use ic_base_types::PrincipalId;
+use ic_migration_canister::{
+    MigrateCanisterArgs, MigrationStatus, ValidationError as MigrationValidatonError,
+};
 use ic_nns_governance_api::{
     ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, GovernanceError,
     InstallCodeRequest, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
@@ -36,6 +39,8 @@ use wslpath::windows_to_wsl;
 
 mod common;
 
+const T: u128 = 1_000_000_000_000;
+
 fn test_canister_wasm() -> Vec<u8> {
     let wasm_path = std::env::var_os("TEST_WASM").expect("Missing test canister wasm file");
     std::fs::read(wasm_path).unwrap()
@@ -64,7 +69,87 @@ fn all_icp_features() -> IcpFeatures {
         ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
         bitcoin: Some(IcpFeaturesConfig::DefaultConfig),
+        canister_migration: Some(IcpFeaturesConfig::DefaultConfig),
     }
+}
+
+#[test]
+fn test_canister_migration() {
+    let icp_features = IcpFeatures {
+        registry: Some(IcpFeaturesConfig::DefaultConfig),
+        canister_migration: Some(IcpFeaturesConfig::DefaultConfig),
+        ..Default::default()
+    };
+    let pic = PocketIcBuilder::new()
+        .with_icp_features(icp_features)
+        .with_application_subnet()
+        .with_application_subnet()
+        .build();
+
+    let canister_migration_orchestrator =
+        Principal::from_text("sbzkb-zqaaa-aaaaa-aaaiq-cai").unwrap();
+
+    let topology = pic.topology();
+    let subnet_1 = topology.get_app_subnets()[0];
+    let subnet_2 = topology.get_app_subnets()[1];
+
+    let create_canister_on_subnet = |subnet: Principal| {
+        let canister_id = pic.create_canister_on_subnet(None, None, subnet);
+        pic.add_cycles(canister_id, 100 * T);
+        pic.set_controllers(
+            canister_id,
+            None,
+            vec![Principal::anonymous(), canister_migration_orchestrator],
+        )
+        .unwrap();
+        pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+        pic.stop_canister(canister_id, None).unwrap();
+        canister_id
+    };
+
+    let source_canister = create_canister_on_subnet(subnet_1);
+    let target_canister = create_canister_on_subnet(subnet_2);
+
+    assert_eq!(pic.get_subnet(source_canister).unwrap(), subnet_1);
+    assert_eq!(pic.get_subnet(target_canister).unwrap(), subnet_2);
+
+    let migrate_canister_args = MigrateCanisterArgs {
+        source: source_canister,
+        target: target_canister,
+    };
+    let res = update_candid::<_, (Result<(), MigrationValidatonError>,)>(
+        &pic,
+        canister_migration_orchestrator,
+        "migrate_canister",
+        (migrate_canister_args.clone(),),
+    )
+    .unwrap();
+    res.0.unwrap();
+
+    let status = || {
+        let res = update_candid::<_, (Vec<MigrationStatus>,)>(
+            &pic,
+            canister_migration_orchestrator,
+            "migration_status",
+            (migrate_canister_args.clone(),),
+        )
+        .unwrap();
+        res.0.last().unwrap().clone()
+    };
+    loop {
+        pic.advance_time(Duration::from_secs(10));
+        if let MigrationStatus::Succeeded { .. } = status() {
+            break;
+        }
+    }
+
+    pic.start_canister(source_canister, None).unwrap();
+
+    assert_eq!(pic.get_subnet(source_canister).unwrap(), subnet_2);
+    assert!(pic.get_subnet(target_canister).is_none());
+
+    let res = update_candid::<_, (String,)>(&pic, source_canister, "whoami", ()).unwrap();
+    assert_eq!(res.0, source_canister.to_string());
 }
 
 #[test]

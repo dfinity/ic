@@ -570,6 +570,40 @@ fn can_recover_subnet_queues() {
 }
 
 #[test]
+fn can_recover_refunds() {
+    with_test_replica_logger(|log| {
+        let tmp = tmpdir("checkpoint");
+        let root = tmp.path().to_path_buf();
+        let (_tip_handler, tip_channel, layout, state_manager_metrics) = init(&root, &log);
+
+        const HEIGHT: Height = Height::new(42);
+
+        let own_subnet_type = SubnetType::Application;
+        let subnet_id = subnet_test_id(1);
+        let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
+
+        // Add some refunds to later verify that they get recovered.
+        state.add_refund(canister_test_id(10), Cycles::new(1_000_000));
+        state.add_refund(canister_test_id(11), Cycles::new(1_000_000));
+        state.add_refund(canister_test_id(20), Cycles::new(2_000_000));
+
+        let original_state = state.clone();
+        let _state = make_checkpoint_and_get_state(&mut state, HEIGHT, &tip_channel, &log);
+
+        let recovered_state = load_checkpoint(
+            &layout.checkpoint_verified(HEIGHT).unwrap(),
+            own_subnet_type,
+            &state_manager_metrics.checkpoint_metrics,
+            Some(&mut thread_pool()),
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        )
+        .unwrap();
+
+        assert_eq!(original_state.refunds(), recovered_state.refunds());
+    });
+}
+
+#[test]
 fn empty_protobufs_are_loaded_correctly() {
     with_test_replica_logger(|log| {
         let tmp = tmpdir("checkpoint");
@@ -607,6 +641,7 @@ fn empty_protobufs_are_loaded_correctly() {
         let empty_protobufs = vec![
             checkpoint_layout.subnet_queues().raw_path().to_owned(),
             checkpoint_layout.ingress_history().raw_path().to_owned(),
+            checkpoint_layout.refunds().raw_path().to_owned(),
             canister_layout.queues().raw_path().to_owned(),
         ];
 
