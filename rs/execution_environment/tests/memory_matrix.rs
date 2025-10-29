@@ -1,6 +1,7 @@
 /*!
 
-This module contains matrix tests for canister memory usage/allocation, reserved cycles, and subnet available memory.
+This module contains matrix tests for canister memory usage/allocation, reserved cycles,
+and subnet available memory.
 
 It defines multiple *scenarios* and their expectations in terms of memory usage change
 and performs multiple *runs* of every scenarios with various initial parameters.
@@ -77,7 +78,7 @@ const SUBNET_EXECUTION_MEMORY: u64 = 200 * GIB;
 const SUBNET_MEMORY_THRESHOLD: u64 = 100 * GIB;
 
 /// Default subnet memory usage before running the operation under test.
-/// It is stricly above the subnet memory threshold so that cycles are reserved
+/// It is strictly above the subnet memory threshold so that cycles are reserved
 /// if memory usage increases after running the operation under test.
 const DEFAULT_SUBNET_MEMORY_USAGE_BEFORE_OP: u64 =
     SUBNET_MEMORY_THRESHOLD / 4 + 3 * SUBNET_EXECUTION_MEMORY / 4;
