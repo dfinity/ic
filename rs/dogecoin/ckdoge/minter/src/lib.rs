@@ -145,6 +145,21 @@ impl CanisterRuntime for DogeCanisterRuntime {
 
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String {
         updates::account_to_p2pkh_address_from_state(state, account)
+            .display(&Network::from(state.btc_network))
+    }
+
+    fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress {
+        let main_account = Account {
+            owner: ic_cdk::api::canister_self(),
+            subaccount: None,
+        };
+        let minter_address = updates::account_to_p2pkh_address_from_state(state, &main_account);
+
+        // This conversion is a hack to use the same type of address as in TxOut,
+        match minter_address {
+            DogecoinAddress::P2pkh(p2pkh) => BitcoinAddress::P2pkh(p2pkh),
+            DogecoinAddress::P2sh(p2sh) => BitcoinAddress::P2sh(p2sh),
+        }
     }
 
     async fn check_address(
