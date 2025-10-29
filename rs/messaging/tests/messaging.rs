@@ -241,8 +241,8 @@ fn test_call_tree_metrics() {
         metric_vec(&[(
             &[("class", "guaranteed response")],
             HistogramStats {
-                count: 5,      // In total 5 calls are made on `subnet1`...
-                sum: 5 as f64, //... two on depth 0, two on depth 1, one on depth 3, i.e. 0+0+1+1+3
+                count: 5,      // In total 5 calls are made on `subnet1`,
+                sum: 5 as f64, // two on depth 0, two on depth 1, one on depth 3, i.e. 0+0+1+1+3
             }
         )]),
         stats
@@ -257,8 +257,8 @@ fn test_call_tree_metrics() {
         metric_vec(&[(
             &[("class", "guaranteed response")],
             HistogramStats {
-                count: 2,      // In total 2 calls are made on `subnet2`...
-                sum: 4 as f64, // ...both at call depth 2, i.e. 2+2
+                count: 2,      // In total 2 calls are made on `subnet2`,
+                sum: 4 as f64, // both at call depth 2, i.e. 2+2
             }
         )]),
         stats
