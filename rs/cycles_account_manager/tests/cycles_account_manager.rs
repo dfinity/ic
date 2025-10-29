@@ -13,7 +13,9 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_state::{SystemStateBuilder, new_canister_state};
+use ic_test_utilities_state::{
+    SystemStateBuilder, new_canister_state, new_canister_state_with_execution,
+};
 use ic_test_utilities_types::{
     ids::{canister_test_id, user_test_id},
     messages::{RequestBuilder, SignedIngressBuilder},
@@ -65,7 +67,7 @@ fn test_can_charge_application_subnets() {
                         .with_subnet_type(*subnet_type)
                         .build();
                     let compute_allocation = ComputeAllocation::try_from(20).unwrap();
-                    let mut canister = new_canister_state(
+                    let mut canister = new_canister_state_with_execution(
                         canister_test_id(1),
                         canister_test_id(2).get(),
                         Cycles::zero(),
@@ -74,6 +76,13 @@ fn test_can_charge_application_subnets() {
                     canister.system_state.memory_allocation = *memory_allocation;
                     canister.scheduler_state.compute_allocation = compute_allocation;
                     let duration = Duration::from_secs(1);
+
+                    // Ensure that we are not losing test coverage due to the memory usage
+                    // collapsing with the memory allocation.
+                    assert_ne!(
+                        canister.memory_usage(),
+                        memory_allocation.pre_allocated_bytes()
+                    );
 
                     let memory = memory_allocation.allocated_bytes(canister.memory_usage());
                     let expected_fee = cycles_account_manager.compute_allocation_cost(
@@ -87,10 +96,11 @@ fn test_can_charge_application_subnets() {
                         subnet_size,
                         cost_schedule,
                     );
-                    let initial_cycles = expected_fee + Cycles::new(100);
+                    let initial_cycles = expected_fee;
                     canister
                         .system_state
                         .add_cycles(initial_cycles, CyclesUseCase::NonConsumed);
+                    assert_eq!(canister.system_state.balance(), initial_cycles);
                     cycles_account_manager
                         .charge_canister_for_resource_allocation_and_usage(
                             &log,
@@ -100,6 +110,7 @@ fn test_can_charge_application_subnets() {
                             cost_schedule,
                         )
                         .unwrap();
+                    assert_eq!(canister.system_state.balance(), Cycles::zero());
                 }
             }
         }
