@@ -224,7 +224,7 @@ impl LogMemoryStore {
         let mut ring_buffer = RingBuffer::new(self.data.clone());
         for record in delta_log.records() {
             ring_buffer.push_back(&DataEntry {
-                idx: ring_buffer.next_id(),
+                idx: record.idx,
                 ts_nanos: record.timestamp_nanos,
                 len: record.content.len() as u32,
                 content: record.content.clone(),
@@ -366,7 +366,7 @@ impl RingBuffer {
         }
         header.data_tail = (header.data_tail + added_size) % header.data_capacity;
         header.data_size = header.data_size.saturating_add(added_size);
-        header.next_idx += 1; // It's ok to overflow here, since it's a unique ID for _stored_ logs.
+        header.next_idx = entry.idx + 1;
         self.write_header(&header);
     }
 }
