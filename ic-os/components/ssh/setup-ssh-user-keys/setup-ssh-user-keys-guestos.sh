@@ -2,7 +2,6 @@
 
 set -e
 
-echo "Starting SSH user keys setup for GuestOS"
 source /opt/ic/bin/config.sh
 
 copy_ssh_keys() {
@@ -29,7 +28,7 @@ else
 fi
 
 # Create home directories
-echo "Creating home directories for SSH accounts"
+echo "Creating user home directories"
 for ACCOUNT in backup readonly admin; do
     HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
     echo "Creating home directory for ${ACCOUNT}: ${HOMEDIR}"

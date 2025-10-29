@@ -2,8 +2,6 @@
 
 set -e
 
-echo "Starting SSH user keys setup for HostOS"
-
 copy_ssh_keys() {
     local SOURCE_FILE="$1"
     local DEST_FILE="$2"
@@ -17,7 +15,7 @@ copy_ssh_keys() {
 }
 
 # Create home directories
-echo "Creating home directories for SSH accounts"
+echo "Creating user home directories"
 for ACCOUNT in backup readonly admin; do
     HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
     echo "Creating home directory for ${ACCOUNT}: ${HOMEDIR}"
