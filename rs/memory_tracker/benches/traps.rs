@@ -1,6 +1,6 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use ic_types::NumBytes;
-use memory_tracker::prefetching::{PrefetchingMemoryTracker, legacy_signal_handler};
+use memory_tracker::prefetching::{PrefetchingMemoryTracker, basic_signal_handler};
 use memory_tracker::{DirtyPageTracking, MemoryTracker};
 
 use libc::{self, c_void};
@@ -62,7 +62,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
             },
             // Do the actual measurement
             |data| {
-                legacy_signal_handler(
+                basic_signal_handler(
                     black_box(&data.tracker),
                     &data.page_map,
                     black_box(data.ptr),
@@ -108,13 +108,13 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
                     page_map,
                 };
 
-                legacy_signal_handler(&data.tracker, &data.page_map, data.ptr);
+                basic_signal_handler(&data.tracker, &data.page_map, data.ptr);
 
                 data
             },
             // Do the actual measurement
             |data| {
-                legacy_signal_handler(
+                basic_signal_handler(
                     black_box(&data.tracker),
                     &data.page_map,
                     black_box(data.ptr),
