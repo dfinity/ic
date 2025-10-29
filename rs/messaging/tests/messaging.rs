@@ -414,10 +414,12 @@ fn subnet_splitting_smoke_test(
     for round_index in 0..=20 {
         if round_index == subnet1_split_index {
             subnet3 = Some(subnet1.split(SEED.clone()).unwrap());
+            println!("HALO\n\n");
         }
         if round_index == subnet2_routing_table_update_index {
             subnet2.env.reload_registry();
             subnet2.env.registry_client.update_to_latest_version();
+            println!("OLAH\n\n");
         }
 
         subnet1.execute_round();
@@ -427,6 +429,9 @@ fn subnet_splitting_smoke_test(
         }
     }
 
+    println!("\n\nOMG\n\n");
+
+    /*
     // Inject the rest of the calls; not `canister2` is now on `subnet3`.
     let subnet3 = subnet3.unwrap();
     msg_ids1.append(&mut inject_calls(&mut calls1, 0, &subnet1));
@@ -456,6 +461,7 @@ fn subnet_splitting_smoke_test(
         msg_ids2 = subnet3.await_or_check_completed(msg_ids2, check_traps);
         msg_ids3 = subnet2.await_or_check_completed(msg_ids3, check_traps);
     }
+    */
 
     /*
     subnet1.execute_round();

@@ -3104,7 +3104,14 @@ impl StateMachine {
         use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
         use ic_registry_client_helpers::subnet::SubnetListRegistry;
 
-        let subnet_id = subnet_id_from(seed);
+        // Generate new subnet Id from `seed`.
+        let (ni_dkg_transcript, _) =
+            dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
+        let public_key = (&ni_dkg_transcript).try_into().unwrap();
+        let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
+        let subnet_id = PrincipalId::new_self_authenticating(&public_key_der).into();
+
+        // Generate the ranges to be added to the routing table and canister migrations list.
         let ranges = CanisterIdRanges::try_from(vec![CanisterIdRange {
             start: *canister_range.start(),
             end: *canister_range.end(),
@@ -3168,6 +3175,31 @@ impl StateMachine {
         assert!(subnet_ids.len() > initial_len);
 
         add_subnet_list_record(&self.registry_data_provider, next_version.get(), subnet_ids);
+
+        // Add subnet initial records for the new subnet that will be created at the split.
+        let features = SubnetFeatures {
+            http_requests: true,
+            ..SubnetFeatures::default()
+        };
+        let subnet_size = self.nodes.len();
+        let mut node_rng = StdRng::from_seed(seed);
+        let nodes: Vec<StateMachineNode> = (0..subnet_size)
+            .map(|_| StateMachineNode::new(&mut node_rng))
+            .collect();
+
+        let chain_keys_enabled_status = Default::default();
+
+        add_subnet_local_registry_records(
+            subnet_id,
+            self.subnet_type,
+            features,
+            &nodes,
+            public_key,
+            &chain_keys_enabled_status,
+            ni_dkg_transcript,
+            self.registry_data_provider.clone(),
+            next_version,
+        );
     }
 
     /// Simulates a subnet split where the corresponding registry entries are assumed to be done
