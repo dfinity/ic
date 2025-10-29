@@ -608,6 +608,9 @@ where
                 amount: amount.into(),
                 fee: fee.map(Into::into),
             },
+            Op::FeeCollector { .. } => {
+                panic!("not implemented")
+            }
         }
     }
 }
