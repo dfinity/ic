@@ -42,6 +42,19 @@ use prost::{DecodeError, Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
 
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum BatchContent {
+    /// The payload messages to be processed.
+    Data(BatchMessages),
+    /// During subnet splitting we don't include any messages with the batch.
+    Splitting {
+        /// The id of the subnet the replica is assigned to after subnet splitting.
+        new_subnet_id: SubnetId,
+        // Used for sanity checks
+        other_subnet_id: SubnetId,
+    },
+}
+
 /// The `Batch` provided to Message Routing for deterministic processing.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Batch {
@@ -53,8 +66,8 @@ pub struct Batch {
     /// Whether the state obtained by executing this batch needs to be fully
     /// hashed to be eligible for StateSync.
     pub requires_full_state_hash: bool,
-    /// The payload messages to be processed.
-    pub messages: BatchMessages,
+    /// Content, such as ingress messages, to be processed by the Message Routing.
+    pub content: BatchContent,
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
     /// Data required by the chain key service
