@@ -43,13 +43,11 @@ pub fn validate(block: &Value) -> Result<(), ValuePredicateFailures> {
         icrc1_common.clone(),
         item("op", Required, is(Value::text("burn"))),
         item("from", Required, is_account.clone()),
-        item("fee", Optional, is_amount.clone()),
     ]);
     let is_icrc1_mint = and(vec![
         icrc1_common.clone(),
         item("op", Required, is(Value::text("mint"))),
         item("to", Required, is_account.clone()),
-        item("fee", Optional, is_amount.clone()),
     ]);
     let is_icrc2_approve = and(vec![
         icrc1_common.clone(),
