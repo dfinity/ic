@@ -240,7 +240,7 @@ pub fn parse_dogecoin_address(tx_out: &TxOut) -> bitcoin::dogecoin::Address {
     )
     .unwrap_or_else(|e| {
         panic!(
-            "BUG: invalid Dogecoin address from script '{}'",
+            "BUG: invalid Dogecoin address from script '{}': {e}",
             tx_out.script_pubkey
         )
     })

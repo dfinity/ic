@@ -362,13 +362,8 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
         return;
     }
 
-    let main_account = Account {
-        owner: ic_cdk::api::canister_self(),
-        subaccount: None,
-    };
-
     let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
-    let main_address = address::account_to_bitcoin_address(&ecdsa_public_key, &main_account);
+    let main_address = state::read_state(|s| runtime.derive_minter_address(s));
 
     let fee_millisatoshi_per_vbyte = match estimate_fee_per_vbyte(runtime).await {
         Some(fee) => fee,

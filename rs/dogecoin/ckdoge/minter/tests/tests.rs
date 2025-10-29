@@ -381,7 +381,7 @@ mod withdrawal {
         assert_eq!(tx.input[0].previous_output, into_outpoint(utxo.outpoint));
 
         assert_eq!(tx.output.len(), 2);
-        let beneficiary = parse_dogecoin_address(tx.output.get(0).unwrap());
+        let beneficiary = parse_dogecoin_address(tx.output.first().unwrap());
         assert_eq!(DOGECOIN_ADDRESS_1, beneficiary.to_string());
 
         let change_beneficiary = parse_dogecoin_address(tx.output.get(1).unwrap());
