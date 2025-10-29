@@ -102,6 +102,7 @@ mod test {
     use ic_base_types::PrincipalId;
     use ic_registry_transport::insert;
     use maplit::btreemap;
+    use std::str::FromStr;
 
     fn stable_storage_from_registry(
         registry: &Registry,
