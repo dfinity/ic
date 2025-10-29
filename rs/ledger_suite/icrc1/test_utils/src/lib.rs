@@ -540,19 +540,19 @@ impl TransactionsAndBalances {
                 if let Some(spender_account) = spender {
                     let used_allowance = amount.get_e8s() + fee;
                     self.allowances.entry((from, spender_account)).and_modify(
-                                |current_allowance| {
-                                    let current_amount = current_allowance.get_e8s();
-                                    *current_allowance = Tokens::from_e8s(
-                                        current_amount
-                                            .checked_sub(used_allowance)
-                                            .unwrap_or_else(|| {
-                                                panic!(
-                                                    "Allowance {current_amount} not enough to cover amount and fee {used_allowance} - from: {from}, to: {to}, spender: {spender_account}"
-                                                )
-                                            }),
-                                    );
-                                },
+                        |current_allowance| {
+                            let current_amount = current_allowance.get_e8s();
+                            *current_allowance = Tokens::from_e8s(
+                                current_amount
+                                    .checked_sub(used_allowance)
+                                    .unwrap_or_else(|| {
+                                        panic!(
+                                            "Allowance {current_amount} not enough to cover amount and fee {used_allowance} - from: {from}, to: {to}, spender: {spender_account}"
+                                        )
+                                    }),
                             );
+                        },
+                    );
 
                     // Remove allowance entry if it's now zero
                     if let Some(allowance) = self.allowances.get(&(from, spender_account))
