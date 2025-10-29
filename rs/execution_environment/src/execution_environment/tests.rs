@@ -773,6 +773,7 @@ fn get_running_canister_status_from_another_canister() {
         test.canister_state(canister).system_state.balance()
     );
     assert_eq!(csr.freezing_threshold(), 2_592_000);
+    assert_eq!(csr.memory_allocation(), 0);
     assert_eq!(
         csr.memory_size(),
         test.execution_state(canister).memory_usage()
