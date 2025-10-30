@@ -23,6 +23,27 @@ pub struct RegistryCanisterInitPayload {
     pub swapping_enabled_subnets: Vec<SubnetId>,
 }
 
+// TODO: Change RegistryCanisterInitPayload fields to Option<T> and remove this struct, after the
+// code change to use Option<T> gets into the mainnet.
+#[derive(Clone, Debug, Default, candid::CandidType, candid::Deserialize)]
+pub struct RegistryCanisterInitPayloadWithOptionalFlags {
+    pub mutations: Vec<RegistryAtomicMutateRequest>,
+    pub is_swapping_feature_enabled: Option<bool>,
+    pub swapping_whitelisted_callers: Option<Vec<PrincipalId>>,
+    pub swapping_enabled_subnets: Option<Vec<SubnetId>>,
+}
+
+impl From<RegistryCanisterInitPayloadWithOptionalFlags> for RegistryCanisterInitPayload {
+    fn from(payload: RegistryCanisterInitPayloadWithOptionalFlags) -> Self {
+        Self {
+            mutations: payload.mutations,
+            is_swapping_feature_enabled: payload.is_swapping_feature_enabled.unwrap_or_default(),
+            swapping_whitelisted_callers: payload.swapping_whitelisted_callers.unwrap_or_default(),
+            swapping_enabled_subnets: payload.swapping_enabled_subnets.unwrap_or_default(),
+        }
+    }
+}
+
 impl fmt::Display for RegistryCanisterInitPayload {
     /// Produces a string that partly represent the content of this init
     /// payload.

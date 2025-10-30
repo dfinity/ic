@@ -2,7 +2,8 @@
 Description=Set up logical volumes on first boot
 DefaultDependencies=no
 Requires=setup-data-encryption.service
-After=setup-data-encryption.service
+After=setup-data-encryption.service init-config.service
+ConditionPathExists=/run/config/guest_vm_type/default
 
 [Install]
 WantedBy=local-fs.target
@@ -13,5 +14,3 @@ StandardError=journal+console
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/opt/ic/bin/setup-lvs.sh
-# Don't run in UpgradeVM
-ExecCondition=/bin/bash -c '[[ "$(jq -r ".guest_vm_type" /run/config/config.json)" =~ ^(default|null)$ ]]'

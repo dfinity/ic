@@ -3088,22 +3088,138 @@ impl StateMachine {
         Err(format!("No canister state for canister id {canister_id}."))
     }
 
-    /// Simulates a subnet split where the provided `canister_range` is assigned to a new subnet.
+    /// Produces a routing table, a canister migrations list and a subnet list record that reflects
+    /// splitting this subnet; then passes them to the registry data provider.
+    ///
+    /// Does not update the registry client on this subnet.
+    ///
+    /// This is intended to be used before calling `split` simulating a split of this subnet. Having
+    /// this as a separate step allows for other subnets to observe this update before this subnet
+    /// undergoes the split, which is a highly likely situation in a real subnet split.
+    ///
+    /// Note: An actual observation is done only after updating the registry client to the newest version.
+    ///       Since this functions does not update the registry client, this can be done at any point on
+    ///       any subnet in the same subnet pool as this one, i.e. before, at or after the actual split.
+    pub fn make_registry_entries_for_subnet_split(
+        &self,
+        seed: [u8; 32],
+        canister_range: std::ops::RangeInclusive<CanisterId>,
+    ) {
+        use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
+        use ic_registry_client_helpers::subnet::SubnetListRegistry;
+
+        // Generate new subnet Id from `seed`.
+        let (ni_dkg_transcript, _) =
+            dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
+        let public_key = (&ni_dkg_transcript).try_into().unwrap();
+        let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
+        let subnet_id = PrincipalId::new_self_authenticating(&public_key_der).into();
+
+        // Generate the ranges to be added to the routing table and canister migrations list.
+        let ranges = CanisterIdRanges::try_from(vec![CanisterIdRange {
+            start: *canister_range.start(),
+            end: *canister_range.end(),
+        }])
+        .unwrap();
+
+        let last_version = self.registry_client.get_latest_version();
+        let next_version = last_version.increment();
+
+        // Adapt the routing table and add it to the registry data provider.
+        let mut routing_table = self
+            .registry_client
+            .get_routing_table(last_version)
+            .expect("malformed routing table")
+            .expect("missing routing table");
+
+        routing_table_insert_subnet(&mut routing_table, subnet_id).unwrap();
+        routing_table
+            .assign_ranges(ranges.clone(), subnet_id)
+            .expect("ranges are not well formed");
+
+        let pb_routing_table = PbRoutingTable::from(routing_table);
+        self.registry_data_provider
+            .add(
+                &make_canister_ranges_key(CanisterId::from_u64(0)),
+                next_version,
+                Some(pb_routing_table),
+            )
+            .unwrap();
+
+        // Adapt the canister migrations list.
+        let mut canister_migrations = self
+            .registry_client
+            .get_canister_migrations(last_version)
+            .expect("malformed canister migrations")
+            .unwrap_or_default();
+
+        canister_migrations
+            .insert_ranges(ranges, self.get_subnet_id(), subnet_id)
+            .expect("ranges are not well formed");
+
+        self.registry_data_provider
+            .add(
+                &make_canister_migrations_record_key(),
+                next_version,
+                Some(PbCanisterMigrations::from(canister_migrations)),
+            )
+            .unwrap();
+
+        // Extend subnet list record.
+        let mut subnet_ids = self
+            .registry_client
+            .get_subnet_ids(last_version)
+            .expect("malformed subnet list")
+            .unwrap_or_default();
+
+        let initial_len = subnet_ids.len();
+        subnet_ids.push(subnet_id);
+        subnet_ids.sort();
+        subnet_ids.dedup();
+        assert!(subnet_ids.len() > initial_len);
+
+        add_subnet_list_record(&self.registry_data_provider, next_version.get(), subnet_ids);
+
+        // Add subnet initial records for the new subnet that will be created at the split.
+        let features = SubnetFeatures {
+            http_requests: true,
+            ..SubnetFeatures::default()
+        };
+        let subnet_size = self.nodes.len();
+        let mut node_rng = StdRng::from_seed(seed);
+        let nodes: Vec<StateMachineNode> = (0..subnet_size)
+            .map(|_| StateMachineNode::new(&mut node_rng))
+            .collect();
+
+        let chain_keys_enabled_status = Default::default();
+
+        add_subnet_local_registry_records(
+            subnet_id,
+            self.subnet_type,
+            features,
+            &nodes,
+            public_key,
+            &chain_keys_enabled_status,
+            ni_dkg_transcript,
+            self.registry_data_provider.clone(),
+            next_version,
+        );
+    }
+
+    /// Simulates a subnet split where the corresponding registry entries are assumed to be done
+    /// beforehand, i.e. `make_registry_entries_for_subnet_split` should be called first using the
+    /// same `seed`.
     ///
     /// The process has the following steps:
     /// - Write a checkpoint on `self`.
     /// - Clone its enire state directory into a new `state_dir`.
     /// - Create a new `StateMachine` using this `state_dir` and the provided `seed`.
-    /// - Generate a new routing table that reflects the split.
-    /// - Use this routing table to perform the split on both state machines respectively.
-    /// - Adapt the registry with the new routing table and append the subnet to the subnets list.
+    /// - Reloads the registry und updates it to the latest version.
+    /// - Get the routing table from the registry and use it to perform the split.
     ///
-    /// Returns an error if there is no XNet layer or if splitting the state fails.
-    pub fn split(
-        &self,
-        seed: [u8; 32],
-        canister_range: std::ops::RangeInclusive<CanisterId>,
-    ) -> Result<Arc<StateMachine>, String> {
+    /// Returns an error if the routing table does not contain the subnet Id of the new `env` that
+    /// was just created or if the split itself fails.
+    pub fn split(&self, seed: [u8; 32]) -> Result<Arc<StateMachine>, String> {
         use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
 
         // Write a checkpoint.
@@ -3134,6 +3250,7 @@ impl StateMachine {
             )
             .with_subnet_size(self.nodes.len())
             .with_subnet_seed(seed)
+            .with_subnet_type(self.subnet_type)
             .with_registry_data_provider(self.registry_data_provider.clone())
             .build_with_subnets(
                 (*self.pocket_xnet.read().unwrap())
@@ -3142,25 +3259,22 @@ impl StateMachine {
                     .subnets(),
             );
 
+        // Get the newest registry version.
+        self.reload_registry();
+        self.registry_client.update_to_latest_version();
+
+        // Get the routing table.
         let last_version = self.registry_client.get_latest_version();
-        let mut routing_table = self
+        let routing_table = self
             .registry_client
             .get_routing_table(last_version)
             .expect("malformed routing table")
             .expect("missing routing table");
 
-        // Add the new subnet and assign the split canister range to it.
-        routing_table_insert_subnet(&mut routing_table, env.get_subnet_id()).unwrap();
-        routing_table
-            .assign_ranges(
-                CanisterIdRanges::try_from(vec![CanisterIdRange {
-                    start: *canister_range.start(),
-                    end: *canister_range.end(),
-                }])
-                .unwrap(),
-                env.get_subnet_id(),
-            )
-            .expect("ranges are not well formed");
+        // Check the new subnet is in this routing table.
+        if routing_table.ranges(env.get_subnet_id()).is_empty() {
+            return Err("Routing table does not contain the new subnet".to_string());
+        }
 
         // Perform the split on `self`.
         let (height, state) = self.state_manager.take_tip();
@@ -3188,22 +3302,6 @@ impl StateMachine {
             CertificationScope::Full,
             None,
         );
-
-        // Adapt the registry.
-        let pb_routing_table = PbRoutingTable::from(routing_table);
-        self.registry_data_provider
-            .add(
-                &make_canister_ranges_key(CanisterId::from_u64(0)),
-                last_version.increment(),
-                Some(pb_routing_table.clone()),
-            )
-            .unwrap();
-        self.registry_client.update_to_latest_version();
-        assert!(self.add_subnet_to_subnets_list(env.get_subnet_id()));
-
-        // Reload registry to ensure consistency.
-        self.reload_registry();
-        env.reload_registry();
 
         Ok(env)
     }
@@ -4182,34 +4280,6 @@ impl StateMachine {
         assert_eq!(next_version, self.registry_client.get_latest_version());
     }
 
-    /// Adds a `subnet_id` to the subnet list record.
-    ///
-    /// Returns `true` if the `subnet_id` was added as a new entry.
-    pub fn add_subnet_to_subnets_list(&self, subnet_id: SubnetId) -> bool {
-        use ic_registry_client_helpers::subnet::SubnetListRegistry;
-
-        let last_version = self.registry_client.get_latest_version();
-        let next_version = last_version.increment();
-
-        let mut subnet_ids = self
-            .registry_client
-            .get_subnet_ids(last_version)
-            .expect("malformed subnet list")
-            .unwrap_or_default();
-
-        let initial_len = subnet_ids.len();
-        subnet_ids.push(subnet_id);
-        subnet_ids.sort();
-        subnet_ids.dedup();
-
-        if subnet_ids.len() > initial_len {
-            add_subnet_list_record(&self.registry_data_provider, next_version.get(), subnet_ids);
-            true
-        } else {
-            false
-        }
-    }
-
     /// Returns the subnet type of this state machine.
     pub fn get_subnet_type(&self) -> SubnetType {
         self.subnet_type
@@ -4805,16 +4875,19 @@ fn multi_subnet_setup(
     subnets: Arc<dyn Subnets>,
     subnet_seed: u8,
     config: StateMachineConfig,
+    subnet_type: SubnetType,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
 ) -> Arc<StateMachine> {
     StateMachineBuilder::new()
         .with_config(Some(config))
         .with_subnet_seed([subnet_seed; 32])
+        .with_subnet_type(subnet_type)
         .with_registry_data_provider(registry_data_provider)
         .build_with_subnets(subnets)
 }
 
-/// Sets up two `StateMachine` configured with a `StateMachineConfig` that can communicate with each other.
+/// Sets up two `StateMachine` as application subnets and configured with a
+/// `StateMachineConfig` that can communicate with each other.
 pub fn two_subnets_with_config(
     config1: StateMachineConfig,
     config2: StateMachineConfig,
@@ -4824,8 +4897,20 @@ pub fn two_subnets_with_config(
 
     // Set up the two state machines for the two (app) subnets.
     let subnets = Arc::new(SubnetsImpl::new());
-    let env1 = multi_subnet_setup(subnets.clone(), 1, config1, registry_data_provider.clone());
-    let env2 = multi_subnet_setup(subnets.clone(), 2, config2, registry_data_provider.clone());
+    let env1 = multi_subnet_setup(
+        subnets.clone(),
+        1,
+        config1,
+        SubnetType::Application,
+        registry_data_provider.clone(),
+    );
+    let env2 = multi_subnet_setup(
+        subnets.clone(),
+        2,
+        config2,
+        SubnetType::Application,
+        registry_data_provider.clone(),
+    );
 
     // Set up routing table with two subnets.
     let subnet_id1 = env1.get_subnet_id();
@@ -4863,15 +4948,6 @@ pub fn two_subnets_simple() -> (Arc<StateMachine>, Arc<StateMachine>) {
         HypervisorConfig::default(),
     );
     two_subnets_with_config(config.clone(), config)
-}
-
-/// Generates the subnet ID from `seed`.
-pub fn subnet_id_from(seed: [u8; 32]) -> SubnetId {
-    let (ni_dkg_transcript, _) =
-        dummy_initial_dkg_transcript_with_master_key(&mut StdRng::from_seed(seed));
-    let public_key = (&ni_dkg_transcript).try_into().unwrap();
-    let public_key_der = threshold_sig_public_key_to_der(public_key).unwrap();
-    PrincipalId::new_self_authenticating(&public_key_der).into()
 }
 
 // This test should panic on a critical error due to non-monotone timestamps.
