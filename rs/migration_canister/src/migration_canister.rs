@@ -5,15 +5,18 @@
 use std::fmt::Display;
 
 use candid::{CandidType, Principal};
-use ic_cdk::{api::msg_caller, init, post_upgrade, println, query, update};
+use ic_cdk::{
+    api::{instruction_counter, msg_caller},
+    init, post_upgrade, println, query, update,
+};
 use serde::Deserialize;
 use strum::Display;
 
 use crate::{
-    RequestState, ValidationError,
+    EventType, Request, RequestState, ValidationError,
     canister_state::{
         ValidationGuard, caller_allowed,
-        events::find_event,
+        events::{find_event, insert_random_event, num_events},
         migrations_disabled,
         requests::{find_request, insert_request},
         set_allowlist,
@@ -31,6 +34,20 @@ struct MigrationCanisterInitArgs {
 fn init(args: MigrationCanisterInitArgs) {
     start_timers();
     set_allowlist(args.allowlist);
+    // some random events for performance measurements
+    for i in 0..100000 {
+        let event = if i % 2 == 0 {
+            EventType::Succeeded {
+                request: Request::low_bound(),
+            }
+        } else {
+            EventType::Failed {
+                request: Request::low_bound(),
+                reason: "Yesn't".to_string(),
+            }
+        };
+        insert_random_event(event, (i + 1) * 1_000_000_000 * 60 * 60 * 24 + 1);
+    }
 }
 
 #[post_upgrade]
@@ -64,16 +81,31 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
     let Ok(_guard) = ValidationGuard::new() else {
         return Err(ValidationError::RateLimited);
     };
+    println!("num events: {}", num_events());
+    let start = instruction_counter();
     if rate_limited() {
+        println!(
+            "### instructions for checking rate limit: {}",
+            instruction_counter() - start
+        );
         return Err(ValidationError::RateLimited);
     }
+    println!(
+        "### instructions for checking rate limit: {}",
+        instruction_counter() - start
+    );
     let caller = msg_caller();
     // For soft rollout purposes
     if !caller_allowed(&caller) {
         return Err(ValidationError::MigrationsDisabled);
     }
+    let start = instruction_counter();
     match validate_request(args.source, args.target, caller).await {
         Err(e) => {
+            println!(
+                "### instructions for failed validation: {}",
+                instruction_counter() - start
+            );
             println!("Failed to validate request {}: {}", args, e);
             return Err(e);
         }
@@ -82,6 +114,10 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
             if rate_limited() {
                 return Err(ValidationError::RateLimited);
             }
+            println!(
+                "### instructions for successful validation: {}",
+                instruction_counter() - start
+            );
             println!("Accepted request {}", request);
             insert_request(RequestState::Accepted { request });
         }

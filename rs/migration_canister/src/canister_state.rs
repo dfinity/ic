@@ -116,6 +116,16 @@ pub mod events {
         HISTORY.with_borrow_mut(|h| h.insert(event, ()));
     }
 
+    pub fn insert_random_event(event: EventType, dt: u64) {
+        let time = time().saturating_sub(dt);
+        let event = Event { time, event };
+        HISTORY.with_borrow_mut(|h| h.insert(event, ()));
+    }
+
+    pub fn num_events() -> u64 {
+        HISTORY.with_borrow(|x| x.len())
+    }
+
     pub fn list_events(_page_index: u64, _page_size: u64) -> Vec<Event> {
         // TODO: implement pagination
         HISTORY.with_borrow(|h| h.keys().collect())

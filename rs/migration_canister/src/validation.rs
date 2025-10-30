@@ -9,7 +9,7 @@
 //! caller.
 
 use candid::Principal;
-use ic_cdk::api::canister_self;
+use ic_cdk::api::{canister_self, instruction_counter};
 
 use crate::{
     CYCLES_COST_PER_MIGRATION, Request, ValidationError,
