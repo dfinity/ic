@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::str::FromStr;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Error, Result, bail};
 use canister_test::PrincipalId;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
@@ -334,4 +334,58 @@ pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
         .expect("Failed to retrieve boot ID")
         .trim()
         .to_string()
+}
+
+/// Logs guestos diagnostics, used in the event of test failure
+pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger, error: Error) {
+    info!(
+        logger,
+        "Orchestrator dashboard not accessible: {:?}. Attempting GuestOS diagnostics...", error
+    );
+
+    match host.get_guest_ssh() {
+        Ok(guest) => {
+            let diagnostics: Vec<(&str, &str)> = vec![
+                (
+                    "systemctl --failed --no-pager || true",
+                    "GuestOS failed systemd units",
+                ),
+                (
+                    "journalctl -b --no-pager -u systemd-remount-fs.service || true",
+                    "GuestOS systemd-remount-fs.service logs",
+                ),
+                ("mount | sort", "GuestOS current mounts"),
+                (
+                    "journalctl -b --no-pager -p warning | tail -n 200",
+                    "GuestOS journal warnings (last 200 lines)",
+                ),
+                (
+                    "set -o pipefail; dmesg --color=never | grep -iE 'mount|ext4|xfs|btrfs|nvme|sda|i/o error|failed' | tail -n 200 || true",
+                    "GuestOS dmesg mount/kernel errors (last 200 matching lines)",
+                ),
+            ];
+
+            for (cmd, label) in diagnostics {
+                match guest.block_on_bash_script(cmd) {
+                    Ok(output) => {
+                        info!(logger, "{}:\n{}\n\n", label, output);
+                    }
+                    Err(err) => {
+                        info!(logger, "Failed to collect '{}': {:?}\n\n", label, err);
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            info!(
+                logger,
+                "Unable to establish GuestOS SSH session for diagnostics: {:?}", err
+            );
+        }
+    }
+
+    panic!(
+        "System test failed. See diagnostics above. Error: {:?}",
+        error
+    );
 }
