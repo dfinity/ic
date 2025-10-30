@@ -89,13 +89,15 @@ fn test_header_v1_roundtrip_serialization() {
     assert_eq!(original, recovered);
 }
 
-// struct LookupSlot {
-//     idx_min: u64,
-//     ts_nanos_min: u64,
-//     offset: u64,
-// }
-// const SLOT_SIZE: usize = 24;
-//const _: () = assert!(std::mem::size_of::<LookupSlot>() == SLOT_SIZE);
+#[derive(Debug, PartialEq)]
+#[repr(C, packed)]
+struct LookupSlot {
+    idx_min: u64,
+    ts_nanos_min: u64,
+    offset: u64,
+}
+const SLOT_SIZE: usize = 24;
+const _: () = assert!(std::mem::size_of::<LookupSlot>() == SLOT_SIZE);
 
 struct DataEntry {
     idx: u64,
