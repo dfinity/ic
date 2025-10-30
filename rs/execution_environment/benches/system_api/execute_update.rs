@@ -9,6 +9,7 @@
 //! bazel run //rs/execution_environment:execute_update_bench
 //! ```
 
+use candid::{CandidType, Deserialize};
 use criterion::{Criterion, criterion_group, criterion_main};
 use execution_environment_bench::{common, wat::*};
 use ic_error_types::ErrorCode;
@@ -31,14 +32,15 @@ pub fn execute_update_bench(c: &mut Criterion) {
     let benchmarks: Vec<common::Benchmark> = vec![
         common::Benchmark(
             "wasm32/baseline/empty test*".into(),
-            Module::Test.from_sections(("", "(drop (i32.const 0))"), Wasm64::Disabled),
+            Module::Test.from_sections(("", "", "(drop (i32.const 0))"), Wasm64::Disabled),
             3,
         ),
         common::Benchmark(
             "wasm64/baseline/empty test*".into(),
-            Module::Test.from_sections(("", "(drop (i32.const 0))"), Wasm64::Enabled),
+            Module::Test.from_sections(("", "", "(drop (i32.const 0))"), Wasm64::Enabled),
             3,
         ),
+        /*
         common::Benchmark(
             "wasm32/baseline/empty loop".into(),
             Module::Test.from_sections(
@@ -1027,6 +1029,71 @@ pub fn execute_update_bench(c: &mut Criterion) {
             ),
             519004006,
         ),
+        */
+        {
+            #[derive(CandidType, Deserialize)]
+            struct CostHttpRequestV2Params {
+                request_bytes: u64,
+                http_roundtrip_time_ms: u64,
+                raw_response_bytes: u64,
+                transformed_response_bytes: u64,
+                transform_instructions: u64,
+            }
+
+            let params = CostHttpRequestV2Params {
+                request_bytes: 1_000,
+                http_roundtrip_time_ms: 2_000,
+                raw_response_bytes: 3_000,
+                transformed_response_bytes: 2_000,
+                transform_instructions: 1_000_000,
+            };
+
+            let serialized_params = candid::encode_one(params).unwrap();
+
+            common::Benchmark(
+                "wasm32/ic0_cost_http_request_v2()".into(),
+                Module::Test.from_ic0_with_data(
+                    "cost_http_request_v2",
+                    Params3(0_i32, serialized_params.len() as i32, serialized_params.len() as i32),
+                    Result::No,
+                    DataSections { use_64_bit: false, sections: vec![(0_u32, serialized_params)]},
+                    Wasm64::Disabled,
+                ),
+                519001006,
+            )
+        },
+        {
+            #[derive(CandidType, Deserialize)]
+            struct CostHttpRequestV2Params {
+                request_bytes: u64,
+                http_roundtrip_time_ms: u64,
+                raw_response_bytes: u64,
+                transformed_response_bytes: u64,
+                transform_instructions: u64,
+            }
+
+            let params = CostHttpRequestV2Params {
+                request_bytes: 1_000,
+                http_roundtrip_time_ms: 2_000,
+                raw_response_bytes: 3_000,
+                transformed_response_bytes: 2_000,
+                transform_instructions: 1_000_000,
+            };
+
+            let serialized_params = candid::encode_one(params).unwrap();
+
+            common::Benchmark(
+                "wasm64/ic0_cost_http_request_v2()".into(),
+                Module::Test.from_ic0_with_data(
+                    "cost_http_request_v2",
+                    Params3(0_i64, serialized_params.len() as i64, serialized_params.len() as i64),
+                    Result::No,
+                    DataSections { use_64_bit: true, sections: vec![(0_u32, serialized_params)]},
+                    Wasm64::Enabled,
+                ),
+                519004006
+            )
+        },
         common::Benchmark(
             "wasm32/ic0_cost_sign_with_ecdsa()".into(),
             Module::Test.from_ic0(

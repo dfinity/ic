@@ -8915,6 +8915,45 @@ fn invoke_cost_http_request_v2() {
 }
 
 #[test]
+fn cost_http_request_v2_fails_with_too_big_candid() {
+    #[derive(CandidType)]
+    struct CostHttpRequestV2ParamsExtended {
+        request_bytes: u64,
+        http_roundtrip_time_ms: u64,
+        raw_response_bytes: u64,
+        transformed_response_bytes: u64,
+        transform_instructions: u64,
+        garbage: Vec<u8>,
+    }
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let request_bytes = 1000;
+    let http_roundtrip_time_ms = 2_000;
+    let raw_response_bytes = 1_000_000;
+    let transformed_response_bytes = 800_000;
+    let transform_instructions = 500_000_000;
+    let garbage = "Some garbage to DoS the System API by making Candid decoding more expensive".as_bytes().into();
+    let params = CostHttpRequestV2ParamsExtended {
+        request_bytes,
+        http_roundtrip_time_ms,
+        raw_response_bytes,
+        transformed_response_bytes,
+        transform_instructions,
+        garbage,
+    };
+    let params_blob = Encode!(&params).unwrap();
+
+    let payload = wasm()
+        .cost_http_request_v2(&params_blob)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+
+    assert_matches!(res, Err(e) if e.code() == ErrorCode::CanisterContractViolation && e.description().contains("Failed to decode HttpRequestV2CostParams from Candid"));
+}
+
+#[test]
 fn invoke_cost_sign_with_ecdsa() {
     let key_name = String::from("testkey");
     let curve_variant = 0;
