@@ -108,10 +108,12 @@ where
     let payload_size_bytes = payload.len();
 
     // Create bytes vector [payload.len(); payload; padding].
-    let mut bytes = Vec::with_capacity(std::cmp::max(target_bytes_count, payload.len() + 4));
+    let capacity = std::cmp::max(target_bytes_count, payload.len() + 4);
+    let mut bytes = Vec::with_capacity(capacity);
+
     bytes.extend_from_slice(&(payload.len() as u32).to_le_bytes());
     bytes.append(&mut payload);
-    bytes.resize(bytes.capacity(), 13_u8);
+    bytes.resize(capacity, 13_u8);
 
     (bytes, payload_size_bytes as u32)
 }
