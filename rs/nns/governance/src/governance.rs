@@ -4327,11 +4327,11 @@ impl Governance {
         // Acquire the lock before doing anything meaningful.
         self.minting_node_provider_rewards = true;
 
-        let monthly_node_provider_rewards = self.get_node_providers_rewards().await?;
+        let node_provider_rewards = self.get_node_providers_rewards().await?;
         let _ = self
-            .reward_node_providers(&monthly_node_provider_rewards.rewards)
+            .reward_node_providers(&node_provider_rewards.rewards)
             .await;
-        self.update_most_recent_node_provider_rewards(monthly_node_provider_rewards);
+        self.update_most_recent_node_provider_rewards(node_provider_rewards);
 
         // Release the lock before committing the result.
         self.minting_node_provider_rewards = false;
@@ -4384,35 +4384,18 @@ impl Governance {
         }
     }
 
-    pub fn get_most_recent_node_provider_rewards_timestamp(&self) -> Option<u64> {
+    pub fn get_most_recent_node_provider_rewards(&self) -> Option<NodeProviderRewards> {
         let archived = latest_node_provider_rewards();
 
         match archived {
-            None => self
-                .heap_data
-                .most_recent_monthly_node_provider_rewards
-                .as_ref()
-                .map(|r| r.timestamp),
-            Some(ArchivedMonthlyNodeProviderRewards {
-                version:
-                    Some(archived_monthly_node_provider_rewards::Version::Version1(
-                        archived_monthly_node_provider_rewards::V1 { rewards },
-                    )),
-            }) => rewards.as_ref().map(|r| r.timestamp),
+            None => self.heap_data.most_recent_node_provider_rewards.clone(),
             Some(ArchivedMonthlyNodeProviderRewards {
                 version:
                     Some(archived_monthly_node_provider_rewards::Version::Version2(
                         archived_monthly_node_provider_rewards::V2 { rewards },
                     )),
-            }) => rewards.as_ref().map(|r| {
-                let date_to = r.to.expect("date_to exists");
-                let timestamp =
-                    NaiveDate::from_ymd_opt(date_to.year as i32, date_to.month, date_to.day)
-                        .map(|date| date.and_hms(0, 0, 0).timestamp())
-                        .unwrap() as u64;
-                timestamp
-            }),
-            Some(_) => panic!("Should not be possible!"),
+            }) => rewards,
+            Some(_) => None,
         }
     }
 
@@ -6617,7 +6600,7 @@ impl Governance {
                 ),
             }
             #[cfg(feature = "performance-based-rewards")]
-            match self.mint_monthly_node_provider_rewards().await {
+            match self.mint_node_provider_rewards().await {
                 Ok(()) => (),
                 Err(e) => println!(
                     "{}Error when minting node provider rewards in run_periodic_tasks: {}",
@@ -7905,8 +7888,11 @@ impl Governance {
     ) -> Result<NodeProviderRewards, GovernanceError> {
         let mut rewards = vec![];
 
+        // On the very first run, we need to fetch the rewards from monthly rewards.
+        // TODO: This is valid just for the first run! We should fetch V2 rewards going forward.
         let latest_rewards_timestamp_seconds = self
-            .get_most_recent_node_provider_rewards_timestamp()
+            .get_most_recent_monthly_node_provider_rewards()
+            .map(|rewards| rewards.timestamp)
             .ok_or(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
                 "No rewards found for the last month.",
@@ -7914,9 +7900,10 @@ impl Governance {
 
         let from_timestamp_seconds =
             latest_rewards_timestamp_seconds.saturating_add(ONE_DAY_SECONDS);
-        // To yesterday, since today we have collected up to and included node metrics of yesterday
+        // Today we have collected up to and included node metrics of yesterday
         // in the node rewards canister.
-        let to_timestamp_seconds = self.env.now().saturating_sub(ONE_DAY_SECONDS);
+        let now = self.env.now();
+        let to_timestamp_seconds = now.saturating_sub(ONE_DAY_SECONDS);
 
         let from = ApiDateUtc::from_unix_timestamp_seconds(from_timestamp_seconds);
         let to = ApiDateUtc::from_unix_timestamp_seconds(to_timestamp_seconds);
@@ -7959,6 +7946,7 @@ impl Governance {
         };
 
         Ok(NodeProviderRewards {
+            timestamp: now,
             from: Some(DateUtc::try_from(from).expect("from date exists")),
             to: Some(DateUtc::try_from(to).expect("to date exists")),
             rewards,

@@ -2738,6 +2738,7 @@ pub struct Governance {
     pub neuron_management_voting_period_seconds: Option<u64>,
     pub metrics: Option<governance::GovernanceCachedMetrics>,
     pub most_recent_monthly_node_provider_rewards: Option<MonthlyNodeProviderRewards>,
+    pub most_recent_node_provider_rewards: Option<NodeProviderRewards>,
     /// Cached value for the maturity modulation as calculated each day.
     pub cached_daily_maturity_modulation_basis_points: Option<i32>,
     /// The last time that the maturity modulation value was updated.
@@ -3121,6 +3122,40 @@ pub struct MonthlyNodeProviderRewards {
     pub registry_version: Option<u64>,
     /// The list of node_provieders at the time when the rewards were calculated.
     pub node_providers: Vec<NodeProvider>,
+}
+/// Date UTC used in NodeProviderRewards to define their validity boundaries
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct DateUtc {
+    pub year: u32,
+    pub month: u32,
+    pub day: u32,
+}
+/// Node Providers' rewards for the period spanning from `from` to `to`, inclusive of both endpoints.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct NodeProviderRewards {
+    /// The time when the rewards were calculated.
+    pub timestamp: u64,
+    /// Date from for which the rewards were calculated.
+    pub from: ::core::option::Option<DateUtc>,
+    /// Date to for which the rewards were calculated.
+    pub to: ::core::option::Option<DateUtc>,
+    /// The Rewards calculated and rewarded.
+    pub rewards: ::prost::alloc::vec::Vec<RewardNodeProvider>,
+    /// The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.
+    /// This field snapshots the actual rate used by governance when the rewards were calculated.
+    pub xdr_conversion_rate: ::core::option::Option<XdrConversionRate>,
+    /// The minimum xdr permyriad per icp at the time when the rewards were calculated.  This is useful for understanding
+    /// why the rewards were what they were if the xdr_conversion_rate falls below this threshold.
+    pub minimum_xdr_permyriad_per_icp: ::core::option::Option<u64>,
+    /// The maximum amount of ICP e8s that can be awarded to a single node provider in one event.  This is snapshotted
+    /// from the value in network economics.
+    pub maximum_node_provider_rewards_e8s: ::core::option::Option<u64>,
+    /// The list of node_provieders at the time when the rewards were calculated.
+    pub node_providers: ::prost::alloc::vec::Vec<NodeProvider>,
 }
 /// TODO(NNS1-1589): Until the Jira ticket gets solved, changes here need to be
 /// manually propagated to (sns) swap.proto.

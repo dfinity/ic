@@ -134,6 +134,7 @@ pub fn initialize_governance(
         neuron_management_voting_period_seconds,
         metrics,
         most_recent_monthly_node_provider_rewards,
+        most_recent_node_provider_rewards,
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
@@ -157,6 +158,7 @@ pub fn initialize_governance(
     let metrics = metrics.map(|x| x.into());
     let most_recent_monthly_node_provider_rewards =
         most_recent_monthly_node_provider_rewards.map(|x| x.into());
+    let most_recent_node_provider_rewards = most_recent_node_provider_rewards.map(|x| x.into());
     let restore_aging_summary = restore_aging_summary.map(|x| x.into());
 
     // Third, fill in the missing fields.
@@ -201,6 +203,7 @@ pub fn initialize_governance(
         neuron_management_voting_period_seconds,
         metrics,
         most_recent_monthly_node_provider_rewards,
+        most_recent_node_provider_rewards,
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
@@ -240,6 +243,7 @@ pub fn split_governance_proto(
         neuron_management_voting_period_seconds,
         metrics,
         most_recent_monthly_node_provider_rewards,
+        most_recent_node_provider_rewards,
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
@@ -279,6 +283,7 @@ pub fn split_governance_proto(
             neuron_management_voting_period_seconds,
             metrics,
             most_recent_monthly_node_provider_rewards,
+            most_recent_node_provider_rewards,
             cached_daily_maturity_modulation_basis_points,
             maturity_modulation_last_updated_at_timestamp_seconds,
             spawning_neurons,
@@ -319,6 +324,7 @@ pub fn reassemble_governance_proto(
         neuron_management_voting_period_seconds,
         metrics,
         most_recent_monthly_node_provider_rewards,
+        most_recent_node_provider_rewards,
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,
@@ -346,6 +352,7 @@ pub fn reassemble_governance_proto(
         neuron_management_voting_period_seconds,
         metrics,
         most_recent_monthly_node_provider_rewards,
+        most_recent_node_provider_rewards,
         cached_daily_maturity_modulation_basis_points,
         maturity_modulation_last_updated_at_timestamp_seconds,
         spawning_neurons,

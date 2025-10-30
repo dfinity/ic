@@ -88,10 +88,9 @@ pub(crate) fn list_node_provider_rewards(
                     .version
                     .clone()
                     .map(|v| match v {
-                        Version::Version1(v1) => v1,
+                        Version::Version1(v1) => v1.rewards.map(|v| v.timestamp),
+                        Version::Version2(v2) => v2.rewards.map(|v| v.timestamp),
                     })
-                    .and_then(|v1| v1.rewards)
-                    .map(|rewards| rewards.timestamp)
                     .map(|ts| ts >= start_timestamp && ts <= end_timestamp)
                     .unwrap_or(false)
             })

@@ -2124,6 +2124,8 @@ message Governance {
 
   MonthlyNodeProviderRewards most_recent_monthly_node_provider_rewards = 16;
 
+  NodeProviderRewards most_recent_node_provider_rewards = 43;
+
   // Cached value for the maturity modulation as calculated each day.
   optional int32 cached_daily_maturity_modulation_basis_points = 17;
 
@@ -2272,15 +2274,15 @@ message DateUtc {
   uint32 day = 3;
 }
 
-// Node Providers' rewards for the period spanning from `from` to `to`, inclusive of both endpoints.
+// Node Providers' rewards for the date period spanning from `from` to `to`, inclusive of both endpoints.
 message NodeProviderRewards {
   // The time when the rewards were calculated.
   uint64 timestamp = 1;
 
-  // Date from for which the rewards were calculated.
+  // The start date (included) that these rewards cover.
   DateUtc from = 2;
 
-  // Date to for which the rewards were calculated.
+  // The end date (included) that these rewards cover.
   DateUtc to = 3;
 
   // The Rewards calculated and rewarded.

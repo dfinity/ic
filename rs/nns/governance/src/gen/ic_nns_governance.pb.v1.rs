@@ -361,7 +361,6 @@ pub struct RewardNodeProviders {
     pub rewards: ::prost::alloc::vec::Vec<RewardNodeProvider>,
     /// If true, reward Node Providers with the rewards returned by the Registry's
     /// get_node_providers_monthly_xdr_rewards method
-    /// TODO: Change it to add DateUtc as input
     #[prost(bool, optional, tag = "2")]
     pub use_registry_derived_rewards: ::core::option::Option<bool>,
 }
@@ -2875,6 +2874,8 @@ pub struct Governance {
     #[prost(message, optional, tag = "16")]
     pub most_recent_monthly_node_provider_rewards:
         ::core::option::Option<MonthlyNodeProviderRewards>,
+    #[prost(message, optional, tag = "43")]
+    pub most_recent_node_provider_rewards: ::core::option::Option<NodeProviderRewards>,
     /// Cached value for the maturity modulation as calculated each day.
     #[prost(int32, optional, tag = "17")]
     pub cached_daily_maturity_modulation_basis_points: ::core::option::Option<i32>,
@@ -3291,7 +3292,7 @@ pub struct DateUtc {
     #[prost(uint32, tag = "3")]
     pub day: u32,
 }
-/// Node Providers' rewards for the period spanning from `from` to `to`, inclusive of both endpoints.
+/// Node Providers' rewards for the date period spanning from `from` to `to`, inclusive of both endpoints.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3305,10 +3306,10 @@ pub struct NodeProviderRewards {
     /// The time when the rewards were calculated.
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
-    /// Date from for which the rewards were calculated.
+    /// The start date (included) that these rewards cover.
     #[prost(message, optional, tag = "2")]
     pub from: ::core::option::Option<DateUtc>,
-    /// Date to for which the rewards were calculated.
+    /// The end date (included) that these rewards cover.
     #[prost(message, optional, tag = "3")]
     pub to: ::core::option::Option<DateUtc>,
     /// The Rewards calculated and rewarded.

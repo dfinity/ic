@@ -1,4 +1,3 @@
-use crate::pb::v1::DateUtc;
 use crate::{
     governance::MAX_FOLLOWEES_PER_TOPIC,
     neuron::Neuron,
@@ -7,7 +6,6 @@ use crate::{
         manage_neuron::{SetFollowing, set_following::FolloweesForTopic},
     },
 };
-use chrono::NaiveDate;
 use ic_base_types::PrincipalId;
 use ic_nns_governance_api::{GovernanceError, governance_error::ErrorType};
 use ic_stable_structures::{Storable, storable::Bound};

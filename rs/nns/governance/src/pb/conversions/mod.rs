@@ -3123,6 +3123,20 @@ impl From<pb::MonthlyNodeProviderRewards> for pb_api::MonthlyNodeProviderRewards
         }
     }
 }
+impl From<pb::NodeProviderRewards> for pb_api::NodeProviderRewards {
+    fn from(item: pb::NodeProviderRewards) -> Self {
+        Self {
+            timestamp: item.timestamp,
+            from: item.from.map(|x| x.into()),
+            to: item.to.map(|x| x.into()),
+            rewards: item.rewards.into_iter().map(|x| x.into()).collect(),
+            xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
+            minimum_xdr_permyriad_per_icp: item.minimum_xdr_permyriad_per_icp,
+            maximum_node_provider_rewards_e8s: item.maximum_node_provider_rewards_e8s,
+            node_providers: item.node_providers.into_iter().map(|x| x.into()).collect(),
+        }
+    }
+}
 impl From<pb_api::MonthlyNodeProviderRewards> for pb::MonthlyNodeProviderRewards {
     fn from(item: pb_api::MonthlyNodeProviderRewards) -> Self {
         Self {
