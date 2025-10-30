@@ -35,7 +35,7 @@ mod validation;
 /// - succeeded (in HISTORY) and not older than 24 hours.
 const RATE_LIMIT: u64 = 50;
 /// Validations cause xnet calls, so we limit them.
-const MAX_ONGOING_VALIDATIONS: u64 = 500;
+const MAX_ONGOING_VALIDATIONS: u64 = 200;
 /// 10 Trillion Cycles
 const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
 

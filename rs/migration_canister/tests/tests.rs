@@ -1017,7 +1017,7 @@ async fn parallel_migrations() {
 
 #[tokio::test]
 async fn parallel_validations() {
-    const NUM_MIGRATIONS: usize = 550;
+    const NUM_MIGRATIONS: usize = 260;
     let Setup {
         pic,
         sources,
@@ -1031,27 +1031,12 @@ async fn parallel_validations() {
     .await;
     let sender = source_controllers[0];
 
-    for i in 0..45 {
-        migrate_canister(
-            &pic,
-            source_controllers[0],
-            &MigrateCanisterArgs {
-                source: sources[i],
-                target: targets[i],
-            },
-        )
-        .await
-        .unwrap();
-    }
-    // We have 5 slots left. Attempt to validate 505 calls.
-    // Of those, 5 should fail due to validation limit and 495 should fail due to
-    // rate limit.
     let mut msg_ids = vec![];
-    for i in 45..NUM_MIGRATIONS {
+    for i in 0..NUM_MIGRATIONS {
         let id = pic
             .submit_call(
                 MIGRATION_CANISTER_ID.into(),
-                sender,
+                Principal::anonymous(),
                 "migrate_canister",
                 Encode!(&MigrateCanisterArgs {
                     source: sources[i],
@@ -1066,17 +1051,19 @@ async fn parallel_validations() {
     }
     advance(&pic).await;
 
-    let mut success_counter = 0;
-    let mut fail_counter = 0;
-    for i in 45..NUM_MIGRATIONS {
-        let res = pic.await_call(msg_ids[i - 45].clone()).await.unwrap();
+    let mut not_controller_counter = 0;
+    let mut rate_limited_counter = 0;
+    for msg_id in msg_ids.into_iter() {
+        let res = pic.await_call(msg_id).await.unwrap();
         let res = Decode!(&res, Result<(), ValidationError>).unwrap();
         match res {
-            Ok(_) => success_counter += 1,
-            Err(ValidationError::RateLimited) => fail_counter += 1,
-            _ => panic!(),
+            Err(ValidationError::CallerNotController { .. }) => not_controller_counter += 1,
+            Err(ValidationError::RateLimited) => rate_limited_counter += 1,
+            _ => {
+                panic!()
+            }
         }
     }
-    assert_eq!(success_counter, 5);
-    assert_eq!(fail_counter, 500);
+    assert_eq!(not_controller_counter, 200);
+    assert_eq!(rate_limited_counter, 60);
 }
