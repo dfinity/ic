@@ -61,6 +61,7 @@ impl Registry {
         // Get required node_reward_type
         let node_reward_type = payload
             .node_reward_type
+            .as_ref()
             .map(|t| {
                 validate_str_as_node_reward_type(t).map_err(|e| {
                     format!("{LOG_PREFIX}do_add_node: Error parsing node type from payload: {e}")
