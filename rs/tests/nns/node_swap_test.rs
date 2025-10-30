@@ -31,7 +31,7 @@ fn main() -> Result<()> {
 fn setup(env: TestEnv) {
     // Ensure that the variable is set so that the test panics early
     // if ic-admin isn't setup correctly.
-    fetch_ic_admin_path();
+    ensure_ic_admin_path();
 
     let caller = *TEST_USER1_PRINCIPAL;
     let mut ic = InternetComputer::new()
@@ -59,65 +59,84 @@ fn setup(env: TestEnv) {
 }
 
 fn fetch_ic_admin_path() -> String {
-    std::env::var("IC_ADMIN_PATH").expect(
+    let ic_admin_path = std::env::var("IC_ADMIN_PATH").expect(
         "IC admin isn't present in the environment variables and is required for this test to run",
-    )
+    );
+
+    if !std::fs::exists(&ic_admin_path).unwrap_or_default() {
+        panic!(
+            "Provided IC_ADMIN_PATH {ic_admin_path} does not point to a file accessible by this test"
+        );
+    }
+    ic_admin_path
+}
+
+fn ensure_ic_admin_path() {
+    let _ = fetch_ic_admin_path();
 }
 
 fn test(env: TestEnv) {
-    block_on(test_inner(env))
-}
+    block_on(async {
+        let topology_snapshot = env.topology_snapshot();
 
-async fn test_inner(env: TestEnv) {
-    let snapshot = env.topology_snapshot();
+        let unassigned_node = topology_snapshot.unassigned_nodes().next().unwrap();
+        let nns_subnet = topology_snapshot.subnets().next().unwrap();
+        let mut nns_nodes = nns_subnet.nodes();
 
-    let unassigned_node = snapshot.unassigned_nodes().next().unwrap();
-    let subnet = snapshot.subnets().next().unwrap();
-    let mut nodes_iter = subnet.nodes();
+        let nns_node = nns_nodes.next().unwrap();
 
-    let assigned_node = nodes_iter.next().unwrap();
+        let nns_node_url = format!("http://[{}]:8080", nns_node.get_ip_addr());
+        ic_admin_swap_nodes(
+            &nns_node_url,
+            &TEST_USER1_KEYPAIR.to_pem(),
+            nns_node.node_id,
+            unassigned_node.node_id,
+            &env,
+        )
+        .await
+        .unwrap();
 
-    let next_nns_node = nodes_iter.next().unwrap();
-    let url = format!("http://[{}]:8080", next_nns_node.get_ip_addr());
-    ic_admin_swap_nodes(
-        &url,
-        &TEST_USER1_KEYPAIR.to_pem(),
-        assigned_node.node_id,
-        unassigned_node.node_id,
-        &env,
-    )
-    .await
-    .unwrap();
+        topology_snapshot
+            .block_for_newer_registry_version()
+            .await
+            .unwrap();
 
-    snapshot.block_for_newer_registry_version().await.unwrap();
+        let observed_unassigned_node_ids = topology_snapshot
+            .unassigned_nodes()
+            .map(|node| node.node_id)
+            .collect::<Vec<_>>();
+        // Expect the new unassigned node to be the previously assigned one
+        // which should happen if the canister didn't return any errors.
+        assert_eq!(observed_unassigned_node_ids, vec![nns_node.node_id]);
 
-    let new_unassigned_node = snapshot.unassigned_nodes().next().unwrap();
-    // Expect the new unassigned node to be the previously assigned one
-    // which should happen if the canister didn't return any errors.
-    assert_eq!(new_unassigned_node.node_id, assigned_node.node_id);
+        // Expect the previously unassigned node to be a member of
+        // a subnet it was directly swapped into.
+        let new_node_in_subnet = topology_snapshot
+            .subnets()
+            .next()
+            .unwrap()
+            .nodes()
+            .find(|node| node.node_id == unassigned_node.node_id)
+            .unwrap_or_else(|| {
+                panic!(
+                    "Expected the unassigned node {} to become a member of a subnet {}",
+                    unassigned_node.node_id, nns_subnet.subnet_id,
+                )
+            });
+        let subnet_id = nns_subnet.subnet_id;
 
-    // Expect the previously unassigned node to be a member of
-    // a subnet it was directly swapped into.
-    let new_node_in_subnet = snapshot
-        .subnets()
-        .next()
+        retry_with_msg_async!(
+            "Check that the node joined the subnt",
+            &env.logger(),
+            Duration::from_secs(600),
+            Duration::from_secs(5),
+            || async {
+                ensure_node_in_subnet(new_node_in_subnet.clone(), subnet_id, env.logger()).await
+            }
+        )
+        .await
         .unwrap()
-        .nodes()
-        .find(|node| node.node_id == unassigned_node.node_id)
-        .expect("Expected the unassigned node to become a member of a subnet");
-    let subnet_id = subnet.subnet_id;
-
-    retry_with_msg_async!(
-        "Check that the node joined the subnt",
-        &env.logger(),
-        Duration::from_secs(600),
-        Duration::from_secs(5),
-        || async {
-            ensure_node_in_subnet(new_node_in_subnet.clone(), subnet_id, env.logger()).await
-        }
-    )
-    .await
-    .unwrap()
+    })
 }
 
 async fn ensure_node_in_subnet(

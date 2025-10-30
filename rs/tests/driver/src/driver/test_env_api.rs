@@ -2299,8 +2299,7 @@ pub async fn install_nns_canisters(
     let registry_local_store = ic_prep_state_dir.registry_local_store_path();
     let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
     if !registry_canister_init_payload.mutations.is_empty() {
-        warn!(
-            logger,
+        panic!(
             "Provided registry canister init payload via NnsCustomizations weren't empty! These will be overriden by local store registry mutations"
         );
     }
