@@ -80,12 +80,9 @@ fn fill_node_operators_max_rewardable_nodes(registry: &Registry) -> Vec<Registry
         get_key_family::<NodeOperatorRecord>(registry, NODE_OPERATOR_RECORD_KEY_PREFIX).into_iter()
     {
         let node_operator_id = PrincipalId::try_from(&record.node_operator_principal_id).unwrap();
-        let rewardable_nodes = &record.rewardable_nodes;
-
-        if !rewardable_nodes.is_empty() {
+        if !record.max_rewardable_nodes.is_empty() {
             continue;
         }
-
         match max_rewardable_nodes_mapping.get(&node_operator_id).cloned() {
             Some(max_rewardable_nodes) => {
                 record.max_rewardable_nodes = max_rewardable_nodes
@@ -104,6 +101,10 @@ fn fill_node_operators_max_rewardable_nodes(registry: &Registry) -> Vec<Registry
                         // Reason for choosing type3 is simply because it is the latest type.
                         "type3".to_string() => record.node_allowance as u32,
                     };
+                    mutations.push(update(
+                        make_node_operator_record_key(node_operator_id),
+                        record.encode_to_vec(),
+                    ));
                 }
             }
         }
