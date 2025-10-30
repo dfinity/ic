@@ -76,7 +76,7 @@ where
 
     validate_bootstrap_contents(tmpdir.path()).context("Bootstrap validation failed")?;
 
-    copy_bootstrap_files_with_sev_checker(tmpdir.path(), config_root, state_root, sev_checker)?;
+    copy_bootstrap_files(tmpdir.path(), config_root, state_root, sev_checker)?;
 
     // Fix up permissions. Ideally this is specific to only what is copied. If
     // we do make this change, we need to make sure `data` itself has the
@@ -143,7 +143,7 @@ fn copy_state_injection_files(extracted_dir: &Path, state_root: &Path) -> Result
 }
 
 /// Copy select bootstrap files from extracted directory to their destinations with custom SEV checker
-fn copy_bootstrap_files_with_sev_checker<F>(
+fn copy_bootstrap_files<F>(
     extracted_dir: &Path,
     config_root: &Path,
     state_root: &Path,
@@ -529,12 +529,8 @@ mod tests {
         .unwrap();
 
         set_mock_sev_active(false);
-        let result = copy_bootstrap_files_with_sev_checker(
-            &extracted_dir,
-            &config_root,
-            &state_root,
-            mock_sev_checker,
-        );
+        let result =
+            copy_bootstrap_files(&extracted_dir, &config_root, &state_root, mock_sev_checker);
         assert!(result.is_ok());
 
         // Verify files were copied correctly
@@ -611,12 +607,8 @@ mod tests {
         .unwrap();
 
         set_mock_sev_active(false);
-        let result = copy_bootstrap_files_with_sev_checker(
-            &extracted_dir,
-            &config_root,
-            &state_root,
-            mock_sev_checker,
-        );
+        let result =
+            copy_bootstrap_files(&extracted_dir, &config_root, &state_root, mock_sev_checker);
         assert!(result.is_ok());
 
         // Verify that dev files were copied
@@ -647,12 +639,8 @@ mod tests {
         .unwrap();
 
         set_mock_sev_active(false);
-        let result = copy_bootstrap_files_with_sev_checker(
-            &extracted_dir,
-            &config_root,
-            &state_root,
-            mock_sev_checker,
-        );
+        let result =
+            copy_bootstrap_files(&extracted_dir, &config_root, &state_root, mock_sev_checker);
         assert!(result.is_ok());
 
         // Verify that the dev files were not copied
@@ -702,12 +690,8 @@ mod tests {
 
         // Set SEV as active (simulating production environment with SEV)
         set_mock_sev_active(true);
-        let result = copy_bootstrap_files_with_sev_checker(
-            &extracted_dir,
-            &config_root,
-            &state_root,
-            mock_sev_checker,
-        );
+        let result =
+            copy_bootstrap_files(&extracted_dir, &config_root, &state_root, mock_sev_checker);
         assert!(result.is_ok());
 
         // Verify that state injection files were NOT copied when SEV is active in production
