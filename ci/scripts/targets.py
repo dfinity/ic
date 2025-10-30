@@ -188,7 +188,8 @@ def targets(
 
     # Finally, exclude targets that have any of the excluded tags:
     excluded_tags_regex = "|".join(EXCLUDED_TAGS + exclude_tags)
-    query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...)'
+    query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...) ' \
+            f'except kind("generated files", //...)'
 
     args = ["bazel", "query", "--keep_going", query]
     log(shlex.join(args))
