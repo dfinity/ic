@@ -1,6 +1,8 @@
 use ic_cdk::api::in_replicated_execution;
 use ic_cdk::{init, post_upgrade, pre_upgrade, query, update};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_canisters::registry::RegistryCanister;
+use ic_nervous_system_common::serve_metrics;
 use ic_nervous_system_timer_task::{RecurringSyncTask, TimerTaskMetricsRegistry};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_node_rewards_canister::canister::NodeRewardsCanister;
@@ -61,6 +63,17 @@ pub fn schedule_timers() {
 fn panic_if_caller_not_governance() {
     if ic_cdk::api::msg_caller() != GOVERNANCE_CANISTER_ID.get().0 {
         panic!("Only the governance canister can call this method");
+    }
+}
+
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
+fn http_request(request: HttpRequest) -> HttpResponse {
+    match request.path() {
+        "/metrics" => serve_metrics(),
+        _ => HttpResponseBuilder::not_found().build(),
     }
 }
 

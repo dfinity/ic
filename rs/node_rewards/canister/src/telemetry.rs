@@ -59,7 +59,6 @@ pub struct PrometheusMetrics<'b> {
     /// If last_sync_start > last_sync_end, sync is in progress, else sync is not taking place.
     /// If last_sync_success == last_sync_end, last sync was successful.
     last_sync_end: f64,
-    /// Publishes the instruction count that the last sync incurred.
     /// during various phases.
     last_sync_instructions: f64,
     last_sync_registry_sync_instructions: f64,
