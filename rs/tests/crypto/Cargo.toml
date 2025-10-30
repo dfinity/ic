@@ -18,8 +18,10 @@ ic-system-test-driver = { path = "../driver" }
 ic-types = { path = "../../types/types" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 k256 = { workspace = true }
+p256 = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
+ring = { workspace = true }
 serde_bytes = { workspace = true }
 serde_cbor = { workspace = true }
 slog = { workspace = true }

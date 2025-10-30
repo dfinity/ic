@@ -4,7 +4,7 @@ use anyhow::Result;
 use ic_agent::export::Principal;
 use ic_agent::{
     Identity,
-    identity::{AnonymousIdentity, Secp256k1Identity},
+    identity::{AnonymousIdentity, Prime256v1Identity, Secp256k1Identity},
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_registry_subnet_type::SubnetType;
@@ -74,11 +74,22 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing valid requests from an ECDSA identity. Should succeed."
+                "Testing valid requests from an ECDSA secp256k1 identity. Should succeed."
             );
             test_valid_request_succeeds(
                 node_url.as_str(),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
+                canister.canister_id(),
+            )
+            .await;
+
+            info!(
+                logger,
+                "Testing valid requests from an ECDSA secp256r1 identity. Should succeed."
+            );
+            test_valid_request_succeeds(
+                node_url.as_str(),
+                random_ecdsa_secp256r1_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -96,11 +107,22 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing request from an ECDSA identity but with missing signature. Should fail."
+                "Testing request from an ECDSA secp256k1 identity but with missing signature. Should fail."
             );
             test_request_with_empty_signature_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
+                canister.canister_id(),
+            )
+            .await;
+
+            info!(
+                logger,
+                "Testing request from an ECDSA secp256r1 identity but with missing signature. Should fail."
+            );
+            test_request_with_empty_signature_fails(
+                node_url.as_str(),
+                random_ecdsa_secp256r1_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -118,11 +140,11 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing request from an ECDSA identity signed by an ed25519 identity. Should fail."
+                "Testing request from an ECDSA secp256k1 identity signed by an ed25519 identity. Should fail."
             );
             test_request_signed_by_another_identity_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
                 random_ed25519_identity(),
                 canister.canister_id(),
             )
@@ -130,12 +152,24 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing request from an ed25519 identity signed by an ECDSA identity. Should fail."
+                "Testing request from an ECDSA secp256r1 identity signed by an ed25519 identity. Should fail."
+            );
+            test_request_signed_by_another_identity_fails(
+                node_url.as_str(),
+                random_ecdsa_secp256r1_identity(rng),
+                random_ed25519_identity(),
+                canister.canister_id(),
+            )
+            .await;
+
+            info!(
+                logger,
+                "Testing request from an ed25519 identity signed by an ECDSA secp256k1 identity. Should fail."
             );
             test_request_signed_by_another_identity_fails(
                 node_url.as_str(),
                 random_ed25519_identity(),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -154,23 +188,23 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing request from an ECDSA identity signed by another ECDSA identity. Should fail."
+                "Testing request from an ECDSA secp256k1 identity signed by another ECDSA secp256k1 identity. Should fail."
             );
             test_request_signed_by_another_identity_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(rng),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
                 canister.canister_id(),
             )
             .await;
 
             info!(
                 logger,
-                "Testing request from an ECDSA identity but with an ed25519 sender. Should fail."
+                "Testing request from an ECDSA secp256k1 identity but with an ed25519 sender. Should fail."
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
                 random_ed25519_identity(),
                 canister.canister_id(),
             )
@@ -178,12 +212,24 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing request from an ed25519 identity but with wrong (ECDSA) identity. Should fail."
+                "Testing request from an ECDSA secp256r1 identity but with an ed25519 sender. Should fail."
+            );
+            test_request_with_valid_signature_but_wrong_sender_fails(
+                node_url.as_str(),
+                random_ecdsa_secp256r1_identity(rng),
+                random_ed25519_identity(),
+                canister.canister_id(),
+            )
+            .await;
+
+            info!(
+                logger,
+                "Testing request from an ed25519 identity but with wrong (ECDSA secp256k1) identity. Should fail."
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
                 node_url.as_str(),
                 random_ed25519_identity(),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -202,12 +248,12 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing request from an ECDSA identity but with wrong (ECDSA) identity. Should fail."
+                "Testing request from an ECDSA secp256k1 identity but with wrong (ECDSA secp256k1) identity. Should fail."
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(rng),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -215,8 +261,12 @@ pub fn request_signature_test(env: TestEnv) {
     });
 }
 
-pub fn random_ecdsa_identity<R: Rng + CryptoRng>(rng: &mut R) -> Secp256k1Identity {
+pub fn random_ecdsa_secp256k1_identity<R: Rng + CryptoRng>(rng: &mut R) -> Secp256k1Identity {
     Secp256k1Identity::from_private_key(k256::SecretKey::random(rng))
+}
+
+pub fn random_ecdsa_secp256r1_identity<R: Rng + CryptoRng>(rng: &mut R) -> Prime256v1Identity {
+    Prime256v1Identity::from_private_key(p256::SecretKey::random(rng))
 }
 
 // Test sending a query/update from the anonymous user that returns
