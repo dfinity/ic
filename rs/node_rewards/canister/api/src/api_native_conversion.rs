@@ -50,10 +50,10 @@ impl TryFrom<native_types::DailyNodeFailureRate> for DailyNodeFailureRate {
                 })
             }
             native_types::DailyNodeFailureRate::NonSubnetMember {
-                extrapolated_failure_rate: extrapolated_fr,
+                extrapolated_failure_rate,
             } => Ok(DailyNodeFailureRate::NonSubnetMember {
                 extrapolated_failure_rate: Some(
-                    extrapolated_fr
+                    extrapolated_failure_rate
                         .to_f64()
                         .ok_or("Conversion to f64 failed (extrapolated_fr)")?,
                 ),
