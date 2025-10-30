@@ -2,13 +2,13 @@ use candid::Encode;
 use canister_test::{CanisterId, CanisterInstallMode, Cycles, InstallCodeArgs};
 use criterion::{BatchSize, Criterion, Throughput};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
-use ic_types::ingress::WasmResult;
 use ic_types::NumBytes;
-use ic_wasm_transform::Module;
+use ic_types::ingress::WasmResult;
 use std::{
     cell::RefCell,
     time::{Duration, Instant},
 };
+use wirm::Module;
 
 #[derive(Copy, Clone)]
 pub enum SetupAction {
@@ -25,7 +25,7 @@ fn initialize_execution_test(
 ) {
     const LARGE_INSTRUCTION_LIMIT: u64 = 1_000_000_000_000;
 
-    // Get the memory type of the wasm module using ic_wasm_transform.
+    // Get the memory type of the wasm module using wirm.
     let is_wasm64 = {
         // 1f 8b is GZIP magic number, 08 is DEFLATE algorithm.
         if wasm.starts_with(b"\x1f\x8b\x08") {
@@ -33,8 +33,8 @@ fn initialize_execution_test(
             false
         } else {
             let module = Module::parse(wasm, true).unwrap();
-            if let Some(mem) = module.memories.first() {
-                mem.memory64
+            if let Some(mem) = module.memories.iter().next() {
+                mem.ty.memory64
             } else {
                 // Wasm with no memory is wasm32.
                 false
@@ -56,7 +56,6 @@ fn initialize_execution_test(
         .with_slice_instruction_limit(LARGE_INSTRUCTION_LIMIT);
 
     if is_wasm64 {
-        test = test.with_wasm64();
         // Set memory size to 8 GiB for Wasm64.
         test = test.with_max_wasm64_memory_size(NumBytes::from(8 * 1024 * 1024 * 1024));
     }
@@ -71,7 +70,7 @@ fn initialize_execution_test(
     );
     let result = test.install_code(args).unwrap();
     if let WasmResult::Reject(s) = result {
-        panic!("Installation rejected: {}", s)
+        panic!("Installation rejected: {s}")
     }
     match setup_action {
         SetupAction::PerformCheckpoint => {

@@ -4,8 +4,8 @@ use ic_base_types::{NodeId, PrincipalId};
 
 use super::{
     common::{
-        get_api_boundary_node_records_from_snapshot, get_node_records_from_snapshot,
-        InvariantCheckError, RegistrySnapshot,
+        InvariantCheckError, RegistrySnapshot, get_api_boundary_node_records_from_snapshot,
+        get_node_records_from_snapshot,
     },
     subnet::get_subnet_records_map,
 };

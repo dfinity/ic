@@ -1,6 +1,6 @@
 use crate::invariants::common::{
-    get_node_records_from_snapshot, get_subnet_ids_from_snapshot, get_value_from_snapshot,
-    InvariantCheckError, RegistrySnapshot,
+    InvariantCheckError, RegistrySnapshot, get_node_records_from_snapshot,
+    get_subnet_ids_from_snapshot, get_value_from_snapshot,
 };
 
 use std::{
@@ -16,7 +16,7 @@ use ic_protobuf::registry::firewall::v1::{
     FirewallAction, FirewallRule, FirewallRuleDirection, FirewallRuleSet,
 };
 use ic_registry_keys::{
-    get_firewall_rules_record_principal_id, make_firewall_rules_record_key, FirewallRulesScope,
+    FirewallRulesScope, get_firewall_rules_record_principal_id, make_firewall_rules_record_key,
 };
 
 const COMMENT_SIZE: usize = 255;
@@ -76,18 +76,17 @@ fn validate_firewall_rule_principals(
 
     for key in snapshot.keys() {
         let record_key = String::from_utf8(key.clone()).unwrap();
-        if let Some(principal_id) = get_firewall_rules_record_principal_id(&record_key) {
-            if let Some(firewall_rules) = get_firewall_rules(snapshot, record_key.to_string()) {
-                if !principal_ids.contains(&principal_id) && !firewall_rules.entries.is_empty() {
-                    return Err(InvariantCheckError {
-                        msg: format!(
-                            "Firewall rule entry refers to non-existing principal: {:?}",
-                            record_key
-                        ),
-                        source: None,
-                    });
-                }
-            }
+        if let Some(principal_id) = get_firewall_rules_record_principal_id(&record_key)
+            && let Some(firewall_rules) = get_firewall_rules(snapshot, record_key.to_string())
+            && !principal_ids.contains(&principal_id)
+            && !firewall_rules.entries.is_empty()
+        {
+            return Err(InvariantCheckError {
+                msg: format!(
+                    "Firewall rule entry refers to non-existing principal: {record_key:?}"
+                ),
+                source: None,
+            });
         }
     }
 
@@ -132,14 +131,14 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
             ipv4_prefix
                 .parse::<Ipv4Net>()
                 .map_err(|e| InvariantCheckError {
-                    msg: format!("Failed to parse IPv4 prefix: {:?}", ipv4_prefix),
+                    msg: format!("Failed to parse IPv4 prefix: {ipv4_prefix:?}"),
                     source: Some(Box::new(e)),
                 })?;
         } else {
             ipv4_prefix
                 .parse::<Ipv4Addr>()
                 .map_err(|e| InvariantCheckError {
-                    msg: format!("Failed to parse IPv4 address: {:?}", ipv4_prefix),
+                    msg: format!("Failed to parse IPv4 address: {ipv4_prefix:?}"),
                     source: Some(Box::new(e)),
                 })?;
         }
@@ -152,14 +151,14 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
             ipv6_prefix
                 .parse::<Ipv6Net>()
                 .map_err(|e| InvariantCheckError {
-                    msg: format!("Failed to parse IPv6 prefix: {:?}", ipv6_prefix),
+                    msg: format!("Failed to parse IPv6 prefix: {ipv6_prefix:?}"),
                     source: Some(Box::new(e)),
                 })?;
         } else {
             ipv6_prefix
                 .parse::<Ipv6Addr>()
                 .map_err(|e| InvariantCheckError {
-                    msg: format!("Failed to parse IPv6 address: {:?}", ipv6_prefix),
+                    msg: format!("Failed to parse IPv6 address: {ipv6_prefix:?}"),
                     source: Some(Box::new(e)),
                 })?;
         }
@@ -176,7 +175,7 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
     // check that port number is <= 65535
     for &port in rule.ports.iter() {
         u16::try_from(port).map_err(|e| InvariantCheckError {
-            msg: format!("Port is outside of the allowed range: {:?}", port),
+            msg: format!("Port is outside of the allowed range: {port:?}"),
             source: Some(Box::new(e)),
         })?;
     }
@@ -203,25 +202,24 @@ fn validate_firewall_rule(rule: &FirewallRule) -> Result<(), InvariantCheckError
     }
 
     //Check that if a user is specified, it is not empty nor too long
-    if let Some(user) = &rule.user {
-        if user.is_empty() || user.len() > USER_SIZE {
-            return Err(InvariantCheckError {
-                msg: format!("User name {:?} is invalid", user),
-                source: None,
-            });
-        }
+    if let Some(user) = &rule.user
+        && (user.is_empty() || user.len() > USER_SIZE)
+    {
+        return Err(InvariantCheckError {
+            msg: format!("User name {user:?} is invalid"),
+            source: None,
+        });
     }
 
     // Check that the direction is one of the existing enum values
-    if let Some(direction) = rule.direction {
-        if FirewallRuleDirection::try_from(direction).unwrap_or(FirewallRuleDirection::Unspecified)
+    if let Some(direction) = rule.direction
+        && FirewallRuleDirection::try_from(direction).unwrap_or(FirewallRuleDirection::Unspecified)
             == FirewallRuleDirection::Unspecified
-        {
-            return Err(InvariantCheckError {
-                msg: format!("Direction {:?} is invalid", direction,),
-                source: None,
-            });
-        }
+    {
+        return Err(InvariantCheckError {
+            msg: format!("Direction {direction:?} is invalid",),
+            source: None,
+        });
     }
 
     Ok(())
@@ -274,7 +272,7 @@ fn get_firewall_rules(snapshot: &RegistrySnapshot, record_key: String) -> Option
     if snapshot.contains_key(record_key.as_bytes()) {
         Some(
             get_value_from_snapshot(snapshot, record_key.clone())
-                .unwrap_or_else(|| panic!("Could not find firewall rules: {}", record_key)),
+                .unwrap_or_else(|| panic!("Could not find firewall rules: {record_key}")),
         )
     } else {
         None
@@ -341,6 +339,7 @@ mod tests {
             public_ipv4_config: None,
             domain: None,
             node_reward_type: None,
+            ssh_node_state_write_access: vec![],
         }
     }
 

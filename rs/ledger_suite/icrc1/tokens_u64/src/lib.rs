@@ -3,7 +3,7 @@ use ic_ledger_core::tokens::{CheckedAdd, CheckedSub, Zero};
 use ic_stable_structures::storable::{Bound, Storable};
 use minicbor::{Decode, Encode};
 use num_traits::{Bounded, ToPrimitive};
-use serde::{de::Deserializer, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Deserializer};
 use std::borrow::Cow;
 use std::fmt;
 use std::str::FromStr;
@@ -17,6 +17,7 @@ pub struct U64(#[n(0)] u64);
 impl U64 {
     pub const ZERO: Self = Self(0);
     pub const MAX: Self = Self(u64::MAX);
+    pub const TYPE: &'static str = "U64";
 
     #[inline]
     pub const fn new(n: u64) -> Self {
@@ -33,7 +34,7 @@ impl FromStr for U64 {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(U64(s.parse().map_err(|_| {
-            format!("Could not parse string to u64: {}", s)
+            format!("Could not parse string to u64: {s}")
         })?))
     }
 }
@@ -61,13 +62,13 @@ impl TryFrom<Nat> for U64 {
 
     fn try_from(n: Nat) -> Result<Self, Self::Error> {
         Ok(Self(n.0.to_u64().ok_or_else(|| {
-            format!("amount {} does not fit into u64 token type", n)
+            format!("amount {n} does not fit into u64 token type")
         })?))
     }
 }
 
 impl Storable for U64 {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.0.to_bytes()
     }
 

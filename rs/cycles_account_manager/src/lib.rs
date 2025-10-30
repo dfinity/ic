@@ -15,21 +15,22 @@
 
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
-use ic_logger::{error, info, ReplicaLogger};
+use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, MessageMemoryUsage};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_management_canister_types_private::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
+    CanisterState, SystemState,
     canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
-    CanisterState, MessageMemoryUsage, SystemState,
 };
 use ic_types::{
-    batch::CanisterCyclesCostSchedule,
-    canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
-    messages::{Request, Response, SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
     PrincipalId, SubnetId,
+    batch::CanisterCyclesCostSchedule,
+    canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
+    canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
+    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, Request, SignedIngress},
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -46,7 +47,7 @@ const DAY: Duration = Duration::from_secs(SECONDS_PER_DAY as u64);
 
 /// Maximum payload size of a management call to update_settings
 /// overriding the canister's freezing threshold.
-const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 310;
+const MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: usize = 324;
 
 /// Errors returned by the [`CyclesAccountManager`].
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -62,7 +63,7 @@ impl std::fmt::Display for CyclesAccountManagerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CyclesAccountManagerError::ContractViolation(msg) => {
-                write!(f, "Contract violation: {}", msg)
+                write!(f, "Contract violation: {msg}")
             }
         }
     }
@@ -102,12 +103,6 @@ impl ResourceSaturation {
             threshold,
             capacity,
         }
-    }
-
-    /// Creates a new `ResourceSaturation` like the `new()` constructor, but also
-    /// divides `usage`, `threshold`, and `capacity` by the given `scaling` factor.
-    pub fn new_scaled(usage: u64, threshold: u64, capacity: u64, scaling: u64) -> Self {
-        Self::new(usage / scaling, threshold / scaling, capacity / scaling)
     }
 
     /// Returns the part of the usage that is above the threshold.
@@ -670,11 +665,13 @@ impl CyclesAccountManager {
     ///  - The cost of inducting the message.
     pub fn ingress_induction_cost(
         &self,
-        ingress: &SignedIngressContent,
+        ingress: &SignedIngress,
         effective_canister_id: Option<CanisterId>,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> IngressInductionCost {
+        let raw_bytes = NumBytes::from(ingress.binary().len() as u64);
+        let ingress = ingress.content();
         let paying_canister = match ingress.is_addressed_to_subnet() {
             // If a subnet message, get effective canister id who will pay for the message.
             true => {
@@ -697,14 +694,8 @@ impl CyclesAccountManager {
 
         match paying_canister {
             Some(paying_canister) => {
-                let bytes_to_charge = ingress.arg().len()
-                    + ingress.method_name().len()
-                    + ingress.nonce().map(|n| n.len()).unwrap_or(0);
-                let cost = self.ingress_induction_cost_from_bytes(
-                    NumBytes::from(bytes_to_charge as u64),
-                    subnet_size,
-                    cost_schedule,
-                );
+                let cost =
+                    self.ingress_induction_cost_from_bytes(raw_bytes, subnet_size, cost_schedule);
                 IngressInductionCost::Fee {
                     payer: paying_canister,
                     cost,
@@ -992,13 +983,13 @@ impl CyclesAccountManager {
         &self,
         log: &ReplicaLogger,
         error_counter: &IntCounter,
-        response: &Response,
+        response: &Payload,
         prepayment_for_response_transmission: Cycles,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
         let max_expected_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get();
-        let transmitted_bytes = response.payload_size_bytes().get();
+        let transmitted_bytes = response.size_bytes().get();
         debug_assert!(transmitted_bytes <= max_expected_bytes);
         if max_expected_bytes < transmitted_bytes {
             error_counter.inc();
@@ -1184,8 +1175,7 @@ impl CyclesAccountManager {
     ) -> Result<Cycles, CyclesAccountManagerError> {
         if canister_id != CYCLES_MINTING_CANISTER_ID {
             let error_str = format!(
-                "ic0.mint_cycles128 cannot be executed on non Cycles Minting Canister: {} != {}",
-                canister_id, CYCLES_MINTING_CANISTER_ID
+                "ic0.mint_cycles128 cannot be executed on non Cycles Minting Canister: {canister_id} != {CYCLES_MINTING_CANISTER_ID}"
             );
             Err(CyclesAccountManagerError::ContractViolation(error_str))
         } else {
@@ -1381,6 +1371,34 @@ impl CyclesAccountManager {
     pub fn default_reserved_balance_limit(&self) -> Cycles {
         self.config.default_reserved_balance_limit
     }
+
+    pub fn fetch_canister_logs_fee(
+        &self,
+        response_size: NumBytes,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::new(0),
+            CanisterCyclesCostSchedule::Normal => {
+                (self.config.fetch_canister_logs_base_fee
+                    + self.config.fetch_canister_logs_per_byte_fee * response_size.get())
+                    * subnet_size
+            }
+        }
+    }
+
+    pub fn max_fetch_canister_logs_fee(
+        &self,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        self.fetch_canister_logs_fee(
+            NumBytes::new(MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES as u64),
+            subnet_size,
+            cost_schedule,
+        )
+    }
 }
 
 /// Encapsulates the payer and cost of inducting an ingress messages.
@@ -1450,9 +1468,7 @@ mod tests {
 
         assert!(
             payload_size <= MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE,
-            "Payload size: {}, is greater than MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: {}.",
-            payload_size,
-            MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE
+            "Payload size: {payload_size}, is greater than MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE: {MAX_DELAYED_INGRESS_COST_PAYLOAD_SIZE}."
         );
     }
 

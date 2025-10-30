@@ -40,6 +40,7 @@ ic-secp256k1 = { path = "../../packages/ic-secp256k1" }
 ic-secp256r1 = { path = "../../packages/ic-secp256r1" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
 ic-registry-keys = { path = "../registry/keys" }
+ic-sys = { path = "../sys" }
 ic-types = { path = "../types/types" }
 ic-vetkeys = { workspace = true }
 parking_lot = { workspace = true }
@@ -49,6 +50,7 @@ slog = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 tempfile = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]

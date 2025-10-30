@@ -63,21 +63,17 @@ pub(crate) fn check_canister_migrations_invariants(
                         || canister_migrations_range.end > routing_table_range.end
                     {
                         return Err(InvariantCheckError {
-                             msg: format!(
-                                 "canister ID range {:?} in `canister_migrations` is not hosted by any subnet in trace {:?}.",
-                                 canister_migrations_range,
-                                 trace
-                             ),
-                             source: None,
-                         });
+                            msg: format!(
+                                "canister ID range {canister_migrations_range:?} in `canister_migrations` is not hosted by any subnet in trace {trace:?}."
+                            ),
+                            source: None,
+                        });
                     }
                 }
                 None => {
                     return Err(InvariantCheckError {
                         msg: format!(
-                            "canister ID range {:?} in `canister_migrations` is not hosted by any subnet in trace {:?}.",
-                            canister_migrations_range,
-                            trace
+                            "canister ID range {canister_migrations_range:?} in `canister_migrations` is not hosted by any subnet in trace {trace:?}."
                         ),
                         source: None,
                     });

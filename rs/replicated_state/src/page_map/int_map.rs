@@ -291,7 +291,7 @@ impl<K: AsInt, V: Clone> Tree<K, V> {
     }
 
     /// See the comments of the public `bounds()` method.
-    fn bounds(&self, key: &K) -> Bounds<K, V> {
+    fn bounds(&self, key: &K) -> Bounds<'_, K, V> {
         match self {
             Tree::Empty => (None, None),
 
@@ -667,10 +667,10 @@ where
 
                 (Some((lk, lv)), Some((rk, rv))) => {
                     if lk != rk {
-                        return Err(format!("Key divergence: {:#?} != {:#?}", lk, rk));
+                        return Err(format!("Key divergence: {lk:#?} != {rk:#?}"));
                     }
                     if let Err(err) = lv.validate_eq(rv) {
-                        return Err(format!("Value divergence @{:#?}: {}", lk, err));
+                        return Err(format!("Value divergence @{lk:#?}: {err}"));
                     }
                 }
 
@@ -679,7 +679,7 @@ where
                         "Length divergence: {} != {}",
                         self.len(),
                         rhs.len()
-                    ))
+                    ));
                 }
             }
         }
@@ -744,7 +744,7 @@ impl<K: AsInt, V: Clone> IntMap<K, V> {
     /// - `upper == Some((k, v))` implies `self.get(k) == v`,
     ///
     /// Complexity: `O(min(N, |key|))`.
-    pub fn bounds(&self, key: &K) -> Bounds<K, V> {
+    pub fn bounds(&self, key: &K) -> Bounds<'_, K, V> {
         self.0.bounds(key)
     }
 
@@ -897,7 +897,7 @@ impl<K: AsInt, V: Clone> MutableIntMap<K, V> {
     /// - `upper == Some((k, v))` implies `self.get(k) == v`,
     ///
     /// Complexity: `O(min(N, |key|))`.
-    pub fn bounds(&self, key: &K) -> Bounds<K, V> {
+    pub fn bounds(&self, key: &K) -> Bounds<'_, K, V> {
         self.tree.bounds(key)
     }
 

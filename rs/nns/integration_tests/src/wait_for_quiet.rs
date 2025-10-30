@@ -7,17 +7,17 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api::{
+    AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, Neuron, NodeProvider, ProposalActionRequest, ProposalInfo, Vote,
     add_or_remove_node_provider::Change,
     manage_neuron::{self, NeuronIdOrSubaccount},
     manage_neuron_response::Command as CommandResponse,
     neuron::DissolveState,
     test_api::TimeWarp,
-    AddOrRemoveNodeProvider, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, Neuron, NodeProvider, ProposalActionRequest, ProposalInfo, Vote,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 use std::time::SystemTime;
 
@@ -98,10 +98,9 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
             .unwrap()
         {
             CommandResponse::MakeProposal(resp) => resp.proposal_id.unwrap(),
-            some_error => panic!(
-                "Cannot find proposal id in response. The response is: {:?}",
-                some_error
-            ),
+            some_error => {
+                panic!("Cannot find proposal id in response. The response is: {some_error:?}")
+            }
         };
 
         let pi: Option<ProposalInfo> = nns_canisters
@@ -155,9 +154,7 @@ fn test_deadline_is_extended_with_wait_for_quiet() {
 
         assert!(
             final_deadline > initial_deadline,
-            "{:?}\n{:#?}",
-            initial_deadline,
-            final_proposal_info,
+            "{initial_deadline:?}\n{final_proposal_info:#?}",
         );
 
         Ok(())

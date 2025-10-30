@@ -3,11 +3,13 @@ use candid::{CandidType, Deserialize};
 use ic_base_types::PrincipalId;
 use serde::Serialize;
 
-/// Enum used for encoding/decoding:
-/// `record {
-///     response : http_response;
-///     context : blob;
-/// }`
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///   response : http_response;
+///   context : blob;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct TransformArgs {
     pub response: CanisterHttpResponsePayload,
@@ -20,11 +22,13 @@ impl Payload<'_> for TransformArgs {}
 // Encapsulating the corresponding candid `func` type.
 candid::define_function!(pub TransformFunc : (TransformArgs) -> (CanisterHttpResponsePayload) query);
 
-/// Enum used for encoding/decoding:
-/// `record {
-//       function : func (record {response : http_response; context : blob}) -> (http_response) query;
-//       context : blob;
-//   }`
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///   function : func (record {response : http_response; context : blob}) -> (http_response) query;
+///   context : blob;
+/// }
+/// ```
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct TransformContext {
     /// Reference function with signature: `func (record {response : http_response; context : blob}) -> (http_response) query;`.
@@ -60,18 +64,20 @@ pub type BoundedHttpHeaders = BoundedVec<
 >;
 
 /// Struct used for encoding/decoding
-/// `(http_request : (record {
-//     url : text;
-//     max_response_bytes: opt nat64;
-//     headers : vec http_header;
-//     method : variant { get; head; post };
-//     body : opt blob;
-//     transform : opt record {
-//       function : func (record {response : http_response; context : blob}) -> (http_response) query;
-//       context : blob;
-//     };
-//     is_replicated: opt bool;
-//   })`
+/// ```text
+/// record {
+///   url : text;
+///   max_response_bytes : opt nat64;
+///   headers : vec http_header;
+///   method : variant { get; head; post };
+///   body : opt blob;
+///   transform : opt record {
+///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
+///     context : blob;
+///   };
+///   is_replicated : opt bool;
+/// }
+/// ```
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterHttpRequestArgs {
     pub url: String,
@@ -134,8 +140,7 @@ fn test_http_headers_max_number() {
             assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 error.description().contains(&format!(
-                    "Deserialize error: The number of elements exceeds maximum allowed {}",
-                    THRESHOLD
+                    "Deserialize error: The number of elements exceeds maximum allowed {THRESHOLD}"
                 )),
                 "Actual: {}",
                 error.description()
@@ -188,8 +193,7 @@ fn test_http_headers_max_total_size() {
             assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 error.description().contains(&format!(
-                    "Deserialize error: The total data size exceeds maximum allowed {}",
-                    THRESHOLD
+                    "Deserialize error: The total data size exceeds maximum allowed {THRESHOLD}"
                 )),
                 "Actual: {}",
                 error.description()
@@ -236,8 +240,7 @@ fn test_http_headers_max_element_size() {
             assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 error.description().contains(&format!(
-                    "Deserialize error: The single element data size exceeds maximum allowed {}",
-                    THRESHOLD
+                    "Deserialize error: The single element data size exceeds maximum allowed {THRESHOLD}"
                 )),
                 "Actual: {}",
                 error.description()
@@ -247,10 +250,12 @@ fn test_http_headers_max_element_size() {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-/// name: text;
-/// value: text;
-/// })`;
+/// ```text
+/// record {
+///   name : text;
+///   value : text;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct HttpHeader {
     pub name: String,
@@ -299,11 +304,13 @@ pub enum HttpMethod {
 
 /// Represents the response for a canister http request.
 /// Struct used for encoding/decoding
-/// `(record {
-///     status: nat;
-///     headers: vec http_header;
-///     body: blob;
-/// })`;
+/// ```text
+/// record {
+///   status : nat;
+///   headers : vec http_header;
+///   body : blob;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct CanisterHttpResponsePayload {
     pub status: u128,

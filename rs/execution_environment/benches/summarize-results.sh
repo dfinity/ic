@@ -11,12 +11,11 @@ set -ue
 DEPENDENCIES="awk egrep fgrep sed"
 which ${DEPENDENCIES} >/dev/null || (echo "Error checking dependencies: ${DEPENDENCIES}" >&2 && exit 1)
 
-NOISE_THRESHOLD_PCT="${NOISE_THRESHOLD_PCT:-2}"
-TOP_N="${TOP_N:-10}"
-
-printf "    %-12s := %s\n" \
+printf "    %-19s := %s\n" \
+    "BASELINE_DIR" "${BASELINE_DIR:=${0%/*}/baseline}" \
     "MIN_FILE" "${MIN_FILE:=${0##*/}.min}" \
-    "BASELINE_DIR" "${BASELINE_DIR:=${0%/*}/baseline}" >&2
+    "NOISE_THRESHOLD_PCT" "${NOISE_THRESHOLD_PCT:=2}" \
+    "TOP_N" "${TOP_N:=10}" >&2
 
 NAME="${NAME:-${MIN_FILE%.*}}"
 TMP_FILE="${TMP_FILE:-${MIN_FILE%.*}.tmp}"

@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
-use quote::{quote, ToTokens};
-use syn::{parse_macro_input, ItemFn, Stmt};
+use quote::{ToTokens, quote};
+use syn::{ItemFn, Stmt, parse_macro_input};
 
 /// This does almost the same thing as ic_cdk::update. There is just one
 /// difference: This adds a statement to the beginning of the function. It looks

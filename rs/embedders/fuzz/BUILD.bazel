@@ -6,8 +6,6 @@ package(default_visibility = [
     "//rs/execution_environment/fuzz:__subpackages__",
 ])
 
-MACRO_DEPENDENCIES = []
-
 rust_library(
     name = "wasm_fuzzers",
     testonly = True,
@@ -16,7 +14,6 @@ rust_library(
         "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
         "//conditions:default": [],
     }),
-    proc_macro_deps = MACRO_DEPENDENCIES,
     rustc_flags = select({
         "//bazel:fuzzing_code_enabled": DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
         "//conditions:default": [],
@@ -35,7 +32,6 @@ rust_library(
         "//rs/test_utilities",
         "//rs/test_utilities/embedders",
         "//rs/test_utilities/state",
-        "//rs/test_utilities/time",
         "//rs/test_utilities/types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
@@ -45,7 +41,6 @@ rust_library(
         "@crate_index//:lazy_static",
         "@crate_index//:libfuzzer-sys",
         "@crate_index//:num-traits",
-        "@crate_index//:tempfile",
         "@crate_index//:tokio",
         "@crate_index//:wasm-encoder",
         "@crate_index//:wasm-smith",
@@ -72,7 +67,6 @@ rust_binary(
         "//rs/config",
         "//rs/embedders",
         "//rs/monitoring/logger",
-        "//rs/replicated_state",
         "@crate_index//:arbitrary",
         "@crate_index//:clap",
         "@crate_index//:wasmprinter",
@@ -84,7 +78,6 @@ rust_fuzz_test_binary(
     srcs = [
         "fuzz_targets/execute_with_wasmtime.rs",
     ],
-    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":wasm_fuzzers"] + ["@crate_index//:libfuzzer-sys"],
 )
 
@@ -93,7 +86,6 @@ rust_fuzz_test_binary_afl(
     srcs = [
         "fuzz_targets/execute_with_wasmtime.rs",
     ],
-    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":wasm_fuzzers"] + ["@crate_index//:libfuzzer-sys"],
 )
 
@@ -102,7 +94,6 @@ rust_fuzz_test_binary_afl(
     srcs = [
         "fuzz_targets/differential_simd_execute_with_wasmtime.rs",
     ],
-    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":wasm_fuzzers"] + ["@crate_index//:libfuzzer-sys"],
 )
 
@@ -111,7 +102,6 @@ rust_fuzz_test_binary(
     srcs = [
         "fuzz_targets/execute_with_wasm_executor.rs",
     ],
-    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":wasm_fuzzers"] + ["@crate_index//:libfuzzer-sys"],
 )
 
@@ -120,13 +110,11 @@ rust_fuzz_test_binary_afl(
     srcs = [
         "fuzz_targets/execute_with_wasm_executor.rs",
     ],
-    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":wasm_fuzzers"] + ["@crate_index//:libfuzzer-sys"],
 )
 
 rust_fuzz_test_binary_afl(
     name = "compile_wasm_using_embedder",
     srcs = ["fuzz_targets/compile_wasm_using_embedder.rs"],
-    proc_macro_deps = MACRO_DEPENDENCIES,
     deps = [":wasm_fuzzers"] + ["@crate_index//:libfuzzer-sys"],
 )

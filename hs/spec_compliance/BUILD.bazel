@@ -102,7 +102,6 @@ haskell_binary(
         ":IC-Crypto-Ed25519",
         ":IC-Crypto-Secp256k1",
         ":IC-Crypto-WebAuthn",
-        ":IC-DRun-Parse",
         ":IC-HTTP-CBOR",
         ":IC-HTTP-GenR",
         ":IC-HTTP-GenR-Parse",
@@ -539,17 +538,6 @@ haskell_library(
 haskell_library(
     name = "IC-CBOR-Patterns",
     srcs = ["src/IC/CBOR/Patterns.hs"],
-    src_strip_prefix = "src",
-    target_compatible_with = ["@platforms//os:linux"],
-    deps = STACK_DEPS + [
-        "@haskell-candid//:candid",
-        "@miracl-core//:lib",
-    ],
-)
-
-haskell_library(
-    name = "IC-DRun-Parse",
-    srcs = ["src/IC/DRun/Parse.hs"],
     src_strip_prefix = "src",
     target_compatible_with = ["@platforms//os:linux"],
     deps = STACK_DEPS + [

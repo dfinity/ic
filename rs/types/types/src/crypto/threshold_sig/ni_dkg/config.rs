@@ -76,9 +76,9 @@ impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
                     .into_iter()
                     .map(|dealer| crate::node_id_try_from_option(Some(dealer)))
                     .collect::<Result<BTreeSet<_>, _>>()
-                    .map_err(|err| format!("Problem loading dealers in NiDkgConfig: {:?}", err))?,
+                    .map_err(|err| format!("Problem loading dealers in NiDkgConfig: {err:?}"))?,
             )
-            .map_err(|e| format!("{:?}", e))?,
+            .map_err(|e| format!("{e:?}"))?,
             max_corrupt_receivers: NumberOfNodes::from(config.max_corrupt_receivers),
             receivers: NiDkgReceivers::new(
                 config
@@ -86,19 +86,17 @@ impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
                     .into_iter()
                     .map(|receiver| crate::node_id_try_from_option(Some(receiver)))
                     .collect::<Result<BTreeSet<_>, _>>()
-                    .map_err(|err| {
-                        format!("Problem loading receivers in NiDkgConfig: {:?}", err)
-                    })?,
+                    .map_err(|err| format!("Problem loading receivers in NiDkgConfig: {err:?}"))?,
             )
-            .map_err(|e| format!("{:?}", e))?,
+            .map_err(|e| format!("{e:?}"))?,
             threshold: NiDkgThreshold::new(NumberOfNodes::from(config.threshold))
-                .map_err(|e| format!("threshold error {:?}", e))?,
+                .map_err(|e| format!("threshold error {e:?}"))?,
             registry_version: RegistryVersion::from(config.registry_version),
             resharing_transcript: config
                 .resharing_transcript
                 .map(|transcript| {
                     NiDkgTranscript::try_from(&transcript)
-                        .map_err(|e| format!("Converting resharing transcript failed: {:?}", e))
+                        .map_err(|e| format!("Converting resharing transcript failed: {e:?}"))
                 })
                 .transpose()?,
         })

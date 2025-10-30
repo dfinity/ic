@@ -19,18 +19,16 @@ use ic_protobuf::registry::{
     node::v1::NodeRecord,
 };
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_keys::{
-    make_canister_ranges_key, make_chain_key_enabled_subnet_list_key, make_routing_table_record_key,
-};
+use ic_registry_keys::{make_canister_ranges_key, make_chain_key_enabled_subnet_list_key};
 use ic_registry_local_registry::LocalRegistry;
 use ic_registry_proto_data_provider::{ProtoRegistryDataProvider, ProtoRegistryDataProviderError};
-use ic_registry_routing_table::{routing_table_insert_subnet, CanisterMigrations, RoutingTable};
+use ic_registry_routing_table::{CanisterMigrations, RoutingTable, routing_table_insert_subnet};
 use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_replicated_state::Stream;
 use ic_test_utilities::state_manager::FakeStateManager;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge_vec, metric_vec};
-use ic_test_utilities_registry::{get_mainnet_delta_00_6d_c1, SubnetRecordBuilder};
+use ic_test_utilities_registry::{SubnetRecordBuilder, get_mainnet_delta_00_6d_c1};
 use ic_test_utilities_state::CanisterStateBuilder;
 use ic_test_utilities_types::{
     batch::BatchBuilder,
@@ -38,14 +36,14 @@ use ic_test_utilities_types::{
 };
 use ic_types::batch::BlockmakerMetrics;
 use ic_types::xnet::{StreamIndexedQueue, StreamSlice};
-use ic_types::{
-    batch::{Batch, BatchMessages},
-    crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
-    crypto::AlgorithmId,
-    time::Time,
-    NodeId, PrincipalId, Randomness,
-};
 use ic_types::{CanisterId, ReplicaVersion};
+use ic_types::{
+    NodeId, PrincipalId, Randomness,
+    batch::{Batch, BatchMessages},
+    crypto::AlgorithmId,
+    crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
+    time::Time,
+};
 use maplit::{btreemap, btreeset};
 use std::{fmt::Debug, str::FromStr, sync::Arc, time::Duration};
 
@@ -134,8 +132,7 @@ mod notification {
                 if let Some(ref old_value) = *guard {
                     if value != *old_value {
                         panic!(
-                            "Notified twice with different values: first {:?}, then {:?}",
-                            old_value, value
+                            "Notified twice with different values: first {old_value:?}, then {value:?}"
                         );
                     } else {
                         return;
@@ -366,7 +363,7 @@ impl RegistryFixture {
         key: &str,
         value: Integrity<T>,
     ) -> Result<(), ProtoRegistryDataProviderError> {
-        use ic_registry_transport::pb::v1::{registry_mutation::Type, RegistryMutation};
+        use ic_registry_transport::pb::v1::{RegistryMutation, registry_mutation::Type};
         match value {
             Integrity::Valid(value) => self.data_provider.add(
                 key,
@@ -435,11 +432,6 @@ impl RegistryFixture {
 
         self.write_record(
             &make_canister_ranges_key(CanisterId::from_u64(0)),
-            routing_table.map(RoutingTableProto::from),
-        )?;
-        // TODO(NNS1-3781): Remove this once routing_table is no longer used by clients.
-        self.write_record(
-            &make_routing_table_record_key(),
             routing_table.map(RoutingTableProto::from),
         )
     }
@@ -1855,7 +1847,7 @@ fn test_demux_delivers_certified_stream_slices() {
         fn induct_messages(
             &self,
             _: &mut ReplicatedState,
-            _: Vec<ic_types::messages::SignedIngressContent>,
+            _: Vec<ic_types::messages::SignedIngress>,
         ) {
             // do nothing
         }

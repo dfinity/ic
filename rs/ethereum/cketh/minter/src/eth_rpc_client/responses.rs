@@ -1,6 +1,6 @@
 use crate::eth_rpc::Hash;
 use crate::numeric::{BlockNumber, GasAmount, Wei, WeiPerGas};
-use evm_rpc_client::TransactionReceipt as EvmTransactionReceipt;
+use evm_rpc_types::TransactionReceipt as EvmTransactionReceipt;
 use minicbor::{Decode, Encode};
 use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
@@ -93,7 +93,7 @@ impl TryFrom<u8> for TransactionStatus {
         match value {
             0 => Ok(TransactionStatus::Failure),
             1 => Ok(TransactionStatus::Success),
-            _ => Err(format!("invalid transaction status: {}", value)),
+            _ => Err(format!("invalid transaction status: {value}")),
         }
     }
 }
@@ -104,7 +104,7 @@ impl TryFrom<ethnum::u256> for TransactionStatus {
     fn try_from(value: ethnum::u256) -> Result<Self, Self::Error> {
         match value {
             ethnum::u256::ZERO | ethnum::u256::ONE => TransactionStatus::try_from(value.as_u8()),
-            _ => Err(format!("invalid transaction status: {}", value)),
+            _ => Err(format!("invalid transaction status: {value}")),
         }
     }
 }

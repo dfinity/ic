@@ -1,5 +1,5 @@
 use crate::consensus::metrics::{
-    PayloadBuilderMetrics, CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_VALIDATION_NOT_PASSED,
+    CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_VALIDATION_NOT_PASSED, PayloadBuilderMetrics,
 };
 use ic_consensus_utils::pool_reader::filter_past_payloads;
 use ic_interfaces::{
@@ -9,12 +9,12 @@ use ic_interfaces::{
     messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
 };
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_types::{
+    CountBytes, Height, NumBytes, Time,
     batch::{BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     consensus::Payload,
     messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT,
-    CountBytes, Height, NumBytes, Time,
 };
 use std::sync::Arc;
 
@@ -475,7 +475,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities_types::ids::node_test_id;
-    use ic_types::{batch::ValidationContext, time::UNIX_EPOCH, RegistryVersion};
+    use ic_types::{RegistryVersion, batch::ValidationContext, time::UNIX_EPOCH};
 
     struct TestXNetPayloadBuilder {
         return_size: u64,

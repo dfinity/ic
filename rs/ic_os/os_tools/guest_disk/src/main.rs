@@ -1,26 +1,17 @@
-pub(crate) mod crypt;
-mod generated_key;
-mod sev;
-
 #[cfg(test)]
 mod tests;
 
-use crate::generated_key::{GeneratedKeyDiskEncryption, DEFAULT_GENERATED_KEY_PATH};
-use crate::sev::{SevDiskEncryption, PREVIOUS_KEY_PATH};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
-use config::{deserialize_config, DEFAULT_GUESTOS_CONFIG_OBJECT_PATH};
+use config::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::GuestOSConfig;
-use ic_sev::guest::key_deriver::SevKeyDeriver;
-use libcryptsetup_rs::consts::flags::CryptActivate;
+use guest_disk::generated_key::{DEFAULT_GENERATED_KEY_PATH, GeneratedKeyDiskEncryption};
+use guest_disk::sev::SevDiskEncryption;
+use guest_disk::{DEFAULT_PREVIOUS_SEV_KEY_PATH, DiskEncryption, Partition, crypt_name};
+use ic_sev::guest::firmware::SevGuestFirmware;
 use nix::unistd::getuid;
-use std::ffi::{c_char, c_int, c_void, CStr};
+use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::{Path, PathBuf};
-
-// We depend on the values of these constants in bash scripts and config files so be careful
-// when changing them!
-const VAR_CRYPT_NAME: &str = "var_crypt";
-const STORE_CRYPT_NAME: &str = "vda10-crypt";
 
 #[derive(clap::Parser)]
 pub enum Args {
@@ -38,14 +29,7 @@ pub enum Args {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub enum Partition {
-    /// Encrypted var partition, private to the current GuestOS version.
-    Var,
-    /// Encrypted store partition, shared between GuestOS releases.
-    Store,
-}
-
+#[cfg(target_os = "linux")]
 fn main() -> Result<()> {
     let args = Args::parse();
 
@@ -60,8 +44,13 @@ fn main() -> Result<()> {
     run(
         args,
         &guestos_config,
-        SevKeyDeriver::new,
-        Path::new(PREVIOUS_KEY_PATH),
+        ic_sev::guest::is_sev_active().context("Failed to check if SEV is active")?,
+        || {
+            ::sev::firmware::guest::Firmware::open()
+                .context("Failed to open /dev/sev-guest")
+                .map(|x| Box::new(x) as _)
+        },
+        Path::new(DEFAULT_PREVIOUS_SEV_KEY_PATH),
         Path::new(DEFAULT_GENERATED_KEY_PATH),
     )
 }
@@ -71,18 +60,16 @@ fn main() -> Result<()> {
 fn run(
     args: Args,
     guestos_config: &GuestOSConfig,
-    sev_key_deriver_factory: impl Fn() -> Result<SevKeyDeriver>,
+    is_sev_active: bool,
+    sev_firmware_factory: impl Fn() -> Result<Box<dyn SevGuestFirmware>>,
     previous_key_path: &Path,
     generated_key_path: &Path,
 ) -> Result<()> {
     libcryptsetup_rs::set_log_callback::<()>(Some(cryptsetup_log), None);
 
-    let mut encryption: Box<dyn DiskEncryption> = if guestos_config
-        .icos_settings
-        .enable_trusted_execution_environment
-    {
+    let mut encryption: Box<dyn DiskEncryption> = if is_sev_active {
         Box::new(SevDiskEncryption {
-            sev_key_deriver: sev_key_deriver_factory().context("Failed to create SevKeyDeriver")?,
+            sev_firmware: sev_firmware_factory().context("Failed to open SEV firmware")?,
             guest_vm_type: guestos_config.guest_vm_type,
             previous_key_path,
         })
@@ -108,30 +95,7 @@ fn run(
     }
 }
 
-/// Returns the name of the cryptographic device for the given partition.
-/// When opening the encrypted partition, it will be mapped under `/dev/mapper/[crypt_name]`.
-fn crypt_name(partition: Partition) -> &'static str {
-    match partition {
-        Partition::Var => VAR_CRYPT_NAME,
-        Partition::Store => STORE_CRYPT_NAME,
-    }
-}
-
-fn activate_flags(partition: Partition) -> CryptActivate {
-    match partition {
-        Partition::Var => CryptActivate::empty(),
-        Partition::Store => CryptActivate::ALLOW_DISCARDS,
-    }
-}
-
-trait DiskEncryption {
-    /// Opens an encrypted device and activates it under /dev/mapper/`crypt_name`.
-    fn open(&mut self, device_path: &Path, partition: Partition, crypt_name: &str) -> Result<()>;
-    /// Formats the device with LUKS2 and initializes it with a key.
-    fn format(&mut self, device_path: &Path, partition: Partition) -> Result<()>;
-}
-
-extern "C" fn cryptsetup_log(_level: c_int, msg: *const c_char, _usrptr: *mut c_void) {
+unsafe extern "C" fn cryptsetup_log(_level: c_int, msg: *const c_char, _usrptr: *mut c_void) {
     eprintln!(
         "libcryptsetup: {}",
         unsafe { CStr::from_ptr(msg) }.to_string_lossy()

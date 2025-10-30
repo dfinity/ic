@@ -1,8 +1,8 @@
 use std::{
     backtrace::Backtrace,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc, Mutex, RwLock,
+        atomic::{AtomicBool, Ordering},
     },
 };
 
@@ -29,7 +29,7 @@ async fn priority_from_stash_to_fetch() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
 
@@ -86,7 +86,7 @@ async fn fetch_to_stash_to_fetch() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
 
@@ -160,7 +160,7 @@ async fn invalid_artifact_not_accepted() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
     let mut mock_transport = MockTransport::new();
@@ -229,7 +229,7 @@ async fn priority_from_stash_to_drop() {
     // https://github.com/tokio-rs/tokio/issues/4516
     std::panic::set_hook(Box::new(|info| {
         let stacktrace = Backtrace::force_capture();
-        println!("Got panic. @info:{}\n@stackTrace:{}", info, stacktrace);
+        println!("Got panic. @info:{info}\n@stackTrace:{stacktrace}");
         std::process::abort();
     }));
 

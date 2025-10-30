@@ -478,8 +478,8 @@ fn x509_cert_cn(cn: &String, duplicate: bool) -> x509_cert::name::Name {
 }
 
 fn asn1_time_string_to_unix_timestamp(time_asn1: &str) -> Result<u64, String> {
-    use time::macros::format_description;
     use time::PrimitiveDateTime;
+    use time::macros::format_description;
 
     let asn1_format = format_description!("[year][month][day][hour][minute][second]Z"); // e.g., 99991231235959Z
     let time_primitivedatetime =

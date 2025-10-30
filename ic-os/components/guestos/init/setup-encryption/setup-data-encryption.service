@@ -1,0 +1,22 @@
+[Unit]
+Description=Set up and activate encrypted storage
+DefaultDependencies=no
+# When SEV is disabled, the key is read from /boot/config.
+# When SEV is enabled, the key is read from /var during the first boot after an upgrade.
+RequiresMountsFor=/boot/config /var
+Requires=init-config.service
+After=init-config.service
+Wants=cryptsetup-pre.target
+Before=cryptsetup.target
+Conflicts=umount.target
+Before=umount.target
+ConditionPathExists=/run/config/guest_vm_type/default
+
+[Install]
+WantedBy=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/setup-data-encryption.sh
+ExecStop=/usr/bin/systemd-cryptsetup detach 'vda10-crypt'

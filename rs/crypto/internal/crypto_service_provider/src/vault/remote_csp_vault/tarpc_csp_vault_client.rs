@@ -6,16 +6,17 @@ use crate::vault::api::{
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspPublicKeyStoreError,
     CspSecretKeyStoreContainsError, CspTlsKeygenError, CspTlsSignError,
     IDkgCreateDealingVaultError, IDkgDealingInternalBytes, IDkgProtocolCspVault,
-    IDkgTranscriptInternalBytes, MultiSignatureCspVault, NiDkgCspVault, PksAndSksContainsErrors,
-    PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault, PublicRandomSeedGenerator,
-    PublicRandomSeedGeneratorError, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
-    ThresholdSchnorrSigShareBytes, ThresholdSchnorrSignerCspVault, ThresholdSignatureCspVault,
-    ValidatePksAndSksError, VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError,
+    IDkgTranscriptInternalBytes, IDkgTranscriptOperationInternalBytes, MultiSignatureCspVault,
+    NiDkgCspVault, PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault,
+    PublicKeyStoreCspVault, PublicRandomSeedGenerator, PublicRandomSeedGeneratorError,
+    SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault, ThresholdSchnorrSigShareBytes,
+    ThresholdSchnorrSignerCspVault, ThresholdSignatureCspVault, ValidatePksAndSksError,
+    VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError,
 };
-use crate::vault::remote_csp_vault::codec::{Bincode, CspVaultObserver, ObservableCodec};
 use crate::vault::remote_csp_vault::ThresholdSchnorrCreateSigShareVaultError;
+use crate::vault::remote_csp_vault::codec::{Bincode, CspVaultObserver, ObservableCodec};
 use crate::vault::remote_csp_vault::{
-    remote_vault_codec_builder, robust_unix_socket, TarpcCspVaultClient, FOUR_GIGA_BYTES,
+    FOUR_GIGA_BYTES, TarpcCspVaultClient, remote_vault_codec_builder, robust_unix_socket,
 };
 use crate::{ExternalPublicKeys, TlsHandshakeCspVault};
 use core::future::Future;
@@ -28,25 +29,23 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CommitmentOpening, IDkgComplaintInternal, MEGaPublicKey, ThresholdEcdsaSigShareInternal,
 };
+use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
-use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_logger::{debug, new_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, new_logger};
 use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgTranscriptOperation,
-};
+use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::crypto::vetkd::{VetKdDerivationContext, VetKdEncryptedKeyShareContent};
-use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
@@ -591,7 +590,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
         dealer_index: NodeIndex,
         reconstruction_threshold: NumberOfNodes,
         receiver_keys: Vec<PublicKey>,
-        transcript_operation: IDkgTranscriptOperation,
+        transcript_operation: IDkgTranscriptOperationInternalBytes,
     ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError> {
         self.tokio_block_on(self.tarpc_csp_client.idkg_create_dealing(
             context_with_timeout(self.rpc_timeout),
@@ -639,7 +638,7 @@ impl IDkgProtocolCspVault for RemoteCspVault {
     fn idkg_load_transcript(
         &self,
         algorithm_id: AlgorithmId,
-        dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+        dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
         context_data: Vec<u8>,
         receiver_index: NodeIndex,
         key_id: KeyId,

@@ -30,8 +30,8 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::systest;
 
 use anyhow::Result;
-use ic_types::malicious_behavior::MaliciousBehavior;
 use ic_types::Height;
+use ic_types::malicious_behavior::MaliciousBehavior;
 use std::time::Duration;
 
 const PROMETHEUS_SCRAPE_INTERVAL: Duration = Duration::from_secs(5);

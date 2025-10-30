@@ -20,6 +20,7 @@ rust_library(
     deps = [
         # Keep sorted.
         "//packages/ic-error-types",
+        "//packages/ic-heap-bytes",
         "//rs/bitcoin/replica_types",
         "//rs/crypto/internal/crypto_lib/types",
         "//rs/crypto/sha2",

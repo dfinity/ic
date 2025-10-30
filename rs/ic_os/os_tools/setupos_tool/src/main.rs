@@ -1,12 +1,12 @@
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use clap::{Parser, Subcommand};
 
-use config::{deserialize_config, DEFAULT_SETUPOS_CONFIG_OBJECT_PATH};
+use config::{DEFAULT_SETUPOS_CONFIG_OBJECT_PATH, deserialize_config};
 use config_types::{Ipv6Config, SetupOSConfig};
 use deterministic_ips::node_type::NodeType;
-use deterministic_ips::{calculate_deterministic_mac, IpVariant, MacAddr6Ext};
+use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
 use network::generate_network_config;
 use network::systemd::DEFAULT_SYSTEMD_NETWORK_DIR;
 use utils::to_cidr;
@@ -58,7 +58,7 @@ pub fn main() -> Result<()> {
                 IpVariant::V6,
                 NodeType::SetupOS,
             );
-            eprintln!("Using generated mac {}", generated_mac);
+            eprintln!("Using generated mac {generated_mac}");
 
             generate_network_config(
                 &setupos_config.network_settings,
@@ -81,7 +81,7 @@ pub fn main() -> Result<()> {
                 IpVariant::V6,
                 node_type,
             );
-            eprintln!("Using generated mac address {}", generated_mac);
+            eprintln!("Using generated mac address {generated_mac}");
 
             let Ipv6Config::Deterministic(ipv6_config) =
                 &setupos_config.network_settings.ipv6_config

@@ -3,7 +3,7 @@ use crate::{
     registry_lifecycle::canister_post_upgrade,
 };
 
-use canbench_rs::{bench, bench_fn, bench_scope, BenchResult};
+use canbench_rs::{BenchResult, bench, bench_fn, bench_scope};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_registry_routing_table::CANISTER_IDS_PER_SUBNET;
 use prost::Message;
@@ -24,7 +24,7 @@ fn setup_subnets(registry: &mut Registry) {
 
 fn migrate_canisters_to_subnets(registry: &mut Registry, num_migrations: u64, rng: &mut impl Rng) {
     assert!(
-        num_migrations % NUM_SUBNETS == 0,
+        num_migrations.is_multiple_of(NUM_SUBNETS),
         "Please choose a number of migrations that is divisible by the number of subnets"
     );
     let num_canisters_per_subnet = num_migrations / NUM_SUBNETS;
@@ -97,16 +97,14 @@ fn upgrade_with_routing_table(num_canisters: u64) -> BenchResult {
             registry_storage.encode_to_vec()
         };
 
-        let new_registry = {
+        {
             let _s2 = bench_scope("post_upgrade");
             let registry_storage = RegistryCanisterStableStorage::decode(bytes.as_slice())
                 .expect("Error decoding from stable.");
             let mut new_registry = Registry::new();
             canister_post_upgrade(&mut new_registry, registry_storage);
             new_registry
-        };
-
-        new_registry
+        }
     })
 }
 

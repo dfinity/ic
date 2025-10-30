@@ -21,10 +21,7 @@ fn to_i8_at_pos(naf: &Naf, i: usize) -> i8 {
         (false, true) => -1i8,
         (false, false) => 0i8,
         (true, false) => 1i8,
-        (true, true) => panic!(
-            "NAF is true for both positive and negative bit at position {}",
-            i
-        ),
+        (true, true) => panic!("NAF is true for both positive and negative bit at position {i}"),
     }
 }
 
@@ -116,8 +113,8 @@ fn non_adjacent_form_transformation_is_correct_u64_random_samples() -> CanisterT
 }
 
 #[test]
-fn non_adjacent_form_transformation_is_correct_ecc_scalar_random_samples(
-) -> CanisterThresholdResult<()> {
+fn non_adjacent_form_transformation_is_correct_ecc_scalar_random_samples()
+-> CanisterThresholdResult<()> {
     let rng = &mut reproducible_rng();
     for curve_type in EccCurveType::all() {
         let scalars: Vec<EccScalar> = (0..1000)

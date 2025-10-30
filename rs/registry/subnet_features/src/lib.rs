@@ -2,7 +2,7 @@ use candid::CandidType;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::types::v1 as pb_types;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     registry::subnet::v1 as pb,
 };
 use serde::{Deserialize, Serialize};
@@ -80,7 +80,7 @@ impl FromStr for SubnetFeatures {
                 "canister_sandboxing" => features.canister_sandboxing = true,
                 "http_requests" => features.http_requests = true,
                 "sev_enabled" => features.sev_enabled = true,
-                _ => return Err(format!("Unknown feature {:?} in {:?}", feature, string)),
+                _ => return Err(format!("Unknown feature {feature:?} in {string:?}")),
             }
         }
 
@@ -142,11 +142,21 @@ pub struct ChainKeyConfig {
 }
 
 impl ChainKeyConfig {
+    /// Returns the list of key IDs for which there are key configs.
+    /// Note that a registry invariant ensures that there is at most one config for each key ID.
     pub fn key_ids(&self) -> Vec<MasterPublicKeyId> {
         self.key_configs
             .iter()
             .map(|key_config| key_config.key_id.clone())
             .collect()
+    }
+
+    /// Returns the key config for the given key ID, if it exists.
+    /// Note that a registry invariant ensures that there is at most one config for each key ID.
+    pub fn key_config(&self, key_id: &MasterPublicKeyId) -> Option<&KeyConfig> {
+        self.key_configs
+            .iter()
+            .find(|config| config.key_id == *key_id)
     }
 }
 

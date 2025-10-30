@@ -3,17 +3,17 @@ use std::io::Error;
 use std::ops::Deref;
 use std::ptr;
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
 };
 
 use anyhow::bail;
 use ic_sys::PAGE_SIZE;
 use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
-use libc::c_void;
 use libc::MAP_FAILED;
-use libc::{mmap, munmap};
+use libc::c_void;
 use libc::{MAP_ANON, MAP_PRIVATE, PROT_NONE};
+use libc::{mmap, munmap};
 use wasmtime::{LinearMemory, MemoryType};
 use wasmtime_environ::WASM32_MAX_SIZE;
 
@@ -88,21 +88,17 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
         };
         assert!(
             reserved_size_in_bytes <= MAX_STABLE_MEMORY_IN_BYTES as usize,
-            "Reserved bytes for wasm memory {} exceeds the maximum expected {}",
-            reserved_size_in_bytes,
-            MAX_STABLE_MEMORY_IN_BYTES
+            "Reserved bytes for wasm memory {reserved_size_in_bytes} exceeds the maximum expected {MAX_STABLE_MEMORY_IN_BYTES}"
         );
         assert!(
             reserved_size_in_bytes >= max * WASM_PAGE_SIZE as usize,
-            "Reserved size {} in bytes is smaller than expected max size {} in wasm pages",
-            reserved_size_in_bytes,
-            max
+            "Reserved size {reserved_size_in_bytes} in bytes is smaller than expected max size {max} in wasm pages"
         );
 
         let mem = MmapMemory::new(reserved_size_in_bytes, guard_size);
 
         match self.created_memories.lock() {
-            Err(err) => Err(format!("Error locking map of created memories: {:?}", err)),
+            Err(err) => Err(format!("Error locking map of created memories: {err:?}")),
             Ok(mut created_memories) => {
                 let new_memory = WasmtimeMemory::new(mem, min, reserved_size_in_bytes);
                 created_memories.insert(
@@ -139,19 +135,15 @@ impl MmapMemory {
     pub fn new(reserved_size_in_bytes: usize, guard_size_in_bytes: usize) -> Self {
         assert!(
             guard_size_in_bytes >= MIN_GUARD_REGION_SIZE,
-            "Requested guard size {} is smaller than required size {}",
-            guard_size_in_bytes,
-            MIN_GUARD_REGION_SIZE
+            "Requested guard size {guard_size_in_bytes} is smaller than required size {MIN_GUARD_REGION_SIZE}"
         );
         assert!(
             is_multiple_of_page_size(guard_size_in_bytes),
-            "Requested guard size {} is not a multiple of the page size.",
-            guard_size_in_bytes
+            "Requested guard size {guard_size_in_bytes} is not a multiple of the page size."
         );
         assert!(
             is_multiple_of_page_size(reserved_size_in_bytes),
-            "Requested memory size {} is not a multiple of the page size.",
-            reserved_size_in_bytes
+            "Requested memory size {reserved_size_in_bytes} is not a multiple of the page size."
         );
 
         let prologue_guard_size_in_bytes = guard_size_in_bytes;
@@ -226,7 +218,7 @@ impl WasmtimeMemory {
 fn convert_pages_to_bytes(pages: usize) -> usize {
     let (result, overflow) = pages.overflowing_mul(WASM_PAGE_SIZE as usize);
     if overflow {
-        panic!("Unable to convert memory page size {} to bytes", pages)
+        panic!("Unable to convert memory page size {pages} to bytes")
     }
     result
 }
@@ -245,7 +237,7 @@ unsafe impl LinearMemory for WasmtimeMemory {
     }
 
     fn grow_to(&mut self, new_size: usize) -> anyhow::Result<()> {
-        if new_size % WASM_PAGE_SIZE as usize != 0 {
+        if !new_size.is_multiple_of(WASM_PAGE_SIZE as usize) {
             bail!(
                 "Requested wasm page size increase wasn't a multiple of the wasm page size: {}",
                 new_size

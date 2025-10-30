@@ -252,15 +252,11 @@ impl CreateServiceNervousSystem {
                 .find(|&timestamp| timestamp > swap_approved_timestamp_seconds + ONE_DAY_SECONDS)
                 .ok_or(format!(
                     "Unable to find a swap start time after the swap was approved. \
-                     swap_approved_timestamp_seconds = {}, \
-                     midnight_after_swap_approved_timestamp_seconds = {}, \
-                     start_time_of_day = {}, \
-                     duration = {} \
+                     swap_approved_timestamp_seconds = {swap_approved_timestamp_seconds}, \
+                     midnight_after_swap_approved_timestamp_seconds = {midnight_after_swap_approved_timestamp_seconds}, \
+                     start_time_of_day = {start_time_of_day}, \
+                     duration = {duration} \
                      This is probably a bug.",
-                    swap_approved_timestamp_seconds,
-                    midnight_after_swap_approved_timestamp_seconds,
-                    start_time_of_day,
-                    duration,
                 ))?
         };
 

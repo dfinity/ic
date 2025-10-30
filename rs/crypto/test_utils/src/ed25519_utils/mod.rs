@@ -1,4 +1,4 @@
-use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, UserPublicKey, DOMAIN_IC_REQUEST};
+use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, DOMAIN_IC_REQUEST, UserPublicKey};
 use ic_types::messages::MessageId;
 use rand::{CryptoRng, Rng};
 

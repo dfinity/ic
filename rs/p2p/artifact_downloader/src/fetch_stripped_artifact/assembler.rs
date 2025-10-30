@@ -7,17 +7,17 @@ use thiserror::Error;
 use ic_interfaces::p2p::consensus::{
     ArtifactAssembler, AssembleResult, BouncerFactory, Peers, ValidatedPoolReader,
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use ic_quic_transport::Transport;
 use ic_types::{
+    CountBytes, NodeId,
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
     batch::IngressPayload,
     consensus::{BlockProposal, ConsensusMessage},
     messages::SignedIngress,
-    CountBytes, NodeId,
 };
 
 use crate::FetchArtifact;
@@ -27,10 +27,10 @@ use super::{
     metrics::{FetchStrippedConsensusArtifactMetrics, IngressMessageSource, IngressSenderMetrics},
     stripper::Strippable,
     types::{
+        SignedIngressId,
         stripped::{
             MaybeStrippedConsensusMessage, StrippedBlockProposal, StrippedConsensusMessageId,
         },
-        SignedIngressId,
     },
 };
 
@@ -567,7 +567,7 @@ mod tests {
 
             mock_transport
                 .expect_rpc()
-                .returning(move |_, _| (Ok(fake_response.clone())));
+                .returning(move |_, _| Ok(fake_response.clone()));
         }
 
         let consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();

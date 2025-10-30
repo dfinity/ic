@@ -1,33 +1,34 @@
 use crate::{
+    MAX_REMOTE_DKG_ATTEMPTS, MAX_REMOTE_DKGS_PER_INTERVAL, REMOTE_DKG_REPEATED_FAILURE_ERROR,
     utils::{self, tags_iter, vetkd_key_ids_for_subnet},
-    MAX_REMOTE_DKGS_PER_INTERVAL, MAX_REMOTE_DKG_ATTEMPTS, REMOTE_DKG_REPEATED_FAILURE_ERROR,
 };
 use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::{crypto::ErrorReproducibility, dkg::DkgPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_protobuf::registry::subnet::v1::{
-    chain_key_initialization::Initialization, CatchUpPackageContents,
+    CatchUpPackageContents, chain_key_initialization::Initialization,
 };
 use ic_registry_client_helpers::{
     crypto::initial_ni_dkg_transcript_from_registry_record, subnet::SubnetRegistry,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
+    Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId,
     batch::ValidationContext,
     consensus::{
+        Block,
         dkg::{DkgDataPayload, DkgPayload, DkgPayloadCreationError, DkgSummary},
-        get_faults_tolerated, Block,
+        get_faults_tolerated,
     },
     crypto::threshold_sig::ni_dkg::{
-        config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
-        errors::create_transcript_error::DkgCreateTranscriptError,
         NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         NiDkgTranscript,
+        config::{NiDkgConfig, NiDkgConfigData, errors::NiDkgConfigValidationError},
+        errors::create_transcript_error::DkgCreateTranscriptError,
     },
     messages::CallbackId,
-    Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -406,16 +407,16 @@ fn compute_remote_dkg_data(
         let target = config_group
             .first()
             .map(|config| config.dkg_id().target_subnet);
-        if let Some(NiDkgTargetSubnet::Remote(id)) = target {
-            if failed_target_ids.contains(&id) {
-                for config in config_group.iter() {
-                    new_transcripts.insert(
-                        config.dkg_id().clone(),
-                        Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()),
-                    );
-                }
-                return false;
+        if let Some(NiDkgTargetSubnet::Remote(id)) = target
+            && failed_target_ids.contains(&id)
+        {
+            for config in config_group.iter() {
+                new_transcripts.insert(
+                    config.dkg_id().clone(),
+                    Err(REMOTE_DKG_REPEATED_FAILURE_ERROR.to_string()),
+                );
             }
+            return false;
         }
         true
     });
@@ -500,10 +501,7 @@ pub fn get_dkg_summary_from_cup_contents(
         let key_id = NiDkgMasterPublicKeyId::try_from(key_id)
             .map_err(|err| format!("IDkg key combined with NiDkg initialization: {err}"))?;
         let transcript = initial_ni_dkg_transcript_from_registry_record(record).map_err(|err| {
-            format!(
-                "Decoding high-threshold DKG for key-id {} failed: {}",
-                key_id, err
-            )
+            format!("Decoding high-threshold DKG for key-id {key_id} failed: {err}")
         })?;
         transcripts.insert(NiDkgTag::HighThresholdForKey(key_id), transcript);
     }
@@ -623,8 +621,7 @@ fn get_dkg_interval_length(
         .map_err(DkgPayloadCreationError::FailedToGetDkgIntervalSettingFromRegistry)?
         .ok_or_else(|| {
             panic!(
-                "No subnet record found for registry version={:?} and subnet_id={:?}",
-                version, subnet_id,
+                "No subnet record found for registry version={version:?} and subnet_id={subnet_id:?}",
             )
         })
 }
@@ -807,8 +804,7 @@ fn get_node_list(
         .map_err(DkgPayloadCreationError::FailedToGetSubnetMemberListFromRegistry)?
         .unwrap_or_else(|| {
             panic!(
-                "No subnet record found for registry version={:?} and subnet_id={:?}",
-                registry_version, subnet_id,
+                "No subnet record found for registry version={registry_version:?} and subnet_id={subnet_id:?}",
             )
         })
         .into_iter()
@@ -965,7 +961,7 @@ fn create_remote_dkg_config_for_key_id(
         registry_version,
         Some(resharing_transcript.clone()),
     )
-    .map_err(|err| Box::new((dkg_id, format!("{:?}", err))))
+    .map_err(|err| Box::new((dkg_id, format!("{err:?}"))))
 }
 
 fn create_remote_dkg_config(
@@ -995,20 +991,20 @@ mod tests {
 
     use super::{super::test_utils::complement_state_manager_with_setup_initial_dkg_request, *};
     use ic_consensus_mocks::{
-        dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
-        Dependencies,
+        Dependencies, dependencies_with_subnet_params,
+        dependencies_with_subnet_records_with_raw_state_manager,
     };
     use ic_crypto_test_utils_ni_dkg::dummy_transcript_for_tests_with_params;
     use ic_logger::replica_logger::no_op_logger;
     use ic_management_canister_types_private::{VetKdCurve, VetKdKeyId};
     use ic_registry_client_helpers::subnet::SubnetRegistry;
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
+        RegistryVersion,
         crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
         time::UNIX_EPOCH,
-        RegistryVersion,
     };
     use std::collections::BTreeSet;
 
@@ -1068,7 +1064,7 @@ mod tests {
             registry_version,
             &vet_key_ids,
         )
-        .unwrap_or_else(|err| panic!("Couldn't create configs: {:?}", err));
+        .unwrap_or_else(|err| panic!("Couldn't create configs: {err:?}"));
 
         // We produced exactly four configs (high, low and two vetkeys), and with expected ids.
         assert_eq!(configs.len(), 4);
@@ -1208,8 +1204,7 @@ mod tests {
                             == NiDkgTargetSubnet::Remote(target_id))
                         .count(),
                     2,
-                    "{:?}",
-                    configs
+                    "{configs:?}"
                 );
 
                 // This is the first attempt to run DKG for this remote target.
@@ -1431,9 +1426,11 @@ mod tests {
             assert!(summary.next_transcript(&NiDkgTag::HighThreshold).is_none());
             assert_eq!(vet_key_ids.len(), 1);
             for vet_key_id in &vet_key_ids {
-                assert!(summary
-                    .next_transcript(&NiDkgTag::HighThresholdForKey(vet_key_id.clone()))
-                    .is_none());
+                assert!(
+                    summary
+                        .next_transcript(&NiDkgTag::HighThresholdForKey(vet_key_id.clone()))
+                        .is_none()
+                );
             }
 
             for tag in tags_iter(&vet_key_ids) {

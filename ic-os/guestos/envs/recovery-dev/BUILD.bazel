@@ -12,7 +12,6 @@ icos_images = icos_build(
     image_deps_func = image_deps,
     tags = [
         "manual",
-        "no-cache",
     ],
     visibility = [
         "//rs:ic-os-pkg",

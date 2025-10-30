@@ -1,5 +1,5 @@
 use ic_agent::{
-    agent::EnvelopeContent, export::Principal, identity::Secp256k1Identity, Identity, Signature,
+    Identity, Signature, agent::EnvelopeContent, export::Principal, identity::Secp256k1Identity,
 };
 use ic_protobuf::registry::crypto::v1::{AlgorithmId, PublicKey};
 use ic_sys::utility_command::{UtilityCommand, UtilityCommandResult};

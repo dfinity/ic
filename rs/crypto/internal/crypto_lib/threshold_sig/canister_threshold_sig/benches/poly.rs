@@ -14,7 +14,7 @@ fn poly_bench(c: &mut Criterion) {
         let x = EccScalar::random(curve, rng);
 
         c.bench_function(
-            &format!("poly evaluate_at({}, degree {})", curve, degree),
+            &format!("poly evaluate_at({curve}, degree {degree})"),
             |b| {
                 b.iter(|| {
                     let _ = poly.evaluate_at(&x);
@@ -30,7 +30,7 @@ fn poly_bench(c: &mut Criterion) {
         }
 
         c.bench_function(
-            &format!("poly interpolate({}, degree {})", curve, degree),
+            &format!("poly interpolate({curve}, degree {degree})"),
             |b| {
                 b.iter(|| {
                     let p = Polynomial::interpolate(curve, &samples).unwrap();
@@ -42,7 +42,7 @@ fn poly_bench(c: &mut Criterion) {
         let poly_b = Polynomial::random(curve, degree, rng);
 
         c.bench_function(
-            &format!("poly simple commitment({}, degree {})", curve, degree),
+            &format!("poly simple commitment({curve}, degree {degree})"),
             |b| {
                 b.iter(|| {
                     let _ = SimpleCommitment::create(&poly, degree).unwrap();
@@ -51,7 +51,7 @@ fn poly_bench(c: &mut Criterion) {
         );
 
         c.bench_function(
-            &format!("poly Pedersen commitment({}, degree {})", curve, degree),
+            &format!("poly Pedersen commitment({curve}, degree {degree})"),
             |b| {
                 b.iter(|| {
                     let _ = PedersenCommitment::create(&poly, &poly_b, degree).unwrap();
@@ -82,11 +82,28 @@ fn random_lagrange_coeffs<R: Rng + CryptoRng>(
     .unwrap()
 }
 
+fn poly_compute_lagrange(c: &mut Criterion) {
+    for curve in EccCurveType::all() {
+        let mut group = c.benchmark_group(format!("crypto_lagrange_coefficients_{curve}"));
+        group.warm_up_time(std::time::Duration::from_millis(100));
+
+        for n in [13, 34, 40] {
+            let node_indices = (0..n).collect::<Vec<NodeIndex>>();
+
+            group.bench_function(format!("setup/{n}"), |b| {
+                b.iter(|| {
+                    let _ = LagrangeCoefficients::at_zero(curve, &node_indices);
+                })
+            });
+        }
+    }
+}
+
 fn poly_interpolate_point(c: &mut Criterion) {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
-        let mut group = c.benchmark_group(format!("crypto_poly_interpolate_point_{}", curve_type));
+        let mut group = c.benchmark_group(format!("crypto_poly_interpolate_point_{curve_type}"));
 
         // range of arguments for generic functions
         for degree in (5..=100).step_by(5) {
@@ -124,7 +141,7 @@ fn poly_interpolate_scalar(c: &mut Criterion) {
     let rng = &mut reproducible_rng();
 
     for curve_type in EccCurveType::all() {
-        let mut group = c.benchmark_group(format!("crypto_poly_interpolate_scalar_{}", curve_type));
+        let mut group = c.benchmark_group(format!("crypto_poly_interpolate_scalar_{curve_type}"));
         // range of arguments for generic functions
         for degree in (5..=100).step_by(5) {
             group.bench_with_input(BenchmarkId::new("-", degree), &degree, |b, &size| {
@@ -149,6 +166,7 @@ fn poly_interpolate_scalar(c: &mut Criterion) {
 criterion_group!(
     benches,
     poly_bench,
+    poly_compute_lagrange,
     poly_interpolate_point,
     poly_interpolate_scalar
 );

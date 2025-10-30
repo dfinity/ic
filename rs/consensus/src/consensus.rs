@@ -2,12 +2,13 @@
 //! distributed consensus.
 
 pub mod batch_delivery;
-pub(crate) mod block_maker;
+mod block_maker;
 pub mod bounds;
 mod catchup_package_maker;
 mod finalizer;
+#[cfg(feature = "malicious_code")]
 pub mod malicious_consensus;
-pub(crate) mod metrics;
+mod metrics;
 mod notary;
 mod payload;
 pub mod payload_builder;
@@ -30,8 +31,8 @@ use crate::consensus::{
 };
 use ic_consensus_dkg::DkgKeyManager;
 use ic_consensus_utils::{
-    bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto, get_notarization_delay_settings,
-    membership::Membership, pool_reader::PoolReader, RoundRobin,
+    RoundRobin, bouncer_metrics::BouncerMetrics, crypto::ConsensusCrypto,
+    get_notarization_delay_settings, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
     batch_payload::BatchPayloadBuilder,
@@ -46,18 +47,18 @@ use ic_interfaces::{
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::TimeSource,
 };
-use ic_interfaces_registry::{RegistryClient, POLLING_PERIOD};
+use ic_interfaces_registry::{POLLING_PERIOD, RegistryClient};
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, info, trace, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    artifact::ConsensusMessageId, consensus::ConsensusMessageHashable,
+    Time, artifact::ConsensusMessageId, consensus::ConsensusMessageHashable,
     malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
-    replica_version::ReplicaVersion, Time,
+    replica_version::ReplicaVersion,
 };
-pub use metrics::ValidatorMetrics;
+use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::{
     cell::RefCell,
     collections::BTreeMap,
@@ -79,6 +80,9 @@ pub(crate) const ACCEPTABLE_NOTARIZATION_CERTIFICATION_GAP: u64 = 70;
 /// value above the latest CUP. During validation, the only exception to this are
 /// CUPs, which have no upper bound on the height to be validated.
 pub(crate) const ACCEPTABLE_NOTARIZATION_CUP_GAP: u64 = 130;
+
+/// The maximum number of threads used to create & validate block payloads in parallel.
+pub const MAX_CONSENSUS_THREADS: usize = 16;
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
@@ -111,17 +115,24 @@ pub(crate) fn check_protocol_version(
     }
 }
 
+/// Builds a rayon thread pool with the given number of threads.
+pub fn build_thread_pool(num_threads: usize) -> Arc<ThreadPool> {
+    Arc::new(
+        ThreadPoolBuilder::new()
+            .num_threads(num_threads)
+            .build()
+            .expect("Failed to create thread pool"),
+    )
+}
+
 /// [ConsensusImpl] holds all consensus subcomponents, and implements the
 /// Consensus trait by calling each subcomponent in round-robin manner.
 pub struct ConsensusImpl {
-    /// Notary
-    pub notary: Notary,
-    /// Finalizer
-    pub finalizer: Finalizer,
+    notary: Notary,
+    finalizer: Finalizer,
     random_beacon_maker: RandomBeaconMaker,
     random_tape_maker: RandomTapeMaker,
-    /// Blockmaker
-    pub block_maker: BlockMaker,
+    block_maker: BlockMaker,
     catch_up_package_maker: CatchUpPackageMaker,
     validator: Validator,
     aggregator: ShareAggregator,
@@ -159,6 +170,7 @@ impl ConsensusImpl {
         dkg_key_manager: Arc<Mutex<DkgKeyManager>>,
         message_routing: Arc<dyn MessageRouting>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        thread_pool: Arc<ThreadPool>,
         time_source: Arc<dyn TimeSource>,
         registry_poll_delay_duration_ms: u64,
         malicious_flags: MaliciousFlags,
@@ -250,6 +262,7 @@ impl ConsensusImpl {
                 payload_builder.clone(),
                 dkg_pool.clone(),
                 idkg_pool.clone(),
+                thread_pool.clone(),
                 state_manager.clone(),
                 stable_registry_version_age,
                 metrics_registry.clone(),
@@ -264,8 +277,9 @@ impl ConsensusImpl {
                 state_manager.clone(),
                 message_routing.clone(),
                 dkg_pool,
+                thread_pool,
                 logger.clone(),
-                ValidatorMetrics::new(metrics_registry.clone()),
+                &metrics_registry,
                 Arc::clone(&time_source),
             ),
             aggregator: ShareAggregator::new(
@@ -547,14 +561,10 @@ impl<T: ConsensusPool> PoolMutationsProducer<T> for ConsensusImpl {
 
         #[cfg(feature = "malicious_code")]
         if self.malicious_flags.is_consensus_malicious() {
-            crate::consensus::malicious_consensus::maliciously_alter_changeset(
+            self.maliciously_alter_changeset(
                 &pool_reader,
                 changeset,
                 &self.malicious_flags,
-                &self.block_maker,
-                &self.finalizer,
-                &self.notary,
-                &self.log,
                 self.time_source.get_relative_time(),
             )
         } else {
@@ -628,7 +638,7 @@ impl<Pool: ConsensusPool> BouncerFactory<ConsensusMessageId, Pool> for Consensus
 mod tests {
     use super::*;
     use ic_config::artifact_pool::ArtifactPoolConfig;
-    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies_with_subnet_params};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
@@ -643,7 +653,7 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_time::FastForwardTimeSource;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
-    use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height, SubnetId};
+    use ic_types::{CryptoHashOfState, Height, SubnetId, crypto::CryptoHash};
     use std::sync::Arc;
 
     fn set_up_consensus_with_subnet_record(
@@ -705,6 +715,7 @@ mod tests {
             ))),
             Arc::new(FakeMessageRouting::new()),
             state_manager,
+            build_thread_pool(MAX_CONSENSUS_THREADS),
             time_source.clone(),
             0,
             MaliciousFlags::default(),

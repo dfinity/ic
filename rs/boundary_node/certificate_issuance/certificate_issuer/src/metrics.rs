@@ -4,7 +4,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use candid::Principal;
 use certificate_orchestrator_interface::IcCertificate;
-use ic_agent::{hash_tree::HashTree, Certificate};
+use ic_agent::{Certificate, hash_tree::HashTree};
 use prometheus::{CounterVec, HistogramVec, Registry};
 use tracing::{error, info};
 use trust_dns_resolver::{error::ResolveError, lookup::Lookup, proto::rr::RecordType};
@@ -20,8 +20,8 @@ use crate::{
     },
     verification::{Verify, VerifyError},
     work::{
-        extract_domain, Dispense, DispenseError, Peek, PeekError, Process, ProcessError, Queue,
-        QueueError, Task,
+        Dispense, DispenseError, Peek, PeekError, Process, ProcessError, Queue, QueueError, Task,
+        extract_domain,
     },
 };
 

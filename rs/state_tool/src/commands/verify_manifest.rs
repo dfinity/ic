@@ -1,10 +1,10 @@
 use ic_state_manager::manifest::validate_manifest;
 use ic_state_manager::state_sync::types::{
-    ChunkInfo, FileInfo, Manifest, MAX_SUPPORTED_STATE_SYNC_VERSION,
+    ChunkInfo, FileInfo, MAX_SUPPORTED_STATE_SYNC_VERSION, Manifest,
 };
+use ic_types::CryptoHashOfState;
 use ic_types::crypto::CryptoHash;
 use ic_types::state_sync::StateSyncVersion;
-use ic_types::CryptoHashOfState;
 use std::{
     convert::TryInto,
     fs::File,
@@ -47,8 +47,7 @@ fn extract_file_table(lines: &[String]) -> Vec<FileInfo> {
             assert_eq!(
                 i,
                 columns.next().unwrap().parse::<usize>().unwrap(),
-                "Missing file index {}",
-                i
+                "Missing file index {i}"
             );
             FileInfo {
                 size_bytes: columns.next().unwrap().parse().unwrap(),
@@ -91,9 +90,9 @@ fn extract_root_hash(lines: &[String]) -> Result<StateHash, String> {
             .ok_or_else(|| String::from("Failed to find the root hash in the manifest"))?
             .replace("ROOT HASH: ", ""),
     )
-    .map_err(|err| format!("Failed to decode the root hash: {}", err))?
+    .map_err(|err| format!("Failed to decode the root hash: {err}"))?
     .try_into()
-    .map_err(|err| format!("Failed to decode the root hash: {:?}", err))
+    .map_err(|err| format!("Failed to decode the root hash: {err:?}"))
 }
 
 pub(crate) fn parse_manifest(
@@ -118,8 +117,7 @@ pub fn verify_manifest(file: File) -> Result<StateHash, String> {
     let (version, file_table, chunk_table, root_hash) = parse_manifest(file)?;
     if version > MAX_SUPPORTED_STATE_SYNC_VERSION {
         panic!(
-            "Unsupported state sync version provided {:?}. Max supported version {:?}",
-            version, MAX_SUPPORTED_STATE_SYNC_VERSION
+            "Unsupported state sync version provided {version:?}. Max supported version {MAX_SUPPORTED_STATE_SYNC_VERSION:?}"
         );
     }
 
@@ -128,7 +126,7 @@ pub fn verify_manifest(file: File) -> Result<StateHash, String> {
         &manifest,
         &CryptoHashOfState::from(CryptoHash(root_hash.to_vec())),
     )
-    .map_err(|err| format!("Failed to validate the manifest: {}", err))?;
+    .map_err(|err| format!("Failed to validate the manifest: {err}"))?;
 
     Ok(root_hash)
 }
@@ -155,7 +153,7 @@ mod tests {
         manifest_hash,
     };
     use ic_state_manager::state_sync::types::{ChunkInfo, FileInfo, Manifest};
-    use ic_types::state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION};
+    use ic_types::state_sync::{CURRENT_STATE_SYNC_VERSION, StateSyncVersion};
 
     use super::verify_manifest;
 
@@ -234,8 +232,8 @@ mod tests {
     fn recompute_root_hash_with_current_version_succeeds() {
         let (manifest, root_hash) = test_manifest_current_version();
         let mut tmp_file = tempfile::tempfile().unwrap();
-        writeln!(&mut tmp_file, "{}", manifest).unwrap();
-        writeln!(&mut tmp_file, "ROOT HASH: {}", root_hash).unwrap();
+        writeln!(&mut tmp_file, "{manifest}").unwrap();
+        writeln!(&mut tmp_file, "ROOT HASH: {root_hash}").unwrap();
         tmp_file.seek(std::io::SeekFrom::Start(0)).unwrap();
 
         verify_manifest(tmp_file).unwrap();
@@ -245,8 +243,8 @@ mod tests {
     fn recompute_root_hash_v2_succeeds() {
         let (manifest, root_hash) = test_manifest_v2();
         let mut tmp_file = tempfile::tempfile().unwrap();
-        writeln!(&mut tmp_file, "{}", manifest).unwrap();
-        writeln!(&mut tmp_file, "ROOT HASH: {}", root_hash).unwrap();
+        writeln!(&mut tmp_file, "{manifest}").unwrap();
+        writeln!(&mut tmp_file, "ROOT HASH: {root_hash}").unwrap();
         tmp_file.seek(std::io::SeekFrom::Start(0)).unwrap();
 
         verify_manifest(tmp_file).unwrap();

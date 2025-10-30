@@ -1,7 +1,7 @@
 use async_trait::async_trait;
+use candid::Principal;
 use candid::types::number::Nat;
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
-use candid::Principal;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};

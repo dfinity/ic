@@ -2,7 +2,7 @@
 
 use crate::consensus::{
     metrics::{
-        PayloadBuilderMetrics, CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_SUBNET_RECORD_ISSUE,
+        CRITICAL_ERROR_PAYLOAD_TOO_LARGE, CRITICAL_ERROR_SUBNET_RECORD_ISSUE, PayloadBuilderMetrics,
     },
     payload::BatchPayloadSectionBuilder,
 };
@@ -16,14 +16,14 @@ use ic_interfaces::{
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{error, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_types::{
-    batch::{BatchPayload, ValidationContext, MAX_BITCOIN_PAYLOAD_IN_BYTES},
-    consensus::{block_maker::SubnetRecords, Payload},
-    messages::MAX_XNET_PAYLOAD_IN_BYTES,
     Height, NodeId, NumBytes, SubnetId, Time,
+    batch::{BatchPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES, ValidationContext},
+    consensus::{Payload, block_maker::SubnetRecords},
+    messages::MAX_XNET_PAYLOAD_IN_BYTES,
 };
 use num_traits::SaturatingSub;
 use std::sync::Arc;
@@ -210,14 +210,19 @@ impl PayloadBuilderImpl {
         NumBytes::new(max_block_payload_size)
     }
 }
+
 #[cfg(test)]
 pub(crate) mod test {
     use super::*;
     use ic_btc_replica_types::{
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
     };
-    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies};
     use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
+    use ic_interfaces_mocks::messaging::MockXNetPayloadBuilder;
+    use ic_interfaces_mocks::payload_builder::{
+        MockIngressSelector, MockSelfValidatingPayloadBuilder,
+    };
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
         ingress_selector::FakeIngressSelector,
@@ -231,18 +236,26 @@ pub(crate) mod test {
         messages::SignedIngressBuilder,
     };
     use ic_types::{
+        CountBytes, CryptoHashOfPartialState, RegistryVersion,
+        batch::{IngressPayload, SelfValidatingPayload, XNetPayload},
         canister_http::CanisterHttpResponseWithConsensus,
-        consensus::certification::{Certification, CertificationContent},
-        crypto::{CryptoHash, Signed},
+        consensus::{
+            BlockPayload, DataPayload,
+            certification::{Certification, CertificationContent},
+            dkg::DkgDataPayload,
+        },
+        crypto::{CryptoHash, Signed, crypto_hash},
+        ingress::IngressSets,
         messages::SignedIngress,
         signature::ThresholdSignature,
         time::UNIX_EPOCH,
         xnet::CertifiedStreamSlice,
-        CryptoHashOfPartialState, RegistryVersion,
     };
+    use ic_types_test_utils::ids::NODE_1;
+    use mockall::predicate;
+    use rstest::rstest;
     use std::collections::BTreeMap;
 
-    #[cfg(feature = "proptest")]
     impl PayloadBuilderImpl {
         /// Return the number of critical errors that have occurred.
         ///
@@ -396,5 +409,270 @@ pub(crate) mod test {
                 param_msgs_test(i, j);
             }
         }
+    }
+
+    const KB: u64 = 1024;
+    const MB: u64 = 1024 * KB;
+
+    #[test]
+    // NOTE: this test is sensitive to the order in which the individual payload builders are executed.
+    // At the time of the writing the test the order for a block at height 1 is:
+    // 1. vetkd
+    // 2. ingress
+    // 3. bitcoin
+    // 3. xnet
+    // 4. canister hhtp
+    // 5. query_stats
+    fn test_get_payload_respect_limits() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies { registry, .. } = dependencies(pool_config, 1);
+
+            const MAX_BLOCK_SIZE: NumBytes = NumBytes::new(ic_limits::MAX_BLOCK_PAYLOAD_SIZE);
+            const XNET_PAYLOAD_SIZE: NumBytes = NumBytes::new(64 * KB);
+            const BITCOIN_PAYLOAD_SIZE: NumBytes = NumBytes::new(128 * KB);
+            const CANISTER_HTTP_PAYLOAD_SIZE: NumBytes = NumBytes::new(256 * KB);
+            const VETKD_PAYLOAD_SIZE: NumBytes = NumBytes::new(512 * KB);
+            const QUERY_STATS_PAYLOAD_SIZE: NumBytes = NumBytes::new(MB);
+            const INGRESS_MESSAGE_PAYLOAD_SIZE: NumBytes = NumBytes::new(2 * MB);
+
+            let ingress = SignedIngressBuilder::new()
+                .method_payload(vec![0; INGRESS_MESSAGE_PAYLOAD_SIZE.get() as usize])
+                .build();
+            let ingress_size = NumBytes::from(ingress.count_bytes() as u64);
+
+            let payload_builder = set_up_payload_builder(
+                registry,
+                MocksSettings {
+                    vetkd_payload_to_return: vec![0; VETKD_PAYLOAD_SIZE.get() as usize],
+                    expected_vetkd_payload_size_limit: MAX_BLOCK_SIZE,
+                    ingress_payload_to_return: IngressPayload::from(vec![ingress]),
+                    expected_ingress_payload_size_limit: MAX_BLOCK_SIZE - VETKD_PAYLOAD_SIZE,
+                    bitcoin_payload_size_to_return: BITCOIN_PAYLOAD_SIZE,
+                    expected_bitcoin_payload_size_limit: MAX_BLOCK_SIZE
+                        - VETKD_PAYLOAD_SIZE
+                        - ingress_size,
+                    xnet_payload_size_to_return: XNET_PAYLOAD_SIZE,
+                    expected_xnet_payload_size_limit: NumBytes::new(
+                        95 * (MAX_BLOCK_SIZE
+                            - VETKD_PAYLOAD_SIZE
+                            - ingress_size
+                            - BITCOIN_PAYLOAD_SIZE)
+                            .get()
+                            / 100,
+                    ),
+                    http_outcalls_payload_to_return: vec![
+                        0;
+                        CANISTER_HTTP_PAYLOAD_SIZE.get() as usize
+                    ],
+                    expected_http_outcalls_size_limit: MAX_BLOCK_SIZE
+                        - VETKD_PAYLOAD_SIZE
+                        - ingress_size
+                        - BITCOIN_PAYLOAD_SIZE
+                        - XNET_PAYLOAD_SIZE,
+                    query_stats_payload_to_return: vec![0; QUERY_STATS_PAYLOAD_SIZE.get() as usize],
+                    expected_query_stats_size_limit: MAX_BLOCK_SIZE
+                        - VETKD_PAYLOAD_SIZE
+                        - ingress_size
+                        - BITCOIN_PAYLOAD_SIZE
+                        - XNET_PAYLOAD_SIZE
+                        - CANISTER_HTTP_PAYLOAD_SIZE,
+                },
+            );
+
+            let prev_payloads = Vec::new();
+            let context = ValidationContext {
+                certified_height: Height::from(0),
+                registry_version: RegistryVersion::from(1),
+                time: UNIX_EPOCH,
+            };
+            let subnet_record = SubnetRecordBuilder::from(&[node_test_id(0)]).build();
+            let subnet_records = SubnetRecords {
+                membership_version: subnet_record.clone(),
+                context_version: subnet_record,
+            };
+
+            // this will fail if any of the expectations above are not met
+            payload_builder.get_payload(Height::from(1), &prev_payloads, &context, &subnet_records);
+        })
+    }
+
+    #[rstest]
+    #[case(2 * MB, false, false)]
+    #[case(3 * MB, true, false)]
+    #[case(6 * MB, true, false)]
+    #[case(7 * MB, true, true)]
+    // Note: payloads other than the ingress payload sum to a little below 2 MB.
+    fn test_validate_payload_respect_limits(
+        #[case] ingress_payload_size: u64,
+        #[case] expects_soft_error: bool,
+        #[case] expects_hard_error: bool,
+    ) {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            const ZERO_BYTES: NumBytes = NumBytes::new(0);
+
+            let Dependencies { registry, .. } = dependencies(pool_config, 1);
+
+            let ingress = SignedIngressBuilder::new()
+                .method_payload(vec![0; ingress_payload_size as usize])
+                .build();
+
+            let settings = MocksSettings {
+                ingress_payload_to_return: IngressPayload::from(vec![ingress]),
+                query_stats_payload_to_return: vec![0; MB as usize],
+                vetkd_payload_to_return: vec![0; 512 * KB as usize],
+                http_outcalls_payload_to_return: vec![0; 256 * KB as usize],
+                bitcoin_payload_size_to_return: NumBytes::new(128 * KB),
+                xnet_payload_size_to_return: NumBytes::new(64 * KB),
+                // The fields below are irrelevant for the test
+                expected_vetkd_payload_size_limit: ZERO_BYTES,
+                expected_ingress_payload_size_limit: ZERO_BYTES,
+                expected_bitcoin_payload_size_limit: ZERO_BYTES,
+                expected_xnet_payload_size_limit: ZERO_BYTES,
+                expected_http_outcalls_size_limit: ZERO_BYTES,
+                expected_query_stats_size_limit: ZERO_BYTES,
+            };
+            let payload_builder = set_up_payload_builder(registry, settings.clone());
+
+            let prev_payloads = Vec::new();
+            let context = ValidationContext {
+                certified_height: Height::from(0),
+                registry_version: RegistryVersion::from(1),
+                time: UNIX_EPOCH,
+            };
+            let proposal_context = ProposalContext {
+                proposer: NODE_1,
+                validation_context: &context,
+            };
+            let payload = Payload::new(
+                crypto_hash,
+                BlockPayload::Data(DataPayload {
+                    batch: BatchPayload {
+                        ingress: settings.ingress_payload_to_return,
+                        xnet: XNetPayload::default(),
+                        self_validating: SelfValidatingPayload::default(),
+                        canister_http: settings.http_outcalls_payload_to_return,
+                        query_stats: settings.query_stats_payload_to_return,
+                        vetkd: settings.vetkd_payload_to_return,
+                    },
+                    dkg: DkgDataPayload::new_empty(Height::from(0)),
+                    idkg: None,
+                }),
+            );
+
+            assert_eq!(
+                payload_builder
+                    .validate_payload(Height::from(1), &proposal_context, &payload, &prev_payloads,)
+                    .is_err(),
+                expects_hard_error,
+            );
+
+            if expects_soft_error {
+                assert!(payload_builder.count_critical_errors() > 0);
+            } else {
+                assert_eq!(payload_builder.count_critical_errors(), 0);
+            }
+        })
+    }
+
+    #[derive(Clone)]
+    struct MocksSettings {
+        ingress_payload_to_return: IngressPayload,
+        expected_ingress_payload_size_limit: NumBytes,
+        vetkd_payload_to_return: Vec<u8>,
+        expected_vetkd_payload_size_limit: NumBytes,
+        bitcoin_payload_size_to_return: NumBytes,
+        expected_bitcoin_payload_size_limit: NumBytes,
+        xnet_payload_size_to_return: NumBytes,
+        expected_xnet_payload_size_limit: NumBytes,
+        http_outcalls_payload_to_return: Vec<u8>,
+        expected_http_outcalls_size_limit: NumBytes,
+        query_stats_payload_to_return: Vec<u8>,
+        expected_query_stats_size_limit: NumBytes,
+    }
+
+    fn set_up_payload_builder(
+        registry: Arc<dyn RegistryClient>,
+        settings: MocksSettings,
+    ) -> PayloadBuilderImpl {
+        let vetkd_payload_builder = MockBatchPayloadBuilder::new().with_response_and_max_size(
+            settings.vetkd_payload_to_return,
+            settings.expected_vetkd_payload_size_limit,
+        );
+
+        let mut ingress_selector = MockIngressSelector::new();
+        ingress_selector
+            .expect_filter_past_payloads()
+            .return_once(|_, _| IngressSets::new(vec![], UNIX_EPOCH));
+        ingress_selector
+            .expect_validate_ingress_payload()
+            .return_once(|_, _, _| Ok(()));
+        ingress_selector
+            .expect_get_ingress_payload()
+            .with(
+                predicate::always(),
+                predicate::always(),
+                predicate::eq(settings.expected_ingress_payload_size_limit),
+            )
+            .return_once(move |_, _, _| settings.ingress_payload_to_return);
+
+        let mut self_validating_payload_builder = MockSelfValidatingPayloadBuilder::new();
+        self_validating_payload_builder
+            .expect_get_self_validating_payload()
+            .with(
+                predicate::always(),
+                predicate::always(),
+                predicate::eq(settings.expected_bitcoin_payload_size_limit),
+                predicate::always(),
+            )
+            .return_once(move |_, _, _, _| {
+                (
+                    SelfValidatingPayload::default(),
+                    settings.bitcoin_payload_size_to_return,
+                )
+            });
+        self_validating_payload_builder
+            .expect_validate_self_validating_payload()
+            .return_once(move |_, _, _| Ok(settings.bitcoin_payload_size_to_return));
+
+        let mut xnet_payload_builder = MockXNetPayloadBuilder::new();
+        xnet_payload_builder
+            .expect_get_xnet_payload()
+            .with(
+                predicate::always(),
+                predicate::always(),
+                predicate::eq(settings.expected_xnet_payload_size_limit),
+            )
+            .return_once(move |_, _, _| {
+                (XNetPayload::default(), settings.xnet_payload_size_to_return)
+            });
+        xnet_payload_builder
+            .expect_validate_xnet_payload()
+            .return_once(move |_, _, _| Ok(settings.xnet_payload_size_to_return));
+
+        let canister_http_payload_builder = MockBatchPayloadBuilder::new()
+            .with_response_and_max_size(
+                settings.http_outcalls_payload_to_return,
+                settings.expected_http_outcalls_size_limit,
+            );
+
+        let query_stats_payload_builder = MockBatchPayloadBuilder::new()
+            .with_response_and_max_size(
+                settings.query_stats_payload_to_return,
+                settings.expected_query_stats_size_limit,
+            );
+
+        PayloadBuilderImpl::new(
+            subnet_test_id(0),
+            node_test_id(0),
+            registry,
+            Arc::new(ingress_selector),
+            Arc::new(xnet_payload_builder),
+            Arc::new(self_validating_payload_builder),
+            Arc::new(canister_http_payload_builder),
+            Arc::new(query_stats_payload_builder),
+            Arc::new(vetkd_payload_builder),
+            MetricsRegistry::new(),
+            no_op_logger(),
+        )
     }
 }

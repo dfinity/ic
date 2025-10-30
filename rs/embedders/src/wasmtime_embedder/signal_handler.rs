@@ -2,10 +2,10 @@ use crate::wasmtime_embedder::host_memory::MemoryPageSize;
 
 use ic_types::NumBytes;
 use libc::c_void;
-use memory_tracker::{signal_access_kind_and_address, SigsegvMemoryTracker};
+use memory_tracker::{SigsegvMemoryTracker, signal_access_kind_and_address};
 use std::convert::TryFrom;
 use std::sync::MutexGuard;
-use std::sync::{atomic::Ordering, Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic::Ordering};
 
 const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
@@ -16,7 +16,7 @@ pub(crate) fn sigsegv_memory_tracker_handler(
     let mut memories: Vec<_> = memories
         .into_iter()
         .map(|(t, size)| {
-            let base = t.lock().unwrap().area().addr();
+            let base = t.lock().unwrap().start();
             (base, t, size)
         })
         .collect();
@@ -29,7 +29,7 @@ pub(crate) fn sigsegv_memory_tracker_handler(
               current_size_in_pages: &MemoryPageSize| unsafe {
             let page_count = current_size_in_pages.load(Ordering::SeqCst);
             let heap_size = page_count * (WASM_PAGE_SIZE as usize);
-            let heap_start = tracker.area().addr() as *mut libc::c_void;
+            let heap_start = tracker.start() as *mut libc::c_void;
             if (heap_start <= si_addr) && (si_addr < { heap_start.add(heap_size) }) {
                 Some(heap_size)
             } else {
@@ -78,15 +78,11 @@ pub(crate) fn sigsegv_memory_tracker_handler(
         let memory_tracker = memory_tracker.lock().unwrap();
         // Spawn a guard to report the total time spent in the handler.
         let _guard = scopeguard::guard(timer, |timer| {
-            let elapsed_nanos = timer.elapsed().as_nanos() as u64;
-            memory_tracker
-                .metrics
-                .sigsegv_handler_duration_nanos
-                .fetch_add(elapsed_nanos, Ordering::Relaxed);
+            memory_tracker.add_sigsegv_handler_duration(timer.elapsed());
         });
 
         // We handle SIGSEGV from the Wasm module heap ourselves.
-        if memory_tracker.area().is_within(si_addr) {
+        if memory_tracker.contains(si_addr) {
             // Returns true if the signal has been handled by our handler which indicates
             // that the instance should continue.
             memory_tracker.handle_sigsegv(access_kind, si_addr)
@@ -94,7 +90,7 @@ pub(crate) fn sigsegv_memory_tracker_handler(
         } else if let Some(heap_size) =
             check_if_expanded(&memory_tracker, si_addr, memory_page_size)
         {
-            let delta = NumBytes::new(heap_size as u64) - memory_tracker.area().size();
+            let delta = NumBytes::new(heap_size as u64) - memory_tracker.size();
             memory_tracker.expand(delta);
             true
         } else {

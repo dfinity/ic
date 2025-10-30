@@ -8,21 +8,23 @@ use ic_config::{
 };
 use ic_embedders::wasmtime_embedder::system_api::MAX_CALL_TIMEOUT_SECONDS;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
-    CreateCanisterArgs, DerivationPath, EcdsaKeyId, EmptyBlob, LoadCanisterSnapshotArgs,
-    MasterPublicKeyId, Method, Payload, SignWithECDSAArgs, TakeCanisterSnapshotArgs,
-    UpdateSettingsArgs, IC_00,
+    CanisterIdRecord, CanisterMetadataRequest, CanisterMetadataResponse, CanisterSettingsArgs,
+    CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs, DerivationPath,
+    EcdsaKeyId, EmptyBlob, IC_00, LoadCanisterSnapshotArgs, MasterPublicKeyId, Method, Payload,
+    SignWithECDSAArgs, TakeCanisterSnapshotArgs, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::NumWasmPages;
 use ic_state_machine_tests::{
     ErrorCode, StateMachine, StateMachineBuilder, StateMachineConfig, UserError,
 };
-use ic_test_utilities_metrics::{fetch_gauge, fetch_int_counter};
+use ic_test_utilities_metrics::{
+    fetch_gauge, fetch_histogram_vec_stats, fetch_int_counter, labels,
+};
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::MessageId;
-use ic_types::{ingress::WasmResult, messages::NO_DEADLINE, CanisterId, Cycles, NumBytes, Time};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_types::{CanisterId, Cycles, NumBytes, Time, ingress::WasmResult, messages::NO_DEADLINE};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use more_asserts::{assert_gt, assert_le, assert_lt};
 use std::{convert::TryInto, str::FromStr, sync::Arc, time::Duration};
 
@@ -686,7 +688,7 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(21 * MIB),
+            subnet_memory_capacity: NumBytes::from(81 * MIB),
             subnet_memory_reservation: NumBytes::from(MIB),
             ..Default::default()
         },
@@ -696,29 +698,31 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
     let now = std::time::SystemTime::now();
     env.set_time(now);
 
-    let canister_id = create_universal_canister_with_cycles(
-        &env,
-        Some(CanisterSettingsArgsBuilder::new().build()),
-        INITIAL_CYCLES_BALANCE,
-    );
-
+    // There are 4 cores by default so the subnet available memory is 80 / 4 = 20 MiB.
     // Set the memory to 20MiB + 1. Should fail.
     let res = env
-        .update_settings(
-            &canister_id,
-            CanisterSettingsArgsBuilder::new()
-                .with_memory_allocation(20u64 * MIB + 1)
-                .build(),
+        .create_canister_with_cycles_impl(
+            None,
+            INITIAL_CYCLES_BALANCE,
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_memory_allocation(20u64 * MIB + 1)
+                    .build(),
+            ),
         )
         .unwrap_err();
     assert_eq!(res.code(), ErrorCode::SubnetOversubscribed);
 
+    // There are 4 cores by default so the subnet available memory is 80 / 4 = 20 MiB.
     // Set the memory to exactly 20MiB. Should succeed.
-    env.update_settings(
-        &canister_id,
-        CanisterSettingsArgsBuilder::new()
-            .with_memory_allocation(20u64 * MIB)
-            .build(),
+    env.create_canister_with_cycles_impl(
+        None,
+        INITIAL_CYCLES_BALANCE,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(20u64 * MIB)
+                .build(),
+        ),
     )
     .unwrap();
 }
@@ -730,7 +734,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(100 * MIB),
+            subnet_memory_capacity: NumBytes::from(120 * MIB),
             subnet_memory_reservation: NumBytes::from(0),
             ..Default::default()
         },
@@ -749,7 +753,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
         canister_id,
         "update",
         wasm()
-            // As there are 2 scheduler cores, the memory capacity is 100 / 2 = 50 MiB per core.
+            // As there are 2 scheduler cores, the memory capacity is 120 / 2 = 60 MiB per core.
             .memory_size_is_at_least(30 * MIB)
             .reply_data(&[42])
             .build(),
@@ -765,7 +769,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
         other_canister_id,
         "update",
         wasm()
-            // The memory capacity is (100 - 30) / 2 = 35 MiB per core.
+            // The memory capacity is (120 - 30) / 2 = 45 MiB per core.
             .memory_size_is_at_least(25 * MIB)
             .reply_data(&[42])
             .build(),
@@ -773,7 +777,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     .expect("Error increasing the canister memory size");
 
     // This should take another 30 MiB on top of the 30 MiB of the canister state.
-    // The available memory at this point is 100 - 30 - 25 = 45 MiB.
+    // The available memory at this point is (120 - 30 - 25) / 2 = 32.5 MiB.
     env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
         .unwrap();
 
@@ -781,7 +785,7 @@ fn take_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     env.tick();
 
     // Taking a snapshot of the second canister should take another 25MiB, however the available
-    // memory at this point is 100 - 30 - 25 - 30 = 15 MiB, so it should fail.
+    // memory at this point is (120 - 30 - 25 - 30) / 2 = 17.5 MiB, so it should fail.
     let error = env
         .take_canister_snapshot(TakeCanisterSnapshotArgs::new(other_canister_id, None))
         .map(|_| ())
@@ -796,7 +800,7 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(100 * MIB),
+            subnet_memory_capacity: NumBytes::from(120 * MIB),
             subnet_memory_reservation: NumBytes::from(0),
             ..Default::default()
         },
@@ -815,7 +819,7 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
         canister_id,
         "update",
         wasm()
-            // As there are 2 scheduler cores, the memory capacity is 100 / 2 = 50 MiB per core.
+            // As there are 2 scheduler cores, the memory capacity is 120 / 2 = 60 MiB per core.
             .memory_size_is_at_least(30 * MIB)
             .reply_data(&[42])
             .build(),
@@ -831,7 +835,7 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
         other_canister_id,
         "update",
         wasm()
-            // The memory capacity is (100 - 30) / 2 = 35 MiB per core.
+            // The memory capacity is (120 - 30) / 2 = 45 MiB per core.
             .memory_size_is_at_least(25 * MIB)
             .reply_data(&[42])
             .build(),
@@ -839,7 +843,7 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     .expect("Error increasing the canister memory size");
 
     // This should take another 30 MiB on top of the 30 MiB of the canister state.
-    // The available memory at this point is 100 - 30 - 25 = 45 MiB.
+    // The available memory at this point is (120 - 30 - 25) / 2 = 32.5 MiB.
     let snapshot_id = env
         .take_canister_snapshot(TakeCanisterSnapshotArgs::new(canister_id, None))
         .unwrap()
@@ -849,11 +853,11 @@ fn load_canister_snapshot_request_fails_when_subnet_capacity_reached() {
     env.tick();
 
     // Uninstall the first canister to free up some memory. This should free up 30MiB.
-    // The available memory at this point should be 100 - 30 - 25 - 30 + 30 = 45 MiB.
+    // The available memory at this point should be (120 - 30 - 25 - 30 + 30) / 2 = 32.5 MiB.
     env.uninstall_code(canister_id).unwrap();
 
     // Taking a snapshot of the second canister should take another 25MiB,
-    // making the available memory 100 - 30 - 25 - 30 + 30 - 25 = 20 MiB.
+    // making the available memory (120 - 30 - 25 - 30 + 30 - 25) / 2 = 20 MiB.
     env.take_canister_snapshot(TakeCanisterSnapshotArgs::new(other_canister_id, None))
         .unwrap();
 
@@ -876,7 +880,7 @@ fn canister_snapshot_metrics_are_observed() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(100 * MIB),
+            subnet_memory_capacity: NumBytes::from(120 * MIB),
             subnet_memory_reservation: NumBytes::from(0),
             ..Default::default()
         },
@@ -895,7 +899,7 @@ fn canister_snapshot_metrics_are_observed() {
         canister_id,
         "update",
         wasm()
-            // As there are 2 scheduler cores, the memory capacity is 100 / 2 = 50 MiB per core.
+            // As there are 2 scheduler cores, the memory capacity is 120 / 2 = 60 MiB per core.
             .memory_size_is_at_least(30 * MIB)
             .reply_data(&[42])
             .build(),
@@ -911,7 +915,7 @@ fn canister_snapshot_metrics_are_observed() {
         other_canister_id,
         "update",
         wasm()
-            // The memory capacity is (100 - 30) / 2 = 35 MiB per core.
+            // The memory capacity is (120 - 30) / 2 = 45 MiB per core.
             .memory_size_is_at_least(25 * MIB)
             .reply_data(&[42])
             .build(),
@@ -976,9 +980,9 @@ fn assert_replied(result: Result<WasmResult, UserError>) {
     match result {
         Ok(wasm_result) => match wasm_result {
             WasmResult::Reply(_) => {}
-            WasmResult::Reject(err) => panic!("Unexpected reject: {:?}", err),
+            WasmResult::Reject(err) => panic!("Unexpected reject: {err:?}"),
         },
-        Err(err) => panic!("Got unexpected error: {}", err),
+        Err(err) => panic!("Got unexpected error: {err}"),
     }
 }
 
@@ -993,10 +997,10 @@ fn assert_replied_with(result: Result<WasmResult, UserError>, expected: i64) {
                 assert_eq!(i64::from_le_bytes(res[0..8].try_into().unwrap()), expected)
             }
             WasmResult::Reject(reject_message) => {
-                panic!("Got unexpected reject: {}", reject_message)
+                panic!("Got unexpected reject: {reject_message}")
             }
         },
-        Err(err) => panic!("Got unexpected error: {}", err),
+        Err(err) => panic!("Got unexpected error: {err}"),
     }
 }
 
@@ -1014,10 +1018,10 @@ fn replied_with(result: &Result<WasmResult, UserError>, expected: i64) -> bool {
 fn assert_rejected(result: Result<WasmResult, UserError>) {
     match result {
         Ok(wasm_result) => match wasm_result {
-            WasmResult::Reply(blob) => panic!("Unexpected reply: {:?}", blob),
+            WasmResult::Reply(blob) => panic!("Unexpected reply: {blob:?}"),
             WasmResult::Reject(_err) => {}
         },
-        Err(err) => panic!("Got unexpected error: {}", err),
+        Err(err) => panic!("Got unexpected error: {err}"),
     }
 }
 
@@ -1186,10 +1190,7 @@ fn subnet_memory_reservation_scales_with_number_of_cores() {
     let err = env.execute_ingress(a_id, "update", a).unwrap_err();
     err.assert_contains(
         ErrorCode::CanisterTrapped,
-        &format!(
-            "Error from Canister {}: Canister trapped: stable memory out of bounds",
-            a_id
-        ),
+        &format!("Error from Canister {a_id}: Canister trapped: stable memory out of bounds"),
     );
 }
 
@@ -1199,7 +1200,7 @@ fn canister_with_memory_allocation_does_not_fail_when_growing_wasm_memory() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(100_000_000),
+            subnet_memory_capacity: NumBytes::from(400_000_000),
             subnet_memory_reservation: NumBytes::from(0),
             ..Default::default()
         },
@@ -1255,7 +1256,7 @@ fn canister_with_memory_allocation_does_not_fail_when_growing_stable_memory() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(100_000_000),
+            subnet_memory_capacity: NumBytes::from(400_000_000),
             subnet_memory_reservation: NumBytes::from(0),
             ..Default::default()
         },
@@ -1339,8 +1340,7 @@ fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation() {
 #[test]
 fn canister_with_memory_allocation_cannot_grow_wasm_memory_above_allocation_wasm64() {
     let subnet_config = SubnetConfig::new(SubnetType::Application);
-    let mut embedders_config = ic_config::embedders::Config::default();
-    embedders_config.feature_flags.wasm64 = ic_config::flag_status::FlagStatus::Enabled;
+    let embedders_config = ic_config::embedders::Config::default();
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
@@ -2416,7 +2416,7 @@ fn helper_tests_for_stale_data_in_buffer_between_calls(
 
     let data = match ret_val.unwrap() {
         WasmResult::Reply(data) => data,
-        WasmResult::Reject(msg) => panic!("Unexpected reject {}.", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject {msg}."),
     };
 
     assert_eq!(
@@ -2446,7 +2446,7 @@ fn helper_tests_for_stale_data_in_buffer_between_calls(
 
     let data = match ret_val.unwrap() {
         WasmResult::Reply(data) => data,
-        WasmResult::Reject(msg) => panic!("Unexpected reject {}.", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject {msg}."),
     };
 
     assert_eq!(
@@ -2497,7 +2497,8 @@ fn helper_tests_for_illegal_data_buffer_access(env: &StateMachine, canister_id: 
 
     assert!(
         ret_val.description().contains(containing_str),
-        "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.", ret_val.description()
+        "Should return error if input data is copied to out of bound internal buffer. Instead, it returns unexpected message: {}.",
+        ret_val.description()
     );
 }
 
@@ -2942,7 +2943,7 @@ fn test_canister_liquid_cycle_balance() {
         .unwrap();
     let liquid_balance = match res {
         WasmResult::Reply(blob) => u128::from_le_bytes(blob.try_into().unwrap()),
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
 
     // Install another universal canister to receive as many cycles as possible from the existing universal canister.
@@ -2969,7 +2970,7 @@ fn test_canister_liquid_cycle_balance() {
         .unwrap();
     let accepted_cycles = match res {
         WasmResult::Reply(blob) => u128::from_le_bytes(blob.try_into().unwrap()),
-        WasmResult::Reject(msg) => panic!("Unexpected reject: {}", msg),
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
     };
     assert!(0 < accepted_cycles && accepted_cycles < liquid_balance);
 
@@ -3014,8 +3015,95 @@ fn large_ipc_call_fails() {
     let err = env
         .execute_ingress(canister_id, "send_calls", Encode!(&(2 * 1024_u32)).unwrap())
         .unwrap_err();
-    let expected_error = format!("Error from Canister \
+    let expected_error = format!(
+        "Error from Canister \
         rwlgt-iiaaa-aaaaa-aaaaa-cai: Canister exceeded the limit of {instruction_limit} instructions \
-        for single message execution.");
+        for single message execution."
+    );
     err.assert_contains(ErrorCode::CanisterInstructionLimitExceeded, &expected_error);
+}
+
+#[test]
+fn get_canister_metadata() {
+    let env = StateMachine::new();
+    let canister_with_metadata = env.install_canister_wat(
+        r#"(module
+(memory $memory 1)
+(export "memory" (memory $memory))
+(@custom "icp:public my_public_section" "my_public_section_value")
+)"#,
+        vec![],
+        None,
+    );
+    let universal_canister =
+        create_universal_canister_with_cycles(&env, None, INITIAL_CYCLES_BALANCE);
+    let canister_metadata_args =
+        CanisterMetadataRequest::new(canister_with_metadata, "my_public_section".to_string())
+            .encode();
+
+    // Call the canister metadata method through an inter-canister call should succeed.
+    let get_canister_metadata = wasm()
+        .call_simple(
+            IC_00,
+            Method::CanisterMetadata,
+            call_args().other_side(canister_metadata_args.clone()),
+        )
+        .build();
+    let res = env
+        .execute_ingress(universal_canister, "update", get_canister_metadata)
+        .unwrap();
+    let reply = match res {
+        WasmResult::Reply(blob) => blob,
+        WasmResult::Reject(msg) => panic!("Unexpected reject: {msg}"),
+    };
+    let response = CanisterMetadataResponse::decode(&reply).unwrap();
+    assert_eq!(response.value(), b"my_public_section_value");
+
+    // Call the canister metadata method through an ingress message should fail.
+    let err = env
+        .execute_ingress(IC_00, Method::CanisterMetadata, canister_metadata_args)
+        .unwrap_err();
+    err.assert_contains(
+        ErrorCode::CanisterRejectedMessage,
+        "Only canisters can call ic00 method canister_metadata",
+    );
+}
+
+#[test]
+fn test_canister_status_via_query_call() {
+    fn canister_status_count(env: &StateMachine) -> u64 {
+        fetch_histogram_vec_stats(
+            env.metrics_registry(),
+            "execution_subnet_query_message_duration_seconds",
+        )
+        .get(&labels(&[
+            ("method_name", "query_ic00_canister_status"),
+            ("status", "success"),
+        ]))
+        .map_or(0, |stats| stats.count)
+    }
+
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachineBuilder::new()
+        .with_config(Some(StateMachineConfig::new(
+            subnet_config,
+            HypervisorConfig::default(),
+        )))
+        .build();
+    let canister_id = create_universal_canister_with_cycles(
+        &env,
+        Some(CanisterSettingsArgsBuilder::new().build()),
+        INITIAL_CYCLES_BALANCE,
+    );
+
+    assert_eq!(canister_status_count(&env), 0);
+
+    let result = env.query(
+        CanisterId::ic_00(),
+        "canister_status",
+        CanisterIdRecord::from(canister_id).encode(),
+    );
+
+    assert!(result.is_ok());
+    assert_eq!(canister_status_count(&env), 1);
 }

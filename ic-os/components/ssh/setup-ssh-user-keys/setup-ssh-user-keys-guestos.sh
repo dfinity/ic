@@ -13,8 +13,21 @@ copy_ssh_keys() {
     fi
 }
 
-ENABLE_TEE=$(get_config_value '.icos_settings.enable_trusted_execution_environment')
+if /opt/ic/bin/sev_active; then
+    ENABLE_TEE="true"
+elif [ $? -eq 1 ]; then
+    ENABLE_TEE="false"
+else
+    exit 1
+fi
 
+# Create home directories
+for ACCOUNT in backup readonly admin; do
+    HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
+    mkdir -p "${HOMEDIR}"
+done
+
+# Setup SSH keys
 for ACCOUNT in backup readonly admin; do
     HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
     GROUP=$(id -ng "${ACCOUNT}")

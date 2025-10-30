@@ -1,15 +1,14 @@
 use candid::{Decode, Encode};
 use clap::Parser;
-use ic_agent::{agent::CallResponse, export::Principal, Agent};
-use ic_certification::Certificate;
+use ic_agent::{Agent, export::Principal};
 use ic_identity_hsm::HardwareIdentity;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance_api::{
+    ManageNeuron, ManageNeuronResponse, Motion, Proposal,
     manage_neuron::{Command, NeuronIdOrSubaccount},
     manage_neuron_response::{self, MakeProposalResponse},
     proposal::Action,
-    ManageNeuron, ManageNeuronResponse, Motion, Proposal,
 };
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -81,7 +80,7 @@ async fn main() {
         .await
         .update(&governance_canister_id, "manage_neuron")
         .with_arg(Encode!(&request).unwrap())
-        .call()
+        .call_and_wait()
         .await
         .unwrap();
 
@@ -91,19 +90,13 @@ async fn main() {
 /// Reports what happend as a result of attempting to make/submit a motion
 /// proposal. In the happy case, the main thing this prints out is a URL to the
 /// proposal that was just submitted/made.
-fn handle_response(response: CallResponse<(Vec<u8>, Certificate)>) {
-    // Unpack ic-agent.
-    let response = match response {
-        CallResponse::Response((result_bytes, _certificate)) => result_bytes,
-        _ => panic!("Response from canister is not a Response: {:#?}", response),
-    };
-
+fn handle_response(response: Vec<u8>) {
     // Unpack API.
     let ManageNeuronResponse { command } = Decode!(&response, ManageNeuronResponse).unwrap();
     let command = command.unwrap();
     let make_proposal_response = match command {
         manage_neuron_response::Command::MakeProposal(ok) => ok,
-        _ => panic!("{:#?}", command),
+        _ => panic!("{command:#?}"),
     };
     let MakeProposalResponse {
         proposal_id,
@@ -115,15 +108,12 @@ fn handle_response(response: CallResponse<(Vec<u8>, Certificate)>) {
         .map(|proposal_id| {
             let ProposalId { id: proposal_id } = proposal_id;
 
-            format!("{}", proposal_id)
+            format!("{proposal_id}")
         })
         .unwrap_or_else(|| "???".to_string());
 
     println!("Succes! 🚀");
-    println!(
-        "Proposal URL: https://dashboard.internetcomputer.org/proposals/{}",
-        proposal_id
-    );
+    println!("Proposal URL: https://dashboard.internetcomputer.org/proposals/{proposal_id}");
     if let Some(message) = message {
         println!("Message: {message}");
     }
@@ -146,11 +136,11 @@ fn load_proposal(proposal_file_path: &str, neuron_id: u64, verbose: bool) -> Man
     }
 
     let Header { title, url } = serde_yaml::from_str::<Header>(header).unwrap();
-    println!("Title: {}", title);
+    println!("Title: {title}");
     if verbose {
-        println!("URL: {}", url);
+        println!("URL: {url}");
         println!("Summary:");
-        println!("{}", summary);
+        println!("{summary}");
     }
     println!("Submitting... ⏳");
 
@@ -244,8 +234,7 @@ fn new_identity() -> HardwareIdentity {
             std::env::var("DFX_HSM_PIN").map_err(|err| {
                 format!(
                     "DFX_HSM_PIN environment variable is not set (or just \
-                     not exported such that it is visible to this process): {}",
-                    err,
+                     not exported such that it is visible to this process): {err}",
                 )
             })
         },

@@ -10,6 +10,7 @@ This macro defines the overall build process for ICOS images, including:
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("//bazel:defs.bzl", "zstd_compress")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//ic-os/components:defs.bzl", "tree_hash")
@@ -378,16 +379,16 @@ def icos_build(
     # -------------------- Vulnerability Scanning Tool ------------
 
     if vuln_scan:
-        native.sh_binary(
+        sh_binary(
             name = "vuln-scan",
             srcs = ["//ic-os:vuln-scan/vuln-scan.sh"],
             data = [
-                "@trivy//:trivy",
+                "//:trivy",
                 ":rootfs-tree.tar",
                 "//ic-os:vuln-scan/vuln-scan.html",
             ],
             env = {
-                "trivy_path": "$(rootpath @trivy//:trivy)",
+                "trivy_path": "$(rootpath //:trivy)",
                 "CONTAINER_TAR": "$(rootpaths :rootfs-tree.tar)",
                 "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
             },
@@ -416,29 +417,6 @@ cat $$HASH
 EOF
         """,
         executable = True,
-        tags = ["manual"],
-    )
-
-    # -------------------- VM Developer Tools --------------------
-
-    native.sh_binary(
-        name = "launch-remote-vm",
-        srcs = ["//ic-os:dev-tools/launch-remote-vm.sh"],
-        data = [
-            "//rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm",
-            ":disk-img.tar.zst",
-            "//rs/tests/nested:empty-disk-img.tar.zst",
-            ":version.txt",
-            "//bazel:upload_systest_dep",
-        ],
-        env = {
-            "BIN": "$(location //rs/ic_os/dev_test_tools/launch-single-vm:launch-single-vm)",
-            "UPLOAD_SYSTEST_DEP": "$(location //bazel:upload_systest_dep)",
-            "VERSION_FILE": "$(location :version.txt)",
-            "DISK_IMG": "$(location :disk-img.tar.zst)",
-            "EMPTY_DISK_IMG_PATH": "$(location //rs/tests/nested:empty-disk-img.tar.zst)",
-        },
-        testonly = True,
         tags = ["manual"],
     )
 

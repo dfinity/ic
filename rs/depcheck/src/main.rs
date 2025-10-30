@@ -79,19 +79,19 @@ If your constants need dependencies, define them in a separate package."#
             eprintln!("Found one dependency policy violation.");
         }
         n => {
-            eprintln!("Found {} dependency policy violations.", n);
+            eprintln!("Found {n} dependency policy violations.");
         }
     }
 
     for violation in violations.iter() {
-        eprintln!("\n{}", SEPARATOR);
+        eprintln!("\n{SEPARATOR}");
         let rule = &rules[violation.rule_idx];
         eprintln!(
             "Found a violation of rule #{} defined in {}:",
             violation.rule_idx + 1,
             rule.defined_in
         );
-        eprintln!("{}", SEPARATOR);
+        eprintln!("{SEPARATOR}");
 
         eprintln!(
             "'{}' should not depend on '{}'.",
@@ -104,7 +104,7 @@ If your constants need dependencies, define them in a separate package."#
             if depth > 0 {
                 eprintln!("{:width$}└── {}:{}", "", p, v, width = (depth - 1) * 4);
             } else {
-                eprintln!("{}:{}", p, v);
+                eprintln!("{p}:{v}");
             }
         }
     }

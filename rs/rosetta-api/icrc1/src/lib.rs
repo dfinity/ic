@@ -1,6 +1,6 @@
 #![allow(clippy::disallowed_types)]
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use common::storage::storage_client::StorageClient;
 use common::storage::types::MetadataEntry;
 use ic_base_types::CanisterId;
@@ -15,6 +15,7 @@ use std::{
 };
 use tokio::sync::Mutex as AsyncMutex;
 pub mod common;
+pub mod config;
 pub mod construction_api;
 pub mod data_api;
 pub mod ledger_blocks_synchronization;

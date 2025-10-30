@@ -10,14 +10,14 @@ use crate::{
     signature::*,
     *,
 };
-use ic_base_types::subnet_id_try_from_option;
 use ic_base_types::PrincipalIdError;
+use ic_base_types::subnet_id_try_from_option;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::types::v1::{self as pb, consensus_message::Msg};
 use ic_protobuf::{
     log::block_log_entry::v1::BlockLogEntry,
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
 };
 use serde::{Deserialize, Serialize};
 use std::cmp::PartialOrd;

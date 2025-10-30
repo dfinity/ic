@@ -1,6 +1,6 @@
 use ic_base_types::NodeId;
 use ic_metrics::{
-    buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector, MetricsRegistry,
+    MetricsRegistry, buckets::decimal_buckets, tokio_metrics_collector::TokioTaskMetricsCollector,
 };
 use prometheus::{GaugeVec, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 use quinn::{Connection, ConnectionError, ReadError, ReadToEndError, StoppedError, WriteError};
@@ -52,6 +52,8 @@ pub struct QuicTransportMetrics {
     pub connection_handle_bytes_sent_total: IntCounterVec,
     pub connection_handle_duration_seconds: HistogramVec,
     pub connection_handle_errors_total: IntCounterVec,
+    pub connection_handle_outgoing_streams_total: IntGauge,
+    pub connection_handle_incoming_streams_total: IntGauge,
     // Quinn
     quinn_path_rtt_seconds: GaugeVec,
     quinn_path_congestion_window: IntGaugeVec,
@@ -155,6 +157,14 @@ impl QuicTransportMetrics {
                 "quic_transport_connection_handle_errors_total",
                 "Request handler errors by stream type and error type.",
                 &[QUINN_API_LABEL, ERROR_TYPE_LABEL],
+            ),
+            connection_handle_incoming_streams_total: metrics_registry.int_gauge(
+                "quic_transport_connection_handle_incoming_streams_total",
+                "The number of concurrent incoming streams accross all connections.",
+            ),
+            connection_handle_outgoing_streams_total: metrics_registry.int_gauge(
+                "quic_transport_connection_handle_outgoing_streams_total",
+                "The number of concurrent outgoing streams accross all connections.",
             ),
             // Quinn stats
             quinn_path_rtt_seconds: metrics_registry.gauge_vec(

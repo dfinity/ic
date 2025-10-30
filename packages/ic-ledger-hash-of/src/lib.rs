@@ -1,8 +1,8 @@
-use candid::types::internal::{Type, TypeInner};
 use candid::CandidType;
+use candid::types::internal::{Type, TypeInner};
 use serde::{
-    de::{Deserializer, Visitor},
     Deserialize, Serialize, Serializer,
+    de::{Deserializer, Visitor},
 };
 use std::convert::TryInto;
 use std::{fmt, marker::PhantomData, str::FromStr};
@@ -51,7 +51,7 @@ impl<T> HashOf<T> {
 impl<T> fmt::Display for HashOf<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let res = hex::encode(self.as_slice());
-        write!(f, "{}", res)
+        write!(f, "{res}")
     }
 }
 

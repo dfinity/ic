@@ -7,14 +7,14 @@ use ic_interfaces::execution_environment::HypervisorError;
 use ic_management_canister_types_private::IC_00;
 use ic_types::ingress::WasmResult;
 use ic_types::messages::{
-    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, Request,
-    RequestMetadata, Response, NO_DEADLINE,
+    CallContextId, CallbackId, CanisterCall, CanisterCallOrTask, MessageId, NO_DEADLINE, Request,
+    RequestMetadata, Response,
 };
 use ic_types::methods::Callback;
 use ic_types::time::CoarseTime;
 use ic_types::{
-    user_id_into_protobuf, user_id_try_from_protobuf, CanisterId, Cycles, Funds, NumInstructions,
-    PrincipalId, Time, UserId,
+    CanisterId, Cycles, Funds, NumInstructions, PrincipalId, Time, UserId, user_id_into_protobuf,
+    user_id_try_from_protobuf,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
@@ -197,15 +197,15 @@ impl CallContextManagerStats {
     /// Updates the stats following the creation of a new call context.
     fn on_new_call_context(&mut self, call_origin: &CallOrigin) {
         match call_origin {
-            CallOrigin::CanisterUpdate(_, _, deadline) => {
+            CallOrigin::CanisterUpdate(_, _, deadline, _) => {
                 self.unresponded_canister_update_call_contexts += 1;
                 if *deadline == NO_DEADLINE {
                     self.unresponded_guaranteed_response_call_contexts += 1;
                 }
             }
-            CallOrigin::CanisterQuery(_, _)
-            | CallOrigin::Ingress(_, _)
-            | CallOrigin::Query(_)
+            CallOrigin::CanisterQuery(..)
+            | CallOrigin::Ingress(..)
+            | CallOrigin::Query(..)
             | CallOrigin::SystemTask => {}
         }
     }
@@ -214,15 +214,15 @@ impl CallContextManagerStats {
     /// origin.
     fn on_call_context_response(&mut self, call_origin: &CallOrigin) {
         match call_origin {
-            CallOrigin::CanisterUpdate(_, _, deadline) => {
+            CallOrigin::CanisterUpdate(_, _, deadline, _) => {
                 self.unresponded_canister_update_call_contexts -= 1;
                 if *deadline == NO_DEADLINE {
                     self.unresponded_guaranteed_response_call_contexts -= 1;
                 }
             }
-            CallOrigin::CanisterQuery(_, _)
-            | CallOrigin::Ingress(_, _)
-            | CallOrigin::Query(_)
+            CallOrigin::CanisterQuery(..)
+            | CallOrigin::Ingress(..)
+            | CallOrigin::Query(..)
             | CallOrigin::SystemTask => {}
         }
     }
@@ -252,10 +252,7 @@ impl CallContextManagerStats {
             .values()
             .filter(|call_context| !call_context.responded)
             .filter(|call_context| {
-                matches!(
-                    call_context.call_origin,
-                    CallOrigin::CanisterUpdate(_, _, _)
-                )
+                matches!(call_context.call_origin, CallOrigin::CanisterUpdate(..))
             })
             .count();
         let unresponded_guaranteed_response_call_contexts = call_contexts
@@ -264,7 +261,7 @@ impl CallContextManagerStats {
             .filter(|call_context| {
                 matches!(
                     call_context.call_origin,
-                    CallOrigin::CanisterUpdate(_, _, deadline) if deadline == NO_DEADLINE
+                    CallOrigin::CanisterUpdate(_, _, deadline, _) if deadline == NO_DEADLINE
                 )
             })
             .count();
@@ -318,8 +315,7 @@ impl CallContextManagerStats {
                 Entry::Vacant(_) => {
                     debug_assert!(
                         false,
-                        "Aborted or paused DTS response with no matching callback: {:?}",
-                        response
+                        "Aborted or paused DTS response with no matching callback: {response:?}"
                     )
                 }
             }
@@ -344,7 +340,7 @@ impl CallContextManagerStats {
             .values()
             .filter(|call_context| !call_context.responded)
             .filter_map(|call_context| match call_context.call_origin {
-                CallOrigin::CanisterUpdate(originator, _, _) => Some(originator),
+                CallOrigin::CanisterUpdate(originator, ..) => Some(originator),
                 _ => None,
             })
             .fold(
@@ -409,12 +405,14 @@ pub struct CallContextManager {
     stats: CallContextManagerStats,
 }
 
+type MethodName = String;
+
 #[derive(Clone, Eq, PartialEq, Debug, Deserialize, Serialize)]
 pub enum CallOrigin {
-    Ingress(UserId, MessageId),
-    CanisterUpdate(CanisterId, CallbackId, CoarseTime),
-    Query(UserId),
-    CanisterQuery(CanisterId, CallbackId),
+    Ingress(UserId, MessageId, MethodName),
+    CanisterUpdate(CanisterId, CallbackId, CoarseTime, MethodName),
+    Query(UserId, MethodName),
+    CanisterQuery(CanisterId, CallbackId, MethodName),
     /// System task is either a `Heartbeat` or a `GlobalTimer`.
     SystemTask,
 }
@@ -423,10 +421,10 @@ impl CallOrigin {
     /// Returns the principal ID associated with this call origin.
     pub fn get_principal(&self) -> PrincipalId {
         match self {
-            CallOrigin::Ingress(user_id, _) => user_id.get(),
-            CallOrigin::CanisterUpdate(canister_id, _, _) => canister_id.get(),
-            CallOrigin::Query(user_id) => user_id.get(),
-            CallOrigin::CanisterQuery(canister_id, _) => canister_id.get(),
+            CallOrigin::Ingress(user_id, ..) => user_id.get(),
+            CallOrigin::CanisterUpdate(canister_id, ..) => canister_id.get(),
+            CallOrigin::Query(user_id, ..) => user_id.get(),
+            CallOrigin::CanisterQuery(canister_id, ..) => canister_id.get(),
             CallOrigin::SystemTask => IC_00.get(),
         }
     }
@@ -435,7 +433,7 @@ impl CallOrigin {
     /// `None` for all other origins.
     pub fn deadline(&self) -> Option<CoarseTime> {
         match self {
-            CallOrigin::CanisterUpdate(_, _, deadline) => Some(*deadline),
+            CallOrigin::CanisterUpdate(_, _, deadline, _) => Some(*deadline),
             CallOrigin::Ingress(..)
             | CallOrigin::Query(..)
             | CallOrigin::CanisterQuery(..)
@@ -550,7 +548,7 @@ impl CallContextManager {
         let mut context = self
             .call_contexts
             .remove(&call_context_id)
-            .unwrap_or_else(|| panic!("no call context with ID={}", call_context_id));
+            .unwrap_or_else(|| panic!("no call context with ID={call_context_id}"));
         // Update call context `instructions_executed += instructions_used`
         context.instructions_executed = context
             .instructions_executed
@@ -647,7 +645,7 @@ impl CallContextManager {
         let mut call_context = self
             .call_contexts
             .remove(&call_context_id)
-            .ok_or(format!("Call context not found: {}", call_context_id))?;
+            .ok_or(format!("Call context not found: {call_context_id}"))?;
         if !call_context.responded {
             call_context.mark_responded();
 
@@ -731,7 +729,10 @@ impl CallContextManager {
     /// best-effort callbacks whose deadlines are `< now`.
     ///
     /// Note: A given callback ID will be returned at most once by this function.
-    pub(super) fn expire_callbacks(&mut self, now: CoarseTime) -> impl Iterator<Item = CallbackId> {
+    pub(super) fn expire_callbacks(
+        &mut self,
+        now: CoarseTime,
+    ) -> impl Iterator<Item = CallbackId> + use<> {
         const MIN_CALLBACK_ID: CallbackId = CallbackId::new(0);
 
         // Unfortunate two-step splitting off of the expired callbacks.
@@ -919,10 +920,13 @@ impl From<&CanisterCall> for CallOrigin {
                 request.sender,
                 request.sender_reply_callback,
                 request.deadline,
+                request.method_name.clone(),
             ),
-            CanisterCall::Ingress(ingress) => {
-                CallOrigin::Ingress(ingress.source, ingress.message_id.clone())
-            }
+            CanisterCall::Ingress(ingress) => CallOrigin::Ingress(
+                ingress.source,
+                ingress.message_id.clone(),
+                ingress.method_name.clone(),
+            ),
         }
     }
 }

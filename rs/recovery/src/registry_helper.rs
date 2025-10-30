@@ -19,7 +19,7 @@ use ic_registry_replicator::RegistryReplicator;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_features::ChainKeyConfig;
 use prost::Message;
-use slog::{error, info, warn, Logger};
+use slog::{Logger, error, info, warn};
 use url::Url;
 
 use std::{
@@ -147,8 +147,7 @@ impl RegistryHelper {
                 block_on(self.registry_replicator.poll(vec![self.nns_url.clone()])).map_err(
                     |err| {
                         RecoveryError::RegistryError(format!(
-                            "Failed to poll the newest registry: {}",
-                            err
+                            "Failed to poll the newest registry: {err}"
                         ))
                     },
                 )?;
@@ -157,7 +156,7 @@ impl RegistryHelper {
         }
 
         self.registry_client.poll_once().map_err(|err| {
-            RecoveryError::RegistryError(format!("Failed to poll the newest registry: {}", err))
+            RecoveryError::RegistryError(format!("Failed to poll the newest registry: {err}"))
         })?;
 
         Ok(self.registry_client.get_latest_version())
@@ -173,7 +172,7 @@ impl RegistryHelper {
 
         let field =
             field_extractor(registry_version, self.registry_client.as_ref()).map_err(|err| {
-                RecoveryError::RegistryError(format!("Failed to extract the field: {}", err))
+                RecoveryError::RegistryError(format!("Failed to extract the field: {err}"))
             })?;
 
         Ok((registry_version, field))
@@ -196,10 +195,10 @@ fn get_nns_public_key(
     }
 
     let key = parse_threshold_sig_key(nns_pem_path)
-        .map_err(|e| RecoveryError::RegistryError(format!("Failed to read nns.pem file: {}", e)))?;
+        .map_err(|e| RecoveryError::RegistryError(format!("Failed to read nns.pem file: {e}")))?;
 
     let downloaded_key = read_file(nns_pem_path)
-        .map_err(|e| RecoveryError::RegistryError(format!("Failed to read nns.pem: {}", e)))?;
+        .map_err(|e| RecoveryError::RegistryError(format!("Failed to read nns.pem: {e}")))?;
     info!(logger, "Continuing with public key:\n{}", downloaded_key);
 
     let included_key = include_str!("../ic_public_key.pem");
@@ -227,7 +226,7 @@ fn download_nns_pem(nns_url: &Url, nns_pem_path: &Path, logger: &Logger) -> Reco
         get_value_from_registry_canister(&registry_canister, make_subnet_list_record_key())?;
 
     let list = SubnetListRecord::decode(bytes.as_slice()).map_err(|e| {
-        RecoveryError::RegistryError(format!("Error decoding subnet list from registry: {}", e))
+        RecoveryError::RegistryError(format!("Error decoding subnet list from registry: {e}"))
     })?;
 
     let maybe_id = list.subnets.first().map(|x| {
@@ -243,19 +242,17 @@ fn download_nns_pem(nns_url: &Url, nns_pem_path: &Path, logger: &Logger) -> Reco
     let bytes = get_value_from_registry_canister(&registry_canister, key)?;
 
     let public_key = PublicKey::decode(bytes.as_slice()).map_err(|e| {
-        RecoveryError::RegistryError(format!("Error decoding PublicKey from registry: {}", e))
+        RecoveryError::RegistryError(format!("Error decoding PublicKey from registry: {e}"))
     })?;
 
     let key = ThresholdSigPublicKey::try_from(public_key).map_err(|e| {
         RecoveryError::RegistryError(format!(
-            "failed to parse threshold signature PK from protobuf: {:?}",
-            e
+            "failed to parse threshold signature PK from protobuf: {e:?}"
         ))
     })?;
     let der_bytes = public_key_to_der(&key.into_bytes()).map_err(|e| {
         RecoveryError::RegistryError(format!(
-            "failed to encode threshold signature PK into DER: {:?}",
-            e
+            "failed to encode threshold signature PK into DER: {e:?}"
         ))
     })?;
 
@@ -269,8 +266,7 @@ fn get_value_from_registry_canister(
     block_on(registry_canister.get_value(key.as_bytes().to_vec(), /*version_opt=*/ None))
         .map_err(|e| {
             RecoveryError::RegistryError(format!(
-                "Error getting value from the registry canister: {}",
-                e
+                "Error getting value from the registry canister: {e}"
             ))
         })
         .map(|(bytes, _)| bytes)

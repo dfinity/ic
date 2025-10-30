@@ -1,18 +1,13 @@
+use crate::DateUtc;
 use candid::{CandidType, Deserialize, Principal};
 use std::collections::BTreeMap;
 
 #[derive(CandidType, Clone, Deserialize)]
 pub struct GetNodeProvidersRewardsRequest {
-    /// These timestamps cover the entire correspondent UTC day and are inclusive.
-    pub from_timestamp_nanoseconds: u64,
-    pub to_timestamp_nanoseconds: u64,
+    pub from_day: DateUtc,
+    pub to_day: DateUtc,
 }
-
-#[derive(CandidType, Deserialize, Debug, PartialEq)]
-pub struct GetNodeProvidersRewardsResponse {
-    pub rewards: Option<NodeProvidersRewards>,
-    pub error: Option<String>,
-}
+pub type GetNodeProvidersRewardsResponse = Result<NodeProvidersRewards, String>;
 
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub struct NodeProvidersRewards {

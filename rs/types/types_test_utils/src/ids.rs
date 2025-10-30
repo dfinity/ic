@@ -1,6 +1,6 @@
 use ic_types::{
-    messages::{CallContextId, MessageId, EXPECTED_MESSAGE_ID_LENGTH},
     CanisterId, NodeId, PrincipalId, SubnetId, UserId,
+    messages::{CallContextId, EXPECTED_MESSAGE_ID_LENGTH, MessageId},
 };
 
 pub const NODE_1: NodeId = NodeId::new(PrincipalId::new(

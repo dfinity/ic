@@ -1,10 +1,10 @@
 use ic_types::ReplicaVersion;
-use serde::{de::Error, Deserialize, Deserializer, Serializer};
+use serde::{Deserialize, Deserializer, Serializer, de::Error};
 use std::future::Future;
 use tokio::runtime::Runtime;
 
 pub(crate) fn block_on<F: Future>(f: F) -> F::Output {
-    let rt = Runtime::new().unwrap_or_else(|err| panic!("Could not create tokio runtime: {}", err));
+    let rt = Runtime::new().unwrap_or_else(|err| panic!("Could not create tokio runtime: {err}"));
     rt.block_on(f)
 }
 

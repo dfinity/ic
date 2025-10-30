@@ -11,7 +11,7 @@ use ic_nns_test_utils::{
         get_pending_proposals, submit_external_update_proposal,
         submit_external_update_proposal_allowing_error, wait_for_final_state,
     },
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     registry::get_value_or_panic,
 };
 use ic_protobuf::registry::dc::v1::{
@@ -19,7 +19,7 @@ use ic_protobuf::registry::dc::v1::{
 };
 use ic_registry_keys::make_data_center_record_key;
 use ic_registry_transport::{
-    deserialize_get_value_response, serialize_get_value_request, Error::KeyNotPresent,
+    Error::KeyNotPresent, deserialize_get_value_response, serialize_get_value_request,
 };
 
 #[test]
@@ -201,9 +201,11 @@ fn test_submit_add_or_remove_data_centers_proposal() {
         .await
         .unwrap_err();
 
-        assert!(response
-            .error_message
-            .contains("owner must not be longer than"));
+        assert!(
+            response
+                .error_message
+                .contains("owner must not be longer than")
+        );
 
         // Should have 0 pending proposals
         let pending_proposals = get_pending_proposals(&nns_canisters.governance).await;

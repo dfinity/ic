@@ -1,9 +1,9 @@
-use super::message_pool::{Kind, Reference};
 use super::CanisterInput;
+use super::message_pool::{Kind, Reference};
 use crate::StateError;
 use ic_base_types::CanisterId;
-use ic_types::messages::{Ingress, RequestOrResponse};
 use ic_types::CountBytes;
+use ic_types::messages::{Ingress, RequestOrResponse};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 use std::collections::{BTreeMap, VecDeque};

@@ -4,13 +4,13 @@ use crate::vault::api::{IDkgTranscriptInternalBytes, ThresholdEcdsaSignerCspVaul
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
-    create_ecdsa_signature_share as tecdsa_sign_share, IDkgTranscriptInternal,
-    ThresholdEcdsaSigShareInternal,
+    IDkgTranscriptInternal, ThresholdEcdsaSigShareInternal,
+    create_ecdsa_signature_share as tecdsa_sign_share,
 };
-use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;
+use ic_types::Randomness;
 use ic_types::crypto::AlgorithmId;
 use ic_types::crypto::ExtendedDerivationPath;
-use ic_types::Randomness;
+use ic_types::crypto::canister_threshold_sig::error::ThresholdEcdsaCreateSigShareError;
 use rand::{CryptoRng, Rng};
 
 #[cfg(test)]
@@ -105,7 +105,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             algorithm_id,
         )
         .map_err(|e| ThresholdEcdsaCreateSigShareError::InternalError {
-            internal_error: format!("{:?}", e),
+            internal_error: format!("{e:?}"),
         })
     }
 }

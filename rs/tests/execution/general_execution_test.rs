@@ -14,6 +14,7 @@ use general_execution_tests::canister_heartbeat::*;
 use general_execution_tests::canister_lifecycle::*;
 use general_execution_tests::cycles_transfer::*;
 use general_execution_tests::ingress_rate_limiting::*;
+use general_execution_tests::input_deduplication::input_deduplication_test;
 use general_execution_tests::malicious_input::malicious_input_test;
 use general_execution_tests::nns_shielding::*;
 use general_execution_tests::queries::query_reply_sizes;
@@ -34,6 +35,7 @@ fn main() -> Result<()> {
         .add_parallel(
             SystemTestSubGroup::new()
                 .add_test(systest!(malicious_input_test))
+                .add_test(systest!(input_deduplication_test))
                 .add_test(systest!(test_raw_rand_api))
                 .add_test(systest!(test_controller))
                 .add_test(systest!(test_in_replicated_execution))

@@ -9,6 +9,7 @@ use icp_ledger::{
     TransferArgs, TransferError,
 };
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
 use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 use mockall::automock;
 use std::marker::PhantomData;
@@ -64,6 +65,27 @@ impl<Rt: Runtime + Send + Sync> ICRC1Ledger for IcpLedgerCanister<Rt> {
         self.canister_id
     }
 
+    async fn icrc2_approve(
+        &self,
+        spender: Account,
+        amount: u64,
+        expires_at: Option<u64>,
+        fee: u64,
+        from_subaccount: Option<Subaccount>,
+        expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
+        <IcpLedgerCanister<Rt> as IcpLedger>::icrc2_approve(
+            self,
+            spender,
+            amount,
+            expires_at,
+            fee,
+            from_subaccount,
+            expected_allowance,
+        )
+        .await
+    }
+
     async fn icrc3_get_blocks(
         &self,
         _args: Vec<GetBlocksRequest>,
@@ -108,13 +130,12 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         result
             .map_err(|(code, msg)| {
                 NervousSystemError::new_with_message(format!(
-                    "Error calling method 'transfer' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
+                    "Error calling method 'transfer' of the ledger canister. Code: {code:?}. Message: {msg}"
                 ))
             })
             .and_then(|inner_result: (Result<u64, TransferError>,)| {
                 inner_result.0.map_err(|e: TransferError| {
-                    NervousSystemError::new_with_message(format!("Error transferring funds: {}", e))
+                    NervousSystemError::new_with_message(format!("Error transferring funds: {e}"))
                 })
             })
     }
@@ -131,8 +152,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
                 format!(
-                    "Error calling method 'icrc1_total_supply' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
+                    "Error calling method 'icrc1_total_supply' of the ledger canister. Code: {code:?}. Message: {msg}"
                 )
             )
         })
@@ -155,8 +175,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
         result.map_err(|(code, msg)| {
             NervousSystemError::new_with_message(
                 format!(
-                    "Error calling method 'account_balance' of the ledger canister. Code: {:?}. Message: {}",
-                    code, msg
+                    "Error calling method 'account_balance' of the ledger canister. Code: {code:?}. Message: {msg}"
                 )
             )
         })
@@ -164,6 +183,43 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for IcpLedgerCanister<Rt> {
 
     fn canister_id(&self) -> CanisterId {
         self.canister_id
+    }
+
+    async fn icrc2_approve(
+        &self,
+        spender: Account,
+        amount: u64,
+        expires_at: Option<u64>,
+        fee: u64,
+        from_subaccount: Option<Subaccount>,
+        expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError> {
+        let result: Result<(Result<Nat, ApproveError>,), (i32, String)> = Rt::call_with_cleanup(
+            self.canister_id,
+            "icrc2_approve",
+            (ApproveArgs {
+                spender,
+                amount: Nat::from(amount),
+                expires_at,
+                fee: Some(Nat::from(fee)),
+                from_subaccount,
+                created_at_time: None,
+                expected_allowance: expected_allowance.map(Nat::from),
+                memo: None,
+            },),
+        )
+        .await;
+
+        result.map_err(|(code, msg)| {
+            NervousSystemError::new_with_message(format!(
+                "Error calling method 'icrc2_approve' of the ledger canister. Code: {code:?}. Message: {msg}"
+            ))
+        })
+        .and_then(|inner_result: (Result<Nat, ApproveError>,)| {
+            inner_result.0.map_err(|e: ApproveError| {
+                NervousSystemError::new_with_message(format!("Error approving funds: {e}"))
+            })
+        })
     }
 
     async fn icrc3_get_blocks(
@@ -207,6 +263,17 @@ pub trait ICRC1Ledger: Send + Sync {
     /// Returns the CanisterId of the Ledger being accessed.
     fn canister_id(&self) -> CanisterId;
 
+    /// Gives approval for `amount` of asset to `spender`.
+    async fn icrc2_approve(
+        &self,
+        spender: Account,
+        amount: u64,
+        expires_at: Option<u64>,
+        fee: u64,
+        from_subaccount: Option<Subaccount>,
+        expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError>;
+
     /// Returns an array of blocks for the ranges specified in args.
     async fn icrc3_get_blocks(
         &self,
@@ -243,6 +310,17 @@ pub trait IcpLedger: Send + Sync {
 
     /// Returns the CanisterId of the Ledger being accessed.
     fn canister_id(&self) -> CanisterId;
+
+    /// Gives approval for `amount` of asset to `spender`.
+    async fn icrc2_approve(
+        &self,
+        spender: Account,
+        amount: u64,
+        expires_at: Option<u64>,
+        fee: u64,
+        from_subaccount: Option<Subaccount>,
+        expected_allowance: Option<u64>,
+    ) -> Result<Nat, NervousSystemError>;
 
     /// Returns an array of blocks for the ranges specified in args.
     async fn icrc3_get_blocks(

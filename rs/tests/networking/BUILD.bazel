@@ -1,4 +1,5 @@
-load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "GRAFANA_RUNTIME_DEPS", "MESSAGE_CANISTER_ENV", "MESSAGE_CANISTER_RUNTIME_DEPS", "STATESYNC_TEST_CANISTER_RUNTIME_DEPS", "UNIVERSAL_CANISTER_ENV", "UNIVERSAL_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
@@ -37,10 +38,17 @@ COMMON_DEPS = [
 HTTP_ENDPOINTS_DEPS = [
     # Keep sorted.
     "//rs/crypto/tree_hash",
+    "//rs/http_endpoints/public",
     "//rs/http_endpoints/test_agent",
     "//rs/tests/consensus/utils",
     "//rs/types/types",
+    "//rs/universal_canister/lib",
+    "@crate_index//:candid",
+    "@crate_index//:ic-utils",
+    "@crate_index//:maplit",
+    "@crate_index//:serde_cbor",
     "@crate_index//:url",
+    "@crate_index//:wat",
 ]
 
 system_test_nns(
@@ -49,7 +57,6 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps =
@@ -156,7 +163,6 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     tags = [
-        "k8s",
         "manual",
     ],
     runtime_deps =
@@ -177,9 +183,6 @@ system_test_nns(
     env = {
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
-    tags = [
-        "k8s",
-    ],
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +
         CANISTER_HTTP_RUNTIME_DEPS + PROXY_CANISTER_RUNTIME_DEPS,
@@ -192,7 +195,6 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     tags = [
-        "k8s",
         "long_test",
     ],
     runtime_deps =
@@ -204,12 +206,12 @@ system_test_nns(
 system_test_nns(
     name = "read_state_test",
     env = MESSAGE_CANISTER_ENV | UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "k8s",
-    ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
+        "//rs/certification",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/http_endpoints/public",
         "//rs/limits",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
@@ -226,19 +228,21 @@ system_test_nns(
         "@crate_index//:futures",
         "@crate_index//:ic-agent",
         "@crate_index//:leb128",
+        "@crate_index//:reqwest",
+        "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:slog",
+        "@crate_index//:time",
         "@crate_index//:tokio",
+        "@crate_index//:url",
     ],
 )
 
-system_test_nns(
+rust_binary(
     name = "nns_delegation_test",
-    env = UNIVERSAL_CANISTER_ENV,
-    tags = [
-        "long_test",
-    ],
-    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    testonly = True,
+    srcs = ["nns_delegation_test.rs"],
+    crate_name = "ic_systest_nns_delegation_test",
     deps = [
         # Keep sorted.
         "//rs/certification",
@@ -248,7 +252,9 @@ system_test_nns(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
+        "//rs/universal_canister/lib",
         "@crate_index//:anyhow",
+        "@crate_index//:candid",
         "@crate_index//:ic-agent",
         "@crate_index//:leb128",
         "@crate_index//:reqwest",
@@ -258,6 +264,37 @@ system_test_nns(
         "@crate_index//:time",
         "@crate_index//:tokio",
     ],
+)
+
+system_test_nns(
+    name = "nns_delegation_mainnet_nns_version_test",
+    env = UNIVERSAL_CANISTER_ENV,
+    tags = [
+        "long_test",
+    ],
+    test_driver_target = ":nns_delegation_test",
+    # The test will is long because we upgrade a subnet and then wait for a delegation to be refreshed
+    # which could take more than 15 minutes in total.
+    test_timeout = "eternal",
+    uses_guestos_img = False,
+    uses_guestos_mainnet_nns_img = True,
+    uses_guestos_update = True,
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
+)
+
+system_test_nns(
+    name = "nns_delegation_branch_nns_version_test",
+    env = UNIVERSAL_CANISTER_ENV,
+    tags = [
+        "long_test",
+    ],
+    test_driver_target = ":nns_delegation_test",
+    # The nns_delegation_on_app_subnet_test subtest takes ~10 minutes eating up the time budget for other tests.
+    test_timeout = "eternal",
+    uses_guestos_img = True,
+    uses_guestos_mainnet_nns_img = False,
+    uses_guestos_update = True,
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS,
 )
 
 system_test_nns(
@@ -308,7 +345,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of 20% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "k8s",
         "system_test_large",
     ],
     test_timeout = "eternal",
@@ -327,7 +363,6 @@ system_test_nns(
     flaky = True,  # flakiness rate of 3.45% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
-        "k8s",
         "system_test_large",
     ],
     runtime_deps = COUNTER_CANISTER_RUNTIME_DEPS,
@@ -341,7 +376,6 @@ system_test_nns(
 system_test_nns(
     name = "p2p_performance_test",
     tags = [
-        "k8s",
         "manual",
     ],
     test_timeout = "eternal",
@@ -355,13 +389,19 @@ system_test_nns(
 
 system_test_nns(
     name = "query_workload_long_test",
+    additional_colocate_tags = [
+        "system_test_benchmark",
+    ],
+    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 16,
+    },
+    enable_head_nns_variant = False,
     flaky = True,  # flakiness rate of over 1.1% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
-        "k8s",
-        "long_test",
     ],
-    test_timeout = "long",
+    test_timeout = "eternal",
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",
@@ -369,13 +409,48 @@ system_test_nns(
 )
 
 system_test_nns(
+    name = "state_sync_performance",
+    enable_head_nns_variant = False,  # only run this test with the mainnet NNS canisters.
+    env = UNIVERSAL_CANISTER_ENV | {
+        "STATESYNC_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/statesync_test:statesync-test-canister)",
+    },
+    tags = [
+        "colocate",
+        "manual",
+    ],
+    test_timeout = "eternal",
+    runtime_deps =
+        GRAFANA_RUNTIME_DEPS +
+        STATESYNC_TEST_CANISTER_RUNTIME_DEPS +
+        UNIVERSAL_CANISTER_RUNTIME_DEPS,
+    deps = COMMON_DEPS + [
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/registry/canister",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/tecdsa/utils",
+        "//rs/tests/message_routing/rejoin_test_lib",
+        "//rs/types/types",
+        "@crate_index//:futures",
+        "@crate_index//:tokio",
+    ],
+)
+
+system_test_nns(
     name = "update_workload_large_payload",
+    additional_colocate_tags = [
+        "system_test_benchmark",
+    ],
+    colocated_test_driver_vm_required_host_features = ["performance"],
+    colocated_test_driver_vm_resources = {
+        "vcpus": 16,
+    },
+    enable_head_nns_variant = False,
     flaky = True,  # flakiness rate of 1.83% over the month from 2025-02-11 till 2025-03-11.
     tags = [
         "colocate",
-        "long_test",
     ],
-    test_timeout = "long",
+    test_timeout = "eternal",
     runtime_deps = GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
     deps = COMMON_DEPS + [
         "//rs/tests/networking/subnet_update_workload",

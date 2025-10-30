@@ -13,7 +13,7 @@
 use crate::controller_service::ControllerService;
 use crate::protocol;
 use crate::rpc;
-use ic_logger::{debug, error, info, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, info, trace};
 
 use super::active_execution_state_registry::ActiveExecutionStateRegistry;
 use super::active_execution_state_registry::CompletionResult;

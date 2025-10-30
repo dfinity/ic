@@ -3,7 +3,7 @@ use ic_backup::{
     backup_manager::BackupManager,
     cmd::{BackupArgs, SubCommand},
 };
-use slog::{o, Drain};
+use slog::{Drain, o};
 use std::{io::stdin, sync::Arc};
 use tokio_util::sync::CancellationToken;
 

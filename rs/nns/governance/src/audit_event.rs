@@ -1,11 +1,11 @@
 use crate::{pb::v1::AuditEvent, storage::with_audit_events_log};
 
-use ic_stable_structures::{storable::Bound, Storable};
+use ic_stable_structures::{Storable, storable::Bound};
 use prost::Message;
 use std::borrow::Cow;
 
 impl Storable for AuditEvent {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.encode_to_vec().into()
     }
 

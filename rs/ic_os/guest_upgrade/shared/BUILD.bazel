@@ -1,0 +1,49 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    build_script_env = {
+        "CARGO_MANIFEST_DIR": "rs/ic_os/guest_upgrade/shared",
+        "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+        "RUSTFMT": "$(execpath @rules_rust//rust/toolchain:current_rustfmt_files)",
+    },
+    data = [
+        "proto/api.proto",
+        "//rs/ic_os/attestation:proto/attestation.proto",
+        "@com_google_protobuf//:protoc",
+        "@rules_rust//rust/toolchain:current_rustfmt_files",
+    ],
+    deps = [
+        "@crate_index//:prost-build",
+        "@crate_index//:tonic-build",
+    ],
+)
+
+rust_library(
+    name = "shared",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "guest_upgrade_shared",
+    deps = [
+        ":build_script",
+        "//rs/ic_os/attestation",
+        "@crate_index//:anyhow",
+        "@crate_index//:der",
+        "@crate_index//:prost",
+        "@crate_index//:rustls",
+        "@crate_index//:thiserror",
+        "@crate_index//:tokio",
+        "@crate_index//:tonic",
+    ],
+)
+
+rust_test(
+    name = "shared_test",
+    crate = ":shared",
+    deps = [
+        "@crate_index//:tonic-build",
+    ],
+)

@@ -16,7 +16,7 @@ use ic_nns_test_utils::{
 use ic_protobuf::registry::{node::v1::NodeRewardType, node_operator::v1::NodeOperatorRecord};
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::pb::v1::{
-    registry_mutation, RegistryAtomicMutateRequest, RegistryMutation,
+    RegistryAtomicMutateRequest, RegistryMutation, registry_mutation,
 };
 use ic_types::NodeId;
 use prost::Message;
@@ -132,10 +132,12 @@ fn node_is_not_created_with_invalid_type() {
             )
             .await;
         assert!(response.is_err());
-        assert!(response
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid node type"));
+        assert!(
+            response
+                .unwrap_err()
+                .to_string()
+                .contains("Invalid node type")
+        );
 
         // The record should still not be there
         let node_record = get_node_record(&registry, node_id).await;

@@ -27,15 +27,16 @@ fn get_state(
     swap_canister_id: CanisterId,
     sns_name: &str,
 ) -> GetStateResponse {
+    // A little hack to ensure out of cycles does not cause spurious test
+    // failures. Such failures are considered spurious, because we are not
+    // testing anything to do with cycles. We are just trying to verify that
+    // upgrades will work.
+    state_machine.add_cycles(swap_canister_id, 100e12 as u128);
+
     let args = Encode!(&GetStateRequest {}).unwrap();
     let state_before_upgrade = state_machine
         .execute_ingress(swap_canister_id, "get_state", args)
-        .unwrap_or_else(|err| {
-            panic!(
-                "Unable to get state of {}'s Swap canister: {}",
-                sns_name, err,
-            )
-        });
+        .unwrap_or_else(|err| panic!("Unable to get state of {sns_name}'s Swap canister: {err}",));
     Decode!(&state_before_upgrade.bytes(), GetStateResponse).unwrap()
 }
 
@@ -49,7 +50,7 @@ fn upgrade_swap_to_tip_of_master(
 
     state_machine
         .upgrade_canister(swap_canister_id, swap_wasm.wasm, swap_upgrade_arg)
-        .unwrap_or_else(|err| panic!("Cannot upgrade {}'s Swap canister: {}", sns_name, err));
+        .unwrap_or_else(|err| panic!("Cannot upgrade {sns_name}'s Swap canister: {err}"));
 }
 
 /// Returns the pre-upgrade and post-upgrade states of the Swap.
@@ -122,6 +123,9 @@ fn run_test_for_swap(state_machine: &StateMachine, swap_canister_id: &str, sns_n
 
 #[test]
 fn golden_state_swap_upgrade_twice() {
+    // Ideally, we would try to upgrade all SNS canisters (not just swap). For
+    // now, we only check these canisters. One slight difficulty of this is
+    // determining which SNSs are still "active".
     let snses_under_test = [
         ("vuqiy-liaaa-aaaaq-aabiq-cai", "BOOM DAO"),
         ("iuhw5-siaaa-aaaaq-aadoq-cai", "CYCLES-TRANSFER-STATION"),
@@ -138,9 +142,7 @@ fn golden_state_swap_upgrade_twice() {
         ("ch7an-giaaa-aaaaq-aacwq-cai", "ICPSwap"),
         ("c424i-4qaaa-aaaaq-aacua-cai", "ICPanda DAO"),
         ("mzwsh-biaaa-aaaaq-aaduq-cai", "ICVC"),
-        ("mlqf6-nyaaa-aaaaq-aadxq-cai", "Juno Build"),
         ("7sppf-6aaaa-aaaaq-aaata-cai", "Kinic"),
-        ("khyv5-2qaaa-aaaaq-aadaa-cai", "MORA DAO"),
         ("kv6ce-waaaa-aaaaq-aadda-cai", "Motoko"),
         ("f25or-jiaaa-aaaaq-aaceq-cai", "Neutrinite"),
         ("q2nfe-mqaaa-aaaaq-aabua-cai", "Nuance"),

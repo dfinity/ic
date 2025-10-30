@@ -1,9 +1,9 @@
 use crate::args::ReplicaArgs;
 use clap::Parser;
-use ic_config::{crypto::CryptoConfig, Config, ConfigSource, SAMPLE_CONFIG};
+use ic_config::{Config, ConfigSource, SAMPLE_CONFIG, crypto::CryptoConfig};
 use ic_crypto::CryptoComponent;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{fatal, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, fatal, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client::client::RegistryClientImpl;
@@ -11,7 +11,7 @@ use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    consensus::catchup::CatchUpPackage, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
+    NodeId, RegistryVersion, ReplicaVersion, SubnetId, consensus::catchup::CatchUpPackage,
 };
 use std::{env, path::PathBuf, sync::Arc};
 
@@ -21,7 +21,7 @@ pub fn parse_args() -> Result<ReplicaArgs, clap::Error> {
 
     args_result.inspect(|args| {
         if args.print_sample_config {
-            print!("{}", SAMPLE_CONFIG);
+            print!("{SAMPLE_CONFIG}");
             std::process::exit(0);
         }
     })
@@ -53,7 +53,7 @@ pub fn get_catch_up_package(
     match replica_args {
         Ok(args) => Some(
             pb::CatchUpPackage::read_from_file(args.catch_up_package.clone()?)
-                .map_err(|e| panic!("Failed to load CUP at startup {:?}", e))
+                .map_err(|e| panic!("Failed to load CUP at startup {e:?}"))
                 .unwrap(),
         ),
         Err(_) => {
@@ -114,8 +114,7 @@ pub fn get_subnet_id(
         tries += 1;
         if tries > 10 {
             panic!(
-                "Failed to find a subnet for node {} at registry version {}",
-                node_id, registry_version
+                "Failed to find a subnet for node {node_id} at registry version {registry_version}"
             );
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -193,7 +192,7 @@ pub fn setup_crypto_registry(
 
     // The registry must be initialized before setting up the crypto component
     if let Err(e) = registry.fetch_and_start_polling() {
-        panic!("fetch_and_start_polling failed: {}", e);
+        panic!("fetch_and_start_polling failed: {e}");
     }
 
     // TODO(RPL-49): pass in registry_client
@@ -223,7 +222,7 @@ fn get_config_source_or_abort(args: &[String]) -> ConfigSource {
         ["-"] => ConfigSource::StdIn,
         ["--help"] => abort_print_usage(args),
         ["--sample-config"] => {
-            print!("{}", SAMPLE_CONFIG);
+            print!("{SAMPLE_CONFIG}");
             std::process::exit(0);
         }
         [arg] if arg.starts_with("--config=") => {

@@ -1,10 +1,10 @@
-use crate::canister::test::test_utils::{setup_thread_local_canister_for_test, CANISTER_TEST};
 use crate::canister::NodeRewardsCanister;
+use crate::canister::test::test_utils::{CANISTER_TEST, setup_thread_local_canister_for_test};
 use crate::metrics::tests::subnet_id;
 use futures_util::FutureExt;
 use ic_base_types::{RegistryVersion, SubnetId};
-use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_nervous_system_canisters::registry::Registry;
+use ic_nervous_system_canisters::registry::fake::FakeRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_keys::make_subnet_list_record_key;
 use std::sync::Arc;
@@ -38,6 +38,7 @@ fn sync_all() {
         .unwrap();
     NodeRewardsCanister::schedule_metrics_sync(&CANISTER_TEST)
         .now_or_never()
+        .unwrap()
         .unwrap();
 }
 
@@ -94,14 +95,15 @@ fn test_sync_non_zero_registry_version() {
         subnet_id(8),
         subnet_id(9),
     ];
-    add_subnet_list(fake_registry.clone(), subnets_second_sync[..3].to_vec());
-    add_subnet_list(fake_registry.clone(), subnets_second_sync[3..].to_vec());
+    add_subnet_list(fake_registry.clone(), subnets_second_sync.clone());
     sync_all();
 
     let registry_client = CANISTER_TEST.with_borrow(|canister| canister.get_registry_client());
     let metrics_manager = CANISTER_TEST.with_borrow(|canister| canister.get_metrics_manager());
 
-    let expected_version = RegistryVersion::from(3);
+    let expected_version = RegistryVersion::from(2);
+    assert_eq!(expected_version, registry_client.get_latest_version());
+
     // From NON ZERO_REGISTRY_VERSION, we expect all subnets to be synced.
     let expected_subnets: Vec<SubnetId> = subnets_first_sync
         .into_iter()
@@ -114,6 +116,5 @@ fn test_sync_non_zero_registry_version() {
         .map(|(k, _)| k.subnet_id.unwrap().into())
         .collect::<Vec<_>>();
 
-    assert_eq!(expected_version, registry_client.get_latest_version());
     assert_eq!(expected_subnets, got_subnets);
 }

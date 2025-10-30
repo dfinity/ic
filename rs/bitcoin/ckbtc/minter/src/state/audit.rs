@@ -1,9 +1,9 @@
 //! State modifications that should end up in the event log.
 
 use super::{
-    eventlog::{EventType, ReplacedReason},
     CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, LedgerBurnIndex, RetrieveBtcRequest,
     SubmittedBtcTransaction, SuspendedReason, WithdrawalCancellation,
+    eventlog::{EventType, ReplacedReason},
 };
 use crate::reimbursement::{ReimburseWithdrawalTask, WithdrawalReimbursementReason};
 use crate::state::invariants::CheckInvariantsImpl;

@@ -1,10 +1,11 @@
 use crossbeam_channel::{Sender, TrySendError};
 use ic_config::{execution_environment::Config, flag_status::FlagStatus};
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
+    CanisterId, Height, QueryStatsEpoch,
     batch::{CanisterQueryStats, LocalQueryStats, QueryStats},
-    epoch_from_height, CanisterId, Height, QueryStatsEpoch,
+    epoch_from_height,
 };
 use std::sync::Mutex;
 use std::{collections::BTreeMap, sync::RwLock};

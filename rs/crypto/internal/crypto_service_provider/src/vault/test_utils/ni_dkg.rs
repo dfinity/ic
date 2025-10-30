@@ -6,8 +6,8 @@ use crate::types::CspPublicCoefficients;
 use crate::vault::api::CspVault;
 use crate::vault::test_utils;
 use crate::vault::test_utils::ni_dkg::fixtures::{
-    random_algorithm_id, MockDkgConfig, MockNetwork, MockNode, StateWithConfig, StateWithDealings,
-    StateWithTranscript, StateWithVerifiedDealings,
+    MockDkgConfig, MockNetwork, MockNode, StateWithConfig, StateWithDealings, StateWithTranscript,
+    StateWithVerifiedDealings, random_algorithm_id,
 };
 use assert_matches::assert_matches;
 use ic_crypto_internal_seed::Seed;
@@ -22,8 +22,8 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
 use ic_types_test_utils::ids::NODE_42;
-use rand::prelude::IteratorRandom;
 use rand::SeedableRng;
+use rand::prelude::IteratorRandom;
 use rand_chacha::ChaCha20Rng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
@@ -317,17 +317,14 @@ impl StateWithConfig {
                 .map(CspPublicCoefficients::from),
         );
         match dealing {
-            Ok(_) => panic!(
-                "Dealing should fail with AlgorithmId: {:?}",
-                incorrect_algorithm_id
-            ),
+            Ok(_) => panic!("Dealing should fail with AlgorithmId: {incorrect_algorithm_id:?}"),
             Err(CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(algorithm_id)) => {
                 assert_eq!(
                     algorithm_id, incorrect_algorithm_id,
                     "Wrong algorithm_id reported"
                 )
             }
-            Err(error) => panic!("Incorrect error: {:?}", error),
+            Err(error) => panic!("Incorrect error: {error:?}"),
         }
     }
 
@@ -366,9 +363,11 @@ impl StateWithConfig {
                     .map(CspPublicCoefficients::from),
             );
             match dealing {
-                Ok(_) => panic!("Dealing should fail with incorrect threshold.\n  Threshold: {}\n  Num receivers: {}", incorrect_threshold, num_receivers),
+                Ok(_) => panic!(
+                    "Dealing should fail with incorrect threshold.\n  Threshold: {incorrect_threshold}\n  Num receivers: {num_receivers}"
+                ),
                 Err(CspDkgCreateReshareDealingError::InvalidThresholdError(_)) => (),
-                Err(error) => panic!("Incorrect error: {:?}", error),
+                Err(error) => panic!("Incorrect error: {error:?}"),
             }
         }
     }
@@ -411,9 +410,9 @@ impl StateWithConfig {
                 .map(CspPublicCoefficients::from),
         );
         match dealing {
-            Ok(_) => panic!("Dealing should fail with indices: {:?}", incorrect_indices),
+            Ok(_) => panic!("Dealing should fail with indices: {incorrect_indices:?}"),
             Err(CspDkgCreateReshareDealingError::MisnumberedReceiverError { .. }) => (),
-            Err(error) => panic!("Incorrect error: {:?}", error),
+            Err(error) => panic!("Incorrect error: {error:?}"),
         }
     }
 

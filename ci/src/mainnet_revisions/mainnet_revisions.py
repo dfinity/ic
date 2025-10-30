@@ -4,8 +4,11 @@ import hashlib
 import json
 import logging
 import pathlib
+import re
 import subprocess
+import tempfile
 import urllib.request
+from dataclasses import dataclass
 from enum import Enum
 from typing import List
 
@@ -21,49 +24,13 @@ class Command(Enum):
     CANISTERS = 2
 
 
-def base_download_url(git_commit_id, variant, update, test, dev=True):
-    """Construct the base download URL for ICOS images."""
-    component = ("update-img" if update else "disk-img") + ("-dev" if dev else "")
-    test_suffix = "-test" if test else ""
-    return f"https://download.dfinity.systems/ic/{git_commit_id}/{variant}/{component}{test_suffix}/"
-
-
-# NOTE: We must download and hash the update dev image ourselves because public proposals only include hashes for the production images
-def download_and_hash_image(url, logger):
-    """Download an image from the given URL and return its SHA256 hash."""
-    logger.info(f"Downloading image from: {url}")
-
-    try:
-        with urllib.request.urlopen(url, timeout=300) as response:
-            status = response.status
-            if status != 200:
-                raise Exception(f"Unexpected response {status}!")
-
-            sha256_hash = hashlib.sha256()
-
-            chunk_size = 8192
-            while True:
-                chunk = response.read(chunk_size)
-                if not chunk:
-                    break
-                sha256_hash.update(chunk)
-
-            hash_hex = sha256_hash.hexdigest()
-            logger.info(f"Successfully downloaded and hashed image: {hash_hex}")
-            return hash_hex
-
-    except Exception as e:
-        logger.error(f"Failed to download image from {url}: {e}")
-        raise
-
-
-def get_image_hash_for_version(version, variant, logger, is_dev=True):
-    """Get the SHA256 hash of an update image for a given version and variant."""
-    base_url = base_download_url(git_commit_id=version, variant=variant, update=True, test=False, dev=is_dev)
-
-    image_url = base_url + "update-img.tar.zst"
-
-    return download_and_hash_image(image_url, logger)
+@dataclass
+class VersionInfo:
+    version: str
+    hash: str
+    dev_hash: str
+    launch_measurements: dict
+    dev_measurements: dict
 
 
 def sync_main_branch_and_checkout_branch(
@@ -141,8 +108,6 @@ def commit_and_create_pr(
                     description,
                     "--title",
                     commit_message,
-                    "--label",
-                    "CI_ALL_BAZEL_TARGETS",
                 ],
                 cwd=repo_root,
             )
@@ -153,115 +118,211 @@ def commit_and_create_pr(
             subprocess.check_call(["gh", "pr", "merge", pr_number, "--auto"], cwd=repo_root)
 
 
-def get_subnet_replica_version_info(subnet_id: str, logger: logging.Logger) -> (str, str):
-    """Use the dashboard to pull the latest version info for the given subnet and calculate image hash."""
+def get_subnet_replica_version_info(subnet_id: str) -> VersionInfo:
+    """Use the dashboard to pull the latest version info for the given subnet."""
     req = urllib.request.Request(
         url=f"{PUBLIC_DASHBOARD_API}/api/v3/subnets/{subnet_id}", headers={"user-agent": "python"}
     )
-
     with urllib.request.urlopen(req, timeout=30) as request:
-        replica_versions = json.loads(request.read().decode())["replica_versions"]
-        latest_replica_version = sorted(replica_versions, key=lambda x: x["executed_timestamp_seconds"])[-1][
-            "replica_version_id"
-        ]
+        response = json.loads(request.read().decode())
 
+    replica_versions = response["replica_versions"]
+    latest_replica_version = sorted(replica_versions, key=lambda x: x["executed_timestamp_seconds"])[-1][
+        "replica_version_id"
+    ]
+
+    return get_replica_version_info(latest_replica_version)
+
+
+def get_replica_version_info(replica_version: str) -> VersionInfo:
     req = urllib.request.Request(
-        url=f"{PUBLIC_DASHBOARD_API}/api/v3/subnet-replica-versions/{latest_replica_version}",
+        url=f"{PUBLIC_DASHBOARD_API}/api/v3/subnet-replica-versions/{replica_version}",
         headers={"user-agent": "python"},
     )
-
     with urllib.request.urlopen(req, timeout=30) as request:
-        proposal_id = json.loads(request.read().decode())["proposal_id"]
+        response = json.loads(request.read().decode())
+
+    proposal_id = response["proposal_id"]
 
     req = urllib.request.Request(
         url=f"{PUBLIC_DASHBOARD_API}/api/v3/proposals/{proposal_id}", headers={"user-agent": "python"}
     )
-
     with urllib.request.urlopen(req, timeout=30) as request:
-        proposal = json.loads(request.read().decode())
-        version = proposal["payload"]["replica_version_to_elect"]
+        response = json.loads(request.read().decode())
 
-        # TODO(NODE-1682): Currently only the application subnet uses dev images
-        is_dev = subnet_id == app_subnet_id
-        hash = get_image_hash_for_version(version, "guest-os", logger, is_dev)
+    version = response["payload"]["replica_version_to_elect"]
+    hash = response["payload"]["release_package_sha256_hex"]
+    launch_measurements = response["payload"]["guest_launch_measurements"]
 
-        return (version, hash)
+    dev_hash = download_and_hash_file(
+        f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/update-img.tar.zst"
+    )
+
+    dev_measurements = download_and_read_file(
+        f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/launch-measurements.json"
+    )
+
+    return VersionInfo(version, hash, dev_hash, launch_measurements, dev_measurements)
 
 
-def get_latest_hostos_version_info(logger: logging.Logger) -> (str, str):
-    """Use the dashboard to pull the version info for the most recent HostOS version and calculate image hash."""
+def get_latest_replica_version_info() -> VersionInfo:
+    """Use the dashboard to pull the version info for the most recent GuestOS version."""
+    req = urllib.request.Request(
+        url=f"{PUBLIC_DASHBOARD_API}/api/v3/proposals?include_status=EXECUTED&include_action_nns_function=ReviseElectedGuestosVersions",
+        headers={"user-agent": "python"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as request:
+        response = json.loads(request.read().decode())
+
+    # Hunt for the latest ReviseElectedGuestosVersions proposal that added a version
+    proposals = response["data"]
+    filtered_proposals = filter(lambda x: "-base" in x["summary"].partition("\n")[0], proposals)
+    sorted_proposals = sorted(filtered_proposals, key=lambda x: x["executed_timestamp_seconds"], reverse=True)
+    latest_elect_proposal = next(v for v in sorted_proposals if v["payload"]["replica_version_to_elect"])
+
+    version = latest_elect_proposal["payload"]["replica_version_to_elect"]
+    hash = latest_elect_proposal["payload"]["release_package_sha256_hex"]
+    launch_measurements = latest_elect_proposal["payload"]["guest_launch_measurements"]
+
+    dev_hash = download_and_hash_file(
+        f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/update-img.tar.zst"
+    )
+
+    dev_measurements = download_and_read_file(
+        f"https://download.dfinity.systems/ic/{version}/guest-os/update-img-dev/launch-measurements.json"
+    )
+
+    return VersionInfo(version, hash, dev_hash, launch_measurements, dev_measurements)
+
+
+def get_latest_hostos_version_info(logger: logging.Logger) -> VersionInfo:
+    """Use the dashboard to pull the version info for the most recent HostOS version."""
     req = urllib.request.Request(
         url=f"{PUBLIC_DASHBOARD_API}/api/v3/proposals?include_status=EXECUTED&include_action_nns_function=ReviseElectedHostosVersions",
         headers={"user-agent": "python"},
     )
-
     with urllib.request.urlopen(req, timeout=30) as request:
-        # Hunt for the latest ReviseElectedHostosVersions proposal that added a version
-        proposals = json.loads(request.read().decode())["data"]
-        sorted_proposals = sorted(proposals, key=lambda x: x["executed_timestamp_seconds"], reverse=True)
-        latest_elect_proposal = next(v for v in sorted_proposals if v["payload"]["hostos_version_to_elect"])
+        response = json.loads(request.read().decode())
 
-        version = latest_elect_proposal["payload"]["hostos_version_to_elect"]
+    # Hunt for the latest ReviseElectedHostosVersions proposal that added a version
+    proposals = response["data"]
+    filtered_proposals = filter(lambda x: "-base" in x["summary"].partition("\n")[0], proposals)
+    sorted_proposals = sorted(filtered_proposals, key=lambda x: x["executed_timestamp_seconds"], reverse=True)
+    latest_elect_proposal = next(v for v in sorted_proposals if v["payload"]["hostos_version_to_elect"])
 
-        hash = get_image_hash_for_version(version, "host-os", logger, is_dev=True)
+    version = latest_elect_proposal["payload"]["hostos_version_to_elect"]
+    hash = latest_elect_proposal["payload"]["release_package_sha256_hex"]
 
-        return (version, hash)
+    dev_hash = download_and_hash_file(
+        f"https://download.dfinity.systems/ic/{version}/host-os/update-img-dev/update-img.tar.zst"
+    )
+
+    # Pull the measurements of the GuestOS version from the proposal
+    try:
+        replica_info = get_replica_version_info(version)
+    except:
+        logger.info(
+            "Unable to find matching GuestOS release. It is expected that HostOS is always released alongside GuestOS."
+        )
+        raise
+
+    return VersionInfo(version, hash, dev_hash, replica_info.launch_measurements, replica_info.dev_measurements)
 
 
 def update_saved_subnet_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path, subnet: str):
     """Fetch and update the saved subnet version and hash."""
-    (version, hash) = get_subnet_replica_version_info(subnet, logger)
-    logger.info("Current subnet (%s) revision: %s calculated hash: %s", subnet, version, hash)
+    replica_info = get_subnet_replica_version_info(subnet)
+    logger.info("Current subnet (%s) revision: %s hash: %s", subnet, replica_info.version, replica_info.hash)
 
     full_path = repo_root / file_path
     # Check if the subnet revision is already up-to-date.
     with open(full_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    guestos_info = data.get("guestos", {})
-    subnet_infos = guestos_info.get("subnets", {})
-    subnet_info = subnet_infos.get(subnet, {})
-    existing_version = subnet_info.get("version", "")
 
-    # TODO(NODE-1682): Use the correct field name based on whether it's a dev image or not
-    is_dev = subnet == app_subnet_id
-    field_name = "update_img_hash_dev" if is_dev else "update_img_hash"
-    existing_hash = subnet_info.get(field_name, "")
-
-    if existing_version == version and existing_hash == hash:
-        logger.info("Subnet revision already updated to version %s with hash %s. Skipping update.", version, hash)
+    existing_version = data.get("guestos", {}).get("subnets", {}).get(subnet, {}).get("version", "")
+    if existing_version == replica_info.version:
+        logger.info("Subnet revision already updated to version %s. Skipping update.", replica_info.version)
         return
 
-    data["guestos"]["subnets"][subnet] = {"version": version, field_name: hash}
+    data["guestos"]["subnets"][subnet] = {
+        "version": replica_info.version,
+        "update_img_hash": replica_info.hash,
+        "update_img_hash_dev": replica_info.dev_hash,
+        "launch_measurements": replica_info.launch_measurements,
+        "launch_measurements_dev": replica_info.dev_measurements,
+    }
     with open(full_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-    logger.info("Updated subnet %s revision to version %s with calculated image hash %s", subnet, version, hash)
+        contents = collapse_simple_lists(json.dumps(data, indent=2))
+        f.write(contents)
+
+    logger.info(
+        "Updated subnet %s revision to version %s with image hash %s", subnet, replica_info.version, replica_info.hash
+    )
+
+
+def update_saved_replica_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
+    """Fetch and update the latest replica version and hash."""
+    replica_info = get_latest_replica_version_info()
+    logger.info("Latest revision: %s hash: %s", replica_info.version, replica_info.hash)
+
+    full_path = repo_root / file_path
+    # Check if the latest revision is already up-to-date.
+    with open(full_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    existing_version = data.get("guestos", {}).get("latest_release", {}).get("version", "")
+    if existing_version == replica_info.version:
+        logger.info("Latest revision already updated to version %s. Skipping update.", replica_info.version)
+        return
+
+    data["guestos"]["latest_release"] = {
+        "version": replica_info.version,
+        "update_img_hash": replica_info.hash,
+        "update_img_hash_dev": replica_info.dev_hash,
+        "launch_measurements": replica_info.launch_measurements,
+        "launch_measurements_dev": replica_info.dev_measurements,
+    }
+    with open(full_path, "w", encoding="utf-8") as f:
+        contents = collapse_simple_lists(json.dumps(data, indent=2))
+        f.write(contents)
+
+    logger.info("Updated latest revision to version %s with image hash %s", replica_info.version, replica_info.hash)
 
 
 def update_saved_hostos_revision(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
     """Fetch and update the saved HostOS version and hash."""
-    (version, hash) = get_latest_hostos_version_info(logger)
-    logger.info("Latest HostOS revision: %s calculated hash: %s", version, hash)
+    replica_info = get_latest_hostos_version_info(logger)
+    logger.info("Latest HostOS revision: %s hash: %s", replica_info.version, replica_info.hash)
 
     full_path = repo_root / file_path
     # Check if the hostos revision is already up-to-date.
     with open(full_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    hostos_info = data.get("hostos", {})
-    latest_release = hostos_info.get("latest_release", {})
-    existing_version = latest_release.get("version", "")
-    existing_hash = latest_release.get("update_img_hash_dev", "")
 
-    if existing_version == version and existing_hash == hash:
-        logger.info("Hostos revision already updated to version %s with hash %s. Skipping update.", version, hash)
+    existing_version = data.get("hostos", {}).get("latest_release", {}).get("version", "")
+    if existing_version == replica_info.version:
+        logger.info("Hostos revision already updated to version %s. Skipping update.", replica_info.version)
         return
 
-    data["hostos"] = {"latest_release": {"version": version, "update_img_hash_dev": hash}}
+    data["hostos"] = {
+        "latest_release": {
+            "version": replica_info.version,
+            "update_img_hash": replica_info.hash,
+            "update_img_hash_dev": replica_info.dev_hash,
+            "launch_measurements": replica_info.launch_measurements,
+            "launch_measurements_dev": replica_info.dev_measurements,
+        }
+    }
+
     with open(full_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-    logger.info("Updated hostos revision to version %s with calculated image hash %s", version, hash)
+        contents = collapse_simple_lists(json.dumps(data, indent=2))
+        f.write(contents)
+
+    logger.info("Updated hostos revision to version %s with image hash %s", replica_info.version, replica_info.hash)
 
 
 def update_mainnet_icos_revisions_file(repo_root: pathlib.Path, logger: logging.Logger, file_path: pathlib.Path):
+    update_saved_replica_revision(repo_root, logger, file_path)
     update_saved_subnet_revision(repo_root, logger, file_path, nns_subnet_id)
     update_saved_subnet_revision(repo_root, logger, file_path, app_subnet_id)
 
@@ -277,6 +338,20 @@ def update_mainnet_revisions_canisters_file(repo_root: pathlib.Path, logger: log
 
     logger.info("Running command: %s", " ".join(cmd))
     subprocess.check_call(cmd, cwd=repo_root)
+
+
+def download_and_hash_file(url: str):
+    with tempfile.NamedTemporaryFile() as tmp_file:
+        urllib.request.urlretrieve(url, tmp_file.name)
+        with open(tmp_file.name, "rb") as f:
+            return hashlib.file_digest(f, "sha256").hexdigest()
+
+
+def download_and_read_file(url: str):
+    with tempfile.NamedTemporaryFile() as tmp_file:
+        urllib.request.urlretrieve(url, tmp_file.name)
+        with open(tmp_file.name, "rb") as f:
+            return json.loads(f.read().decode())
 
 
 def get_logger(level) -> logging.Logger:
@@ -368,6 +443,16 @@ This PR is created automatically using [`mainnet_revisions.py`](https://github.c
             )
     else:
         raise Exception("This shouldn't happen")
+
+
+def collapse_simple_lists(contents):
+    return re.sub(
+        # Capture simple lists (single level, only digits)
+        r"\[[\d\s,]*\]",
+        # Format onto a single line
+        lambda m: " ".join([v.strip() for v in m.group(0).splitlines()]),
+        contents,
+    )
 
 
 if __name__ == "__main__":

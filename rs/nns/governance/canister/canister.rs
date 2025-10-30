@@ -14,7 +14,7 @@ use ic_nns_common::{
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
-    canister_state::{governance, governance_mut, set_governance, CanisterEnv},
+    canister_state::{CanisterEnv, governance, governance_mut, set_governance},
     encode_metrics,
     governance::Governance,
     neuron_data_validation::NeuronDataValidationSummary,
@@ -25,23 +25,24 @@ use ic_nns_governance::{
 #[cfg(feature = "test")]
 use ic_nns_governance_api::test_api::TimeWarp;
 use ic_nns_governance_api::{
+    ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse,
+    GetNeuronIndexRequest, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
+    Governance as ApiGovernanceProto, GovernanceError, ListKnownNeuronsResponse,
+    ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListNodeProvidersResponse,
+    ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronIndexData,
+    NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+    SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     governance::GovernanceCachedMetrics,
     governance_error::ErrorType,
     manage_neuron::{
-        claim_or_refresh::{By, MemoAndController},
         ClaimOrRefresh, NeuronIdOrSubaccount, RegisterVote,
+        claim_or_refresh::{By, MemoAndController},
     },
-    manage_neuron_response, ClaimOrRefreshNeuronFromAccount,
-    ClaimOrRefreshNeuronFromAccountResponse, GetNeuronsFundAuditInfoRequest,
-    GetNeuronsFundAuditInfoResponse, Governance as ApiGovernanceProto, GovernanceError,
-    ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListNodeProviderRewardsRequest,
-    ListNodeProviderRewardsResponse, ListNodeProvidersResponse, ListProposalInfo,
-    ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronInfo,
-    NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
-    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
-    SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
+    manage_neuron_response,
 };
 use std::sync::Arc;
 use std::{boxed::Box, time::Duration};
@@ -49,7 +50,7 @@ use std::{boxed::Box, time::Duration};
 #[cfg(feature = "test")]
 use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 
-use ic_nns_governance::canister_state::{with_governance, CanisterRandomnessGenerator};
+use ic_nns_governance::canister_state::{CanisterRandomnessGenerator, with_governance};
 
 #[cfg(feature = "tla")]
 mod tla_ledger;
@@ -377,6 +378,14 @@ fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
 }
 
 #[query]
+fn get_neuron_index(req: GetNeuronIndexRequest) -> Result<NeuronIndexData, GovernanceError> {
+    debug_log("get_neuron_index");
+    governance()
+        .get_neuron_index(req, caller())
+        .map_err(GovernanceError::from)
+}
+
+#[query]
 fn get_metrics() -> Result<GovernanceCachedMetrics, GovernanceError> {
     debug_log("get_metrics");
     governance()
@@ -419,9 +428,8 @@ fn list_known_neurons() -> ListKnownNeuronsResponse {
 #[update(hidden = true)]
 fn submit_proposal(_proposer: NeuronId, _proposal: Proposal, _caller: PrincipalId) -> ProposalId {
     panic!(
-        "{}submit_proposal is deprecated, and now always panics. \
-               Use `manage_neuron` instead to submit a proposal.",
-        LOG_PREFIX
+        "{LOG_PREFIX}submit_proposal is deprecated, and now always panics. \
+               Use `manage_neuron` instead to submit a proposal."
     );
 }
 
@@ -550,6 +558,15 @@ fn get_neuron_data_validation_summary() -> NeuronDataValidationSummary {
 fn get_restore_aging_summary() -> RestoreAgingSummary {
     let response = governance().get_restore_aging_summary().unwrap_or_default();
     RestoreAgingSummary::from(response)
+}
+
+#[query]
+fn list_neuron_votes(request: ListNeuronVotesRequest) -> ListNeuronVotesResponse {
+    with_governance(|governance| {
+        governance
+            .list_neuron_votes(request)
+            .map_err(GovernanceError::from)
+    })
 }
 
 #[query(

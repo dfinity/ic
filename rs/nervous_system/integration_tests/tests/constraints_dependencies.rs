@@ -1,7 +1,7 @@
 use ic_nervous_system_common::MAX_NEURONS_FOR_DIRECT_PARTICIPANTS;
 use ic_nns_governance::governance::MAX_NEURONS_FUND_PARTICIPANTS;
 use ic_sns_governance::pb::v1::NervousSystemParameters;
-use ic_sns_init::{distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT, MAX_SNS_NEURONS_PER_BASKET};
+use ic_sns_init::{MAX_SNS_NEURONS_PER_BASKET, distributions::MAX_DEVELOPER_DISTRIBUTION_COUNT};
 
 // Test that the total number of SNS neurons created by an SNS swap is within the ceiling expected
 // by SNS Governance (`MAX_NUMBER_OF_NEURONS_CEILING`). Concretely, the test compares this constant

@@ -9,11 +9,11 @@ use prost::Message;
 use quinn::Connection;
 
 use crate::{
+    ConnId, MAX_MESSAGE_SIZE_BYTES, MessagePriority, P2PError, ResetStreamOnDrop,
     metrics::{
-        observe_conn_error, observe_read_to_end_error, observe_stopped_error, observe_write_error,
-        QuicTransportMetrics, INFALIBBLE,
+        INFALIBBLE, QuicTransportMetrics, observe_conn_error, observe_read_to_end_error,
+        observe_stopped_error, observe_write_error,
     },
-    ConnId, MessagePriority, P2PError, ResetStreamOnDrop, MAX_MESSAGE_SIZE_BYTES,
 };
 
 static CONN_ID_SEQ: AtomicU64 = AtomicU64::new(1);
@@ -73,7 +73,12 @@ impl ConnectionHandle {
             observe_conn_error(err, "open_bi", &self.metrics.connection_handle_errors_total);
         })?;
 
-        let mut send_stream_guard = ResetStreamOnDrop::new(send_stream);
+        let mut send_stream_guard = ResetStreamOnDrop::new(
+            send_stream,
+            self.metrics
+                .connection_handle_outgoing_streams_total
+                .clone(),
+        );
         let send_stream = &mut send_stream_guard.send_stream;
 
         let priority = request
@@ -183,11 +188,12 @@ mod tests {
     use assert_matches::assert_matches;
     use bytes::Bytes;
     use ic_p2p_test_utils::{
-        generate_self_signed_cert, turmoil::CustomUdp, SkipServerVerification,
+        SkipServerVerification, generate_self_signed_cert, turmoil::CustomUdp,
     };
+    use prometheus::IntGauge;
     use quinn::{
-        crypto::rustls::QuicClientConfig, ClientConfig, Endpoint, EndpointConfig, ReadError,
-        ReadToEndError,
+        ClientConfig, Endpoint, EndpointConfig, ReadError, ReadToEndError,
+        crypto::rustls::QuicClientConfig,
     };
     use rstest::rstest;
     use std::{
@@ -296,7 +302,9 @@ mod tests {
                 .unwrap();
 
             let (send_stream, _recv_stream) = connection.open_bi().await.unwrap();
-            let mut drop_guard = ResetStreamOnDrop::new(send_stream);
+            let metric = IntGauge::new("test", "test").unwrap();
+            let mut drop_guard = ResetStreamOnDrop::new(send_stream, metric.clone());
+            assert_eq!(metric.get(), 1);
             let send_stream = &mut drop_guard.send_stream;
             send_stream
                 .write_chunk(Bytes::from(&b"hello wo"[..]))
@@ -314,6 +322,7 @@ mod tests {
             };
 
             drop(drop_guard);
+            assert_eq!(metric.get(), 0);
             client_completed.wait().await;
 
             Ok(())

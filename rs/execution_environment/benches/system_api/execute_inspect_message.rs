@@ -9,7 +9,7 @@
 //! bazel run //rs/execution_environment:execute_inspect_message_bench
 //! ```
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use execution_environment_bench::{common, wat::*};
 use ic_execution_environment::execution::inspect_message;
 

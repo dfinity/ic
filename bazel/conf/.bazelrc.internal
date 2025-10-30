@@ -23,7 +23,3 @@ build    --remote_upload_local_results=false
 
 # Run `bazel build ... --config=local` to build targets without cache
 build:local --remote_cache=
-
-# Upload bes by default when running system tests so that e.g. failures can
-# be shared easily without having to rerun a potentially very-long systest
-build:systest --config=bes

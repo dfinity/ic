@@ -24,10 +24,10 @@ use ic_system_test_driver::{
     },
     util::*,
 };
-use ic_types::{malicious_behavior::MaliciousBehavior, Height};
+use ic_types::{Height, malicious_behavior::MaliciousBehavior};
 use ic_universal_canister::wasm;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use slog::info;
 use std::time::Duration;
 

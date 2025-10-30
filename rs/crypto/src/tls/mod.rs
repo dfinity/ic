@@ -196,7 +196,7 @@ impl From<RegistryClientError> for TlsCertFromRegistryError {
 
 fn log_err<T: fmt::Display>(error_option: Option<&T>) -> String {
     if let Some(error) = error_option {
-        return format!("{}", error);
+        return format!("{error}");
     }
     "none".to_string()
 }

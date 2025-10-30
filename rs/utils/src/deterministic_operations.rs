@@ -13,7 +13,8 @@ pub fn deterministic_copy_from_slice(dst: &mut [u8], src: &[u8]) {
         panic!(
             "source and destination have different lengths: src has length {} and dst has length {}",
             src.len(),
-            dst.len())
+            dst.len()
+        )
     };
     #[allow(clippy::manual_memcpy)]
     for i in 0..dst.len() {

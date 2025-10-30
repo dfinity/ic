@@ -72,6 +72,7 @@ JIRA_OWNER_GROUP_BY_TEAM = {
     Team.INTEGRATIONS_TEAM: {"name": "dept-Integrations"},
     Team.PRODUCT_ENABLEMENT_TEAM: {"name": "dept-Product Enablement"},
     Team.UTOPIA_RND_TEAM: {"name": "div-Utopia R&D"},
+    Team.CROSS_CHAIN_TEAM: {"name": "dept-Cross-Chain"},
 }
 JIRA_LABEL_PATCH_VULNDEP_PUBLISHED = "patch_published_vulndep"
 JIRA_LABEL_PATCH_ALLDEP_PUBLISHED = "patch_published_alldep"

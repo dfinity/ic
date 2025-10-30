@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 
 use ic_cdk::api::{certified_data_set, data_certificate};
-use ic_certified_map::{labeled, labeled_hash, AsHashTree, Hash as ICHash, RbTree};
+use ic_certified_map::{AsHashTree, Hash as ICHash, RbTree, labeled, labeled_hash};
 use serde::Serialize;
 use serde_cbor::Serializer;
 use sha2::{Digest, Sha256};

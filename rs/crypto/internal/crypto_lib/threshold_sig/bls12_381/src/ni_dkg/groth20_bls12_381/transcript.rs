@@ -50,8 +50,7 @@ pub fn create_transcript(
     let collection_threshold_usize = usize::try_from(collection_threshold.get()).map_err(|_| {
         CspDkgCreateTranscriptError::SizeError(SizeError {
             message: format!(
-                "collection threshold is too large for this machine: {}",
-                collection_threshold
+                "collection threshold is too large for this machine: {collection_threshold}"
             ),
         })
     })?;
@@ -189,7 +188,7 @@ fn compute_transcript(
                 .map(|public_coefficients| (*dealer_index, public_coefficients))
                 .map_err(|crypto_error| {
                     let error = InvalidArgumentError {
-                        message: format!("Invalid dealing: {:?}", crypto_error),
+                        message: format!("Invalid dealing: {crypto_error:?}"),
                     };
                     CspDkgCreateTranscriptError::InvalidDealingError {
                         dealer_index: *dealer_index,
@@ -275,8 +274,7 @@ pub fn compute_threshold_signing_key(
                     },
                     error => {
                         let message = format!(
-                            "Dealing #{}: could not get share for receiver #{}.\n {:#?}",
-                            dealer_index, receiver_index, error
+                            "Dealing #{dealer_index}: could not get share for receiver #{receiver_index}.\n {error:#?}"
                         );
                         let error = InvalidArgumentError { message };
                         ni_dkg_errors::CspDkgLoadPrivateKeyError::InvalidTranscriptError(error)

@@ -5,15 +5,15 @@ mod tests;
 use async_trait::async_trait;
 use candid::utils::ArgumentEncoder;
 use candid::{CandidType, Principal};
-use ic_canister_log::{log, Sink};
+use ic_canister_log::{Sink, log};
 use ic_cdk::api::call::RejectionCode;
 use serde::de::DeserializeOwned;
 use std::fmt::Debug;
 
 pub use evm_rpc_types::{
     Block, BlockTag, ConsensusStrategy, EthMainnetService, EthSepoliaService, FeeHistory,
-    FeeHistoryArgs, GetLogsArgs, GetLogsRpcConfig, GetTransactionCountArgs, Hex, Hex20, Hex256,
-    Hex32, HexByte, HttpOutcallError, JsonRpcError, LegacyRejectionCode, LogEntry, MultiRpcResult,
+    FeeHistoryArgs, GetLogsArgs, GetLogsRpcConfig, GetTransactionCountArgs, Hex, Hex20, Hex32,
+    Hex256, HexByte, HttpOutcallError, JsonRpcError, LegacyRejectionCode, LogEntry, MultiRpcResult,
     Nat256, ProviderError, RpcApi, RpcConfig, RpcError, RpcResult, RpcService, RpcServices,
     SendRawTransactionStatus, TransactionReceipt, ValidationError,
 };

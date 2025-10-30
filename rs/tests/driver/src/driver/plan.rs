@@ -50,10 +50,9 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Plan<T> {
                 children,
             } => write!(
                 f,
-                "Plan::Supervised< supervisor={:?}, ordering={:?}, children={:?} >",
-                supervisor, ordering, children
+                "Plan::Supervised< supervisor={supervisor:?}, ordering={ordering:?}, children={children:?} >"
             ),
-            Plan::Leaf { task } => write!(f, "Plan::Leaf< task={:?} >", task),
+            Plan::Leaf { task } => write!(f, "Plan::Leaf< task={task:?} >"),
         }
     }
 }

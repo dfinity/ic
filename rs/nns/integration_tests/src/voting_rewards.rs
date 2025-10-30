@@ -10,7 +10,7 @@ use ic_nns_governance_api::{
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    itest_helpers::{state_machine_test_on_nns_subnet, NnsCanisters},
+    itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
 };
 use std::{
     iter::once,
@@ -92,7 +92,7 @@ fn test_increase_maturity_just_after_init() {
             .query_("get_latest_reward_event", candid, ())
             .await
             .unwrap();
-        eprintln!("{:?}", latest_reward_event);
+        eprintln!("{latest_reward_event:?}");
         while latest_reward_event.day_after_genesis == 0 {
             match &runtime {
                 Runtime::Remote(_) | Runtime::Local(_) => {
@@ -103,11 +103,13 @@ fn test_increase_maturity_just_after_init() {
                     sm.tick();
                 }
             }
-            latest_reward_event = dbg!(nns_canisters
-                .governance
-                .query_("get_latest_reward_event", candid, ())
-                .await
-                .unwrap());
+            latest_reward_event = dbg!(
+                nns_canisters
+                    .governance
+                    .query_("get_latest_reward_event", candid, ())
+                    .await
+                    .unwrap()
+            );
         }
         // Async reward distribution
         for _ in 0..5 {
@@ -117,8 +119,7 @@ fn test_increase_maturity_just_after_init() {
         assert_eq!(latest_reward_event.day_after_genesis, 1);
         assert!(
             latest_reward_event.distributed_e8s_equivalent > 0,
-            "latest_reward_event: {:?}",
-            latest_reward_event
+            "latest_reward_event: {latest_reward_event:?}"
         );
 
         let sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
@@ -139,8 +140,7 @@ fn test_increase_maturity_just_after_init() {
         // distributed.
         assert_eq!(
             neuron.maturity_e8s_equivalent, latest_reward_event.distributed_e8s_equivalent,
-            "Neuron: {:?}",
-            neuron
+            "Neuron: {neuron:?}"
         );
 
         Ok(())

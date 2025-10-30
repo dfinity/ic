@@ -1,14 +1,14 @@
 use crate::{
     governance::{
-        test_data::CREATE_SERVICE_NERVOUS_SYSTEM, Governance,
-        EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
+        EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX, Governance,
+        test_data::CREATE_SERVICE_NERVOUS_SYSTEM,
     },
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
-        manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
-        proposal::Action,
         ExecuteNnsFunction, Followees, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics,
         NnsFunction, Proposal, ProposalRewardStatus, ProposalStatus, Topic, WaitForQuietState,
+        manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
+        proposal::Action,
     },
     test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger},
 };
@@ -19,8 +19,8 @@ use futures::FutureExt;
 use ic_nervous_system_common::{E8, ONE_YEAR_SECONDS};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance_api::{
-    proposal::Action as ApiAction, Governance as ApiGovernance, ListProposalInfoResponse,
-    NetworkEconomics as ApiNetworkEconomics, ProposalInfo, Vote,
+    Governance as ApiGovernance, ListProposalInfoResponse, NetworkEconomics as ApiNetworkEconomics,
+    ProposalInfo, Vote, proposal::Action as ApiAction,
 };
 use ic_types::PrincipalId;
 use lazy_static::lazy_static;
@@ -60,7 +60,7 @@ fn prepare_voting_eligible_neurons(governance: &mut Governance) {
     .with_cached_neuron_stake_e8s(10_000 * E8)
     .build();
 
-    governance.add_neuron(PROPOSER.id, proposer, false).unwrap();
+    governance.add_neuron(PROPOSER.id, proposer).unwrap();
 
     // Another neuron with a greater stake is added so that proposals don't get executed
     // immediately.
@@ -76,7 +76,7 @@ fn prepare_voting_eligible_neurons(governance: &mut Governance) {
     .with_cached_neuron_stake_e8s(20_000 * E8)
     .build();
     governance
-        .add_neuron(another_neuron_id, another_neuron, false)
+        .add_neuron(another_neuron_id, another_neuron)
         .unwrap();
 }
 
@@ -254,9 +254,7 @@ fn test_filter_proposals_manage_neuron_proposal_visibility() {
     .with_hot_keys(vec![hot_key_of_manager])
     .with_cached_neuron_stake_e8s(10_000 * E8)
     .build();
-    governance
-        .add_neuron(1, neuron_manager.clone(), false)
-        .unwrap();
+    governance.add_neuron(1, neuron_manager.clone()).unwrap();
     let managed_neuron = NeuronBuilder::new_for_test(
         2,
         DissolveStateAndAge::DissolvingOrDissolved {
@@ -270,9 +268,7 @@ fn test_filter_proposals_manage_neuron_proposal_visibility() {
         }
     })
     .build();
-    governance
-        .add_neuron(2, managed_neuron.clone(), false)
-        .unwrap();
+    governance.add_neuron(2, managed_neuron.clone()).unwrap();
     let some_other_neuron = NeuronBuilder::new_for_test(
         3,
         DissolveStateAndAge::DissolvingOrDissolved {
@@ -280,9 +276,7 @@ fn test_filter_proposals_manage_neuron_proposal_visibility() {
         },
     )
     .build();
-    governance
-        .add_neuron(3, some_other_neuron.clone(), false)
-        .unwrap();
+    governance.add_neuron(3, some_other_neuron.clone()).unwrap();
 
     make_proposal(
         &mut governance,
@@ -553,7 +547,7 @@ fn test_filter_proposal_ballots() {
     .with_cached_neuron_stake_e8s(10_000 * E8)
     .build();
     governance
-        .add_neuron(PROPOSER.id, neuron_1.clone(), false)
+        .add_neuron(PROPOSER.id, neuron_1.clone())
         .unwrap();
     let neuron_2 = NeuronBuilder::new_for_test(
         2,
@@ -566,7 +560,7 @@ fn test_filter_proposal_ballots() {
     .with_hot_keys(vec![neuron_2_hot_key])
     .with_cached_neuron_stake_e8s(10_000 * E8)
     .build();
-    governance.add_neuron(2, neuron_2.clone(), false).unwrap();
+    governance.add_neuron(2, neuron_2.clone()).unwrap();
 
     // Create a proposal with votes from both neurons.
     make_proposal(
@@ -638,8 +632,7 @@ fn test_omit_large_fields() {
     );
     assert!(
         create_service_nervous_system_has_logo(&response.proposal_info[0]),
-        "{:?}",
-        response
+        "{response:?}"
     );
 
     let response = governance.list_proposals(
@@ -651,8 +644,7 @@ fn test_omit_large_fields() {
     );
     assert!(
         create_service_nervous_system_has_logo(&response.proposal_info[0]),
-        "{:?}",
-        response
+        "{response:?}"
     );
 
     let response = governance.list_proposals(
@@ -664,7 +656,6 @@ fn test_omit_large_fields() {
     );
     assert!(
         !create_service_nervous_system_has_logo(&response.proposal_info[0]),
-        "{:?}",
-        response
+        "{response:?}"
     );
 }

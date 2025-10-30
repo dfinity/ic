@@ -21,6 +21,7 @@ DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/artifact_pool",
     "//rs/consensus/mocks",
+    "//rs/crypto/test_utils/crypto_returning_ok",
     "//rs/test_utilities",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/logger",

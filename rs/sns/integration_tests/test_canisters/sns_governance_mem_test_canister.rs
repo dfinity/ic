@@ -11,18 +11,17 @@
 
 use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::dfn_core_stable_mem_utils::BufferedStableMemWriter;
-use ic_sns_governance::pb::v1::Topic;
+use ic_nervous_system_common::memory_manager_upgrade_storage::store_protobuf;
 use ic_sns_governance::{
     governance::HEAP_SIZE_SOFT_LIMIT_IN_WASM32_PAGES,
     pb::v1::{
+        Ballot, Governance as GovernanceProto, Motion, NervousSystemFunction,
+        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionType,
+        Proposal, ProposalData, ProposalId, Topic, WaitForQuietState,
         governance::{Mode, NeuronInFlightCommand, SnsMetadata},
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
         neuron::{DissolveState, Followees},
         proposal::Action,
-        Ballot, Governance as GovernanceProto, Motion, NervousSystemFunction,
-        NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionType,
-        Proposal, ProposalData, ProposalId, WaitForQuietState,
     },
     proposal::{
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, PROPOSAL_SUMMARY_BYTES_MAX, PROPOSAL_TITLE_BYTES_MAX,
@@ -30,19 +29,20 @@ use ic_sns_governance::{
     },
     types::native_action_ids,
 };
+use ic_stable_structures::{
+    DefaultMemoryImpl,
+    memory_manager::{MemoryId, MemoryManager, VirtualMemory},
+};
 use icrc_ledger_types::icrc1::account::Subaccount;
 use pretty_bytes::converter;
-use prost::Message;
-use rand::{rngs::StdRng, RngCore, SeedableRng};
-use std::collections::BTreeMap;
+use rand::{RngCore, SeedableRng, rngs::StdRng};
+use std::{cell::RefCell, collections::BTreeMap};
 
 const LOG_PREFIX: &str = "[Governance mem test] ";
 
 const MAX_POSSIBLE_HEAP_SIZE_IN_PAGES: usize = 4 * 1024 * 1024 / 64;
 
 const WASM_PAGE_SIZE_BYTES: usize = 65536;
-
-const BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100 MiB
 
 const SIZE_OF_NEURON_ID: usize = std::mem::size_of::<Subaccount>();
 
@@ -66,6 +66,20 @@ const DEFAULT_CONTROLLER: PrincipalId = PrincipalId::new(
     [0; PrincipalId::MAX_LENGTH_IN_BYTES],
 );
 
+/// Constants to define memory segments.  Must not change.
+const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
+
+thread_local! {
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> = RefCell::new(
+        MemoryManager::init(DefaultMemoryImpl::default())
+    );
+
+    // The memory where the governance reads and writes its state during an upgrade.
+    pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
+        RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
+
+}
+
 static mut GOVERNANCE: Option<GovernanceProto> = None;
 
 /// Returns the number of wasm32 pages consumed.
@@ -78,7 +92,7 @@ fn heap_size_num_pages() -> usize {
     0
 }
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn canister_init() {
     dfn_core::printer::hook();
     println!("{}Executing canister_init...", LOG_PREFIX);
@@ -86,23 +100,21 @@ fn canister_init() {
     println!("{}Completed execution of canister_init", LOG_PREFIX);
 }
 
-#[export_name = "canister_pre_upgrade"]
+#[unsafe(export_name = "canister_pre_upgrade")]
 fn canister_pre_upgrade() {
     println!("{}Executing canister_pre_upgrade...", LOG_PREFIX);
-    let mut writer = BufferedStableMemWriter::new(BUFFER_SIZE);
     unsafe {
-        GOVERNANCE
-            .as_ref()
-            .unwrap()
-            .encode(&mut writer)
-            .expect("Could not serialize to stable memory");
+        UPGRADES_MEMORY.with_borrow(|memory| {
+            store_protobuf(memory, GOVERNANCE.as_ref().unwrap())
+                .expect("Failed to encode protobuf pre_upgrade")
+        });
     }
-    writer.flush(); // or `drop(writer)`
+
     println!("{}Completed execution of canister_pre_upgrade", LOG_PREFIX);
 }
 
 /// Canister post_upgrade should never run
-#[export_name = "canister_post_upgrade"]
+#[unsafe(export_name = "canister_post_upgrade")]
 fn canister_post_upgrade() {
     unimplemented!()
 }
@@ -405,7 +417,10 @@ fn populate_canister_state() {
         max_number_of_neurons,
         max_followee_per_function,
         max_number_of_principals_per_neuron,
-        pretty_bytes((wasm_pages_after_neurons - wasm_pages_after_nervous_system_functions) * WASM_PAGE_SIZE_BYTES)
+        pretty_bytes(
+            (wasm_pages_after_neurons - wasm_pages_after_nervous_system_functions)
+                * WASM_PAGE_SIZE_BYTES
+        )
     );
 
     // Generate Proposal required data

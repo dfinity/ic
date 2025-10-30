@@ -30,10 +30,12 @@ fn should_retrieve_mega_keys_from_the_registry() {
 
     registry_client.update_to_latest_version();
 
-    assert!(retrieve_mega_public_key_from_registry(
-        &node_id,
-        registry_client.as_ref(),
-        registry_version
-    )
-    .is_ok());
+    assert!(
+        retrieve_mega_public_key_from_registry(
+            &node_id,
+            registry_client.as_ref(),
+            registry_version
+        )
+        .is_ok()
+    );
 }

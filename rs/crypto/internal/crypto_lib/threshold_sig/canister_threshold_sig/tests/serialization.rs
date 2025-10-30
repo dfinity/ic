@@ -22,12 +22,9 @@ fn verify_data(tag: String, expected_hash: &str, serialized: &[u8]) {
     let computed_hash = hex::encode(&hash[0..8]);
 
     if !UPDATING_TEST_VECTORS {
-        assert_eq!(computed_hash, expected_hash, "{}", tag);
+        assert_eq!(computed_hash, expected_hash, "{tag}");
     } else if computed_hash != expected_hash {
-        println!(
-            "perl -pi -e s/{}/{}/g tests/serialization.rs",
-            expected_hash, computed_hash
-        );
+        println!("perl -pi -e s/{expected_hash}/{computed_hash}/g tests/serialization.rs");
     }
 }
 
@@ -39,13 +36,13 @@ fn check_dealings(
     dealing_hashes: &[&'static str],
 ) -> CanisterThresholdResult<()> {
     verify_data(
-        format!("{} commitment", name),
+        format!("{name} commitment"),
         commitment_hash,
         &round.commitment.serialize().expect("Serialization failed"),
     );
 
     verify_data(
-        format!("{} transcript", name),
+        format!("{name} transcript"),
         transcript_hash,
         &round.transcript.serialize().expect("Serialization failed"),
     );
@@ -56,7 +53,7 @@ fn check_dealings(
         let dealer_index = dealer_index as u32;
         let dealing = round.dealings.get(&dealer_index).expect("Missing dealing");
         verify_data(
-            format!("{} dealing {}", name, dealer_index),
+            format!("{name} dealing {dealer_index}"),
             hash,
             &dealing.serialize().expect("Serialization failed"),
         );
@@ -75,7 +72,7 @@ fn check_ecdsa_shares(
         let index = index as u32;
         let share = shares.get(&index).expect("Unable to find signature share");
         verify_data(
-            format!("share {}", index),
+            format!("share {index}"),
             hash,
             &share.serialize().expect("Serialization failed"),
         )
@@ -93,11 +90,7 @@ fn check_bip340_shares(
     for (index, hash) in hashes.iter().enumerate() {
         let index = index as u32;
         let share = shares.get(&index).expect("Unable to find signature share");
-        verify_data(
-            format!("share {}", index),
-            hash,
-            &share.serialize().unwrap(),
-        )
+        verify_data(format!("share {index}"), hash, &share.serialize().unwrap())
     }
 
     Ok(())
@@ -112,15 +105,15 @@ fn check_ed25519_shares(
     for (index, hash) in hashes.iter().enumerate() {
         let index = index as u32;
         let share = shares.get(&index).expect("Unable to find signature share");
-        verify_data(format!("share {}", index), hash, &share.serialize())
+        verify_data(format!("share {index}"), hash, &share.serialize())
     }
 
     Ok(())
 }
 
 #[test]
-fn verify_protocol_output_remains_unchanged_over_time_k256_unmasked_kappa(
-) -> Result<(), CanisterThresholdError> {
+fn verify_protocol_output_remains_unchanged_over_time_k256_unmasked_kappa()
+-> Result<(), CanisterThresholdError> {
     let nodes = 5;
     let threshold = 2;
 
@@ -205,9 +198,13 @@ fn verify_protocol_output_remains_unchanged_over_time_k256_unmasked_kappa(
         ],
     )?;
 
-    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let signed_message = seed
+        .derive("message")
+        .into_rng()
+        .r#gen::<[u8; 32]>()
+        .to_vec();
     let random_beacon =
-        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().r#gen::<[u8; 32]>());
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto =
@@ -322,9 +319,13 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Canis
         ],
     )?;
 
-    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let signed_message = seed
+        .derive("message")
+        .into_rng()
+        .r#gen::<[u8; 32]>()
+        .to_vec();
     let random_beacon =
-        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().r#gen::<[u8; 32]>());
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto =
@@ -355,8 +356,8 @@ fn verify_protocol_output_remains_unchanged_over_time_p256() -> Result<(), Canis
 }
 
 #[test]
-fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
-) -> Result<(), CanisterThresholdError> {
+fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega()
+-> Result<(), CanisterThresholdError> {
     let nodes = 5;
     let threshold = 2;
 
@@ -440,9 +441,13 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
         ],
     )?;
 
-    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let signed_message = seed
+        .derive("message")
+        .into_rng()
+        .r#gen::<[u8; 32]>()
+        .to_vec();
     let random_beacon =
-        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().r#gen::<[u8; 32]>());
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto =
@@ -473,8 +478,8 @@ fn verify_protocol_output_remains_unchanged_over_time_p256_sig_with_k256_mega(
 }
 
 #[test]
-fn verify_protocol_output_remains_unchanged_over_time_bip340_sig_with_k256_mega(
-) -> Result<(), CanisterThresholdError> {
+fn verify_protocol_output_remains_unchanged_over_time_bip340_sig_with_k256_mega()
+-> Result<(), CanisterThresholdError> {
     let nodes = 5;
     let threshold = 2;
 
@@ -516,9 +521,13 @@ fn verify_protocol_output_remains_unchanged_over_time_bip340_sig_with_k256_mega(
         ],
     )?;
 
-    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let signed_message = seed
+        .derive("message")
+        .into_rng()
+        .r#gen::<[u8; 32]>()
+        .to_vec();
     let random_beacon =
-        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().r#gen::<[u8; 32]>());
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto = Bip340SignatureProtocolExecution::new(
@@ -553,8 +562,8 @@ fn verify_protocol_output_remains_unchanged_over_time_bip340_sig_with_k256_mega(
 }
 
 #[test]
-fn verify_protocol_output_remains_unchanged_over_time_ed25519_sig_with_k256_mega(
-) -> Result<(), CanisterThresholdError> {
+fn verify_protocol_output_remains_unchanged_over_time_ed25519_sig_with_k256_mega()
+-> Result<(), CanisterThresholdError> {
     let nodes = 5;
     let threshold = 2;
 
@@ -596,9 +605,13 @@ fn verify_protocol_output_remains_unchanged_over_time_ed25519_sig_with_k256_mega
         ],
     )?;
 
-    let signed_message = seed.derive("message").into_rng().gen::<[u8; 32]>().to_vec();
+    let signed_message = seed
+        .derive("message")
+        .into_rng()
+        .r#gen::<[u8; 32]>()
+        .to_vec();
     let random_beacon =
-        ic_types::Randomness::from(seed.derive("beacon").into_rng().gen::<[u8; 32]>());
+        ic_types::Randomness::from(seed.derive("beacon").into_rng().r#gen::<[u8; 32]>());
 
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
     let proto = Ed25519SignatureProtocolExecution::new(
@@ -746,13 +759,17 @@ fn commitment_opening_k256_serialization_is_stable() -> Result<(), CanisterThres
 
     let simple = CommitmentOpeningBytes::Simple(s1_bytes.clone());
 
-    assert_eq!(hex::encode(serde_cbor::to_vec(&simple).unwrap()),
-            "a16653696d706c65a1644b32353698201853183d18b717183618db18b1181c182318fd189a186c18d70318d3187a18fd1851187318b9184318dc1893182d1838187d18c1187c188918aa18ad1884");
+    assert_eq!(
+        hex::encode(serde_cbor::to_vec(&simple).unwrap()),
+        "a16653696d706c65a1644b32353698201853183d18b717183618db18b1181c182318fd189a186c18d70318d3187a18fd1851187318b9184318dc1893182d1838187d18c1187c188918aa18ad1884"
+    );
 
     let pedersen = CommitmentOpeningBytes::Pedersen(s1_bytes, s2_bytes);
 
-    assert_eq!(hex::encode(serde_cbor::to_vec(&pedersen).unwrap()),
-            "a168506564657273656e82a1644b32353698201853183d18b717183618db18b1181c182318fd189a186c18d70318d3187a18fd1851187318b9184318dc1893182d1838187d18c1187c188918aa18ad1884a1644b32353698201843181f18b6141845184b187c181f182e18c218bd18761883182d18af184e18c618ca18da18a3188b18fb18fb1880181a186d1820189b1827185a18f2188d");
+    assert_eq!(
+        hex::encode(serde_cbor::to_vec(&pedersen).unwrap()),
+        "a168506564657273656e82a1644b32353698201853183d18b717183618db18b1181c182318fd189a186c18d70318d3187a18fd1851187318b9184318dc1893182d1838187d18c1187c188918aa18ad1884a1644b32353698201843181f18b6141845184b187c181f182e18c218bd18761883182d18af184e18c618ca18da18a3188b18fb18fb1880181a186d1820189b1827185a18f2188d"
+    );
 
     Ok(())
 }
@@ -779,13 +796,17 @@ fn commitment_opening_p256_serialization_is_stable() -> Result<(), CanisterThres
 
     let simple = CommitmentOpeningBytes::Simple(s1_bytes.clone());
 
-    assert_eq!(hex::encode(serde_cbor::to_vec(&simple).unwrap()),
-               "a16653696d706c65a1645032353698201853183d18b717183618db18b1181c182318fd189a186c18d70318d3187a18fd1851187318b9184318dc1893182d1838187d18c1187c188918aa18ad1884");
+    assert_eq!(
+        hex::encode(serde_cbor::to_vec(&simple).unwrap()),
+        "a16653696d706c65a1645032353698201853183d18b717183618db18b1181c182318fd189a186c18d70318d3187a18fd1851187318b9184318dc1893182d1838187d18c1187c188918aa18ad1884"
+    );
 
     let pedersen = CommitmentOpeningBytes::Pedersen(s1_bytes, s2_bytes);
 
-    assert_eq!(hex::encode(serde_cbor::to_vec(&pedersen).unwrap()),
-               "a168506564657273656e82a1645032353698201853183d18b717183618db18b1181c182318fd189a186c18d70318d3187a18fd1851187318b9184318dc1893182d1838187d18c1187c188918aa18ad1884a1645032353698201843181f18b6141845184b187c181f182e18c218bd18761883182d18af184e18c618ca18da18a3188b18fb18fb1880181a186d1820189b1827185a18f2188d");
+    assert_eq!(
+        hex::encode(serde_cbor::to_vec(&pedersen).unwrap()),
+        "a168506564657273656e82a1645032353698201853183d18b717183618db18b1181c182318fd189a186c18d70318d3187a18fd1851187318b9184318dc1893182d1838187d18c1187c188918aa18ad1884a1645032353698201843181f18b6141845184b187c181f182e18c218bd18761883182d18af184e18c618ca18da18a3188b18fb18fb1880181a186d1820189b1827185a18f2188d"
+    );
 
     Ok(())
 }
@@ -812,13 +833,17 @@ fn commitment_opening_ed25519_serialization_is_stable() -> Result<(), CanisterTh
 
     let simple = CommitmentOpeningBytes::Simple(s1_bytes.clone());
 
-    assert_eq!(hex::encode(serde_cbor::to_vec(&simple).unwrap()),
-               "a16653696d706c65a167456432353531399820187c18a918cd181f18dc18ff18d3181811187018bf188c1848182918a21872189f188b184b186318d418ef1840182618b0184518bb189518d8182a020d");
+    assert_eq!(
+        hex::encode(serde_cbor::to_vec(&simple).unwrap()),
+        "a16653696d706c65a167456432353531399820187c18a918cd181f18dc18ff18d3181811187018bf188c1848182918a21872189f188b184b186318d418ef1840182618b0184518bb189518d8182a020d"
+    );
 
     let pedersen = CommitmentOpeningBytes::Pedersen(s1_bytes, s2_bytes);
 
-    assert_eq!(hex::encode(serde_cbor::to_vec(&pedersen).unwrap()),
-               "a168506564657273656e82a167456432353531399820187c18a918cd181f18dc18ff18d3181811187018bf188c1848182918a21872189f188b184b186318d418ef1840182618b0184518bb189518d8182a020da167456432353531399820184d18311841182b18f5189418aa18b81820182f18a0189118aa188a16189318a3021718c918c518ce188912189e187b0018c018b118b218510c");
+    assert_eq!(
+        hex::encode(serde_cbor::to_vec(&pedersen).unwrap()),
+        "a168506564657273656e82a167456432353531399820187c18a918cd181f18dc18ff18d3181811187018bf188c1848182918a21872189f188b184b186318d418ef1840182618b0184518bb189518d8182a020da167456432353531399820184d18311841182b18f5189418aa18b81820182f18a0189118aa188a16189318a3021718c918c518ce188912189e187b0018c018b118b218510c"
+    );
 
     Ok(())
 }
@@ -829,7 +854,7 @@ fn bip340_combined_share_serialization_roundtrip_works_correctly() {
     let threshold = 2;
     let rng = &mut reproducible_rng();
     let signed_message = random_bytes(rng);
-    let random_beacon = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
+    let random_beacon = ic_types::Randomness::from(rng.r#gen::<[u8; 32]>());
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
     let cfg = TestConfig::new(IdkgProtocolAlgorithm::Bip340, EccCurveType::K256);
@@ -864,7 +889,7 @@ fn ed25519_combined_share_serialization_roundtrip_works_correctly() {
     let threshold = 2;
     let rng = &mut reproducible_rng();
     let signed_message = random_bytes(rng);
-    let random_beacon = ic_types::Randomness::from(rng.gen::<[u8; 32]>());
+    let random_beacon = ic_types::Randomness::from(rng.r#gen::<[u8; 32]>());
     let derivation_path = DerivationPath::new_bip32(&[1, 2, 3]);
 
     let cfg = TestConfig::new(IdkgProtocolAlgorithm::Ed25519, EccCurveType::K256);

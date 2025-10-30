@@ -2,7 +2,7 @@
 #![deny(clippy::unwrap_used)]
 
 use ic_crypto_sha2::Sha256;
-use serde::{ser::SerializeSeq, Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeSeq};
 use serde_bytes::Bytes;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
@@ -189,14 +189,14 @@ impl fmt::Debug for Label {
             )
         } else {
             write!(f, "0x")?;
-            bytes.iter().try_for_each(|b| write!(f, "{:02X}", b))
+            bytes.iter().try_for_each(|b| write!(f, "{b:02X}"))
         }
     }
 }
 
 impl fmt::Display for Label {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -250,13 +250,13 @@ impl Digest {
 impl fmt::Debug for Digest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "0x")?;
-        self.0.iter().try_for_each(|b| write!(f, "{:02X}", b))
+        self.0.iter().try_for_each(|b| write!(f, "{b:02X}"))
     }
 }
 
 impl fmt::Display for Digest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -345,7 +345,7 @@ pub fn lookup_path<'a>(
 pub enum LookupLowerBoundStatus<'a> {
     /// The actual key found, and its subtree.
     Found(&'a Label, &'a LabeledTree<Vec<u8>>),
-    /// `prefix` is not a valid path in the tree, or it does not contain futher labels below.
+    /// `prefix` is not a valid path in the tree, or it does not contain further labels below.
     PrefixNotFound,
     /// There are either no labels at `prefix` or they are all larger than `label`.
     LabelNotFound,
@@ -626,7 +626,7 @@ impl MixedHashTree {
             t = match t.search_label(entry.as_ref()) {
                 SearchStatus::Found(t) => t,
                 SearchStatus::Absent | SearchStatus::Lt | SearchStatus::Gt => {
-                    return LookupStatus::Absent
+                    return LookupStatus::Absent;
                 }
                 SearchStatus::Unknown => return LookupStatus::Unknown,
             }
@@ -669,6 +669,14 @@ pub enum FilterBuilder {
     Pruned(Digest),
 }
 
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
+enum FilterMode {
+    /// The paths in the filter are kept, everything else is pruned.
+    Keep,
+    /// The paths in the filter are pruned, everything else is kept.
+    Prune,
+}
+
 impl FilterBuilder {
     pub fn digest(&self) -> &Digest {
         match self {
@@ -698,14 +706,16 @@ impl FilterBuilder {
         }
     }
 
-    /// Returns a [`MixedHashTree`] with everything pruned except the paths in `filter`.
-    pub fn filtered(
+    /// Common code of [`Self::filtered`] and [`Self::pruned`], as they both have the same recursion with the decisions to prune or keep a subtree flipped.
+    fn filtered_impl(
         &self,
         filter: &LabeledTree<()>,
+        filter_mode: FilterMode,
     ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
         fn filtered_inner(
             tree: &FilterBuilder,
             filter: &LabeledTree<()>,
+            filter_mode: FilterMode,
             depth: u8,
         ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
             if depth > MAX_HASH_TREE_DEPTH {
@@ -716,12 +726,15 @@ impl FilterBuilder {
                 // Pruned and empty subtrees are always kept.
                 (FilterBuilder::Empty(_), _) => Ok(tree.mixed_hash_tree()),
                 (FilterBuilder::Pruned(_), _) => Ok(tree.mixed_hash_tree()),
-                // Path ends in an inner node so we simply keep the entire subtree.
-                (_, LabeledTree::Leaf(_)) => Ok(tree.mixed_hash_tree()),
+                // If the path in `filter` ends, we keep the entire subtree if `FilterMode::Keep` and prune it otherwise.
+                (_, LabeledTree::Leaf(_)) => match filter_mode {
+                    FilterMode::Keep => Ok(tree.mixed_hash_tree()),
+                    FilterMode::Prune => Ok(MixedHashTree::Pruned(tree.digest().clone())),
+                },
                 // On a fork, filter both sides.
                 (FilterBuilder::Fork(digest, b), filter) => {
-                    let l = filtered_inner(&b.0, filter, depth + 1)?;
-                    let r = filtered_inner(&b.1, filter, depth + 1)?;
+                    let l = filtered_inner(&b.0, filter, filter_mode, depth + 1)?;
+                    let r = filtered_inner(&b.1, filter, filter_mode, depth + 1)?;
 
                     // If both branches are pruned, prune the node instead.
                     match (&l, &r) {
@@ -733,15 +746,22 @@ impl FilterBuilder {
                 }
                 // On a label, check if it is in `filter`.
                 (FilterBuilder::Labeled(digest, label, inner), LabeledTree::SubTree(flat_map)) => {
-                    match flat_map.get(label) {
-                        Some(subfilter) => {
-                            let mixed_hash_tree = filtered_inner(inner, subfilter, depth + 1)?;
+                    match (flat_map.get(label), filter_mode) {
+                        (Some(LabeledTree::Leaf(_)), FilterMode::Prune) => {
+                            // A path in `filter` ends here, so we prune this subtree including the label.
+                            Ok(MixedHashTree::Pruned(digest.clone()))
+                        }
+                        (Some(subfilter), _) => {
+                            // Recursive case
+                            let mixed_hash_tree =
+                                filtered_inner(inner, subfilter, filter_mode, depth + 1)?;
                             Ok(MixedHashTree::Labeled(
                                 label.clone(),
                                 Box::new(mixed_hash_tree),
                             ))
                         }
-                        None => Ok(MixedHashTree::Pruned(digest.clone())),
+                        (None, FilterMode::Keep) => Ok(MixedHashTree::Pruned(digest.clone())),
+                        (None, FilterMode::Prune) => Ok(tree.mixed_hash_tree()),
                     }
                 }
                 // The tree ends in a leaf, but the path still continues. Invalid input.
@@ -751,7 +771,25 @@ impl FilterBuilder {
             }
         }
 
-        filtered_inner(self, filter, 0)
+        filtered_inner(self, filter, filter_mode, 0)
+    }
+
+    /// Returns a [`MixedHashTree`] with everything pruned except the paths in `filter`.
+    /// See also [`Self::pruned`].
+    pub fn filtered(
+        &self,
+        filter: &LabeledTree<()>,
+    ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
+        self.filtered_impl(filter, FilterMode::Keep)
+    }
+
+    /// Returns a [`MixedHashTree`] with everything in `paths` pruned.
+    /// See also [`Self::filtered`].
+    pub fn pruned(
+        &self,
+        paths: &LabeledTree<()>,
+    ) -> Result<MixedHashTree, MixedHashTreeFilterError> {
+        self.filtered_impl(paths, FilterMode::Prune)
     }
 }
 
@@ -1015,8 +1053,7 @@ impl<'de> serde::de::Deserialize<'de> for MixedHashTree {
                         Ok(MixedHashTree::Pruned(digest))
                     }
                     _ => Err(de::Error::custom(format!(
-                        "unknown tag: {}, expected the tag to be one of {{0, 1, 2, 3, 4}}",
-                        tag
+                        "unknown tag: {tag}, expected the tag to be one of {{0, 1, 2, 3, 4}}"
                     ))),
                 }
             }
@@ -1088,17 +1125,17 @@ fn write_witness(witness: &Witness, level: u8, f: &mut fmt::Formatter<'_>) -> fm
     let indent = String::from_utf8(vec![b' '; (level.saturating_mul(8)) as usize])
         .expect("String was not valid utf8");
     match witness {
-        Witness::Known() => writeln!(f, "{}** KNOWN **", indent),
-        Witness::Pruned { digest } => writeln!(f, "{}\\__pruned:{:?}", indent, digest),
+        Witness::Known() => writeln!(f, "{indent}** KNOWN **"),
+        Witness::Pruned { digest } => writeln!(f, "{indent}\\__pruned:{digest:?}"),
         Witness::Node { label, sub_witness } => {
-            writeln!(f, "{}+-- node:{:?}", indent, label)?;
+            writeln!(f, "{indent}+-- node:{label:?}")?;
             write_witness(sub_witness, level.saturating_add(1), f)
         }
         Witness::Fork {
             left_tree,
             right_tree,
         } => {
-            writeln!(f, "{}+-- fork:", indent)?;
+            writeln!(f, "{indent}+-- fork:")?;
             write_witness(left_tree, level.saturating_add(1), f)?;
             write_witness(right_tree, level.saturating_add(1), f)
         }
@@ -1270,3 +1307,23 @@ pub trait HashTreeBuilder {
     /// Does not `panic!`.
     fn witness_generator(&self) -> Option<Self::WitnessGenerator>;
 }
+
+/// A restricted match pattern that either allows a specific label or everything except a specific label.
+#[derive(Clone, Debug)]
+pub enum MatchPattern {
+    Inclusive(Label),
+    Exclusive(Label),
+}
+
+impl MatchPattern {
+    /// It either matches only the exact label, or everything except the label.
+    pub fn matches(&self, label: &Label) -> bool {
+        match self {
+            MatchPattern::Inclusive(l) => l == label,
+            MatchPattern::Exclusive(l) => l != label,
+        }
+    }
+}
+
+/// A path of `MatchPattern`.
+pub type MatchPatternPath = Vec<MatchPattern>;

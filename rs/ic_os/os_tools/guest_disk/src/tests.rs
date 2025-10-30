@@ -1,21 +1,22 @@
-use crate::crypt::{
-    activate_crypt_device, check_encryption_key, deactivate_crypt_device, format_crypt_device,
-};
-use crate::{crypt_name, run, Args, Partition};
+use crate::{Args, Partition, crypt_name, run};
 use anyhow::Result;
 use config_types::{
     DeploymentEnvironment, GuestOSConfig, ICOSSettings, Ipv6Config, NetworkSettings,
 };
+use guest_disk::crypt::{
+    activate_crypt_device, check_encryption_key, deactivate_crypt_device, format_crypt_device,
+};
+use guest_disk::sev::can_open_store;
 use ic_device::device_mapping::{Bytes, TempDevice};
-use ic_sev::guest::firmware::MockSevGuestFirmware;
-use ic_sev::guest::key_deriver::{Key, SevKeyDeriver};
+use ic_sev::guest::key_deriver::{Key, derive_key_from_sev_measurement};
+use ic_sev::guest::testing::MockSevGuestFirmwareBuilder;
 use libcryptsetup_rs::consts::flags::CryptActivate;
 use std::fs;
 use std::fs::{File, Permissions};
 use std::io::Read;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 // All tests interact with the same device mapper and use shared crypt device names, so we must run
 // the tests sequentially.
@@ -25,7 +26,7 @@ struct TestFixture<'a> {
     device: TempDevice,
     previous_key_path: PathBuf,
     generated_key_path: PathBuf,
-    sev_derived_key: [u8; 32],
+    sev_firmware_builder: MockSevGuestFirmwareBuilder,
     guestos_config: GuestOSConfig,
     _temp_dir: TempDir,
     _guard: parking_lot::MutexGuard<'a, ()>,
@@ -41,12 +42,14 @@ impl<'a> TestFixture<'a> {
         let previous_key_path = temp_dir.path().join("previous_key");
         let generated_key_path = temp_dir.path().join("generated_key");
         let guestos_config = Self::create_guestos_config(enable_trusted_execution_environment);
+        let sev_firmware_builder =
+            MockSevGuestFirmwareBuilder::new().with_derived_key(Some([0; 32]));
 
         Self {
             device,
             previous_key_path,
             generated_key_path,
-            sev_derived_key: [42; 32],
+            sev_firmware_builder,
             guestos_config,
             _temp_dir: temp_dir,
             _guard: guard,
@@ -77,23 +80,18 @@ impl<'a> TestFixture<'a> {
             guest_vm_type: Default::default(),
             upgrade_config: Default::default(),
             trusted_execution_environment_config: None,
+            recovery_config: Default::default(),
         }
-    }
-
-    fn get_mock_sev_key_deriver(&self) -> SevKeyDeriver {
-        let mut mock_sev_firmware = MockSevGuestFirmware::new();
-        let derived_key = self.sev_derived_key;
-        mock_sev_firmware
-            .expect_get_derived_key()
-            .returning(move |_, _| Ok(derived_key));
-        SevKeyDeriver::new_for_test(Box::new(mock_sev_firmware))
     }
 
     fn run(&mut self, args: Args) -> Result<()> {
         run(
             args,
             &self.guestos_config,
-            || Ok(self.get_mock_sev_key_deriver()),
+            self.guestos_config
+                .icos_settings
+                .enable_trusted_execution_environment,
+            || Ok(Box::new(self.sev_firmware_builder.clone())),
             &self.previous_key_path,
             &self.generated_key_path,
         )
@@ -296,12 +294,13 @@ fn test_sev_unlock_store_partition_with_previous_key() {
     check_encryption_key(&fixture.device.path().unwrap(), PREVIOUS_KEY)
         .expect("previous key should unlock the store partition");
 
-    let sev_key = fixture
-        .get_mock_sev_key_deriver()
-        .derive_key(Key::DiskEncryptionKey {
+    let sev_key = derive_key_from_sev_measurement(
+        &mut fixture.sev_firmware_builder.build(),
+        Key::DiskEncryptionKey {
             device_path: &fixture.device.path().unwrap(),
-        })
-        .unwrap();
+        },
+    )
+    .unwrap();
 
     check_encryption_key(&fixture.device.path().unwrap(), sev_key.as_bytes())
         .expect("SEV key should unlock the store partition");
@@ -320,13 +319,14 @@ fn test_sev_unlock_store_with_current_key_if_previous_key_does_not_work() {
     // The store partition is encrypted with the current SEV key but not with the previous key.
     format_crypt_device(
         &fixture.device.path().unwrap(),
-        fixture
-            .get_mock_sev_key_deriver()
-            .derive_key(Key::DiskEncryptionKey {
+        derive_key_from_sev_measurement(
+            &mut fixture.sev_firmware_builder,
+            Key::DiskEncryptionKey {
                 device_path: &fixture.device.path().unwrap(),
-            })
-            .unwrap()
-            .as_bytes(),
+            },
+        )
+        .unwrap()
+        .as_bytes(),
     )
     .unwrap();
 
@@ -362,12 +362,13 @@ fn test_open_store_multiple_times_with_different_keys() {
     fixture.format(Partition::Store).unwrap();
     fs::write(
         &fixture.previous_key_path,
-        fixture
-            .get_mock_sev_key_deriver()
-            .derive_key(Key::DiskEncryptionKey {
+        derive_key_from_sev_measurement(
+            &mut fixture.sev_firmware_builder,
+            Key::DiskEncryptionKey {
                 device_path: &fixture.device.path().unwrap(),
-            })
-            .unwrap(),
+            },
+        )
+        .unwrap(),
     )
     .unwrap();
 
@@ -375,17 +376,18 @@ fn test_open_store_multiple_times_with_different_keys() {
         // Simulate saving the previous key during upgrade.
         fs::write(
             &fixture.previous_key_path,
-            fixture
-                .get_mock_sev_key_deriver()
-                .derive_key(Key::DiskEncryptionKey {
+            derive_key_from_sev_measurement(
+                &mut fixture.sev_firmware_builder,
+                Key::DiskEncryptionKey {
                     device_path: &fixture.device.path().unwrap(),
-                })
-                .unwrap(),
+                },
+            )
+            .unwrap(),
         )
         .unwrap();
 
         // After an upgrade, the firmware derives a new key.
-        fixture.sev_derived_key = [i; 32];
+        fixture.sev_firmware_builder = fixture.sev_firmware_builder.with_derived_key(Some([i; 32]));
 
         fixture
             .open(Partition::Store)
@@ -393,4 +395,85 @@ fn test_open_store_multiple_times_with_different_keys() {
         assert!(Path::new("/dev/mapper/vda10-crypt").exists());
         deactive_crypt_device_with_check("vda10-crypt");
     }
+}
+
+#[test]
+fn test_can_open_store_with_previous_key() {
+    let fixture = TestFixture::new(true);
+
+    // Prepare device encrypted with a previous key and write previous key file
+    const PREVIOUS_KEY: &[u8] = b"previous key";
+    fs::write(&fixture.previous_key_path, PREVIOUS_KEY).expect("Failed to write previous key");
+
+    // Format device with previous key
+    format_crypt_device(&fixture.device.path().unwrap(), PREVIOUS_KEY).unwrap();
+
+    // can_open_store should return true because previous key unlocks the device
+    let mut sev_fw = fixture.sev_firmware_builder.build();
+    let result = can_open_store(
+        &fixture.device.path().unwrap(),
+        &fixture.previous_key_path,
+        &mut sev_fw,
+    )
+    .expect("can_open_store returned error");
+    assert!(
+        result,
+        "Expected can_open_store to return true when previous key works"
+    );
+}
+
+#[test]
+fn test_can_open_store_with_derived_key_when_previous_key_fails() {
+    let fixture = TestFixture::new(true);
+
+    // Write a previous key that does NOT unlock the device
+    fs::write(&fixture.previous_key_path, b"wrong previous key")
+        .expect("Failed to write previous key");
+
+    // Format the device with the current SEV derived key
+    let sev_key = derive_key_from_sev_measurement(
+        &mut fixture.sev_firmware_builder.build(),
+        Key::DiskEncryptionKey {
+            device_path: &fixture.device.path().unwrap(),
+        },
+    )
+    .unwrap();
+
+    format_crypt_device(&fixture.device.path().unwrap(), sev_key.as_bytes()).unwrap();
+
+    // can_open_store should return true because the derived SEV key can open it
+    let mut sev_fw = fixture.sev_firmware_builder.build();
+    let result = can_open_store(
+        &fixture.device.path().unwrap(),
+        &fixture.previous_key_path,
+        &mut sev_fw,
+    )
+    .expect("can_open_store returned error");
+    assert!(
+        result,
+        "Expected can_open_store to return true when derived SEV key works"
+    );
+}
+
+#[test]
+fn test_cannot_open_store_when_no_key_works() {
+    let fixture = TestFixture::new(true);
+
+    // No previous key file and device is unformatted -> should return false
+    // Ensure previous key file does not exist
+    let _ = fs::remove_file(&fixture.previous_key_path);
+
+    // Create an unformatted device (no LUKS header)
+    // can_open_store should return false
+    let mut sev_fw = fixture.sev_firmware_builder.build();
+    let result = can_open_store(
+        &fixture.device.path().unwrap(),
+        &fixture.previous_key_path,
+        &mut sev_fw,
+    )
+    .expect("can_open_store returned error");
+    assert!(
+        !result,
+        "Expected can_open_store to return false when no key can open the device"
+    );
 }

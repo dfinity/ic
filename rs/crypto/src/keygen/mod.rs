@@ -1,14 +1,14 @@
 #[cfg(test)]
 mod tests;
 
-use crate::tls::{tls_cert_from_registry_raw, TlsCertFromRegistryError};
-use crate::{key_from_registry, CryptoComponentImpl};
+use crate::tls::{TlsCertFromRegistryError, tls_cert_from_registry_raw};
+use crate::{CryptoComponentImpl, key_from_registry};
+use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use ic_crypto_internal_csp::types::ExternalPublicKeys;
 use ic_crypto_internal_csp::vault::api::{
     CspPublicKeyStoreError, NodeKeysErrors, PksAndSksContainsErrors,
 };
-use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_logmon::metrics::{
     BooleanOperation, BooleanResult, KeyCounts, KeyRotationResult, MetricsResult,
 };
@@ -69,8 +69,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentImpl<C> {
                         );
                         Err(CryptoError::InternalError {
                             internal_error: format!(
-                                "Error calling pks_and_sks_contains: {:?}",
-                                node_keys_errors
+                                "Error calling pks_and_sks_contains: {node_keys_errors:?}"
                             ),
                         })
                     }
@@ -79,8 +78,7 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentImpl<C> {
                         self.observe_all_key_counts(&KeyCounts::ZERO, MetricsResult::Err);
                         Err(CryptoError::TransientInternalError {
                             internal_error: format!(
-                                "Transient error calling pks_and_sks_contains: {:?}",
-                                internal_error
+                                "Transient error calling pks_and_sks_contains: {internal_error:?}"
                             ),
                         })
                     }
@@ -200,24 +198,23 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
                     );
                     if let Some(latest_local_idkg_dealing_encryption_key_timestamp) =
                         latest_local_idkg_dealing_encryption_key_timestamp
-                    {
-                        if self.is_current_key_too_old(
+                        && self.is_current_key_too_old(
                             latest_local_idkg_dealing_encryption_key_timestamp,
                             key_rotation_period,
-                        ) {
-                            warn!(
-                                self.logger,
-                                "Local iDKG dealing encryption key is too old ({}), but it still has not been registered in the registry",
-                                latest_local_idkg_dealing_encryption_key_timestamp;
-                            );
-                            return Ok(
-                                IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
-                                    KeyRotationOutcome::KeyNotRotatedButTooOld {
-                                        existing_key: current_idkg_public_key_proto,
-                                    },
-                                ),
-                            );
-                        }
+                        )
+                    {
+                        warn!(
+                            self.logger,
+                            "Local iDKG dealing encryption key is too old ({}), but it still has not been registered in the registry",
+                            latest_local_idkg_dealing_encryption_key_timestamp;
+                        );
+                        return Ok(
+                            IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
+                                KeyRotationOutcome::KeyNotRotatedButTooOld {
+                                    existing_key: current_idkg_public_key_proto,
+                                },
+                            ),
+                        );
                     }
                     return Ok(
                         IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(

@@ -1,8 +1,8 @@
 use std::{borrow::Cow, fmt::Display};
 
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
-use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
+use ic_stable_structures::storable::Bound;
 
 const BYTE: u32 = 1;
 const KB: u32 = 1024 * BYTE;
@@ -24,7 +24,7 @@ pub struct EncryptedPair(
 );
 
 impl Storable for EncryptedPair {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(Encode!(self).unwrap())
     }
 
@@ -88,7 +88,7 @@ fn floor_char_boundary(v: &str, index: usize) -> usize {
 }
 
 impl<const N: usize> Storable for BoundedString<N> {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         self.0.to_bytes()
     }
 
@@ -154,7 +154,7 @@ impl TryFrom<&str> for Name {
 }
 
 impl Storable for Name {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(Encode!(self).unwrap())
     }
 
@@ -194,7 +194,7 @@ pub struct Registration {
 }
 
 impl Storable for Registration {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(Encode!(self).unwrap())
     }
 

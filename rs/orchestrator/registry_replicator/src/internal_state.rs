@@ -1,5 +1,5 @@
 use ic_interfaces_registry::{RegistryClient, ZERO_REGISTRY_VERSION};
-use ic_logger::{info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_protobuf::{
     registry::{
         node::v1::ConnectionEndpoint,
@@ -14,14 +14,14 @@ use ic_registry_client_helpers::{
     subnet::{SubnetRegistry, SubnetTransportRegistry},
 };
 use ic_registry_keys::{
-    make_canister_ranges_key, make_routing_table_record_key, make_subnet_list_record_key,
-    make_subnet_record_key, CANISTER_RANGES_PREFIX, ROOT_SUBNET_ID_KEY,
+    CANISTER_RANGES_PREFIX, ROOT_SUBNET_ID_KEY, make_canister_ranges_key,
+    make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, CanisterId, NodeId, RegistryVersion, SubnetId,
+    CanisterId, NodeId, RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
 };
 use prost::Message;
 use std::{
@@ -145,8 +145,7 @@ impl InternalState {
                 Err(e) => {
                     self.failed_poll_count += 1;
                     return Err(format!(
-                        "Error when trying to fetch updates from NNS: {:?}",
-                        e
+                        "Error when trying to fetch updates from NNS: {e:?}"
                     ));
                 }
             };
@@ -206,7 +205,7 @@ impl InternalState {
         };
 
         fn map_to_str<E: Debug>(msg: &str, v: RegistryVersion, e: E) -> String {
-            format!("{} at version {}: {:?}", msg, v, e)
+            format!("{msg} at version {v}: {e:?}")
         }
 
         let (subnet_id, subnet_record) = match self
@@ -219,7 +218,7 @@ impl InternalState {
                     "Error retrieving subnet records",
                     latest_version,
                     e,
-                ))
+                ));
             }
             _ => return Ok(()),
         };
@@ -301,13 +300,9 @@ impl InternalState {
     fn get_root_subnet_id(&self, version: RegistryVersion) -> Result<SubnetId, String> {
         match self.registry_client.get_root_subnet_id(version) {
             Ok(Some(v)) => Ok(v),
-            Ok(_) => Err(format!(
-                "No NNS subnet id configured at version {}",
-                version
-            )),
+            Ok(_) => Err(format!("No NNS subnet id configured at version {version}")),
             Err(e) => Err(format!(
-                "Could not fetch nns subnet id at version {}: {:?}",
-                version, e
+                "Could not fetch nns subnet id at version {version}: {e:?}"
             )),
         }
     }
@@ -323,12 +318,10 @@ impl InternalState {
         {
             Ok(Some(v)) => Ok(v),
             Ok(None) => Err(format!(
-                "Public key for subnet {} not set at version {}",
-                subnet_id, version
+                "Public key for subnet {subnet_id} not set at version {version}"
             )),
             Err(e) => Err(format!(
-                "Error when retrieving public key for subnet {} at version {}: {:?}",
-                subnet_id, version, e
+                "Error when retrieving public key for subnet {subnet_id} at version {version}: {e:?}"
             )),
         }
     }
@@ -345,15 +338,13 @@ impl InternalState {
             Ok(Some(v)) => v,
             Ok(None) => {
                 return Err(format!(
-                    "Missing or incomplete transport infos for subnet {} at version {}.",
-                    subnet_id, version
-                ))
+                    "Missing or incomplete transport infos for subnet {subnet_id} at version {version}."
+                ));
             }
             Err(e) => {
                 return Err(format!(
-                    "Error retrieving transport infos for subnet {} at version {}: {:?}.",
-                    subnet_id, version, e
-                ))
+                    "Error retrieving transport infos for subnet {subnet_id} at version {version}: {e:?}."
+                ));
             }
         };
 
@@ -374,7 +365,7 @@ impl InternalState {
         let host_str = match IpAddr::from_str(&http.ip_addr.clone()) {
             Ok(v) => {
                 if v.is_ipv6() {
-                    format!("[{}]", v)
+                    format!("[{v}]")
                 } else {
                     v.to_string()
                 }
@@ -427,7 +418,6 @@ pub fn apply_switch_over_to_last_changelog_entry_impl(
     last.retain(|k| {
         k.key != ROOT_SUBNET_ID_KEY
             && k.key != make_subnet_list_record_key()
-            && k.key != make_routing_table_record_key()
             && k.key != subnet_record_key
             // Remove all canister_ranges_* records that are not deletion records, since those
             // won't come up in the canister_range_keys due to being deleted.
@@ -498,23 +488,16 @@ pub fn apply_switch_over_to_last_changelog_entry_impl(
         })
         .collect();
 
-    last.push(KeyMutation {
-        key: make_routing_table_record_key(),
-        value: Some(new_routing_table.encode_to_vec()),
-    });
-
     last.append(&mut routing_table_updates);
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use ic_protobuf::registry::routing_table;
-    use ic_protobuf::registry::routing_table::v1::routing_table::Entry;
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_registry_keys::{
-        make_canister_ranges_key, make_routing_table_record_key, make_subnet_list_record_key,
-        make_subnet_record_key, ROOT_SUBNET_ID_KEY,
+        ROOT_SUBNET_ID_KEY, make_canister_ranges_key, make_subnet_list_record_key,
+        make_subnet_record_key,
     };
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
@@ -567,29 +550,6 @@ mod test {
                 Some(old_nns_subnet_id_proto),
             )
             .expect("Failed to set root subnet ID");
-
-        // Set routing table
-        let pb_routing_table = PbRoutingTable::from(
-            RoutingTable::try_from(
-                shards
-                    .values()
-                    .map(|map| {
-                        PbRoutingTable::from(
-                            RoutingTable::try_from(map.clone())
-                                .expect("Invalid routing table shard"),
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            )
-            .expect("Invalid routing table"),
-        );
-        data_provider
-            .add(
-                &make_routing_table_record_key(),
-                RegistryVersion::from(2),
-                Some(pb_routing_table.clone()),
-            )
-            .expect("Failed to set routing table");
 
         // Add canister range keys
         for (key, shard) in shards {
@@ -677,10 +637,6 @@ mod test {
                     value: Some(vec![2]),
                 },
                 KeyMutation {
-                    key: make_routing_table_record_key(),
-                    value: Some(vec![3]),
-                },
-                KeyMutation {
                     key: make_subnet_record_key(new_nns_subnet_id),
                     value: Some(vec![4]),
                 },
@@ -723,7 +679,6 @@ mod test {
         // Verify all required keys are present
         assert!(keys.contains(&&ROOT_SUBNET_ID_KEY.to_string()));
         assert!(keys.contains(&&make_subnet_list_record_key()));
-        assert!(keys.contains(&&make_routing_table_record_key()));
         assert!(keys.contains(&&make_subnet_record_key(new_nns_subnet_id)));
         assert!(keys.contains(&&make_canister_ranges_key(CanisterId::from_u64(0))));
 
@@ -758,31 +713,6 @@ mod test {
         assert!(!decoded_record.start_as_nns);
         assert_eq!(decoded_record.subnet_type, SubnetType::System as i32);
 
-        // Verify routing table was updated correctly
-        let routing_table_mutation = last_entry
-            .iter()
-            .find(|km| km.key == make_routing_table_record_key())
-            .expect("Routing table mutation should exist");
-
-        assert!(routing_table_mutation.value.is_some());
-
-        let decoded_routing_table =
-            PbRoutingTable::decode(routing_table_mutation.value.as_ref().unwrap().as_slice())
-                .expect("Should decode successfully");
-
-        // The routing table should only contain ranges that were previously assigned to old NNS
-        assert!(!decoded_routing_table.entries.is_empty());
-        let expected_routing_table = PbRoutingTable {
-            entries: vec![Entry {
-                range: Some(routing_table::v1::CanisterIdRange {
-                    start_canister_id: Some(CanisterId::from_u64(0).into()),
-                    end_canister_id: Some(CanisterId::from_u64(50).into()),
-                }),
-                subnet_id: Some(ic_types::subnet_id_into_protobuf(new_nns_subnet_id)),
-            }],
-        };
-        assert_eq!(decoded_routing_table, expected_routing_table);
-
         // Verify canister range key handling
         let canister_0_key = make_canister_ranges_key(CanisterId::from_u64(0));
         let canister_0_mutation = last_entry
@@ -790,7 +720,6 @@ mod test {
             .find(|km| km.key == canister_0_key)
             .expect("Expected mutation for CanisterId = 0");
         assert!(canister_0_mutation.value.is_some());
-        assert_eq!(canister_0_mutation.value, routing_table_mutation.value);
 
         let canister_51_key = make_canister_ranges_key(CanisterId::from_u64(51));
         let canister_51_mutation = last_entry

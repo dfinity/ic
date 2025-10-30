@@ -11,18 +11,18 @@ use ic_consensus_utils::{
 use ic_interfaces::messaging::MessageRouting;
 use ic_logger::ReplicaLogger;
 use ic_types::{
+    Height,
     consensus::{
         CatchUpContent, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasHeight,
         RandomTapeContent,
     },
     crypto::Signed,
-    Height,
 };
 use std::{cmp::min, sync::Arc};
 
 /// The ShareAggregator is responsible for aggregating shares of random beacons,
 /// notarizations, and finalizations into full objects
-pub struct ShareAggregator {
+pub(crate) struct ShareAggregator {
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
     message_routing: Arc<dyn MessageRouting>,
@@ -139,9 +139,7 @@ impl ShareAggregator {
             let shares = pool.get_catch_up_package_shares(height).map(|share| {
                 let block = pool
                     .get_block(&share.content.block, height)
-                    .unwrap_or_else(|err| {
-                        panic!("Block not found for {:?}, error: {:?}", share, err)
-                    });
+                    .unwrap_or_else(|err| panic!("Block not found for {share:?}, error: {err:?}"));
                 Signed {
                     content: CatchUpContent::from_share_content(share.content, block.into_inner()),
                     signature: share.signature,
@@ -160,21 +158,22 @@ impl ShareAggregator {
                 return to_messages(result);
             }
 
-            if let Some(block_from_last_interval) =
+            let Some(block_from_last_interval) =
                 pool.get_finalized_block(start_block.height.decrement())
-            {
-                let next_start_height = block_from_last_interval
-                    .payload
-                    .as_ref()
-                    .dkg_interval_start_height();
-                if let Some(new_start_block) = pool.get_finalized_block(next_start_height) {
-                    start_block = new_start_block;
-                } else {
-                    break;
-                }
-            } else {
+            else {
                 break;
-            }
+            };
+
+            let next_start_height = block_from_last_interval
+                .payload
+                .as_ref()
+                .dkg_interval_start_height();
+
+            let Some(new_start_block) = pool.get_finalized_block(next_start_height) else {
+                break;
+            };
+
+            start_block = new_start_block;
         }
         Vec::new()
     }
@@ -187,7 +186,7 @@ fn to_messages<T: ConsensusMessageHashable>(artifacts: Vec<T>) -> Vec<ConsensusM
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies, dependencies_with_subnet_params};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::message_routing::FakeMessageRouting;
@@ -195,13 +194,13 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
+        NodeId, RegistryVersion,
         consensus::{
             CatchUpPackage, CatchUpPackageShare, CatchUpShareContent, FinalizationShare,
             HashedBlock, HashedRandomBeacon, NotarizationShare, RandomBeaconShare,
         },
         crypto::{CryptoHash, CryptoHashOf},
         signature::ThresholdSignatureShare,
-        NodeId, RegistryVersion,
     };
     use std::sync::Arc;
 
@@ -383,7 +382,7 @@ mod tests {
             assert!(messages.len() == 1);
             let cup = match messages.pop() {
                 Some(ConsensusMessage::CatchUpPackage(x)) => x,
-                x => panic!("Expecting CatchUpPackageShare but got {:?}\n", x),
+                x => panic!("Expecting CatchUpPackageShare but got {x:?}\n"),
             };
 
             assert_eq!(CatchUpShareContent::from(&cup.content), share0.content);

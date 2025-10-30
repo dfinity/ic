@@ -6,18 +6,18 @@ use ic_icp_index::{
 };
 use ic_icrc1_index_ng::GetAccountTransactionsArgs;
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_ledger_core::Tokens;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
-use ic_ledger_core::Tokens;
+use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_ledger_test_utils::state_machine_helpers::index::{
-    wait_until_sync_is_completed, SYNC_STEP_SECONDS,
+    SYNC_STEP_SECONDS, wait_until_sync_is_completed,
 };
 use ic_ledger_test_utils::state_machine_helpers::ledger::{icp_get_blocks, icp_query_blocks};
-use ic_rosetta_test_utils::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
-    AccountIdentifier, Transaction, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST,
-    MAX_BLOCKS_PER_REQUEST,
+    AccountIdentifier, MAX_BLOCKS_PER_INGRESS_REPLICATED_QUERY_REQUEST, MAX_BLOCKS_PER_REQUEST,
+    Transaction,
 };
 use icp_ledger::{FeatureFlags, LedgerCanisterInitPayload, Memo, Operation};
 use icrc_ledger_types::icrc1::account::Account;
@@ -1302,8 +1302,7 @@ fn test_get_account_identifier_transactions_pagination() {
         // didn't return the expected batch for the given start
         if res.transactions.is_empty() {
             panic!(
-                "get_account_identifier_transactions({:?}, u64::MAX) returned an empty batch!",
-                start
+                "get_account_identifier_transactions({start:?}, u64::MAX) returned an empty batch!"
             );
         }
 

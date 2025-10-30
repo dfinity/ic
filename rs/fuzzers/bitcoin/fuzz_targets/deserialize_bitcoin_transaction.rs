@@ -1,7 +1,7 @@
 #![no_main]
 use bitcoin::blockdata::transaction::Transaction;
 use bitcoin::consensus::encode::{deserialize, serialize};
-use libfuzzer_sys::{fuzz_target, Corpus};
+use libfuzzer_sys::{Corpus, fuzz_target};
 
 fuzz_target!(|data: &[u8]| -> Corpus {
     match deserialize::<Transaction>(data) {

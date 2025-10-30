@@ -1,8 +1,8 @@
 #![allow(deprecated)]
 use anyhow::Result;
 use candid::{Decode, Encode, Principal};
-use ic_agent::agent::RejectCode;
 use ic_agent::AgentError;
+use ic_agent::agent::RejectCode;
 use ic_cdk::api::management_canister::main::{CanisterIdRecord, CanisterStatusResponse};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
@@ -13,7 +13,7 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::types::CreateCanisterResult;
-use ic_system_test_driver::util::{assert_reject, block_on, UniversalCanister};
+use ic_system_test_driver::util::{UniversalCanister, assert_reject, block_on};
 use ic_types::Cycles;
 use ic_utils::interfaces::ManagementCanister;
 
@@ -90,11 +90,13 @@ pub fn ingress_message_to_subnet_id_fails(env: TestEnv) {
             let err = agent_call(&subnet_id, &subnet_id).await.unwrap_err();
             match err {
                 AgentError::UncertifiedReject { reject, .. } => {
-                    assert!(reject
-                        .reject_message
-                        .contains(&format!("Canister {} not found", subnet_id)));
+                    assert!(
+                        reject
+                            .reject_message
+                            .contains(&format!("Canister {subnet_id} not found"))
+                    );
                 }
-                _ => panic!("Unexpected error: {:?}", err),
+                _ => panic!("Unexpected error: {err:?}"),
             };
 
             // Requesting `canister_status` using the subnet ID as the callee and the canister ID as the effective canister ID fails
@@ -104,11 +106,10 @@ pub fn ingress_message_to_subnet_id_fails(env: TestEnv) {
                 AgentError::HttpError(payload) => {
                     let error_message = String::from_utf8(payload.content).unwrap();
                     assert!(error_message.contains(&format!(
-                        "Specified CanisterId {} does not match effective canister id in URL {}",
-                        subnet_id, canister_id
+                        "Specified CanisterId {subnet_id} does not match effective canister id in URL {canister_id}"
                     )));
                 }
-                _ => panic!("Unexpected error: {:?}", err),
+                _ => panic!("Unexpected error: {err:?}"),
             };
 
             // The same call using the management canister ID as the callee and the canister ID as the effective canister ID succeeds

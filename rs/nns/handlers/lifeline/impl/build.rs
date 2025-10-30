@@ -25,7 +25,7 @@ impl BuildError {
     fn print_stderr(&self) {
         match self {
             BuildError::IO(io_err) => {
-                eprintln!("IO error: {:?}", io_err);
+                eprintln!("IO error: {io_err:?}");
             }
             BuildError::MocFailure(output) => {
                 eprintln!("moc returned {:?}", output.status.code());
@@ -60,8 +60,8 @@ fn create_did_alias<F>(
 where
     F: FnOnce(&mut String),
 {
-    println!("cargo:rerun-if-changed={}", relative_path);
-    let target_file_path = out_dir.join(format!("{}.did", id));
+    println!("cargo:rerun-if-changed={relative_path}");
+    let target_file_path = out_dir.join(format!("{id}.did"));
     // Delete the old if it's already there
     let _ = std::fs::remove_file(&target_file_path);
     // On CI, we use environment variables to know where the .did files are.
@@ -69,7 +69,7 @@ where
     let env_var = format!("{}_DID", name.to_ascii_uppercase());
     let did_file_path = env::var(env_var).unwrap_or_else(|_| relative_path.to_string());
 
-    println!("did_file_path={:?}", did_file_path);
+    println!("did_file_path={did_file_path:?}");
 
     let mut did_contents = fs::read_to_string(did_file_path).unwrap();
 
@@ -134,8 +134,8 @@ fn main() {
     println!("cargo:rerun-if-changed=lifeline.mo");
     println!("cargo:rerun-if-changed=lifeline.did");
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed={}", ROOT_DID);
-    println!("cargo:rerun-if-changed={}", GOVERNANCE_DID);
+    println!("cargo:rerun-if-changed={ROOT_DID}");
+    println!("cargo:rerun-if-changed={GOVERNANCE_DID}");
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR environment variable not set"));
     let governance_out_did = out_dir.join("rrkah-fqaaa-aaaaa-aaaaq-cai.did");
