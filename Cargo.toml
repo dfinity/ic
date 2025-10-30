@@ -895,9 +895,9 @@ uuid = { version = "=1.12.1", features = ["v4", "serde"] }
 virt = "0.4"
 walkdir = "2.3.3"
 walrus = "0.23.3"
-wasm-encoder = { version = "0.235.0", features = ["wasmparser"] }
-wasmparser = "0.235.0"
-wasmprinter = "0.235.0"
+wasm-encoder = { version = "0.239.0", features = ["wasmparser"] }
+wasmparser = "0.239.0"
+wasmprinter = "0.239.0"
 wast = "235.0.0"
 wat = "1.235.0"
 which = "6.0.3"
