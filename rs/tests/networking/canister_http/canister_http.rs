@@ -296,12 +296,12 @@ fn create_accept_fw_rules(env: &TestEnv, target_socket_addr: SocketAddr) {
     }
 }
 
-// Create firewall rules on all nodes to allow connections from canister http adapter to the API BN.
-// This is necessary because by default outbound connections from the ic-http-adapter to most internal
-// IPv6 ranges are blocked.
-// API BNs are used as proxies to reach the UVM from the canister http adapter when the direct request
-// fails.
-// This should be called only after all nodes are up and healthy.
+/// Create firewall rules on all nodes to allow connections from canister http adapter to the API BN.
+/// This is necessary because by default outbound connections from the ic-http-adapter to most internal
+/// IPv6 ranges are blocked.
+/// API BNs are used as proxies to reach the UVM from the canister http adapter when the direct request
+/// fails.
+/// This should be called only after all nodes are up and healthy.
 pub fn whitelist_nodes_access_to_apibns(env: &TestEnv) {
     let api_bns = env.topology_snapshot().api_boundary_nodes();
 
