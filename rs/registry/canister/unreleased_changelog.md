@@ -9,6 +9,8 @@ on the process that this file is part of, see
 
 ## Added
 
+* Added rate limiting for add_node based on IP address.
+
 ## Changed
 
 ## Deprecated
