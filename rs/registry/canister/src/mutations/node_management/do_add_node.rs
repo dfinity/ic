@@ -1177,10 +1177,10 @@ mod tests {
             result_2.is_err(),
             "Second node addition should fail due to rate limiting"
         );
-        let err_msg = result_2.unwrap_err();
+        let error_message = result_2.unwrap_err();
         assert!(
-            err_msg.contains("Capacity exceeded") || err_msg.contains("Rate"),
-            "Error message should mention rate/capacity limit, got: {err_msg}"
+            error_message.contains("Capacity exceeded") || error_message.contains("Rate"),
+            "Error message should mention rate/capacity limit, got: {error_message}"
         );
 
         // Act: Try again after 24 hours - should succeed
@@ -1191,10 +1191,17 @@ mod tests {
             "Capacity should be restored after 24 hours"
         );
 
-        let result_3 = registry.do_add_node_(new_payload, node_operator_id, one_day_later);
+        let result_3 = registry.do_add_node_(new_payload.clone(), node_operator_id, one_day_later);
         assert!(
             result_3.is_ok(),
             "Node addition should succeed after 24 hours"
+        );
+
+        let result_4 = registry.do_add_node_(new_payload, node_operator_id, one_day_later);
+        let error_message = result_4.unwrap_err();
+        assert!(
+            error_message.contains("Capacity exceeded") || error_message.contains("Rate"),
+            "Error message should mention rate/capacity limit, got: {error_message}"
         );
     }
 
