@@ -116,6 +116,7 @@ pub struct RateLimitReservation {
 
 impl Registry {
     /// Try to reserve capacity for an operation that is rate limited by both Node Operator and Node Provider
+    /// See ic_nervous_system_rate_limits documentation to understand the reserve-commit pattern.
     pub fn try_reserve_capacity_for_node_operator_operation(
         &self,
         now: SystemTime,
@@ -142,6 +143,8 @@ impl Registry {
         })
     }
 
+    /// Tries to reserve capacity for a node provider operation.
+    /// See ic_nervous_system_rate_limits documentation to understand the reserve-commit pattern.
     pub fn try_reserve_capacity_for_node_provider_operation(
         &self,
         now: SystemTime,
@@ -153,7 +156,8 @@ impl Registry {
         })
     }
 
-    /// Commit the reserved usage (i.e. commit the reserved usage)
+    /// Commits the reserved usage (i.e. commit the reserved usage)
+    /// See ic_nervous_system_rate_limits documentation to understand the reserve-commit pattern.
     pub fn commit_used_capacity_for_node_operator_operation(
         &self,
         now: SystemTime,
@@ -174,6 +178,8 @@ impl Registry {
         Ok(())
     }
 
+    /// Commits the reserved usage for a node provider operation.
+    /// See ic_nervous_system_rate_limits documentation to understand the reserve-commit pattern.
     pub fn commit_used_capacity_for_node_provider_operation(
         &self,
         now: SystemTime,
@@ -208,8 +214,9 @@ impl Registry {
     }
 }
 
-/// Try to reserve capacity for an add_node operation based on IP address.
-/// Each IP address can add 1 node per day.
+/// Tries to reserve capacity for an add_node operation based on IP address.
+/// Each IP address can (on average)add 1 node per day.
+/// See ic_nervous_system_rate_limits documentation to understand the reserve-commit pattern.
 pub fn try_reserve_add_node_capacity(
     now: SystemTime,
     ip_addr: String,
@@ -217,7 +224,8 @@ pub fn try_reserve_add_node_capacity(
     with_add_node_ip_rate_limiter(|rate_limiter| rate_limiter.try_reserve(now, ip_addr, 1))
 }
 
-/// Commit the reserved capacity for an add_node operation.
+/// Commits the reserved capacity for an add_node operation.
+/// See ic_nervous_system_rate_limits documentation to understand the reserve-commit pattern.
 pub fn commit_add_node_capacity(
     now: SystemTime,
     reservation: Reservation<String>,
