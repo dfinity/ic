@@ -268,15 +268,11 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
 
 /// This waits for the orchestrator to apply the firewall rules on all nodes.
 fn wait_for_orchestrator_fw_rules(env: &TestEnv) {
-    let all_nodes: Vec<IcNodeSnapshot> = env
-        .topology_snapshot()
-        .subnets()
-        .flat_map(|s| s.nodes())
-        .collect();
-
-    for node in all_nodes {
-        node.wait_for_orchestrator_fw_rule(&env.logger())
-            .expect("Orchestrator rule did not appear in time.");
+    for subnet in env.topology_snapshot() {
+        for node in subnet.nodes() {
+            node.wait_for_orchestrator_fw_rule(&env.logger())
+                .expect("Orchestrator rule did not appear in time.");
+        }
     }
 }
 
@@ -284,15 +280,13 @@ fn wait_for_orchestrator_fw_rules(env: &TestEnv) {
 /// This is usually called because by default outbound connections from the ic-http-adapter to most internal
 /// IPv6 ranges are blocked.
 fn create_accept_fw_rules(env: &TestEnv, target_socket_addr: SocketAddr) {
-    let all_nodes: Vec<IcNodeSnapshot> = env
-        .topology_snapshot()
-        .subnets()
-        .flat_map(|s| s.nodes())
-        .collect();
-
-    for node in all_nodes {
-        node.insert_egress_accept_rule_for_outcalls_adapter(target_socket_addr)
-            .expect("Failed to add accept firewall rule to allow access to UVM httpbin service");
+    for subnet in env.topology_snapshot() {
+        for node in subnet.nodes() {
+            node.insert_egress_accept_rule_for_outcalls_adapter(target_socket_addr)
+                .expect(
+                    "Failed to add accept firewall rule to allow access to UVM httpbin service",
+                );
+        }
     }
 }
 
