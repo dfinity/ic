@@ -27,6 +27,7 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateHashError, StateManager};
 use ic_logger::{ReplicaLogger, trace, warn};
+use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
@@ -705,7 +706,7 @@ impl Validator {
         dkg_pool: Arc<RwLock<dyn DkgPool>>,
         thread_pool: Arc<ThreadPool>,
         log: ReplicaLogger,
-        metrics: ValidatorMetrics,
+        metrics_registry: &MetricsRegistry,
         time_source: Arc<dyn TimeSource>,
     ) -> Validator {
         Validator {
@@ -719,7 +720,7 @@ impl Validator {
             dkg_pool,
             thread_pool,
             log,
-            metrics,
+            metrics: ValidatorMetrics::new(metrics_registry),
             schedule: RoundRobin::default(),
             time_source,
         }
@@ -2040,7 +2041,7 @@ pub mod test {
                 dependencies.dkg_pool.clone(),
                 build_thread_pool(MAX_CONSENSUS_THREADS),
                 no_op_logger(),
-                ValidatorMetrics::new(MetricsRegistry::new()),
+                &MetricsRegistry::new(),
                 Arc::clone(&dependencies.time_source) as Arc<_>,
             );
             Self {
