@@ -34,7 +34,7 @@ use prost::Message;
 use registry_canister::{
     certification::{current_version_tree, hash_tree_to_proto},
     common::LOG_PREFIX,
-    init::RegistryCanisterInitPayload,
+    init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadWithOptionalFlags},
     mutations::{
         complete_canister_migration::CompleteCanisterMigrationPayload,
         do_add_api_boundary_nodes::AddApiBoundaryNodesPayload,
@@ -158,9 +158,10 @@ fn canister_init() {
     dfn_core::printer::hook();
     recertify_registry();
 
-    let init_payload =
-        Decode!(&arg_data(), RegistryCanisterInitPayload)
+    let init_payload_with_optional_flags =
+        Decode!(&arg_data(), RegistryCanisterInitPayloadWithOptionalFlags)
             .expect("The init argument for the registry canister must be a Candid-encoded RegistryCanisterInitPayload.");
+    let init_payload = RegistryCanisterInitPayload::from(init_payload_with_optional_flags);
     println!(
         "{}canister_init: Initializing with: {}",
         LOG_PREFIX,
