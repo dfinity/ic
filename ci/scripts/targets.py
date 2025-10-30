@@ -237,7 +237,8 @@ def check():
 
         for target in explicit_targets_for_pattern:
             excluded_tags_regex = "|".join(EXCLUDED_TAGS)
-            query = f'({target}) except attr(tags, "{excluded_tags_regex}", //...)'
+            query = (f'({target}) except attr(tags, "{excluded_tags_regex}", //...) '
+                     f'except kind("generated files", //...)')
             result = subprocess.run(["bazel", "query", query], capture_output=True, text=True)
             if result.returncode != 0:
                 indented_error_msg = f"{indentation}" + f"\n{indentation}".join(result.stderr.strip().splitlines())
