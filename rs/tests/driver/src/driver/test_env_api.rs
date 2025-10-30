@@ -1653,6 +1653,8 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// Waits until the Orchestrator dashboard endpoint is accessible
     fn await_orchestrator_dashboard_accessible(&self) -> anyhow::Result<()> {
+        std::thread::sleep(std::time::Duration::from_secs(120));
+        panic!("Slept for 2 minutes, now panicking as instructed");
         let mut count = 0;
         retry_with_msg!(
             &format!(
