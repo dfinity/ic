@@ -1,10 +1,11 @@
 #![allow(deprecated)]
+pub use ic_management_canister_types_private::CanisterSettingsArgs;
+
 use candid::{CandidType, Nat};
 use ic_cdk::api::call::{CallResult, RejectionCode};
 use std::time::{Duration, SystemTime};
 
 use dfn_protobuf::{ProtoBuf, ToProto};
-use ic_management_canister_types_private::CanisterSettingsArgs;
 
 use ic_nervous_system_time_helpers::now_nanoseconds;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
