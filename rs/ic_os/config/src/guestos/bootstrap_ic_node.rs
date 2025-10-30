@@ -234,19 +234,23 @@ fn copy_directory_recursive(src: &Path, dst: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
     use std::fs;
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::thread_local;
     use tempfile::TempDir;
 
-    // Mock SEV checker for tests
-    static MOCK_SEV_ACTIVE: AtomicBool = AtomicBool::new(false);
-    fn set_mock_sev_active(value: bool) {
-        MOCK_SEV_ACTIVE.store(value, Ordering::SeqCst);
-    }
-    fn mock_sev_checker() -> anyhow::Result<bool> {
-        Ok(MOCK_SEV_ACTIVE.load(Ordering::SeqCst))
+    // Mock SEV checker for tests with thread-local isolation
+    thread_local! {
+        static MOCK_SEV_ACTIVE: Cell<bool> = Cell::new(false);
     }
 
+    fn set_mock_sev_active(value: bool) {
+        MOCK_SEV_ACTIVE.with(|flag| flag.set(value));
+    }
+
+    fn mock_sev_checker() -> anyhow::Result<bool> {
+        Ok(MOCK_SEV_ACTIVE.with(|flag| flag.get()))
+    }
     #[test]
     fn test_copy_directory_recursive() {
         let src_dir = TempDir::new().unwrap();
