@@ -30,49 +30,28 @@ const AVG_ADD_NODE_BY_IP_PER_DAY: u64 = 1;
 const ADD_NODE_IP_MAX_SPIKE: u64 = AVG_ADD_NODE_BY_IP_PER_DAY * 7;
 const ADD_NODE_IP_REFILL_INTERVAL_SECONDS: u64 = ONE_DAY_SECONDS;
 
-/// Creates a rate limiter configuration for node providers
-fn create_node_provider_rate_limiter_config() -> RateLimiterConfig {
-    RateLimiterConfig {
-        add_capacity_amount: 1,
-        add_capacity_interval: Duration::from_secs(NODE_PROVIDER_CAPACITY_ADD_INTERVAL_SECONDS),
-        max_capacity: NODE_PROVIDER_MAX_SPIKE,
-        max_reservations: NODE_PROVIDER_MAX_SPIKE * 2,
-    }
-}
-
-/// Creates a rate limiter configuration for node operators
-fn create_node_operator_rate_limiter_config() -> RateLimiterConfig {
-    RateLimiterConfig {
-        add_capacity_amount: 1,
-        add_capacity_interval: Duration::from_secs(NODE_OPERATOR_CAPACITY_ADD_INTERVAL_SECONDS),
-        max_capacity: NODE_OPERATOR_MAX_SPIKE,
-        max_reservations: NODE_OPERATOR_MAX_SPIKE * 2,
-    }
-}
-
-/// Creates a rate limiter configuration for add_node IP-based limiting
-/// Limits to 1 node addition per day per IP address
-fn create_add_node_ip_rate_limiter_config() -> RateLimiterConfig {
-    RateLimiterConfig {
-        add_capacity_amount: 1,
-        add_capacity_interval: Duration::from_secs(ADD_NODE_IP_REFILL_INTERVAL_SECONDS),
-        max_capacity: ADD_NODE_IP_MAX_SPIKE,
-        max_reservations: ADD_NODE_IP_MAX_SPIKE * 2,
-    }
-}
-
 thread_local! {
     static NODE_PROVIDER_RATE_LIMITER: RefCell<
         RateLimiter<String, StableMemoryCapacityStorage<String, VM>>,
     > = RefCell::new(RateLimiter::new_stable(
-        create_node_provider_rate_limiter_config(),
+        RateLimiterConfig {
+            add_capacity_amount: 1,
+            add_capacity_interval: Duration::from_secs(NODE_PROVIDER_CAPACITY_ADD_INTERVAL_SECONDS),
+            max_capacity: NODE_PROVIDER_MAX_SPIKE,
+            max_reservations: NODE_PROVIDER_MAX_SPIKE * 2,
+        },
         get_node_provider_rate_limiter_memory(),
     ));
 
     static NODE_OPERATOR_RATE_LIMITER: RefCell<
         RateLimiter<String, StableMemoryCapacityStorage<String, VM>>,
     > = RefCell::new(RateLimiter::new_stable(
-        create_node_operator_rate_limiter_config(),
+        RateLimiterConfig {
+            add_capacity_amount: 1,
+            add_capacity_interval: Duration::from_secs(NODE_OPERATOR_CAPACITY_ADD_INTERVAL_SECONDS),
+            max_capacity: NODE_OPERATOR_MAX_SPIKE,
+            max_reservations: NODE_OPERATOR_MAX_SPIKE * 2,
+        },
         get_node_operator_rate_limiter_memory(),
     ));
 
@@ -81,7 +60,12 @@ thread_local! {
     /// Limits to 1 node addition per day per IP address.
     static ADD_NODE_IP_RATE_LIMITER: RefCell<InMemoryRateLimiter<String>> =
         RefCell::new(InMemoryRateLimiter::new_in_memory(
-            create_add_node_ip_rate_limiter_config(),
+            RateLimiterConfig {
+                add_capacity_amount: 1,
+                add_capacity_interval: Duration::from_secs(ADD_NODE_IP_REFILL_INTERVAL_SECONDS),
+                max_capacity: ADD_NODE_IP_MAX_SPIKE,
+                max_reservations: ADD_NODE_IP_MAX_SPIKE * 2,
+            },
         ));
 }
 

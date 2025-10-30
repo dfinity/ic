@@ -1122,7 +1122,7 @@ mod tests {
     fn test_ip_rate_limiting_for_add_node() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
-        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        let node_operator_id = PrincipalId::new_user_test_id(1);
 
         // Add node operator record with sufficient allowance
         let node_operator_record = NodeOperatorRecord {
@@ -1209,7 +1209,7 @@ mod tests {
     fn test_ip_rate_limiting_different_ips() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
-        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        let node_operator_id = PrincipalId::new_user_test_id(1);
 
         // Add node operator record with sufficient allowance
         let node_operator_record = NodeOperatorRecord {
