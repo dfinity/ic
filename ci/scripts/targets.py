@@ -188,8 +188,7 @@ def targets(
 
     # Finally, exclude targets that have any of the excluded tags:
     excluded_tags_regex = "|".join(EXCLUDED_TAGS + exclude_tags)
-    query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...) ' \
-            f'except kind("generated files", //...)'
+    query = f'({query}) except attr(tags, "{excluded_tags_regex}", //...) except kind("generated files", //...)'
 
     args = ["bazel", "query", "--keep_going", query]
     log(shlex.join(args))
@@ -238,8 +237,10 @@ def check():
 
         for target in explicit_targets_for_pattern:
             excluded_tags_regex = "|".join(EXCLUDED_TAGS)
-            query = (f'({target}) except attr(tags, "{excluded_tags_regex}", //...) '
-                     f'except kind("generated files", //...)')
+            query = (
+                f'({target}) except attr(tags, "{excluded_tags_regex}", //...) except kind("generated files", //...)'
+            )
+
             result = subprocess.run(["bazel", "query", query], capture_output=True, text=True)
             if result.returncode != 0:
                 indented_error_msg = f"{indentation}" + f"\n{indentation}".join(result.stderr.strip().splitlines())
