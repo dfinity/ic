@@ -266,7 +266,7 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
     info!(&env.logger(), "httpbin service started on UVM");
 }
 
-// This waits for the orchestrator to apply the firewall rules on all nodes.
+/// This waits for the orchestrator to apply the firewall rules on all nodes.
 fn wait_for_orchestrator_fw_rules(env: &TestEnv) {
     let all_nodes: Vec<IcNodeSnapshot> = env
         .topology_snapshot()
