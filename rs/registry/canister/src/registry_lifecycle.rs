@@ -121,6 +121,9 @@ mod test {
         registry_lifecycle::Registry,
     };
     use ic_base_types::PrincipalId;
+    use ic_protobuf::registry::node::v1::NodeRewardType;
+    use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
+    use ic_protobuf::registry::node_rewards::v2::{NodeRewardRate, NodeRewardRates};
     use ic_registry_transport::insert;
     use maplit::btreemap;
     use std::str::FromStr;
@@ -251,7 +254,7 @@ mod test {
     #[test]
     fn test_fill_node_operators_max_rewardable_nodes_correctly_single_type() {
         let mut registry = invariant_compliant_registry(0);
-        let mut node_operator_additions = Vec::new();
+        let mut initial_mutations = Vec::new();
 
         let no_1 = PrincipalId::from_str(
             "5dwhe-vpbuf-zz5ml-ylu6k-7y2z2-36ywv-5e4wf-advxd-3endk-icvg4-cae",
@@ -266,13 +269,29 @@ mod test {
             max_rewardable_nodes: btreemap! {},
             ..NodeOperatorRecord::default()
         };
+        let rewards_table = NodeRewardsTable {
+            table: btreemap! {
+                "REGION_A".to_string() => NodeRewardRates {
+                    rates: btreemap! {
+                        NodeRewardType::Type1.to_string() => NodeRewardRate{
+                            xdr_permyriad_per_node_per_month: 1000,
+                            reward_coefficient_percent: None,
+                        }
+                    },
+                }
+            },
+        };
 
-        node_operator_additions.push(insert(
+        initial_mutations.push(insert(
             make_node_operator_record_key(no_1),
             record_no_1.encode_to_vec(),
         ));
+        initial_mutations.push(insert(
+            NODE_REWARDS_TABLE_KEY,
+            rewards_table.encode_to_vec(),
+        ));
 
-        registry.apply_mutations_for_test(node_operator_additions);
+        registry.apply_mutations_for_test(initial_mutations);
         let mutations = fill_node_operators_max_rewardable_nodes(&registry);
         assert_eq!(mutations.len(), 1);
         registry.apply_mutations_for_test(mutations);
@@ -294,9 +313,58 @@ mod test {
     }
 
     #[test]
+    fn test_should_not_not_fill_node_operators_max_rewardable_nodes_when_max_rewardable_nodes_are_present()
+     {
+        let mut registry = invariant_compliant_registry(0);
+        let mut initial_mutations = Vec::new();
+
+        let no_1 = PrincipalId::from_str(
+            "5dwhe-vpbuf-zz5ml-ylu6k-7y2z2-36ywv-5e4wf-advxd-3endk-icvg4-cae",
+        )
+        .unwrap();
+
+        let record_no_1 = NodeOperatorRecord {
+            node_operator_principal_id: no_1.clone().to_vec(),
+            dc_id: "dummy_dc_id_1".to_string(),
+            ipv6: Some("dummy_ipv6_1".to_string()),
+            // Empty rewardable nodes, should be filled in by the migration
+            max_rewardable_nodes: btreemap! {
+                "type3.1".to_string() => 10,
+            },
+            ..NodeOperatorRecord::default()
+        };
+        let rewards_table = NodeRewardsTable {
+            table: btreemap! {
+                "REGION_A".to_string() => NodeRewardRates {
+                    rates: btreemap! {
+                        NodeRewardType::Type1.to_string() => NodeRewardRate{
+                            xdr_permyriad_per_node_per_month: 1000,
+                            reward_coefficient_percent: None,
+                        }
+                    },
+                }
+            },
+        };
+
+        initial_mutations.push(insert(
+            make_node_operator_record_key(no_1),
+            record_no_1.encode_to_vec(),
+        ));
+        initial_mutations.push(insert(
+            NODE_REWARDS_TABLE_KEY,
+            rewards_table.encode_to_vec(),
+        ));
+
+        registry.apply_mutations_for_test(initial_mutations);
+        let mutations = fill_node_operators_max_rewardable_nodes(&registry);
+
+        assert_eq!(mutations.len(), 0);
+    }
+
+    #[test]
     fn test_fill_node_operators_max_rewardable_nodes_correctly_multiple_types() {
         let mut registry = invariant_compliant_registry(0);
-        let mut node_operator_additions = Vec::new();
+        let mut initial_mutations = Vec::new();
 
         let no_1 = PrincipalId::from_str(
             "ukji3-ju5bx-ty5r7-qwk4p-eobil-isp26-fsomg-44kwf-j4ew7-ozkqy-wqe",
@@ -312,12 +380,29 @@ mod test {
             ..NodeOperatorRecord::default()
         };
 
-        node_operator_additions.push(insert(
+        let rewards_table = NodeRewardsTable {
+            table: btreemap! {
+                "REGION_A".to_string() => NodeRewardRates {
+                    rates: btreemap! {
+                        NodeRewardType::Type1.to_string() => NodeRewardRate{
+                            xdr_permyriad_per_node_per_month: 1000,
+                            reward_coefficient_percent: None,
+                        }
+                    },
+                }
+            },
+        };
+
+        initial_mutations.push(insert(
             make_node_operator_record_key(no_1),
             record_no_1.encode_to_vec(),
         ));
+        initial_mutations.push(insert(
+            NODE_REWARDS_TABLE_KEY,
+            rewards_table.encode_to_vec(),
+        ));
 
-        registry.apply_mutations_for_test(node_operator_additions);
+        registry.apply_mutations_for_test(initial_mutations);
         let mutations = fill_node_operators_max_rewardable_nodes(&registry);
         assert_eq!(mutations.len(), 1);
         registry.apply_mutations_for_test(mutations);
@@ -329,6 +414,50 @@ mod test {
             dc_id: "dummy_dc_id_1".to_string(),
             ipv6: Some("dummy_ipv6_1".to_string()),
             max_rewardable_nodes: btreemap! {"type3".to_string() => 16, "type3.1".to_string() => 9},
+            ..NodeOperatorRecord::default()
+        };
+
+        assert_eq!(
+            record, expected_record,
+            "Assertion for NodeOperator {no_1} failed"
+        );
+    }
+
+    #[test]
+    fn test_migrates_utopia_operators_node_allowance_to_max_rewardable_nodes_type3() {
+        let mut registry = invariant_compliant_registry(0);
+        let mut initial_mutations = Vec::new();
+
+        let no_1 = PrincipalId::new_user_test_id(1);
+
+        let record_no_1 = NodeOperatorRecord {
+            node_operator_principal_id: no_1.clone().to_vec(),
+            dc_id: "dummy_dc_id_1".to_string(),
+            ipv6: Some("dummy_ipv6_1".to_string()),
+            node_allowance: 1000,
+            // Empty rewardable nodes, should be filled in by the migration
+            max_rewardable_nodes: btreemap! {},
+            ..NodeOperatorRecord::default()
+        };
+
+        initial_mutations.push(insert(
+            make_node_operator_record_key(no_1),
+            record_no_1.encode_to_vec(),
+        ));
+
+        registry.apply_mutations_for_test(initial_mutations);
+        let mutations = fill_node_operators_max_rewardable_nodes(&registry);
+        assert_eq!(mutations.len(), 1);
+        registry.apply_mutations_for_test(mutations);
+
+        let record = registry.get_node_operator_or_panic(no_1);
+
+        let expected_record = NodeOperatorRecord {
+            node_operator_principal_id: no_1.clone().to_vec(),
+            dc_id: "dummy_dc_id_1".to_string(),
+            ipv6: Some("dummy_ipv6_1".to_string()),
+            node_allowance: 1000,
+            max_rewardable_nodes: btreemap! {"type3".to_string() => 1000},
             ..NodeOperatorRecord::default()
         };
 
