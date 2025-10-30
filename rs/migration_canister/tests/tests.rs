@@ -1022,7 +1022,6 @@ async fn parallel_validations() {
         pic,
         sources,
         targets,
-        source_controllers,
         ..
     } = setup(Settings {
         num_migrations: NUM_MIGRATIONS as u64,
