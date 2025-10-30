@@ -178,16 +178,16 @@ where
 
     // Restrict state injection on SEV production nodes
     if !sev_checker()? {
-        println!("SEV is not active - copying state injection files");
+        println!("SEV is not active - allowing state injection files");
         copy_state_injection_files(extracted_dir, state_root)?;
     } else {
         #[cfg(not(feature = "dev"))]
         {
-            println!("SEV is active - skipping state injection files for production variant");
+            println!("SEV is active - blocking state injection files for production variant");
         }
         #[cfg(feature = "dev")]
         {
-            println!("SEV is active - copying state injection files for dev variant");
+            println!("SEV is active - allowing state injection files for dev variant");
             copy_state_injection_files(extracted_dir, state_root)?;
         }
     }
