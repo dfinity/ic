@@ -154,6 +154,7 @@ def motoko_canister(name, entry, deps, **kwargs):
       name: the name of the target that produces a Wasm module.
       entry: path to this canister's main Motoko source file.
       deps: list of actor dependencies, e.g., external_actor targets from @rules_motoko.
+      **kwargs: additional arguments to pass to motoko_binary (like `moc_flags`).
     """
 
     raw_wasm = entry.replace(".mo", ".raw")
