@@ -50,6 +50,7 @@ pub enum BatchContent {
     Splitting {
         /// The id of the subnet the replica is assigned to after subnet splitting.
         new_subnet_id: SubnetId,
+        /// The id of the subnet which will have the other half of the state.
         // Used for sanity checks
         other_subnet_id: SubnetId,
     },
