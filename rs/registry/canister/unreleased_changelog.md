@@ -16,6 +16,8 @@ on the process that this file is part of, see
   used in a slightly improved subnet recovery procedure. Thus, this would only
   be used in rare extraordinary situations.
 
+* Added rate limiting for add_node based on IP address.
+
 ## Changed
 
 * `ssh_node_state_write_access` can have at most 50 elements. Previously, there
