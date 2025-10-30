@@ -576,12 +576,11 @@ async fn test_request_with_empty_domain_separator_fails<T: Identity + 'static>(
 
     let signature = sign_query_with_empty_domain_separator(&content, &identity);
 
-    // Add the public key but not the signature to the envelope. Should fail.
     let envelope = HttpRequestEnvelope {
         content: content.clone(),
         sender_delegation: None,
         sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
-        sender_sig: None,
+        sender_sig: Some(Blob(signature.signature.unwrap())),
     };
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
@@ -609,12 +608,11 @@ async fn test_request_with_empty_domain_separator_fails<T: Identity + 'static>(
 
     let signature = sign_update_with_empty_domain_separator(&content, &identity);
 
-    // Add the public key but not the signature to the envelope. Should fail.
     let envelope = HttpRequestEnvelope {
         content: content.clone(),
         sender_delegation: None,
         sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
-        sender_sig: None,
+        sender_sig: Some(Blob(signature.signature.unwrap())),
     };
     let body = serde_cbor::ser::to_vec(&envelope).unwrap();
     let client = reqwest::Client::new();
