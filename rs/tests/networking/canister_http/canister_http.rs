@@ -175,8 +175,8 @@ pub fn get_universal_vm_ipv4_address(env: &TestEnv) -> Ipv4Addr {
     }
 }
 
-// This function starts the httpbin service on the universal VM and creates firewall rules on all nodes to
-// allow access to it. This means that this must only be called after all nodes are up and healthy.
+/// This function starts the httpbin service on the universal VM and creates firewall rules on all nodes to
+/// allow access to it. This means that this must only be called after all nodes are up and healthy.
 pub fn start_httpbin_on_uvm(env: &TestEnv) {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let vm = deployed_universal_vm.get_vm().unwrap();
