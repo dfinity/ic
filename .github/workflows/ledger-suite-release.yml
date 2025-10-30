@@ -524,39 +524,38 @@ jobs:
             }
 
             // Create release body using template literal with string interpolation
-            const releaseBody = `### ${humanTitle}\n` +
-              `\n` +
-              `#### Features\n` +
-              `**⚠️ TODO: Replace this section with actual feature descriptions before publishing! ⚠️**\n` +
-              `\n` +
-              `#### Upgrade and Downgrade Notes\n` +
-              `${upgradeNotes}` +
-              `- It is recommended to have all ledger suite canisters running at the same version.\n` +
-              `- Upgrading the ledger suite canisters shall be done in the following order:\n` +
-              `  1. The index first.\n` +
-              `  2. The ledger second.\n` +
-              `  3. Any archives third.\n` +
-              `\n` +
-              `#### WASM Verification\n` +
-              `\`\`\`\n` +
-              `git fetch\n` +
-              `git checkout ${tagName}\n` +
-              `./ci/container/build-ic.sh -c\n` +
-              `${wasmCommands}` +
-              `\`\`\`\n` +
-              `The hashes should match the values included in the \`SHA256SUMS\` file. For convenience, the filenames and corresponding hashes are also included in the table below.\n` +
-              `\n` +
-              `#### Change Log\n` +
-              `\n` +
-              `\`\`\`\n` +
-              `${gitCommand}${gitLog}\n` +
-              `\`\`\`\n` +
-              `\n` +
-              `#### Files and Hashes\n` +
-              `\n` +
-              `| Filename  | SHA256  |\n` +
-              `| --- | --- |\n` +
-              `${hashTable}`;
+            // Create release body using template literal with string interpolation
+            const releaseBody = `### ${humanTitle}
+
+            #### Features
+            **⚠️ TODO: Replace this section with actual feature descriptions before publishing! ⚠️**
+
+            #### Upgrade and Downgrade Notes
+            ${upgradeNotes}- It is recommended to have all ledger suite canisters running at the same version.
+            - Upgrading the ledger suite canisters shall be done in the following order:
+              1. The index first.
+              2. The ledger second.
+              3. Any archives third.
+
+            #### WASM Verification
+            \`\`\`
+            git fetch
+            git checkout ${tagName}
+            ./ci/container/build-ic.sh -c
+            ${wasmCommands}\`\`\`
+            The hashes should match the values included in the \`SHA256SUMS\` file. For convenience, the filenames and corresponding hashes are also included in the table below.
+
+            #### Change Log
+
+            \`\`\`
+            ${gitCommand}${gitLog}
+            \`\`\`
+
+            #### Files and Hashes
+
+            | Filename  | SHA256  |
+            | --- | --- |
+            ${hashTable}`;
 
             // Write the release body to file
             const releaseBodyFile = path.join(tempDirMetadata, 'release_body.md');
