@@ -472,52 +472,17 @@ jobs:
             // Parse WASM files from JSON array
             const wasmFiles = JSON.parse('${{ steps.variables.outputs.wasm_files }}');
 
-            // Define the release body template
-            const releaseTemplate = [
-              '### {{humanTitle}}',
-              '',
-              '#### Features',
-              '**⚠️ TODO: Replace this section with actual feature descriptions before publishing! ⚠️**',
-              '',
-              '#### Upgrade and Downgrade Notes',
-              '{{upgradeNotes}}- It is recommended to have all ledger suite canisters running at the same version.',
-              '- Upgrading the ledger suite canisters shall be done in the following order:',
-              '  1. The index first.',
-              '  2. The ledger second.',
-              '  3. Any archives third.',
-              '',
-              '#### WASM Verification',
-              '```',
-              'git fetch',
-              'git checkout {{tagName}}',
-              './ci/container/build-ic.sh -c',
-              '{{wasmCommands}}```',
-              'The hashes should match the values included in the `SHA256SUMS` file. For convenience, the filenames and corresponding hashes are also included in the table below.',
-              '',
-              '#### Change Log',
-              '',
-              '```',
-              '{{gitCommand}}{{gitLog}}',
-              '```',
-              '',
-              '#### Files and Hashes',
-              '',
-              '| Filename  | SHA256  |',
-              '| --- | --- |',
-              '{{hashTable}}'
-            ].join('\n');
-
             // Build dynamic parts
 
             // 1. Upgrade notes (conditional for ICRC)
             let upgradeNotes = '';
             if (releaseType === 'icrc') {
-              upgradeNotes = '- For upgrading the ledger to this release, the installed ledger shall be running [' + upgradeFrom + '](https://github.com/' + repository + '/releases/tag/' + upgradeFrom + ') or later\n';
+              upgradeNotes = `- For upgrading the ledger to this release, the installed ledger shall be running [${upgradeFrom}](https://github.com/${repository}/releases/tag/${upgradeFrom}) or later\n`;
             }
 
             // 2. WASM verification commands
             const wasmCommands = wasmFiles
-              .map(wasmFile => 'sha256sum ./artifacts/canisters/' + wasmFile)
+              .map(wasmFile => `sha256sum ./artifacts/canisters/${wasmFile}`)
               .join('\n') + '\n';
 
             // 3. Git command and log
@@ -550,22 +515,47 @@ jobs:
 
                   // Skip the SHA256SUMS file itself in the table
                   if (filename !== 'SHA256SUMS') {
-                    hashRows.push('| [' + filename + '](https://github.com/' + repository + '/releases/download/' + tagName + '/' + filename + ') | `' + hash + '` |');
+                    hashRows.push(`| [${filename}](https://github.com/${repository}/releases/download/${tagName}/${filename}) | \`${hash}\` |`);
                   }
                 }
               }
               hashTable = hashRows.join('\n');
             }
 
-            // Replace placeholders in template
-            const releaseBody = releaseTemplate
-              .replace('{{humanTitle}}', humanTitle)
-              .replace('{{upgradeNotes}}', upgradeNotes)
-              .replace('{{tagName}}', tagName)
-              .replace('{{wasmCommands}}', wasmCommands)
-              .replace('{{gitCommand}}', gitCommand)
-              .replace('{{gitLog}}', gitLog)
-              .replace('{{hashTable}}', hashTable);
+            // Create release body using template literal with string interpolation
+            const releaseBody = `### ${humanTitle}\n` +
+              `\n` +
+              `#### Features\n` +
+              `**⚠️ TODO: Replace this section with actual feature descriptions before publishing! ⚠️**\n` +
+              `\n` +
+              `#### Upgrade and Downgrade Notes\n` +
+              `${upgradeNotes}` +
+              `- It is recommended to have all ledger suite canisters running at the same version.\n` +
+              `- Upgrading the ledger suite canisters shall be done in the following order:\n` +
+              `  1. The index first.\n` +
+              `  2. The ledger second.\n` +
+              `  3. Any archives third.\n` +
+              `\n` +
+              `#### WASM Verification\n` +
+              `\`\`\`\n` +
+              `git fetch\n` +
+              `git checkout ${tagName}\n` +
+              `./ci/container/build-ic.sh -c\n` +
+              `${wasmCommands}` +
+              `\`\`\`\n` +
+              `The hashes should match the values included in the \`SHA256SUMS\` file. For convenience, the filenames and corresponding hashes are also included in the table below.\n` +
+              `\n` +
+              `#### Change Log\n` +
+              `\n` +
+              `\`\`\`\n` +
+              `${gitCommand}${gitLog}\n` +
+              `\`\`\`\n` +
+              `\n` +
+              `#### Files and Hashes\n` +
+              `\n` +
+              `| Filename  | SHA256  |\n` +
+              `| --- | --- |\n` +
+              `${hashTable}`;
 
             // Write the release body to file
             const releaseBodyFile = path.join(tempDirMetadata, 'release_body.md');
