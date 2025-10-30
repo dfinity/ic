@@ -23,7 +23,6 @@ DEPENDENCIES = [
     "@crate_index//:p256",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
-    "@crate_index//:ring",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde_cbor",
     "@crate_index//:slog",
