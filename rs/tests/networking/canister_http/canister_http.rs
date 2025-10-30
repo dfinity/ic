@@ -280,9 +280,9 @@ fn wait_for_orchestrator_fw_rules(env: &TestEnv) {
     }
 }
 
-// Create firewall rules on all nodes to allow connections from canister http adapter to the target socket address.
-// This is usually called because by default outbound connections from the ic-http-adapter to most internal
-// IPv6 ranges are blocked.
+/// Create firewall rules on all nodes to allow connections from canister http adapter to the target socket address.
+/// This is usually called because by default outbound connections from the ic-http-adapter to most internal
+/// IPv6 ranges are blocked.
 fn create_accept_fw_rules(env: &TestEnv, target_socket_addr: SocketAddr) {
     let all_nodes: Vec<IcNodeSnapshot> = env
         .topology_snapshot()
