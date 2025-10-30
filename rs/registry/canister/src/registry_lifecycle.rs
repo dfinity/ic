@@ -5,8 +5,11 @@ use crate::{
 };
 use ic_base_types::PrincipalId;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_registry_keys::{NODE_OPERATOR_RECORD_KEY_PREFIX, make_node_operator_record_key};
+use ic_registry_keys::{
+    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, make_node_operator_record_key,
+};
 use ic_registry_transport::{pb::v1::RegistryMutation, update};
+use maplit::btreemap;
 use prost::Message;
 
 pub fn canister_post_upgrade(
@@ -61,6 +64,14 @@ pub fn canister_post_upgrade(
     }
 }
 
+/// Currently, we know that node rewards are enabled based on the presence of the table in the
+/// registry.
+fn are_node_rewards_enabled(registry: &Registry) -> bool {
+    registry
+        .get(NODE_REWARDS_TABLE_KEY.as_bytes(), registry.latest_version())
+        .is_some()
+}
+
 fn fill_node_operators_max_rewardable_nodes(registry: &Registry) -> Vec<RegistryMutation> {
     let mut mutations = Vec::new();
     let max_rewardable_nodes_mapping = &MAX_REWARDABLE_NODES_MAPPING;
@@ -74,17 +85,27 @@ fn fill_node_operators_max_rewardable_nodes(registry: &Registry) -> Vec<Registry
         if !rewardable_nodes.is_empty() {
             continue;
         }
-        if let Some(max_rewardable_nodes) =
-            max_rewardable_nodes_mapping.get(&node_operator_id).cloned()
-        {
-            record.max_rewardable_nodes = max_rewardable_nodes
-                .into_iter()
-                .map(|(node_reward_type, count)| (node_reward_type.to_string(), count))
-                .collect();
-            mutations.push(update(
-                make_node_operator_record_key(node_operator_id),
-                record.encode_to_vec(),
-            ));
+
+        match max_rewardable_nodes_mapping.get(&node_operator_id).cloned() {
+            Some(max_rewardable_nodes) => {
+                record.max_rewardable_nodes = max_rewardable_nodes
+                    .into_iter()
+                    .map(|(node_reward_type, count)| (node_reward_type.to_string(), count))
+                    .collect();
+                mutations.push(update(
+                    make_node_operator_record_key(node_operator_id),
+                    record.encode_to_vec(),
+                ));
+            }
+            None => {
+                // This is for migrating UTOPIA node_allowance to max_rewardable_nodes.
+                if !are_node_rewards_enabled(registry) {
+                    record.max_rewardable_nodes = btreemap! {
+                        // Reason for choosing type3 is simply because it is the latest type.
+                        "type3".to_string() => record.node_allowance as u32,
+                    };
+                }
+            }
         }
     }
 
