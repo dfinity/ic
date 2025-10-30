@@ -102,8 +102,7 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                 .await
                 .expect("Update call to proxy canister failed");
             if !matches!(res, Ok(ref x) if x.status == 200 && x.body.contains(context)) {
-                //todo(urgent): change this back to bail. 
-                info!(&logger, "Http request failed response: {:?}", res);
+                bail!("Http request failed response: {:?}", res);
             }
             info!(&logger, "Update call succeeded! {:?}", res);
             Ok(())

@@ -15,21 +15,13 @@ rust_library(
     target_compatible_with = ["@platforms//os:linux"],
     deps = [
         # Keep sorted.
-        ##TODO(urgent): consider using helprs from the firewall test.
-        "//rs/nns/governance/api",
-        "//rs/protobuf",
-        "//rs/registry/canister",
-        "//rs/registry/keys",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
         "//rs/rust_canisters/canister_test",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/types/types",
-        "@crate_index//:candid",
-        "@crate_index//:reqwest",
         "@crate_index//:slog",
         "@crate_index//:tokio",
-        "@crate_index//:url",
     ],
 )
 
