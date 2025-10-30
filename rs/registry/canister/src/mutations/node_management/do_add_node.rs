@@ -25,6 +25,7 @@ use crate::mutations::node_management::{
 };
 use ic_nervous_system_time_helpers::now_system_time;
 use ic_registry_canister_api::AddNodePayload;
+use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
 use ic_types::{crypto::CurrentNodePublicKeys, time::Time};
 use prost::Message;
 
@@ -60,16 +61,21 @@ impl Registry {
         // Get required node_reward_type
         let node_reward_type = payload
             .node_reward_type
-            .as_ref()
             .map(|t| {
                 validate_str_as_node_reward_type(t).map_err(|e| {
                     format!("{LOG_PREFIX}do_add_node: Error parsing node type from payload: {e}")
                 })
             })
-            .transpose()?
-            .ok_or(format!(
-                "{LOG_PREFIX}do_add_node: Node reward type is required."
-            ))?;
+            .unwrap_or_else(|| {
+                if !self.are_node_rewards_enabled() {
+                    // Handles UTOPIA case where node rewards are not enabled.
+                    Ok(NodeRewardType::Type3)
+                } else {
+                    Err(format!(
+                        "{LOG_PREFIX}do_add_node: Node reward type is required."
+                    ))
+                }
+            })?;
 
         // Clear out any nodes that already exist at this IP.
         // This will only succeed if the same NO was in control of the original nodes.
@@ -198,6 +204,13 @@ impl Registry {
         }
 
         Ok(node_id)
+    }
+
+    /// Currently, we know that node rewards are enabled based on the presence of the table in the
+    /// registry.
+    fn are_node_rewards_enabled(&self) -> bool {
+        self.get(NODE_REWARDS_TABLE_KEY.as_bytes(), self.latest_version())
+            .is_some()
     }
 }
 
