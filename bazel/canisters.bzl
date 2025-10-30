@@ -147,7 +147,7 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
         did = service_file,
     )
 
-def motoko_canister(name, entry, deps):
+def motoko_canister(name, entry, deps, **kwargs):
     """Defines a Motoko program that builds into a WebAssembly module.
 
     Args:
@@ -171,6 +171,7 @@ def motoko_canister(name, entry, deps):
         idl_out = raw_did,
         wasm_out = raw_wasm,
         deps = deps,
+        **kwargs
     )
 
     finalize_wasm(
