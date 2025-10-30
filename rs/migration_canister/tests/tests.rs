@@ -1029,7 +1029,6 @@ async fn parallel_validations() {
         ..Settings::default()
     })
     .await;
-    let sender = source_controllers[0];
 
     let mut msg_ids = vec![];
     for i in 0..NUM_MIGRATIONS {
