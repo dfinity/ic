@@ -64,49 +64,48 @@ pub fn canister_post_upgrade(
     }
 }
 
-/// Currently, we know that node rewards are enabled based on the presence of the table in the
-/// registry.
-fn are_node_rewards_enabled(registry: &Registry) -> bool {
-    registry
-        .get(NODE_REWARDS_TABLE_KEY.as_bytes(), registry.latest_version())
-        .is_some()
-}
-
 fn fill_node_operators_max_rewardable_nodes(registry: &Registry) -> Vec<RegistryMutation> {
     let mut mutations = Vec::new();
     let max_rewardable_nodes_mapping = &MAX_REWARDABLE_NODES_MAPPING;
+
+    let are_node_rewards_enabled = registry
+        .get(NODE_REWARDS_TABLE_KEY.as_bytes(), registry.latest_version())
+        .is_some();
 
     for (_, mut record) in
         get_key_family::<NodeOperatorRecord>(registry, NODE_OPERATOR_RECORD_KEY_PREFIX).into_iter()
     {
         let node_operator_id = PrincipalId::try_from(&record.node_operator_principal_id).unwrap();
+
+        // This to ensure migration is performed only once.
         if !record.max_rewardable_nodes.is_empty() {
             continue;
         }
-        match max_rewardable_nodes_mapping.get(&node_operator_id).cloned() {
-            Some(max_rewardable_nodes) => {
-                record.max_rewardable_nodes = max_rewardable_nodes
-                    .into_iter()
-                    .map(|(node_reward_type, count)| (node_reward_type.to_string(), count))
-                    .collect();
-                mutations.push(update(
-                    make_node_operator_record_key(node_operator_id),
-                    record.encode_to_vec(),
-                ));
-            }
-            None => {
-                // This is for migrating UTOPIA node_allowance to max_rewardable_nodes.
-                if !are_node_rewards_enabled(registry) {
-                    record.max_rewardable_nodes = btreemap! {
-                        // Reason for choosing type3 is simply because it is the latest type.
-                        "type3".to_string() => record.node_allowance as u32,
-                    };
-                    mutations.push(update(
-                        make_node_operator_record_key(node_operator_id),
-                        record.encode_to_vec(),
-                    ));
-                }
-            }
+
+        if !are_node_rewards_enabled {
+            // This is for migrating UTOPIA node_allowance to max_rewardable_nodes.
+            record.max_rewardable_nodes = btreemap! {
+                // Reason for choosing type3 is simply because it is the latest type.
+                "type3".to_string() => record.node_allowance as u32,
+            };
+            mutations.push(update(
+                make_node_operator_record_key(node_operator_id),
+                record.encode_to_vec(),
+            ));
+            continue;
+        }
+
+        if let Some(max_rewardable_nodes) =
+            max_rewardable_nodes_mapping.get(&node_operator_id).cloned()
+        {
+            record.max_rewardable_nodes = max_rewardable_nodes
+                .into_iter()
+                .map(|(node_reward_type, count)| (node_reward_type.to_string(), count))
+                .collect();
+            mutations.push(update(
+                make_node_operator_record_key(node_operator_id),
+                record.encode_to_vec(),
+            ));
         }
     }
 
