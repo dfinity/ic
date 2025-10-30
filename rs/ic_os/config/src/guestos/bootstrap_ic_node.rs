@@ -241,7 +241,7 @@ mod tests {
 
     // Mock SEV checker for tests with thread-local isolation
     thread_local! {
-        static MOCK_SEV_ACTIVE: Cell<bool> = Cell::new(false);
+        static MOCK_SEV_ACTIVE: Cell<bool> = const { Cell::new(false) };
     }
 
     fn set_mock_sev_active(value: bool) {
