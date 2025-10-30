@@ -18,7 +18,8 @@
 #   Release Candidates: ledger-suite-icrc-2025-05-22.rc1, ledger-suite-icp-2025-05-22.rc2
 #
 # Release Workflow:
-# 1. Pick a commit on the master branch (to ensure artifacts are available in CDN)
+# 1. Pick a commit on the master branch for which the FI nightly test passed, and verify that artifacts are available in
+#    the CDN (e.g., verify that https://download.dfinity.systems/ic/${commit}/canisters/ic-icrc1-ledger.wasm.gz exists).
 # 2. Create a release candidate tag: ledger-suite-{type}-YYYY-MM-DD.rc1
 #    - This creates a prerelease for testing
 #    - If issues are found, create .rc2, .rc3, etc. with fixes
