@@ -169,7 +169,7 @@ struct LoopDeviceMount {
 
 impl Drop for LoopDeviceMount {
     fn drop(&mut self) {
-        if let Err(e) = self.mount.unmount(UnmountFlags::empty()) {
+        if let Err(e) = retry_if_busy(|| self.mount.unmount(UnmountFlags::empty())) {
             // If umount fails, we need to avoid cleaning the tmpdir, as this
             // will purge the contents of the mounted fs, instead.
             eprintln!("Error dropping mount: {e:?}");
