@@ -134,7 +134,7 @@ impl TryFrom<native_types::Type3RegionBaseRewards> for Type3RegionBaseRewards {
                     .to_u64()
                     .ok_or("Conversion to u64 failed (avg_rewards_xdr_permyriad)")?,
             ),
-            avg_coefficient_percent: Some(
+            avg_coefficient: Some(
                 src.avg_coefficient
                     .to_f64()
                     .ok_or("Conversion to f64 failed (avg_coefficient_percent)")?,

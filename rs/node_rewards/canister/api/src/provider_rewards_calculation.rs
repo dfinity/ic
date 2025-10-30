@@ -58,7 +58,7 @@ pub struct Type3RegionBaseRewards {
     pub region: Option<String>,
     pub nodes_count: Option<u64>,
     pub avg_rewards_xdr_permyriad: Option<u64>,
-    pub avg_coefficient_percent: Option<f64>,
+    pub avg_coefficient: Option<f64>,
     pub daily_xdr_permyriad: Option<u64>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
