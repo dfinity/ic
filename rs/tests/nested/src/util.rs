@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::str::FromStr;
 
-use anyhow::{Context, Error, Result, bail};
+use anyhow::{Context, Result, bail};
 use canister_test::PrincipalId;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
@@ -336,44 +336,26 @@ pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
         .to_string()
 }
 
-/// Logs guestos diagnostics, used in the event of test failure
-pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger, error: Error) {
-    info!(
-        logger,
-        "TEST FAILED: {:?}\n\nAttempting GuestOS diagnostics...", error
-    );
+/// Execute a bash script on a node via SSH and log the output.
+pub fn block_on_bash_script_and_log<N: SshSession>(log: &Logger, node: &N, cmd: &str) {
+    let out = node.block_on_bash_script(cmd).unwrap();
+    info!(log, "{cmd}:\n{out}");
+}
 
+/// Logs guestos diagnostics, used in the event of test failure
+pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
     match host.get_guest_ssh() {
         Ok(guest) => {
-            let diagnostics: Vec<(&str, &str)> = vec![
-                (
-                    "systemctl --failed --no-pager || true",
-                    "GuestOS failed systemd units",
-                ),
-                (
-                    "journalctl -b --no-pager -u systemd-remount-fs.service || true",
-                    "GuestOS systemd-remount-fs.service logs",
-                ),
-                ("mount | sort", "GuestOS current mounts"),
-                (
-                    "journalctl -b --no-pager -p warning | tail -n 200",
-                    "GuestOS journal warnings (last 200 lines)",
-                ),
-                (
-                    "set -o pipefail; dmesg --color=never | grep -iE 'mount|ext4|xfs|btrfs|nvme|sda|i/o error|failed' | tail -n 200 || true",
-                    "GuestOS dmesg mount/kernel errors (last 200 matching lines)",
-                ),
+            let diagnostics = vec![
+                "systemctl --failed --no-pager || true",
+                "journalctl -b --no-pager -u systemd-remount-fs.service || true",
+                "mount | sort",
+                "journalctl -b --no-pager -p warning | tail -n 200",
+                "set -o pipefail; dmesg --color=never | grep -iE 'mount|ext4|xfs|btrfs|nvme|sda|i/o error|failed' | tail -n 200 || true",
             ];
 
-            for (cmd, label) in diagnostics {
-                match guest.block_on_bash_script(cmd) {
-                    Ok(output) => {
-                        info!(logger, "{}:\n{}\n\n", label, output);
-                    }
-                    Err(err) => {
-                        info!(logger, "Failed to collect '{}': {:?}\n\n", label, err);
-                    }
-                }
+            for cmd in diagnostics {
+                block_on_bash_script_and_log(logger, &guest, cmd);
             }
         }
         Err(err) => {
@@ -383,9 +365,4 @@ pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger, error: 
             );
         }
     }
-
-    panic!(
-        "System test failed. See diagnostics above. Error: {:?}",
-        error
-    );
 }
