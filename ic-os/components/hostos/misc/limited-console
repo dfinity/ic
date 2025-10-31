@@ -92,11 +92,7 @@ while true; do
         continue
     fi
 
-    if [ "$command" = "help" ]; then
-        show_menu
-    else
-        # Parse command and arguments
-        read -r cmd args <<< "$command"
-        execute_command "$cmd" $args
-    fi
+    # Parse command and arguments
+    read -r cmd args <<< "$command"
+    execute_command "$cmd" $args
 done
