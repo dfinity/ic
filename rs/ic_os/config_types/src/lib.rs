@@ -34,7 +34,7 @@ use url::Url;
 pub const CONFIG_VERSION: &str = "1.9.0";
 
 /// List of field paths that have been removed and should not be reused.
-pub static RESERVED_FIELD_PATHS: &[&str] = &[];
+pub static RESERVED_FIELD_PATHS: &[&str] = &["icos_settings.logging"];
 
 pub type ConfigMap = HashMap<String, String>;
 
