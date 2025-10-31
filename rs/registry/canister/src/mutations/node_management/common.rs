@@ -82,23 +82,20 @@ pub fn get_node_operator_id_for_node(
 pub fn get_node_reward_type_for_node(
     registry: &Registry,
     node_id: NodeId,
-) -> Result<NodeRewardType, String> {
+) -> Result<Option<NodeRewardType>, String> {
     let node_key = make_node_record_key(node_id);
-    registry
+    let value = registry
         .get(node_key.as_bytes(), registry.latest_version())
-        .map_or(
-            Err(format!("Node Id {node_id:} not found in the registry")),
-            |result| {
-                let node_reward_type = NodeRecord::decode(result.value.as_slice())
-                    .unwrap()
-                    .node_reward_type
-                    .ok_or(format!("Node Id {node_id:} does not have a reward type"))?;
+        .ok_or(format!("Node Id {node_id:} not found in the registry"))?;
 
-                NodeRewardType::try_from(node_reward_type).map_err(|_| {
-                    format!("Could not decode node_record's node_reward_type for Node Id {node_id}")
-                })
-            },
-        )
+    NodeRecord::decode(value.value.as_slice())
+        .map_err(|_| format!("Could not decode node_record for Node Id {node_id}"))?
+        .node_reward_type
+        .map(|t| NodeRewardType::try_from(t))
+        .transpose()
+        .map_err(|_| {
+            format!("Could not decode node_record's node_reward_type for Node Id {node_id}")
+        })
 }
 
 pub fn get_node_provider_id_for_operator_id(

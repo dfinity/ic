@@ -46,7 +46,7 @@ impl Registry {
         caller_id: PrincipalId,
         now: SystemTime,
     ) -> Result<NodeId, String> {
-        let node_operator_record = get_node_operator_record(self, caller_id)
+        let mut node_operator_record = get_node_operator_record(self, caller_id)
             .map_err(|err| format!("{LOG_PREFIX}do_add_node: Aborting node addition: {err}"))?;
 
         let reservation =
@@ -58,7 +58,7 @@ impl Registry {
 
         println!("{LOG_PREFIX}do_add_node: The node id is {node_id:?}");
 
-        // Get required node_reward_type
+        // Get valid node_rewards_type if type is in request
         let node_reward_type = payload
             .node_reward_type
             .as_ref()
@@ -67,16 +67,8 @@ impl Registry {
                     format!("{LOG_PREFIX}do_add_node: Error parsing node type from payload: {e}")
                 })
             })
-            .unwrap_or_else(|| {
-                if !self.are_node_rewards_enabled() {
-                    // Handles UTOPIA case where node rewards are not enabled.
-                    Ok(NodeRewardType::Type3)
-                } else {
-                    Err(format!(
-                        "{LOG_PREFIX}do_add_node: Node reward type is required."
-                    ))
-                }
-            })?;
+            .transpose()?
+            .map(|node_reward_type| node_reward_type as i32);
 
         // Clear out any nodes that already exist at this IP.
         // This will only succeed if the same NO was in control of the original nodes.
@@ -90,7 +82,8 @@ impl Registry {
         if !nodes_with_same_ip.is_empty() {
             for node_with_same_ip in &nodes_with_same_ip {
                 let node_same_ip_type = get_node_reward_type_for_node(self, *node_with_same_ip)
-                    .map_err(|e| format!("{LOG_PREFIX}do_add_node: {e}"))?;
+                    .map_err(|e| format!("{LOG_PREFIX}do_add_node: {e}"))?
+                    .map(|node_reward_type| node_reward_type as i32);
 
                 if node_same_ip_type == node_reward_type {
                     num_removed_same_ip_same_type += 1;
@@ -125,25 +118,33 @@ impl Registry {
             }
         }
 
-        // Validate node operator's max_rewardable_nodes quota
-        let max_rewardable_nodes_same_type = node_operator_record.max_rewardable_nodes.get(&(node_reward_type.to_string()))
-            .ok_or(format!("{LOG_PREFIX}do_add_node: Node Operator does not have rewardable nodes for {node_reward_type}"))?;
+        if self.are_node_rewards_enabled() {
+            let node_reward_type = node_reward_type.ok_or(format!(
+                "{LOG_PREFIX}do_add_node: Node reward type is required."
+            ))?;
 
-        let num_in_registry_same_type = get_node_operator_nodes(self, caller_id)
-            .into_iter()
-            .filter_map(|node| node.node_reward_type)
-            .filter(|&node_reward_type_src| node_reward_type_src == node_reward_type as i32)
-            .count() as u32;
+            let max_rewardable_nodes_same_type = *node_operator_record
+                .max_rewardable_nodes
+                .get(&(node_reward_type.to_string()))
+                .ok_or(format!("{LOG_PREFIX}do_add_node: Node Operator does not have rewardable nodes for {node_reward_type}"))?;
 
-        if max_rewardable_nodes_same_type + num_removed_same_ip_same_type
-            <= num_in_registry_same_type
-        {
-            return Err(format!(
-                "{LOG_PREFIX}do_add_node: Node Operator has reached max_rewardable_nodes quota for {node_reward_type}"
-            ));
+            let num_in_registry_same_type = get_node_operator_nodes(self, caller_id)
+                .into_iter()
+                .filter_map(|node| node.node_reward_type)
+                .filter(|t| t == &node_reward_type)
+                .count() as u32;
+
+            // Validate node operator's max_rewardable_nodes quota
+            if max_rewardable_nodes_same_type
+                <= num_in_registry_same_type - num_removed_same_ip_same_type
+            {
+                return Err(format!(
+                    "{LOG_PREFIX}do_add_node: Node Operator has reached max_rewardable_nodes quota for {node_reward_type}"
+                ));
+            }
         }
 
-        // Validate the domain
+        // 5. Validate the domain
         let domain: Option<String> = payload
             .domain
             .as_ref()
@@ -184,7 +185,7 @@ impl Registry {
             chip_id: payload.chip_id.clone(),
             public_ipv4_config: ipv4_intf_config,
             domain,
-            node_reward_type: Some(node_reward_type as i32),
+            node_reward_type,
             ssh_node_state_write_access: vec![],
         };
 
