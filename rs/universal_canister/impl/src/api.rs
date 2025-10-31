@@ -480,7 +480,11 @@ pub fn cost_http_request(request_size: u64, max_res_bytes: u64) -> Vec<u8> {
 pub fn cost_http_request_v2(data: &[u8]) -> Vec<u8> {
     let mut bytes = vec![0u8; CYCLES_SIZE];
     unsafe {
-        ic0::cost_http_request_v2(data.as_ptr() as u32, data.len() as u32, bytes.as_mut_ptr() as u32);
+        ic0::cost_http_request_v2(
+            data.as_ptr() as u32,
+            data.len() as u32,
+            bytes.as_mut_ptr() as u32,
+        );
     }
     bytes
 }

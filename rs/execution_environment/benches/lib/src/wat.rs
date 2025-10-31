@@ -42,13 +42,7 @@ impl Module {
         N: std::fmt::Display,
         P: RenderParams,
     {
-        self.from_ic0_with_data(
-            name,
-            params,
-            result,
-            DataSections::default(),
-            wasm64_status,
-        )
+        self.from_ic0_with_data(name, params, result, DataSections::default(), wasm64_status)
     }
 
     /// Render a complete WAT module for a system call executing in a loop, with params and result,
@@ -84,7 +78,11 @@ impl Module {
 
     /// Render a complete WAT module from imports and body.
     #[allow(clippy::wrong_self_convention)]
-    pub fn from_sections<I, D, B>(&self, (imports, data, body): (I, D, B), wasm64_status: Wasm64) -> String
+    pub fn from_sections<I, D, B>(
+        &self,
+        (imports, data, body): (I, D, B),
+        wasm64_status: Wasm64,
+    ) -> String
     where
         I: core::fmt::Display,
         D: core::fmt::Display,

@@ -35,13 +35,13 @@ use request_in_prep::{RequestInPrep, into_request};
 use sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
+use std::time::Duration;
 use std::{
     collections::BTreeMap,
     convert::{From, TryFrom},
     rc::Rc,
     str,
 };
-use std::time::Duration;
 
 pub mod cycles_balance_change;
 use cycles_balance_change::CyclesBalanceChange;
@@ -4228,7 +4228,6 @@ impl SystemApi for SystemApiImpl {
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
-
         #[derive(CandidType, Deserialize)]
         struct CostHttpRequestV2Params {
             request_bytes: u64,

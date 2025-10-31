@@ -8932,7 +8932,9 @@ fn cost_http_request_v2_fails_with_too_big_candid() {
     let raw_response_bytes = 1_000_000;
     let transformed_response_bytes = 800_000;
     let transform_instructions = 500_000_000;
-    let garbage = "Some garbage to DoS the System API by making Candid decoding more expensive".as_bytes().into();
+    let garbage = "Some garbage to DoS the System API by making Candid decoding more expensive"
+        .as_bytes()
+        .into();
     let params = CostHttpRequestV2ParamsExtended {
         request_bytes,
         http_roundtrip_time_ms,
