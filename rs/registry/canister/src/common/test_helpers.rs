@@ -11,6 +11,7 @@ use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::node::v1::{IPv4InterfaceConfig, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
+use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_keys::make_node_operator_record_key;
@@ -145,6 +146,14 @@ pub fn prepare_registry_with_nodes_and_node_operator_id(
             (node_id, dkg_dealing_encryption_pk)
         })
         .collect();
+
+    mutations.push(insert(
+        ic_registry_keys::NODE_REWARDS_TABLE_KEY.as_bytes(),
+        NodeRewardsTable {
+            table: BTreeMap::new(),
+        }
+        .encode_to_vec(),
+    ));
 
     let mutate_request = RegistryAtomicMutateRequest {
         mutations,

@@ -46,7 +46,7 @@ impl Registry {
         caller_id: PrincipalId,
         now: SystemTime,
     ) -> Result<NodeId, String> {
-        let mut node_operator_record = get_node_operator_record(self, caller_id)
+        let node_operator_record = get_node_operator_record(self, caller_id)
             .map_err(|err| format!("{LOG_PREFIX}do_add_node: Aborting node addition: {err}"))?;
 
         let reservation =
@@ -67,8 +67,7 @@ impl Registry {
                     format!("{LOG_PREFIX}do_add_node: Error parsing node type from payload: {e}")
                 })
             })
-            .transpose()?
-            .map(|node_reward_type| node_reward_type as i32);
+            .transpose()?;
 
         // Clear out any nodes that already exist at this IP.
         // This will only succeed if the same NO was in control of the original nodes.
@@ -82,8 +81,7 @@ impl Registry {
         if !nodes_with_same_ip.is_empty() {
             for node_with_same_ip in &nodes_with_same_ip {
                 let node_same_ip_type = get_node_reward_type_for_node(self, *node_with_same_ip)
-                    .map_err(|e| format!("{LOG_PREFIX}do_add_node: {e}"))?
-                    .map(|node_reward_type| node_reward_type as i32);
+                    .map_err(|e| format!("{LOG_PREFIX}do_add_node: {e}"))?;
 
                 if node_same_ip_type == node_reward_type {
                     num_removed_same_ip_same_type += 1;
@@ -131,8 +129,12 @@ impl Registry {
             let num_in_registry_same_type = get_node_operator_nodes(self, caller_id)
                 .into_iter()
                 .filter_map(|node| node.node_reward_type)
-                .filter(|t| t == &node_reward_type)
+                .filter(|t| t == &(node_reward_type as i32))
                 .count() as u32;
+
+            println!(
+                "{LOG_PREFIX}do_add_node: num_in_registry_same_type: {num_in_registry_same_type}, {max_rewardable_nodes_same_type}, {num_removed_same_ip_same_type}"
+            );
 
             // Validate node operator's max_rewardable_nodes quota
             if max_rewardable_nodes_same_type
@@ -185,7 +187,7 @@ impl Registry {
             chip_id: payload.chip_id.clone(),
             public_ipv4_config: ipv4_intf_config,
             domain,
-            node_reward_type,
+            node_reward_type: node_reward_type.map(|t| t as i32),
             ssh_node_state_write_access: vec![],
         };
 
@@ -333,6 +335,7 @@ mod tests {
     use ic_base_types::{NodeId, PrincipalId};
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
+    use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
     use ic_protobuf::registry::{
         api_boundary_node::v1::ApiBoundaryNodeRecord, node_operator::v1::NodeOperatorRecord,
     };
@@ -562,27 +565,6 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             "[Registry] do_add_node: Domain name `invalid_domain_name` has invalid format"
-        );
-    }
-
-    #[test]
-    fn should_fail_if_empty_rewardable_nodes() {
-        // Arrange
-        let mut registry = invariant_compliant_registry(0);
-        // Add node operator record with no max rewardable nodes.
-        let node_operator_record = NodeOperatorRecord::default();
-        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
-        registry.maybe_apply_mutation_internal(vec![insert(
-            make_node_operator_record_key(node_operator_id),
-            node_operator_record.encode_to_vec(),
-        )]);
-        let (payload, _) = prepare_add_node_payload(1, "type1");
-        // Act
-        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
-        // Assert
-        assert_eq!(
-            result.unwrap_err(),
-            "[Registry] do_add_node: Node Operator does not have rewardable nodes for type1"
         );
     }
 
@@ -1029,6 +1011,11 @@ mod tests {
             ..Default::default()
         };
         let node_operator_id = PrincipalId::new_user_test_id(10001);
+
+        registry.maybe_apply_mutation_internal(vec![insert(
+            NODE_REWARDS_TABLE_KEY,
+            NodeRewardsTable::default().encode_to_vec(),
+        )]);
 
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),

@@ -214,12 +214,12 @@ pub struct RemoveNodeDirectlyPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::test_helpers::prepare_registry_with_nodes_and_node_operator_id;
     use crate::mutations::do_add_node_operator::AddNodeOperatorPayload;
     use crate::{
         common::test_helpers::{
             invariant_compliant_registry, prepare_registry_with_nodes,
-            prepare_registry_with_nodes_and_node_operator_id, registry_add_node_operator_for_node,
-            registry_create_subnet_with_nodes,
+            registry_add_node_operator_for_node, registry_create_subnet_with_nodes,
         },
         mutations::common::test::TEST_NODE_ID,
     };
