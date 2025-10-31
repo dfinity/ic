@@ -219,8 +219,9 @@ mod withdrawal {
     use ic_ckdoge_minter::candid_api::{RetrieveDogeStatus, RetrieveDogeWithApprovalArgs};
     use ic_ckdoge_minter::lifecycle::init::Network;
     use ic_ckdoge_minter::{
-        BitcoinAddress, BurnMemo, EventType, MintMemo, OutPoint, RetrieveBtcRequest,
-        UpdateBalanceArgs, Utxo, UtxoStatus, candid_api::GetDogeAddressArgs, memo_encode,
+        BitcoinAddress, BurnMemo, ChangeOutput, EventType, MintMemo, OutPoint, RetrieveBtcRequest,
+        UpdateBalanceArgs, Utxo, UtxoStatus, WithdrawalFee, candid_api::GetDogeAddressArgs,
+        memo_encode,
     };
     use ic_ckdoge_minter_test_utils::{
         DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
@@ -316,9 +317,11 @@ mod withdrawal {
             },
         ]);
 
+        assert_eq!(utxo.value, ledger.icrc1_balance_of(account));
         let _ledger_approval_index = ledger
             .icrc2_approve(account, RETRIEVE_DOGE_MIN_AMOUNT, minter.id())
             .unwrap();
+        assert_eq!(RETRIEVE_DOGE_MIN_AMOUNT, ledger.icrc1_balance_of(account));
 
         let beneficiary_address =
             DogecoinAddress::parse(DOGECOIN_ADDRESS_1, &Network::Mainnet).unwrap();
@@ -368,6 +371,26 @@ mod withdrawal {
             });
 
         let txid = minter.await_doge_transaction(retrieve_doge_id.block_index);
+        // TODO XC-496: fix fee handling
+        let change_amount = 1_000_300;
+        let withdrawal_fee = WithdrawalFee {
+            minter_fee: 300,
+            bitcoin_fee: 220,
+        };
+        minter
+            .assert_that_events()
+            .contains_only_once_in_order(&[EventType::SentBtcTransaction {
+                request_block_indices: vec![retrieve_doge_id.block_index],
+                txid,
+                utxos: vec![utxo.clone()],
+                change_output: Some(ChangeOutput {
+                    vout: 1,
+                    value: change_amount,
+                }),
+                submitted_at: time_of_retrieval.as_nanos_since_unix_epoch(),
+                fee_per_vbyte: Some(1_500),
+                withdrawal_fee: Some(withdrawal_fee),
+            }]);
         let mempool = dogecoin.mempool();
         assert_eq!(
             mempool.len(),
@@ -383,9 +406,20 @@ mod withdrawal {
         assert_eq!(tx.output.len(), 2);
         let beneficiary = parse_dogecoin_address(tx.output.first().unwrap());
         assert_eq!(DOGECOIN_ADDRESS_1, beneficiary.to_string());
+        let amount_received =
+            RETRIEVE_DOGE_MIN_AMOUNT - withdrawal_fee.bitcoin_fee - withdrawal_fee.minter_fee;
+        assert_eq!(amount_received, tx.output.first().unwrap().value.to_sat());
 
         let change_beneficiary = parse_dogecoin_address(tx.output.get(1).unwrap());
         assert_eq!(minter_address, change_beneficiary.to_string());
+        assert_eq!(change_amount, tx.output.get(1).unwrap().value.to_sat());
+
+        assert_eq!(
+            utxo.value - amount_received - change_amount,
+            withdrawal_fee.bitcoin_fee
+        );
+
+        assert_eq!(ledger.icrc1_balance_of(account), 0);
     }
 }
 

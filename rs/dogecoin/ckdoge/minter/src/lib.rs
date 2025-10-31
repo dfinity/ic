@@ -23,8 +23,9 @@ pub use ic_ckbtc_minter::{
     address::BitcoinAddress,
     logs::Priority,
     memo::{BurnMemo, MintMemo, encode as memo_encode},
-    state::RetrieveBtcRequest,
+    queries::WithdrawalFee,
     state::eventlog::{Event, EventType, GetEventsArg},
+    state::{ChangeOutput, RetrieveBtcRequest},
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
 use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};

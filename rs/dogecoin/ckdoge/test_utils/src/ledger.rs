@@ -84,6 +84,20 @@ impl LedgerCanister {
             .unwrap()
             .map(|index| index.0.try_into().unwrap())
     }
+
+    pub fn icrc1_balance_of(&self, user: impl Into<Account>) -> u64 {
+        let user = user.into();
+        let call_result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "icrc1_balance_of",
+                Encode!(&user).unwrap(),
+            )
+            .expect("BUG: failed to call icrc1_balance_of");
+        Decode!(&call_result, Nat).unwrap().0.try_into().unwrap()
+    }
 }
 
 pub struct LedgerTransactionAssert<T> {
