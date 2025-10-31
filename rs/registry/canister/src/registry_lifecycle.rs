@@ -110,9 +110,7 @@ fn fill_node_operators_max_rewardable_nodes(registry: &Registry) -> Vec<Registry
         get_key_family::<NodeOperatorRecord>(registry, NODE_OPERATOR_RECORD_KEY_PREFIX).into_iter()
     {
         let node_operator_id = PrincipalId::try_from(&record.node_operator_principal_id).unwrap();
-        let rewardable_nodes = &record.rewardable_nodes;
-
-        if !rewardable_nodes.is_empty() {
+        if !&record.max_rewardable_nodes.is_empty() {
             continue;
         }
         if let Some(max_rewardable_nodes) =
