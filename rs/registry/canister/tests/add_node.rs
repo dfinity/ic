@@ -294,7 +294,6 @@ fn duplicated_nodes_are_removed_on_join() {
                 &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
             )
             .await;
-        println!("{:?}", response);
         assert!(response.is_ok());
 
         // Then, try to add another node.
