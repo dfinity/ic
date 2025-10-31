@@ -225,13 +225,36 @@ mod withdrawal {
     };
     use ic_ckdoge_minter_test_utils::{
         DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-        into_outpoint, parse_dogecoin_address, txid,
+        into_outpoint, parse_dogecoin_address, txid, utxo_wth_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
     use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
     use pocket_ic::Time;
     use std::array;
+
+    #[test]
+    fn should_withdraw_doge_fluent() {
+        let setup = Setup::default();
+        let dogecoin = setup.dogecoin();
+        let fee_percentiles = array::from_fn(|i| i as u64);
+        let median_fee = fee_percentiles[50];
+        assert_eq!(median_fee, 50);
+        dogecoin.set_fee_percentiles(fee_percentiles);
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+
+        setup
+            .deposit_flow()
+            .minter_get_dogecoin_deposit_address(account)
+            .dogecoin_simulate_transaction(utxo_wth_value(
+                RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE,
+            ))
+            .minter_update_balance()
+            .expect_mint();
+    }
 
     #[test]
     fn should_withdraw_doge() {
@@ -327,7 +350,7 @@ mod withdrawal {
             DogecoinAddress::parse(DOGECOIN_ADDRESS_1, &Network::Mainnet).unwrap();
         let time_of_retrieval = Time::from_nanos_since_unix_epoch(1760709476000000000);
 
-        setup.as_ref().set_time(time_of_retrieval);
+        setup.env.set_time(time_of_retrieval);
         let retrieve_doge_id = minter
             .retrieve_doge_with_approval(
                 USER_PRINCIPAL,

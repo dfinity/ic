@@ -1,13 +1,16 @@
+mod deposit;
 mod dogecoin;
 mod events;
 mod ledger;
 mod minter;
 
+use crate::deposit::RetrieveDepositAddressFlow;
 use crate::dogecoin::DogecoinCanister;
 use crate::ledger::LedgerCanister;
 pub use crate::minter::MinterCanister;
 use bitcoin::TxOut;
 use candid::{Encode, Principal};
+use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_ckdoge_minter::{
     Txid, get_dogecoin_canister_id,
     lifecycle::init::{InitArgs, MinterArg, Mode, Network},
@@ -185,6 +188,10 @@ impl Setup {
     pub fn network(&self) -> Network {
         self.doge_network
     }
+
+    pub fn deposit_flow(&self) -> RetrieveDepositAddressFlow<&Setup> {
+        RetrieveDepositAddressFlow::new(self)
+    }
 }
 
 impl Default for Setup {
@@ -193,9 +200,9 @@ impl Default for Setup {
     }
 }
 
-impl AsRef<PocketIc> for Setup {
-    fn as_ref(&self) -> &PocketIc {
-        &self.env
+impl AsRef<Setup> for Setup {
+    fn as_ref(&self) -> &Setup {
+        self
     }
 }
 
@@ -226,6 +233,17 @@ pub fn assert_trap<T: Debug>(result: Result<T, RejectResponse>, message: &str) {
 
 pub fn txid() -> Txid {
     Txid::from([42u8; 32])
+}
+
+pub fn utxo_wth_value(value: u64) -> Utxo {
+    Utxo {
+        height: 0,
+        outpoint: OutPoint {
+            txid: txid(),
+            vout: 1,
+        },
+        value,
+    }
 }
 
 pub fn into_outpoint(
