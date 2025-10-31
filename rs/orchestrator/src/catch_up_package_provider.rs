@@ -32,7 +32,6 @@
 
 use crate::{
     error::{OrchestratorError, OrchestratorResult},
-    metrics::OrchestratorMetrics,
     registry_helper::RegistryHelper,
     utils::https_endpoint_to_url,
 };
@@ -65,7 +64,6 @@ use tokio::time::timeout;
 /// and hence which version of the IC this node should be starting.
 pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
-    metrics: Arc<OrchestratorMetrics>,
     cup_dir: PathBuf,
     crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
     crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
@@ -82,7 +80,6 @@ impl CatchUpPackageProvider {
     /// Instantiate a new `CatchUpPackageProvider`
     pub(crate) fn new(
         registry: Arc<RegistryHelper>,
-        metrics: Arc<OrchestratorMetrics>,
         cup_dir: PathBuf,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
         crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
@@ -91,7 +88,6 @@ impl CatchUpPackageProvider {
     ) -> Self {
         Self::new_with_initial_backoff(
             registry,
-            metrics,
             cup_dir,
             crypto,
             crypto_tls_config,
@@ -103,7 +99,6 @@ impl CatchUpPackageProvider {
 
     fn new_with_initial_backoff(
         registry: Arc<RegistryHelper>,
-        metrics: Arc<OrchestratorMetrics>,
         cup_dir: PathBuf,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
         crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
@@ -114,7 +109,6 @@ impl CatchUpPackageProvider {
         Self {
             node_id,
             registry,
-            metrics,
             cup_dir,
             crypto,
             crypto_tls_config,
@@ -455,10 +449,6 @@ impl CatchUpPackageProvider {
         // recreate the CUP on all orchestrators of the version B before starting the replica.
         if height > local_cup_height || height == local_cup_height && !latest_cup.is_signed() {
             self.persist_cup(&latest_cup_proto)?;
-            self.metrics
-                .local_cup_state_hash
-                .with_label_values(&[&hex::encode(latest_cup.content.state_hash.clone().get().0)])
-                .set(1);
         }
 
         Ok(latest_cup)
@@ -756,7 +746,6 @@ mod tests {
     ) -> CatchUpPackageProvider {
         CatchUpPackageProvider::new_with_initial_backoff(
             registry,
-            Arc::new(OrchestratorMetrics::new(&ic_metrics::MetricsRegistry::new())),
             cup_dir,
             Arc::new(CryptoReturningOk::default()),
             Arc::new(mock_tls_config()),

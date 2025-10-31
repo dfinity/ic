@@ -33,7 +33,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     path::PathBuf,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
@@ -312,10 +312,6 @@ impl Upgrade {
             .registry
             .get_replica_version(subnet_id, cup_registry_version)?;
         if new_replica_version != self.replica_version {
-            // Wait a bit to let Prometheus scrape the newest metrics, in particular the newest
-            // local CUP state hash, before rebooting.
-            tokio::time::sleep(Duration::from_secs(10)).await;
-
             info!(
                 self.logger,
                 "Starting version upgrade at CUP registry version {}: {} -> {}",

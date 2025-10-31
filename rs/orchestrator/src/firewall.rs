@@ -1000,13 +1000,10 @@ mod tests {
             no_op_logger(),
         ));
 
-        let metrics = Arc::new(OrchestratorMetrics::new(&ic_metrics::MetricsRegistry::new()));
-
         let (crypto, _) =
             ic_crypto_test_utils_tls::temp_crypto_component_with_tls_keys(registry, node_id);
         let catch_up_package_provider = CatchUpPackageProvider::new(
-            Arc::clone(&registry_helper),
-            Arc::clone(&metrics),
+            registry_helper.clone(),
             tmp_dir.join("cups"),
             Arc::new(CryptoReturningOk::default()),
             Arc::new(crypto),
@@ -1017,7 +1014,7 @@ mod tests {
         Firewall::new(
             node_id,
             registry_helper,
-            metrics,
+            Arc::new(OrchestratorMetrics::new(&ic_metrics::MetricsRegistry::new())),
             config,
             boundary_node_config,
             Arc::new(catch_up_package_provider),
