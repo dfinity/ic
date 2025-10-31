@@ -958,10 +958,10 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
 
                 debit(block_index, from, fee);
 
-                if let Some(fee_collector_107) = get_fee_collector_107() {
-                    if let Some(fee_collector) = fee_collector_107 {
-                        credit(block_index, fee_collector, fee);
-                    }
+                if let Some(fee_collector_107) = get_fee_collector_107()
+                    && let Some(fee_collector) = fee_collector_107
+                {
+                    credit(block_index, fee_collector, fee);
                 }
             }
             Operation::FeeCollector {
