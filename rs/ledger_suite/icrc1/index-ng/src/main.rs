@@ -957,6 +957,12 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                 change_balance(spender, |balance| balance);
 
                 debit(block_index, from, fee);
+
+                if let Some(fee_collector_107) = get_fee_collector_107() {
+                    if let Some(fee_collector) = fee_collector_107 {
+                        credit(block_index, fee_collector, fee);
+                    }
+                }
             }
             Operation::FeeCollector {
                 fee_collector,
@@ -1012,14 +1018,14 @@ fn get_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) -> Option
     };
     match fee_collector_107 {
         Some(fee_collector) => fee_collector,
-        None => match get_fee_collector_from_state() {
+        None => match get_fee_collector_107() {
             Some(fee_collector) => fee_collector,
             None => get_legacy_fee_collector(block_index, block),
         },
     }
 }
 
-fn get_fee_collector_from_state() -> Option<Option<Account>> {
+fn get_fee_collector_107() -> Option<Option<Account>> {
     with_state(|s| s.fee_collector_107)
 }
 
