@@ -781,7 +781,6 @@ mod tests {
             .do_add_node_(payload_2.clone(), node_operator_id, now_system_time())
             .unwrap_err();
 
-        println!("{:?}", e);
         assert!(
             e.contains("do_add_node: There is already another node with the same IPv4 address")
         );
@@ -1030,6 +1029,32 @@ mod tests {
         assert_eq!(
             result.unwrap_err(),
             "[Registry] do_add_node: Node reward type is required."
+        );
+    }
+
+    #[test]
+    fn test_node_reward_type_is_not_required_if_no_node_rewards_table_present() {
+        let mut registry = invariant_compliant_registry(0);
+        // Add node operator record first
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 1, // Should be > 0 to add a new node
+            ..Default::default()
+        };
+        let node_operator_id = PrincipalId::new_user_test_id(10001);
+
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+        let (mut payload, _) = prepare_add_node_payload(1, "type1");
+        payload.node_reward_type = None;
+        // Code under test
+        let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
+
+        // Assert
+        assert!(
+            result.is_ok(),
+            "Could not create node with no node reward type: {result:?}"
         );
     }
 

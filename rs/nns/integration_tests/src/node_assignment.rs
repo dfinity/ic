@@ -20,7 +20,6 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_registry_keys::make_node_record_key;
-use maplit::btreemap;
 use registry_canister::mutations::{
     do_add_node_operator::AddNodeOperatorPayload,
     node_management::do_remove_nodes::RemoveNodesPayload,
@@ -103,7 +102,7 @@ fn test_add_and_remove_nodes_from_registry() {
             dc_id: "an1".into(),
             rewardable_nodes: BTreeMap::new(),
             ipv6: Some("0:0:0:0:0:0:0:0".into()),
-            max_rewardable_nodes: Some(btreemap! { "type1".to_string() => 5 }),
+            max_rewardable_nodes: None,
         };
 
         submit_external_update_proposal(
@@ -117,8 +116,7 @@ fn test_add_and_remove_nodes_from_registry() {
         )
         .await;
 
-        let (mut payload, _) = prepare_add_node_payload(1);
-        payload.node_reward_type = Some("type1".to_string());
+        let (payload, _) = prepare_add_node_payload(1);
         // To fix occasional flakiness similar to this error:
         // invalid TLS certificate: notBefore date (=ASN1Time(2024-12-12 13:17:08.0 +00:00:00)) \
         //      is in the future compared to current time (=ASN1Time(2024-12-12 13:16:39.0 +00:00:00))\"
