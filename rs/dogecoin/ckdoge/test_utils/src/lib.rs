@@ -34,6 +34,7 @@ pub const MIN_CONFIRMATIONS: u32 = 60;
 
 pub struct Setup {
     pub env: Arc<PocketIc>,
+    doge_network: Network,
     dogecoin: CanisterId,
     minter: CanisterId,
     ledger: CanisterId,
@@ -153,6 +154,7 @@ impl Setup {
 
         Self {
             env,
+            doge_network,
             dogecoin,
             minter,
             ledger,
@@ -178,6 +180,10 @@ impl Setup {
             env: self.env.clone(),
             id: self.ledger,
         }
+    }
+
+    pub fn network(&self) -> Network {
+        self.doge_network
     }
 }
 
@@ -233,10 +239,14 @@ pub fn into_outpoint(
     }
 }
 
-pub fn parse_dogecoin_address(tx_out: &TxOut) -> bitcoin::dogecoin::Address {
+pub fn parse_dogecoin_address(network: Network, tx_out: &TxOut) -> bitcoin::dogecoin::Address {
     bitcoin::dogecoin::Address::from_script(
         tx_out.script_pubkey.as_script(),
-        bitcoin::dogecoin::Network::Dogecoin,
+        match network {
+            Network::Mainnet => bitcoin::dogecoin::Network::Dogecoin,
+            Network::Testnet => bitcoin::dogecoin::Network::Testnet,
+            Network::Regtest => bitcoin::dogecoin::Network::Regtest,
+        },
     )
     .unwrap_or_else(|e| {
         panic!(

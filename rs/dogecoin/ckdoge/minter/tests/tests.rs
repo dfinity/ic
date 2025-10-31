@@ -405,13 +405,13 @@ mod withdrawal {
         assert_eq!(tx.input[0].previous_output, into_outpoint(utxo.outpoint));
 
         assert_eq!(tx.output.len(), 2);
-        let beneficiary = parse_dogecoin_address(tx.output.first().unwrap());
+        let beneficiary = parse_dogecoin_address(setup.network(), tx.output.first().unwrap());
         assert_eq!(DOGECOIN_ADDRESS_1, beneficiary.to_string());
         let amount_received =
             RETRIEVE_DOGE_MIN_AMOUNT - withdrawal_fee.bitcoin_fee - withdrawal_fee.minter_fee;
         assert_eq!(amount_received, tx.output.first().unwrap().value.to_sat());
 
-        let change_beneficiary = parse_dogecoin_address(tx.output.get(1).unwrap());
+        let change_beneficiary = parse_dogecoin_address(setup.network(), tx.output.get(1).unwrap());
         assert_eq!(minter_address, change_beneficiary.to_string());
         assert_eq!(change_amount, tx.output.get(1).unwrap().value.to_sat());
 
