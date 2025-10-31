@@ -132,10 +132,6 @@ impl Registry {
                 .filter(|t| t == &(node_reward_type as i32))
                 .count() as u32;
 
-            println!(
-                "{LOG_PREFIX}do_add_node: num_in_registry_same_type: {num_in_registry_same_type}, {max_rewardable_nodes_same_type}, {num_removed_same_ip_same_type}"
-            );
-
             // Validate node operator's max_rewardable_nodes quota
             if max_rewardable_nodes_same_type
                 <= num_in_registry_same_type - num_removed_same_ip_same_type
