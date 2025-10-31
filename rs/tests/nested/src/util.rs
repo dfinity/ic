@@ -340,7 +340,7 @@ pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
 pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger, error: Error) {
     info!(
         logger,
-        "Orchestrator dashboard not accessible: {:?}. Attempting GuestOS diagnostics...", error
+        "TEST FAILED: {:?}\n\nAttempting GuestOS diagnostics...", error
     );
 
     match host.get_guest_ssh() {
