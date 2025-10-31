@@ -124,6 +124,7 @@ async fn leave_proxy_canister_running(proxy_canister: &Canister<'_>, url: String
                             method: HttpMethod::GET,
                             max_response_bytes: None,
                             is_replicated: Some(true),
+                            pricing_version: None,
                         },
                         cycles: 500_000_000_000,
                     },

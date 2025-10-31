@@ -150,7 +150,15 @@ message CanisterHttpRequestContext {
   optional uint64 max_response_bytes = 9;
   google.protobuf.BytesValue transform_context = 10;
   optional Replication replication = 11;
+  optional PricingVersion pricing_version = 12;
   reserved 5;
+}
+
+message PricingVersion {
+  oneof version {
+    google.protobuf.Empty legacy = 1;
+    google.protobuf.Empty pay_as_you_go = 2;
+  }
 }
 
 message Replication {

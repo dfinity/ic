@@ -126,6 +126,7 @@ pub(crate) async fn single_https_outcall(canister: &Principal, agents: &[Agent])
             context: vec![],
         }),
         is_replicated: None,
+        pricing_version: None,
     };
 
     agents
