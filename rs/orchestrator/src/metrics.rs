@@ -11,6 +11,7 @@ pub(crate) struct OrchestratorMetrics {
     pub(crate) ipv4_registry_version: IntGauge,
     pub(crate) reboot_duration: IntGauge,
     pub(crate) orchestrator_info: IntGaugeVec,
+    pub(crate) local_cup_state_hash: IntGaugeVec,
     pub(crate) key_rotation_status: IntGaugeVec,
     pub(crate) master_public_key_changed_errors: IntCounterVec,
     pub(crate) failed_consecutive_upgrade_checks: IntCounter,
@@ -66,6 +67,11 @@ impl OrchestratorMetrics {
                 "ic_orchestrator_info",
                 "version info for the internet computer orchestrator running.",
                 &["ic_active_version"],
+            ),
+            local_cup_state_hash: metrics_registry.int_gauge_vec(
+                "local_cup_state_hash",
+                "The state hash of the locally persisted catch-up package.",
+                &["state_hash"],
             ),
             key_rotation_status: metrics_registry.int_gauge_vec(
                 "orchestrator_key_rotation_status",

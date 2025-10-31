@@ -237,6 +237,7 @@ impl Orchestrator {
 
         let cup_provider = Arc::new(CatchUpPackageProvider::new(
             Arc::clone(&registry),
+            Arc::clone(&metrics),
             args.cup_dir.clone(),
             Arc::clone(&crypto) as _,
             Arc::clone(&crypto) as _,
