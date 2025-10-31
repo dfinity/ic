@@ -33,6 +33,7 @@ mod validation;
 /// The max number of requests in a 24 hour sliding window. Requests are either
 /// - active (in REQUESTS)
 /// - succeeded (in HISTORY) and not older than 24 hours.
+///
 /// Note that RATE_LIMIT + MAX_ONGOING_VALIDATIONS < 500, which is the
 /// subnet queue capacity.
 const RATE_LIMIT: u64 = 50;
