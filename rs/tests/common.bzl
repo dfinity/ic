@@ -49,7 +49,7 @@ NNS_CANISTER_WASM_PROVIDERS = {
     },
     "migration-canister": {
         "tip-of-branch": "//rs/migration_canister:migration-canister",
-        "mainnet": "//rs/test_utilities:empty-wasm",
+        "mainnet": "@mainnet_canisters//:migration-canister.wasm.gz",
     },
 }
 
