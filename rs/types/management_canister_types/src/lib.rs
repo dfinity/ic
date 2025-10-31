@@ -427,11 +427,43 @@ pub struct CanisterRenameRecord {
     rename_to: RenameToRecord,
 }
 
+impl CanisterRenameRecord {
+    pub fn canister_id(&self) -> PrincipalId {
+        self.canister_id
+    }
+
+    pub fn total_num_changes(&self) -> u64 {
+        self.total_num_changes
+    }
+
+    pub fn requested_by(&self) -> PrincipalId {
+        self.requested_by
+    }
+
+    pub fn rename_to(&self) -> &RenameToRecord {
+        &self.rename_to
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize)]
 pub struct RenameToRecord {
     canister_id: PrincipalId,
     version: u64,
     total_num_changes: u64,
+}
+
+impl RenameToRecord {
+    pub fn canister_id(&self) -> PrincipalId {
+        self.canister_id
+    }
+
+    pub fn version(&self) -> u64 {
+        self.version
+    }
+
+    pub fn total_num_changes(&self) -> u64 {
+        self.total_num_changes
+    }
 }
 
 /// `CandidType` for `CanisterChangeDetails`

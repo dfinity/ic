@@ -1,7 +1,11 @@
 use candid::{CandidType, Decode, Encode, Principal};
 use canister_test::Project;
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::{CanisterLogRecord, CanisterSettings};
+use ic_management_canister_types_private::{
+    CanisterChangeDetails, CanisterInfoRequest, CanisterInfoResponse, Payload as _,
+};
+use ic_universal_canister::{CallArgs, UNIVERSAL_CANISTER_WASM, wasm};
 use itertools::Itertools;
 use pocket_ic::{
     PocketIcBuilder,
@@ -152,34 +156,24 @@ async fn setup(
     let target_subnet = subnets[1];
 
     // source canister
+    let mut all_source_controllers = source_controllers.clone();
+    if mc_controls_source {
+        // make migration canister controller of source
+        all_source_controllers.push(MIGRATION_CANISTER_ID.into());
+        if let Some(ref allowlist) = allowlist {
+            all_source_controllers.extend(allowlist.clone());
+        }
+    }
     let source = pic
         .create_canister_on_subnet(
             Some(c1),
             Some(CanisterSettings {
-                controllers: Some(source_controllers.clone()),
+                controllers: Some(all_source_controllers),
                 ..Default::default()
             }),
             source_subnet,
         )
         .await;
-    if mc_controls_source {
-        // make migration canister controller of source
-        let mut new_controllers = source_controllers.clone();
-        new_controllers.push(MIGRATION_CANISTER_ID.into());
-        if let Some(ref allowlist) = allowlist {
-            new_controllers.extend(allowlist.clone());
-        }
-        pic.update_canister_settings(
-            source,
-            Some(c1),
-            CanisterSettings {
-                controllers: Some(new_controllers.clone()),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-    }
     if enough_cycles {
         pic.add_cycles(source, u128::MAX / 2).await;
     } else {
@@ -187,34 +181,24 @@ async fn setup(
     }
     pic.stop_canister(source, Some(c1)).await.unwrap();
     // target canister
+    let mut all_target_controllers = target_controllers.clone();
+    if mc_controls_target {
+        // make migration canister controller of target
+        all_target_controllers.push(MIGRATION_CANISTER_ID.into());
+        if let Some(ref allowlist) = allowlist {
+            all_target_controllers.extend(allowlist.clone());
+        }
+    }
     let target = pic
         .create_canister_on_subnet(
             Some(c1),
             Some(CanisterSettings {
-                controllers: Some(target_controllers.clone()),
+                controllers: Some(all_target_controllers),
                 ..Default::default()
             }),
             target_subnet,
         )
         .await;
-    if mc_controls_target {
-        // make migration canister controller of target
-        let mut new_controllers = target_controllers.clone();
-        new_controllers.push(MIGRATION_CANISTER_ID.into());
-        if let Some(ref allowlist) = allowlist {
-            new_controllers.extend(allowlist.clone());
-        }
-        pic.update_canister_settings(
-            target,
-            Some(c1),
-            CanisterSettings {
-                controllers: Some(new_controllers),
-                ..Default::default()
-            },
-        )
-        .await
-        .unwrap();
-    }
     if enough_cycles {
         pic.add_cycles(target, u128::MAX / 2).await;
     } else {
@@ -343,6 +327,15 @@ async fn migration_succeeds() {
     } = setup(Settings::default()).await;
     let sender = source_controllers[0];
 
+    pic.add_cycles(target, 1_000_000_000_000).await;
+    pic.install_canister(
+        target,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        Some(sender),
+    )
+    .await;
+
     migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target })
         .await
         .unwrap();
@@ -382,11 +375,57 @@ async fn migration_succeeds() {
     let source_new_subnet = pic.get_subnet(source).await.unwrap();
     assert_eq!(source_new_subnet, target_subnet);
     pic.start_canister(source, Some(sender)).await.unwrap();
-    let err = pic
-        .update_call(source, sender, "yesn't", vec![])
+    pic.update_call(source, sender, "update", wasm().reply().build())
         .await
-        .unwrap_err();
-    assert!(err.reject_message.contains("no wasm module"));
+        .unwrap();
+
+    // Check canister history retrieved via a universal canister
+    // acting as a proxy canister.
+    let proxy_canister = pic.create_canister().await;
+    pic.add_cycles(proxy_canister, 1_000_000_000_000).await;
+    pic.install_canister(
+        proxy_canister,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+    )
+    .await;
+    let source_canister_id = CanisterId::unchecked_from_principal(PrincipalId(source));
+    let canister_info_request = CanisterInfoRequest::new(source_canister_id, Some(20));
+    let call_args = CallArgs::default().other_side(canister_info_request.encode());
+    let payload = wasm()
+        .call_simple(CanisterId::ic_00(), "canister_info", call_args)
+        .build();
+    let res = pic
+        .update_call(proxy_canister, Principal::anonymous(), "update", payload)
+        .await
+        .unwrap();
+    let canister_info_response = CanisterInfoResponse::decode(&res).unwrap();
+    // There are 4 changes of the "source" canister after renaming:
+    // creation, controllers change, renaming, and controllers change.
+    assert_eq!(canister_info_response.total_num_changes(), 4);
+    // There are 5 entries in the canister history of the "source" canister after renaming:
+    // creation, installation, controllers change of the "target" canister before renaming,
+    // then renaming, and controllers change.
+    let canister_history = canister_info_response.changes();
+    assert_eq!(canister_history.len(), 5);
+    // The second-to-last entry in canister history is the renaming entry.
+    let rename_details = canister_history[canister_history.len() - 2].details();
+    match rename_details {
+        CanisterChangeDetails::CanisterRename(rename_record) => {
+            assert_eq!(rename_record.canister_id(), PrincipalId(target));
+            // There were 3 entries in the canister history of the "target" canister before renaming:
+            // creation, installation, and controllers change.
+            assert_eq!(rename_record.total_num_changes(), 3);
+            assert_eq!(rename_record.requested_by(), PrincipalId(sender));
+            let rename_to = rename_record.rename_to();
+            assert_eq!(rename_to.canister_id(), PrincipalId(source));
+            // There were 2 entries in the canister history of the "source" canister before renaming:
+            // creation and controllers change.
+            assert_eq!(rename_to.total_num_changes(), 2);
+        }
+        _ => panic!("Unexpected canister history entry: {:?}", rename_details),
+    };
 }
 
 #[tokio::test]
