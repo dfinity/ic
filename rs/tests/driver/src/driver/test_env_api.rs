@@ -1653,8 +1653,30 @@ pub trait HasPublicApiUrl: HasTestEnv + Send + Sync {
 
     /// Waits until the Orchestrator dashboard endpoint is accessible
     fn await_orchestrator_dashboard_accessible(&self) -> anyhow::Result<()> {
-        std::thread::sleep(std::time::Duration::from_secs(120));
-        Err(anyhow!("Slept for 2 minutes, now panicking"))
+        let mut count = 0;
+        retry_with_msg!(
+            &format!(
+                "await_orchestrator_dashboard_accessible for {}",
+                self.get_public_addr().ip()
+            ),
+            self.test_env().logger(),
+            READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
+            || {
+                let ip = match self.get_public_addr().ip() {
+                    IpAddr::V6(ip) => ip,
+                    IpAddr::V4(_) => panic!("Expected IPv6 address"),
+                };
+                if Self::is_orchestrator_dashboard_accessible(ip, 5) {
+                    Ok(())
+                } else {
+                    count += 1;
+                    Err(anyhow::anyhow!(
+                        "Orchestrator dashboard not available, attempt {count}"
+                    ))
+                }
+            }
+        )
     }
 
     fn build_default_agent(&self) -> Agent {
