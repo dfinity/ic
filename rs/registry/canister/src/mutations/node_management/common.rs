@@ -251,14 +251,14 @@ pub fn scan_for_nodes_by_ip(registry: &Registry, ip_addr: &str) -> Vec<NodeId> {
 /// Scan through the registry, returning a list of node records for the given node operator.
 pub fn get_node_operator_nodes(
     registry: &Registry,
-    node_operator_id: PrincipalId,
+    query_node_operator_id: PrincipalId,
 ) -> Vec<NodeRecord> {
+    let query_node_operator_id = query_node_operator_id.to_string();
+
     get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX)
         .into_iter()
         .filter(|(_, node_record)| {
-            let node_operator_id_src =
-                PrincipalId::try_from(&node_record.node_operator_id).unwrap();
-            node_operator_id_src == node_operator_id
+            node_record.node_operator_id == query_node_operator_id
         })
         .map(|(_, node_record)| node_record)
         .collect()
