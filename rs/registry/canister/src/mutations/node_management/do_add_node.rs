@@ -80,10 +80,11 @@ impl Registry {
         let mut num_removed_same_ip_same_type = 0;
         if !nodes_with_same_ip.is_empty() {
             for node_with_same_ip in &nodes_with_same_ip {
-                let node_same_ip_type = get_node_reward_type_for_node(self, *node_with_same_ip)
-                    .map_err(|e| format!("{LOG_PREFIX}do_add_node: {e}"))?;
+                let node_same_ip_reward_type =
+                    get_node_reward_type_for_node(self, *node_with_same_ip)
+                        .map_err(|e| format!("{LOG_PREFIX}do_add_node: {e}"))?;
 
-                if Some(node_same_ip_type) == node_reward_type {
+                if Some(node_same_ip_reward_type) == node_reward_type {
                     num_removed_same_ip_same_type += 1;
                 }
             }
@@ -137,7 +138,10 @@ impl Registry {
                 <= num_in_registry_same_type.saturating_sub(num_removed_same_ip_same_type)
             {
                 return Err(format!(
-                    "{LOG_PREFIX}do_add_node: Node Operator has reached max_rewardable_nodes quota for {node_reward_type}"
+                    "{LOG_PREFIX}do_add_node: Node Operator has reached max_rewardable_nodes quota for {node_reward_type}.\
+                    Number of nodes in the registry with {node_reward_type} type = {num_in_registry_same_type},\
+                    Number of removed nodes with same IP and same type = {num_removed_same_ip_same_type},\
+                    {node_reward_type} quota = {max_rewardable_nodes_same_type}"
                 ));
             }
         }
@@ -734,10 +738,10 @@ mod tests {
                 .is_none()
         );
         // Assert max_rewardable_nodes has decremented by one (as only one node record was effectively added)
-        let node_operator_record_got = get_node_operator_record(&registry, node_operator_id)
+        let observed_node_operator_record = get_node_operator_record(&registry, node_operator_id)
             .expect("failed to get node operator");
         assert_eq!(
-            node_operator_record_got.max_rewardable_nodes,
+            observed_node_operator_record.max_rewardable_nodes,
             node_operator_record.max_rewardable_nodes
         );
     }
@@ -966,9 +970,10 @@ mod tests {
         let (payload, _valid_pks) = prepare_add_node_payload(2, "type1");
 
         // Attempt to add the new node, which should panic due to exhausted max rewardable nodes
-        registry
+        let err = registry
             .do_add_node_(payload.clone(), node_operator_id, now_system_time())
-            .unwrap();
+            .unwrap_err();
+        assert!(some_property(err), "{err}");
     }
 
     #[test]
@@ -992,9 +997,10 @@ mod tests {
         let (payload, _valid_pks) = prepare_add_node_payload(2, "type1.1");
 
         // Attempt to add the new node, which should panic due to exhausted max rewardable nodes
-        registry
+        let err = registry
             .do_add_node_(payload.clone(), node_operator_id, now_system_time())
-            .unwrap();
+            .unwrap_err();
+        assert!(some_property(err), "{err}");
     }
 
     #[test]

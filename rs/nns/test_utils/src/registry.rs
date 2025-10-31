@@ -927,7 +927,7 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         // Unused section follows
         p2p_flow_endpoints: Default::default(),
         prometheus_metrics_endpoint: Default::default(),
-        node_reward_type: Some(NodeRewardType::Type1.to_string()),
+        node_reward_type: None,
     };
 
     (payload, node_public_keys)
