@@ -211,8 +211,8 @@ pub async fn get_canister_info(
 #[derive(Clone, Debug, Deserialize, CandidType, PartialEq)]
 pub struct RenameCanisterArgs {
     pub canister_id: Principal,
-    pub requested_by: Principal,
     pub rename_to: RenameToArgs,
+    pub requested_by: Principal,
     pub sender_canister_version: u64,
 }
 
@@ -226,19 +226,19 @@ pub struct RenameToArgs {
 pub async fn rename_canister(
     source: Principal,
     source_version: u64,
-    requested_by: Principal,
     target: Principal,
     target_subnet: Principal,
     total_num_changes: u64,
+    requested_by: Principal,
 ) -> ProcessingResult<(), Infallible> {
     let args = RenameCanisterArgs {
         canister_id: target,
-        requested_by,
         rename_to: RenameToArgs {
             canister_id: source,
             version: source_version,
             total_num_changes,
         },
+        requested_by,
         sender_canister_version: canister_version(),
     };
 

@@ -199,10 +199,10 @@ pub async fn process_stopped(
     rename_canister(
         request.source,
         canister_version,
-        request.caller,
         request.target,
         request.target_subnet,
         canister_history_total_num,
+        request.caller,
     )
     .await
     .map_success(|_| RequestState::RenamedTarget {
