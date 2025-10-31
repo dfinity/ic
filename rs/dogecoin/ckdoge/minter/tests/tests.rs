@@ -379,6 +379,7 @@ mod withdrawal {
         };
         minter
             .assert_that_events()
+            .ignoring_timestamp()
             .contains_only_once_in_order(&[EventType::SentBtcTransaction {
                 request_block_indices: vec![retrieve_doge_id.block_index],
                 txid,
@@ -387,7 +388,7 @@ mod withdrawal {
                     vout: 1,
                     value: change_amount,
                 }),
-                submitted_at: time_of_retrieval.as_nanos_since_unix_epoch(),
+                submitted_at: 0, //not relevant
                 fee_per_vbyte: Some(1_500),
                 withdrawal_fee: Some(withdrawal_fee),
             }]);

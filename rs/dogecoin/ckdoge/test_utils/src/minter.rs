@@ -3,7 +3,7 @@ use crate::events::MinterEventAssert;
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
 use ic_ckdoge_minter::{
-    Event, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
+    Event, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
@@ -144,9 +144,13 @@ impl MinterCanister {
             .entries
     }
 
-    pub fn assert_that_events(&self) -> MinterEventAssert {
+    pub fn assert_that_events(&self) -> MinterEventAssert<EventType> {
         MinterEventAssert {
-            events: self.get_all_events(),
+            events: self
+                .get_all_events()
+                .into_iter()
+                .map(|e| e.payload)
+                .collect(),
         }
     }
 
