@@ -1,7 +1,8 @@
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::{RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError};
 use ic_ckdoge_minter_test_utils::{
-    DOGECOIN_ADDRESS_1, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap,
+    DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
+    assert_trap, utxo_wth_value,
 };
 use std::array;
 use std::time::Duration;
@@ -46,10 +47,31 @@ fn should_fail_withdrawal() {
             },
         ),
         Err(RetrieveDogeWithApprovalError::InsufficientAllowance { allowance: 0 })
-    )
+    );
 
-    // TODO XC-495: create sufficient allowance (which requires funds to pay for the ledger fee)
-    // and test failure when insufficient funds
+    setup
+        .deposit_flow()
+        .minter_get_dogecoin_deposit_address(USER_PRINCIPAL)
+        .dogecoin_simulate_transaction(utxo_wth_value(RETRIEVE_DOGE_MIN_AMOUNT))
+        .minter_update_balance()
+        .expect_mint();
+    let _ledger_approval_index = setup
+        .ledger()
+        .icrc2_approve(USER_PRINCIPAL, RETRIEVE_DOGE_MIN_AMOUNT, minter.id())
+        .unwrap();
+
+    assert_eq!(
+        minter.retrieve_doge_with_approval(
+            USER_PRINCIPAL,
+            &RetrieveDogeWithApprovalArgs {
+                amount: RETRIEVE_DOGE_MIN_AMOUNT,
+                ..correct_withdrawal_args.clone()
+            },
+        ),
+        Err(RetrieveDogeWithApprovalError::InsufficientFunds {
+            balance: RETRIEVE_DOGE_MIN_AMOUNT - LEDGER_TRANSFER_FEE
+        })
+    );
 }
 
 mod get_doge_address {
