@@ -238,7 +238,7 @@ impl CanisterLog {
     /// Moves all the logs from `delta_log` to `self`.
     pub fn append_delta_log(&mut self, delta_log: &mut Self) {
         // Record the size of the appended delta log for metrics.
-        self.push_delta_log_size(delta_log.records.used_space());
+        self.push_delta_log_size(delta_log.used_space());
 
         // Assume records sorted cronologically (with increasing idx) and
         // update the system state's next index with the last record's index.
