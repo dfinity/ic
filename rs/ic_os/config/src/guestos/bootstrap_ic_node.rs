@@ -32,7 +32,8 @@ pub fn bootstrap_ic_node(bootstrap_tar_path: &Path) -> Result<()> {
         "Processing bootstrap data from {}",
         bootstrap_tar_path.display()
     );
-    process_bootstrap(bootstrap_tar_path, config_root, state_root)?;
+    let is_sev_active = ic_sev::guest::is_sev_active()?;
+    process_bootstrap(bootstrap_tar_path, config_root, state_root, is_sev_active)?;
     println!("Successfully processed bootstrap data");
 
     File::create(&configured_marker)?;
@@ -41,7 +42,12 @@ pub fn bootstrap_ic_node(bootstrap_tar_path: &Path) -> Result<()> {
 }
 
 /// Process the bootstrap package to copy config contents
-fn process_bootstrap(bootstrap_tar: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
+fn process_bootstrap(
+    bootstrap_tar: &Path,
+    config_root: &Path,
+    state_root: &Path,
+    is_sev_active: bool,
+) -> Result<()> {
     let tmpdir = TempDir::new().context("Failed to create temporary directory")?;
 
     let status = Command::new("tar")
@@ -58,7 +64,7 @@ fn process_bootstrap(bootstrap_tar: &Path, config_root: &Path, state_root: &Path
 
     validate_bootstrap_contents(tmpdir.path()).context("Bootstrap validation failed")?;
 
-    copy_bootstrap_files(tmpdir.path(), config_root, state_root)?;
+    copy_bootstrap_files(tmpdir.path(), config_root, state_root, is_sev_active)?;
 
     // Fix up permissions. Ideally this is specific to only what is copied. If
     // we do make this change, we need to make sure `data` itself has the
@@ -99,8 +105,7 @@ fn validate_bootstrap_contents(extracted_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Copy select bootstrap files from extracted directory to their destinations
-fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
+fn copy_state_injection_files(extracted_dir: &Path, state_root: &Path) -> Result<()> {
     let ic_crypto_src = extracted_dir.join("ic_crypto");
     let ic_crypto_dst = state_root.join("crypto");
     if ic_crypto_src.exists() {
@@ -122,6 +127,16 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
         copy_directory_recursive(&ic_registry_src, &ic_registry_dst)?;
     }
 
+    Ok(())
+}
+
+/// Copy select bootstrap files from extracted directory to their destinations with custom SEV checker
+fn copy_bootstrap_files(
+    extracted_dir: &Path,
+    config_root: &Path,
+    state_root: &Path,
+    is_sev_active: bool,
+) -> Result<()> {
     let node_op_key_src = extracted_dir.join("node_operator_private_key.pem");
     let node_op_key_dst = state_root.join("data/node_operator_private_key.pem");
     if node_op_key_src.exists() {
@@ -145,6 +160,23 @@ fn copy_bootstrap_files(extracted_dir: &Path, config_root: &Path, state_root: &P
         copy_file_with_parent_dir(nns_key_src, &nns_key_dst)?;
         fs::set_permissions(&nns_key_dst, fs::Permissions::from_mode(0o444))?;
     }
+
+    // Restrict state injection on SEV production nodes
+    if is_sev_active {
+        #[cfg(not(feature = "dev"))]
+        {
+            println!("SEV is active - blocking state injection files for production variant");
+        }
+        #[cfg(feature = "dev")]
+        {
+            println!("SEV is active - allowing state injection files for dev variant");
+            copy_state_injection_files(extracted_dir, state_root)?;
+        }
+    } else {
+        println!("SEV is not active - allowing state injection files");
+        copy_state_injection_files(extracted_dir, state_root)?;
+    }
+
     #[cfg(feature = "dev")]
     {
         let nns_key_override_src = extracted_dir.join("nns_public_key_override.pem");
@@ -295,7 +327,7 @@ mod tests {
         fs::create_dir_all(&config_root).unwrap();
         fs::create_dir_all(&state_root).unwrap();
 
-        let result = process_bootstrap(&bootstrap_tar, &config_root, &state_root);
+        let result = process_bootstrap(&bootstrap_tar, &config_root, &state_root, false);
         assert!(result.is_ok());
 
         // Verify files were copied correctly
@@ -311,6 +343,11 @@ mod tests {
             config_root
                 .join("accounts_ssh_authorized_keys")
                 .join("authorized_keys")
+                .exists()
+        );
+        assert!(
+            state_root
+                .join("data/node_operator_private_key.pem")
                 .exists()
         );
 
@@ -334,7 +371,7 @@ mod tests {
         fs::create_dir_all(&state_root).unwrap();
 
         let nonexistent_tar = temp_dir.path().join("nonexistent.tar");
-        let result = process_bootstrap(&nonexistent_tar, &config_root, &state_root);
+        let result = process_bootstrap(&nonexistent_tar, &config_root, &state_root, false);
         assert!(result.is_err());
     }
 
@@ -349,7 +386,7 @@ mod tests {
         fs::create_dir_all(&config_root).unwrap();
         fs::create_dir_all(&state_root).unwrap();
 
-        let result = process_bootstrap(&invalid_tar, &config_root, &state_root);
+        let result = process_bootstrap(&invalid_tar, &config_root, &state_root, false);
         assert!(result.is_err());
     }
 
@@ -459,8 +496,7 @@ mod tests {
         )
         .unwrap();
 
-        // Call copy_bootstrap_files
-        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root, false);
         assert!(result.is_ok());
 
         // Verify files were copied correctly
@@ -536,11 +572,10 @@ mod tests {
         )
         .unwrap();
 
-        // Call copy_bootstrap_files
-        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root, false);
         assert!(result.is_ok());
 
-        // Verify that the override key was copied
+        // Verify that dev files were copied
         assert!(state_root.join("data/nns_public_key.pem").exists());
         assert_eq!(
             fs::read_to_string(state_root.join("data/nns_public_key.pem")).unwrap(),
@@ -567,11 +602,79 @@ mod tests {
         )
         .unwrap();
 
-        // Call copy_bootstrap_files
-        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root);
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root, false);
         assert!(result.is_ok());
 
-        // Verify that the override key was not copied
+        // Verify that the dev files were not copied
         assert!(!state_root.join("data/nns_public_key.pem").exists());
+    }
+
+    #[test]
+    #[cfg(not(feature = "dev"))]
+    fn test_sev_active_prod_state_injection_blocked() {
+        // Create extracted directory structure
+        let temp_dir = TempDir::new().unwrap();
+        let extracted_dir = temp_dir.path().join("extracted");
+        let config_root = temp_dir.path().join("config");
+        let state_root = temp_dir.path().join("state");
+        fs::create_dir_all(&extracted_dir).unwrap();
+        fs::create_dir_all(&config_root).unwrap();
+        fs::create_dir_all(&state_root).unwrap();
+
+        // Create state injection files that should be blocked when SEV is active in production
+        fs::create_dir_all(extracted_dir.join("ic_crypto")).unwrap();
+        fs::write(
+            extracted_dir.join("ic_crypto").join("key.pem"),
+            "test_crypto_key",
+        )
+        .unwrap();
+        fs::create_dir_all(extracted_dir.join("ic_state")).unwrap();
+        fs::write(
+            extracted_dir.join("ic_state").join("state.dat"),
+            "test_state_data",
+        )
+        .unwrap();
+        fs::create_dir_all(extracted_dir.join("ic_registry_local_store")).unwrap();
+        fs::write(
+            extracted_dir
+                .join("ic_registry_local_store")
+                .join("registry.dat"),
+            "test_registry_data",
+        )
+        .unwrap();
+
+        // Create other bootstrap files that should still be copied
+        fs::write(
+            extracted_dir.join("node_operator_private_key.pem"),
+            "test_node_op_key",
+        )
+        .unwrap();
+
+        // Set SEV as active (simulating production environment with SEV)
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root, true);
+        assert!(result.is_ok());
+
+        // Verify that state injection files were NOT copied when SEV is active in production
+        assert!(!state_root.join("crypto").join("key.pem").exists());
+        assert!(!state_root.join("data/ic_state").join("state.dat").exists());
+        assert!(
+            !state_root
+                .join("data/ic_registry_local_store")
+                .join("registry.dat")
+                .exists()
+        );
+
+        // Verify that other bootstrap files were still copied
+        assert!(
+            state_root
+                .join("data/node_operator_private_key.pem")
+                .exists()
+        );
+
+        // Verify file contents for copied files
+        assert_eq!(
+            fs::read_to_string(state_root.join("data/node_operator_private_key.pem")).unwrap(),
+            "test_node_op_key"
+        );
     }
 }
