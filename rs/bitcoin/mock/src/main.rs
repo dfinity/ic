@@ -180,6 +180,16 @@ fn set_fee_percentiles(fee_percentiles: Vec<MillisatoshiPerByte>) {
 #[candid_method(update)]
 #[update]
 fn bitcoin_send_transaction(transaction: SendTransactionRequest) {
+    send_transaction(transaction);
+}
+
+#[candid_method(update)]
+#[update]
+fn dogecoin_send_transaction(transaction: SendTransactionRequest) {
+    send_transaction(transaction);
+}
+
+fn send_transaction(transaction: SendTransactionRequest) {
     mutate_state(|s| {
         let cdk_network = match transaction.network {
             BitcoinNetwork::Mainnet => Network::Mainnet,
