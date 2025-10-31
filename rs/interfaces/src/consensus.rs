@@ -17,7 +17,7 @@ use crate::{
     validation::{ValidationError, ValidationResult},
     vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
 };
-use ic_base_types::{NumBytes, SubnetId};
+use ic_base_types::{NumBytes, SubnetId, WireBytes};
 use ic_types::{
     Height, Time,
     batch::{BatchPayload, ValidationContext},
@@ -26,6 +26,12 @@ use ic_types::{
 };
 
 pub mod errors;
+
+#[derive(Debug)]
+pub struct PayloadWithSizeEstimate<T> {
+    pub payload: T,
+    pub wire_size_estimate: WireBytes,
+}
 
 /// The [`PayloadBuilder`] is responsible for creating and validating payload that
 /// is included in consensus blocks.

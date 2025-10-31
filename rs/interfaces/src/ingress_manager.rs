@@ -1,10 +1,12 @@
 //! The ingress manager public interface.
 use crate::{
+    consensus::PayloadWithSizeEstimate,
     execution_environment::{CanisterOutOfCyclesError, IngressHistoryError},
-    validation::{ValidationError, ValidationResult},
+    validation::ValidationError,
 };
+use ic_base_types::WireBytes;
 use ic_types::{
-    CanisterId, Height, NumBytes,
+    CanisterId, Height,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
@@ -119,8 +121,8 @@ pub trait IngressSelector: Send + Sync {
         &self,
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
-        byte_limit: NumBytes,
-    ) -> IngressPayload;
+        wire_byte_limit: WireBytes,
+    ) -> PayloadWithSizeEstimate<IngressPayload>;
 
     /// Validates an IngressPayload against the past payloads and
     /// ValidationContext. The size of the payload is derived from registry.
@@ -143,7 +145,7 @@ pub trait IngressSelector: Send + Sync {
         payload: &IngressPayload,
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
-    ) -> ValidationResult<IngressPayloadValidationError>;
+    ) -> Result<WireBytes, IngressPayloadValidationError>;
 
     /// Extracts the sequence of past ingress messages from `past_payloads`. The
     /// past_ingress is actually a list of HashSet of MessageIds taken from the
