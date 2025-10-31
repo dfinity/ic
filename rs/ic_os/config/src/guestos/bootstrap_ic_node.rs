@@ -32,7 +32,8 @@ pub fn bootstrap_ic_node(bootstrap_tar_path: &Path) -> Result<()> {
         "Processing bootstrap data from {}",
         bootstrap_tar_path.display()
     );
-    process_bootstrap(bootstrap_tar_path, config_root, state_root)?;
+    let is_sev_active = ic_sev::guest::is_sev_active()?;
+    process_bootstrap(bootstrap_tar_path, config_root, state_root, is_sev_active)?;
     println!("Successfully processed bootstrap data");
 
     File::create(&configured_marker)?;
@@ -41,25 +42,12 @@ pub fn bootstrap_ic_node(bootstrap_tar_path: &Path) -> Result<()> {
 }
 
 /// Process the bootstrap package to copy config contents
-fn process_bootstrap(bootstrap_tar: &Path, config_root: &Path, state_root: &Path) -> Result<()> {
-    process_bootstrap_with_sev_checker(
-        bootstrap_tar,
-        config_root,
-        state_root,
-        ic_sev::guest::is_sev_active,
-    )
-}
-
-/// Process the bootstrap package to copy config contents with custom SEV checker
-fn process_bootstrap_with_sev_checker<F>(
+fn process_bootstrap(
     bootstrap_tar: &Path,
     config_root: &Path,
     state_root: &Path,
-    is_sev_active: F,
-) -> Result<()>
-where
-    F: Fn() -> anyhow::Result<bool>,
-{
+    is_sev_active: bool,
+) -> Result<()> {
     let tmpdir = TempDir::new().context("Failed to create temporary directory")?;
 
     let status = Command::new("tar")
@@ -143,15 +131,12 @@ fn copy_state_injection_files(extracted_dir: &Path, state_root: &Path) -> Result
 }
 
 /// Copy select bootstrap files from extracted directory to their destinations with custom SEV checker
-fn copy_bootstrap_files<F>(
+fn copy_bootstrap_files(
     extracted_dir: &Path,
     config_root: &Path,
     state_root: &Path,
-    is_sev_active: F,
-) -> Result<()>
-where
-    F: Fn() -> anyhow::Result<bool>,
-{
+    is_sev_active: bool,
+) -> Result<()> {
     let node_op_key_src = extracted_dir.join("node_operator_private_key.pem");
     let node_op_key_dst = state_root.join("data/node_operator_private_key.pem");
     if node_op_key_src.exists() {
@@ -177,7 +162,7 @@ where
     }
 
     // Restrict state injection on SEV production nodes
-    if is_sev_active()? {
+    if is_sev_active {
         #[cfg(not(feature = "dev"))]
         {
             println!("SEV is active - blocking state injection files for production variant");
@@ -234,23 +219,9 @@ fn copy_directory_recursive(src: &Path, dst: &Path) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::Cell;
     use std::fs;
-    use std::thread_local;
     use tempfile::TempDir;
 
-    // Mock SEV checker for tests with thread-local isolation
-    thread_local! {
-        static MOCK_SEV_ACTIVE: Cell<bool> = const { Cell::new(false) };
-    }
-
-    fn set_mock_sev_active(value: bool) {
-        MOCK_SEV_ACTIVE.with(|flag| flag.set(value));
-    }
-
-    fn mock_is_sev_active() -> anyhow::Result<bool> {
-        Ok(MOCK_SEV_ACTIVE.with(|flag| flag.get()))
-    }
     #[test]
     fn test_copy_directory_recursive() {
         let src_dir = TempDir::new().unwrap();
@@ -356,14 +327,7 @@ mod tests {
         fs::create_dir_all(&config_root).unwrap();
         fs::create_dir_all(&state_root).unwrap();
 
-        set_mock_sev_active(false);
-
-        let result = process_bootstrap_with_sev_checker(
-            &bootstrap_tar,
-            &config_root,
-            &state_root,
-            mock_is_sev_active,
-        );
+        let result = process_bootstrap(&bootstrap_tar, &config_root, &state_root, false);
         assert!(result.is_ok());
 
         // Verify files were copied correctly
@@ -407,7 +371,7 @@ mod tests {
         fs::create_dir_all(&state_root).unwrap();
 
         let nonexistent_tar = temp_dir.path().join("nonexistent.tar");
-        let result = process_bootstrap(&nonexistent_tar, &config_root, &state_root);
+        let result = process_bootstrap(&nonexistent_tar, &config_root, &state_root, false);
         assert!(result.is_err());
     }
 
@@ -422,7 +386,7 @@ mod tests {
         fs::create_dir_all(&config_root).unwrap();
         fs::create_dir_all(&state_root).unwrap();
 
-        let result = process_bootstrap(&invalid_tar, &config_root, &state_root);
+        let result = process_bootstrap(&invalid_tar, &config_root, &state_root, false);
         assert!(result.is_err());
     }
 
@@ -532,13 +496,7 @@ mod tests {
         )
         .unwrap();
 
-        set_mock_sev_active(false);
-        let result = copy_bootstrap_files(
-            &extracted_dir,
-            &config_root,
-            &state_root,
-            mock_is_sev_active,
-        );
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root, false);
         assert!(result.is_ok());
 
         // Verify files were copied correctly
@@ -614,13 +572,7 @@ mod tests {
         )
         .unwrap();
 
-        set_mock_sev_active(false);
-        let result = copy_bootstrap_files(
-            &extracted_dir,
-            &config_root,
-            &state_root,
-            mock_is_sev_active,
-        );
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root, false);
         assert!(result.is_ok());
 
         // Verify that dev files were copied
@@ -650,13 +602,7 @@ mod tests {
         )
         .unwrap();
 
-        set_mock_sev_active(false);
-        let result = copy_bootstrap_files(
-            &extracted_dir,
-            &config_root,
-            &state_root,
-            mock_is_sev_active,
-        );
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root, false);
         assert!(result.is_ok());
 
         // Verify that the dev files were not copied
@@ -705,9 +651,7 @@ mod tests {
         .unwrap();
 
         // Set SEV as active (simulating production environment with SEV)
-        set_mock_sev_active(true);
-        let result =
-            copy_bootstrap_files(&extracted_dir, &config_root, &state_root, mock_sev_checker);
+        let result = copy_bootstrap_files(&extracted_dir, &config_root, &state_root, true);
         assert!(result.is_ok());
 
         // Verify that state injection files were NOT copied when SEV is active in production
