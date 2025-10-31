@@ -107,9 +107,10 @@ async fn run_periodic_tasks() {
 }
 
 fn init_periodic_tasks() {
-    let _new_timer_id = ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, || {
-        ic_cdk::futures::spawn_017_compat(run_periodic_tasks())
-    });
+    let _new_timer_id =
+        ic_cdk_timers::set_timer_interval(RUN_PERIODIC_TASKS_INTERVAL, async || {
+            run_periodic_tasks().await
+        });
 }
 
 #[init]

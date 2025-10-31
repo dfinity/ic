@@ -10,7 +10,7 @@ use ic_cdk::api::{
     call::{arg_data_raw, reply_raw},
     caller, data_certificate, instruction_counter, print, set_certified_data, time, trap,
 };
-use ic_cdk::futures::{in_executor_context, in_query_executor_context};
+use ic_cdk::futures::internals::{in_executor_context, in_query_executor_context};
 use ic_cdk::{post_upgrade, pre_upgrade, query, update};
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_icrc1::endpoints::{StandardRecord, convert_transfer_error};

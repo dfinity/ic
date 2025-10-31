@@ -381,7 +381,7 @@ fn migrate_next_part(instruction_limit: u64) {
             log_message(
                 format!("Migration partially done. Scheduling the next part. {msg}").as_str(),
             );
-            ic_cdk_timers::set_timer(Duration::from_secs(0), || {
+            ic_cdk_timers::set_timer(Duration::from_secs(0), async {
                 migrate_next_part(MAX_INSTRUCTIONS_PER_TIMER_CALL)
             });
         } else {

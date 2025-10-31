@@ -360,17 +360,15 @@ pub async fn build_index() -> Result<(), String> {
 }
 
 fn set_build_index_timer(after: Duration) -> TimerId {
-    ic_cdk_timers::set_timer(after, || {
-        ic_cdk::spawn(async {
-            let _ = build_index().await.map_err(|err| {
-                log!(
-                    P0,
-                    "[set_build_index_timer]: received error while building index: {}",
-                    err
-                );
+    ic_cdk_timers::set_timer(after, async {
+        let _ = build_index().await.map_err(|err| {
+            log!(
+                P0,
+                "[set_build_index_timer]: received error while building index: {}",
                 err
-            });
-        })
+            );
+            err
+        });
     })
 }
 
