@@ -42,7 +42,7 @@ def image_deps(mode, _malicious = False):
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/hostos/context:context-files"),
-        "component_files": dict(component_files),
+        "component_files": dict(component_files),  # Make a copy because we might update it later
         "partition_table": Label("//ic-os/hostos:partitions.csv"),
         "volume_table": Label("//ic-os/hostos:volumes.csv"),
         "rootfs_size": "3G",
