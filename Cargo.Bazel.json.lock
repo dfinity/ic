@@ -1,5 +1,5 @@
 {
-  "checksum": "871b6672d5222b2ea18c0d5741ede467c824974be0bdee007fe388e530ea43b5",
+  "checksum": "450ab4af6cd31c0bc1820bcf2ab1b3e87d4ab69f3960d7e70c2f84d9d410880d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -213,7 +213,7 @@
               "target": "memchr"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -373,7 +373,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -385,7 +385,7 @@
               "target": "sha1"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -752,7 +752,7 @@
               "target": "futures_core"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -813,7 +813,7 @@
               "target": "local_waker"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -961,7 +961,7 @@
               "target": "once_cell"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -985,7 +985,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -1140,7 +1140,7 @@
               "target": "log"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -4004,7 +4004,7 @@
               "target": "futures_core"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -4081,7 +4081,7 @@
               "target": "memchr"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -4312,7 +4312,7 @@
               "target": "event_listener_strategy"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -4528,7 +4528,7 @@
               "target": "futures_core"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -5195,7 +5195,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -5376,7 +5376,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -5514,7 +5514,7 @@
               "target": "mime"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -5620,7 +5620,7 @@
               "target": "mime"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -5736,7 +5736,7 @@
               "target": "mime"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -5964,7 +5964,7 @@
               "target": "opentelemetry_sdk"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -6059,7 +6059,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -6153,7 +6153,7 @@
               "target": "instant"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -11410,14 +11410,17 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "canbench 0.2.1": {
+    "canbench 0.3.0": {
       "name": "canbench",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/canbench/0.2.1/download",
-          "sha256": "567825a16fade4532526ab697d8ea816895e5c6264472f92a113b809d3630482"
+        "Git": {
+          "remote": "https://github.com/dfinity/canbench.git",
+          "commitish": {
+            "Rev": "0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43"
+          },
+          "strip_prefix": "canbench-bin"
         }
       },
       "targets": [
@@ -11454,11 +11457,11 @@
         "deps": {
           "common": [
             {
-              "id": "canbench-rs 0.2.1",
+              "id": "canbench-rs 0.3.0",
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -11482,7 +11485,7 @@
               "target": "inferno"
             },
             {
-              "id": "pocket-ic 9.0.0",
+              "id": "pocket-ic 10.0.0",
               "target": "pocket_ic"
             },
             {
@@ -11525,7 +11528,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.1"
+        "version": "0.3.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11533,14 +11536,17 @@
       ],
       "license_file": null
     },
-    "canbench-rs 0.2.1": {
+    "canbench-rs 0.3.0": {
       "name": "canbench-rs",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs/0.2.1/download",
-          "sha256": "ce6a55bed4e45003d254afc26e86cbc47a808d0db83f1a1c03f535a39f8b38ee"
+        "Git": {
+          "remote": "https://github.com/dfinity/canbench.git",
+          "commitish": {
+            "Rev": "0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43"
+          },
+          "strip_prefix": "canbench-rs"
         }
       },
       "targets": [
@@ -11565,11 +11571,11 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.18.7",
+              "id": "ic-cdk 0.19.0-beta.3",
               "target": "ic_cdk"
             },
             {
@@ -11583,13 +11589,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "canbench-rs-macros 0.2.1",
+              "id": "canbench-rs-macros 0.3.0",
               "target": "canbench_rs_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.2.1"
+        "version": "0.3.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11597,14 +11603,17 @@
       ],
       "license_file": null
     },
-    "canbench-rs-macros 0.2.1": {
+    "canbench-rs-macros 0.3.0": {
       "name": "canbench-rs-macros",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/canbench-rs-macros/0.2.1/download",
-          "sha256": "5369e35db0ccebbf4a15b05533c23320f84ca1bee4179874eb28f18335ebff60"
+        "Git": {
+          "remote": "https://github.com/dfinity/canbench.git",
+          "commitish": {
+            "Rev": "0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43"
+          },
+          "strip_prefix": "canbench-rs-macros"
         }
       },
       "targets": [
@@ -11644,7 +11653,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.2.1"
+        "version": "0.3.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11652,14 +11661,14 @@
       ],
       "license_file": null
     },
-    "candid 0.10.17": {
+    "candid 0.10.20": {
       "name": "candid",
-      "version": "0.10.17",
+      "version": "0.10.20",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid/0.10.17/download",
-          "sha256": "eaac522d18020d5fbc8320ecb12a9b13b2137ae31133da2d42fa256a825507c4"
+          "url": "https://static.crates.io/crates/candid/0.10.20/download",
+          "sha256": "8037a01ec09d6c06883a38bad4f47b8d06158ad360b841e0ae5707c9884dfaf6"
         }
       },
       "targets": [
@@ -11756,7 +11765,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "candid_derive 0.10.17",
+              "id": "candid_derive 0.10.20",
               "target": "candid_derive"
             },
             {
@@ -11791,7 +11800,7 @@
             ]
           }
         },
-        "version": "0.10.17"
+        "version": "0.10.20"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11799,14 +11808,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "candid_derive 0.10.17": {
+    "candid_derive 0.10.20": {
       "name": "candid_derive",
-      "version": "0.10.17",
+      "version": "0.10.20",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid_derive/0.10.17/download",
-          "sha256": "8a1b4fddbd462182050989068d53604a91a3d0f117c3c8316c6818023df00add"
+          "url": "https://static.crates.io/crates/candid_derive/0.10.20/download",
+          "sha256": "fb45f4d5eff3805598ee633dd80f8afb306c023249d34b5b7dfdc2080ea1df2e"
         }
       },
       "targets": [
@@ -11850,7 +11859,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.10.17"
+        "version": "0.10.20"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11906,7 +11915,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -12015,7 +12024,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -12023,7 +12032,7 @@
               "target": "ic_canister_log"
             },
             {
-              "id": "ic0 1.0.0",
+              "id": "ic0 1.0.1",
               "target": "ic0"
             },
             {
@@ -15936,7 +15945,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -16260,7 +16269,7 @@
               "target": "log"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -17691,7 +17700,7 @@
               "target": "phf"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             }
           ],
@@ -20210,7 +20219,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -20800,15 +20809,15 @@
               "target": "cached"
             },
             {
-              "id": "canbench 0.2.1",
+              "id": "canbench 0.3.0",
               "target": "canbench"
             },
             {
-              "id": "canbench-rs 0.2.1",
+              "id": "canbench-rs 0.3.0",
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -21101,15 +21110,15 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.18.7",
+              "id": "ic-cdk 0.19.0-beta.3",
               "target": "ic_cdk"
             },
             {
-              "id": "ic-cdk-executor 1.0.2",
+              "id": "ic-cdk-executor 2.0.0-beta.1",
               "target": "ic_cdk_executor"
             },
             {
-              "id": "ic-cdk-timers 0.12.2",
+              "id": "ic-cdk-timers 1.0.0-beta.1",
               "target": "ic_cdk_timers"
             },
             {
@@ -21182,7 +21191,7 @@
               "target": "ic_verify_bls_signature"
             },
             {
-              "id": "ic-vetkeys 0.4.0",
+              "id": "ic-vetkeys 0.5.0",
               "target": "ic_vetkeys"
             },
             {
@@ -21194,7 +21203,7 @@
               "target": "ic_xrc_types"
             },
             {
-              "id": "ic0 1.0.0",
+              "id": "ic0 1.0.1",
               "target": "ic0"
             },
             {
@@ -21442,7 +21451,7 @@
               "target": "pem"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -25553,7 +25562,7 @@
               "target": "concurrent_queue"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -25638,7 +25647,7 @@
               "target": "concurrent_queue"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -25721,7 +25730,7 @@
               "target": "event_listener"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -25779,7 +25788,7 @@
               "target": "event_listener"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -25827,7 +25836,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -28100,7 +28109,7 @@
               "target": "parking"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -28447,7 +28456,7 @@
               "target": "memchr"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -29490,7 +29499,7 @@
               "target": "rand"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -31306,7 +31315,7 @@
               "target": "rustls"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -31984,7 +31993,7 @@
               "target": "http"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -32104,7 +32113,7 @@
               "target": "http_body"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -32462,7 +32471,7 @@
               "target": "itoa"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -32576,11 +32585,11 @@
               "target": "itoa"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -32945,7 +32954,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -33063,7 +33072,7 @@
               "target": "libc"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -33388,7 +33397,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -33612,7 +33621,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -33854,7 +33863,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -33933,9 +33942,11 @@
       "version": "1.3.0",
       "package_url": "https://github.com/dfinity/ic-canister-sig-creation",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-canister-sig-creation/1.3.0/download",
-          "sha256": "e4de4a335e8f13986a39e8d1c02aa6999c7aa5736bc0083dacafe3a99b26f3a2"
+        "Git": {
+          "remote": "https://github.com/dfinity/ic-canister-sig-creation.git",
+          "commitish": {
+            "Rev": "c790e58434be9bf30e656b418c14f7862353a476"
+          }
         }
       },
       "targets": [
@@ -33960,16 +33971,12 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
               "id": "hex 0.4.3",
               "target": "hex"
-            },
-            {
-              "id": "ic-cdk 0.18.7",
-              "target": "ic_cdk"
             },
             {
               "id": "ic-certification 3.0.3",
@@ -33978,6 +33985,10 @@
             {
               "id": "ic-representation-independent-hash 3.0.3",
               "target": "ic_representation_independent_hash"
+            },
+            {
+              "id": "ic0 1.0.1",
+              "target": "ic0"
             },
             {
               "id": "lazy_static 1.5.0",
@@ -34047,7 +34058,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -34078,14 +34089,14 @@
       ],
       "license_file": null
     },
-    "ic-cdk 0.18.7": {
+    "ic-cdk 0.19.0-beta.3": {
       "name": "ic-cdk",
-      "version": "0.18.7",
+      "version": "0.19.0-beta.3",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.18.7/download",
-          "sha256": "4efb278f5d3ef033b3eed7f01f1096eaf67701896aa5ef69f5eddf5a84833dc0"
+          "url": "https://static.crates.io/crates/ic-cdk/0.19.0-beta.3/download",
+          "sha256": "67f8b31e7df91b8b698afbfd7178b76e5299d379725ae09acc18b32dfa50725f"
         }
       },
       "targets": [
@@ -34110,11 +34121,11 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
-              "id": "ic-cdk-executor 1.0.2",
+              "id": "ic-cdk-executor 2.0.0-beta.1",
               "target": "ic_cdk_executor"
             },
             {
@@ -34122,12 +34133,16 @@
               "target": "ic_error_types"
             },
             {
-              "id": "ic-management-canister-types 0.3.3",
+              "id": "ic-management-canister-types 0.4.1",
               "target": "ic_management_canister_types"
             },
             {
-              "id": "ic0 1.0.0",
+              "id": "ic0 1.0.1",
               "target": "ic0"
+            },
+            {
+              "id": "pin-project-lite 0.2.16",
+              "target": "pin_project_lite"
             },
             {
               "id": "serde 1.0.219",
@@ -34152,13 +34167,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.18.7",
+              "id": "ic-cdk-macros 0.19.0-beta.3",
               "target": "ic_cdk_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.18.7"
+        "version": "0.19.0-beta.3"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34166,14 +34181,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk-executor 1.0.2": {
+    "ic-cdk-executor 2.0.0-beta.1": {
       "name": "ic-cdk-executor",
-      "version": "1.0.2",
+      "version": "2.0.0-beta.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-executor/1.0.2/download",
-          "sha256": "99f4ee8930fd2e491177e2eb7fff53ee1c407c13b9582bdc7d6920cf83109a2d"
+          "url": "https://static.crates.io/crates/ic-cdk-executor/2.0.0-beta.1/download",
+          "sha256": "0aae561cd3dc1027c1ffe635b7cd7c76ea746c114d43daff58c4465beae9365e"
         }
       },
       "targets": [
@@ -34210,22 +34225,26 @@
         "deps": {
           "common": [
             {
-              "id": "ic-cdk-executor 1.0.2",
+              "id": "ic-cdk-executor 2.0.0-beta.1",
               "target": "build_script_build"
             },
             {
-              "id": "ic0 1.0.0",
+              "id": "ic0 1.0.1",
               "target": "ic0"
             },
             {
               "id": "slotmap 1.0.7",
               "target": "slotmap"
+            },
+            {
+              "id": "smallvec 1.15.1",
+              "target": "smallvec"
             }
           ],
           "selects": {}
         },
         "edition": "2024",
-        "version": "1.0.2"
+        "version": "2.0.0-beta.1"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -34245,14 +34264,14 @@
       ],
       "license_file": null
     },
-    "ic-cdk-macros 0.18.7": {
+    "ic-cdk-macros 0.19.0-beta.3": {
       "name": "ic-cdk-macros",
-      "version": "0.18.7",
+      "version": "0.19.0-beta.3",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.18.7/download",
-          "sha256": "7eb14c5d691cc9d72bb95459b4761e3a4b3444b85a63d17555d5ddd782969a1e"
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.19.0-beta.3/download",
+          "sha256": "80d5de53544393a8b2a5e9cd7e76fd1f32a132c0356cf3126906a3d53ea81122"
         }
       },
       "targets": [
@@ -34277,7 +34296,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -34300,7 +34319,7 @@
           "selects": {}
         },
         "edition": "2024",
-        "version": "0.18.7"
+        "version": "0.19.0-beta.3"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34308,14 +34327,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk-timers 0.12.2": {
+    "ic-cdk-timers 1.0.0-beta.1": {
       "name": "ic-cdk-timers",
-      "version": "0.12.2",
+      "version": "1.0.0-beta.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-timers/0.12.2/download",
-          "sha256": "9ea87cf31444de833db85bbd15e97bc135ee14529b13158ffdaf6530bf6d7e85"
+          "url": "https://static.crates.io/crates/ic-cdk-timers/1.0.0-beta.1/download",
+          "sha256": "a24de3439f066ca0130ecc22ba6482ed9ade84db2c20bb8ef3ac558c302e8a65"
         }
       },
       "targets": [
@@ -34340,28 +34359,12 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
-              "target": "candid"
+              "id": "ic-cdk-executor 2.0.0-beta.1",
+              "target": "ic_cdk_executor"
             },
             {
-              "id": "futures 0.3.31",
-              "target": "futures"
-            },
-            {
-              "id": "ic-cdk 0.18.7",
-              "target": "ic_cdk"
-            },
-            {
-              "id": "ic0 1.0.0",
+              "id": "ic0 1.0.1",
               "target": "ic0"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde_bytes 0.11.15",
-              "target": "serde_bytes"
             },
             {
               "id": "slotmap 1.0.7",
@@ -34370,8 +34373,8 @@
           ],
           "selects": {}
         },
-        "edition": "2021",
-        "version": "0.12.2"
+        "edition": "2024",
+        "version": "1.0.0-beta.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34415,7 +34418,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -34709,7 +34712,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -34955,7 +34958,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35034,7 +35037,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35184,7 +35187,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35200,6 +35203,61 @@
         },
         "edition": "2024",
         "version": "0.3.3"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-management-canister-types 0.4.1": {
+      "name": "ic-management-canister-types",
+      "version": "0.4.1",
+      "package_url": "https://github.com/dfinity/cdk-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.4.1/download",
+          "sha256": "8b5a939a84adbc30769d47e5de72c7b9f3713284e3ac87df4eb24795677a8df8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_management_canister_types",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_management_canister_types",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.20",
+              "target": "candid"
+            },
+            {
+              "id": "serde 1.0.219",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2024",
+        "version": "0.4.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -35332,7 +35390,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35626,7 +35684,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35652,94 +35710,6 @@
         "Apache-2.0"
       ],
       "license_file": "LICENSE"
-    },
-    "ic-transport-types 0.39.3": {
-      "name": "ic-transport-types",
-      "version": "0.39.3",
-      "package_url": "https://github.com/dfinity/agent-rs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-transport-types/0.39.3/download",
-          "sha256": "979ee7bee5a67150a4c090fb012c93c294a528b4a867bad9a15cc6d01cb4227f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "ic_transport_types",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "ic_transport_types",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "candid 0.10.17",
-              "target": "candid"
-            },
-            {
-              "id": "hex 0.4.3",
-              "target": "hex"
-            },
-            {
-              "id": "ic-certification 3.0.3",
-              "target": "ic_certification"
-            },
-            {
-              "id": "leb128 0.2.5",
-              "target": "leb128"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde_bytes 0.11.15",
-              "target": "serde_bytes"
-            },
-            {
-              "id": "serde_cbor 0.11.2",
-              "target": "serde_cbor"
-            },
-            {
-              "id": "sha2 0.10.9",
-              "target": "sha2"
-            },
-            {
-              "id": "thiserror 2.0.12",
-              "target": "thiserror"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "serde_repr 0.1.19",
-              "target": "serde_repr"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.39.3"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": null
     },
     "ic-transport-types 0.40.1": {
       "name": "ic-transport-types",
@@ -35773,7 +35743,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35867,7 +35837,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -36088,14 +36058,17 @@
       ],
       "license_file": null
     },
-    "ic-vetkeys 0.4.0": {
+    "ic-vetkeys 0.5.0": {
       "name": "ic-vetkeys",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "package_url": "https://github.com/dfinity/vetkeys",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-vetkeys/0.4.0/download",
-          "sha256": "89db8e638924d9e07dd8fa33dc5cfcdc69b7331bed7fcc72e2586f3956b12e58"
+        "Git": {
+          "remote": "https://github.com/dfinity/vetkeys.git",
+          "commitish": {
+            "Rev": "5f7d3dba3983fed8a11e7d9919910a0339e6620e"
+          },
+          "strip_prefix": "backend/rs/ic_vetkeys"
         }
       },
       "targets": [
@@ -36120,11 +36093,15 @@
         "deps": {
           "common": [
             {
+              "id": "aes-gcm 0.10.3",
+              "target": "aes_gcm"
+            },
+            {
               "id": "anyhow 1.0.98",
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -36140,7 +36117,7 @@
               "target": "hkdf"
             },
             {
-              "id": "ic-cdk 0.18.7",
+              "id": "ic-cdk 0.19.0-beta.3",
               "target": "ic_cdk"
             },
             {
@@ -36206,17 +36183,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.18.7",
-              "target": "ic_cdk_macros"
-            },
-            {
               "id": "strum_macros 0.27.1",
               "target": "strum_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.4.0"
+        "version": "0.5.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -36281,7 +36254,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -36356,7 +36329,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -36375,14 +36348,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic0 1.0.0": {
+    "ic0 1.0.1": {
       "name": "ic0",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ic0/1.0.0/download",
-          "sha256": "8877193e1921b5fd16accb0305eb46016868cd1935b05c05eca0ec007b943272"
+          "url": "https://static.crates.io/crates/ic0/1.0.1/download",
+          "sha256": "1499d08fd5be8f790d477e1865d63bab6a8d748300e141270c4296e6d5fdd6bc"
         }
       },
       "targets": [
@@ -36404,8 +36377,8 @@
         "compile_data_glob": [
           "**"
         ],
-        "edition": "2021",
-        "version": "1.0.0"
+        "edition": "2024",
+        "version": "1.0.1"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -36621,7 +36594,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -36692,7 +36665,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -37024,7 +36997,7 @@
               "target": "icu_provider"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -37606,7 +37579,7 @@
               "target": "idna_adapter"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -45883,7 +45856,7 @@
               "target": "opentelemetry"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -46981,7 +46954,7 @@
               "target": "quanta"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -48484,7 +48457,7 @@
               "target": "serde"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -50654,7 +50627,7 @@
               "target": "once_cell"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -50738,7 +50711,7 @@
               "target": "once_cell"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -51178,7 +51151,7 @@
               "target": "once_cell"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -51261,7 +51234,7 @@
               "target": "once_cell"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -52601,7 +52574,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             }
           ],
@@ -52699,7 +52672,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             }
           ],
@@ -54508,14 +54481,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "pin-project-lite 0.2.13": {
+    "pin-project-lite 0.2.16": {
       "name": "pin-project-lite",
-      "version": "0.2.13",
+      "version": "0.2.16",
       "package_url": "https://github.com/taiki-e/pin-project-lite",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/pin-project-lite/0.2.13/download",
-          "sha256": "8afb450f006bf6385ca15ef45d71d2288452bc3683ce2e2cacc0d18e4be60b58"
+          "url": "https://static.crates.io/crates/pin-project-lite/0.2.16/download",
+          "sha256": "3b3cff922bd51709b605d9ead9aa71031d81447142d828eb4a6eba76fe619f9b"
         }
       },
       "targets": [
@@ -54538,7 +54511,7 @@
           "**"
         ],
         "edition": "2018",
-        "version": "0.2.13"
+        "version": "0.2.16"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -55140,14 +55113,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "pocket-ic 9.0.0": {
+    "pocket-ic 10.0.0": {
       "name": "pocket-ic",
-      "version": "9.0.0",
+      "version": "10.0.0",
       "package_url": "https://github.com/dfinity/ic",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/pocket-ic/9.0.0/download",
-          "sha256": "1d0dee25e0f699db883fa2228b18b6e86ae874a0f538dd362aef70679ca5cc6d"
+          "url": "https://static.crates.io/crates/pocket-ic/10.0.0/download",
+          "sha256": "4c9b78f339182efb981ceca2ac360aa280609f8d8c785e5a7eeda488f53497a8"
         }
       },
       "targets": [
@@ -55180,7 +55153,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -55200,7 +55173,7 @@
               "target": "ic_management_canister_types"
             },
             {
-              "id": "ic-transport-types 0.39.3",
+              "id": "ic-transport-types 0.40.1",
               "target": "ic_transport_types"
             },
             {
@@ -55283,7 +55256,7 @@
           ],
           "selects": {}
         },
-        "version": "9.0.0"
+        "version": "10.0.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -55350,7 +55323,7 @@
                 "target": "concurrent_queue"
               },
               {
-                "id": "pin-project-lite 0.2.13",
+                "id": "pin-project-lite 0.2.16",
                 "target": "pin_project_lite"
               },
               {
@@ -55837,7 +55810,7 @@
               "target": "prost"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -59468,7 +59441,7 @@
               "target": "bytes"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -62057,7 +62030,7 @@
               "target": "rustc_hash"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             }
           ],
@@ -62908,7 +62881,7 @@
                 "target": "percent_encoding"
               },
               {
-                "id": "pin-project-lite 0.2.13",
+                "id": "pin-project-lite 0.2.16",
                 "target": "pin_project_lite"
               },
               {
@@ -63257,7 +63230,7 @@
                 "target": "percent_encoding"
               },
               {
-                "id": "pin-project-lite 0.2.13",
+                "id": "pin-project-lite 0.2.16",
                 "target": "pin_project_lite"
               },
               {
@@ -64845,7 +64818,7 @@
               "target": "libsqlite3_sys"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             }
           ],
@@ -67676,7 +67649,7 @@
               "target": "selectors"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -68620,7 +68593,7 @@
               "target": "servo_arc"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             }
           ],
@@ -72192,14 +72165,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "smallvec 1.13.2": {
+    "smallvec 1.15.1": {
       "name": "smallvec",
-      "version": "1.13.2",
+      "version": "1.15.1",
       "package_url": "https://github.com/servo/rust-smallvec",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/smallvec/1.13.2/download",
-          "sha256": "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
+          "url": "https://static.crates.io/crates/smallvec/1.15.1/download",
+          "sha256": "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
         }
       },
       "targets": [
@@ -72241,7 +72214,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.13.2"
+        "version": "1.15.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -73300,7 +73273,7 @@
               "target": "futures_core"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -78204,7 +78177,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -78323,7 +78296,7 @@
         "deps": {
           "common": [
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -78442,7 +78415,7 @@
               "target": "futures_util"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -78860,7 +78833,7 @@
               "target": "futures_core"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -79148,7 +79121,7 @@
               "target": "futures_util"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -79689,7 +79662,7 @@
               "target": "pin_project"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -79814,7 +79787,7 @@
               "target": "indexmap"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -79919,7 +79892,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -80055,7 +80028,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -80470,7 +80443,7 @@
               "target": "log"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -80907,7 +80880,7 @@
               "target": "opentelemetry_sdk"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -81198,7 +81171,7 @@
               "target": "sharded_slab"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -81406,7 +81379,7 @@
               "target": "rand"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -81522,7 +81495,7 @@
               "target": "resolv_conf"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -86179,7 +86152,7 @@
               "target": "serde"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -86431,7 +86404,7 @@
               "target": "serde"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -86606,7 +86579,7 @@
               "target": "pulley_interpreter"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -88388,7 +88361,7 @@
               "target": "regalloc2"
             },
             {
-              "id": "smallvec 1.13.2",
+              "id": "smallvec 1.15.1",
               "target": "smallvec"
             },
             {
@@ -93760,7 +93733,7 @@
     }
   },
   "binary_crates": [
-    "canbench 0.2.1",
+    "canbench 0.3.0",
     "ic-wasm 0.8.4",
     "metrics-proxy 0.1.0"
   ],
@@ -94089,9 +94062,9 @@
     "byteorder 1.5.0",
     "bytes 1.10.1",
     "cached 0.49.2",
-    "canbench 0.2.1",
-    "canbench-rs 0.2.1",
-    "candid 0.10.17",
+    "canbench 0.3.0",
+    "canbench-rs 0.3.0",
+    "candid 0.10.20",
     "candid_parser 0.1.4",
     "cargo_metadata 0.14.2",
     "cc 1.2.22",
@@ -94167,9 +94140,9 @@
     "ic-canister-log 0.2.0",
     "ic-canister-sig-creation 1.3.0",
     "ic-cbor 3.0.3",
-    "ic-cdk 0.18.7",
-    "ic-cdk-executor 1.0.2",
-    "ic-cdk-timers 0.12.2",
+    "ic-cdk 0.19.0-beta.3",
+    "ic-cdk-executor 2.0.0-beta.1",
+    "ic-cdk-timers 1.0.0-beta.1",
     "ic-certificate-verification 3.0.3",
     "ic-certification 3.0.3",
     "ic-certified-map 0.3.4",
@@ -94187,10 +94160,10 @@
     "ic-transport-types 0.40.1",
     "ic-utils 0.40.1",
     "ic-verify-bls-signature 0.6.0",
-    "ic-vetkeys 0.4.0",
+    "ic-vetkeys 0.5.0",
     "ic-wasm 0.8.4",
     "ic-xrc-types 1.2.0",
-    "ic0 1.0.0",
+    "ic0 1.0.1",
     "ic_bls12_381 0.10.1",
     "ic_principal 0.1.1",
     "icrc1-test-env 0.1.1",
@@ -94255,7 +94228,7 @@
     "paste 1.0.15",
     "pcre2 0.2.6",
     "pem 1.1.1",
-    "pin-project-lite 0.2.13",
+    "pin-project-lite 0.2.16",
     "ping 0.5.0",
     "pkcs8 0.10.2",
     "pkg-config 0.3.32",

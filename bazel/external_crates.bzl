@@ -351,10 +351,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "canbench": crate.spec(
-                version = "^0.2.1",
+                git = "https://github.com/dfinity/canbench.git",
+                rev = "0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43",
             ),
             "canbench-rs": crate.spec(
-                version = "^0.2.1",
+                git = "https://github.com/dfinity/canbench.git",
+                rev = "0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43",
             ),
             "candid": crate.spec(
                 version = "^0.10.17",
@@ -647,19 +649,20 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.2.0",
             ),
             "ic-canister-sig-creation": crate.spec(
-                version = "^1.3.0",
+                git = "https://github.com/dfinity/ic-canister-sig-creation.git",
+                rev = "c790e58434be9bf30e656b418c14f7862353a476",
             ),
             "ic-cbor": crate.spec(
                 version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                version = "^0.18.7",
+                version = "^0.19.0-beta.3",
             ),
             "ic-cdk-executor": crate.spec(
-                version = "^1.0.2",
+                version = "^2.0.0-beta.1",
             ),
             "ic-cdk-timers": crate.spec(
-                version = "^0.12.2",
+                version = "^1.0.0-beta.1",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -733,7 +736,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "ic-vetkeys": crate.spec(
-                version = "^0.4.0",
+                git = "https://github.com/dfinity/vetkeys.git",
+                rev = "5f7d3dba3983fed8a11e7d9919910a0339e6620e",
             ),
             "ic-wasm": crate.spec(
                 version = "^0.8.4",
