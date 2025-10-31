@@ -140,6 +140,8 @@ struct State {
     /// index. Lower values will result in a more responsive UI, but higher costs due to increased
     /// cycle burn for the index, ledger and archive(s).
     retrieve_blocks_from_ledger_interval: Option<Duration>,
+
+    fee_collector_107: Option<Option<Account>>,
 }
 
 impl State {
@@ -161,6 +163,7 @@ impl Default for State {
             fee_collectors: Default::default(),
             last_fee: None,
             retrieve_blocks_from_ledger_interval: None,
+            fee_collector_107: None,
         }
     }
 }
@@ -954,6 +957,18 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                 change_balance(spender, |balance| balance);
 
                 debit(block_index, from, fee);
+
+                if let Some(fee_collector_107) = get_fee_collector_107()
+                    && let Some(fee_collector) = fee_collector_107
+                {
+                    credit(block_index, fee_collector, fee);
+                }
+            }
+            Operation::FeeCollector {
+                fee_collector,
+                caller: _,
+            } => {
+                mutate_state(|s| s.fee_collector_107 = Some(fee_collector));
             }
         },
     );
@@ -989,10 +1004,32 @@ fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
         Operation::Mint { to, .. } => vec![to],
         Operation::Transfer { from, to, .. } => vec![from, to],
         Operation::Approve { from, .. } => vec![from],
+        Operation::FeeCollector { .. } => vec![],
     }
 }
 
 fn get_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) -> Option<Account> {
+    let fee_collector_107 = match block.transaction.operation {
+        Operation::FeeCollector {
+            fee_collector,
+            caller: _,
+        } => Some(fee_collector),
+        _ => None,
+    };
+    match fee_collector_107 {
+        Some(fee_collector) => fee_collector,
+        None => match get_fee_collector_107() {
+            Some(fee_collector) => fee_collector,
+            None => get_legacy_fee_collector(block_index, block),
+        },
+    }
+}
+
+fn get_fee_collector_107() -> Option<Option<Account>> {
+    with_state(|s| s.fee_collector_107)
+}
+
+fn get_legacy_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) -> Option<Account> {
     if block.fee_collector.is_some() {
         block.fee_collector
     } else if let Some(fee_collector_block_index) = block.fee_collector_block_index {

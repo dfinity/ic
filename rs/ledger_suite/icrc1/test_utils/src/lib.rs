@@ -223,6 +223,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Burn { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Mint { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
+                Operation::FeeCollector { .. } => None,
             };
 
             Block {
@@ -577,6 +578,9 @@ impl TransactionsAndBalances {
                     .or_insert(amount);
                 self.debit(from, fee);
             }
+            Operation::FeeCollector { .. } => {
+                panic!("not implemented")
+            }
         };
         self.transactions.push(tx);
 
@@ -603,6 +607,9 @@ impl TransactionsAndBalances {
                 // Check if the from account should be added/removed from valid_allowance_from
                 // (allowance was added/modified for this account)
                 self.check_and_update_account_validity(*from, default_fee);
+            }
+            Operation::FeeCollector { .. } => {
+                panic!("not implemented")
             }
         }
     }

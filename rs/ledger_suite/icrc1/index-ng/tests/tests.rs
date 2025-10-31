@@ -889,6 +889,7 @@ fn test_get_account_transactions_pagination() {
                     transfer: None,
                     approve: None,
                     timestamp: 0,
+                    fee_collector: None,
                 },
                 transaction,
             );
