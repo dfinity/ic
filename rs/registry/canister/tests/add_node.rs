@@ -294,6 +294,7 @@ fn duplicated_nodes_are_removed_on_join() {
                 &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
             )
             .await;
+        println!("{:?}", response);
         assert!(response.is_ok());
 
         // Then, try to add another node.
@@ -399,7 +400,7 @@ fn init_mutation_with_rewards_table() -> RegistryAtomicMutateRequest {
     RegistryAtomicMutateRequest {
         mutations: vec![RegistryMutation {
             mutation_type: registry_mutation::Type::Insert as i32,
-            key: NODE_REWARDS_TABLE_KEY.as_bytes().to_vec(),
+            key: NODE_REWARDS_TABLE_KEY.into(),
             value: NodeRewardsTable::default().encode_to_vec(),
         }],
         preconditions: vec![],

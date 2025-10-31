@@ -82,20 +82,15 @@ pub fn get_node_operator_id_for_node(
 pub fn get_node_reward_type_for_node(
     registry: &Registry,
     node_id: NodeId,
-) -> Result<Option<NodeRewardType>, String> {
+) -> Result<NodeRewardType, String> {
     let node_key = make_node_record_key(node_id);
     let value = registry
         .get(node_key.as_bytes(), registry.latest_version())
         .ok_or(format!("Node Id {node_id:} not found in the registry"))?;
 
     NodeRecord::decode(value.value.as_slice())
-        .map_err(|_| format!("Could not decode node_record for Node Id {node_id}"))?
-        .node_reward_type
-        .map(NodeRewardType::try_from)
-        .transpose()
-        .map_err(|_| {
-            format!("Could not decode node_record's node_reward_type for Node Id {node_id}")
-        })
+        .map_err(|_| format!("Could not decode node_record for Node Id {node_id}"))
+        .map(|node_record| node_record.node_reward_type())
 }
 
 pub fn get_node_provider_id_for_operator_id(
@@ -261,7 +256,7 @@ pub fn get_node_operator_nodes(
     get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX)
         .into_iter()
         .filter(|(_, node_record)| {
-            let node_operator_id_src: PrincipalId =
+            let node_operator_id_src =
                 PrincipalId::try_from(&node_record.node_operator_id).unwrap();
             node_operator_id_src == node_operator_id
         })

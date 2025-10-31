@@ -83,7 +83,7 @@ impl Registry {
                 let node_same_ip_type = get_node_reward_type_for_node(self, *node_with_same_ip)
                     .map_err(|e| format!("{LOG_PREFIX}do_add_node: {e}"))?;
 
-                if node_same_ip_type == node_reward_type {
+                if Some(node_same_ip_type) == node_reward_type {
                     num_removed_same_ip_same_type += 1;
                 }
             }
@@ -134,7 +134,7 @@ impl Registry {
 
             // Validate node operator's max_rewardable_nodes quota
             if max_rewardable_nodes_same_type
-                <= num_in_registry_same_type - num_removed_same_ip_same_type
+                <= num_in_registry_same_type.saturating_sub(num_removed_same_ip_same_type)
             {
                 return Err(format!(
                     "{LOG_PREFIX}do_add_node: Node Operator has reached max_rewardable_nodes quota for {node_reward_type}"
