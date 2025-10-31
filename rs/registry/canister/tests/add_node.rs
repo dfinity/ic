@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use dfn_candid::candid;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
@@ -13,14 +11,17 @@ use ic_nns_test_utils::{
         invariant_compliant_mutation_as_atomic_req, prepare_add_node_payload,
     },
 };
+use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::registry::{node::v1::NodeRewardType, node_operator::v1::NodeOperatorRecord};
-use ic_registry_keys::make_node_operator_record_key;
+use ic_registry_keys::{NODE_REWARDS_TABLE_KEY, make_node_operator_record_key};
 use ic_registry_transport::pb::v1::{
     RegistryAtomicMutateRequest, RegistryMutation, registry_mutation,
 };
 use ic_types::NodeId;
+use maplit::btreemap;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
+use std::collections::BTreeMap;
 
 #[test]
 fn node_is_created_on_receiving_the_request() {
@@ -31,7 +32,10 @@ fn node_is_created_on_receiving_the_request() {
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(100))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type3".to_string() => 100 },
+                ))
+                .push_init_mutate_request(init_mutation_with_rewards_table())
                 .build(),
         )
         .await;
@@ -95,7 +99,10 @@ fn node_is_created_on_receiving_the_request() {
             get_node_operator_record(&registry, *TEST_NEURON_1_OWNER_PRINCIPAL)
                 .await
                 .unwrap();
-        assert_eq!(node_operator_record.node_allowance, 99);
+        assert_eq!(
+            node_operator_record.max_rewardable_nodes,
+            btreemap! { "type3".to_string() => 100 }
+        );
 
         Ok(())
     });
@@ -110,7 +117,10 @@ fn node_is_not_created_with_invalid_type() {
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(100))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 100 },
+                ))
+                .push_init_mutate_request(init_mutation_with_rewards_table())
                 .build(),
         )
         .await;
@@ -156,7 +166,10 @@ fn node_is_not_created_on_wrong_principal() {
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(100))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 100 },
+                ))
+                .push_init_mutate_request(init_mutation_with_rewards_table())
                 .build(),
         )
         .await;
@@ -195,7 +208,10 @@ fn node_is_not_created_when_above_capacity() {
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(1))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 1 },
+                ))
+                .push_init_mutate_request(init_mutation_with_rewards_table())
                 .build(),
         )
         .await;
@@ -253,7 +269,10 @@ fn duplicated_nodes_are_removed_on_join() {
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(10))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 10 },
+                ))
+                .push_init_mutate_request(init_mutation_with_rewards_table())
                 .build(),
         )
         .await;
@@ -317,7 +336,10 @@ fn join_with_duplicate_is_allowed_when_at_capacity() {
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
                 .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
-                .push_init_mutate_request(init_mutation_with_node_allowance(1))
+                .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
+                    btreemap! { "type1".to_string() => 1 },
+                ))
+                .push_init_mutate_request(init_mutation_with_rewards_table())
                 .build(),
         )
         .await;
@@ -373,16 +395,29 @@ fn join_with_duplicate_is_allowed_when_at_capacity() {
     });
 }
 
-fn init_mutation_with_node_allowance(node_allowance: u64) -> RegistryAtomicMutateRequest {
+fn init_mutation_with_rewards_table() -> RegistryAtomicMutateRequest {
+    RegistryAtomicMutateRequest {
+        mutations: vec![RegistryMutation {
+            mutation_type: registry_mutation::Type::Insert as i32,
+            key: NODE_REWARDS_TABLE_KEY.into(),
+            value: NodeRewardsTable::default().encode_to_vec(),
+        }],
+        preconditions: vec![],
+    }
+}
+
+fn init_mutation_with_max_rewardable_nodes(
+    max_rewardable_nodes: BTreeMap<String, u32>,
+) -> RegistryAtomicMutateRequest {
     let node_operator_record = NodeOperatorRecord {
         node_operator_principal_id: TEST_NEURON_1_OWNER_PRINCIPAL.to_vec(),
-        node_allowance,
+        node_allowance: 0,
         // This doesn't go through Governance validation
         node_provider_principal_id: vec![],
         dc_id: "".into(),
         rewardable_nodes: BTreeMap::new(),
         ipv6: None,
-        max_rewardable_nodes: BTreeMap::new(),
+        max_rewardable_nodes,
     };
     RegistryAtomicMutateRequest {
         mutations: vec![RegistryMutation {
