@@ -11481,6 +11481,7 @@ version = "0.9.0"
 dependencies = [
  "ic-cdk-timers",
  "slotmap",
+ "tokio",
 ]
 
 [[package]]
