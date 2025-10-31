@@ -89,6 +89,18 @@ fn test_header_v1_roundtrip_serialization() {
     assert_eq!(original, recovered);
 }
 
+#[test]
+fn test_lookup_slot_serialization() {
+    let original = LookupSlot {
+        idx_min: 1,
+        ts_nanos_min: 2,
+        offset: 3,
+    };
+    let bytes = LookupSlotBytes::from(&original);
+    let recovered = LookupSlot::from(&bytes);
+    assert_eq!(original, recovered);
+}
+
 #[derive(Debug, PartialEq)]
 #[repr(C, packed)]
 struct LookupSlot {
@@ -98,6 +110,27 @@ struct LookupSlot {
 }
 const SLOT_SIZE: usize = 24;
 const _: () = assert!(std::mem::size_of::<LookupSlot>() == SLOT_SIZE);
+type LookupSlotBytes = [u8; SLOT_SIZE];
+
+impl From<&LookupSlot> for LookupSlotBytes {
+    fn from(slot: &LookupSlot) -> Self {
+        let mut bytes = [0; SLOT_SIZE];
+        bytes[0..8].copy_from_slice(&slot.idx_min.to_le_bytes());
+        bytes[8..16].copy_from_slice(&slot.ts_nanos_min.to_le_bytes());
+        bytes[16..24].copy_from_slice(&slot.offset.to_le_bytes());
+        bytes
+    }
+}
+
+impl From<&LookupSlotBytes> for LookupSlot {
+    fn from(bytes: &LookupSlotBytes) -> Self {
+        Self {
+            idx_min: u64::from_le_bytes(bytes[0..8].try_into().unwrap()),
+            ts_nanos_min: u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
+            offset: u64::from_le_bytes(bytes[16..24].try_into().unwrap()),
+        }
+    }
+}
 
 struct DataEntry {
     idx: u64,
@@ -240,13 +273,19 @@ impl LogMemoryStore {
 
 struct RingBuffer {
     buffer: Buffer,
+    /// In-memory lookup table for efficient filtering.
+    /// Each slot represents a range of entries for fast lookup.
+    lookup_table: Vec<LookupSlot>,
 }
 
 impl RingBuffer {
     pub fn new(page_map: PageMap) -> Self {
-        Self {
+        let mut ring_buffer = Self {
             buffer: Buffer::new(page_map),
-        }
+            lookup_table: Vec::new(),
+        };
+        ring_buffer.load_lookup_table();
+        ring_buffer
     }
 
     fn read_header(&self) -> HeaderV1 {
@@ -296,6 +335,28 @@ impl RingBuffer {
         let mut bytes = vec![0; len];
         self.buffer.read(&mut bytes, offset as usize);
         bytes
+    }
+
+    fn read_lookup_slot(&self, slot_index: usize) -> LookupSlot {
+        let slot_offset = V1_LOOKUP_TABLE_OFFSET + (slot_index * SLOT_SIZE);
+        let mut slot_bytes = [0; SLOT_SIZE];
+        self.buffer.read(&mut slot_bytes, slot_offset);
+        LookupSlot::from(&slot_bytes)
+    }
+
+    fn write_lookup_slot(&mut self, slot_index: usize, slot: &LookupSlot) {
+        let slot_offset = V1_LOOKUP_TABLE_OFFSET + (slot_index * SLOT_SIZE);
+        let slot_bytes = LookupSlotBytes::from(slot);
+        self.buffer.write(&slot_bytes, slot_offset);
+    }
+
+    fn load_lookup_table(&mut self) {
+        let count = self.read_header().lookup_slots_count as usize;
+        self.lookup_table.clear();
+        self.lookup_table.reserve(count);
+        for i in 0..count {
+            self.lookup_table.push(self.read_lookup_slot(i));
+        }
     }
 
     fn get(&self, offset: u64) -> DataEntry {
