@@ -10,7 +10,6 @@ use url::Url;
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct DeploymentSettings {
     pub deployment: Deployment,
-    pub logging: Logging,
     pub nns: Nns,
     pub dev_vm_resources: VmResources,
 }
@@ -20,7 +19,6 @@ pub struct DeploymentSettings {
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct CompatDeploymentSettings {
     pub deployment: Deployment,
-    pub logging: Logging,
     pub nns: Nns,
     pub vm_resources: Option<VmResources>,
     pub dev_vm_resources: Option<VmResources>,
@@ -35,10 +33,6 @@ pub struct Deployment {
     /// Optional management MAC address for network configuration, used for nested environments
     pub mgmt_mac: Option<String>,
 }
-
-// NODE-1681: Leftover from push-based logging. Remove in NODE-1681
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
-pub struct Logging {}
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct Nns {
@@ -87,7 +81,6 @@ mod test {
                 "deployment_environment": "mainnet",
                 "mgmt_mac": null
               },
-              "logging": {},
               "nns": {
                 "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
               },
@@ -105,7 +98,6 @@ mod test {
     "deployment_environment": "mainnet",
     "mgmt_mac": null
   },
-  "logging": {},
   "nns": {
     "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
   },
@@ -121,7 +113,6 @@ mod test {
             deployment_environment: DeploymentEnvironment::Mainnet,
             mgmt_mac: None,
         },
-        logging: Logging {},
         nns: Nns {
             urls: vec![
                 Url::parse("https://icp-api.io").unwrap(),
