@@ -9,6 +9,10 @@ on the process that this file is part of, see
 
 ## Added
 
+* Added support for more Mangement canister features:
+    * Added `allowed_viewers` to `log_visibility` (used by `CanisterSettings`).
+    * Added `log_memory_limit` to `CanisterSettings`.
+
 ## Changed
 
 ## Deprecated
