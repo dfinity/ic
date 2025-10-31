@@ -10,7 +10,7 @@ use crate::{
 use ic_base_types::SubnetId;
 use ic_metrics::MetricsRegistry;
 use ic_recovery::{
-    CUPS_DIR, IC_REGISTRY_LOCAL_STORE, Recovery,
+    CUPS_DIR, Recovery,
     cli::consent_given,
     error::{RecoveryError, RecoveryResult},
     file_sync_helper::rsync,
@@ -35,7 +35,7 @@ pub(crate) struct CopyWorkDirStep {
 impl Step for CopyWorkDirStep {
     fn descr(&self) -> String {
         format!(
-            "Copying {} to {}. Excluding cups and registry local store",
+            "Copying {} to {}. Excluding cups",
             self.layout.work_dir(TargetSubnet::Source).display(),
             self.layout.work_dir(TargetSubnet::Destination).display(),
         )
@@ -44,7 +44,8 @@ impl Step for CopyWorkDirStep {
     fn exec(&self) -> RecoveryResult<()> {
         rsync(
             &self.logger,
-            vec![CUPS_DIR, IC_REGISTRY_LOCAL_STORE],
+            Vec::<String>::default(),
+            vec![CUPS_DIR],
             &format!("{}/", self.layout.work_dir(TargetSubnet::Source).display()),
             &self
                 .layout
