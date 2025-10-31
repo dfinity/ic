@@ -3622,7 +3622,7 @@ dependencies = [
  "ic-http-certification",
  "ic-http-gateway",
  "ic-identity-hsm",
- "ic-management-canister-types 0.3.3",
+ "ic-management-canister-types 0.4.1",
  "ic-metrics-encoder",
  "ic-response-verification",
  "ic-sha3",
