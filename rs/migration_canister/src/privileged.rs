@@ -6,7 +6,7 @@ use candid::{CandidType, Principal};
 use ic_cdk::{api::msg_caller, update};
 use serde::Deserialize;
 
-use crate::canister_state::privileged::{set_disabled_flag, set_max_active_requests};
+use crate::canister_state::privileged::set_disabled_flag;
 
 const GOVERNANCE_CANISTER_ID: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
 
@@ -22,18 +22,6 @@ fn check_caller() -> Result<(), MigrationCanisterError> {
 #[derive(Clone, Debug, CandidType, Deserialize)]
 enum MigrationCanisterError {
     CallerNotAuthorized,
-}
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct SetRateLimitArgs {
-    pub max_active_requests: u64,
-}
-
-#[update]
-fn set_rate_limit(args: SetRateLimitArgs) -> Result<(), MigrationCanisterError> {
-    check_caller()?;
-    set_max_active_requests(args.max_active_requests);
-    Ok(())
 }
 
 #[update]
