@@ -155,7 +155,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
             if request_pricing_version == ic_types::canister_http::PricingVersion::PayAsYouGo {
                 warn!(
                     log,
-                    "Canister HTTP request with PayAsYouGo pricing is not supported: request_id {}, sender {}, process_id: {}",
+                    "Canister HTTP request with PayAsYouGo pricing is not supported yet: request_id {}, sender {}, process_id: {}",
                     request_id,
                     request_sender,
                     std::process::id(),
