@@ -38,6 +38,7 @@ pub struct SwapBuilder {
     neurons_fund_participation_constraints: Option<NeuronsFundParticipationConstraints>,
     neurons_fund_participation: Option<bool>,
     neuron_recipes: Vec<SnsNeuronRecipe>,
+    testflight: Option<bool>,
     // The following fields are deprecated and thus don't need to be represented here.
     // min_icp_e8s,
     // max_icp_e8s,
@@ -79,6 +80,7 @@ impl Default for SwapBuilder {
             neurons_fund_participation_constraints: None,
             neurons_fund_participation: None,
             neuron_recipes: vec![],
+            testflight: Some(false),
         }
     }
 }
@@ -242,6 +244,7 @@ impl SwapBuilder {
             should_auto_finalize: self.should_auto_finalize,
             neurons_fund_participation_constraints: self.neurons_fund_participation_constraints,
             neurons_fund_participation: self.neurons_fund_participation,
+            testflight: self.testflight,
 
             // The following fields are deprecated.
             min_icp_e8s: None,
