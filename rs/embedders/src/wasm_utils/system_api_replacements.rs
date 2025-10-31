@@ -17,7 +17,7 @@ use crate::{
     wasmtime_embedder::system_api_complexity::overhead_native,
 };
 use ic_interfaces::execution_environment::StableMemoryApi;
-use ic_sys::PAGE_SIZE;
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use ic_types::NumInstructions;
 use wirm::{DataType, ir::types::Instructions, wasmparser::BlockType};
 
@@ -26,7 +26,6 @@ use ic_types::NumBytes;
 use super::SystemApiFunc;
 
 const MAX_32_BIT_STABLE_MEMORY_IN_PAGES: i64 = 64 * 1024; // 4GiB
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 fn make_body(
     locals: Vec<(u32, DataType)>,

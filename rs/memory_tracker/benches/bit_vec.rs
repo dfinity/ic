@@ -1,6 +1,7 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use nix::sys::mman::{MapFlags, ProtFlags, mmap, munmap};
 
 const KIB: usize = 1024;
@@ -8,14 +9,12 @@ const MIB: usize = 1024 * KIB;
 const GIB: usize = 1024 * MIB;
 const TIB: usize = 1024 * GIB;
 
-const OS_PAGE_SIZE: usize = 4 * KIB;
-const WASM_PAGE_SIZE: usize = 64 * KIB;
 const MAX_ACCESSED_SIZE: usize = 2 * GIB;
 
 #[repr(usize)]
 #[derive(Copy, Clone)]
 enum PageSize {
-    Os = OS_PAGE_SIZE,
+    Os = PAGE_SIZE,
     Wasm = WASM_PAGE_SIZE,
 }
 

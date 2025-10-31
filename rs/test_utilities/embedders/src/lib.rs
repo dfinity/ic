@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::{convert::TryFrom, rc::Rc};
 
-use ic_base_types::NumBytes;
+use ic_base_types::{NumBytes, NumWasmPages};
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
@@ -22,7 +22,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap};
+use ic_replicated_state::{Memory, NetworkTopology, PageMap};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{canister_test_id, user_test_id};
@@ -202,14 +202,8 @@ impl WasmtimeInstanceBuilder {
                 canister_test_id(1),
                 &compiled,
                 self.globals.as_deref(),
-                &Memory::new(
-                    PageMap::new_for_testing(),
-                    ic_replicated_state::NumWasmPages::from(0),
-                ),
-                &Memory::new(
-                    PageMap::new_for_testing(),
-                    ic_replicated_state::NumWasmPages::from(0),
-                ),
+                &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
+                &Memory::new(PageMap::new_for_testing(), NumWasmPages::from(0)),
                 ModificationTracking::Track,
                 Some(api),
             )

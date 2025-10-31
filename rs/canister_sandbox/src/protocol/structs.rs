@@ -1,3 +1,4 @@
+use ic_base_types::NumWasmPages;
 use ic_embedders::{
     wasm_executor::SliceExecutionOutput,
     wasmtime_embedder::system_api::{
@@ -9,7 +10,7 @@ use ic_interfaces::execution_environment::{
     MessageMemoryUsage, SubnetAvailableMemory, WasmExecutionOutput,
 };
 use ic_management_canister_types_private::Global;
-use ic_replicated_state::{Memory, NumWasmPages, PageIndex, page_map::PageDeltaSerialization};
+use ic_replicated_state::{Memory, PageIndex, page_map::PageDeltaSerialization};
 use ic_types::{NumBytes, methods::FuncRef};
 use serde::{Deserialize, Serialize};
 

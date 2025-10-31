@@ -56,6 +56,7 @@ rust_bench(
     data = ["benches/test-data/64KiB.txt"],
     deps = [
         # Keep sorted.
+        "//rs/sys",
         "@crate_index//:criterion",
         "@crate_index//:memmap2",
         "@crate_index//:rayon",
@@ -68,6 +69,7 @@ rust_bench(
     srcs = ["benches/bit_vec.rs"],
     deps = [
         # Keep sorted.
+        "//rs/sys",
         "@crate_index//:bit-vec",
         "@crate_index//:criterion",
         "@crate_index//:nix",

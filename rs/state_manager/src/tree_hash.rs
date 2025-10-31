@@ -60,7 +60,7 @@ pub fn hash_state(state: &ReplicatedState) -> HashTree {
 mod tests {
     use super::*;
     use hex::FromHex;
-    use ic_base_types::{NumBytes, NumSeconds};
+    use ic_base_types::{NumBytes, NumSeconds, NumWasmPages};
     use ic_canonical_state::{CertificationVersion, all_supported_versions};
     use ic_crypto_tree_hash::Digest;
     use ic_error_types::{ErrorCode, UserError};
@@ -70,7 +70,7 @@ mod tests {
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
-        ExecutionState, ExportedFunctions, Memory, NumWasmPages, PageMap, ReplicatedState,
+        ExecutionState, ExportedFunctions, Memory, PageMap, ReplicatedState,
         canister_state::{
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
             system_state::CyclesUseCase,

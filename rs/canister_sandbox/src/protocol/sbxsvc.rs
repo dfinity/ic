@@ -5,15 +5,12 @@ use std::{os::fd::RawFd, time::Duration};
 
 use crate::fdenum::EnumerateInnerFileDescriptors;
 use crate::protocol::structs;
+use ic_base_types::NumWasmPages;
 use ic_interfaces::execution_environment::HypervisorResult;
 use ic_management_canister_types_private::Global;
-use ic_replicated_state::{
-    NumWasmPages,
-    page_map::{
-        BaseFileSerialization, CheckpointSerialization, MappingSerialization,
-        OverlayFileSerialization, PageAllocatorSerialization, PageMapSerialization,
-        StorageSerialization,
-    },
+use ic_replicated_state::page_map::{
+    BaseFileSerialization, CheckpointSerialization, MappingSerialization, OverlayFileSerialization,
+    PageAllocatorSerialization, PageMapSerialization, StorageSerialization,
 };
 use ic_types::CanisterId;
 use serde::{Deserialize, Serialize};
@@ -317,7 +314,7 @@ mod tests {
 
     use std::time::Duration;
 
-    use ic_base_types::NumSeconds;
+    use ic_base_types::{NumSeconds, NumWasmPages};
     use ic_config::subnet_config::CyclesAccountManagerConfig;
     use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
     use ic_embedders::wasmtime_embedder::system_api::{
@@ -328,7 +325,7 @@ mod tests {
         ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
     };
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages, PageMap, SystemState};
+    use ic_replicated_state::{Memory, NetworkTopology, PageMap, SystemState};
     use ic_test_utilities_types::ids::canister_test_id;
     use ic_types::{
         ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions, SubnetId, Time,

@@ -16,6 +16,9 @@ pub const PAGE_SIZE: usize = 16384;
 #[cfg(not(all(target_arch = "aarch64", target_vendor = "apple")))]
 pub const PAGE_SIZE: usize = 4096;
 
+/// The size of a Wasm memory page.
+pub const WASM_PAGE_SIZE: usize = 65536;
+
 /// The size of a huge page on x86_64 on Linux.
 /// Used for a huge page allocation as a memory optimization as
 /// it reduces the number of page faults and improves performance.

@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use ic_base_types::SnapshotId;
+use ic_base_types::{NumWasmPages, SnapshotId};
 use ic_canonical_state::encoding::encode_subnet_canister_ranges;
 use ic_config::state_manager::{Config, lsmt_config_default};
 use ic_crypto_tree_hash::{
@@ -21,8 +21,8 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    ExecutionState, ExportedFunctions, Memory, NetworkTopology, NumWasmPages, PageMap,
-    ReplicatedState, Stream, SubnetTopology,
+    ExecutionState, ExportedFunctions, Memory, NetworkTopology, PageMap, ReplicatedState, Stream,
+    SubnetTopology,
     canister_snapshots::CanisterSnapshot,
     canister_state::{execution_state::WasmBinary, system_state::wasm_chunk_store::WasmChunkStore},
     metadata_state::ApiBoundaryNodeEntry,

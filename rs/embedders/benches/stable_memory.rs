@@ -10,8 +10,7 @@
 use candid::Encode;
 use criterion::{Criterion, criterion_group, criterion_main};
 use embedders_bench::SetupAction;
-use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
-use ic_sys::PAGE_SIZE;
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 
 /// Each entry should have a pair of u64's for the key and value so that makes
 /// 256 entries be 4KiB page. So with these numbers each new lookup should
@@ -130,7 +129,7 @@ fn direct_wat() -> String {
         loop_count = DIRECT_U64_ENTRIES_TO_HANDLE,
         large_write_data_size = 2 * 1024 * 1024, // 2 MiB
         large_read_data_size = 20 * 1024 * 1024, // 20 MiB
-        initial_memory = 20 * 1024 * 1024 / WASM_PAGE_SIZE_IN_BYTES,
+        initial_memory = 20 * 1024 * 1024 / WASM_PAGE_SIZE,
     )
 }
 

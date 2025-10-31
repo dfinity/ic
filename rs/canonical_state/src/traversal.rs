@@ -46,7 +46,7 @@ mod tests {
         encoding::{CborProxyEncoder, encode_stream_header, types::SystemMetadata},
         test_visitors::{NoopVisitor, TraceEntry as E, TracingVisitor},
     };
-    use ic_base_types::{NumBytes, NumSeconds};
+    use ic_base_types::{NumBytes, NumSeconds, NumWasmPages};
     use ic_certification_version::{
         CertificationVersion::{self, *},
         all_supported_versions,
@@ -58,7 +58,7 @@ mod tests {
     use ic_replicated_state::{
         Memory,
         canister_state::{
-            ExecutionState, ExportedFunctions, NumWasmPages,
+            ExecutionState, ExportedFunctions,
             execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         },
         metadata_state::{ApiBoundaryNodeEntry, SubnetTopology},

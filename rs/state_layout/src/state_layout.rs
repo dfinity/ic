@@ -1,4 +1,4 @@
-use ic_base_types::{NumBytes, NumSeconds};
+use ic_base_types::{NumBytes, NumSeconds, NumWasmPages};
 use ic_logger::{ReplicaLogger, error, info, warn};
 use ic_management_canister_types_private::{
     Global, LogVisibilityV2, OnLowWasmMemoryHookStatus, SnapshotSource,
@@ -10,7 +10,7 @@ use ic_protobuf::state::{
     queues::v1 as pb_queues, stats::v1 as pb_stats, system_metadata::v1 as pb_metadata,
 };
 use ic_replicated_state::{
-    CanisterStatus, ExportedFunctions, NumWasmPages,
+    CanisterStatus, ExportedFunctions,
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
         system_state::{

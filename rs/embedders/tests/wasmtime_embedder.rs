@@ -17,7 +17,7 @@ use ic_interfaces::execution_environment::{
 };
 use ic_management_canister_types_private::Global;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
+use ic_sys::WASM_PAGE_SIZE;
 use ic_test_utilities_embedders::{DEFAULT_NUM_INSTRUCTIONS, WasmtimeInstanceBuilder};
 use ic_test_utilities_types::ids::{call_context_test_id, user_test_id};
 use ic_types::{
@@ -28,8 +28,6 @@ use ic_types::{
     time::UNIX_EPOCH,
 };
 use wirm::wasmparser;
-
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 /// Ensures that attempts to execute messages on wasm modules that do not
 /// define memory fails.
@@ -1606,7 +1604,7 @@ fn stable_access_beyond_32_bit_range() {
     let gb = 1024 * 1024 * 1024;
     // We'll grow stable memory to 30 GB and then try writing to the last byte.
     let bytes_to_access = 30 * gb;
-    let max_stable_memory_in_wasm_pages = bytes_to_access / WASM_PAGE_SIZE_IN_BYTES as u64;
+    let max_stable_memory_in_wasm_pages = bytes_to_access / WASM_PAGE_SIZE as u64;
     let last_byte_of_stable_memory = bytes_to_access - 1;
 
     let wat = format!(
@@ -2281,8 +2279,7 @@ fn wasm64_msg_caller_copy() {
 
     let wasm_heap: &[u8] = unsafe {
         let addr = instance.heap_addr(CanisterMemoryType::Heap);
-        let size_in_bytes =
-            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        let size_in_bytes = instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE;
         assert!(size_in_bytes >= dirty_heap_size);
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
@@ -2346,8 +2343,7 @@ fn wasm64_msg_arg_data_copy() {
 
     let wasm_heap: &[u8] = unsafe {
         let addr = instance.heap_addr(CanisterMemoryType::Heap);
-        let size_in_bytes =
-            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        let size_in_bytes = instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE;
         assert!(size_in_bytes >= dirty_heap_size);
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
@@ -2406,8 +2402,7 @@ fn wasm64_msg_method_name_copy() {
 
     let wasm_heap: &[u8] = unsafe {
         let addr = instance.heap_addr(CanisterMemoryType::Heap);
-        let size_in_bytes =
-            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        let size_in_bytes = instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE;
         assert!(size_in_bytes >= dirty_heap_size);
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
@@ -2579,8 +2574,7 @@ fn wasm64_reject_msg_copy() {
 
     let wasm_heap: &[u8] = unsafe {
         let addr = instance.heap_addr(CanisterMemoryType::Heap);
-        let size_in_bytes =
-            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        let size_in_bytes = instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE;
         assert!(size_in_bytes >= dirty_heap_size);
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
@@ -2634,8 +2628,7 @@ fn wasm64_root_key() {
     let dirty_heap_size = ic_sys::PAGE_SIZE;
     let wasm_heap: &[u8] = unsafe {
         let addr = instance.heap_addr(CanisterMemoryType::Heap);
-        let size_in_bytes =
-            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        let size_in_bytes = instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE;
         assert!(size_in_bytes >= dirty_heap_size);
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
@@ -2722,8 +2715,7 @@ fn wasm64_canister_self_copy() {
 
     let wasm_heap: &[u8] = unsafe {
         let addr = instance.heap_addr(CanisterMemoryType::Heap);
-        let size_in_bytes =
-            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        let size_in_bytes = instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE;
         assert!(size_in_bytes >= dirty_heap_size);
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
@@ -2832,8 +2824,7 @@ fn wasm64_subnet_self_copy() {
 
     let wasm_heap: &[u8] = unsafe {
         let addr = instance.heap_addr(CanisterMemoryType::Heap);
-        let size_in_bytes =
-            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        let size_in_bytes = instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE;
         assert!(size_in_bytes >= dirty_heap_size);
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
@@ -2950,8 +2941,7 @@ fn wasm64_canister_cycle_balance128() {
 
     let wasm_heap: &[u8] = unsafe {
         let addr = instance.heap_addr(CanisterMemoryType::Heap);
-        let size_in_bytes =
-            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        let size_in_bytes = instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE;
         assert!(size_in_bytes >= dirty_heap_size);
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
@@ -3009,8 +2999,7 @@ fn wasm64_canister_liquid_cycle_balance128() {
     let dirty_heap_size = ic_sys::PAGE_SIZE;
     let wasm_heap: &[u8] = unsafe {
         let addr = instance.heap_addr(CanisterMemoryType::Heap);
-        let size_in_bytes =
-            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        let size_in_bytes = instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE;
         assert!(size_in_bytes >= dirty_heap_size);
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
@@ -3089,8 +3078,7 @@ fn wasm64_msg_cycles_refunded128() {
 
     let wasm_heap: &[u8] = unsafe {
         let addr = instance.heap_addr(CanisterMemoryType::Heap);
-        let size_in_bytes =
-            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        let size_in_bytes = instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE;
         assert!(size_in_bytes >= dirty_heap_size);
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };
@@ -3151,8 +3139,7 @@ fn wasm64_cycles_burn128() {
 
     let wasm_heap: &[u8] = unsafe {
         let addr = instance.heap_addr(CanisterMemoryType::Heap);
-        let size_in_bytes =
-            instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_IN_BYTES;
+        let size_in_bytes = instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE;
         assert!(size_in_bytes >= dirty_heap_size);
         std::slice::from_raw_parts_mut(addr as *mut _, dirty_heap_size)
     };

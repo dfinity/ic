@@ -6,7 +6,7 @@ use ic_replica_tests as utils;
 use ic_replica_tests::{assert_reply, install_universal_canister};
 use ic_replicated_state::{PageIndex, PageMap};
 use ic_state_machine_tests::StateMachine;
-use ic_sys::PAGE_SIZE;
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use ic_test_utilities::universal_canister::{call_args, wasm};
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
@@ -14,8 +14,6 @@ use ic_types::{
     messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, time::expiry_time_from_now,
 };
 use std::sync::Arc;
-
-const WASM_PAGE_SIZE: usize = 65536;
 
 #[test]
 /// Tests a message can roundtrip through all layers

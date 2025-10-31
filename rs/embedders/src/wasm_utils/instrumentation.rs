@@ -113,9 +113,9 @@
 use super::system_api_replacements::replacement_functions;
 use super::validation::API_VERSION_IC0;
 use super::{InstrumentationOutput, Segments, SystemApiFunc};
+use ic_base_types::NumWasmPages;
 use ic_config::embedders::MeteringType;
-use ic_replicated_state::NumWasmPages;
-use ic_sys::PAGE_SIZE;
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use ic_types::NumBytes;
 use ic_types::NumInstructions;
 use ic_types::methods::WasmMethod;
@@ -140,8 +140,6 @@ use crate::wasmtime_embedder::{
 
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
-
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 #[derive(Clone, Copy, Debug)]
 pub enum WasmMemoryType {

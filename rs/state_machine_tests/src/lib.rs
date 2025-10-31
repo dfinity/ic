@@ -2,6 +2,7 @@ use candid::Decode;
 use core::sync::atomic::Ordering;
 use ed25519_dalek::{SigningKey, pkcs8::EncodePrivateKey};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
+use ic_base_types::NumWasmPages;
 use ic_btc_adapter_client::setup_bitcoin_adapter_clients;
 use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{
@@ -106,15 +107,13 @@ use ic_registry_subnet_features::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
-    canister_state::{
-        NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
-        system_state::{CanisterHistory, CyclesUseCase},
-    },
+    canister_state::system_state::{CanisterHistory, CyclesUseCase},
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
+use ic_sys::WASM_PAGE_SIZE;
 use ic_test_utilities_consensus::{FakeConsensusPoolCache, batch::MockBatchPayloadBuilder};
 use ic_test_utilities_metrics::{
     Labels, fetch_counter_vec, fetch_histogram_stats, fetch_int_counter, fetch_int_gauge,
@@ -4397,7 +4396,7 @@ impl StateMachine {
             .unwrap_or_else(|| panic!("Canister {canister_id} has no module"))
             .stable_memory;
 
-        let mut dst = vec![0u8; memory.size.get() * WASM_PAGE_SIZE_IN_BYTES];
+        let mut dst = vec![0u8; memory.size.get() * WASM_PAGE_SIZE];
         let buffer = Buffer::new(memory.page_map.clone());
         buffer.read(&mut dst, 0);
         dst
@@ -4434,7 +4433,7 @@ impl StateMachine {
         let canister_state = replicated_state
             .canister_state_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {canister_id} does not exist"));
-        let size = data.len().div_ceil(WASM_PAGE_SIZE_IN_BYTES);
+        let size = data.len().div_ceil(WASM_PAGE_SIZE);
         let memory = Memory::new(PageMap::from(data), NumWasmPages::new(size));
         canister_state
             .execution_state

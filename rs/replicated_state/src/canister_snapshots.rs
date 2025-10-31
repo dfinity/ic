@@ -1,18 +1,18 @@
 use crate::{
-    CanisterState, NumWasmPages, PageMap,
+    CanisterState, PageMap,
     canister_state::{
-        WASM_PAGE_SIZE_IN_BYTES,
         execution_state::{Memory, WasmExecutionMode},
         system_state::wasm_chunk_store::{self, ValidatedChunk, WasmChunkStore},
     },
     page_map::{Buffer, PageAllocatorFileDescriptor, PersistenceError},
 };
+use ic_base_types::NumWasmPages;
 use ic_config::embedders::{MAX_GLOBALS, WASM_MAX_SIZE};
 use ic_management_canister_types_private::{
     Global, GlobalTimer, OnLowWasmMemoryHookStatus, SnapshotSource,
     UploadCanisterSnapshotMetadataArgs,
 };
-use ic_sys::PAGE_SIZE;
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use ic_types::{
     CanisterId, CanisterTimer, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
     MAX_WASM64_MEMORY_IN_BYTES, NumBytes, PrincipalId, SnapshotId, Time,
@@ -566,7 +566,7 @@ impl CanisterSnapshot {
         offset: u64,
         size: u64,
     ) -> Result<Vec<u8>, CanisterSnapshotError> {
-        let page_map_size_bytes = (page_memory.size.get() * WASM_PAGE_SIZE_IN_BYTES) as u64;
+        let page_map_size_bytes = (page_memory.size.get() * WASM_PAGE_SIZE) as u64;
         if offset.saturating_add(size) > page_map_size_bytes {
             return Err(CanisterSnapshotError::InvalidSubslice { offset, size });
         }
@@ -612,7 +612,7 @@ impl ValidatedSnapshotMetadata {
         if raw.wasm_module_size > WASM_MAX_SIZE.get() {
             return Err(MetadataValidationError::WasmModuleTooLarge);
         }
-        if !(raw.wasm_memory_size as usize).is_multiple_of(WASM_PAGE_SIZE_IN_BYTES) {
+        if !(raw.wasm_memory_size as usize).is_multiple_of(WASM_PAGE_SIZE) {
             return Err(MetadataValidationError::WasmMemoryNotPageAligned);
         }
         match wasm_mode {
@@ -627,7 +627,7 @@ impl ValidatedSnapshotMetadata {
                 }
             }
         }
-        if !(raw.stable_memory_size as usize).is_multiple_of(WASM_PAGE_SIZE_IN_BYTES) {
+        if !(raw.stable_memory_size as usize).is_multiple_of(WASM_PAGE_SIZE) {
             return Err(MetadataValidationError::StableMemoryNotPageAligned);
         }
         if raw.stable_memory_size > MAX_STABLE_MEMORY_IN_BYTES {
@@ -646,12 +646,8 @@ impl ValidatedSnapshotMetadata {
             replace_snapshot: raw.replace_snapshot,
             wasm_module_size: NumBytes::new(raw.wasm_module_size),
             exported_globals: raw.globals,
-            wasm_memory_size: NumWasmPages::new(
-                raw.wasm_memory_size as usize / WASM_PAGE_SIZE_IN_BYTES,
-            ),
-            stable_memory_size: NumWasmPages::new(
-                raw.stable_memory_size as usize / WASM_PAGE_SIZE_IN_BYTES,
-            ),
+            wasm_memory_size: NumWasmPages::new(raw.wasm_memory_size as usize / WASM_PAGE_SIZE),
+            stable_memory_size: NumWasmPages::new(raw.stable_memory_size as usize / WASM_PAGE_SIZE),
             certified_data: raw.certified_data,
             global_timer: raw.global_timer,
             on_low_wasm_memory_hook_status: raw.on_low_wasm_memory_hook_status,
@@ -661,8 +657,8 @@ impl ValidatedSnapshotMetadata {
     /// Returns the size of this snapshot, excluding the size of the wasm chunk store.
     pub fn snapshot_size_bytes(&self) -> NumBytes {
         let num_bytes = self.wasm_module_size.get()
-            + (self.wasm_memory_size.get() * WASM_PAGE_SIZE_IN_BYTES) as u64
-            + (self.stable_memory_size.get() * WASM_PAGE_SIZE_IN_BYTES) as u64
+            + (self.wasm_memory_size.get() * WASM_PAGE_SIZE) as u64
+            + (self.stable_memory_size.get() * WASM_PAGE_SIZE) as u64
             + self.certified_data.len() as u64
             + self.exported_globals.len() as u64 * size_of::<Global>() as u64;
         NumBytes::new(num_bytes)

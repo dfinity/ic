@@ -1,3 +1,4 @@
+use ic_base_types::NumWasmPages;
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
     subnet_config::SchedulerConfig,
@@ -16,8 +17,8 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages};
-use ic_sys::PAGE_SIZE;
+use ic_replicated_state::{Memory, NetworkTopology};
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_execution_environment::bytes_and_logging_cost;
 use ic_test_utilities_logger::with_test_replica_logger;
@@ -461,10 +462,9 @@ fn buf_apply_write(heap: &mut [u8], write: &Write, copies_data_to_first_page: bo
     heap[write.dst as usize..(write.dst as usize + write.bytes.len())].copy_from_slice(&write.bytes)
 }
 
-const TEST_HEAP_SIZE_BYTES: usize = WASM_PAGE_SIZE_BYTES * TEST_NUM_PAGES;
+const TEST_HEAP_SIZE_BYTES: usize = WASM_PAGE_SIZE * TEST_NUM_PAGES;
 const TEST_NUM_PAGES: usize = 800;
 const TEST_NUM_WRITES: usize = 2000;
-const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const BYTES_PER_INSTRUCTION: usize = 1;
 
 fn wat2wasm(wat: &str) -> Result<BinaryEncodedWasm, wat::Error> {
@@ -552,7 +552,7 @@ mod tests {
                 let wasm_heap: &[u8] = unsafe {
                     let addr = instance.heap_addr(CanisterMemoryType::Heap);
                     let size_in_bytes =
-                        instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE_BYTES;
+                        instance.heap_size(CanisterMemoryType::Heap).get() * WASM_PAGE_SIZE;
                     std::slice::from_raw_parts_mut(addr as *mut _, size_in_bytes)
                 };
                 let start = write.dst as usize;

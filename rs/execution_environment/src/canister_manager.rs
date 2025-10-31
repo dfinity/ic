@@ -33,7 +33,6 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_replicated_state::canister_snapshots::ValidatedSnapshotMetadata;
-use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::canister_state::execution_state::{CustomSectionType, SandboxMemory};
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store::{
     CHUNK_SIZE, ChunkValidationResult, WasmChunkHash,
@@ -54,6 +53,7 @@ use ic_replicated_state::{
     metadata_state::subnet_call_context_manager::InstallCodeCallId,
     page_map::PageAllocatorFileDescriptor,
 };
+use ic_sys::WASM_PAGE_SIZE;
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
@@ -2520,9 +2520,9 @@ impl CanisterManager {
             wasm_module_size: snapshot.execution_snapshot().wasm_binary.len() as u64,
             globals,
             wasm_memory_size: snapshot.execution_snapshot().wasm_memory.size.get() as u64
-                * WASM_PAGE_SIZE_IN_BYTES as u64,
+                * WASM_PAGE_SIZE as u64,
             stable_memory_size: snapshot.execution_snapshot().stable_memory.size.get() as u64
-                * WASM_PAGE_SIZE_IN_BYTES as u64,
+                * WASM_PAGE_SIZE as u64,
             wasm_chunk_store: snapshot
                 .chunk_store()
                 .keys()
@@ -2829,8 +2829,7 @@ impl CanisterManager {
                 }
             }
             CanisterSnapshotDataOffset::WasmMemory { offset } => {
-                let max_size_bytes =
-                    snapshot_inner.wasm_memory().size.get() * WASM_PAGE_SIZE_IN_BYTES;
+                let max_size_bytes = snapshot_inner.wasm_memory().size.get() * WASM_PAGE_SIZE;
                 if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
                     return Err(CanisterManagerError::InvalidSlice {
                         offset,
@@ -2843,8 +2842,7 @@ impl CanisterManager {
                 snapshot_inner.wasm_memory_mut().page_map.update(&delta);
             }
             CanisterSnapshotDataOffset::StableMemory { offset } => {
-                let max_size_bytes =
-                    snapshot_inner.stable_memory().size.get() * WASM_PAGE_SIZE_IN_BYTES;
+                let max_size_bytes = snapshot_inner.stable_memory().size.get() * WASM_PAGE_SIZE;
                 if max_size_bytes < args.chunk.len().saturating_add(offset as usize) {
                     return Err(CanisterManagerError::InvalidSlice {
                         offset,

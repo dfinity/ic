@@ -1,4 +1,4 @@
-use ic_base_types::{NumBytes, NumSeconds, PrincipalIdBlobParseError};
+use ic_base_types::{NumBytes, NumSeconds, NumWasmPages, PrincipalIdBlobParseError};
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasmtime_embedder::system_api::{
@@ -15,7 +15,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::OnLowWasmMemoryHookStatus;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallOrigin, Memory, NetworkTopology, NumWasmPages, SystemState, testing::CanisterQueuesTesting,
+    CallOrigin, Memory, NetworkTopology, SystemState, testing::CanisterQueuesTesting,
 };
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;

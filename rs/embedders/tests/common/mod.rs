@@ -1,6 +1,6 @@
 use std::{convert::TryFrom, rc::Rc, sync::Arc};
 
-use ic_base_types::{CanisterId, NumBytes, SubnetId};
+use ic_base_types::{CanisterId, NumBytes, NumWasmPages, SubnetId};
 use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasmtime_embedder::system_api::{
@@ -14,9 +14,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    CallOrigin, Memory, NetworkTopology, NumWasmPages, SubnetTopology, SystemState,
-};
+use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, SubnetTopology, SystemState};
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{
     call_context_test_id, canister_test_id, subnet_test_id, user_test_id,

@@ -10,7 +10,7 @@ use crate::{
     },
 };
 use crossbeam_channel::{Sender, bounded, unbounded};
-use ic_base_types::subnet_id_into_protobuf;
+use ic_base_types::{NumWasmPages, subnet_id_into_protobuf};
 use ic_config::state_manager::LsmtConfig;
 use ic_logger::{ReplicaLogger, error, fatal, info, warn};
 use ic_protobuf::state::{
@@ -20,7 +20,7 @@ use ic_protobuf::state::{
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::SandboxMemory;
 use ic_replicated_state::{
-    CanisterState, NumWasmPages, PageMap, ReplicatedState,
+    CanisterState, PageMap, ReplicatedState,
     page_map::{PAGE_SIZE, StorageLayout},
 };
 use ic_replicated_state::{

@@ -8,6 +8,7 @@ use crate::{
     metrics::MeasurementScope,
     util::process_responses,
 };
+use ic_base_types::NumWasmPages;
 use ic_config::embedders::Config as HypervisorConfig;
 use ic_config::flag_status::FlagStatus;
 use ic_config::subnet_config::SchedulerConfig;
@@ -27,8 +28,7 @@ use ic_management_canister_types_private::{
 };
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, NumWasmPages,
-    ReplicatedState,
+    CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
     canister_state::{
         NextExecution, execution_state::NextScheduledMethod, system_state::CyclesUseCase,
     },

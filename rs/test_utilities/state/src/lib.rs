@@ -1,4 +1,4 @@
-use ic_base_types::{EnvironmentVariables, NumSeconds};
+use ic_base_types::{EnvironmentVariables, NumSeconds, NumWasmPages};
 use ic_btc_replica_types::BitcoinAdapterRequestWrapper;
 use ic_management_canister_types_private::{
     CanisterStatusType, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
@@ -9,7 +9,7 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CallContext, CallOrigin, CanisterState, ExecutionState, ExportedFunctions, InputQueueType,
-    Memory, NumWasmPages, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
+    Memory, ReplicatedState, SchedulerState, SubnetTopology, SystemState,
     canister_state::{
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         system_state::{CyclesUseCase, TaskQueue},
@@ -24,6 +24,7 @@ use ic_replicated_state::{
     page_map::PageMap,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting, SystemStateTesting},
 };
+use ic_sys::WASM_PAGE_SIZE;
 use ic_test_utilities_types::{
     arbitrary,
     ids::{canister_test_id, message_test_id, node_test_id, subnet_test_id, user_test_id},
@@ -56,7 +57,6 @@ use strum::IntoEnumIterator;
 mod history;
 pub use history::MockIngressHistory;
 
-const WASM_PAGE_SIZE_BYTES: usize = 65536;
 const DEFAULT_FREEZE_THRESHOLD: NumSeconds = NumSeconds::new(1 << 30);
 const INITIAL_CYCLES: Cycles = Cycles::new(5_000_000_000_000);
 
@@ -364,7 +364,7 @@ impl CanisterStateBuilder {
         let stable_memory = if let Some(data) = self.stable_memory {
             Memory::new(
                 PageMap::from(&data[..]),
-                NumWasmPages::new((data.len() / WASM_PAGE_SIZE_BYTES) + 1),
+                NumWasmPages::new((data.len() / WASM_PAGE_SIZE) + 1),
             )
         } else {
             Memory::new_for_testing()

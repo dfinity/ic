@@ -7,12 +7,9 @@ use ic_error_types::ErrorCode;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
-use ic_replicated_state::{
-    CallOrigin,
-    canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
-};
+use ic_replicated_state::{CallOrigin, canister_state::NextExecution};
 use ic_state_machine_tests::WasmResult;
-use ic_sys::PAGE_SIZE;
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::IngressState;
 use ic_types::messages::{CallbackId, RequestMetadata};
@@ -1108,7 +1105,7 @@ fn dts_uninstall_with_aborted_replicated_execution() {
 
 #[test]
 fn stable_grow_updates_subnet_available_memory() {
-    let initial_subnet_memory = 11 * WASM_PAGE_SIZE_IN_BYTES as i64;
+    let initial_subnet_memory = 11 * WASM_PAGE_SIZE as i64;
 
     let mut test = ExecutionTestBuilder::new().build();
     let canister_id = test.universal_canister().unwrap();
@@ -1127,7 +1124,7 @@ fn stable_grow_updates_subnet_available_memory() {
     // the page we allocated with `stable_grow`.
     assert_eq!(
         initial_subnet_memory - test.subnet_available_memory().get_execution_memory(),
-        2 * WASM_PAGE_SIZE_IN_BYTES as i64
+        2 * WASM_PAGE_SIZE as i64
     );
 
     // Growing beyond the total subnet memory should fail (returning -1) and not
@@ -1142,7 +1139,7 @@ fn stable_grow_updates_subnet_available_memory() {
     assert_eq!(i64::from_le_bytes(result.bytes().try_into().unwrap()), -1);
     assert_eq!(
         initial_subnet_memory - test.subnet_available_memory().get_execution_memory(),
-        2 * WASM_PAGE_SIZE_IN_BYTES as i64
+        2 * WASM_PAGE_SIZE as i64
     );
 }
 
@@ -1158,7 +1155,7 @@ fn stable_grow_returns_allocated_memory_on_error() {
         .universal_canister_with_cycles(Cycles::new(100_000_000_000_000))
         .unwrap();
     let payload = wasm()
-        .stable64_grow((4 * GB / WASM_PAGE_SIZE_IN_BYTES as u64) + 1)
+        .stable64_grow((4 * GB / WASM_PAGE_SIZE as u64) + 1)
         .int64_to_blob()
         .append_and_reply()
         .build();

@@ -22,6 +22,7 @@ rust_library(
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/replicated_state",
+        "//rs/types/base_types",
         "//rs/types/management_canister_types",
         "//rs/types/types",
         "//rs/types/wasm_types",

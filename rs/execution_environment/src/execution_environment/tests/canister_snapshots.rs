@@ -17,13 +17,12 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CanisterState, ExecutionState, SchedulerState,
     canister_state::{
-        WASM_PAGE_SIZE_IN_BYTES,
         execution_state::{WasmBinary, WasmExecutionMode},
         system_state::wasm_chunk_store::CHUNK_SIZE,
     },
     metadata_state::UnflushedCheckpointOp,
 };
-use ic_sys::PAGE_SIZE;
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use ic_test_utilities_execution_environment::{
     ExecutionTest, ExecutionTestBuilder, cycles_reserved_for_app_and_verified_app_subnets,
     get_output_messages,
@@ -477,7 +476,6 @@ fn canister_snapshot_reserves_cycles_difference() {
         const CYCLES: Cycles = Cycles::new(200_000_000_000_000);
         const CAPACITY: u64 = 2_000_000_000;
         const THRESHOLD: u64 = CAPACITY / 4;
-        const WASM_PAGE_SIZE: u64 = 65_536;
         // 7500 of stable memory pages is close to 500MB, but still leaves some room
         // for Wasm memory of the universal canister.
         const NUM_PAGES: u64 = 7_500;
@@ -496,7 +494,7 @@ fn canister_snapshot_reserves_cycles_difference() {
             .unwrap();
         test.canister_update_reserved_cycles_limit(canister_id, CYCLES)
             .unwrap();
-        grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
+        grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE as u64, NUM_PAGES);
 
         // Get the reserve balance before taking a canister snapshot.
         let initial_reserved_cycles = test
@@ -684,7 +682,6 @@ fn take_canister_snapshot_increases_heap_delta() {
     const CAPACITY: u64 = 1_000_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
 
-    const WASM_PAGE_SIZE: u64 = 65_536;
     // 7500 of stable memory pages is close to 500MB, but still leaves some room
     // for Wasm memory of the universal canister.
     const NUM_PAGES: u64 = 7_500;
@@ -704,7 +701,7 @@ fn take_canister_snapshot_increases_heap_delta() {
         .unwrap();
 
     // Increase memory usage.
-    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
+    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE as u64, NUM_PAGES);
     let heap_delta_before = test.state().metadata.heap_delta_estimate;
 
     // Take a snapshot of the canister.
@@ -722,7 +719,6 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
     const CAPACITY: u64 = 500_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
-    const WASM_PAGE_SIZE: u64 = 65_536;
     const NUM_PAGES: u64 = 2_400;
 
     let mut test = ExecutionTestBuilder::new()
@@ -743,7 +739,7 @@ fn take_canister_snapshot_fails_when_heap_delta_rate_limited() {
         .unwrap();
 
     // Increase memory usage.
-    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
+    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE as u64, NUM_PAGES);
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
@@ -1317,7 +1313,6 @@ fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
     const CYCLES: Cycles = Cycles::new(20_000_000_000_000);
     const CAPACITY: u64 = 500_000_000;
     const THRESHOLD: u64 = CAPACITY / 2;
-    const WASM_PAGE_SIZE: u64 = 65_536;
     const NUM_PAGES: u64 = 2_400;
 
     let mut test = ExecutionTestBuilder::new()
@@ -1338,7 +1333,7 @@ fn load_canister_snapshot_fails_when_heap_delta_rate_limited() {
         .unwrap();
 
     // Increase memory usage.
-    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
+    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE as u64, NUM_PAGES);
 
     // Take a snapshot of the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
@@ -1707,7 +1702,6 @@ fn snapshot_is_deleted_with_canister_delete() {
 #[test]
 fn take_canister_snapshot_charges_canister_cycles() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const WASM_PAGE_SIZE: u64 = 65_536;
     // 7500 of stable memory pages is close to 500MB, but still leaves some room
     // for Wasm memory of the universal canister.
     const NUM_PAGES: u64 = 7_500;
@@ -1730,7 +1724,7 @@ fn take_canister_snapshot_charges_canister_cycles() {
         .unwrap();
 
     // Increase memory usage.
-    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
+    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE as u64, NUM_PAGES);
     let canister_snapshot_size = test.canister_state(canister_id).snapshot_size_bytes();
 
     let initial_balance = test.canister_state(canister_id).system_state.balance();
@@ -1762,7 +1756,6 @@ fn take_canister_snapshot_charges_canister_cycles() {
 #[test]
 fn load_canister_snapshot_charges_canister_cycles() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
-    const WASM_PAGE_SIZE: u64 = 65_536;
     // 7500 of stable memory pages is close to 500MB, but still leaves some room
     // for Wasm memory of the universal canister.
     const NUM_PAGES: u64 = 500;
@@ -1785,7 +1778,7 @@ fn load_canister_snapshot_charges_canister_cycles() {
         .unwrap();
 
     // Increase memory usage.
-    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE, NUM_PAGES);
+    grow_stable_memory(&mut test, canister_id, WASM_PAGE_SIZE as u64, NUM_PAGES);
     // Take a snapshot for the canister.
     let args: TakeCanisterSnapshotArgs = TakeCanisterSnapshotArgs::new(canister_id, None);
     let result = test.subnet_message("take_canister_snapshot", args.encode());
@@ -1954,7 +1947,7 @@ fn read_canister_snapshot_metadata_succeeds() {
     assert_eq!(metadata.source, SnapshotSource::TakenFromCanister(Reserved));
     assert_eq!(
         metadata.stable_memory_size,
-        WASM_PAGE_SIZE_IN_BYTES as u64 * stable_pages
+        WASM_PAGE_SIZE as u64 * stable_pages
     );
     assert_eq!(metadata.wasm_module_size, uni_canister_wasm.len() as u64);
     assert_eq!(metadata.wasm_chunk_store.len(), 1);
@@ -2270,7 +2263,7 @@ fn verify_data_stable_memory(
     );
     let chunk = read_canister_snapshot_data(test, &args_stable);
     total_len += chunk.len();
-    assert_eq!(total_len, stable_pages as usize * WASM_PAGE_SIZE_IN_BYTES);
+    assert_eq!(total_len, stable_pages as usize * WASM_PAGE_SIZE);
 }
 
 #[test]

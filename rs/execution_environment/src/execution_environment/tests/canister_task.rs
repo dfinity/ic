@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use ic_base_types::{NumSeconds, PrincipalId};
+use ic_base_types::{NumSeconds, NumWasmPages, PrincipalId};
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
@@ -7,13 +7,12 @@ use ic_management_canister_types_private::{
     IC_00, OnLowWasmMemoryHookStatus, Payload, WasmMemoryPersistence,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::canister_state::NextExecution;
-use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_replicated_state::canister_state::execution_state::NextScheduledMethod;
 use ic_replicated_state::page_map::PAGE_SIZE;
 use ic_state_machine_tests::StateMachine;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig, WasmResult};
+use ic_sys::WASM_PAGE_SIZE;
 use ic_test_utilities_execution_environment::{ExecutionTestBuilder, wat_compilation_cost};
 use ic_test_utilities_metrics::fetch_int_counter_vec;
 use ic_types::Cycles;
@@ -1193,8 +1192,8 @@ fn on_low_wasm_memory_hook_is_run_after_freezing() {
 
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
-        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (15 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (20 * WASM_PAGE_SIZE as u64).into(),
+        (15 * WASM_PAGE_SIZE as u64).into(),
     )
     .unwrap();
 
@@ -1301,8 +1300,8 @@ fn on_low_wasm_memory_is_executed() {
 
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
-        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (10 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (20 * WASM_PAGE_SIZE as u64).into(),
+        (10 * WASM_PAGE_SIZE as u64).into(),
     )
     .unwrap();
 
@@ -1351,8 +1350,8 @@ fn on_low_wasm_memory_is_executed_before_message() {
 
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
-        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (15 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (20 * WASM_PAGE_SIZE as u64).into(),
+        (15 * WASM_PAGE_SIZE as u64).into(),
     )
     .unwrap();
 
@@ -1409,8 +1408,8 @@ fn on_low_wasm_memory_is_executed_after_upgrade_if_condition_holds() {
 
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
-        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (15 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (20 * WASM_PAGE_SIZE as u64).into(),
+        (15 * WASM_PAGE_SIZE as u64).into(),
     )
     .unwrap();
 
@@ -1509,8 +1508,8 @@ fn on_low_wasm_memory_is_not_executed_after_upgrade_if_condition_becomes_unsatis
 
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
-        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (15 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (20 * WASM_PAGE_SIZE as u64).into(),
+        (15 * WASM_PAGE_SIZE as u64).into(),
     )
     .unwrap();
 
@@ -1611,8 +1610,8 @@ fn upgrade_changes_hook_status_to_not_satisfied() {
 
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
-        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (15 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (20 * WASM_PAGE_SIZE as u64).into(),
+        (15 * WASM_PAGE_SIZE as u64).into(),
     )
     .unwrap();
 
@@ -1706,8 +1705,8 @@ fn hook_status_remains_executed_if_condition_holds_after_upgrade() {
 
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
-        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (15 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (20 * WASM_PAGE_SIZE as u64).into(),
+        (15 * WASM_PAGE_SIZE as u64).into(),
     )
     .unwrap();
 
@@ -1795,8 +1794,8 @@ fn upgrade_changes_hook_status_to_ready() {
 
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
-        (10 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (9 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (10 * WASM_PAGE_SIZE as u64).into(),
+        (9 * WASM_PAGE_SIZE as u64).into(),
     )
     .unwrap();
 
@@ -1869,8 +1868,8 @@ fn on_low_wasm_memory_is_executed_once() {
 
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
-        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (15 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (20 * WASM_PAGE_SIZE as u64).into(),
+        (15 * WASM_PAGE_SIZE as u64).into(),
     )
     .unwrap();
 
@@ -1934,8 +1933,8 @@ fn on_low_wasm_memory_runs_after_dts_execution() {
 
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
-        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (15 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (20 * WASM_PAGE_SIZE as u64).into(),
+        (15 * WASM_PAGE_SIZE as u64).into(),
     )
     .unwrap();
 
@@ -2006,8 +2005,8 @@ fn on_low_wasm_memory_is_executed_after_growing_stable_memory() {
 
     test.canister_update_memory_allocation_and_wasm_memory_threshold(
         canister_id,
-        (30 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (20 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (30 * WASM_PAGE_SIZE as u64).into(),
+        (20 * WASM_PAGE_SIZE as u64).into(),
     )
     .unwrap();
 
@@ -2087,8 +2086,8 @@ fn low_wasm_memory_hook_is_run_when_memory_limit_is_exceeded() {
     // We update `wasm_memory_limit` to be smaller than `used_wasm_memory`.
     test.canister_update_wasm_memory_limit_and_wasm_memory_threshold(
         canister_id,
-        (10 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
-        (5 * WASM_PAGE_SIZE_IN_BYTES as u64).into(),
+        (10 * WASM_PAGE_SIZE as u64).into(),
+        (5 * WASM_PAGE_SIZE as u64).into(),
     )
     .unwrap();
 

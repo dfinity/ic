@@ -46,11 +46,13 @@ DEPENDENCIES = [
     "//rs/replicated_state",
     "//rs/state_layout",
     "//rs/state_manager",
+    "//rs/sys",
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/metrics",
     "//rs/test_utilities/registry",
     "//rs/test_utilities/time",
     "//rs/test_utilities/types",
+    "//rs/types/base_types",
     "//rs/types/management_canister_types",
     "//rs/types/types",
     "//rs/xnet/payload_builder",
@@ -105,7 +107,6 @@ BIN_DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/types/base_types",
     "//rs/types/types_test_utils",
     "//rs/universal_canister/lib",
 ]

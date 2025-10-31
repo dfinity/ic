@@ -13,6 +13,7 @@ rust_library(
     version = "0.9.0",
     deps = [
         # Keep sorted.
+        "//rs/sys",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:serde",

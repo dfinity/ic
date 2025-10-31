@@ -1,4 +1,4 @@
-use ic_base_types::{InternalAddress, PrincipalIdBlobParseError};
+use ic_base_types::{InternalAddress, NumWasmPages, PrincipalIdBlobParseError};
 use ic_config::embedders::{Config as EmbeddersConfig, StableMemoryPageLimit};
 use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::ResourceSaturation;
@@ -17,9 +17,8 @@ use ic_management_canister_types_private::{
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
-use ic_replicated_state::{
-    Memory, NumWasmPages, canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_usage_of_request,
-};
+use ic_replicated_state::{Memory, memory_usage_of_request};
+use ic_sys::WASM_PAGE_SIZE;
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes,
@@ -1225,13 +1224,13 @@ impl SystemApiImpl {
         let stable_memory_usage = stable_memory
             .size
             .get()
-            .checked_mul(WASM_PAGE_SIZE_IN_BYTES)
+            .checked_mul(WASM_PAGE_SIZE)
             .map(|v| NumBytes::new(v as u64))
             .expect("Stable memory size is larger than maximal allowed.");
 
         let wasm_memory_usage = wasm_memory_size
             .get()
-            .checked_mul(WASM_PAGE_SIZE_IN_BYTES)
+            .checked_mul(WASM_PAGE_SIZE)
             .map(|v| NumBytes::new(v as u64))
             .expect("Wasm memory size is larger than maximal allowed.");
 
@@ -3325,14 +3324,14 @@ impl SystemApi for SystemApiImpl {
                 return Ok(());
             }
             let new_bytes = additional_wasm_pages
-                .checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
+                .checked_mul(WASM_PAGE_SIZE as u64)
                 .map(NumBytes::new)
                 .ok_or(HypervisorError::OutOfMemory)?;
 
             // The `memory.grow` instruction returns the previous size of the
             // Wasm memory in pages.
             let old_bytes = (native_memory_grow_res as u64)
-                .checked_mul(WASM_PAGE_SIZE_IN_BYTES as u64)
+                .checked_mul(WASM_PAGE_SIZE as u64)
                 .map(NumBytes::new)
                 .ok_or(HypervisorError::OutOfMemory)?;
 

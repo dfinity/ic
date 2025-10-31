@@ -8,7 +8,7 @@ use std::sync::{
 };
 
 use anyhow::bail;
-use ic_sys::PAGE_SIZE;
+use ic_sys::{PAGE_SIZE, WASM_PAGE_SIZE};
 use ic_types::MAX_STABLE_MEMORY_IN_BYTES;
 use libc::MAP_FAILED;
 use libc::c_void;
@@ -18,8 +18,6 @@ use wasmtime::{LinearMemory, MemoryType};
 use wasmtime_environ::WASM32_MAX_SIZE;
 
 use crate::MIN_GUARD_REGION_SIZE;
-
-const WASM_PAGE_SIZE: u32 = wasmtime_environ::Memory::DEFAULT_PAGE_SIZE;
 
 pub fn round_up_to_page_size(size: usize, page_size: usize) -> usize {
     (size + (page_size - 1)) & !(page_size - 1)
@@ -91,7 +89,7 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
             "Reserved bytes for wasm memory {reserved_size_in_bytes} exceeds the maximum expected {MAX_STABLE_MEMORY_IN_BYTES}"
         );
         assert!(
-            reserved_size_in_bytes >= max * WASM_PAGE_SIZE as usize,
+            reserved_size_in_bytes >= max * WASM_PAGE_SIZE,
             "Reserved size {reserved_size_in_bytes} in bytes is smaller than expected max size {max} in wasm pages"
         );
 
@@ -216,7 +214,7 @@ impl WasmtimeMemory {
 }
 
 fn convert_pages_to_bytes(pages: usize) -> usize {
-    let (result, overflow) = pages.overflowing_mul(WASM_PAGE_SIZE as usize);
+    let (result, overflow) = pages.overflowing_mul(WASM_PAGE_SIZE);
     if overflow {
         panic!("Unable to convert memory page size {pages} to bytes")
     }
@@ -237,13 +235,13 @@ unsafe impl LinearMemory for WasmtimeMemory {
     }
 
     fn grow_to(&mut self, new_size: usize) -> anyhow::Result<()> {
-        if !new_size.is_multiple_of(WASM_PAGE_SIZE as usize) {
+        if !new_size.is_multiple_of(WASM_PAGE_SIZE) {
             bail!(
                 "Requested wasm page size increase wasn't a multiple of the wasm page size: {}",
                 new_size
             )
         }
-        let new_pages = new_size / WASM_PAGE_SIZE as usize;
+        let new_pages = new_size / WASM_PAGE_SIZE;
         match self
             .used
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |prev_pages| {

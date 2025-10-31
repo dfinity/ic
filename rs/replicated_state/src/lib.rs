@@ -62,8 +62,8 @@ pub mod metadata_state;
 pub mod page_map;
 pub mod replicated_state;
 pub use canister_state::{
-    CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, NumWasmPages,
-    RefundPool, SchedulerState,
+    CanisterQueues, CanisterState, EmbedderCache, ExecutionState, ExportedFunctions, RefundPool,
+    SchedulerState,
     execution_state::Memory,
     num_bytes_try_from,
     system_state::{
