@@ -335,3 +335,34 @@ pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
         .trim()
         .to_string()
 }
+
+/// Execute a bash script on a node via SSH and log the output.
+pub fn block_on_bash_script_and_log<N: SshSession>(log: &Logger, node: &N, cmd: &str) {
+    let out = node.block_on_bash_script(cmd).unwrap();
+    info!(log, "{cmd}:\n{out}");
+}
+
+/// Logs guestos diagnostics, used in the event of test failure
+pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
+    match host.get_guest_ssh() {
+        Ok(guest) => {
+            let diagnostics = vec![
+                "systemctl --failed --no-pager || true",
+                "journalctl -b --no-pager -u systemd-remount-fs.service || true",
+                "mount | sort",
+                "journalctl -b --no-pager -p warning | tail -n 200",
+                "set -o pipefail; dmesg --color=never | grep -iE 'mount|ext4|xfs|btrfs|nvme|sda|i/o error|failed' | tail -n 200 || true",
+            ];
+
+            for cmd in diagnostics {
+                block_on_bash_script_and_log(logger, &guest, cmd);
+            }
+        }
+        Err(err) => {
+            info!(
+                logger,
+                "Unable to establish GuestOS SSH session for diagnostics: {:?}", err
+            );
+        }
+    }
+}
