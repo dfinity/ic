@@ -142,6 +142,7 @@ mod test {
     };
     use ic_base_types::PrincipalId;
     use ic_registry_transport::insert;
+    use itertools::enumerate;
     use maplit::btreemap;
     use std::str::FromStr;
 
