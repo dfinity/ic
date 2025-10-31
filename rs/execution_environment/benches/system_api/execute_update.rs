@@ -62,6 +62,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
             Module::Test.from_sections(
                 (
                     "",
+                    "",
                     Module::render_loop(LoopIterations::Mi, "", Wasm64::Disabled),
                 ),
                 Wasm64::Disabled,
@@ -73,6 +74,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
             Module::Test.from_sections(
                 (
                     "",
+                    "",
                     Module::render_loop(LoopIterations::Mi, "", Wasm64::Enabled),
                 ),
                 Wasm64::Enabled,
@@ -83,6 +85,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
             "wasm32/baseline/adds".into(),
             Module::Test.from_sections(
                 (
+                    "",
                     "",
                     Module::render_loop(
                         LoopIterations::Mi,
@@ -98,6 +101,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
             "wasm64/baseline/adds".into(),
             Module::Test.from_sections(
                 (
+                    "",
                     "",
                     Module::render_loop(
                         LoopIterations::Mi,
@@ -219,6 +223,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                     "msg_reply",
                     NoParams,
                     Result::No,
+                    "",
                     Wasm64::Disabled,
                 ),
                 Wasm64::Disabled,
@@ -234,6 +239,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                     "msg_reply",
                     NoParams,
                     Result::No,
+                    "",
                     Wasm64::Enabled,
                 ),
                 Wasm64::Enabled,
@@ -289,6 +295,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                     "msg_reject",
                     Params2(0, 0),
                     Result::No,
+                    "",
                     Wasm64::Disabled,
                 ),
                 Wasm64::Disabled,
@@ -304,6 +311,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                     "msg_reject",
                     Params2(0_i64, 0_i64),
                     Result::No,
+                    "",
                     Wasm64::Enabled,
                 ),
                 Wasm64::Enabled,
@@ -402,12 +410,12 @@ pub fn execute_update_bench(c: &mut Criterion) {
         ),
         common::Benchmark(
             "wasm32/ic0_call_new()".into(),
-            Module::CallNewLoop.from_sections(("", ""), Wasm64::Disabled), // call_new in a loop is rendered by default
+            Module::CallNewLoop.from_sections(("", "", ""), Wasm64::Disabled), // call_new in a loop is rendered by default
             1552000006,
         ),
         common::Benchmark(
             "wasm64/ic0_call_new()".into(),
-            Module::CallNewLoop.from_sections(("", ""), Wasm64::Enabled), // call_new in a loop is rendered by default
+            Module::CallNewLoop.from_sections(("", "", ""), Wasm64::Enabled), // call_new in a loop is rendered by default
             1552000006,
         ),
         common::Benchmark(
@@ -1068,7 +1076,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
             )
         },
         {
-           let serialized_params = candid::encode_one(COST_HTTP_REQUEST_V2_PARAMS).unwrap();
+            let serialized_params = candid::encode_one(COST_HTTP_REQUEST_V2_PARAMS).unwrap();
 
             common::Benchmark(
                 "wasm64/ic0_cost_http_request_v2()".into(),
