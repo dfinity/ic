@@ -91,7 +91,7 @@ pub fn get_node_reward_type_for_node(
     NodeRecord::decode(value.value.as_slice())
         .map_err(|_| format!("Could not decode node_record for Node Id {node_id}"))?
         .node_reward_type
-        .map(|t| NodeRewardType::try_from(t))
+        .map(NodeRewardType::try_from)
         .transpose()
         .map_err(|_| {
             format!("Could not decode node_record's node_reward_type for Node Id {node_id}")
