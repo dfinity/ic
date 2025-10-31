@@ -11,6 +11,22 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-10-31: Proposal 139210
+
+http://dashboard.internetcomputer.org/proposal/139210
+
+## Changed
+
+* Allow unassigned nodes to have nonempty ssh_node_state_write_access.
+
+  * Why: Previously, it was believed that there is no way that a nonempty
+    ssh_node_state_write_access could be used constructively, but after
+    consulting the Consensus team, we (the Governance team) learned that this is
+    not true. In particular, it could be useful during a subnet recovery, even
+    though this capability generally wouldn't be used during a "typical" subnet
+    recovery.
+
+
 # 2025-10-24: Proposal 139085
 
 http://dashboard.internetcomputer.org/proposal/139085

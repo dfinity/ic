@@ -11,6 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-10-31: Proposal 139211
+
+http://dashboard.internetcomputer.org/proposal/139211
+
+## Added
+
+* Added support for more Mangement canister features:
+    * Added `allowed_viewers` to `log_visibility` (used by `CanisterSettings`).
+    * Added `log_memory_limit` to `CanisterSettings`.
+
+
 # 2025-10-24: Proposal 139088
 
 Just a "maintenance" release, i.e. no behavior changes, just making
