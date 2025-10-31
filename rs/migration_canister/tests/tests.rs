@@ -314,6 +314,24 @@ impl Logs {
     }
 }
 
+async fn canister_info(
+    pic: &PocketIc,
+    proxy_canister: Principal,
+    canister_id: Principal,
+) -> CanisterInfoResponse {
+    let canister_id = CanisterId::unchecked_from_principal(PrincipalId(canister_id));
+    let canister_info_request = CanisterInfoRequest::new(canister_id, Some(20)); // 20 entries is the maximum requested amount
+    let call_args = CallArgs::default().other_side(canister_info_request.encode());
+    let payload = wasm()
+        .call_simple(CanisterId::ic_00(), "canister_info", call_args)
+        .build();
+    let res = pic
+        .update_call(proxy_canister, Principal::anonymous(), "update", payload)
+        .await
+        .unwrap();
+    CanisterInfoResponse::decode(&res).unwrap()
+}
+
 #[tokio::test]
 async fn migration_succeeds() {
     let Setup {
@@ -327,6 +345,21 @@ async fn migration_succeeds() {
     } = setup(Settings::default()).await;
     let sender = source_controllers[0];
 
+    // We deploy a universal canister acting as a proxy canister
+    // for retrieving canister history.
+    let proxy_canister = pic.create_canister().await;
+    pic.add_cycles(proxy_canister, 1_000_000_000_000).await;
+    pic.install_canister(
+        proxy_canister,
+        UNIVERSAL_CANISTER_WASM.to_vec(),
+        vec![],
+        None,
+    )
+    .await;
+
+    // We deploy the universal canister WASM to the "target" canister
+    // so that we can call it via the "source" canister ID
+    // after renaming.
     pic.add_cycles(target, 1_000_000_000_000).await;
     pic.install_canister(
         target,
@@ -335,6 +368,27 @@ async fn migration_succeeds() {
         Some(sender),
     )
     .await;
+
+    // There is 1 entry in the canister history of the "source" canister before migrating:
+    // creation.
+    let source_info = canister_info(&pic, proxy_canister, source).await;
+    assert_eq!(source_info.total_num_changes(), 1);
+    assert!(matches!(
+        source_info.changes()[0].details(),
+        CanisterChangeDetails::CanisterCreation(_)
+    ));
+    // There are 2 entries in the canister history of the "target" canister before migrating:
+    // creation and installation.
+    let target_info = canister_info(&pic, proxy_canister, target).await;
+    assert_eq!(target_info.total_num_changes(), 2);
+    assert!(matches!(
+        target_info.changes()[0].details(),
+        CanisterChangeDetails::CanisterCreation(_)
+    ));
+    assert!(matches!(
+        target_info.changes()[1].details(),
+        CanisterChangeDetails::CanisterCodeDeployment(_)
+    ));
 
     migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target })
         .await
@@ -379,36 +433,36 @@ async fn migration_succeeds() {
         .await
         .unwrap();
 
-    // Check canister history retrieved via a universal canister
-    // acting as a proxy canister.
-    let proxy_canister = pic.create_canister().await;
-    pic.add_cycles(proxy_canister, 1_000_000_000_000).await;
-    pic.install_canister(
-        proxy_canister,
-        UNIVERSAL_CANISTER_WASM.to_vec(),
-        vec![],
-        None,
-    )
-    .await;
-    let source_canister_id = CanisterId::unchecked_from_principal(PrincipalId(source));
-    let canister_info_request = CanisterInfoRequest::new(source_canister_id, Some(20));
-    let call_args = CallArgs::default().other_side(canister_info_request.encode());
-    let payload = wasm()
-        .call_simple(CanisterId::ic_00(), "canister_info", call_args)
-        .build();
-    let res = pic
-        .update_call(proxy_canister, Principal::anonymous(), "update", payload)
-        .await
-        .unwrap();
-    let canister_info_response = CanisterInfoResponse::decode(&res).unwrap();
+    // We check the canister history of the "source" canister after renaming.
+    let source_info = canister_info(&pic, proxy_canister, source).await;
     // There are 4 changes of the "source" canister after renaming:
     // creation, controllers change, renaming, and controllers change.
-    assert_eq!(canister_info_response.total_num_changes(), 4);
+    assert_eq!(source_info.total_num_changes(), 4);
     // There are 5 entries in the canister history of the "source" canister after renaming:
     // creation, installation, controllers change of the "target" canister before renaming,
     // then renaming, and controllers change.
-    let canister_history = canister_info_response.changes();
+    let canister_history = source_info.changes();
     assert_eq!(canister_history.len(), 5);
+    assert!(matches!(
+        canister_history[0].details(),
+        CanisterChangeDetails::CanisterCreation(_)
+    ));
+    assert!(matches!(
+        canister_history[1].details(),
+        CanisterChangeDetails::CanisterCodeDeployment(_)
+    ));
+    assert!(matches!(
+        canister_history[2].details(),
+        CanisterChangeDetails::CanisterControllersChange(_)
+    ));
+    assert!(matches!(
+        canister_history[3].details(),
+        CanisterChangeDetails::CanisterRename(_)
+    ));
+    assert!(matches!(
+        canister_history[4].details(),
+        CanisterChangeDetails::CanisterControllersChange(_)
+    ));
     // The second-to-last entry in canister history is the renaming entry.
     let rename_details = canister_history[canister_history.len() - 2].details();
     match rename_details {
