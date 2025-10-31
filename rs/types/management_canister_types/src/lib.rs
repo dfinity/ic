@@ -411,6 +411,7 @@ impl CanisterSettingsChangeRecord {
 /// record {
 ///    canister_id : principal;
 ///    total_num_changes : nat64;
+///    requested_by : principal;
 ///    rename_to : record {
 ///        canister_id : principal;
 ///        version : nat64;
@@ -422,6 +423,7 @@ impl CanisterSettingsChangeRecord {
 pub struct CanisterRenameRecord {
     canister_id: PrincipalId,
     total_num_changes: u64,
+    requested_by: PrincipalId,
     rename_to: RenameToRecord,
 }
 
@@ -546,6 +548,7 @@ impl CanisterChangeDetails {
     pub fn rename_canister(
         canister_id: PrincipalId,
         total_num_changes: u64,
+        requested_by: PrincipalId,
         to_canister_id: PrincipalId,
         to_version: u64,
         to_total_num_changes: u64,
@@ -557,6 +560,7 @@ impl CanisterChangeDetails {
         };
         let record = CanisterRenameRecord {
             canister_id,
+            requested_by,
             total_num_changes,
             rename_to,
         };
@@ -913,6 +917,7 @@ impl From<&CanisterChangeDetails> for pb_canister_state_bits::canister_change::C
                     pb_canister_state_bits::CanisterRename {
                         canister_id: Some(canister_rename.canister_id.into()),
                         total_num_changes: canister_rename.total_num_changes,
+                        requested_by: Some(canister_rename.requested_by.into()),
                         rename_to: Some(pb_canister_state_bits::RenameTo {
                             canister_id: Some(canister_rename.rename_to.canister_id.into()),
                             version: canister_rename.rename_to.version,
@@ -1042,6 +1047,19 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
             pb_canister_state_bits::canister_change::ChangeDetails::CanisterRename(
                 canister_rename,
             ) => {
+                // The only principal who could request canister renaming before
+                // that principal started to be recorded in canister history
+                // is the following principal allowlisted in the NNS proposal 139083:
+                // https://dashboard.internetcomputer.org/proposal/139083
+                let default_requested_by = PrincipalId::from_str(
+                    "axa43-ya3vf-zi3lb-xbffp-vdsi5-alaja-wujmj-qg26n-pugel-72qro-iae",
+                )
+                .unwrap();
+                let requested_by = if let Some(requested_by) = canister_rename.requested_by {
+                    requested_by.try_into()?
+                } else {
+                    default_requested_by
+                };
                 let rename_to = canister_rename
                     .rename_to
                     .ok_or(ProxyDecodeError::MissingField("CanisterRename::rename_to"))?;
@@ -1055,6 +1073,7 @@ impl TryFrom<pb_canister_state_bits::canister_change::ChangeDetails> for Caniste
                         .to_owned()
                         .try_into()?,
                     canister_rename.total_num_changes,
+                    requested_by,
                     rename_to
                         .canister_id
                         .as_ref()
@@ -4649,6 +4668,7 @@ pub enum CanisterSnapshotDataOffset {
 /// ```text
 /// record {
 ///   canister_id : principal;
+///   requested_by : principal;
 ///   rename_to : record {
 ///     canister_id : principal;
 ///     version : nat64;
@@ -4661,6 +4681,7 @@ pub enum CanisterSnapshotDataOffset {
 #[derive(Clone, Debug, Deserialize, CandidType, Serialize, PartialEq)]
 pub struct RenameCanisterArgs {
     pub canister_id: PrincipalId,
+    pub requested_by: PrincipalId,
     pub rename_to: RenameToArgs,
     pub sender_canister_version: u64,
 }
@@ -4670,6 +4691,10 @@ impl Payload<'_> for RenameCanisterArgs {}
 impl RenameCanisterArgs {
     pub fn get_canister_id(&self) -> CanisterId {
         CanisterId::unchecked_from_principal(self.canister_id)
+    }
+
+    pub fn requested_by(&self) -> PrincipalId {
+        self.requested_by
     }
 
     pub fn get_sender_canister_version(&self) -> Option<u64> {

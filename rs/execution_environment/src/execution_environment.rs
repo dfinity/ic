@@ -2650,6 +2650,7 @@ impl ExecutionEnvironment {
         origin: CanisterChangeOrigin,
     ) -> Result<Vec<u8>, UserError> {
         let old_id = args.get_canister_id();
+        let requested_by = args.requested_by();
         let new_id = args.rename_to.get_canister_id();
         let to_version = args.rename_to.version;
         let to_total_num_changes = args.rename_to.total_num_changes;
@@ -2672,6 +2673,7 @@ impl ExecutionEnvironment {
                 &mut canister,
                 origin,
                 old_id,
+                requested_by,
                 new_id,
                 to_version,
                 to_total_num_changes,

@@ -2952,7 +2952,7 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
     assert_eq!(err.code(), ErrorCode::InsufficientMemoryAllocation);
     assert!(
         err.description()
-            .contains("Canister was given 64.44 KiB memory allocation but at least")
+            .contains("Canister was given 64.50 KiB memory allocation but at least")
     );
 
     // canister history memory usage at the beginning of update_settings
@@ -5427,7 +5427,7 @@ fn chunk_store_methods_succeed_from_canister_itself() {
     }
 }
 
-const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(190);
+const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222);
 
 #[test]
 fn empty_canister_memory_usage() {
@@ -6531,6 +6531,7 @@ fn rename_canister(
 
     let arguments = RenameCanisterArgs {
         canister_id: old_canister_id.into(),
+        requested_by: sender_canister.into(),
         rename_to: RenameToArgs {
             canister_id: new_canister_id.into(),
             version: new_version,
@@ -6697,6 +6698,7 @@ fn can_rename_canister() {
     let expected_history_entry = CanisterChangeDetails::rename_canister(
         canister_id2.into(),
         old_num_changes,
+        canister_id1.into(),
         new_canister_id.into(),
         new_version,
         new_num_changes,
@@ -6741,6 +6743,7 @@ fn can_rename_canister() {
     let expected_history_entry = CanisterChangeDetails::rename_canister(
         new_canister_id.into(),
         old_num_changes,
+        canister_id1.into(),
         third_canister_id.into(),
         third_version,
         third_num_changes,
@@ -6776,6 +6779,7 @@ fn cannot_rename_from_ingress() {
     let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
     let arguments = RenameCanisterArgs {
         canister_id: canister_id.into(),
+        requested_by: PrincipalId::new_anonymous(),
         rename_to: RenameToArgs {
             canister_id: new_canister_id.into(),
             version: 0,
