@@ -30,7 +30,7 @@ execute_command() {
             ;;
         "service-status")
             if [ -n "${2:-}" ]; then
-                sudo systemctl status "$2"
+                systemctl status "$2"
             else
                 echo "Usage: service-status <service-name>"
                 echo "Example: service-status guestos"
@@ -38,7 +38,7 @@ execute_command() {
             ;;
         "view-logs")
             if [ -n "${2:-}" ]; then
-                sudo journalctl -u "$2" --no-pager -n 50
+                journalctl -u "$2" --no-pager -n 50
             else
                 echo "Usage: view-logs <service-name>"
                 echo "Example: view-logs guestos"
@@ -71,6 +71,9 @@ execute_command() {
         "exit")
             echo "Exiting limited console..."
             exit 0
+            ;;
+        "help")
+            show_menu
             ;;
         *)
             echo "Unknown command: $1"
