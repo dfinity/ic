@@ -125,7 +125,7 @@ pub mod events {
         let now = time();
         let nanos_in_24_h = 24 * 60 * 60 * 1_000_000_000;
         HISTORY.with_borrow(|h| {
-            let mut count = 0;
+            let mut count: u64 = 0;
             for event in h.iter_from_prev_key(&Event {
                 time: now.saturating_sub(nanos_in_24_h),
                 event: EventType::Succeeded {
@@ -136,7 +136,8 @@ pub mod events {
                     count += 1;
                 }
             }
-            count
+            // Due to iterating from the _previous_ key, we overcounted by one.
+            count.saturating_sub(1u64)
         })
     }
 
