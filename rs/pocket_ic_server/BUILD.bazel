@@ -223,7 +223,7 @@ MAINNET_NNS_CANISTER_DATA = [
     "@mainnet_canisters//:sns_root.wasm.gz",
     "@mainnet_canisters//:swap.wasm.gz",
     "@mainnet_canisters//:governance-canister_test.wasm.gz",
-    "@mainnet_canisters//:migration-canister.wasm.gz",
+    "@mainnet_canisters//:migration.wasm.gz",
 ]
 
 MAINNET_NNS_CANISTER_ENV = {
@@ -241,7 +241,7 @@ MAINNET_NNS_CANISTER_ENV = {
     "SNS_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:sns_ledger.wasm.gz)",
     "SNS_LEDGER_ARCHIVE_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:sns_archive.wasm.gz)",
     "SNS_LEDGER_INDEX_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:sns_index.wasm.gz)",
-    "MIGRATION_CANISTER_WASM_PATH": "$(location //rs/migration_canister:migration-canister)",
+    "MIGRATION_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:migration.wasm.gz)",
 }
 
 [
