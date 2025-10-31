@@ -354,7 +354,7 @@ mod tests {
     /// Prepares the payload to add a new node, for tests.
     pub fn prepare_add_node_payload(
         mutation_id: u8,
-        node_reward_type: &str,
+        node_reward_type: NodeRewardType,
     ) -> (AddNodePayload, ValidNodePublicKeys) {
         // As the node canister checks for validity of keys, we need to generate them first
         let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
@@ -385,7 +385,7 @@ mod tests {
             // Unused section follows
             p2p_flow_endpoints: Default::default(),
             prometheus_metrics_endpoint: Default::default(),
-            node_reward_type: Some(NodeRewardType::from(node_reward_type.to_string()).to_string()),
+            node_reward_type: Some(node_reward_type.to_string()),
         };
 
         (payload, node_public_keys)
@@ -556,7 +556,7 @@ mod tests {
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
         )]);
-        let (mut payload, _) = prepare_add_node_payload(1, "type1");
+        let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         // Set an invalid domain name
         payload.domain = Some("invalid_domain_name".to_string());
         // Act
@@ -573,7 +573,7 @@ mod tests {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
-        let (payload, _) = prepare_add_node_payload(1, "type1");
+        let (payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         // Act
         let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
         // Assert
@@ -597,7 +597,7 @@ mod tests {
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
         )]);
-        let (payload, _) = prepare_add_node_payload(1, "type1");
+        let (payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         // Act
         let node_id: NodeId = registry
             .do_add_node_(payload.clone(), node_operator_id, now_system_time())
@@ -638,9 +638,9 @@ mod tests {
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
         )]);
-        let (payload_1, _) = prepare_add_node_payload(1, "type1");
+        let (payload_1, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         // Set a different IP for the second node
-        let (mut payload_2, _) = prepare_add_node_payload(2, "type1");
+        let (mut payload_2, _) = prepare_add_node_payload(2, NodeRewardType::Type1);
         payload_2.http_endpoint = "128.0.1.10:4321".to_string();
         assert_ne!(payload_1.http_endpoint, payload_2.http_endpoint);
         // Act: add two nodes with the different IPs
@@ -693,8 +693,8 @@ mod tests {
             node_operator_record.encode_to_vec(),
         )]);
         // Use payloads with the same IPs
-        let (payload_1, _) = prepare_add_node_payload(1, "type1");
-        let (mut payload_2, _) = prepare_add_node_payload(2, "type1");
+        let (payload_1, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
+        let (mut payload_2, _) = prepare_add_node_payload(2, NodeRewardType::Type1);
         payload_2.http_endpoint.clone_from(&payload_1.http_endpoint);
         payload_2.http_endpoint.clone_from(&payload_1.http_endpoint);
 
@@ -769,10 +769,10 @@ mod tests {
         ));
 
         // create two node payloads with the same IPv4 config
-        let (mut payload_1, _) = prepare_add_node_payload(1, "type1");
+        let (mut payload_1, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         payload_1.public_ipv4_config.clone_from(&ipv4_config);
 
-        let (mut payload_2, _) = prepare_add_node_payload(2, "type1");
+        let (mut payload_2, _) = prepare_add_node_payload(2, NodeRewardType::Type1);
         payload_2.public_ipv4_config = ipv4_config;
 
         // Act
@@ -818,7 +818,7 @@ mod tests {
         println!("Original subnet membership (node ids): {subnet_membership:?}");
 
         // Add a new node with the same IP address and port as an existing node, which should replace the existing node
-        let (mut payload, _valid_pks) = prepare_add_node_payload(2, "type1");
+        let (mut payload, _valid_pks) = prepare_add_node_payload(2, NodeRewardType::Type1);
         let http = expected_remove_node.http.unwrap();
         payload
             .http_endpoint
@@ -866,7 +866,7 @@ mod tests {
         );
 
         // Prepare payload to add a new node
-        let (payload, _valid_pks) = prepare_add_node_payload(2, "type1");
+        let (payload, _valid_pks) = prepare_add_node_payload(2, NodeRewardType::Type1);
 
         // Add the new node
         let new_node_id = registry
@@ -915,7 +915,7 @@ mod tests {
         )]);
 
         // Add a new node with the same IP address and port as an existing node, which should replace the existing node
-        let (mut payload, _valid_pks) = prepare_add_node_payload(2, "type1");
+        let (mut payload, _valid_pks) = prepare_add_node_payload(2, NodeRewardType::Type1);
         let http = old_node.http.unwrap();
         payload
             .http_endpoint
@@ -967,7 +967,7 @@ mod tests {
         );
 
         // Prepare payload to add a new node
-        let (payload, _valid_pks) = prepare_add_node_payload(2, "type1");
+        let (payload, _valid_pks) = prepare_add_node_payload(2, NodeRewardType::Type1);
 
         // Attempt to add the new node, which should panic due to exhausted max rewardable nodes
         let err = registry
@@ -994,7 +994,7 @@ mod tests {
         );
 
         // Prepare payload to add a new node
-        let (payload, _valid_pks) = prepare_add_node_payload(2, "type1.1");
+        let (payload, _valid_pks) = prepare_add_node_payload(2, NodeRewardType::Type1dot1);
 
         // Attempt to add the new node, which should panic due to exhausted max rewardable nodes
         let err = registry
@@ -1022,7 +1022,7 @@ mod tests {
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
         )]);
-        let (mut payload, _) = prepare_add_node_payload(1, "type1");
+        let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         payload.node_reward_type = None;
         // Code under test
         let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
@@ -1048,7 +1048,7 @@ mod tests {
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
         )]);
-        let (mut payload, _) = prepare_add_node_payload(1, "type1");
+        let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         payload.node_reward_type = None;
         // Code under test
         let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
@@ -1074,7 +1074,7 @@ mod tests {
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
         )]);
-        let (mut payload, _) = prepare_add_node_payload(1, "type1");
+        let (mut payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
         payload.node_reward_type = Some("invalid_type".to_string());
         // Code under test
         let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
@@ -1111,7 +1111,7 @@ mod tests {
             node_operator_record.encode_to_vec(),
         )]);
 
-        let (payload, _) = prepare_add_node_payload(1, "type1.1");
+        let (payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1dot1);
 
         // Exhaust the rate limit capacity
         let available_operator =
