@@ -270,3 +270,31 @@ system_test(
         "@crate_index//:url",
     ],
 )
+
+system_test(
+    name = "node_swap_test",
+    env = NNS_CANISTER_ENV | UNIVERSAL_CANISTER_ENV | {
+        "IC_ADMIN_PATH": "$(rootpath //rs/registry/admin:ic-admin)",
+    },
+    tags = [],
+    runtime_deps = NNS_CANISTER_RUNTIME_DEPS + UNIVERSAL_CANISTER_RUNTIME_DEPS + [
+        "//rs/registry/admin:ic-admin",
+    ],
+    deps = [
+        # Keep sorted.
+        "//rs/nervous_system/common",
+        "//rs/nervous_system/common/test_keys",
+        "//rs/nns/constants",
+        "//rs/nns/test_utils",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:slog",
+        "@crate_index//:tokio",
+    ],
+)

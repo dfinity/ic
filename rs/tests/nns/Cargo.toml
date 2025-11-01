@@ -98,3 +98,7 @@ path = "bitcoin_set_config_proposal_test.rs"
 [[bin]]
 name = "rent_subnet_test"
 path = "rent_subnet_test.rs"
+
+[[bin]]
+name = "node_swap_test"
+path = "node_swap_test.rs"
