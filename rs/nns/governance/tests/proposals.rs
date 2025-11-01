@@ -234,7 +234,8 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
     run_pending_timers_every_interval_for_count(
         Duration::from_secs(REWARD_DISTRIBUTION_PERIOD_SECONDS),
         1,
-    );
+    )
+    .await;
 
     // Step 3: Inspect result(s).
     let get_neuron_rewards = |neuron_id| {
