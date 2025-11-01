@@ -14,7 +14,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
-use ic_consensus_cup_utils::{make_registry_cup, make_registry_cup_from_cup_contents};
+use ic_consensus_cup_utils::make_registry_cup_from_cup_contents;
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_test_utils_ni_dkg::{
@@ -146,7 +146,6 @@ use ic_types::{
     },
     canister_http::{CanisterHttpResponse, CanisterHttpResponseContent},
     consensus::{
-        CatchUpPackage,
         block_maker::SubnetRecords,
         certification::{Certification, CertificationContent},
     },
@@ -1760,8 +1759,20 @@ impl StateMachine {
         registry_client.update_to_latest_version();
 
         // get the CUP from the registry
-        let cup: CatchUpPackage =
-            make_registry_cup(&registry_client, subnet_id, &replica_logger).unwrap();
+        let registry_version = registry_client.get_latest_version();
+        let cup_contents = registry_client
+            .get_cup_contents(subnet_id, registry_version)
+            .unwrap()
+            .value
+            .unwrap();
+        let cup = make_registry_cup_from_cup_contents(
+            &registry_client,
+            subnet_id,
+            cup_contents,
+            registry_version,
+            &replica_logger,
+        )
+        .unwrap();
         let cup_proto: pb::CatchUpPackage = cup.into();
         // now we can wrap the registry client into an Arc
         let registry_client = Arc::new(registry_client);
