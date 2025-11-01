@@ -103,6 +103,9 @@ struct SchedulerRoundLimits {
 
     /// Keeps track of the compute allocation limit.
     compute_allocation_used: u64,
+
+    /// Keeps track of the memory reserved for executing response handlers.
+    subnet_memory_reservation: NumBytes,
 }
 
 impl SchedulerRoundLimits {
@@ -112,6 +115,7 @@ impl SchedulerRoundLimits {
             subnet_available_memory: self.subnet_available_memory,
             subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used: self.compute_allocation_used,
+            subnet_memory_reservation: self.subnet_memory_reservation,
         }
     }
 
@@ -121,6 +125,7 @@ impl SchedulerRoundLimits {
             subnet_available_memory: self.subnet_available_memory,
             subnet_available_callbacks: self.subnet_available_callbacks,
             compute_allocation_used: self.compute_allocation_used,
+            subnet_memory_reservation: self.subnet_memory_reservation,
         }
     }
 
@@ -129,6 +134,7 @@ impl SchedulerRoundLimits {
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.compute_allocation_used = round_limits.compute_allocation_used;
+        self.subnet_memory_reservation = round_limits.subnet_memory_reservation;
     }
 
     pub fn update_canister_round_limits(&mut self, round_limits: &RoundLimits) {
@@ -136,6 +142,7 @@ impl SchedulerRoundLimits {
         self.subnet_available_memory = round_limits.subnet_available_memory;
         self.subnet_available_callbacks = round_limits.subnet_available_callbacks;
         self.compute_allocation_used = round_limits.compute_allocation_used;
+        self.subnet_memory_reservation = round_limits.subnet_memory_reservation;
     }
 }
 
@@ -1333,6 +1340,7 @@ impl Scheduler for SchedulerImpl {
                 subnet_available_memory: self.exec_env.scaled_subnet_available_memory(&state),
                 subnet_available_callbacks: self.exec_env.subnet_available_callbacks(&state),
                 compute_allocation_used: state.total_compute_allocation(),
+                subnet_memory_reservation: self.exec_env.scaled_subnet_memory_reservation(),
             }
         };
 
