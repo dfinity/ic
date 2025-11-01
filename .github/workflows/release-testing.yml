@@ -45,6 +45,8 @@ jobs:
     name: CI Main
     uses: ./.github/workflows/ci-main.yml
     secrets: inherit
+    with:
+      commit-sha: ${{ github.sha }}
 
   # Run some extra system tests that are skipped on CI Main.
   # Those test suites would overwhelm a runner, so each is run
