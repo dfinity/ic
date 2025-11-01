@@ -40,6 +40,7 @@ use rosetta_core::{
     objects::ObjectMap,
     response_types::{MempoolResponse, MempoolTransactionResponse, NetworkListResponse},
 };
+use std::sync::atomic::AtomicBool;
 use std::{
     convert::{TryFrom, TryInto},
     num::TryFromIntError,
@@ -57,6 +58,7 @@ pub struct RosettaRequestHandler {
     blockchain: String,
     ledger: Arc<dyn LedgerAccess + Send + Sync>,
     rosetta_metrics: RosettaMetrics,
+    initial_sync_complete: Arc<AtomicBool>,
 }
 
 // construction requests are implemented in their own module.
@@ -65,16 +67,19 @@ impl RosettaRequestHandler {
         blockchain: String,
         ledger: Arc<T>,
         rosetta_metrics: RosettaMetrics,
+        initial_sync_complete: Arc<AtomicBool>,
     ) -> Self {
         Self {
             blockchain,
             ledger,
             rosetta_metrics,
+            initial_sync_complete,
         }
     }
 
     pub fn new_with_default_blockchain<T: 'static + LedgerAccess + Send + Sync>(
         ledger: Arc<T>,
+        initial_sync_complete: Arc<AtomicBool>,
     ) -> Self {
         let canister_id = ledger.ledger_canister_id();
         let canister_id_str = hex::encode(canister_id.get().into_vec());
@@ -82,6 +87,7 @@ impl RosettaRequestHandler {
             crate::DEFAULT_BLOCKCHAIN.to_string(),
             ledger,
             RosettaMetrics::new(crate::DEFAULT_TOKEN_SYMBOL.to_string(), canister_id_str),
+            initial_sync_complete,
         )
     }
 
@@ -591,6 +597,15 @@ impl RosettaRequestHandler {
         msg: models::NetworkRequest,
     ) -> Result<NetworkStatusResponse, ApiError> {
         verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        if !self
+            .initial_sync_complete
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            return Err(ApiError::NotAvailableOffline(
+                true,
+                "The node is still syncing the blocks from the ledger canister. Please wait until the initial sync is complete.".into(),
+            ));
+        }
         let rosetta_blocks_mode = self.ledger.read_blocks().await.rosetta_blocks_mode;
         let network_status = match rosetta_blocks_mode {
             // If rosetta mode is not enabled we simply fetched the latest verified block
