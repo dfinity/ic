@@ -108,12 +108,20 @@ impl DiskEncryptionKeyExchangeTestFixture {
                     guest_launch_measurements: Some(GuestLaunchMeasurements {
                         guest_launch_measurements: vec![
                             GuestLaunchMeasurement {
+                                #[allow(deprecated)]
                                 measurement: DEFAULT_CLIENT_MEASUREMENT.into(),
                                 metadata: None,
+                                encoded_measurement: Some(base64::encode(
+                                    DEFAULT_CLIENT_MEASUREMENT,
+                                )),
                             },
                             GuestLaunchMeasurement {
+                                #[allow(deprecated)]
                                 measurement: DEFAULT_SERVER_MEASUREMENT.into(),
                                 metadata: None,
+                                encoded_measurement: Some(base64::encode(
+                                    DEFAULT_SERVER_MEASUREMENT,
+                                )),
                             },
                         ],
                     }),
