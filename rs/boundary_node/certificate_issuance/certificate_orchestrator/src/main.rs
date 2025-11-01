@@ -474,13 +474,13 @@ fn init_timers_fn() {
     let interval =
         Duration::from_secs(MANAGEMENT_TASK_INTERVAL.with(|s| s.borrow().get(&()).unwrap()));
 
-    set_timer_interval(interval, || {
+    set_timer_interval(interval, async || {
         if let Err(err) = EXPIRER.with(|e| e.borrow().expire(time())) {
             trap(format!("failed to run expire: {err}"));
         }
     });
 
-    set_timer_interval(interval, || {
+    set_timer_interval(interval, async || {
         if let Err(err) = RETRIER.with(|r| r.borrow().retry(time())) {
             trap(format!("failed to run retry: {err}"));
         }
@@ -489,7 +489,7 @@ fn init_timers_fn() {
     // update the available tokens for rate limiting
     set_timer_interval(
         REGISTRATION_RATE_LIMIT_PERIOD / REGISTRATION_RATE_LIMIT_RATE,
-        || {
+        async || {
             AVAILABLE_TOKENS.with(|at| {
                 let mut at = at.borrow_mut();
 

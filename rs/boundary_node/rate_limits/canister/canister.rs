@@ -251,15 +251,12 @@ fn __candid_method_http_request(request: HttpRequest) -> HttpResponse {
 fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn CanisterApi>) {
     let interval = Duration::from_secs(interval);
 
-    ic_cdk_timers::set_timer_interval(interval, move || {
+    ic_cdk_timers::set_timer_interval(interval, async move || {
         let canister_api = canister_api.clone();
-        ic_cdk::spawn(async move {
-            let canister_id = Principal::from(REGISTRY_CANISTER_ID);
+        let canister_id = Principal::from(REGISTRY_CANISTER_ID);
 
-            let (call_status, message) = match call::<
-                _,
-                (Result<Vec<ApiBoundaryNodeIdRecord>, String>,),
-            >(
+        let (call_status, message) =
+            match call::<_, (Result<Vec<ApiBoundaryNodeIdRecord>, String>,)>(
                 canister_id,
                 REGISTRY_CANISTER_METHOD,
                 (&GetApiBoundaryNodeIdsRequest {},),
@@ -297,14 +294,13 @@ fn periodically_poll_api_boundary_nodes(interval: u64, canister_api: Arc<dyn Can
                 }
             };
 
-            // Update metric.
-            METRICS.with(|cell| {
-                let mut cell = cell.borrow_mut();
-                cell.registry_poll_calls
-                    .borrow_mut()
-                    .with_label_values(&[call_status, message])
-                    .inc();
-            });
+        // Update metric.
+        METRICS.with(|cell| {
+            let mut cell = cell.borrow_mut();
+            cell.registry_poll_calls
+                .borrow_mut()
+                .with_label_values(&[call_status, message])
+                .inc();
         });
     });
 }

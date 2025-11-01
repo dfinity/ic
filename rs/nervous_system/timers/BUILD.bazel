@@ -9,6 +9,7 @@ DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = DEPENDENCIES + [
+    "@crate_index//:tokio",
 ]
 
 LIB_SRCS = glob(

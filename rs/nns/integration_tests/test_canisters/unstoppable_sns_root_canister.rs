@@ -48,15 +48,12 @@ fn canister_init() {
         });
     });
 
-    ic_cdk_timers::set_timer(Duration::from_millis(10), || {
-        let future = async {
-            println!("Unstoppable canister loop is starting...");
+    ic_cdk_timers::set_timer(Duration::from_millis(10), async {
+        println!("Unstoppable canister loop is starting...");
 
-            loop {
-                interrupt().await;
-            }
-        };
-        dfn_core::api::futures::spawn(future);
+        loop {
+            interrupt().await;
+        }
     });
 }
 
