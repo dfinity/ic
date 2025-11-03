@@ -3643,7 +3643,6 @@ enum MessageBuilder {
     // `(respondent, originator, reason)`
     RejectResponse(CanisterId, CanisterId, RejectReason),
     // `(recipient)`.
-    #[allow(dead_code)]
     Refund(CanisterId),
 }
 

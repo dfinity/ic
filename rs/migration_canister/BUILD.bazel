@@ -70,6 +70,7 @@ rust_test(
 
 rust_test(
     name = "migration_canister_test",
+    timeout = "long",
     srcs = ["tests/tests.rs"],
     data = [
         # Keep sorted

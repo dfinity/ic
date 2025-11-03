@@ -43,7 +43,7 @@ use ic_types::{
 };
 pub use metrics::IngressFilterMetrics;
 pub use query_handler::InternalHttpQueryHandler;
-use query_handler::{HttpQueryHandler, QueryScheduler, QuerySchedulerFlag};
+use query_handler::{HttpQueryHandler, QueryScheduler};
 pub use scheduler::RoundSchedule;
 use scheduler::SchedulerImpl;
 use std::{path::Path, sync::Arc};
@@ -400,7 +400,6 @@ fn setup_execution_helper(
         config.embedders_config.query_execution_threads_per_canister,
         config.query_scheduling_time_slice_per_canister,
         metrics_registry,
-        QuerySchedulerFlag::UseNewSchedulingAlgorithm,
     );
 
     let ingress_filter_metrics: Arc<_> = IngressFilterMetrics::new(metrics_registry).into();
