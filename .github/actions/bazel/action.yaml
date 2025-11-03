@@ -30,6 +30,7 @@ runs:
   using: "composite"
   steps:
     - name: "Node Name"
+      shell: bash
       run: |
         echo "::notice::Node Name: ${NODE_NAME}"
 
