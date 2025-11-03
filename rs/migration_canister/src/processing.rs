@@ -199,10 +199,10 @@ pub async fn process_stopped(
     rename_canister(
         request.source,
         canister_version,
-        request.caller,
         request.target,
         request.target_subnet,
         canister_history_total_num,
+        request.caller,
     )
     .await
     .map_success(|_| RequestState::RenamedTarget {
@@ -257,10 +257,6 @@ pub async fn process_updated(
     else {
         return ProcessingResult::NoProgress;
     };
-    println!(
-        "Registry versions: waiting for: {} source subnet: {} target subnet: {}",
-        registry_version, source_subnet_version, target_subnet_version
-    );
     if source_subnet_version < registry_version || target_subnet_version < registry_version {
         return ProcessingResult::NoProgress;
     }

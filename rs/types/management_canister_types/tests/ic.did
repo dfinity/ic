@@ -81,12 +81,12 @@ type change_details = variant {
     rename_canister: record {
         canister_id : principal;
         total_num_changes : nat64;
-        requested_by : principal;
         rename_to : record {
             canister_id : principal;
             version : nat64;
             total_num_changes : nat64;
         };
+        requested_by : principal;
     };
 };
 
@@ -624,12 +624,12 @@ type upload_canister_snapshot_data_args = record {
 
 type rename_canister_args = record {
    canister_id : principal;
-   requested_by : principal;
    rename_to : record {
      canister_id : principal;
      version : nat64;
      total_num_changes : nat64;
    };
+   requested_by : principal;
    sender_canister_version : nat64;
 };
 
