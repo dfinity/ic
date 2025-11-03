@@ -13,7 +13,6 @@ use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardRate, NodeRewardRates, NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
-use ic_registry_transport::delete;
 use maplit::btreemap;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 
