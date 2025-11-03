@@ -331,7 +331,6 @@ mod tests {
         invariant_compliant_registry, prepare_registry_with_nodes,
         registry_add_node_operator_for_node, registry_create_subnet_with_nodes,
     };
-    use crate::mutations::common::test::TEST_NODE_ID;
     use ic_base_types::{NodeId, PrincipalId};
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
@@ -548,7 +547,7 @@ mod tests {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 1 }, // Should be > 0 to add a new node
             ..Default::default()
         };
-        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        let node_operator_id = PrincipalId::new_user_test_id(0);
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
@@ -570,7 +569,7 @@ mod tests {
     fn should_fail_if_node_operator_is_absent_in_registry() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
-        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        let node_operator_id = PrincipalId::new_user_test_id(0);
         let (payload, _) = prepare_add_node_payload(1);
         // Act
         let result = registry.do_add_node_(payload.clone(), node_operator_id, now_system_time());
@@ -590,7 +589,7 @@ mod tests {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
             ..Default::default()
         };
-        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        let node_operator_id = PrincipalId::new_user_test_id(0);
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
@@ -603,7 +602,7 @@ mod tests {
             .do_add_node_(payload.clone(), node_operator_id, now_system_time())
             .expect("failed to add a node");
         // Assert node record is correct
-        let node_record_expected = NodeRecord {
+        let expected_node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
             node_operator_id: node_operator_id.into(),
@@ -611,24 +610,25 @@ mod tests {
             node_reward_type: Some(NodeRewardType::Type1 as i32),
             ..Default::default()
         };
-        let node_record = registry.get_node_or_panic(node_id);
-        assert_eq!(node_record, node_record_expected);
+        let observed_node_record = registry.get_node_or_panic(node_id);
+        assert_eq!(observed_node_record, expected_node_record);
 
-        let node_operator_record_observed = get_node_operator_record(&registry, node_operator_id)
+        let observed_node_operator_record = get_node_operator_record(&registry, node_operator_id)
             .expect("failed to get node operator");
-        assert_eq!(node_operator_record_observed, node_operator_record);
+        assert_eq!(observed_node_operator_record, node_operator_record);
     }
 
     #[test]
     fn should_succeed_for_adding_one_node_with_rewards_disabled() {
         // Arrange
         let mut registry = invariant_compliant_registry(0);
+        // This disabled node provider rewards.
         registry.maybe_apply_mutation_internal(vec![delete(NODE_REWARDS_TABLE_KEY.as_bytes())]);
         // Add node operator record first
         let node_operator_record = NodeOperatorRecord {
             ..Default::default()
         };
-        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        let node_operator_id = PrincipalId::new_user_test_id(0);
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
@@ -639,19 +639,19 @@ mod tests {
             .do_add_node_(payload.clone(), node_operator_id, now_system_time())
             .expect("failed to add a node");
         // Assert node record is correct
-        let node_record_expected = NodeRecord {
+        let expected_node_record = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload.http_endpoint)),
-            node_operator_id: node_operator_id.into(),
+            node_operator_id: node_operator_id.to_vec(),
             domain: Some("api-example.com".to_string()),
             ..Default::default()
         };
-        let node_record = registry.get_node_or_panic(node_id);
-        assert_eq!(node_record, node_record_expected);
+        let observed_node_record = registry.get_node_or_panic(node_id);
+        assert_eq!(observed_node_record, expected_node_record);
 
-        let node_operator_record_observed = get_node_operator_record(&registry, node_operator_id)
+        let observed_node_operator_record = get_node_operator_record(&registry, node_operator_id)
             .expect("failed to get node operator");
-        assert_eq!(node_operator_record_observed, node_operator_record);
+        assert_eq!(observed_node_operator_record, node_operator_record);
     }
 
     #[test]
@@ -663,7 +663,7 @@ mod tests {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 2 }, // needed for adding two nodes
             ..Default::default()
         };
-        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        let node_operator_id = PrincipalId::new_user_test_id(0);
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
@@ -683,7 +683,7 @@ mod tests {
             .do_add_node_(payload_2.clone(), node_operator_id, now_system_time())
             .expect("failed to add a node");
         // Assert both node records are in the registry and are correct
-        let node_record_expected_1 = NodeRecord {
+        let expected_node_record_1 = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload_1.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload_1.http_endpoint)),
             node_operator_id: node_operator_id.into(),
@@ -691,7 +691,7 @@ mod tests {
             node_reward_type: Some(NodeRewardType::from(payload_1.node_reward_type.unwrap()) as i32),
             ..Default::default()
         };
-        let node_record_expected_2 = NodeRecord {
+        let expected_node_record_2 = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload_2.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload_2.http_endpoint)),
             node_operator_id: node_operator_id.into(),
@@ -700,13 +700,13 @@ mod tests {
             ..Default::default()
         };
         let node_record_1 = registry.get_node_or_panic(node_id_1);
-        assert_eq!(node_record_1, node_record_expected_1);
+        assert_eq!(node_record_1, expected_node_record_1);
         let node_record_2 = registry.get_node_or_panic(node_id_2);
-        assert_eq!(node_record_2, node_record_expected_2);
+        assert_eq!(node_record_2, expected_node_record_2);
         // Assert max rewardable nodes isn't changed
-        let node_operator_record_observed = get_node_operator_record(&registry, node_operator_id)
+        let observed_node_operator_record = get_node_operator_record(&registry, node_operator_id)
             .expect("failed to get node operator");
-        assert_eq!(node_operator_record_observed, node_operator_record);
+        assert_eq!(observed_node_operator_record, node_operator_record);
     }
 
     #[test]
@@ -720,7 +720,7 @@ mod tests {
             ..Default::default()
         };
 
-        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        let node_operator_id = PrincipalId::new_user_test_id(0);
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
@@ -739,7 +739,7 @@ mod tests {
         let node_id_1: NodeId = registry
             .do_add_node_(payload_1.clone(), node_operator_id, now_system_time())
             .expect("failed to add a node");
-        let node_record_expected_1 = NodeRecord {
+        let expected_node_record_1 = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload_1.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload_1.http_endpoint)),
             node_operator_id: node_operator_id.into(),
@@ -749,13 +749,13 @@ mod tests {
         };
 
         let node_record_1 = registry.get_node_or_panic(node_id_1);
-        assert_eq!(node_record_1, node_record_expected_1);
+        assert_eq!(node_record_1, expected_node_record_1);
         // Add the second node, this should remove the first one from the registry
         let node_id_2: NodeId = registry
             .do_add_node_(payload_2.clone(), node_operator_id, now_system_time())
             .unwrap();
         // Assert second node record is in the registry and is correct
-        let node_record_expected_2 = NodeRecord {
+        let expected_node_record_2 = NodeRecord {
             xnet: Some(connection_endpoint_from_string(&payload_2.xnet_endpoint)),
             http: Some(connection_endpoint_from_string(&payload_2.http_endpoint)),
             node_operator_id: node_operator_id.into(),
@@ -764,7 +764,7 @@ mod tests {
             ..Default::default()
         };
         let node_record_2 = registry.get_node_or_panic(node_id_2);
-        assert_eq!(node_record_2, node_record_expected_2);
+        assert_eq!(node_record_2, expected_node_record_2);
         // Assert first node record is removed from the registry because of the IP conflict
         assert!(
             registry
@@ -792,7 +792,7 @@ mod tests {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 2 }, // Should be > 0 to add a new node
             ..Default::default()
         };
-        let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
+        let node_operator_id = PrincipalId::new_user_test_id(0);
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
@@ -1071,6 +1071,7 @@ mod tests {
     #[test]
     fn test_node_reward_type_is_not_required_if_no_node_rewards_table_present() {
         let mut registry = invariant_compliant_registry(0);
+        // This disabled node provider rewards.
         registry.maybe_apply_mutation_internal(vec![delete(NODE_REWARDS_TABLE_KEY.as_bytes())]);
 
         // Add node operator record first

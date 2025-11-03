@@ -105,7 +105,9 @@ fn test_node_operator_records_can_be_added_and_removed() {
         add_node_operator(&nns_canisters, &TEST_NEURON_2_OWNER_PRINCIPAL).await;
 
         // Assert that a Node Operator with no nodes can be removed
-        let (payload, _) = prepare_add_node_payload(1);
+        let (mut payload, _) = prepare_add_node_payload(1);
+        payload.node_reward_type = Some(NodeRewardType::Type1.to_string());
+
         // To fix occasional flakiness similar to this error:
         // invalid TLS certificate: notBefore date (=ASN1Time(2024-12-12 13:17:08.0 +00:00:00)) \
         //      is in the future compared to current time (=ASN1Time(2024-12-12 13:16:39.0 +00:00:00))\"

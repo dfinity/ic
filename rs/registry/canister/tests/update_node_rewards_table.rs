@@ -13,6 +13,7 @@ use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardRate, NodeRewardRates, NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
 };
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
+use ic_registry_transport::delete;
 use maplit::btreemap;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 
@@ -130,7 +131,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_the_node_rew
 
         let table =
             get_value::<NodeRewardsTable>(&registry, NODE_REWARDS_TABLE_KEY.as_bytes()).await;
-        assert!(table.is_none());
+        assert!(table.unwrap().table.is_empty());
 
         Ok(())
     });
