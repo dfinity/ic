@@ -35,4 +35,5 @@ proptest = { workspace = true }
 
 [features]
 default = ["dep:ic-stable-structures"]
+storable = ["dep:ic-stable-structures"]
 no_storable = []
