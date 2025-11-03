@@ -1072,7 +1072,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                     },
                     Wasm64::Disabled,
                 ),
-                519001006,
+                7519001006,
             )
         },
         {
@@ -1094,7 +1094,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                     },
                     Wasm64::Enabled,
                 ),
-                519004006,
+                7519004006,
             )
         },
         common::Benchmark(
