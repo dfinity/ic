@@ -10,7 +10,9 @@ use ic_artifact_pool::{
     ingress_pool::IngressPoolImpl,
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
-use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
+use ic_consensus::consensus::{
+    ConsensusBouncer, ConsensusImpl, MAX_CONSENSUS_THREADS, build_thread_pool,
+};
 use ic_consensus_certification::{CertificationCrypto, CertifierBouncer, CertifierImpl};
 use ic_consensus_dkg::DkgBouncer;
 use ic_consensus_idkg::{IDkgBouncer, IDkgStatsImpl};
@@ -502,6 +504,7 @@ fn start_consensus(
 ) {
     let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let consensus_time = consensus_pool.read().unwrap().get_consensus_time();
+    let consensus_thread_pool = build_thread_pool(MAX_CONSENSUS_THREADS);
     // --------------- PAYLOAD BUILDERS WITH ARTIFACT POOLS FOLLOW ---------------------------------
     let ingress_manager = Arc::new(IngressManager::new(
         time_source.clone(),
@@ -536,6 +539,7 @@ fn start_consensus(
         consensus_pool_cache.clone(),
         consensus_crypto.clone(),
         state_reader.clone(),
+        consensus_thread_pool.clone(),
         subnet_id,
         registry_client.clone(),
         metrics_registry,
@@ -569,6 +573,7 @@ fn start_consensus(
         Arc::clone(&dkg_key_manager) as Arc<_>,
         message_router.clone(),
         Arc::clone(&state_manager) as Arc<_>,
+        consensus_thread_pool,
         Arc::clone(&time_source) as Arc<_>,
         registry_poll_delay_duration_ms,
         malicious_flags.clone(),

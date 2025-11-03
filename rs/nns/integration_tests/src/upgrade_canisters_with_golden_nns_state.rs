@@ -1,4 +1,4 @@
-use candid::Encode;
+use candid::{CandidType, Encode, Principal};
 use cycles_minting_canister::CyclesCanisterInitPayload;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha2::Sha256;
@@ -29,6 +29,7 @@ use ic_nns_test_utils::{
 use ic_nns_test_utils_golden_nns_state::new_state_machine_with_golden_nns_state_or_panic;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::Tokens;
+use serde::Deserialize;
 use std::{
     env,
     fmt::{Debug, Formatter},
@@ -78,6 +79,12 @@ impl NnsCanisterUpgrade {
             .unwrap()
         } else if nns_canister_name == "ledger" {
             Encode!(&()).unwrap()
+        } else if nns_canister_name == "migration" {
+            #[derive(CandidType, Deserialize, Default)]
+            struct MigrationCanisterInitArgs {
+                allowlist: Option<Vec<Principal>>,
+            }
+            Encode!(&MigrationCanisterInitArgs::default()).unwrap()
         } else {
             vec![]
         };

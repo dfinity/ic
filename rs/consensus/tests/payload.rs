@@ -3,6 +3,7 @@ mod framework;
 
 use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, idkg_pool};
+use ic_consensus::consensus::{MAX_CONSENSUS_THREADS, build_thread_pool};
 use ic_consensus_certification::CertifierImpl;
 use ic_consensus_dkg::{DkgKeyManager, get_dkg_summary_from_cup_contents};
 use ic_consensus_utils::pool_reader::PoolReader;
@@ -167,6 +168,7 @@ fn consensus_produces_expected_batches() {
             dkg_key_manager.clone(),
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
+            build_thread_pool(MAX_CONSENSUS_THREADS),
             Arc::clone(&time_source) as Arc<_>,
             0,
             MaliciousFlags::default(),

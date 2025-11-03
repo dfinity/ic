@@ -116,6 +116,7 @@ pub struct ECDSAPublicKey {
 }
 
 pub type GetUtxosRequest = bitcoin_canister::GetUtxosRequest;
+pub type GetCurrentFeePercentilesRequest = bitcoin_canister::GetCurrentFeePercentilesRequest;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetUtxosResponse {
@@ -267,13 +268,24 @@ fn compute_min_withdrawal_amount(
 /// Returns an estimate for transaction fees in millisatoshi per vbyte. Returns
 /// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
-pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
+pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
+    runtime: &R,
+) -> Option<MillisatoshiPerByte> {
     let btc_network = state::read_state(|s| s.btc_network);
-    match management::get_current_fees(btc_network).await {
+    match runtime
+        .get_current_fee_percentiles(&bitcoin_canister::GetCurrentFeePercentilesRequest {
+            network: btc_network.into(),
+        })
+        .await
+    {
         Ok(fees) => {
             if btc_network == Network::Regtest {
                 return state::read_state(|s| s.estimate_median_fee_per_vbyte());
             }
+            log!(
+                Priority::Debug,
+                "[estimate_fee_per_vbyte]: update median fee per vbyte with {fees:?}"
+            );
             state::mutate_state(|s| s.update_median_fee_per_vbyte(fees))
         }
         Err(err) => {
@@ -358,7 +370,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
     let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
     let main_address = address::account_to_bitcoin_address(&ecdsa_public_key, &main_account);
 
-    let fee_millisatoshi_per_vbyte = match estimate_fee_per_vbyte().await {
+    let fee_millisatoshi_per_vbyte = match estimate_fee_per_vbyte(runtime).await {
         Some(fee) => fee,
         None => return,
     };
@@ -747,7 +759,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
     );
 
     // We shall use the latest fee estimate for replacement transactions.
-    let fee_per_vbyte = match estimate_fee_per_vbyte().await {
+    let fee_per_vbyte = match estimate_fee_per_vbyte(runtime).await {
         Some(fee) => fee,
         None => return,
     };
@@ -1427,6 +1439,15 @@ pub trait CanisterRuntime {
     /// Address controlled by the minter (via threshold ECDSA) for a given user.
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
 
+    /// Returns the frequency at which fee percentiles are refreshed.
+    fn refresh_fee_percentiles_frequency(&self) -> Duration;
+
+    /// Retrieves the current transaction fee percentiles.
+    async fn get_current_fee_percentiles(
+        &self,
+        request: &GetCurrentFeePercentilesRequest,
+    ) -> Result<Vec<u64>, CallError>;
+
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified network.
     async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
 
@@ -1470,6 +1491,18 @@ pub struct IcCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
+    fn refresh_fee_percentiles_frequency(&self) -> Duration {
+        const ONE_HOUR: Duration = Duration::from_secs(3_600);
+        ONE_HOUR
+    }
+
+    async fn get_current_fee_percentiles(
+        &self,
+        request: &GetCurrentFeePercentilesRequest,
+    ) -> Result<Vec<u64>, CallError> {
+        management::bitcoin_get_current_fee_percentiles(request).await
+    }
+
     async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
         management::bitcoin_get_utxos(request).await
     }

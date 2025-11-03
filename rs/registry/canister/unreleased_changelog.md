@@ -9,14 +9,16 @@ on the process that this file is part of, see
 
 ## Added
 
-* New set_subnet_operational_level method. This is only callable by
-  Governance. Currently, Governance has no active code path (in release builds)
-  that calls this method. However, once the SetSubnetOperationalLevel proposal
-  type is enabled, this will effectively become an active feature. This will be
-  used in a slightly improved subnet recovery procedure. Thus, this would only
-  be used in rare extraordinary situations.
-
 ## Changed
+
+* Allow unassigned nodes to have nonempty ssh_node_state_write_access.
+
+  * Why: Previously, it was believed that there is no way that a nonempty
+    ssh_node_state_write_access could be used constructively, but after
+    consulting the Consensus team, we (the Governance team) learned that this is
+    not true. In particular, it could be useful during a subnet recovery, even
+    though this capability generally wouldn't be used during a "typical" subnet
+    recovery.
 
 ## Deprecated
 
