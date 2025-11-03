@@ -24,7 +24,6 @@ use ic_agent::{
         http_transport::reqwest_transport::reqwest,
     },
     export::Principal,
-    hash_tree::Label,
     identity::BasicIdentity,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
@@ -1977,20 +1976,25 @@ pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signa
 }
 
 pub fn sign_read_state(content: &HttpReadStateContent, identity: &impl Identity) -> Signature {
-    let HttpReadStateContent::ReadState { read_state } = content;
-    let paths = read_state
+    use ic_agent::hash_tree::Label;
+    use std::ops::Deref;
+    let HttpReadStateContent::ReadState {
+        read_state: content,
+    } = content;
+    let paths = content
         .paths
         .iter()
         .map(|path| {
-            path.iter()
+            path.deref()
+                .iter()
                 .map(|label| Label::from_bytes(label.as_bytes()))
                 .collect::<Vec<_>>()
         })
         .collect();
     let msg = EnvelopeContent::ReadState {
-        ingress_expiry: read_state.ingress_expiry,
-        sender: Principal::from_slice(&read_state.sender.0),
         paths,
+        ingress_expiry: content.ingress_expiry,
+        sender: Principal::from_slice(&content.sender),
     };
     identity.sign(&msg).unwrap()
 }
