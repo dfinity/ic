@@ -13,7 +13,7 @@ use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::batch::Batch;
-use ic_types::{ExecutionRound, NumBytes};
+use ic_types::{Cycles, ExecutionRound, NumBytes};
 use std::time::Instant;
 
 #[cfg(test)]
@@ -126,13 +126,11 @@ impl StateMachine for StateMachineImpl {
         // Preservation of cycles is validated (in debug builds) here for timing out and
         // below for routing + shedding. Validation for induction is only done for each
         // inducted message separately, as doing it for induction as a whole would
-        // require separate accounting for GC-ed and rejected messages.
+        // require detailed accounting of GC-ed and rejected messages.
         #[cfg(debug_assertions)]
         let balance_before_time_out = state.balance_with_messages();
-        state.time_out_messages(&self.metrics);
-        #[cfg(debug_assertions)]
-        state.assert_balance_with_messages(balance_before_time_out);
 
+        state.time_out_messages(&self.metrics);
         self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
 
         // Time out expired callbacks.
@@ -151,6 +149,9 @@ impl StateMachine for StateMachineImpl {
             );
             self.metrics.critical_error_induct_response_failed.inc();
         }
+        #[cfg(debug_assertions)]
+        state.assert_balance_with_messages(balance_before_time_out);
+
         self.observe_phase_duration(PHASE_TIME_OUT_CALLBACKS, &since);
 
         // Preprocess messages and add messages to the induction pool through the Demux.
@@ -221,6 +222,20 @@ impl StateMachine for StateMachineImpl {
         #[cfg(debug_assertions)]
         state_after_stream_builder.assert_balance_with_messages(balance_before_routing);
         self.observe_phase_duration(PHASE_SHED_MESSAGES, &since);
+
+        // Take out all refunds from the refund pool and observe them as lost cycles.
+        //
+        // Refunds are currently not routed to streams (this will be implemented in a
+        // follow-up change). Therefore, we "lose" them here, so they don't accumulate
+        // forever.
+        if !state_after_stream_builder.refunds().is_empty() {
+            let mut lost_cycles = Cycles::new(0);
+            state_after_stream_builder.take_refunds(|refund| {
+                lost_cycles += refund.amount();
+                true
+            });
+            state_after_stream_builder.observe_lost_cycles_due_to_dropped_messages(lost_cycles);
+        }
 
         state_after_stream_builder
     }

@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 
 package(default_visibility = [
     "//rs/p2p:__subpackages__",
@@ -41,6 +41,19 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "peer_manager_test",
+    crate = ":peer_manager",
+    deps = [
+        "//rs/interfaces/mocks",
+        "//rs/registry/fake",
+        "//rs/registry/keys",
+        "//rs/registry/proto_data_provider",
+        "//rs/test_utilities/registry",
+        "//rs/types/types_test_utils",
+    ],
 )
 
 rust_test_suite(
