@@ -575,7 +575,7 @@ mod tests {
         // Assert
         assert_eq!(
             result.unwrap_err(),
-            "[Registry] do_add_node: Aborting node addition: Node Operator Id node_operator_record_2vxsx-fae not found in the registry."
+            "[Registry] do_add_node: Aborting node addition: Node Operator Id node_operator_record_d2zjj-uyaaa-aaaaa-aaaap-4ai not found in the registry."
         );
     }
 

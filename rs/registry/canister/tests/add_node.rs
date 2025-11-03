@@ -274,7 +274,8 @@ fn duplicated_nodes_are_removed_on_join() {
         .await;
 
         // Create a new node to join.
-        let (payload, node_pks) = prepare_add_node_payload(1);
+        let (mut payload, node_pks) = prepare_add_node_payload(1);
+        payload.node_reward_type = Some("type1".to_string());
         let first_node_id = node_pks.node_id();
 
         // Ensure this node does not already exist.
@@ -294,7 +295,8 @@ fn duplicated_nodes_are_removed_on_join() {
 
         // Then, try to add another node.
         // Use the same ID so we can "duplicate" this node.
-        let (payload, node_pks) = prepare_add_node_payload(1);
+        let (mut payload, node_pks) = prepare_add_node_payload(1);
+        payload.node_reward_type = Some("type1".to_string());
         let second_node_id = node_pks.node_id();
 
         // Ensure this node does not already exist.
