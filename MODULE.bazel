@@ -1139,3 +1139,14 @@ canisters(
         "dogecoin": "dfinity/dogecoin-canister",
     },
 )
+
+bazel_dep(name = "rules_motoko", version = "1.0.0")
+archive_override(
+    module_name = "rules_motoko",
+    integrity = "sha256-cheylLgUCNaODuEtYla4/oVrj6F0FMp7nRjui1AvCo4=",
+    strip_prefix = "rules_motoko-9b6d6311db8f1c1fe4c24b70414edf149913ae44",
+    urls = ["https://github.com/dfinity/rules_motoko/archive/9b6d6311db8f1c1fe4c24b70414edf149913ae44.tar.gz"],
+)
+
+motoko = use_extension("@rules_motoko//motoko:extensions.bzl", "motoko")
+motoko.toolchain(version = "0.16.3")
