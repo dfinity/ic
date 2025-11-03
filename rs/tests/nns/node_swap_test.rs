@@ -29,9 +29,7 @@ fn main() -> Result<()> {
 }
 
 fn setup(env: TestEnv) {
-    // Ensure that the variable is set so that the test panics early
-    // if ic-admin isn't setup correctly.
-    ensure_ic_admin_path();
+    let _just_making_sure_if_exists = fetch_ic_admin_path();
 
     let caller = *TEST_USER1_PRINCIPAL;
     let mut ic = InternetComputer::new()
@@ -58,6 +56,7 @@ fn setup(env: TestEnv) {
     install_nns_with_customizations_and_check_progress(env.topology_snapshot(), customizations);
 }
 
+#[must_use]
 fn fetch_ic_admin_path() -> String {
     let ic_admin_path = std::env::var("IC_ADMIN_PATH").expect(
         "IC admin isn't present in the environment variables and is required for this test to run",
@@ -69,10 +68,6 @@ fn fetch_ic_admin_path() -> String {
         );
     }
     ic_admin_path
-}
-
-fn ensure_ic_admin_path() {
-    let _ = fetch_ic_admin_path();
 }
 
 fn test(env: TestEnv) {
