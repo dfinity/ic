@@ -15,7 +15,7 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::systest;
 use nested::util::block_on_bash_script_and_log;
-use slog::{Logger, error, info};
+use slog::{error, info};
 use std::time::Duration;
 
 const POST_KILL_SLEEP_DURATION: Duration = Duration::from_secs(5);
