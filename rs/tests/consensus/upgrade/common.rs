@@ -24,16 +24,21 @@ use ic_consensus_system_test_utils::upgrade::{
 };
 use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types_private::MasterPublicKeyId;
+use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::util::create_agent;
+use ic_system_test_driver::util::{LogStream, create_agent};
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
     util::{MessageCanister, block_on},
 };
+use ic_types::consensus::CatchUpPackage;
 use ic_types::{ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
+use prost::Message;
 use slog::{Logger, info};
 use std::collections::BTreeMap;
+use std::io::Read;
+use std::path::Path;
 use std::time::Duration;
 
 const ALLOWED_FAILURES: usize = 1;
@@ -253,6 +258,12 @@ async fn upgrade_to(
     assert_graceful_orchestrator_tasks_exits: bool,
     logger: &Logger,
 ) {
+    const CUP_PATH: &str = "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb";
+
+    let log_stream = LogStream::open(std::iter::once(subnet_node.clone()))
+        .await
+        .unwrap();
+
     info!(
         logger,
         "Upgrading subnet {} to {}", subnet_id, target_version
@@ -270,11 +281,58 @@ async fn upgrade_to(
         info!(logger, "The orchestrator shut down the tasks gracefully");
     }
 
+    let state_hash_from_logs = fetch_latest_local_cup_hash_from_logs(log_stream).await;
+
+    info!(
+        logger,
+        "Extracted state hash from logs before node reboot: {}", state_hash_from_logs
+    );
+
     assert_assigned_replica_version(subnet_node, target_version, logger.clone());
     info!(
         logger,
         "Successfully upgraded subnet {} to {}", subnet_id, target_version
     );
+
+    // Compare the state hash from logs before the reboot with the one from the local CUP after
+    // reboot
+    let (mut channel, _) = subnet_node
+        .block_on_ssh_session()
+        .unwrap()
+        .scp_recv(Path::new(CUP_PATH))
+        .unwrap();
+    let mut cup_bytes = Vec::new();
+    channel.read_to_end(&mut cup_bytes).unwrap();
+
+    let local_cup =
+        CatchUpPackage::try_from(&pb::CatchUpPackage::decode(cup_bytes.as_slice()).unwrap())
+            .unwrap();
+    assert_eq!(
+        hex::encode(local_cup.content.state_hash.get().0),
+        state_hash_from_logs,
+        "State hash from local CUP does not match the one extracted from logs before reboot"
+    );
+}
+
+/// Fetch the latest local CUP state hash from the node logs by continously searching for matching
+/// log entries until the log stream ends, which happens when the node reboots.
+///
+/// This function will thus loop indefinitely if an upgrade is not scheduled.
+async fn fetch_latest_local_cup_hash_from_logs(mut log_stream: LogStream) -> String {
+    let re =
+        regex::Regex::new(r#"Persisted local CUP to disk: .*state_hash=([a-f0-9]{64})"#).unwrap();
+
+    // The node is expected to reboot any time soon, at which point `.find()` will return an error.
+    // At that point, the last successful maatch will be the latest persisted CUP.
+    let mut log_entry = None;
+    while let Ok((_node, entry)) = log_stream.find(|_, line| re.is_match(line)).await {
+        log_entry = Some(entry);
+    }
+
+    re.captures(&log_entry.expect("No matching log entry found"))
+        .and_then(|caps| caps.get(1))
+        .map(|m| m.as_str().to_string())
+        .expect("Failed to extract state hash from log entry")
 }
 
 // Stops the node and makes sure it becomes unreachable
