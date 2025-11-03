@@ -1,5 +1,5 @@
 use crate::{lifecycle::EthereumNetwork, logs::INFO, state::State};
-use evm_rpc_client::{CandidResponseConverter, EvmRpcClient, IcRuntime};
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient, IcRuntime};
 use evm_rpc_types::{
     ConsensusStrategy, EthSepoliaService, HttpOutcallError, MultiRpcResult as EvmMultiRpcResult,
     RpcError, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
@@ -28,6 +28,7 @@ pub const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
 
 pub fn rpc_client(state: &State) -> EvmRpcClient<IcRuntime, CandidResponseConverter> {
     const TOTAL_NUMBER_OF_PROVIDERS: u8 = 4;
+    const MAX_NUM_RETRIES: u32 = 10;
 
     let chain = state.ethereum_network();
     let evm_rpc_id = state.evm_rpc_id();
@@ -57,6 +58,7 @@ pub fn rpc_client(state: &State) -> EvmRpcClient<IcRuntime, CandidResponseConver
             total: Some(TOTAL_NUMBER_OF_PROVIDERS),
             min: min_threshold,
         })
+        .with_retry_strategy(DoubleCycles::with_max_num_retries(MAX_NUM_RETRIES))
         .build()
 }
 

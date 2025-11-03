@@ -1,5 +1,5 @@
 {
-  "checksum": "05baf6addd477ad8901ee336f8ad9617b203f72f807318cd5a8bdd6e42430a2a",
+  "checksum": "e3af33bb5ff239e45d2c4bf8e77f72a8fbd4e7e57ab5a6b276db14fec46465c8",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20953,7 +20953,7 @@
               "target": "ethnum"
             },
             {
-              "id": "evm_rpc_client 0.1.0",
+              "id": "evm_rpc_client 0.2.0",
               "target": "evm_rpc_client"
             },
             {
@@ -25795,14 +25795,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "evm_rpc_client 0.1.0": {
+    "evm_rpc_client 0.2.0": {
       "name": "evm_rpc_client",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "package_url": "https://github.com/dfinity/evm-rpc-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_client/0.1.0/download",
-          "sha256": "55e42acb572ad1167d4cdbd95fa23bea119a265b2df8588ca7214c11bddfde68"
+          "url": "https://static.crates.io/crates/evm_rpc_client/0.2.0/download",
+          "sha256": "94f29eabef9267a8e6c416ad89d6b36d5ec9be5e6ffd143bd1b4514cfc7cfb9e"
         }
       },
       "targets": [
@@ -25871,7 +25871,7 @@
           ],
           "selects": {}
         },
-        "version": "0.1.0"
+        "version": "0.2.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -94101,7 +94101,7 @@
     "escargot 0.5.7",
     "ethers-core 2.0.8",
     "ethnum 1.3.2",
-    "evm_rpc_client 0.1.0",
+    "evm_rpc_client 0.2.0",
     "evm_rpc_types 3.0.0",
     "exec 0.3.1",
     "eyre 0.6.8",

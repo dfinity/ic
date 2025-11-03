@@ -4475,9 +4475,9 @@ dependencies = [
 
 [[package]]
 name = "evm_rpc_client"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55e42acb572ad1167d4cdbd95fa23bea119a265b2df8588ca7214c11bddfde68"
+checksum = "94f29eabef9267a8e6c416ad89d6b36d5ec9be5e6ffd143bd1b4514cfc7cfb9e"
 dependencies = [
  "async-trait",
  "candid",
