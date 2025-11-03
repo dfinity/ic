@@ -512,13 +512,12 @@ pub fn requests_with_invalid_expiry(env: TestEnv) {
                         "query should be rejected for expiry={expiry} and api_ver={api_ver}"
                     );
                 }
-
                 for api_ver in [2, 3, 4] {
                     test_info.api_ver = api_ver;
                     assert_eq!(
                         perform_update_with_expiry(&test_info, &id, &id, expiry).await,
                         400,
-                        "update should be rejected for expiry={expiry}"
+                        "update should be rejected for expiry={expiry} and api_ver={api_ver}"
                     );
                 }
                 for api_ver in [2, 3] {
