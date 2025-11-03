@@ -3674,6 +3674,7 @@ dependencies = [
  "macaddr",
  "maplit",
  "maxminddb 0.24.0",
+ "memchr",
  "memmap2 0.9.5",
  "metrics-proxy",
  "minicbor",
