@@ -108,7 +108,7 @@ impl BareMetalIpmiSession {
             // Ctrl+] to exit virsh console
             self.session
                 .send_control(']')
-                .context("Failed to send Ctrl+]");
+                .context("Failed to send Ctrl+]")?;
             // Ctrl+D to go to HostOS login prompt
             self.session
                 .send_control('D')
