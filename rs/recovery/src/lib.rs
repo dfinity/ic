@@ -237,8 +237,9 @@ impl Recovery {
         checkpoint_path: &Path,
         logger: &Logger,
     ) -> RecoveryResult<Height> {
-        let checkpoints = Self::get_checkpoint_names(checkpoint_path)?;
-        let (max_name, max_height) = Self::get_latest_checkpoint_name_and_height(checkpoint_path)?;
+        let checkpoints = Self::get_checkpoint_names_locally(checkpoint_path)?;
+        let (max_name, max_height) =
+            Self::get_latest_checkpoint_name_and_height(checkpoint_path, None)?;
 
         for checkpoint in checkpoints {
             if checkpoint == max_name {
@@ -335,7 +336,7 @@ impl Recovery {
     /// Return the list of paths to include when downloading the ic_state with rsync.
     /// These are the paths leading to the latest CUP checkpoint.
     fn get_state_includes(&self, ssh_helper: &SshHelper) -> RecoveryResult<Vec<PathBuf>> {
-        let cup_checkpoint_name = Recovery::get_checkpoint_name_for_latest_cup_height(
+        let cup_checkpoint_name = Recovery::get_checkpoint_name_for_state_download(
             &self.logger,
             &self.work_dir,
             Some(ssh_helper),
@@ -555,7 +556,7 @@ impl Recovery {
     }
 
     /// Get names of all checkpoints currently on disk
-    pub fn get_checkpoint_names(path: &Path) -> RecoveryResult<Vec<String>> {
+    pub fn get_checkpoint_names_locally(path: &Path) -> RecoveryResult<Vec<String>> {
         let res = read_dir(path)?
             .flatten()
             .filter_map(|e| {
@@ -567,26 +568,68 @@ impl Recovery {
         Ok(res)
     }
 
-    /// Reads the consensus pool in the working directory to find the height of the highest CUP and
-    /// checks whether a checkpoint exists for that height. If it does, returns its name.
-    /// Otherwise, returns an error.
+    /// Get names of all checkpoints on the remote node via SSH
+    pub fn get_checkpoint_names_remotely(
+        path: &Path,
+        ssh_helper: &SshHelper,
+    ) -> RecoveryResult<Vec<String>> {
+        ssh_helper
+            .ssh(format!("ls -1 {}", path.display()))
+            .map(|output| {
+                output
+                    .unwrap_or_default()
+                    .lines()
+                    .map(|line| line.trim().to_string())
+                    .filter(|line| !line.is_empty())
+                    .collect()
+            })
+    }
+
+    /// Get the checkpoint name to use for state download.
+    /// If the consensus pool exists in the working directory, return the checkpoint corresponding
+    /// to the latest CUP height found there.
+    /// Otherwise, return the latest checkpoint.
     /// If an `SshHelper` is provided, the existence check is performed over SSH, otherwise
     /// locally.
-    pub fn get_checkpoint_name_for_latest_cup_height(
+    pub fn get_checkpoint_name_for_state_download(
         logger: &Logger,
         work_dir: &Path,
         ssh_helper: Option<&SshHelper>,
     ) -> RecoveryResult<String> {
+        let consensus_pool_path = work_dir.join("data").join(IC_CONSENSUS_POOL_PATH);
+
+        if consensus_pool_path.exists() {
+            Self::get_checkpoint_name_for_latest_cup_height(logger, ssh_helper, consensus_pool_path)
+        } else {
+            Self::get_latest_checkpoint_name_and_height(
+                &PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH),
+                ssh_helper,
+            )
+            .map(|(name, _height)| name)
+        }
+    }
+
+    /// Read the consensus pool in the working directory to find the height of the highest CUP and
+    /// checks whether a checkpoint exists for that height. If it does, returns its name.
+    /// Otherwise, returns an error.
+    /// If an `SshHelper` is provided, the existence check is performed over SSH, otherwise
+    /// locally.
+    fn get_checkpoint_name_for_latest_cup_height(
+        logger: &Logger,
+        ssh_helper: Option<&SshHelper>,
+        consensus_pool_path: PathBuf,
+    ) -> RecoveryResult<String> {
         let pool = ConsensusPoolImpl::from_uncached(
             NodeId::from(PrincipalId::new_anonymous()),
             UncachedConsensusPoolImpl::new(
-                ArtifactPoolConfig::new(work_dir.join("data").join(IC_CONSENSUS_POOL_PATH)),
+                ArtifactPoolConfig::new(consensus_pool_path),
                 logger.clone().into(),
             ),
             MetricsRegistry::new(),
             logger.clone().into(),
             Arc::new(SysTimeSource::new()),
         );
+
         let highest_cup_height = pool.validated().highest_catch_up_package().height().get();
 
         let checkpoint_name = format!("{:016x}", highest_cup_height);
@@ -607,18 +650,25 @@ impl Recovery {
         match result {
             Ok(_) => Ok(checkpoint_name),
             Err(_) => Err(RecoveryError::invalid_output_error(format!(
-                "No checkpoint found for latest CUP height {highest_cup_height} at expected path: {full_checkpoint_path}",
+                "No checkpoint found for latest CUP height {highest_cup_height} at expected path {full_checkpoint_path}",
             ))),
         }
     }
 
-    /// Get the name and the height of the latest checkpoint currently on disk
-    ///
-    /// Returns an error when there are no checkpoints.
+    /// Get the name and the height of the latest checkpoint, or an error if there are no
+    /// checkpoints.
+    /// If an `SshHelper` is provided, the existence check is performed over SSH, otherwise
+    /// locally.
     pub fn get_latest_checkpoint_name_and_height(
         checkpoints_path: &Path,
+        ssh_helper: Option<&SshHelper>,
     ) -> RecoveryResult<(String, Height)> {
-        Self::get_checkpoint_names(checkpoints_path)?
+        let checkpoint_names = match ssh_helper {
+            Some(helper) => Self::get_checkpoint_names_remotely(checkpoints_path, helper)?,
+            None => Self::get_checkpoint_names_locally(checkpoints_path)?,
+        };
+
+        checkpoint_names
             .into_iter()
             .map(|name| parse_hex_str(&name).map(|height| (name, Height::from(height))))
             .collect::<RecoveryResult<Vec<_>>>()?
@@ -1202,7 +1252,7 @@ mod tests {
         );
 
         let (name, height) =
-            Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path())
+            Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path(), None)
                 .expect_graceful("Failed getting the latest checkpoint name and height");
 
         assert_eq!(name, "000000000000fd84");
@@ -1221,14 +1271,18 @@ mod tests {
             ],
         );
 
-        assert!(Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path()).is_err());
+        assert!(
+            Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path(), None).is_err()
+        );
     }
 
     #[test]
     fn get_latest_checkpoint_name_and_height_returns_error_when_no_checkpoints() {
         let checkpoints_dir = tmpdir("checkpoints");
 
-        assert!(Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path()).is_err());
+        assert!(
+            Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path(), None).is_err()
+        );
     }
 
     #[test]
@@ -1248,7 +1302,7 @@ mod tests {
 
         assert_eq!(height, Height::from(64900));
         assert_eq!(
-            Recovery::get_checkpoint_names(checkpoints_dir.path()).unwrap(),
+            Recovery::get_checkpoint_names_locally(checkpoints_dir.path()).unwrap(),
             vec![String::from("000000000000fd84")]
         );
     }

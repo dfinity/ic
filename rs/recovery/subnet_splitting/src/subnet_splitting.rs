@@ -327,7 +327,7 @@ impl SubnetSplitting {
         let checkpoints_dir = self.layout.checkpoints_dir(target_subnet);
 
         let (max_name, max_height) =
-            Recovery::get_latest_checkpoint_name_and_height(&checkpoints_dir)?;
+            Recovery::get_latest_checkpoint_name_and_height(&checkpoints_dir, None)?;
 
         let max_checkpoint_dir = checkpoints_dir.join(max_name);
         let state_hash = get_state_hash(max_checkpoint_dir)?;

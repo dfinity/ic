@@ -99,7 +99,8 @@ impl Layout {
     ) -> RecoveryResult<PathBuf> {
         let checkpoints_dir = self.checkpoints_dir(target_subnet);
 
-        let (max_name, _) = Recovery::get_latest_checkpoint_name_and_height(&checkpoints_dir)?;
+        let (max_name, _) =
+            Recovery::get_latest_checkpoint_name_and_height(&checkpoints_dir, None)?;
 
         Ok(checkpoints_dir.join(max_name))
     }

@@ -410,15 +410,12 @@ impl Step for CopyLocalIcStateStep {
 
         // State
         let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
-        let checkpoint_name_for_latest_cup = Recovery::get_checkpoint_name_for_latest_cup_height(
+        let checkpoint_name = Recovery::get_checkpoint_name_for_state_download(
             &self.logger,
             &PathBuf::from(&self.working_dir),
             None,
         )?;
-        info!(
-            self.logger,
-            "Found checkpoint for latest CUP: {checkpoint_name_for_latest_cup}"
-        );
+        info!(self.logger, "Found checkpoint: {checkpoint_name}");
 
         let recovery_checkpoints_path = PathBuf::from(&self.working_dir)
             .join("data")
@@ -435,7 +432,7 @@ impl Step for CopyLocalIcStateStep {
         );
         let mut cp = Command::new("cp");
         cp.arg("-R")
-            .arg(ic_checkpoints_path.join(checkpoint_name_for_latest_cup))
+            .arg(ic_checkpoints_path.join(checkpoint_name))
             .arg(recovery_checkpoints_path);
         confirm_exec_cmd(&mut cp, log)?;
 
@@ -629,7 +626,7 @@ impl Step for UploadStateAndRestartStep {
     fn exec(&self) -> RecoveryResult<()> {
         let account = SshUser::Admin;
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
-        let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
+        let checkpoints = Recovery::get_checkpoint_names_locally(&checkpoint_path)?;
 
         let [max_checkpoint] = checkpoints.as_slice() else {
             return Err(RecoveryError::invalid_output_error(
