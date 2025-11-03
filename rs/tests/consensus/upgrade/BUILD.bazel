@@ -11,6 +11,7 @@ rust_library(
     crate_name = "ic_consensus_system_test_upgrade_common",
     deps = [
         # Keep sorted.
+        "//rs/protobuf",
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/tecdsa/utils",
         "//rs/tests/consensus/utils",
@@ -19,8 +20,11 @@ rust_library(
         "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:candid",
+        "@crate_index//:hex",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-utils",
+        "@crate_index//:prost",
+        "@crate_index//:regex",
         "@crate_index//:slog",
     ],
 )
@@ -110,9 +114,11 @@ system_test_nns(
     ],
     test_driver_target = ":upgrade_test_bin",
     test_timeout = "eternal",  # the default 900 seconds (15 minutes) is not enough for this test, so we set it to 3600 seconds (1 hour).
-    uses_guestos_img = False,
-    uses_guestos_mainnet_nns_img = True,
-    uses_guestos_update = True,
+    uses_guestos_img = True, # TODO: DO NOT MERGE
+    # uses_guestos_img = False,
+    # uses_guestos_mainnet_nns_img = True,
+    # uses_guestos_update = True,
+    uses_guestos_test_update = True, # TODO: DO NOT MERGE
     runtime_deps =
         MESSAGE_CANISTER_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS,
