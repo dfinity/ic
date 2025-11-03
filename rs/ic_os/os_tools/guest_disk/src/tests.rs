@@ -56,6 +56,14 @@ impl<'a> TestFixture<'a> {
         }
     }
 
+    fn enable_sev(&mut self) {
+        self.guestos_config = Self::create_guestos_config(true);
+    }
+
+    fn disable_sev(&mut self) {
+        self.guestos_config = Self::create_guestos_config(false);
+    }
+
     fn create_guestos_config(enable_trusted_execution_environment: bool) -> GuestOSConfig {
         GuestOSConfig {
             config_version: "".to_string(),
@@ -476,4 +484,17 @@ fn test_cannot_open_store_when_no_key_works() {
         !result,
         "Expected can_open_store to return false when no key can open the device"
     );
+}
+
+#[test]
+fn test_cannot_open_with_generated_key_if_sev_is_enabled() {
+    for partition in [Partition::Store, Partition::Var] {
+        let mut fixture = TestFixture::new(false);
+        fixture.format(partition).unwrap();
+        fixture.open(partition).unwrap();
+        fixture.enable_sev();
+        fixture
+            .open(partition)
+            .expect_err("opening with generated key should fail when SEV is enabled");
+    }
 }
