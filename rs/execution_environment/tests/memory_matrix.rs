@@ -37,7 +37,7 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
     BoundedVec, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, CanisterSnapshotResponse,
-    LoadCanisterSnapshotArgs, LogVisibilityV2, Method, Payload as _,
+    DeleteCanisterSnapshotArgs, LoadCanisterSnapshotArgs, LogVisibilityV2, Method, Payload as _,
     ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
     TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
     UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
@@ -943,6 +943,37 @@ fn test_memory_suite_load_snapshot() {
     let params = ScenarioParams {
         scenario: Scenario::OtherManagement,
         memory_usage_change: MemoryUsageChange::Increase,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_delete_snapshot() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister_with_much_memory(test, canister_id);
+        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let res = test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        );
+        CanisterSnapshotResponse::decode(&get_reply(res))
+            .unwrap()
+            .id
+    };
+    let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
+        let delete_canister_snapshot_args =
+            DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
+        test.subnet_message(
+            Method::DeleteCanisterSnapshot,
+            delete_canister_snapshot_args.encode(),
+        )
+        .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
         setup,
         op,
     };
