@@ -16,7 +16,7 @@ use crate::{
         mutate_state, read_state,
     },
 };
-use evm_rpc_client::{CandidResponseConverter, EvmRpcClient, IcRuntime};
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient, IcRuntime};
 use evm_rpc_types::{Hex32, LogEntry};
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
@@ -234,7 +234,7 @@ where
 }
 
 async fn scrape_block_range<S>(
-    rpc_client: &EvmRpcClient<IcRuntime, CandidResponseConverter>,
+    rpc_client: &EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles>,
     contract_address: Address,
     topics: Vec<Topic>,
     block_range: BlockRangeInclusive,

@@ -26,7 +26,7 @@ pub const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
 
 pub const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
 
-pub fn rpc_client(state: &State) -> EvmRpcClient<IcRuntime, CandidResponseConverter> {
+pub fn rpc_client(state: &State) -> EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles> {
     const TOTAL_NUMBER_OF_PROVIDERS: u8 = 4;
     const MAX_NUM_RETRIES: u32 = 10;
 
