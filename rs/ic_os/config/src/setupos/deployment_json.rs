@@ -10,7 +10,7 @@ use url::Url;
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct DeploymentSettings {
     pub deployment: Deployment,
-    #[serde(default, skip_serializing)]
+    #[serde(default)]
     pub logging: Logging,
     pub nns: Nns,
     pub dev_vm_resources: VmResources,
@@ -21,7 +21,7 @@ pub struct DeploymentSettings {
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct CompatDeploymentSettings {
     pub deployment: Deployment,
-    #[serde(default, skip_serializing)]
+    #[serde(default)]
     pub logging: Logging,
     pub nns: Nns,
     pub vm_resources: Option<VmResources>,
