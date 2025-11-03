@@ -1,5 +1,5 @@
 {
-  "checksum": "79de85eb6ce6dfe590b59ddb74ba53893f30a177164b1315399421a98c11fef2",
+  "checksum": "fc82638fcc678bbcd7d98e0676f84f7a7b088c4eb705b7a6562cba16590670de",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11418,7 +11418,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/canbench.git",
           "commitish": {
-            "Rev": "0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43"
+            "Rev": "e8df43674c3bd635e49929094175294f148e8f41"
           },
           "strip_prefix": "canbench-bin"
         }
@@ -11544,7 +11544,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/canbench.git",
           "commitish": {
-            "Rev": "0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43"
+            "Rev": "e8df43674c3bd635e49929094175294f148e8f41"
           },
           "strip_prefix": "canbench-rs"
         }
@@ -11611,7 +11611,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/canbench.git",
           "commitish": {
-            "Rev": "0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43"
+            "Rev": "e8df43674c3bd635e49929094175294f148e8f41"
           },
           "strip_prefix": "canbench-rs-macros"
         }
@@ -34136,9 +34136,12 @@
       "version": "0.19.0-beta.3",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk/0.19.0-beta.3/download",
-          "sha256": "67f8b31e7df91b8b698afbfd7178b76e5299d379725ae09acc18b32dfa50725f"
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
+          },
+          "strip_prefix": "ic-cdk"
         }
       },
       "targets": [
@@ -34228,9 +34231,12 @@
       "version": "2.0.0-beta.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-executor/2.0.0-beta.1/download",
-          "sha256": "0aae561cd3dc1027c1ffe635b7cd7c76ea746c114d43daff58c4465beae9365e"
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
+          },
+          "strip_prefix": "ic-cdk-executor"
         }
       },
       "targets": [
@@ -34311,9 +34317,12 @@
       "version": "0.19.0-beta.3",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-macros/0.19.0-beta.3/download",
-          "sha256": "80d5de53544393a8b2a5e9cd7e76fd1f32a132c0356cf3126906a3d53ea81122"
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
+          },
+          "strip_prefix": "ic-cdk-macros"
         }
       },
       "targets": [
@@ -34374,9 +34383,12 @@
       "version": "1.0.0-beta.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-cdk-timers/1.0.0-beta.1/download",
-          "sha256": "a24de3439f066ca0130ecc22ba6482ed9ade84db2c20bb8ef3ac558c302e8a65"
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
+          },
+          "strip_prefix": "ic-cdk-timers"
         }
       },
       "targets": [
@@ -35257,9 +35269,12 @@
       "version": "0.4.1",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-management-canister-types/0.4.1/download",
-          "sha256": "8b5a939a84adbc30769d47e5de72c7b9f3713284e3ac87df4eb24795677a8df8"
+        "Git": {
+          "remote": "https://github.com/dfinity/cdk-rs.git",
+          "commitish": {
+            "Rev": "46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
+          },
+          "strip_prefix": "ic-management-canister-types"
         }
       },
       "targets": [
@@ -36108,7 +36123,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/vetkeys.git",
           "commitish": {
-            "Rev": "5f7d3dba3983fed8a11e7d9919910a0339e6620e"
+            "Rev": "2a11926730e6f3953c77f1b347984c7c6bb314c5"
           },
           "strip_prefix": "backend/rs/ic_vetkeys"
         }

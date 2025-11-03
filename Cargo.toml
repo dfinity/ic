@@ -614,7 +614,7 @@ bitcoin = { git = "https://github.com/dfinity/rust-dogecoin", rev = "cda2b5ec270
 build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7" }
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
 bytes = "1.9.0"
-canbench-rs = { git = "https://github.com/dfinity/canbench.git", rev = "0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43" } # branch lwshang/cdk_0.19
+canbench-rs = { git = "https://github.com/dfinity/canbench.git", rev = "e8df43674c3bd635e49929094175294f148e8f41" } # branch lwshang/cdk_0.19
 candid = { version = "0.10.17" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.38", default-features = false, features = [
@@ -683,8 +683,8 @@ ic-bn-lib = { git = "https://github.com/dfinity/ic-bn-lib", rev = "620fb49a238b3
 ic-btc-interface = "0.2.3"
 ic-canister-sig-creation = { git = "https://github.com/dfinity/ic-canister-sig-creation.git", rev = "c790e58434be9bf30e656b418c14f7862353a476" } # branch lwshang/no_dependency_on_ic_cdk
 ic-cbor = "3"
-ic-cdk = "0.19.0-beta.3"
-ic-cdk-timers = "1.0.0-beta.1"
+ic-cdk = { git = "https://github.com/dfinity/cdk-rs.git", rev = "46c13b59cf96c3032428a8c7b6a2912caa5d4c90" } # branch spofford/x-late-reply
+ic-cdk-timers = { git = "https://github.com/dfinity/cdk-rs.git", rev = "46c13b59cf96c3032428a8c7b6a2912caa5d4c90" } # branch spofford/x-late-reply
 ic-certificate-verification = "3"
 ic-certification = "3"
 ic-ed25519 = "0.4.0"
@@ -692,14 +692,14 @@ ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.3.0"
 ic-identity-hsm = "0.40.1"
-ic-management-canister-types = "0.4.1"
+ic-management-canister-types = { git = "https://github.com/dfinity/cdk-rs.git", rev = "46c13b59cf96c3032428a8c7b6a2912caa5d4c90" } # branch spofford/x-late-reply
 ic-response-verification = "3"
 ic-secp256k1 = "0.3.0"
 ic-sha3 = "1.0.0"
 ic-stable-structures = "0.6.8"
 ic-transport-types = { version = "0.40.1" }
 ic-utils = { version = "0.40.1", features = ["raw"] }
-ic-vetkeys = { git = "https://github.com/dfinity/vetkeys.git", rev = "5f7d3dba3983fed8a11e7d9919910a0339e6620e" } # branch lwshang/cdk_0.19
+ic-vetkeys = { git = "https://github.com/dfinity/vetkeys.git", rev = "2a11926730e6f3953c77f1b347984c7c6bb314c5" } # branch lwshang/cdk_0.19
 ic_bls12_381 = { version = "0.10.1", default-features = false, features = [
     "groups",
     "pairings",

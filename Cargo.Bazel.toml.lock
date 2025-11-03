@@ -1946,7 +1946,7 @@ dependencies = [
 [[package]]
 name = "canbench"
 version = "0.3.0"
-source = "git+https://github.com/dfinity/canbench.git?rev=0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43#0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43"
+source = "git+https://github.com/dfinity/canbench.git?rev=e8df43674c3bd635e49929094175294f148e8f41#e8df43674c3bd635e49929094175294f148e8f41"
 dependencies = [
  "canbench-rs",
  "candid",
@@ -1970,7 +1970,7 @@ dependencies = [
 [[package]]
 name = "canbench-rs"
 version = "0.3.0"
-source = "git+https://github.com/dfinity/canbench.git?rev=0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43#0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43"
+source = "git+https://github.com/dfinity/canbench.git?rev=e8df43674c3bd635e49929094175294f148e8f41#e8df43674c3bd635e49929094175294f148e8f41"
 dependencies = [
  "canbench-rs-macros",
  "candid",
@@ -1981,7 +1981,7 @@ dependencies = [
 [[package]]
 name = "canbench-rs-macros"
 version = "0.3.0"
-source = "git+https://github.com/dfinity/canbench.git?rev=0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43#0676b85dc0ed615ac5a075cbd3b97fa57d2f8b43"
+source = "git+https://github.com/dfinity/canbench.git?rev=e8df43674c3bd635e49929094175294f148e8f41#e8df43674c3bd635e49929094175294f148e8f41"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2051,7 +2051,7 @@ dependencies = [
  "candid",
  "canlog_derive",
  "ic-canister-log",
- "ic0",
+ "ic0 1.0.1",
  "regex",
  "serde",
  "serde_json",
@@ -3641,7 +3641,7 @@ dependencies = [
  "ic-vetkeys",
  "ic-wasm",
  "ic-xrc-types",
- "ic0",
+ "ic0 1.0.1",
  "ic_bls12_381",
  "ic_principal",
  "icrc1-test-env",
@@ -5872,7 +5872,7 @@ dependencies = [
  "hex",
  "ic-certification",
  "ic-representation-independent-hash",
- "ic0",
+ "ic0 1.0.1",
  "lazy_static",
  "serde",
  "serde_bytes",
@@ -5897,15 +5897,14 @@ dependencies = [
 [[package]]
 name = "ic-cdk"
 version = "0.19.0-beta.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67f8b31e7df91b8b698afbfd7178b76e5299d379725ae09acc18b32dfa50725f"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90#46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
 dependencies = [
  "candid",
  "ic-cdk-executor",
  "ic-cdk-macros",
  "ic-error-types",
  "ic-management-canister-types 0.4.1",
- "ic0",
+ "ic0 1.0.1",
  "pin-project-lite",
  "serde",
  "serde_bytes",
@@ -5916,10 +5915,9 @@ dependencies = [
 [[package]]
 name = "ic-cdk-executor"
 version = "2.0.0-beta.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0aae561cd3dc1027c1ffe635b7cd7c76ea746c114d43daff58c4465beae9365e"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90#46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
 dependencies = [
- "ic0",
+ "ic0 1.0.1",
  "slotmap",
  "smallvec",
 ]
@@ -5927,8 +5925,7 @@ dependencies = [
 [[package]]
 name = "ic-cdk-macros"
 version = "0.19.0-beta.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80d5de53544393a8b2a5e9cd7e76fd1f32a132c0356cf3126906a3d53ea81122"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90#46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
 dependencies = [
  "candid",
  "darling 0.20.11",
@@ -5940,11 +5937,10 @@ dependencies = [
 [[package]]
 name = "ic-cdk-timers"
 version = "1.0.0-beta.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a24de3439f066ca0130ecc22ba6482ed9ade84db2c20bb8ef3ac558c302e8a65"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90#46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
 dependencies = [
  "ic-cdk-executor",
- "ic0",
+ "ic0 1.0.1",
  "slotmap",
 ]
 
@@ -6128,8 +6124,7 @@ dependencies = [
 [[package]]
 name = "ic-management-canister-types"
 version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b5a939a84adbc30769d47e5de72c7b9f3713284e3ac87df4eb24795677a8df8"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90#46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
 dependencies = [
  "candid",
  "serde",
@@ -6285,7 +6280,7 @@ dependencies = [
 [[package]]
 name = "ic-vetkeys"
 version = "0.5.0"
-source = "git+https://github.com/dfinity/vetkeys.git?rev=5f7d3dba3983fed8a11e7d9919910a0339e6620e#5f7d3dba3983fed8a11e7d9919910a0339e6620e"
+source = "git+https://github.com/dfinity/vetkeys.git?rev=2a11926730e6f3953c77f1b347984c7c6bb314c5#2a11926730e6f3953c77f1b347984c7c6bb314c5"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -6343,6 +6338,11 @@ name = "ic0"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1499d08fd5be8f790d477e1865d63bab6a8d748300e141270c4296e6d5fdd6bc"
+
+[[package]]
+name = "ic0"
+version = "1.0.1"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90#46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
 
 [[package]]
 name = "ic_bls12_381"
