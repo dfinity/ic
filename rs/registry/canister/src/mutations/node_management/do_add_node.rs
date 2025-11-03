@@ -348,7 +348,6 @@ mod tests {
     use lazy_static::lazy_static;
     use maplit::btreemap;
     use prost::Message;
-    use std::str::FromStr;
 
     /// Prepares the payload to add a new node, for tests.
     pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePublicKeys) {
