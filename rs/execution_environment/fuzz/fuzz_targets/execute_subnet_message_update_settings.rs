@@ -37,7 +37,7 @@ fuzz_target!(|args: UpdateSettingsArgs| -> Corpus {
                 .canister_state(canister_id)
                 .system_state
                 .memory_allocation
-                .bytes()
+                .pre_allocated_bytes()
                 .get();
             let freezing_threshold = test
                 .canister_state(canister_id)

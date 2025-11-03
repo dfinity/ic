@@ -712,7 +712,6 @@ impl Player {
                 self.subnet_id,
                 &self.log,
                 replay_target_height,
-                None,
             ) {
                 Ok(h) => break h,
                 Err(MessageRoutingError::QueueIsFull) => std::thread::sleep(WAIT_DURATION),

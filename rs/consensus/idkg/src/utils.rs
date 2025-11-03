@@ -4,7 +4,7 @@ use crate::{
     complaints::{IDkgTranscriptLoader, TranscriptLoadStatus},
     metrics::{IDkgPayloadMetrics, IDkgPayloadStats},
 };
-use ic_consensus_utils::{RoundRobin, pool_reader::PoolReader};
+use ic_consensus_utils::{RoundRobin, pool_reader::PoolReader, range_len};
 use ic_crypto::get_master_public_key_from_transcript;
 use ic_interfaces::{
     consensus_pool::ConsensusBlockChain,
@@ -204,7 +204,7 @@ pub(super) fn block_chain_cache(
     end: Block,
 ) -> Result<Arc<dyn ConsensusBlockChain>, InvalidChainCacheError> {
     let end_height = end.height();
-    let expected_len = (end_height.get() - start_height.get() + 1) as usize;
+    let expected_len = range_len(start_height, end_height);
     let chain = pool_reader.pool().build_block_chain(start_height, end);
     let chain_len = chain.len();
     if chain_len == expected_len {

@@ -17,6 +17,7 @@ use ic_nervous_system_governance::index::{
     neuron_following::NeuronFollowingIndex, neuron_principal::NeuronPrincipalIndex,
 };
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
+use ic_nns_governance_api::NeuronInfo;
 use icp_ledger::{AccountIdentifier, Subaccount};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -30,6 +31,11 @@ pub mod voting_power;
 use crate::governance::RandomnessGenerator;
 use crate::pb::v1::{Ballot, Vote};
 pub(crate) use metrics::NeuronMetrics;
+
+// All information about a neuron can be up to 6 KiB.
+// To avoid hitting the message size limit of 2 MiB, we limit the
+// number of neurons returned in a single page to 300.
+pub const MAX_NEURON_PAGE_SIZE: u32 = 300;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum NeuronStoreError {
@@ -444,6 +450,7 @@ impl NeuronStore {
     pub fn has_neuron_with_account_id(&self, account_id: &AccountIdentifier) -> bool {
         self.get_neuron_id_for_account_id(account_id).is_some()
     }
+
     pub fn with_active_neurons_iter<R>(
         &self,
         callback: impl for<'b> FnOnce(Box<dyn Iterator<Item = Neuron> + 'b>) -> R,
@@ -529,6 +536,25 @@ impl NeuronStore {
     /// List all neuron ids of known neurons
     pub fn list_known_neuron_ids(&self) -> Vec<NeuronId> {
         with_stable_neuron_indexes(|indexes| indexes.known_neuron().list_known_neuron_ids())
+    }
+
+    pub fn list_all_neurons_paginated(
+        &self,
+        exclusive_start_id: NeuronId,
+        page_size: u32,
+        requester: PrincipalId,
+        now_seconds: u64,
+        voting_power_economics: &VotingPowerEconomics,
+    ) -> Vec<NeuronInfo> {
+        with_stable_neuron_store(|stable_store| {
+            stable_store
+                .range_neurons((Bound::Excluded(exclusive_start_id), Bound::Unbounded))
+                .take(page_size as usize)
+                .map(|neuron| {
+                    neuron.get_neuron_info(voting_power_economics, now_seconds, requester, true)
+                })
+                .collect()
+        })
     }
 
     /// List all neurons that are spawning

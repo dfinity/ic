@@ -11,6 +11,32 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-10-24: Proposal 139085
+
+http://dashboard.internetcomputer.org/proposal/139085
+
+## Added
+
+* New set_subnet_operational_level method. This is only callable by
+  Governance. Currently, Governance has no active code path (in release builds)
+  that calls this method. However, once the SetSubnetOperationalLevel proposal
+  type is enabled, this will effectively become an active feature. This will be
+  used in a slightly improved subnet recovery procedure. Thus, this would only
+  be used in rare extraordinary situations.
+
+## Changed
+
+* `ssh_node_state_write_access` can have at most 50 elements. Previously, there
+  was no limit. (This brings this field in line with other ssh_*_access fields.)
+
+# 2025-10-17: Proposal 138992
+
+https://dashboard.internetcomputer.org/proposal/138992
+
+## Changed
+
+Swapping out a node, if the subnet is halted in the registry, is disabled.
+
 # 2025-10-10: Proposal 138914
 
 http://dashboard.internetcomputer.org/proposal/138914
