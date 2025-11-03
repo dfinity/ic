@@ -5,10 +5,10 @@ use ic_base_types::CanisterId;
 use ic_nervous_system_agent::nns::sns_wasm;
 use ic_nns_constants::{
     BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
-    CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, NNS_UI_CANISTER_ID,
-    NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, DOGECOIN_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
+    GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID,
+    NNS_UI_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use reqwest::Client;
 use serde::Deserialize;
@@ -40,7 +40,7 @@ struct ExternalCanisterInfo<'a> {
     test_filename: Option<&'a str>,
 }
 
-const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 5] = [
+const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 6] = [
     (
         "cycles_ledger",
         ExternalCanisterInfo {
@@ -89,6 +89,16 @@ const EXTERNAL_CANISTER_NAME_TO_INFO: [(&str, ExternalCanisterInfo); 5] = [
             filename: "ic-btc-canister.wasm.gz",
             test_filename: None,
             canister_id: BITCOIN_TESTNET_CANISTER_ID,
+        },
+    ),
+    (
+        "dogecoin",
+        ExternalCanisterInfo {
+            repository: "dfinity/dogecoin-canister",
+            tag_name_prefix: Some("release/"),
+            filename: "ic-doge-canister.wasm.gz",
+            test_filename: None,
+            canister_id: DOGECOIN_CANISTER_ID,
         },
     ),
 ];

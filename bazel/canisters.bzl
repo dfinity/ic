@@ -147,13 +147,14 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
         did = service_file,
     )
 
-def motoko_canister(name, entry, deps):
+def motoko_canister(name, entry, deps, **kwargs):
     """Defines a Motoko program that builds into a WebAssembly module.
 
     Args:
       name: the name of the target that produces a Wasm module.
       entry: path to this canister's main Motoko source file.
       deps: list of actor dependencies, e.g., external_actor targets from @rules_motoko.
+      **kwargs: additional arguments to pass to motoko_binary (like `moc_flags`).
     """
 
     raw_wasm = entry.replace(".mo", ".raw")
@@ -171,6 +172,7 @@ def motoko_canister(name, entry, deps):
         idl_out = raw_did,
         wasm_out = raw_wasm,
         deps = deps,
+        **kwargs
     )
 
     finalize_wasm(
