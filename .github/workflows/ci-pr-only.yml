@@ -15,32 +15,22 @@ env:
   ORG: ${{ github.repository_owner }}
 
 jobs:
-  # This job is not run, but just used to set anchor references for other jobs
-  anchor-setup:
-    if: false
-    name: Anchor Setup
+  insta-tests:
+    name: Quick Feedback Tests
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
       image: ghcr.io/dfinity/ic-build@sha256:19aa596f49db34ece26a1a2903e6fabcd8766025b3dc543546fbef341ef910a2
       options: >-
          -e NODE_NAME
+    timeout-minutes: 30
+    if: ${{ github.event_name != 'merge_group' }}
     steps:
       - &checkout
         name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.commit-sha }}
-
-  insta-tests:
-    name: Quick Feedback Tests
-    runs-on: &dind-small-setup
-      labels: dind-small
-    container: *container-setup
-    timeout-minutes: 30
-    if: ${{ github.event_name != 'merge_group' }}
-    steps:
-      - *checkout
       - name: Run insta-tests
         uses: ./.github/actions/bazel
         with:

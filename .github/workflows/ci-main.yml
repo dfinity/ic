@@ -21,16 +21,15 @@ env:
   CI_RUN_ID: ${{ github.run_id }}
 
 jobs:
-  # This job is not run, but just used to set anchor references for other jobs
-  anchor-setup:
-    if: false
-    name: Anchor Setup
+  bazel-run-fuzzers:
+    name: Bazel Run Fuzzers
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
       image: ghcr.io/dfinity/ic-build@sha256:19aa596f49db34ece26a1a2903e6fabcd8766025b3dc543546fbef341ef910a2
       options: >-
          -e NODE_NAME --privileged --cgroupns host
+    timeout-minutes: 90
     steps:
       - &checkout
         name: Checkout
@@ -38,6 +37,16 @@ jobs:
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
           ref: ${{ inputs.commit-sha }}
+      - name: Run Libfuzzer targets
+        uses: ./.github/actions/bazel
+        with:
+          invocation-names: libfuzzer
+          run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
+      - name: Run AFL targets
+        uses: ./.github/actions/bazel
+        with:
+          invocation-names: afl
+          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
 
   config:
     name: Set Config
@@ -423,24 +432,6 @@ jobs:
           name: arm64 artifacts
           upload-command: bazel run --config=stamped //:artifact-uploader -- ${{ steps.prepare-bundle.outputs.bundledir }}
           credentials-content: ${{ secrets.CLOUD_CREDENTIALS_CONTENT }}
-
-  bazel-run-fuzzers:
-    name: Bazel Run Fuzzers
-    runs-on: *dind-large-setup
-    container: *container-setup
-    timeout-minutes: 90
-    steps:
-      - *checkout
-      - name: Run Libfuzzer targets
-        uses: ./.github/actions/bazel
-        with:
-          invocation-names: libfuzzer
-          run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
-      - name: Run AFL targets
-        uses: ./.github/actions/bazel
-        with:
-          invocation-names: afl
-          run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
 
   python-ci-tests:
     name: Python CI Tests
