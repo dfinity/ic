@@ -1,0 +1,48 @@
+name: CI Kickoff Manual
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit-sha:
+        description: 'The commit SHA to run the workflow on'
+        required: true
+        default: ''
+
+jobs:
+  ci-main:
+    name: CI Main
+    uses: ./.github/workflows/ci_main.yml
+    secrets: inherit
+    with:
+      commit-sha: ${{ inputs.commit-sha }}
+    permissions:
+      contents: read
+      pull-requests: read
+
+  ci-pr-only:
+    name: CI PR Only
+    uses: ./.github/workflows/ci-pr-only.yml
+    secrets: inherit
+    with:
+      commit-sha: ${{ inputs.commit-sha }}
+    permissions:
+      contents: read
+      pull-requests: write
+
+  post-commit-status:
+    name: Post Commit Status
+    runs-on: ubuntu-latest
+    needs: [ci-main, ci-pr-only]
+    if: success() || failure()
+    permissions:
+      contents: read
+      pull-requests: write
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit-sha }}
+      - uses: ./.github/actions/post-commit-status
+        with:
+          commit-sha: ${{ inputs.commit-sha }}
+          run-result: ${{ needs.ci-main.result }}
