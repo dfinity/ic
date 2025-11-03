@@ -50,12 +50,14 @@ rust_canister(
 rust_test(
     name = "mc_tests",
     srcs = glob(["src/**/*.rs"]),
+    compile_data = [":migration_canister.did"],
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
     deps = [
         # Keep sorted.
         "@crate_index//:candid",
+        "@crate_index//:candid_parser",
         "@crate_index//:futures",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-cdk-timers",

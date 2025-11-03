@@ -20,6 +20,7 @@ strum = { workspace = true }
 strum_macros = { workspace = true }
 
 [dev-dependencies]
+candid_parser = { workspace = true }
 pocket-ic = { path = "../../packages/pocket-ic" }
 tempfile = { workspace = true }
 tokio = { workspace = true }

@@ -1659,10 +1659,19 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::DeleteCanisterSnapshot) => {
+                let resource_saturation =
+                    self.subnet_memory_saturation(&round_limits.subnet_available_memory);
                 let res = DeleteCanisterSnapshotArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
-                    self.delete_canister_snapshot(*msg.sender(), &mut state, args, round_limits)
-                        .map(|res| (res, Some(canister_id)))
+                    self.delete_canister_snapshot(
+                        *msg.sender(),
+                        &mut state,
+                        args,
+                        round_limits,
+                        registry_settings.subnet_size,
+                        &resource_saturation,
+                    )
+                    .map(|res| (res, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
@@ -2574,6 +2583,8 @@ impl ExecutionEnvironment {
         state: &mut ReplicatedState,
         args: DeleteCanisterSnapshotArgs,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
+        resource_saturation: &ResourceSaturation,
     ) -> Result<Vec<u8>, UserError> {
         let canister_id = args.get_canister_id();
         // Take canister out.
@@ -2595,6 +2606,8 @@ impl ExecutionEnvironment {
                 args.get_snapshot_id(),
                 state,
                 round_limits,
+                subnet_size,
+                resource_saturation,
             )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into());
