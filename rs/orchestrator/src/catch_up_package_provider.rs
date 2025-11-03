@@ -47,7 +47,7 @@ use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
     consensus::{
-        HasHeight,
+        HasHeight, HasVersion,
         catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
     },
     crypto::*,
@@ -449,6 +449,17 @@ impl CatchUpPackageProvider {
         // recreate the CUP on all orchestrators of the version B before starting the replica.
         if height > local_cup_height || height == local_cup_height && !latest_cup.is_signed() {
             self.persist_cup(&latest_cup_proto)?;
+
+            info!(
+                self.logger,
+                "Persisted local CUP to disk: replica_version={}, registry_version={}, height={}, signed={}, state_hash={}, timestamp={}",
+                latest_cup.content.version(),
+                latest_cup.content.registry_version(),
+                latest_cup.content.height(),
+                latest_cup.is_signed(),
+                hex::encode(latest_cup.content.state_hash.clone().get().0),
+                latest_cup.content.block.get_value().context.time,
+            );
         }
 
         Ok(latest_cup)

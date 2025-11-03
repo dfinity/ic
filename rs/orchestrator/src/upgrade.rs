@@ -33,7 +33,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     path::PathBuf,
     sync::{Arc, Mutex},
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 const KEY_CHANGES_FILENAME: &str = "key_changed_metric.cbor";
@@ -319,6 +319,12 @@ impl Upgrade {
                 self.replica_version,
                 new_replica_version
             );
+
+            // Wait a bit to let Vector scrape the newest logs, in particular the one diplaying
+            // useful information about the latest local CUP (in `persist_cup()`), before
+            // rebooting.
+            tokio::time::sleep(Duration::from_secs(5)).await;
+
             // Only downloads the new image if it doesn't already exists locally, i.e. it
             // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
             // below.
