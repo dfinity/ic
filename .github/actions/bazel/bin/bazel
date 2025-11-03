@@ -78,14 +78,14 @@ if [[ $bazel_command == "build" ]] || [[ $bazel_command == "test" ]]; then
         --experimental_profile_include_target_label
     )
 
-    if [ -n "${BUILD_UUIDS:-}" ]; then
-        # here we pop "this_uuid=foo" from "BUILD_UUIDS=foo:bar:baz" leaving "BUILD_UUIDS="bar:baz"
-        this_uuid="${BUILD_UUIDS%%:*}"
-        BUILD_UUIDS="${BUILD_UUIDS#$this_uuid}"
-        BUILD_UUIDS="${BUILD_UUIDS#:}"
-        echo "BUILD_UUIDS=$BUILD_UUIDS" >> "$GITHUB_ENV" # update the env
+    if [ -n "${BAZEL_UUIDS_FILE:-}" ]; then
+        sponge=$(mktemp)
+        # pop the first line of the file into `this_uuid`
+        this_uuid=$(head -n1 <"$BAZEL_UUIDS_FILE")
+        tail -n +2 <"$BAZEL_UUIDS_FILE" > "$sponge"
+        mv "$sponge" "$BAZEL_UUIDS_FILE"
 
-        if [ -n "$this_uuid:-" ]; then
+        if [ -n "${this_uuid:-}" ]; then
             bazel_args+=(
                 --invocation_id="$this_uuid"
             )

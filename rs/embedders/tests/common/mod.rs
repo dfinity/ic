@@ -1,22 +1,21 @@
 use std::{convert::TryFrom, rc::Rc, sync::Arc};
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_config::{
-    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
-};
+use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerConfig};
 use ic_cycles_account_manager::{CyclesAccountManager, ResourceSaturation};
 use ic_embedders::wasmtime_embedder::system_api::{
     ApiType, DefaultOutOfInstructionsHandler, ExecutionParameters, InstructionLimits,
     SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
 };
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CallOrigin, Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages, SubnetTopology,
-    SystemState,
+    CallOrigin, Memory, NetworkTopology, NumWasmPages, SubnetTopology, SystemState,
 };
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::ids::{
@@ -40,7 +39,6 @@ const SUBNET_MEMORY_CAPACITY: i64 = i64::MAX / 2;
 pub fn execution_parameters(execution_mode: ExecutionMode) -> ExecutionParameters {
     ExecutionParameters {
         instruction_limits: InstructionLimits::new(
-            FlagStatus::Disabled,
             NumInstructions::from(5_000_000_000),
             NumInstructions::from(5_000_000_000),
         ),
@@ -247,7 +245,12 @@ pub fn get_system_state() -> SystemState {
         .build();
     system_state
         .new_call_context(
-            CallOrigin::CanisterUpdate(canister_test_id(33), CallbackId::from(5), NO_DEADLINE),
+            CallOrigin::CanisterUpdate(
+                canister_test_id(33),
+                CallbackId::from(5),
+                NO_DEADLINE,
+                String::from(""),
+            ),
             Cycles::new(50),
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),

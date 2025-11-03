@@ -16,17 +16,18 @@ use crate::{
     },
 };
 use ic_base_types::NumSeconds;
-use ic_config::flag_status::FlagStatus;
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
     subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
-use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, SystemState};
+use ic_replicated_state::{Memory, NetworkTopology, SystemState};
 use ic_sys::PageIndex;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;
@@ -86,11 +87,7 @@ fn test_wasmtime_system_api() {
         canister_current_memory_usage,
         canister_current_message_memory_usage,
         ExecutionParameters {
-            instruction_limits: InstructionLimits::new(
-                FlagStatus::Disabled,
-                MAX_NUM_INSTRUCTIONS,
-                MAX_NUM_INSTRUCTIONS,
-            ),
+            instruction_limits: InstructionLimits::new(MAX_NUM_INSTRUCTIONS, MAX_NUM_INSTRUCTIONS),
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
             canister_guaranteed_callback_quota: HypervisorConfig::default()

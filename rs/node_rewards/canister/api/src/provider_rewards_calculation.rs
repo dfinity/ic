@@ -1,7 +1,6 @@
 pub use crate::DateUtc;
 use candid::{CandidType, Deserialize};
 use ic_base_types::{PrincipalId, SubnetId};
-use ic_nervous_system_proto::pb::v1::Decimal;
 use std::collections::BTreeMap;
 
 #[derive(CandidType, Clone, Deserialize)]
@@ -10,7 +9,7 @@ pub struct GetNodeProvidersRewardsCalculationRequest {
 }
 
 // TODO: Remove useless level of indirection: https://github.com/dfinity/ic/pull/7071/files#r2406450031
-pub type GetNodeProviderRewardsCalculationResponse = Result<DailyResults, String>;
+pub type GetNodeProvidersRewardsCalculationResponse = Result<DailyResults, String>;
 
 // These are API-facing types with all fields wrapped in `Option`
 // to ensure forward compatibility. This way, new fields can be added
@@ -20,19 +19,19 @@ pub type GetNodeProviderRewardsCalculationResponse = Result<DailyResults, String
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct NodeMetricsDaily {
     pub subnet_assigned: Option<PrincipalId>,
-    pub subnet_assigned_fr_percent: Option<Decimal>,
+    pub subnet_assigned_failure_rate: Option<f64>,
     pub num_blocks_proposed: Option<u64>,
     pub num_blocks_failed: Option<u64>,
-    pub original_fr_percent: Option<Decimal>,
-    pub relative_fr_percent: Option<Decimal>,
+    pub original_failure_rate: Option<f64>,
+    pub relative_failure_rate: Option<f64>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
-pub enum NodeStatus {
-    Assigned {
+pub enum DailyNodeFailureRate {
+    SubnetMember {
         node_metrics: Option<NodeMetricsDaily>,
     },
-    Unassigned {
-        extrapolated_fr_percent: Option<Decimal>,
+    NonSubnetMember {
+        extrapolated_failure_rate: Option<f64>,
     },
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
@@ -41,36 +40,36 @@ pub struct DailyNodeRewards {
     pub node_reward_type: Option<String>,
     pub region: Option<String>,
     pub dc_id: Option<String>,
-    pub node_status: Option<NodeStatus>,
-    pub performance_multiplier_percent: Option<Decimal>,
-    pub rewards_reduction_percent: Option<Decimal>,
-    pub base_rewards_xdr_permyriad: Option<Decimal>,
-    pub adjusted_rewards_xdr_permyriad: Option<Decimal>,
+    pub daily_node_failure_rate: Option<DailyNodeFailureRate>,
+    pub performance_multiplier: Option<f64>,
+    pub rewards_reduction: Option<f64>,
+    pub base_rewards_xdr_permyriad: Option<u64>,
+    pub adjusted_rewards_xdr_permyriad: Option<u64>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
-pub struct BaseRewardsSpec {
-    pub monthly_xdr_permyriad: Option<Decimal>,
-    pub daily_xdr_permyriad: Option<Decimal>,
+pub struct NodeTypeRegionBaseRewards {
+    pub monthly_xdr_permyriad: Option<u64>,
+    pub daily_xdr_permyriad: Option<u64>,
     pub node_reward_type: Option<String>,
     pub region: Option<String>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
-pub struct Type3BaseRewardsSpec {
+pub struct Type3RegionBaseRewards {
     pub region: Option<String>,
     pub nodes_count: Option<u64>,
-    pub avg_rewards_xdr_permyriad: Option<Decimal>,
-    pub avg_coefficient_percent: Option<Decimal>,
-    pub value_xdr_permyriad: Option<Decimal>,
+    pub avg_rewards_xdr_permyriad: Option<u64>,
+    pub avg_coefficient: Option<f64>,
+    pub daily_xdr_permyriad: Option<u64>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct DailyNodeProviderRewards {
-    pub rewards_total_xdr_permyriad: Option<Decimal>,
-    pub base_rewards: Vec<BaseRewardsSpec>,
-    pub base_rewards_type3: Vec<Type3BaseRewardsSpec>,
+    pub rewards_total_xdr_permyriad: Option<u64>,
+    pub base_rewards: Vec<NodeTypeRegionBaseRewards>,
+    pub base_rewards_type3: Vec<Type3RegionBaseRewards>,
     pub daily_nodes_rewards: Vec<DailyNodeRewards>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct DailyResults {
-    pub subnets_fr: BTreeMap<SubnetId, Decimal>,
+    pub subnets_failure_rate: BTreeMap<SubnetId, f64>,
     pub provider_results: BTreeMap<PrincipalId, DailyNodeProviderRewards>,
 }

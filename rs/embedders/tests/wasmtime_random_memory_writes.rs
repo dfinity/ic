@@ -1,6 +1,6 @@
 use ic_config::{
     embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
-    flag_status::FlagStatus, subnet_config::SchedulerConfig,
+    subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
 use ic_embedders::{
@@ -11,10 +11,12 @@ use ic_embedders::{
         SystemApiImpl, sandbox_safe_system_state::SandboxSafeSystemState,
     },
 };
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+};
 use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, NumWasmPages};
+use ic_replicated_state::{Memory, NetworkTopology, NumWasmPages};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_execution_environment::bytes_and_logging_cost;
@@ -98,11 +100,7 @@ fn test_api_for_update(
         canister_current_memory_usage,
         canister_current_message_memory_usage,
         ExecutionParameters {
-            instruction_limits: InstructionLimits::new(
-                FlagStatus::Disabled,
-                instruction_limit,
-                instruction_limit,
-            ),
+            instruction_limits: InstructionLimits::new(instruction_limit, instruction_limit),
             wasm_memory_limit: None,
             memory_allocation: MemoryAllocation::default(),
             canister_guaranteed_callback_quota: HypervisorConfig::default()

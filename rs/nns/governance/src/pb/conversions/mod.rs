@@ -3884,6 +3884,9 @@ impl From<pb::NnsFunction> for pb_api::NnsFunction {
             pb::NnsFunction::UnpauseCanisterMigrations => {
                 pb_api::NnsFunction::UnpauseCanisterMigrations
             }
+            pb::NnsFunction::SetSubnetOperationalLevel => {
+                pb_api::NnsFunction::SetSubnetOperationalLevel
+            }
         }
     }
 }
@@ -3989,6 +3992,9 @@ impl From<pb_api::NnsFunction> for pb::NnsFunction {
             }
             pb_api::NnsFunction::UnpauseCanisterMigrations => {
                 pb::NnsFunction::UnpauseCanisterMigrations
+            }
+            pb_api::NnsFunction::SetSubnetOperationalLevel => {
+                pb::NnsFunction::SetSubnetOperationalLevel
             }
         }
     }

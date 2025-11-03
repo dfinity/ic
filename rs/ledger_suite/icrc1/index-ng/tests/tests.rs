@@ -1,7 +1,7 @@
 use crate::common::{
     ARCHIVE_TRIGGER_THRESHOLD, FEE, MAX_BLOCKS_FROM_ARCHIVE, account, default_archive_options,
-    index_ng_wasm, install_index_ng, install_ledger, ledger_get_all_blocks, ledger_wasm,
-    wait_until_sync_is_completed,
+    index_ng_wasm, install_icrc3_test_ledger, install_index_ng, install_ledger,
+    ledger_get_all_blocks, ledger_wasm, parse_index_logs, wait_until_sync_is_completed,
 };
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::identity::Identity;
@@ -11,12 +11,19 @@ use ic_icrc1_index_ng::{
     GetAccountTransactionsResponse, GetAccountTransactionsResult, GetBlocksResponse, IndexArg,
     InitArg as IndexInitArg, ListSubaccountsArgs, TransactionWithId,
 };
-use ic_icrc1_ledger::{ChangeFeeCollector, LedgerArgument, UpgradeArgs as LedgerUpgradeArgs};
+use ic_icrc1_ledger::{
+    ChangeFeeCollector, LedgerArgument, Tokens, UpgradeArgs as LedgerUpgradeArgs,
+};
 use ic_icrc1_test_utils::{
-    ArgWithCaller, LedgerEndpointArg, minter_identity, valid_transactions_strategy,
+    ArgWithCaller, LedgerEndpointArg, icrc3::BlockBuilder, minter_identity,
+    valid_transactions_strategy,
+};
+use ic_ledger_suite_state_machine_helpers::{
+    add_block, archive_blocks, get_logs, set_icrc3_enabled,
 };
 use ic_ledger_suite_state_machine_tests::test_http_request_decoding_quota;
 use ic_state_machine_tests::StateMachine;
+use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc2::approve::{ApproveArgs, ApproveError};
@@ -350,6 +357,12 @@ fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_i
             );
         }
     }
+    // Verify there are no errors in the index log.
+    assert!(
+        parse_index_logs(&get_logs(env, index_id))
+            .entries
+            .is_empty()
+    );
 }
 
 #[cfg(any(feature = "get_blocks_disabled", feature = "icrc3_disabled"))]
@@ -454,6 +467,107 @@ fn test_ledger_growing() {
     );
 }
 
+// With 6 blocks we can store 2 blocks in 2 archives and the ledger each.
+// This way we can test all possible locations for the unknown block:
+// - ledger/archive
+// - last/not-last archive
+// - last block/not last block in the archive/ledger
+const NUM_BLOCKS: u64 = 6;
+
+fn verify_unknown_block_handling(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    index_id: CanisterId,
+    bad_block_index: u64,
+) {
+    const TEST_ACCOUNT: Account = Account {
+        owner: PrincipalId::new_user_test_id(44).0,
+        subaccount: None,
+    };
+
+    for i in 0..NUM_BLOCKS {
+        let block = BlockBuilder::new(i, i)
+            .mint(TEST_ACCOUNT, Tokens::from(1u64))
+            .build();
+        let block = if i == bad_block_index {
+            let mut bad_block = match block {
+                ICRC3Value::Map(btree_map) => btree_map,
+                _ => panic!("block should be a map"),
+            };
+            bad_block.insert("unknown_key".to_string(), ICRC3Value::Nat(Nat::from(0u64)));
+            ICRC3Value::Map(bad_block)
+        } else {
+            block
+        };
+        add_block(env, ledger_id, &block).expect("failed adding block to the ledger");
+    }
+
+    let archive1 = install_icrc3_test_ledger(env);
+    let archive2 = install_icrc3_test_ledger(env);
+    let archived_count = archive_blocks(env, ledger_id, archive1, 2);
+    assert_eq!(archived_count, 2);
+    let archived_count = archive_blocks(env, ledger_id, archive2, 2);
+    assert_eq!(archived_count, 2);
+
+    // Advance more than once to make sure the indexing was stopped.
+    for _ in 0..3 {
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+    }
+
+    let ledger_blocks = ledger_get_all_blocks(env, ledger_id, 0, u64::MAX);
+    let index_blocks = index_get_all_blocks(env, index_id, 0, u64::MAX);
+    assert_eq!(ledger_blocks.chain_length, NUM_BLOCKS);
+    assert_eq!(index_blocks.chain_length, bad_block_index);
+
+    assert_eq!(
+        icrc1_balance_of(env, index_id, TEST_ACCOUNT),
+        bad_block_index
+    );
+
+    let logs = parse_index_logs(&get_logs(env, index_id));
+    let mut error_count = 0;
+    let mut stopping_message = false;
+    for entry in logs.entries {
+        if entry.message.contains(&format!(
+            "Block at index {} has unknown fields.",
+            bad_block_index
+        )) {
+            error_count += 1;
+        }
+        if entry.message.contains("Stopping the indexing timer.") {
+            stopping_message = true;
+        }
+    }
+    // This additionally checks whether the indexing was stopped.
+    assert_eq!(error_count, 1);
+    assert!(stopping_message);
+}
+
+#[test]
+fn test_unknown_block_icrc3() {
+    for bad_block_index in 0..NUM_BLOCKS {
+        let env = &StateMachine::new();
+        let ledger_id = install_icrc3_test_ledger(env);
+        let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+        verify_unknown_block_handling(env, ledger_id, index_id, bad_block_index);
+    }
+}
+
+#[test]
+fn test_unknown_block_legacy() {
+    for bad_block_index in 0..NUM_BLOCKS {
+        let env = &StateMachine::new();
+        let ledger_id = install_icrc3_test_ledger(env);
+        let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+        set_icrc3_enabled(env, ledger_id, false);
+
+        verify_unknown_block_handling(env, ledger_id, index_id, bad_block_index);
+    }
+}
+
 #[test]
 fn test_archive_indexing() {
     let env = &StateMachine::new();
@@ -541,6 +655,7 @@ fn test_get_account_transactions() {
                 amount: 1_000_000_000_000_u64.into(),
                 created_at_time: None,
                 memo: None,
+                fee: None,
             },
             0,
         ),
@@ -674,6 +789,7 @@ fn test_get_account_transactions_start_length() {
                     amount: (i * 10_000).into(),
                     created_at_time: None,
                     memo: None,
+                    fee: None,
                 },
                 0,
             ),
@@ -768,6 +884,7 @@ fn test_get_account_transactions_pagination() {
                         amount: (id * 10_000).into(),
                         created_at_time: None,
                         memo: None,
+                        fee: None,
                     }),
                     transfer: None,
                     approve: None,
@@ -1276,12 +1393,9 @@ mod metrics {
 #[cfg(not(feature = "icrc3_disabled"))]
 mod fees_in_burn_and_mint_blocks {
     use super::*;
-    use crate::common::STARTING_CYCLES_PER_CANISTER;
     use ic_icrc1_ledger::Tokens;
     use ic_icrc1_test_utils::icrc3::BlockBuilder;
-    use ic_icrc3_test_ledger::AddBlockResult;
     use ic_types::time::GENESIS;
-    use icrc_ledger_types::icrc::generic_value::ICRC3Value;
 
     #[test]
     fn should_take_mint_block_fee_into_account() {
@@ -1301,14 +1415,7 @@ mod fees_in_burn_and_mint_blocks {
 
         let env = StateMachine::new();
 
-        let ledger_id = env
-            .install_canister_with_cycles(
-                test_ledger_wasm(),
-                Encode!(&()).unwrap(),
-                None,
-                ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
-            )
-            .unwrap();
+        let ledger_id = install_icrc3_test_ledger(&env);
 
         let mint = BlockBuilder::new(0, GENESIS.as_nanos_since_unix_epoch())
             .with_fee(Tokens::from(MINT_FEE))
@@ -1371,14 +1478,7 @@ mod fees_in_burn_and_mint_blocks {
 
         let env = StateMachine::new();
 
-        let ledger_id = env
-            .install_canister_with_cycles(
-                test_ledger_wasm(),
-                Encode!(&()).unwrap(),
-                None,
-                ic_types::Cycles::new(STARTING_CYCLES_PER_CANISTER),
-            )
-            .unwrap();
+        let ledger_id = install_icrc3_test_ledger(&env);
 
         let mint = BlockBuilder::new(0, GENESIS.as_nanos_since_unix_epoch())
             .with_fee_collector(FEE_COLLECTOR_ACCOUNT)
@@ -1433,31 +1533,5 @@ mod fees_in_burn_and_mint_blocks {
             "Actual fee collector balance does not match expected balance after burn block ({} vs {})",
             actual_fee_collector_balance, BURN_FEE
         );
-    }
-
-    fn add_block(
-        env: &StateMachine,
-        canister_id: CanisterId,
-        block: &ICRC3Value,
-    ) -> Result<Nat, String> {
-        Decode!(
-            &env.execute_ingress(canister_id, "add_block", Encode!(block).unwrap())
-                .expect("failed to add block")
-                .bytes(),
-            AddBlockResult
-        )
-        .expect("failed to decode add_block response")
-    }
-
-    fn test_ledger_wasm() -> Vec<u8> {
-        let ledger_wasm_path = std::env::var("IC_ICRC3_TEST_LEDGER_WASM_PATH").expect(
-            "The Ledger wasm path must be set using the env variable IC_ICRC3_TEST_LEDGER_WASM_PATH",
-        );
-        std::fs::read(&ledger_wasm_path).unwrap_or_else(|e| {
-            panic!(
-                "failed to load Wasm file from path {} (env var IC_ICRC3_TEST_LEDGER_WASM_PATH): {}",
-                ledger_wasm_path, e
-            )
-        })
     }
 }

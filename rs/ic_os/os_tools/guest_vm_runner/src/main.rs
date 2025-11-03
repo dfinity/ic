@@ -143,9 +143,9 @@ impl VirtualMachine {
         vm_domain_name: &str,
     ) -> Result<Self> {
         // Check if a domain with the same name already exists and, if so, try to destroy it
-        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name).context(
-            "Unable to create new domain while existing domain '{vm_domain_name}' exists.",
-        )?;
+        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name).with_context(|| {
+            format!("Unable to create new domain while existing domain '{vm_domain_name}' exists.")
+        })?;
 
         let mut retries = 3;
         let domain = loop {
@@ -636,8 +636,8 @@ mod tests {
     use super::*;
     use crate::systemd_notifier::testing::MockSystemdNotifier;
     use config_types::{
-        DeploymentEnvironment, DeterministicIpv6Config, HostOSSettings, ICOSSettings,
-        NetworkSettings,
+        DeploymentEnvironment, DeterministicIpv6Config, HostOSDevSettings, HostOSSettings,
+        ICOSSettings, NetworkSettings,
     };
     use ic_device::mount::GptPartitionProvider;
     use ic_device::mount::testing::ExtractingFilesystemMounter;
@@ -893,11 +893,17 @@ mod tests {
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
             },
+            #[allow(deprecated)]
             hostos_settings: HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 16,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
                 verbose: false,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
             },
             guestos_settings: Default::default(),
         }
@@ -905,7 +911,10 @@ mod tests {
 
     fn invalid_hostos_config() -> HostOSConfig {
         let mut hostos_config = valid_hostos_config();
-        hostos_config.hostos_settings.vm_nr_of_vcpus = 0;
+        hostos_config
+            .hostos_settings
+            .hostos_dev_settings
+            .vm_nr_of_vcpus = 0;
         hostos_config
     }
 

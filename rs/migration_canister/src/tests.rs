@@ -1,3 +1,4 @@
+//! Unit tests
 use candid::Principal;
 
 use crate::{

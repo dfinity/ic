@@ -40,7 +40,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:9cfd9ecc6f751d631b74058643233aecc75a6d4b18501ae0c9fd0f2c1a110ac4
+      image: ghcr.io/dfinity/ic-build@sha256:19aa596f49db34ece26a1a2903e6fabcd8766025b3dc543546fbef341ef910a2
       options: >-
          -e NODE_NAME --privileged --cgroupns host
     steps:
@@ -164,23 +164,15 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
-      - name: Generate Bazel invocation IDs
-        run: |
-          build_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link (build): 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
-          echo "[BuildBuddy link (build)](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
-
-          test_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link (test): 'https://dash.idx.dfinity.network/invocation/$test_uuid'"
-          echo "[BuildBuddy link (build)](https://dash.idx.dfinity.network/invocation/$test_uuid)" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "BUILD_UUIDS=$build_uuid:$test_uuid" >> "$GITHUB_ENV"
 
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         with:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
           execlogs-artifact-name: execlogs-bazel-test-all
+          invocation-names: |
+            build
+            test
           run: |
             set -euo pipefail
 
@@ -280,36 +272,29 @@ jobs:
     if: github.repository == 'dfinity/ic'
     steps:
       - *checkout
-      - name: Generate Bazel invocation IDs (build)
-        run: |
-          build_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link (eval): 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
-          echo "[BuildBuddy link (eval)](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
-          echo "BUILD_UUIDS=$build_uuid" >> "$GITHUB_ENV"
-
         # The amd64-darwin runners are pretty slow so we don't always run the tests -- we do however
         # wanna make sure bazel evaluates successfully.
       - name: Evaluate workspace
         uses: ./.github/actions/bazel
         with:
+          invocation-names: eval
           run: |
             bazel build \
               --config=stamped \
               --build_tag_filters=test_all_platforms \
               //... --nobuild
 
-      - name: Generate Bazel invocation ID (test)
-        if: ${{ needs.config.outputs.full_macos_build == 'true' }}
-        run: |
-          test_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link (build): 'https://dash.idx.dfinity.network/invocation/$test_uuid'"
-          echo "[BuildBuddy link (build)](https://dash.idx.dfinity.network/invocation/$test_uuid)" >> "$GITHUB_STEP_SUMMARY"
-          echo "BUILD_UUIDS=$test_uuid" >> "$GITHUB_ENV"
+            # make sure the artifacts always evaluate successfully even if we don't
+            # upload them
+            bazel build \
+              --config=stamped \
+              //:upload-artifacts --nobuild
 
       - name: Build & Test
         if: ${{ needs.config.outputs.full_macos_build == 'true' }}
         uses: ./.github/actions/bazel
         with:
+          invocation-names: build
           run: |
             bazel test \
               --config=stamped \
@@ -354,14 +339,7 @@ jobs:
           # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
           nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
       - uses: actions/checkout@v4
-      # We need to use lld on aarch64-linux because the default gold linker runs into the following linker bug:
-      # /usr/bin/ld.gold: internal error in update_erratum_insn, at ../../gold/aarch64.cc:1003
-      - name: Install lld
-        if: ${{ matrix.os == 'linux' }}
-        run: |
-          sudo apt install lld
-
-      - name: Build PocketIC server to publish
+      - name: Build and Test
         run: |
           bazel \
             --noworkspace_rc \
@@ -467,10 +445,12 @@ jobs:
       - name: Run Libfuzzer targets
         uses: ./.github/actions/bazel
         with:
+          invocation-names: libfuzzer
           run: ./bin/fuzzing/run-all-fuzzers.sh --libfuzzer 100
       - name: Run AFL targets
         uses: ./.github/actions/bazel
         with:
+          invocation-names: afl
           run: ./bin/fuzzing/run-all-fuzzers.sh --afl 100
 
   python-ci-tests:
@@ -511,12 +491,6 @@ jobs:
       - name: "Node Name"
         run: |
           echo "::notice::Node Name: ${NODE_NAME}"
-      - name: Generate Bazel invocation IDs
-        run: |
-          build_uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link: 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
-          echo "[BuildBuddy link](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
-          echo "BUILD_UUIDS=$build_uuid" >> "$GITHUB_ENV"
       - name: Run Build IC
         uses: ./.github/actions/bazel
         with:
@@ -646,12 +620,6 @@ jobs:
     timeout-minutes: 90
     steps:
       - *checkout
-      - name: Generate Bazel invocation IDs
-        run: |
-          uuid=$(python3 -c 'import uuid; print(uuid.uuid4())')
-          echo "BuildBuddy link (build): 'https://dash.idx.dfinity.network/invocation/$build_uuid'"
-          echo "[BuildBuddy link (build)](https://dash.idx.dfinity.network/invocation/$build_uuid)" >> "$GITHUB_STEP_SUMMARY"
-          echo "BUILD_UUIDS=$build_uuid:$test_uuid" >> "$GITHUB_ENV"
       - name: Run Bazel Build All No Cache
         uses: ./.github/actions/bazel
         with:
@@ -707,3 +675,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Check PULL_REQUEST_BAZEL_TARGETS
         run: ./ci/scripts/targets.py check
+
+# only run on pull-request event - they are also triggered from schedule-daily.yml
+  pocket-ic-tests-windows:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/pocket-ic-tests-windows.yml
+    with:
+      commit-sha: ${{ github.sha }}

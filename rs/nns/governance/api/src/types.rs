@@ -48,6 +48,8 @@ pub struct BallotInfo {
     candid::CandidType, candid::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug, Default,
 )]
 pub struct NeuronInfo {
+    /// The unique identifier of the neuron.
+    pub id: Option<NeuronId>,
     /// The exact time at which this data was computed. This means, for
     /// example, that the exact time that this neuron will enter the
     /// dissolved state, assuming it is currently dissolving, is given
@@ -4102,6 +4104,19 @@ pub enum NnsFunction {
     PauseCanisterMigrations = 53,
     /// Instruct the migration canister to accept migration requests again.
     UnpauseCanisterMigrations = 54,
+    /// For taking a subnet offline for repairs, as well as back online. These
+    /// are the first and last steps in subnet recovery.
+    ///
+    /// The primary thing this does is set the `halted` field in `SubnetRecord`.
+    /// However, there are a couple of secondary changes that this also does:
+    ///
+    ///     1. Set the `ssh_read_only_access` field in `SubnetRecord`.
+    ///     2. Set the `ssh_node_state_write_access` field in `NodeRecord`.
+    ///
+    /// When there is a DFINITY node where SEV is not enabled in the subnet,
+    /// UpdateConfigOfSubnet can be used instead. But otherwise, this is the
+    /// state of the art (as of Oct 2025) way of doing subnet recovery.
+    SetSubnetOperationalLevel = 55,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -4184,6 +4199,7 @@ impl NnsFunction {
             NnsFunction::SubnetRentalRequest => "NNS_FUNCTION_SUBNET_RENTAL_REQUEST",
             NnsFunction::PauseCanisterMigrations => "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS",
             NnsFunction::UnpauseCanisterMigrations => "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS",
+            NnsFunction::SetSubnetOperationalLevel => "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -4263,6 +4279,7 @@ impl NnsFunction {
             "NNS_FUNCTION_SUBNET_RENTAL_REQUEST" => Some(Self::SubnetRentalRequest),
             "NNS_FUNCTION_PAUSE_CANISTER_MIGRATIONS" => Some(Self::PauseCanisterMigrations),
             "NNS_FUNCTION_UNPAUSE_CANISTER_MIGRATIONS" => Some(Self::UnpauseCanisterMigrations),
+            "NNS_FUNCTION_SET_SUBNET_OPERATIONAL_LEVEL" => Some(Self::SetSubnetOperationalLevel),
             _ => None,
         }
     }
@@ -4429,15 +4446,15 @@ pub struct MaturityDisbursement {
     candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
 )]
 pub struct GetNeuronIndexRequest {
-    exclusive_start_neuron_id: Option<NeuronId>,
-    page_size: Option<u32>,
+    pub exclusive_start_neuron_id: Option<NeuronId>,
+    pub page_size: Option<u32>,
 }
 
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
 )]
 pub struct NeuronIndexData {
-    neurons: Vec<NeuronInfo>,
+    pub neurons: Vec<NeuronInfo>,
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]

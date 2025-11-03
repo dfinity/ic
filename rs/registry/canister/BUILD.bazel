@@ -85,6 +85,7 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:candid_parser",
     "@crate_index//:itertools",
+    "@crate_index//:pretty_assertions",
     "@crate_index//:rand",
     "@crate_index//:rand_distr",
     "@crate_index//:serde_json",
