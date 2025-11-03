@@ -30,21 +30,19 @@
 // Happy testing!
 
 use anyhow::Result;
+use ic_consensus_system_test_subnet_recovery::utils::{
+    AdminAndUserKeys, break_nodes, get_admin_keys_and_generate_backup_keys,
+    node_with_highest_certification_share_height,
+};
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nested_nns_recovery_common::{
-    BACKUP_USERNAME, SetupConfig, grant_backup_access_to_all_nns_nodes,
-    replace_nns_with_unassigned_nodes,
-};
-use ic_recovery::get_node_metrics;
-use ic_system_test_driver::driver::driver_setup::{
-    SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
+    SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes,
 };
 use ic_system_test_driver::driver::nested::HasNestedVms;
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
-use ic_system_test_driver::driver::test_env::{SshKeyGen, TestEnv, TestEnvAttribute};
+use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
-use ic_system_test_driver::util::block_on;
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use slog::{info, warn};
 use std::time::Duration;
@@ -96,19 +94,15 @@ fn log_instructions(env: TestEnv) {
         );
     }
 
-    // Generate a new backup keypair
-    env.ssh_keygen_for_user(BACKUP_USERNAME)
-        .expect("ssh-keygen failed for backup key");
-    let ssh_backup_priv_key_path = env
-        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
-        .join(BACKUP_USERNAME);
-    let ssh_backup_pub_key_path = env
-        .get_path(SSH_AUTHORIZED_PUB_KEYS_DIR)
-        .join(BACKUP_USERNAME);
+    let AdminAndUserKeys {
+        user_auth: backup_auth,
+        ssh_user_pub_key: ssh_backup_pub_key,
+        ..
+    } = get_admin_keys_and_generate_backup_keys(&env);
 
     nested::registration(env.clone());
     replace_nns_with_unassigned_nodes(&env);
-    grant_backup_access_to_all_nns_nodes(&env, &ssh_backup_priv_key_path, &ssh_backup_pub_key_path);
+    grant_backup_access_to_all_nns_nodes(&env, &backup_auth, &ssh_backup_pub_key);
 
     env.sync_with_prometheus();
 
@@ -155,47 +149,34 @@ fn log_instructions(env: TestEnv) {
     };
 
     loop {
-        let highest_certified_height = env
-            .topology_snapshot()
-            .root_subnet()
-            .nodes()
-            .filter_map(|n| {
-                block_on(get_node_metrics(&logger, &n.get_ip_addr()))
-                    .map(|m| m.certification_height.get())
-            })
-            .max()
-            .expect("No heights found");
+        let (_, highest_cert_share) = node_with_highest_certification_share_height(
+            &env.topology_snapshot().root_subnet(),
+            &logger,
+        );
 
-        if highest_certified_height >= break_at_height {
+        if highest_cert_share >= break_at_height {
             info!(
                 logger,
-                "Reached break height {break_at_height} (current height is {highest_certified_height})."
+                "Reached break height {break_at_height} (current height is {highest_cert_share})."
             );
             break;
         }
         info!(
             logger,
-            "Waiting to reach break height {break_at_height}, current height is {highest_certified_height}..."
+            "Waiting to reach break height {break_at_height}, current height is {highest_cert_share}..."
         );
         std::thread::sleep(Duration::from_secs(5));
     }
 
-    // Break faulty nodes by SSHing into them and breaking the replica binary.
-    info!(
-        logger,
-        "Breaking the subnet by breaking the replica binary on {} nodes", num_to_break
-    );
-    let ssh_command =
-        "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica";
-    for vm in env.get_all_nested_vms().unwrap().iter().take(num_to_break) {
-        let ip = vm.get_nested_network().unwrap().guest_ip;
-        info!(logger, "Breaking the replica on IP {ip}...",);
-
-        vm.get_guest_ssh()
+    break_nodes(
+        &env.get_all_nested_vms()
             .unwrap()
-            .block_on_bash_script(ssh_command)
-            .unwrap_or_else(|_| panic!("SSH command failed on IP {ip}",));
-    }
+            .iter()
+            .map(|vm| vm.get_guest_ssh().unwrap())
+            .take(num_to_break)
+            .collect::<Vec<_>>(),
+        &logger,
+    );
 
     info!(logger, "The subnet should now be broken.");
 }

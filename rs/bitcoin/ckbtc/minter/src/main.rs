@@ -1,10 +1,8 @@
 use candid::Principal;
 use ic_btc_interface::Utxo;
 use ic_cdk::{init, post_upgrade, query, update};
-use ic_ckbtc_minter::dashboard::build_dashboard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
-use ic_ckbtc_minter::metrics::encode_metrics;
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::{
@@ -22,13 +20,11 @@ use ic_ckbtc_minter::updates::{
 };
 use ic_ckbtc_minter::{IC_CANISTER_RUNTIME, MinterInfo};
 use ic_ckbtc_minter::{
-    logs::Priority,
     state::eventlog::{EventType, GetEventsArg},
     storage,
 };
-use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_http_types::{HttpRequest, HttpResponse};
 use icrc_ledger_types::icrc1::account::Account;
-use std::str::FromStr;
 
 #[init]
 fn init(args: MinterArg) {
@@ -94,7 +90,7 @@ async fn refresh_fee_percentiles() {
         Some(guard) => guard,
         None => return,
     };
-    let _ = ic_ckbtc_minter::estimate_fee_per_vbyte().await;
+    let _ = ic_ckbtc_minter::estimate_fee_per_vbyte(&IC_CANISTER_RUNTIME).await;
 }
 
 fn check_postcondition<T>(t: T) -> T {
@@ -242,94 +238,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
         ic_cdk::trap("update call rejected");
     }
 
-    if req.path() == "/metrics" {
-        let mut writer =
-            ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
-
-        match encode_metrics(&mut writer) {
-            Ok(()) => HttpResponseBuilder::ok()
-                .header("Content-Type", "text/plain; version=0.0.4")
-                .header("Cache-Control", "no-store")
-                .with_body_and_content_length(writer.into_inner())
-                .build(),
-            Err(err) => {
-                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
-                    .build()
-            }
-        }
-    } else if req.path() == "/dashboard" {
-        let account_to_utxos_start = match req.raw_query_param("account_to_utxos_start") {
-            Some(arg) => match u64::from_str(arg) {
-                Ok(value) => value,
-                Err(_) => {
-                    return HttpResponseBuilder::bad_request()
-                        .with_body_and_content_length(
-                            "failed to parse the 'account_to_utxos_start' parameter",
-                        )
-                        .build();
-                }
-            },
-            None => 0,
-        };
-        let dashboard: Vec<u8> = build_dashboard(account_to_utxos_start);
-        HttpResponseBuilder::ok()
-            .header("Content-Type", "text/html; charset=utf-8")
-            .with_body_and_content_length(dashboard)
-            .build()
-    } else if req.path() == "/logs" {
-        use canlog::{Log, Sort};
-
-        let max_skip_timestamp = match req.raw_query_param("time") {
-            Some(arg) => match u64::from_str(arg) {
-                Ok(value) => value,
-                Err(_) => {
-                    return HttpResponseBuilder::bad_request()
-                        .with_body_and_content_length("failed to parse the 'time' parameter")
-                        .build();
-                }
-            },
-            None => 0,
-        };
-
-        let mut log: Log<Priority> = Default::default();
-
-        match req.raw_query_param("priority").map(Priority::from_str) {
-            Some(Ok(priority)) => log.push_logs(priority),
-            Some(Err(_)) | None => {
-                log.push_logs(Priority::Info);
-                log.push_logs(Priority::Debug);
-            }
-        }
-
-        log.entries
-            .retain(|entry| entry.timestamp >= max_skip_timestamp);
-
-        fn ordering_from_query_params(sort: Option<&str>, max_skip_timestamp: u64) -> Sort {
-            match sort.map(Sort::from_str) {
-                Some(Ok(order)) => order,
-                Some(Err(_)) | None => {
-                    if max_skip_timestamp == 0 {
-                        Sort::Ascending
-                    } else {
-                        Sort::Descending
-                    }
-                }
-            }
-        }
-
-        log.sort_logs(ordering_from_query_params(
-            req.raw_query_param("sort"),
-            max_skip_timestamp,
-        ));
-
-        const MAX_BODY_SIZE: usize = 2_000_000;
-        HttpResponseBuilder::ok()
-            .header("Content-Type", "application/json; charset=utf-8")
-            .with_body_and_content_length(log.serialize_logs(MAX_BODY_SIZE))
-            .build()
-    } else {
-        HttpResponseBuilder::not_found().build()
-    }
+    ic_ckbtc_minter::queries::http_request(req)
 }
 
 #[query]

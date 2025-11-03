@@ -1,16 +1,29 @@
-use evm_rpc_types::{EthMainnetService, RpcService as EvmRpcService};
+use crate::{
+    eth_rpc::Hash,
+    eth_rpc_client::{
+        MinByKey, MultiCallError, MultiCallResults, StrictMajorityByKey, ToReducedWithStrategy,
+        responses::{TransactionReceipt, TransactionStatus},
+    },
+    numeric::{BlockNumber, GasAmount, TransactionCount, WeiPerGas},
+};
+use assert_matches::assert_matches;
+use candid::Nat;
+use evm_rpc_types::{
+    EthMainnetService, FeeHistory, HttpOutcallError, JsonRpcError, LegacyRejectionCode,
+    MultiRpcResult, Nat256, RpcError, RpcService as EvmRpcService,
+};
+use proptest::{prelude::any, proptest};
+use std::str::FromStr;
 
 const BLOCK_PI: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::BlockPi);
 const PUBLIC_NODE: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::PublicNode);
 const LLAMA_NODES: EvmRpcService = EvmRpcService::EthMainnet(EthMainnetService::Llama);
 
 mod multi_call_results {
+    use super::*;
 
     mod reduce_with_min_by_key {
-        use crate::eth_rpc_client::tests::{BLOCK_PI, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MinByKey, ToReducedWithStrategy};
-        use crate::numeric::TransactionCount;
-        use evm_rpc_types::{MultiRpcResult, Nat256};
+        use super::*;
 
         #[test]
         fn should_get_minimum_tx_count() {
@@ -28,23 +41,14 @@ mod multi_call_results {
     }
 
     mod reduce_with_stable_majority_by_key {
-        use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
-        use crate::eth_rpc_client::{
-            MultiCallError, MultiCallResults, StrictMajorityByKey, ToReducedWithStrategy,
-        };
-        use candid::Nat;
-        use evm_rpc_types::{
-            FeeHistory, HttpOutcallError, JsonRpcError, LegacyRejectionCode, MultiRpcResult,
-        };
+        use super::*;
 
         #[test]
         fn should_get_unanimous_fee_history() {
             let results: MultiRpcResult<FeeHistory> = MultiRpcResult::Consistent(Ok(fee_history()));
 
             let reduced: Result<FeeHistory, _> =
-                results.reduce_with_strategy(StrictMajorityByKey::new(
-                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
-                ));
+                results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -72,9 +76,7 @@ mod multi_call_results {
                 ]);
 
                 let reduced: Result<FeeHistory, _> =
-                    results.reduce_with_strategy(StrictMajorityByKey::new(
-                        |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
-                    ));
+                    results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
                 assert_eq!(reduced, Ok(majority_fee));
             }
@@ -96,9 +98,7 @@ mod multi_call_results {
             ]);
 
             let reduced: Result<FeeHistory, _> =
-                results.reduce_with_strategy(StrictMajorityByKey::new(
-                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
-                ));
+                results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(reduced, Ok(fee_history()));
         }
@@ -125,9 +125,7 @@ mod multi_call_results {
                 ]);
 
             let reduced: Result<FeeHistory, _> =
-                three_distinct_results.reduce_with_strategy(StrictMajorityByKey::new(
-                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
-                ));
+                three_distinct_results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(
                 reduced,
@@ -146,9 +144,7 @@ mod multi_call_results {
                 ]);
 
             let reduced: Result<FeeHistory, _> =
-                two_distinct_results.reduce_with_strategy(StrictMajorityByKey::new(
-                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
-                ));
+                two_distinct_results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(
                 reduced,
@@ -175,9 +171,7 @@ mod multi_call_results {
                 ]);
 
             let reduced: Result<FeeHistory, _> = two_distinct_results_and_error
-                .reduce_with_strategy(StrictMajorityByKey::new(|fee_history: &FeeHistory| {
-                    Nat::from(fee_history.oldest_block.clone())
-                }));
+                .reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(
                 reduced,
@@ -206,9 +200,7 @@ mod multi_call_results {
             ]);
 
             let reduced: Result<FeeHistory, _> =
-                results.reduce_with_strategy(StrictMajorityByKey::new(
-                    |fee_history: &FeeHistory| Nat::from(fee_history.oldest_block.clone()),
-                ));
+                results.reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(
                 reduced,
@@ -235,12 +227,9 @@ mod multi_call_results {
                 ),
             ]);
 
-            let reduced: Result<FeeHistory, _> =
-                results
-                    .clone()
-                    .reduce_with_strategy(StrictMajorityByKey::new(|fee_history: &FeeHistory| {
-                        Nat::from(fee_history.oldest_block.clone())
-                    }));
+            let reduced: Result<FeeHistory, _> = results
+                .clone()
+                .reduce_with_strategy(StrictMajorityByKey::new(oldest_block));
 
             assert_eq!(
                 reduced,
@@ -284,11 +273,7 @@ mod multi_call_results {
     }
 
     mod has_http_outcall_error_matching {
-        use crate::eth_rpc_client::tests::{BLOCK_PI, LLAMA_NODES, PUBLIC_NODE};
-        use crate::eth_rpc_client::{MultiCallError, MultiCallResults};
-        use evm_rpc_types::{HttpOutcallError, JsonRpcError, LegacyRejectionCode, RpcError};
-        use proptest::prelude::any;
-        use proptest::proptest;
+        use super::*;
 
         proptest! {
             #[test]
@@ -355,12 +340,7 @@ mod multi_call_results {
 }
 
 mod eth_get_transaction_receipt {
-    use crate::eth_rpc::Hash;
-    use crate::eth_rpc_client::responses::{TransactionReceipt, TransactionStatus};
-    use crate::numeric::{BlockNumber, GasAmount, WeiPerGas};
-    use assert_matches::assert_matches;
-    use proptest::proptest;
-    use std::str::FromStr;
+    use super::*;
 
     #[test]
     fn should_deserialize_transaction_receipt() {
@@ -442,11 +422,15 @@ mod eth_get_transaction_receipt {
 }
 
 mod eth_get_transaction_count {
-    use crate::numeric::TransactionCount;
+    use super::*;
 
     #[test]
     fn should_deserialize_transaction_count() {
         let count: TransactionCount = serde_json::from_str("\"0x3d8\"").unwrap();
         assert_eq!(count, TransactionCount::from(0x3d8_u32));
     }
+}
+
+fn oldest_block(fee_history: &FeeHistory) -> Nat {
+    Nat::from(fee_history.oldest_block.clone())
 }

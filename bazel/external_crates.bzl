@@ -1136,6 +1136,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "stream",
                 ],
             ),
+            "rexpect": crate.spec(
+                version = "0.6",
+            ),
             "ring": crate.spec(
                 version = "^0.17.7",
                 features = [
@@ -1566,26 +1569,26 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.235.0",
+                version = "^0.239.0",
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasm-smith": crate.spec(
-                version = "^0.235.0",
+                version = "^0.239.0",
                 default_features = False,
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasmparser": crate.spec(
-                version = "^0.235.0",
+                version = "^0.239.0",
             ),
             "wasmprinter": crate.spec(
-                version = "^0.235.0",
+                version = "^0.239.0",
             ),
             "wasmtime": crate.spec(
-                version = "^35.0.0",
+                version = "^37.0.2",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1596,7 +1599,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^35.0.0",
+                version = "^37.0.2",
             ),
             "wast": crate.spec(
                 version = "^235.0.0",
