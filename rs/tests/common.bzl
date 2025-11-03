@@ -11,8 +11,8 @@ MAINNET_ENV = {
 }
 
 NNS_CANISTER_WASM_PROVIDERS = {
-    "registry-canister": {
-        "tip-of-branch": "//rs/registry/canister:registry-canister",
+    "registry-canister_test": {
+        "tip-of-branch": "//rs/registry/canister:registry-canister-test",
         "mainnet": "@mainnet_canisters//:registry.wasm.gz",
     },
     "governance-canister_test": {
