@@ -11,7 +11,6 @@ use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::node::v1::{IPv4InterfaceConfig, NodeRewardType};
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_keys::make_node_operator_record_key;
@@ -147,14 +146,6 @@ pub fn prepare_registry_with_nodes_and_node_operator_id(
         })
         .collect();
 
-    mutations.push(insert(
-        ic_registry_keys::NODE_REWARDS_TABLE_KEY.as_bytes(),
-        NodeRewardsTable {
-            table: BTreeMap::new(),
-        }
-        .encode_to_vec(),
-    ));
-
     let mutate_request = RegistryAtomicMutateRequest {
         mutations,
         preconditions: vec![],
@@ -191,7 +182,7 @@ pub fn registry_create_subnet_with_nodes(
 pub fn registry_add_node_operator_for_node(
     registry: &mut Registry,
     node_id: NodeId,
-    max_rewardable_nodes: BTreeMap<String, u32>,
+    max_rewardable_nodes: BTreeMap<NodeRewardType, u32>,
 ) -> PrincipalId {
     let node_operator_id =
         PrincipalId::try_from(registry.get_node_or_panic(node_id).node_operator_id).unwrap();
@@ -206,7 +197,10 @@ pub fn registry_add_node_operator_for_node(
     {
         let node_operator_record = NodeOperatorRecord {
             node_operator_principal_id: node_operator_id.to_vec(),
-            max_rewardable_nodes,
+            max_rewardable_nodes: max_rewardable_nodes
+                .into_iter()
+                .map(|(k, v)| (k.to_string(), v))
+                .collect(),
             ..Default::default()
         };
 

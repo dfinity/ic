@@ -224,6 +224,7 @@ mod tests {
         mutations::common::test::TEST_NODE_ID,
     };
     use ic_base_types::{NodeId, PrincipalId};
+    use ic_protobuf::registry::node::v1::NodeRewardType;
     use ic_protobuf::registry::{
         api_boundary_node::v1::ApiBoundaryNodeRecord, node_operator::v1::NodeOperatorRecord,
     };
@@ -617,7 +618,7 @@ mod tests {
         let node_operator_id = registry_add_node_operator_for_node(
             &mut registry,
             node_ids[0],
-            btreemap! { "type1".to_string() => 1 },
+            btreemap! { NodeRewardType::Type1 => 1 },
         );
 
         // Create a subnet with the first node
@@ -645,7 +646,7 @@ mod tests {
         let node_operator_id = registry_add_node_operator_for_node(
             &mut registry,
             node_ids[0],
-            btreemap! { "type1".to_string() => 1 },
+            btreemap! { NodeRewardType::Type1 => 1 },
         );
 
         // Create a subnet with the first node
