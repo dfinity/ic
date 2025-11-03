@@ -664,3 +664,10 @@ jobs:
         uses: actions/checkout@v4
       - name: Check PULL_REQUEST_BAZEL_TARGETS
         run: ./ci/scripts/targets.py check
+
+# only run on pull-request event - they are also triggered from schedule-daily.yml
+  pocket-ic-tests-windows:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/pocket-ic-tests-windows.yml
+    with:
+      commit-sha: ${{ github.sha }}

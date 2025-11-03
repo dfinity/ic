@@ -1,5 +1,4 @@
 use std::{
-    cell::Ref,
     collections::{HashMap, HashSet},
     convert::TryFrom,
     fs::File,
@@ -30,7 +29,7 @@ use ic_types::{
     methods::{FuncRef, WasmMethod},
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
-use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
+use memory_tracker::{DirtyPageTracking, SigsegvMemoryTracker};
 use signal_stack::WasmtimeSignalStack;
 
 use crate::wasm_utils::instrumentation::{
@@ -722,7 +721,7 @@ fn sigsegv_memory_tracker<S>(
             }
 
             Arc::new(Mutex::new(
-                SigsegvMemoryTracker::new(
+                memory_tracker::new(
                     base,
                     NumBytes::new(size as u64),
                     log.clone(),
@@ -1116,8 +1115,6 @@ impl WasmtimeInstance {
                     error: "No memory tracker for stable memory".to_string(),
                 })?;
             let tracker = tracker.lock().unwrap();
-            let page_map = tracker.page_map();
-            let accessed_pages = tracker.accessed_pages().borrow();
             let heap_memory = heap_memory.data(&self.store);
 
             fn handle_bytemap_entry(
@@ -1125,8 +1122,7 @@ impl WasmtimeInstance {
                 result: &mut Vec<PageIndex>,
                 page_index: usize,
                 heap_memory: &[u8],
-                page_map: &PageMap,
-                accessed_pages: &Ref<PageBitmap>,
+                tracker: &SigsegvMemoryTracker,
                 written: u8,
             ) -> HypervisorResult<()> {
                 let index = PageIndex::new(page_index as u64);
@@ -1141,7 +1137,7 @@ impl WasmtimeInstance {
                         // execution before trying to read it because if it
                         // wasn't accessed then it will still be mapped
                         // `PROT_NONE` and trying to read it will segfault.
-                        if *previous_page_marked_written && accessed_pages.is_marked(index) {
+                        if *previous_page_marked_written && tracker.is_accessed(index) {
                             // An unaligned V128 write to the previous page may
                             // have written as many as 15 bytes into this page.
                             // So even if we didn't see a write here we need to
@@ -1149,8 +1145,7 @@ impl WasmtimeInstance {
                             // modified to be sure it isn't dirty.
                             let first_bytes = &heap_memory[PAGE_SIZE * page_index
                                 ..PAGE_SIZE * page_index + size_of::<u128>() - 1];
-                            let previous_bytes =
-                                &page_map.get_page(index)[0..size_of::<u128>() - 1];
+                            let previous_bytes = &tracker.get_page(index)[0..size_of::<u128>() - 1];
                             if first_bytes != previous_bytes {
                                 result.push(index);
                             }
@@ -1180,8 +1175,7 @@ impl WasmtimeInstance {
                     &mut result,
                     page_index,
                     heap_memory,
-                    page_map,
-                    &accessed_pages,
+                    &tracker,
                     *written,
                 )?;
                 page_index += 1;
@@ -1194,8 +1188,7 @@ impl WasmtimeInstance {
                             &mut result,
                             page_index + group_index,
                             heap_memory,
-                            page_map,
-                            &accessed_pages,
+                            &tracker,
                             *written,
                         )?;
                     }
@@ -1208,8 +1201,7 @@ impl WasmtimeInstance {
                     &mut result,
                     page_index,
                     heap_memory,
-                    page_map,
-                    &accessed_pages,
+                    &tracker,
                     *written,
                 )?;
                 page_index += 1;

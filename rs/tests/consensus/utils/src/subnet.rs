@@ -1,4 +1,6 @@
-use crate::rw_message::{can_read_msg, can_store_msg, cert_state_makes_progress_with_retries};
+use crate::rw_message::{
+    can_read_msg, can_read_msg_with_retries, can_store_msg, cert_state_makes_progress_with_retries,
+};
 use crate::upgrade::assert_assigned_replica_version;
 use anyhow::bail;
 use candid::Principal;
@@ -64,11 +66,14 @@ pub fn assert_subnet_is_healthy(
         "Failed to store new message on {}",
         node.get_ip_addr()
     );
-    assert!(
-        can_read_msg(logger, &node.get_public_url(), can_id, new_msg),
-        "Failed to read new message on {}",
-        node.get_ip_addr()
-    );
+    // Wait until all nodes answer with the new message
+    for node in subnet {
+        assert!(
+            can_read_msg_with_retries(logger, &node.get_public_url(), can_id, new_msg, 5),
+            "Failed to read new message on {}",
+            node.get_ip_addr()
+        );
+    }
 }
 
 /// Enable Chain key and signing on the subnet using the given NNS node.
