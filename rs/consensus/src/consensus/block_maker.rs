@@ -64,9 +64,9 @@ pub(crate) fn subnet_records_for_registry_version(
 }
 
 /// A consensus subcomponent that is responsible for creating block proposals.
-pub struct BlockMaker {
+pub(crate) struct BlockMaker {
     time_source: Arc<dyn TimeSource>,
-    pub(crate) replica_config: ReplicaConfig,
+    replica_config: ReplicaConfig,
     registry_client: Arc<dyn RegistryClient>,
     pub(crate) membership: Arc<Membership>,
     pub(crate) crypto: Arc<dyn ConsensusCrypto>,
@@ -74,10 +74,10 @@ pub struct BlockMaker {
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     idkg_pool: Arc<RwLock<dyn IDkgPool>>,
     thread_pool: Arc<ThreadPool>,
-    pub(crate) state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
     idkg_payload_metrics: IDkgPayloadMetrics,
-    pub(crate) log: ReplicaLogger,
+    log: ReplicaLogger,
     // The minimal age of the registry version we want to use for the validation context of a new
     // block. The older is the version, the higher is the probability, that it's universally
     // available across the subnet.

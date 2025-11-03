@@ -219,6 +219,8 @@ const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(16
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
+const FW_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
+const FW_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
@@ -1022,6 +1024,82 @@ impl IcNodeSnapshot {
             Ok::<_, String>(canister_id)
         })
         .expect("Could not install canister")
+    }
+
+    pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {
+        let result = retry_with_msg!(
+            "wait_for_orchestrator_rule",
+            logger.clone(),
+            FW_RETRY_TIMEOUT,
+            FW_RETRY_BACKOFF,
+            || self.wait_for_orchestrator_fw_rule_once(logger)
+        );
+
+        result.context("Timed out waiting for orchestrator rule.".to_string())
+    }
+
+    fn wait_for_orchestrator_fw_rule_once(&self, logger: &Logger) -> Result<()> {
+        // This checks that the rule "meta skuid ic-http-adapter ip6 daddr ::1" was applied
+        // This is a hardcoded rule that is applied regardless of what is in the registry
+        // Hence a change in the registry won't affect this check
+        let script = r#"
+            set -e
+            ADAPTER_UID=$(id -u ic-http-adapter)
+            RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
+            
+            sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
+        "#;
+
+        match self.block_on_bash_script(script) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                debug!(logger, "Orchestrator rule not yet found.");
+                Err(e)
+            }
+        }
+    }
+
+    pub fn insert_egress_accept_rule_for_outcalls_adapter(
+        &self,
+        target: SocketAddr,
+    ) -> Result<String> {
+        self.insert_egress_rule_for_outcalls_adapter(target, "accept")
+    }
+
+    pub fn insert_egress_reject_rule_for_outcalls_adapter(
+        &self,
+        target: SocketAddr,
+    ) -> Result<String> {
+        self.insert_egress_rule_for_outcalls_adapter(target, "reject")
+    }
+
+    fn insert_egress_rule_for_outcalls_adapter(
+        &self,
+        target: SocketAddr,
+        action: &str,
+    ) -> Result<String> {
+        let ip = target.ip();
+        let port = target.port();
+        let node_id = self.node_id;
+
+        let family = match ip {
+            std::net::IpAddr::V4(_) => "ip",
+            std::net::IpAddr::V6(_) => "ip6",
+        };
+
+        let script = format!(
+            r#"
+            set -e
+            ADAPTER_UID=$(id -u ic-http-adapter)
+            echo "Inserting {action} rule on node {node_id} for destination {target}..."
+
+            sudo nft "insert rule {family} filter OUTPUT meta skuid $ADAPTER_UID {family} daddr {ip} tcp dport {port} {action}"
+            "#
+        );
+
+        self.block_on_bash_script(&script).context(format!(
+            "Failed to insert egress {action} rule on node {node_id} for target {target}"
+        ))
     }
 }
 

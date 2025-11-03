@@ -54,7 +54,7 @@ pub fn test(env: TestEnv) {
     block_on(async {
         test_proxy_canister(
             &proxy_canister,
-            format!("https://[{webserver_ipv6}]:20443"),
+            format!("https://[{webserver_ipv6}]"),
             logger,
         )
         .await;

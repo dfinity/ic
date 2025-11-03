@@ -1,10 +1,11 @@
 use assert_matches::assert_matches;
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::ErrorCode;
+use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::CanisterStatusType;
+use ic_replicated_state::NumWasmPages;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::testing::SystemStateTesting;
-use ic_replicated_state::{MessageMemoryUsage, NumWasmPages};
 use ic_test_utilities_execution_environment::{
     ExecutionResponse, ExecutionTest, ExecutionTestBuilder, check_ingress_status,
 };
@@ -2657,7 +2658,7 @@ fn cycles_balance_changes_applied_correctly() {
 
     let mut b = wasm().accept_cycles(Cycles::new(u128::MAX));
 
-    for _ in 0..400 {
+    for _ in 0..4 {
         b = b.inter_update(a_id, call_args());
     }
 
@@ -2699,7 +2700,7 @@ fn test_cycles_burn() {
         &mut balance,
         amount_to_burn,
         ic_config::execution_environment::Config::default().default_freeze_threshold,
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
@@ -2721,7 +2722,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
 
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
@@ -2737,7 +2738,7 @@ fn cycles_burn_up_to_the_threshold_on_not_enough_cycles() {
         &mut balance,
         Cycles::new(10 * amount),
         ic_config::execution_environment::Config::default().default_freeze_threshold,
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),

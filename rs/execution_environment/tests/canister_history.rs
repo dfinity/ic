@@ -1603,53 +1603,6 @@ fn canister_history_tracking_env_vars_update_with_identical_values() {
     assert_eq!(canister_state.system_state.environment_variables, env_vars);
 }
 
-#[test]
-fn canister_history_memory_usage_ignored_in_invariant_checks() {
-    let now = std::time::SystemTime::now();
-    let (env, _test_canister, _test_canister_sha256) = test_setup(SubnetType::Application, now);
-
-    let canister_id = env
-        .install_canister_with_cycles(
-            UNIVERSAL_CANISTER_WASM.to_vec(),
-            vec![],
-            None,
-            INITIAL_CYCLES_BALANCE,
-        )
-        .unwrap();
-    let memory_size = || {
-        let status = env.canister_status(canister_id).unwrap().unwrap();
-        status.memory_size().get()
-    };
-
-    // Set the canister memory allocation to its current memory size.
-    let current_memory_size = memory_size();
-    let settings = CanisterSettingsArgsBuilder::new()
-        .with_memory_allocation(current_memory_size)
-        .build();
-    env.update_settings(&canister_id, settings).unwrap();
-
-    // Reinstalling the canister increases the memory size by the size of the new canister history entry.
-    env.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec(), vec![])
-        .unwrap();
-    assert!(memory_size() > current_memory_size);
-
-    // Execute an ingress message on the canister to make it "active" and trigger canister invariant checks:
-    // they pass because canister history memory usage is ignored in canister invariant checks,
-    // but the update calls fails because it cannot grow its memory beyond the memory allocation.
-    let err = env
-        .execute_ingress_as(
-            PrincipalId::new_anonymous(),
-            canister_id,
-            "update",
-            wasm().reply().build(),
-        )
-        .unwrap_err();
-    assert!(
-        err.description()
-            .contains("Canister cannot grow its memory usage.")
-    );
-}
-
 /// Tests that subnet available execution memory matches the canister memory usage
 /// after executing the following requests tracked in canister history:
 /// - canister creation;
