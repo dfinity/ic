@@ -6,9 +6,12 @@ use std::{
 
 use base32::Alphabet;
 use candid::{CandidType, Deserialize, Principal, types::principal::PrincipalError};
-use ic_stable_structures::{Storable, storable::Bound};
 use minicbor::{Decode, Encode};
 use serde::Serialize;
+
+#[cfg(not(feature = "no_storable"))]
+use ic_stable_structures::{Storable, storable::Bound};
+#[cfg(not(feature = "no_storable"))]
 use std::borrow::Cow;
 
 pub type Subaccount = [u8; 32];
@@ -175,6 +178,7 @@ impl FromStr for Account {
     }
 }
 
+#[cfg(not(feature = "no_storable"))]
 impl Storable for Account {
     fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
@@ -240,11 +244,12 @@ mod tests {
     use assert_matches::assert_matches;
     use candid::Principal;
     use candid::types::principal::PrincipalError;
-    use ic_stable_structures::Storable;
     use proptest::prelude::prop;
     use proptest::strategy::Strategy;
-    use std::borrow::Cow;
     use std::str::FromStr;
+
+    #[cfg(not(feature = "no_storable"))]
+    use ic_stable_structures::Storable;
 
     use crate::icrc1::account::{
         Account, ICRC1TextReprError, principal_to_subaccount, subaccount_to_principal,
@@ -254,15 +259,6 @@ mod tests {
     pub fn principal_strategy() -> impl Strategy<Value = Principal> {
         let bytes_strategy = prop::collection::vec(0..=255u8, 29);
         bytes_strategy.prop_map(|bytes| Principal::from_slice(bytes.as_slice()))
-    }
-
-    pub fn account_strategy() -> impl Strategy<Value = Account> {
-        let bytes_strategy = prop::option::of(prop::collection::vec(0..=255u8, 32));
-        let principal_strategy = principal_strategy();
-        (bytes_strategy, principal_strategy).prop_map(|(bytes, principal)| Account {
-            owner: principal,
-            subaccount: bytes.map(|x| x.as_slice().try_into().unwrap()),
-        })
     }
 
     #[test]
@@ -401,9 +397,20 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "no_storable"))]
     #[test]
     fn test_account_serialization() {
         use proptest::{prop_assert_eq, proptest};
+
+        fn account_strategy() -> impl Strategy<Value = Account> {
+            let bytes_strategy = prop::option::of(prop::collection::vec(0..=255u8, 32));
+            let principal_strategy = principal_strategy();
+            (bytes_strategy, principal_strategy).prop_map(|(bytes, principal)| Account {
+                owner: principal,
+                subaccount: bytes.map(|x| x.as_slice().try_into().unwrap()),
+            })
+        }
+
         proptest!(|(account in account_strategy())| {
             prop_assert_eq!(Account::from_bytes(account.to_bytes()), account);
         })
@@ -454,6 +461,7 @@ mod tests {
         subaccount_to_principal(index_out_of_range_subaccount);
     }
 
+    #[cfg(not(feature = "no_storable"))]
     #[test]
     fn test_account_serialization_stability() {
         let owner =
@@ -488,7 +496,7 @@ mod tests {
             assert_eq!(account.to_bytes(), serialized_accounts[i].clone());
             assert_eq!(
                 *account,
-                Account::from_bytes(Cow::Owned(serialized_accounts[i].clone()))
+                Account::from_bytes(std::borrow::Cow::Owned(serialized_accounts[i].clone()))
             );
         }
     }
