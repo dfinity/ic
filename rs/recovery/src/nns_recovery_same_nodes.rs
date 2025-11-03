@@ -383,7 +383,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                     Ok(Box::new(self.recovery.get_copy_local_state_step()))
                 }
                 Some(DataLocation::Remote(node_ip)) => {
-                    Ok(Box::new(self.recovery.get_download_cup_checkpoint(
+                    Ok(Box::new(self.recovery.get_download_state_step(
                         node_ip,
                         SshUser::Admin,
                         self.recovery.admin_key_file.clone(),

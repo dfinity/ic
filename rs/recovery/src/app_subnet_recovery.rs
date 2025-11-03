@@ -413,7 +413,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         (SshUser::Admin, self.recovery.admin_key_file.clone())
                     };
 
-                    Ok(Box::new(self.recovery.get_download_cup_checkpoint(
+                    Ok(Box::new(self.recovery.get_download_state_step(
                         node_ip,
                         ssh_user,
                         key_file,

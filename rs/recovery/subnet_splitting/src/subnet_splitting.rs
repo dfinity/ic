@@ -591,7 +591,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 };
 
                 self.recovery
-                    .get_download_latest_checkpoint_and_cups(
+                    .get_download_state_and_cups_step(
                         node_ip,
                         ssh_user,
                         key_file,
