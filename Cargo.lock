@@ -21135,6 +21135,7 @@ dependencies = [
  "reqwest 0.12.15",
  "rosetta-core",
  "serde",
+ "serde_cbor",
  "serde_json",
  "slog",
  "tokio",
