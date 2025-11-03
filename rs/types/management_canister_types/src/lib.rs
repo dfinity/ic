@@ -503,6 +503,7 @@ impl RenameToRecord {
 ///       version : nat64;
 ///       total_num_changes : nat64;
 ///     };
+///     requested_by : principal;
 ///   };
 /// }
 /// ```
