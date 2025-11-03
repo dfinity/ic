@@ -99,7 +99,7 @@ pub fn test(env: TestEnv) {
         let webserver_ipv6 = get_universal_vm_address(&env);
 
         block_on(async {
-            let url = format!("https://[{webserver_ipv6}]:20443");
+            let url = format!("https://[{webserver_ipv6}]");
 
             if WITH_WARM_UP {
                 // Make an http_outcall once, to establish the session between the adapter and the target server.

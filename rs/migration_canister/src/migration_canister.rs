@@ -12,7 +12,7 @@ use strum::Display;
 use crate::{
     RequestState, ValidationError,
     canister_state::{
-        caller_allowed,
+        ValidationGuard, caller_allowed,
         events::find_event,
         migrations_disabled,
         requests::{find_request, insert_request},
@@ -60,6 +60,10 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
     if migrations_disabled() {
         return Err(ValidationError::MigrationsDisabled);
     }
+    // Prevent too many interleaved validations.
+    let Ok(_guard) = ValidationGuard::new() else {
+        return Err(ValidationError::RateLimited);
+    };
     if rate_limited() {
         return Err(ValidationError::RateLimited);
     }
@@ -74,6 +78,10 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
             return Err(e);
         }
         Ok(request) => {
+            // Need to check the rate limit again
+            if rate_limited() {
+                return Err(ValidationError::RateLimited);
+            }
             println!("Accepted request {}", request);
             insert_request(RequestState::Accepted { request });
         }
