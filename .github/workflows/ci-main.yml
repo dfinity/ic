@@ -161,10 +161,6 @@ jobs:
     timeout-minutes: 150
     steps:
       - *checkout
-      - name: "Node Name"
-        run: |
-          echo "::notice::Node Name: ${NODE_NAME}"
-
       - name: Run Bazel Commands
         uses: ./.github/actions/bazel
         with:
