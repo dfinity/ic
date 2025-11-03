@@ -256,10 +256,10 @@ pub fn get_node_operator_nodes(
     get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX)
         .into_iter()
         .filter(|(_, node_record)| {
-            let node_operator_id: PrincipalId =
+            let record_node_operator_id: PrincipalId =
                 PrincipalId::try_from(&node_record.node_operator_id).unwrap();
 
-            node_operator_id == query_node_operator_id
+            record_node_operator_id == query_node_operator_id
         })
         .map(|(_, node_record)| node_record)
         .collect()
