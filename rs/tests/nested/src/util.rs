@@ -344,6 +344,7 @@ pub fn block_on_bash_script_and_log<N: SshSession>(log: &Logger, node: &N, cmd: 
 
 /// Logs guestos diagnostics, used in the event of test failure
 pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
+    info!(logger, "Logging GuestOS diagnostics...");
     match host.get_guest_ssh() {
         Ok(guest) => {
             let diagnostics = vec![

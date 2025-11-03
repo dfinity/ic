@@ -120,13 +120,8 @@ pub fn upgrade_hostos(env: TestEnv) {
 
     info!(logger, "Waiting for Orchestrator dashboard...");
     if let Err(e) = host.await_orchestrator_dashboard_accessible() {
-        info!(
-            logger,
-            "Orchestrator dashboard is not accessible: {e}\nLogging GuestOS diagnostics..."
-        );
-
+        info!(logger, "Orchestrator dashboard is not accessible: {e}");
         try_logging_guestos_diagnostics(&host, &logger);
-
         panic!("Orchestrator dashboard is not accessible: {e}");
     }
 
