@@ -42,7 +42,7 @@ use std::net::Ipv6Addr;
 use std::time::Duration;
 
 use ic_protobuf::registry::replica_version::v1::GuestLaunchMeasurements;
-use slog::{Logger, info};
+use slog::{Logger, info, warn};
 
 pub const NODE_REGISTRATION_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 pub const NODE_REGISTRATION_BACKOFF: Duration = Duration::from_secs(5);
@@ -338,8 +338,10 @@ pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
 
 /// Execute a bash script on a node via SSH and log the output.
 pub fn block_on_bash_script_and_log<N: SshSession>(log: &Logger, node: &N, cmd: &str) {
-    let out = node.block_on_bash_script(cmd).unwrap();
-    info!(log, "{cmd}:\n{out}");
+    match node.block_on_bash_script(cmd) {
+        Ok(out) => info!(log, "{cmd}:\n{out}"),
+        Err(err) => warn!(log, "Failed to execute '{cmd}': {:?}", err),
+    }
 }
 
 /// Logs guestos diagnostics, used in the event of test failure
