@@ -23,6 +23,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:ic-agent",
     "@crate_index//:k256",
+    "@crate_index//:p256",
     "@crate_index//:rand",
     "@crate_index//:reqwest",
     "@crate_index//:serde",
