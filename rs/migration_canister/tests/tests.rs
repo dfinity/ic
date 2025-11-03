@@ -479,12 +479,12 @@ async fn migration_succeeds() {
             // There were 3 entries in the canister history of the "target" canister before renaming:
             // creation, installation, and controllers change.
             assert_eq!(rename_record.total_num_changes(), 3);
-            assert_eq!(rename_record.requested_by(), PrincipalId(sender));
             let rename_to = rename_record.rename_to();
             assert_eq!(rename_to.canister_id(), PrincipalId(source));
             // There were 2 entries in the canister history of the "source" canister before renaming:
             // creation and controllers change.
             assert_eq!(rename_to.total_num_changes(), 2);
+            assert_eq!(rename_record.requested_by(), PrincipalId(sender));
         }
         _ => panic!("Unexpected canister history entry: {:?}", rename_details),
     };

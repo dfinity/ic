@@ -2932,10 +2932,10 @@ impl CanisterManager {
         canister: &mut CanisterState,
         origin: CanisterChangeOrigin,
         old_id: CanisterId,
-        requested_by: PrincipalId,
         new_id: CanisterId,
         to_version: u64,
         to_total_num_changes: u64,
+        requested_by: PrincipalId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {

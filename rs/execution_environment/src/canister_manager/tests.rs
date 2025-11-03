@@ -6210,12 +6210,12 @@ fn rename_canister(
 
     let arguments = RenameCanisterArgs {
         canister_id: old_canister_id.into(),
-        requested_by: sender_canister.into(),
         rename_to: RenameToArgs {
             canister_id: new_canister_id.into(),
             version: new_version,
             total_num_changes: new_num_changes,
         },
+        requested_by: sender_canister.into(),
         sender_canister_version,
     };
 
@@ -6458,12 +6458,12 @@ fn cannot_rename_from_ingress() {
     let new_canister_id = CanisterId::from_u64(3 * CANISTER_IDS_PER_SUBNET - 1);
     let arguments = RenameCanisterArgs {
         canister_id: canister_id.into(),
-        requested_by: PrincipalId::new_anonymous(),
         rename_to: RenameToArgs {
             canister_id: new_canister_id.into(),
             version: 0,
             total_num_changes: 0,
         },
+        requested_by: PrincipalId::new_anonymous(),
         sender_canister_version: 0,
     };
 
