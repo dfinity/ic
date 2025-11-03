@@ -1127,6 +1127,7 @@ canisters(
         "cycles_ledger": "cycles-ledger.wasm.gz",
         "cycles_ledger_index": "ic-icrc1-index-ng-u256.wasm.gz",
         "bitcoin_testnet": "ic-btc-canister.wasm.gz",
+        "dogecoin": "ic-doge-canister.wasm.gz",
     },
     path = "//:mainnet-canister-revisions.json",
     repositories = {
@@ -1135,5 +1136,6 @@ canisters(
         "nns_dapp_test": "dfinity/nns-dapp",
         "sns_aggregator_test": "dfinity/nns-dapp",
         "bitcoin_testnet": "dfinity/bitcoin-canister",
+        "dogecoin": "dfinity/dogecoin-canister",
     },
 )
