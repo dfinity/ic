@@ -167,14 +167,14 @@ pub fn upgrade(
     stop_node(&logger, &faulty_node);
 
     info!(logger, "Upgrade to version {}", upgrade_version);
-    upgrade_to(
+    block_on(upgrade_to(
         nns_node,
         subnet_id,
         &subnet_node,
         upgrade_version,
         assert_graceful_orchestrator_tasks_exits,
         &logger,
-    );
+    ));
 
     info!(logger, "Stopping redundant nodes ...");
     // Killing redundant nodes should not prevent the `faulty_node` from upgrading
@@ -245,7 +245,7 @@ pub fn upgrade(
     (faulty_node.clone(), can_id, msg.into())
 }
 
-fn upgrade_to(
+async fn upgrade_to(
     nns_node: &IcNodeSnapshot,
     subnet_id: SubnetId,
     subnet_node: &IcNodeSnapshot,
@@ -257,11 +257,7 @@ fn upgrade_to(
         logger,
         "Upgrading subnet {} to {}", subnet_id, target_version
     );
-    block_on(deploy_guestos_to_all_subnet_nodes(
-        nns_node,
-        target_version,
-        subnet_id,
-    ));
+    deploy_guestos_to_all_subnet_nodes(nns_node, target_version, subnet_id).await;
 
     if assert_graceful_orchestrator_tasks_exits {
         info!(
@@ -270,7 +266,7 @@ fn upgrade_to(
             indicating that the orchestrator has gracefully shut down the tasks",
             subnet_node.get_ip_addr(),
         );
-        block_on(assert_orchestrator_stopped_gracefully(subnet_node.clone()));
+        assert_orchestrator_stopped_gracefully(subnet_node.clone()).await;
         info!(logger, "The orchestrator shut down the tasks gracefully");
     }
 
