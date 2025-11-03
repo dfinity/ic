@@ -343,7 +343,7 @@ mod tests {
     use ic_registry_keys::{
         make_api_boundary_node_record_key, make_node_operator_record_key, make_node_record_key,
     };
-    use ic_registry_transport::{delete, insert};
+    use ic_registry_transport::{delete, insert, update};
     use ic_types::ReplicaVersion;
     use itertools::Itertools;
     use lazy_static::lazy_static;
@@ -719,11 +719,13 @@ mod tests {
             max_rewardable_nodes: btreemap! { "type1".to_string() => 1 },
             ..Default::default()
         };
+
         let node_operator_id = PrincipalId::from_str(TEST_NODE_ID).unwrap();
         registry.maybe_apply_mutation_internal(vec![insert(
             make_node_operator_record_key(node_operator_id),
             node_operator_record.encode_to_vec(),
         )]);
+
         // Use payloads with the same IPs
         let (mut payload_1, _) = prepare_add_node_payload(1);
         payload_1.node_reward_type = Some(NodeRewardType::Type1.to_string());
@@ -745,6 +747,7 @@ mod tests {
             node_reward_type: Some(NodeRewardType::from(payload_1.node_reward_type.unwrap()) as i32),
             ..Default::default()
         };
+
         let node_record_1 = registry.get_node_or_panic(node_id_1);
         assert_eq!(node_record_1, node_record_expected_1);
         // Add the second node, this should remove the first one from the registry
@@ -774,7 +777,10 @@ mod tests {
         // Assert max_rewardable_nodes has not changed
         let observed_node_operator_record = get_node_operator_record(&registry, node_operator_id)
             .expect("failed to get node operator");
-        assert_eq!(observed_node_operator_record, node_operator_record);
+        assert_eq!(
+            observed_node_operator_record.max_rewardable_nodes,
+            node_operator_record.max_rewardable_nodes
+        );
     }
 
     #[test]
@@ -1041,7 +1047,7 @@ mod tests {
         };
         let node_operator_id = PrincipalId::new_user_test_id(10001);
 
-        registry.maybe_apply_mutation_internal(vec![insert(
+        registry.maybe_apply_mutation_internal(vec![update(
             NODE_REWARDS_TABLE_KEY,
             NodeRewardsTable::default().encode_to_vec(),
         )]);
