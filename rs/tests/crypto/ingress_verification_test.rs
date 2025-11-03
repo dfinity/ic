@@ -33,8 +33,7 @@ fn main() -> Result<()> {
                 .add_test(systest!(requests_with_delegations_with_targets; 3))
                 .add_test(systest!(requests_with_delegation_loop; 2))
                 .add_test(systest!(requests_with_delegation_loop; 3))
-                .add_test(systest!(requests_with_invalid_expiry; 2))
-                .add_test(systest!(requests_with_invalid_expiry; 3)),
+                .add_test(systest!(requests_with_invalid_expiry)),
         )
         .execute_from_args()?;
     Ok(())
@@ -474,7 +473,7 @@ pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
 }
 
 // Tests that expired or too-future ingress_expiry values are rejected
-pub fn requests_with_invalid_expiry(env: TestEnv, api_ver: usize) {
+pub fn requests_with_invalid_expiry(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
@@ -493,8 +492,8 @@ pub fn requests_with_invalid_expiry(env: TestEnv, api_ver: usize) {
                 "canister_id" => format!("{:?}", canister.canister_id())
             );
 
-            let test_info = TestInformation {
-                api_ver,
+            let mut test_info = TestInformation {
+                api_ver: 999, // To be set later...
                 url: node_url,
                 canister_id: canister_id_from_principal(&canister.canister_id()),
             };
@@ -502,19 +501,34 @@ pub fn requests_with_invalid_expiry(env: TestEnv, api_ver: usize) {
             // Single identity for sender and signer, no delegations
             let rng = &mut reproducible_rng();
             let id_type = GenericIdentityType::random(rng);
-            let identity = GenericIdentity::new(id_type, rng);
+            let id = GenericIdentity::new(id_type, rng);
 
-            let expiries = [0_u64, u64::MAX];
+            for expiry in [0_u64, u64::MAX] {
+                for api_ver in [2, 3] {
+                    test_info.api_ver = api_ver;
+                    assert_eq!(
+                        perform_query_with_expiry(&test_info, &id, &id, expiry).await,
+                        400,
+                        "query should be rejected for expiry={expiry} and api_ver={api_ver}"
+                    );
+                }
 
-            for &expiry in &expiries {
-                let q = perform_query_with_expiry(&test_info, &identity, &identity, expiry).await;
-                let u = perform_update_with_expiry(&test_info, &identity, &identity, expiry).await;
-                let r =
-                    perform_read_state_with_expiry(&test_info, &identity, &identity, expiry).await;
-
-                assert_eq!(q, 400, "query should be rejected for expiry={expiry}");
-                assert_eq!(u, 400, "update should be rejected for expiry={expiry}");
-                assert_eq!(r, 400, "read_state should be rejected for expiry={expiry}");
+                for api_ver in [2, 3, 4] {
+                    test_info.api_ver = api_ver;
+                    assert_eq!(
+                        perform_update_with_expiry(&test_info, &id, &id, expiry).await,
+                        400,
+                        "update should be rejected for expiry={expiry}"
+                    );
+                }
+                for api_ver in [2, 3] {
+                    test_info.api_ver = api_ver;
+                    assert_eq!(
+                        perform_read_state_with_expiry(&test_info, &id, &id, expiry).await,
+                        400,
+                        "read_state should be rejected for expiry={expiry} and api_ver={api_ver}"
+                    );
+                }
             }
         }
     });
