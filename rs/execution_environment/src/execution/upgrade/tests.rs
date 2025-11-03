@@ -242,7 +242,7 @@ fn upgrade_fails_on_not_enough_cycles() {
 
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),
