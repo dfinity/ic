@@ -9,7 +9,7 @@ use std::{
 use anyhow::{Context, Error, bail};
 
 use config::setupos::config_ini::ConfigIniSettings;
-use config::setupos::deployment_json::CompatDeploymentSettings;
+use config::setupos::deployment_json::DeploymentSettings;
 
 pub fn create_setupos_config(
     config_dir: &Path,
@@ -18,7 +18,7 @@ pub fn create_setupos_config(
     node_operator_private_key: Option<&Path>,
     nns_public_key: Option<&Path>,
     admin_keys: Option<&Path>,
-    deployment_settings: CompatDeploymentSettings,
+    deployment_settings: DeploymentSettings,
 ) -> Result<(), Error> {
     // Check that config and data dirs are valid
     if !config_dir.is_dir() {
