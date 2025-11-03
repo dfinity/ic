@@ -104,7 +104,12 @@ impl BareMetalIpmiSession {
         }
 
         for _ in 0..3 {
-            println!("Sending Ctrl+D to get to login prompt...");
+            println!("Sending Ctrl+] and Ctrl+D to get to login prompt...");
+            // Ctrl+] to exit virsh console
+            self.session
+                .send_control(']')
+                .context("Failed to send Ctrl+]");
+            // Ctrl+D to go to HostOS login prompt
             self.session
                 .send_control('D')
                 .context("Failed to send Ctrl+D")?;
