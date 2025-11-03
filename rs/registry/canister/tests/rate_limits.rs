@@ -39,11 +39,14 @@ fn test_rate_limiting_state_machine() {
     let add_node_operator_payload = AddNodeOperatorPayload {
         node_operator_principal_id: Some(node_operator),
         node_provider_principal_id: Some(node_provider),
-        node_allowance: 10,
+        node_allowance: 0,
         dc_id: "test_dc".to_string(),
         rewardable_nodes: std::collections::BTreeMap::from([("type1".to_string(), 1)]),
         ipv6: None,
-        max_rewardable_nodes: Some(std::collections::BTreeMap::from([("type1".to_string(), 1)])),
+        max_rewardable_nodes: Some(std::collections::BTreeMap::from([(
+            "type1".to_string(),
+            10,
+        )])),
     };
 
     // Add node operator directly
@@ -57,7 +60,8 @@ fn test_rate_limiting_state_machine() {
 
     for _ in 0..70 {
         // Create a simple add_node payload for testing
-        let (add_node_payload, _node_pks) = prepare_add_node_payload(1); // Use unique IDs
+        let (mut add_node_payload, _node_pks) = prepare_add_node_payload(1); // Use unique IDs
+        add_node_payload.node_reward_type = Some("type1".to_string());
 
         let node_id: NodeId = env
             .execute_ingress_as(
@@ -80,7 +84,8 @@ fn test_rate_limiting_state_machine() {
         .unwrap();
     }
 
-    let (add_node_payload, _node_pks) = prepare_add_node_payload(1); // Use unique IDs
+    let (mut add_node_payload, _node_pks) = prepare_add_node_payload(1); // Use unique IDs
+    add_node_payload.node_reward_type = Some("type1".to_string());
     let error = env
         .execute_ingress_as(
             node_operator,

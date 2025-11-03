@@ -11,9 +11,8 @@ use ic_nns_test_utils::{
         invariant_compliant_mutation_as_atomic_req, prepare_add_node_payload,
     },
 };
-use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::registry::{node::v1::NodeRewardType, node_operator::v1::NodeOperatorRecord};
-use ic_registry_keys::{NODE_REWARDS_TABLE_KEY, make_node_operator_record_key};
+use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::pb::v1::{
     RegistryAtomicMutateRequest, RegistryMutation, registry_mutation,
 };
