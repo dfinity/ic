@@ -35,7 +35,6 @@ fn node_is_created_on_receiving_the_request() {
                 .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
                     btreemap! { "type3".to_string() => 100 },
                 ))
-                .push_init_mutate_request(init_mutation_with_rewards_table())
                 .build(),
         )
         .await;
@@ -120,7 +119,6 @@ fn node_is_not_created_with_invalid_type() {
                 .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
                     btreemap! { "type1".to_string() => 100 },
                 ))
-                .push_init_mutate_request(init_mutation_with_rewards_table())
                 .build(),
         )
         .await;
@@ -169,7 +167,6 @@ fn node_is_not_created_on_wrong_principal() {
                 .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
                     btreemap! { "type1".to_string() => 100 },
                 ))
-                .push_init_mutate_request(init_mutation_with_rewards_table())
                 .build(),
         )
         .await;
@@ -211,7 +208,6 @@ fn node_is_not_created_when_above_capacity() {
                 .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
                     btreemap! { "type1".to_string() => 1 },
                 ))
-                .push_init_mutate_request(init_mutation_with_rewards_table())
                 .build(),
         )
         .await;
@@ -272,7 +268,6 @@ fn duplicated_nodes_are_removed_on_join() {
                 .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
                     btreemap! { "type1".to_string() => 10 },
                 ))
-                .push_init_mutate_request(init_mutation_with_rewards_table())
                 .build(),
         )
         .await;
@@ -339,7 +334,6 @@ fn join_with_duplicate_is_allowed_when_at_capacity() {
                 .push_init_mutate_request(init_mutation_with_max_rewardable_nodes(
                     btreemap! { "type1".to_string() => 1 },
                 ))
-                .push_init_mutate_request(init_mutation_with_rewards_table())
                 .build(),
         )
         .await;
@@ -393,17 +387,6 @@ fn join_with_duplicate_is_allowed_when_at_capacity() {
 
         Ok(())
     });
-}
-
-fn init_mutation_with_rewards_table() -> RegistryAtomicMutateRequest {
-    RegistryAtomicMutateRequest {
-        mutations: vec![RegistryMutation {
-            mutation_type: registry_mutation::Type::Insert as i32,
-            key: NODE_REWARDS_TABLE_KEY.into(),
-            value: NodeRewardsTable::default().encode_to_vec(),
-        }],
-        preconditions: vec![],
-    }
 }
 
 fn init_mutation_with_max_rewardable_nodes(

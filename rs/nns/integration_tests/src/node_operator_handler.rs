@@ -20,6 +20,7 @@ use ic_nns_test_utils::{
     itest_helpers::{NnsCanisters, state_machine_test_on_nns_subnet},
     registry::{get_value_or_panic, prepare_add_node_payload},
 };
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
 use ic_registry_keys::make_node_operator_record_key;
 use ic_registry_transport::{
@@ -190,12 +191,14 @@ async fn add_node_operator(nns_canisters: &NnsCanisters<'_>, node_operator_id: &
 
     let proposal_payload = AddNodeOperatorPayload {
         node_operator_principal_id: Some(*node_operator_id),
-        node_allowance: 5,
+        node_allowance: 0,
         node_provider_principal_id: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
         dc_id: "DC".into(),
         rewardable_nodes: rewardable_nodes.clone(),
         ipv6: Some("0:0:0:0:0:0:0:0".into()),
-        max_rewardable_nodes: None,
+        max_rewardable_nodes: Some(btreemap! {
+            NodeRewardType::Type1.to_string() => 5
+        }),
     };
 
     let node_operator_record_key = make_node_operator_record_key(*node_operator_id).into_bytes();
