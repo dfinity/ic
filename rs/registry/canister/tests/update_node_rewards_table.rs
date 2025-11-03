@@ -74,7 +74,7 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
 
         let table =
             get_value::<NodeRewardsTable>(&registry, NODE_REWARDS_TABLE_KEY.as_bytes()).await;
-        assert!(table.is_none());
+        assert!(table.unwrap().table.is_empty());
 
         Ok(())
     });

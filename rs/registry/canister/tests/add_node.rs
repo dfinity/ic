@@ -211,7 +211,8 @@ fn node_is_not_created_when_above_capacity() {
         )
         .await;
 
-        let (payload, node_pks) = prepare_add_node_payload(1);
+        let (mut payload, node_pks) = prepare_add_node_payload(1);
+        payload.node_reward_type = Some("type1".to_string());
         let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
@@ -230,7 +231,8 @@ fn node_is_not_created_when_above_capacity() {
         assert!(response.is_ok());
 
         // Try to add another node
-        let (payload, node_pks) = prepare_add_node_payload(2);
+        let (mut payload, node_pks) = prepare_add_node_payload(2);
+        payload.node_reward_type = Some("type1".to_string());
         let node_id = node_pks.node_id();
 
         // Ensure there is no value for this new node
