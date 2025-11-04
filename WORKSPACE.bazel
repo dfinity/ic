@@ -3,7 +3,6 @@ workspace(
 )
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load("//bazel:mainnet-icos-images.bzl", "get_mainnet_guestos_images", "get_mainnet_setupos_images")
 
 http_archive(
     name = "rules_rust",
@@ -47,8 +46,3 @@ crate_repositories()
 load("//pre-commit:ormolu.bzl", "ormolu")
 
 ormolu(name = "ormolu")
-
-# Mainnet ICOS image support
-get_mainnet_setupos_images()
-
-get_mainnet_guestos_images()
