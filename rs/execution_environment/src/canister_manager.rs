@@ -2957,6 +2957,7 @@ impl CanisterManager {
         new_id: CanisterId,
         to_version: u64,
         to_total_num_changes: u64,
+        requested_by: PrincipalId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
@@ -3002,6 +3003,7 @@ impl CanisterManager {
                 new_id.into(),
                 to_version,
                 to_total_num_changes,
+                requested_by,
             ),
         );
         round_limits

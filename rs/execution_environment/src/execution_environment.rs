@@ -2666,6 +2666,7 @@ impl ExecutionEnvironment {
         let new_id = args.rename_to.get_canister_id();
         let to_version = args.rename_to.version;
         let to_total_num_changes = args.rename_to.total_num_changes;
+        let requested_by = args.requested_by();
 
         // Take canister out.
         let mut canister = match state.take_canister_state(&old_id) {
@@ -2688,6 +2689,7 @@ impl ExecutionEnvironment {
                 new_id,
                 to_version,
                 to_total_num_changes,
+                requested_by,
                 state,
                 round_limits,
             )
