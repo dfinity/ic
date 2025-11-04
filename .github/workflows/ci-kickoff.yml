@@ -1,4 +1,4 @@
-name: CI Main Kickoff
+name: Kickoff
 
 on:
   merge_group:
