@@ -59,7 +59,6 @@ jobs:
           commit-sha: ${{ github.event.pull_request.head.sha || github.sha }}
           run-result: ${{ needs.ci-main.result }}
           name: ci-main-status
-          event_name: ${{ github.event_name }}
 
   post-commit-status-ci-pr-only:
     name: CI PR Only Post Commit Status
