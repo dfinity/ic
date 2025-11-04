@@ -190,7 +190,7 @@ go_deps.bzl               @dfinity/idx
 /rs/protobuf/def/messaging/                             @dfinity/team-dsm
 /rs/protobuf/def/p2p/                                   @dfinity/consensus
 /rs/protobuf/def/registry/                              @dfinity/governance-team
-/rs/protobuf/def/state/                                 @dfinity/team-dsm @dfinity/team-dsm
+/rs/protobuf/def/state/                                 @dfinity/team-dsm
 /rs/protobuf/src/gen/bitcoin/                           @dfinity/team-dsm
 /rs/protobuf/src/gen/crypto/                            @dfinity/crypto-team
 /rs/protobuf/src/gen/messaging/                         @dfinity/team-dsm
