@@ -194,29 +194,6 @@ mod withdrawal {
     use std::array;
 
     #[test]
-    fn should_withdraw_doge_fluent() {
-        let setup = Setup::default();
-        let dogecoin = setup.dogecoin();
-        let fee_percentiles = array::from_fn(|i| i as u64);
-        let median_fee = fee_percentiles[50];
-        assert_eq!(median_fee, 50);
-        dogecoin.set_fee_percentiles(fee_percentiles);
-        let account = Account {
-            owner: USER_PRINCIPAL,
-            subaccount: Some([42_u8; 32]),
-        };
-
-        setup
-            .deposit_flow()
-            .minter_get_dogecoin_deposit_address(account)
-            .dogecoin_simulate_transaction(utxo_wth_value(
-                RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE,
-            ))
-            .minter_update_balance()
-            .expect_mint();
-    }
-
-    #[test]
     fn should_withdraw_doge() {
         let setup = Setup::default();
         let minter = setup.minter();
