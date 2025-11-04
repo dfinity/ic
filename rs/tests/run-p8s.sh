@@ -1,3 +1,5 @@
+#! /usr/bin/env nix-shell
+#! nix-shell run-p8s.nix -i bash
 
 # TODO: Rewrite this to use docker instead of Nix
 # See: https://dfinity.atlassian.net/browse/VER-1941
@@ -119,7 +121,7 @@ prometheus \
 ################################################################################
 # Launch grafana
 ################################################################################
-GRAFANA="/usr"
+
 grafana_data_dir="$(mktemp -d -t grafana-data-dir.XXXX)"
 ln -fs "$GRAFANA/share/grafana/conf" "$grafana_data_dir"
 ln -fs "$GRAFANA/share/grafana/tools" "$grafana_data_dir"
