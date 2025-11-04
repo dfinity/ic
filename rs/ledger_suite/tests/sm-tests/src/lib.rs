@@ -1388,30 +1388,6 @@ where
         0
     );
 
-    let disable_archiving_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
-        metadata: None,
-        token_name: None,
-        token_symbol: None,
-        transfer_fee: None,
-        change_fee_collector: None,
-        feature_flags: None,
-        change_archive_options: Some(ChangeArchiveOptions {
-            trigger_threshold: Some(1_000_000_000usize),
-            num_blocks_to_archive: None,
-            node_max_memory_size_bytes: None,
-            max_message_size_bytes: None,
-            controller_id: None,
-            more_controller_ids: None,
-            cycles_for_archive_creation: None,
-            max_transactions_per_response: None,
-        }),
-    }));
-    println!(
-        "disable_archiving: {}",
-        hex::encode(Encode!(&disable_archiving_args).unwrap())
-    );
-    assert_eq!(1, 3);
-
     let upgrade_args = LedgerArgument::Upgrade(Some(UpgradeArgs {
         change_archive_options: Some(ChangeArchiveOptions {
             cycles_for_archive_creation: Some(100_000_000_000_000),
