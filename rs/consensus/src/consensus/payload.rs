@@ -142,7 +142,7 @@ impl BatchPayloadSectionBuilder {
                 }
 
                 // Perform an additional size check
-                if wire_size_estimate.get() > max_size.get() {
+                if size > max_size {
                     error!(
                         logger,
                         "IngressPayload is larger than byte limits, this is a bug, @{}",
@@ -155,7 +155,7 @@ impl BatchPayloadSectionBuilder {
                 }
 
                 payload.ingress = ingress;
-                NumBytes::new(wire_size_estimate.get())
+                size
             }
             Self::XNet(builder) => {
                 // NOTE: The XNetPayloadBuilder has some special properties that requires some extra logic.

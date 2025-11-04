@@ -17,7 +17,7 @@ use crate::{
     validation::{ValidationError, ValidationResult},
     vetkd::{InvalidVetKdPayloadReason, VetKdPayloadValidationFailure},
 };
-use ic_base_types::{NumBytes, SubnetId, WireBytes};
+use ic_base_types::{NumBytes, SubnetId};
 use ic_types::{
     Height, Time,
     batch::{BatchPayload, ValidationContext},

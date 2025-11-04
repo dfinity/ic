@@ -20,7 +20,7 @@ use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_client_helpers::subnet::IngressMessageSettings;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    CanisterId, CountBytes, Cycles, Height, NumBytes, Time, WireBytes,
+    CanisterId, CountBytes, Cycles, Height, NumBytes, Time,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
@@ -52,7 +52,7 @@ impl IngressSelector for IngressManager {
         &self,
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
-        byte_limit: NumBytes,
+        wire_byte_limit: NumBytes,
     ) -> PayloadWithSizeEstimate<IngressPayload> {
         let _timer = self.metrics.ingress_selector_get_payload_time.start_timer();
         let memory_byte_limit = self.memory_byte_limit(wire_byte_limit);
@@ -102,7 +102,7 @@ impl IngressSelector for IngressManager {
 
         // Select valid ingress messages and stop once the total size
         // becomes greater than byte_limit.
-        let mut accumulated_wire_size = WireBytes::new(0);
+        let mut accumulated_wire_size = NumBytes::new(0);
         let mut accumulated_memory_size = NumBytes::new(0);
         let mut cycles_needed: BTreeMap<CanisterId, Cycles> = BTreeMap::new();
 
@@ -114,7 +114,7 @@ impl IngressSelector for IngressManager {
         #[derive(Default)]
         struct CanisterQueue<'a> {
             /// Number of bytes the canister's queue that was included in ingress
-            memory_bytes_included: NumBytes,
+            memory_bytes_included: usize,
             msgs_included: u32,
             msgs: Vec<&'a ValidatedIngressArtifact>,
         }
@@ -158,7 +158,7 @@ impl IngressSelector for IngressManager {
                     wire_size_estimate: NumBytes::new(0),
                 };
             }
-            canister_count @ 1.. => byte_limit.get() as usize / canister_count,
+            canister_count @ 1.. => wire_byte_limit.get() as usize / canister_count,
         };
 
         let mut messages_in_payload = vec![];
@@ -220,7 +220,8 @@ impl IngressSelector for IngressManager {
                             1,
                             round_robin_iter.saturating_sub(ITERATIONS_BEFORE_WEAKEN_INCLUDE_RULE),
                         )
-                        && (queue.memory_bytes_included + ingress_memory_size) > quota
+                        && (queue.memory_bytes_included + ingress_memory_size.get() as usize)
+                            > quota
                     {
                         break;
                     }
@@ -228,7 +229,7 @@ impl IngressSelector for IngressManager {
                     accumulated_wire_size += ingress_wire_size;
                     accumulated_memory_size += ingress_memory_size;
                     queue.msgs_included += 1;
-                    queue.memory_bytes_included += ingress_memory_size;
+                    queue.memory_bytes_included += ingress_memory_size.get() as usize;
                     // The quota is not a hard limit. We always include the first message
                     // of each canister. This is why we check the third break criterion
                     // after this line.
@@ -255,10 +256,8 @@ impl IngressSelector for IngressManager {
                 match canisters.len() {
                     0 => break,
                     canister_count @ 1.. => {
-                        quota += NumBytes::new(
-                            (memory_byte_limit - accumulated_memory_size).get()
-                                / canister_count as u64,
-                        );
+                        quota += (memory_byte_limit - accumulated_memory_size).get() as usize
+                            / canister_count;
                     }
                 };
             }
@@ -398,7 +397,9 @@ impl IngressSelector for IngressManager {
             )?;
         }
 
-        Ok(NumBytes::from(payload.count_bytes() as u64))
+        let (wire_size_estimate, _memory_size_estimate) = self.payload_size_estimates(payload);
+
+        Ok(wire_size_estimate)
     }
 
     fn filter_past_payloads(
@@ -598,7 +599,7 @@ impl IngressManager {
         Ok(())
     }
 
-    fn memory_byte_limit(&self, wire_byte_limit: WireBytes) -> NumBytes {
+    fn memory_byte_limit(&self, wire_byte_limit: NumBytes) -> NumBytes {
         if self.hashes_in_blocks_enabled() {
             NumBytes::new(ic_limits::MAX_INGRESS_BYTES_PER_BLOCK)
         } else {
@@ -609,19 +610,20 @@ impl IngressManager {
         }
     }
 
-    fn payload_size_estimates(&self, payload: &IngressPayload) -> (WireBytes, NumBytes) {
+    fn payload_size_estimates(&self, payload: &IngressPayload) -> (NumBytes, NumBytes) {
         let memory_bytes =
             payload.total_messages_size_estimate() + payload.total_ids_size_estimate();
+
         let wire_bytes = if self.hashes_in_blocks_enabled() {
             payload.total_ids_size_estimate()
         } else {
             memory_bytes
         };
 
-        (WireBytes::new(wire_bytes.get()), memory_bytes)
+        (wire_bytes, memory_bytes)
     }
 
-    fn message_size_estimates(&self, message: &SignedIngress) -> (WireBytes, NumBytes) {
+    fn message_size_estimates(&self, message: &SignedIngress) -> (NumBytes, NumBytes) {
         let memory_bytes = message.count_bytes();
         let wire_bytes = if self.hashes_in_blocks_enabled() {
             EXPECTED_MESSAGE_ID_LENGTH
@@ -630,7 +632,7 @@ impl IngressManager {
         };
 
         (
-            WireBytes::new(wire_bytes as u64),
+            NumBytes::new(wire_bytes as u64),
             NumBytes::new(memory_bytes as u64),
         )
     }
@@ -768,7 +770,7 @@ mod tests {
     use std::{collections::HashSet, convert::TryInto, time::Duration};
 
     const MAX_INGRESS_SIZE_BYTES: usize = 1000;
-    const MAX_WIRE_BYTES: WireBytes = WireBytes::new(1000);
+    const MAX_WIRE_BYTES: NumBytes = NumBytes::new(1000);
 
     #[tokio::test]
     async fn test_get_empty_ingress_payload() {
@@ -799,7 +801,7 @@ mod tests {
                 },
             );
 
-            assert_eq!(ingress_validation, Ok(WireBytes::new(0)));
+            assert_eq!(ingress_validation, Ok(NumBytes::new(0)));
         })
     }
 
@@ -2166,7 +2168,7 @@ mod tests {
                 let _payload = ingress_manager.get_ingress_payload(
                     &HashSet::new(),
                     &validation_context,
-                    WireBytes::new(MAX_SIZE as u64),
+                    NumBytes::new(MAX_SIZE as u64),
                 );
             },
         );
@@ -2222,7 +2224,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_ordering_fairness(#[values(true, false)] hashes_in_blocks_enabled: bool) {
-        const WIRE_BYTES_LIMIT: WireBytes = WireBytes::new(ic_limits::MAX_INGRESS_BYTES_PER_BLOCK);
+        const WIRE_BYTES_LIMIT: NumBytes = NumBytes::new(ic_limits::MAX_INGRESS_BYTES_PER_BLOCK);
         const CANISTERS_COUNT: u64 = 30;
         const INITIAL_QUOTA: usize =
             (ic_limits::MAX_INGRESS_BYTES_PER_BLOCK / CANISTERS_COUNT) as usize;
@@ -2341,7 +2343,7 @@ mod tests {
                 ingress_manager.get_ingress_payload(
                     &HashSet::new(),
                     &validation_context,
-                    WireBytes::new(MAX_SIZE as u64),
+                    NumBytes::new(MAX_SIZE as u64),
                 );
             },
         )
@@ -2400,7 +2402,7 @@ mod tests {
                 let payload = ingress_manager.get_ingress_payload(
                     &HashSet::new(),
                     &validation_context,
-                    WireBytes::new(wire_bytes_limit as u64),
+                    NumBytes::new(wire_bytes_limit as u64),
                 );
 
                 assert_eq!(

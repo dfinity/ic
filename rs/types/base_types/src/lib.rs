@@ -54,13 +54,6 @@ pub struct NumBytesTag;
 /// and allocation of a Canister.
 pub type NumBytes = AmountOf<NumBytesTag, u64>;
 
-pub struct WireBytesTag;
-/// This type models a non-negative number of bytes.
-///
-/// This type is primarily useful to estimate how much bytes a struct
-/// would have when sent over wire.
-pub type WireBytes = AmountOf<WireBytesTag, u64>;
-
 /// A type representing an internal address.
 ///
 /// This type is used to track pointer arithmetics in the context of

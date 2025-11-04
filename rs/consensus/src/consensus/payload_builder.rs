@@ -236,7 +236,6 @@ pub(crate) mod test {
         ids::{node_test_id, subnet_test_id},
         messages::SignedIngressBuilder,
     };
-    use ic_types::WireBytes;
     use ic_types::{
         CryptoHashOfPartialState, RegistryVersion,
         batch::{IngressPayload, SelfValidatingPayload, XNetPayload},
@@ -500,7 +499,7 @@ pub(crate) mod test {
     #[case(7 * MB, true, true)]
     // Note: payloads other than the ingress payload sum to a little below 2 MB.
     fn test_validate_payload_respect_limits(
-        #[case] ingress_payload_wire_size: u64,
+        #[case] ingress_payload_size: u64,
         #[case] expects_soft_error: bool,
         #[case] expects_hard_error: bool,
     ) {
@@ -518,7 +517,7 @@ pub(crate) mod test {
                 xnet_payload_size_to_return: NumBytes::new(64 * KB),
                 // The fields below are irrelevant for the test
                 expected_vetkd_payload_size_limit: ZERO_BYTES,
-                expected_ingress_payload_size_limit: WireBytes::new(ZERO_BYTES.get()),
+                expected_ingress_payload_size_limit: ZERO_BYTES,
                 expected_bitcoin_payload_size_limit: ZERO_BYTES,
                 expected_xnet_payload_size_limit: ZERO_BYTES,
                 expected_http_outcalls_size_limit: ZERO_BYTES,

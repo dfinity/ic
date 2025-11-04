@@ -4,9 +4,8 @@ use crate::{
     execution_environment::{CanisterOutOfCyclesError, IngressHistoryError},
     validation::ValidationError,
 };
-use ic_base_types::WireBytes;
 use ic_types::{
-    CanisterId, Height,
+    CanisterId, Height, NumBytes,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,

@@ -3,7 +3,7 @@ use ic_interfaces::{
     ingress_manager::{IngressPayloadValidationError, IngressSelector, IngressSetQuery},
 };
 use ic_types::{
-    CountBytes, Height, Time, WireBytes,
+    CountBytes, Height, NumBytes, Time,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
@@ -83,7 +83,7 @@ impl IngressSelector for FakeIngressSelector {
         };
 
         PayloadWithSizeEstimate {
-            wire_size_estimate: NumBytes::from(payload.count_bytes() as u64),
+            wire_size_estimate: payload.total_ids_size_estimate(),
             payload,
         }
     }
@@ -93,7 +93,7 @@ impl IngressSelector for FakeIngressSelector {
         _past_payloads: &dyn IngressSetQuery,
         _context: &ValidationContext,
     ) -> Result<NumBytes, IngressPayloadValidationError> {
-        Ok(NumBytes::from(payload.count_bytes() as u64))
+        Ok(payload.total_ids_size_estimate())
     }
 
     fn filter_past_payloads(
