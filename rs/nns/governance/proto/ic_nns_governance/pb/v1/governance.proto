@@ -2239,7 +2239,6 @@ message ListNodeProvidersResponse {
   repeated NodeProvider node_providers = 1;
 }
 
-
 // Date UTC used in NodeProviderRewards to define their validity boundaries
 message DateUtc {
   uint32 year = 1;
