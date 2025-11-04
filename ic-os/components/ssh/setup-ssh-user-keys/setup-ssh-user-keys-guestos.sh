@@ -37,7 +37,10 @@ for ACCOUNT in backup readonly admin; do
     AUTHORIZED_KEYS_FILE="${HOMEDIR}/.ssh/authorized_keys"
 
     if [ "$SEV_ACTIVE" = 0 ]; then
+        echo "SEV/TEE is not active - SSH key copying is enabled"
         copy_ssh_keys "${GUESTOS_AUTHORIZED_SSH_KEYS}" "${AUTHORIZED_KEYS_FILE}"
+    else
+        echo "SEV/TEE is active - SSH key copying is disabled"
     fi
 
     chown -R "${ACCOUNT}:${GROUP}" "${HOMEDIR}"
