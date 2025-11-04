@@ -15682,6 +15682,7 @@ dependencies = [
  "p384",
  "pem 1.1.1",
  "rand 0.8.5",
+ "raw-cpuid",
  "rcgen",
  "reqwest 0.12.15",
  "rsa",
