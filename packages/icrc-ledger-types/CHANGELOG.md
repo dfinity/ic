@@ -8,8 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- Add a `no_storable` feature flag to disable the implementation of `Storable` trait for `Account`, making the
-  dependency on `ic-stable-structures` crate optional.
+- Add a `no_storable` feature flag to disable the implementation of `Storable` trait for `Account`, making the dependency on `ic-stable-structures` crate optional.
 
 ## 0.1.12
 
