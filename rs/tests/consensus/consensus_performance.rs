@@ -79,6 +79,10 @@ const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_latency(LATENCY)
     .with_bandwidth(BANDWIDTH_MBITS);
 
+/// When set to `true`, the prometheus data will be downloaded and persisted in the test
+/// output directory.
+const SHOULD_DOWNLOAD_PROMETHEUS_DATA: bool = false;
+
 /// When set to `true` a [Jaeger](https://www.jaegertracing.io/) instance will be spawned.
 /// Look for "Jaeger frontend available at: $URL" in the logs and follow the link to visualize &
 /// analyze traces.
@@ -192,6 +196,22 @@ fn test_large_messages(env: TestEnv) {
     test(env, 950_000, 4.0)
 }
 
+fn teardown(env: TestEnv) {
+    if SHOULD_DOWNLOAD_PROMETHEUS_DATA {
+        env.download_prometheus_data_dir_if_exists();
+        env.emit_report(String::from(
+            "Downloaded prometheus data to 'prometheus-data-dir.tar.zst' in the test output \
+            directory. You can now use `rs/tests/run-p8s.sh` script to play with the metrics",
+        ));
+    } else {
+        env.emit_report(String::from(
+            "Not downloading the prometheus data. \
+            If you want to download it on the next test run, \
+            please set `SHOULD_DOWNLOAD_PROMETHEUS_DATA` constant to `true`",
+        ));
+    }
+}
+
 fn main() -> Result<()> {
     SystemTestGroup::new()
         // Since we setup VMs in sequence it takes more than the default timeout
@@ -202,6 +222,7 @@ fn main() -> Result<()> {
         .add_test(systest!(test_small_messages))
         .add_test(systest!(test_few_large_messages))
         .add_test(systest!(test_large_messages))
+        .with_teardown(teardown)
         .execute_from_args()?;
     Ok(())
 }
