@@ -2420,16 +2420,34 @@ impl CanisterManager {
         delete_snapshot_id: SnapshotId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
+        subnet_size: usize,
+        resource_saturation: &ResourceSaturation,
     ) -> Result<(), CanisterManagerError> {
         // Check sender is a controller.
         validate_controller(canister, &sender)?;
 
         // perform access validation, but don't use the result
-        let _ = self.get_snapshot(canister.canister_id(), delete_snapshot_id, state)?;
+        let snapshot = self.get_snapshot(canister.canister_id(), delete_snapshot_id, state)?;
+
+        let memory_usage = canister.memory_usage();
+        let old_snapshot_size = snapshot.size();
+        debug_assert!(memory_usage >= old_snapshot_size);
+        let new_memory_usage = memory_usage.saturating_sub(&old_snapshot_size);
+        let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
+            subnet_size,
+            state.get_own_cost_schedule(),
+            canister,
+            sender,
+            Cycles::zero(),
+            round_limits,
+            new_memory_usage,
+            memory_usage,
+            resource_saturation,
+        )?;
 
         let old_snapshot = state.delete_snapshot(delete_snapshot_id);
         // Already confirmed that `old_snapshot` exists.
-        let old_snapshot_size = old_snapshot.unwrap().size();
+        debug_assert_eq!(old_snapshot.unwrap().size(), old_snapshot_size);
         canister.system_state.snapshots_memory_usage = canister
             .system_state
             .snapshots_memory_usage
@@ -2443,11 +2461,15 @@ impl CanisterManager {
                 .canister_snapshots
                 .compute_memory_usage_by_canister(canister.canister_id()),
         );
-        round_limits.subnet_available_memory.increment(
-            old_snapshot_size,
-            NumBytes::from(0),
-            NumBytes::from(0),
+        self.cycles_and_memory_usage_updates(
+            subnet_size,
+            state.get_own_cost_schedule(),
+            canister,
+            sender,
+            round_limits,
+            validated_cycles_and_memory_usage,
         );
+
         Ok(())
     }
 
@@ -2935,6 +2957,7 @@ impl CanisterManager {
         new_id: CanisterId,
         to_version: u64,
         to_total_num_changes: u64,
+        requested_by: PrincipalId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
@@ -2980,6 +3003,7 @@ impl CanisterManager {
                 new_id.into(),
                 to_version,
                 to_total_num_changes,
+                requested_by,
             ),
         );
         round_limits

@@ -473,6 +473,8 @@ pub struct CanisterRename {
     pub total_num_changes: u64,
     #[prost(message, optional, tag = "3")]
     pub rename_to: ::core::option::Option<RenameTo>,
+    #[prost(message, optional, tag = "4")]
+    pub requested_by: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RenameTo {
