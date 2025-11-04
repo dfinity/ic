@@ -7,7 +7,6 @@
 .rclone*                  @dfinity/idx
 /buf.yaml                 @dfinity/ic-message-routing-owners
 /cpp/                     @dfinity/node
-/hs/spec_compliance       @dfinity/research
 /licenses/                @dfinity/idx
 /bin/ict                  @dfinity/idx
 /bin/                     @dfinity/idx
@@ -256,7 +255,6 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/idx/                                          @dfinity/idx
 /rs/tests/testnets/                                     @dfinity/idx
 /rs/tests/testnets/nns_recovery.rs                      @dfinity/consensus
-/rs/tests/research                                      @dfinity/research
 /rs/tests/driver/src/driver/simulate_network.rs         @dfinity/consensus @dfinity/idx
 /rs/tests/boundary_nodes/                               @dfinity/boundary-node
 /rs/tests/ckbtc/                                        @dfinity/cross-chain-team
