@@ -427,6 +427,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "console": crate.spec(
                 version = "^0.11",
             ),
+            "color-eyre": crate.spec(
+                version = "0.6.5",
+            ),
             "convert_case": crate.spec(
                 version = "^0.6.0",
             ),
@@ -448,6 +451,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "crossbeam-channel": crate.spec(
                 version = "^0.5.15",
+            ),
+            "crossterm": crate.spec(
+                version = "0.29.0",
+                features = [
+                    "event-stream"
+                ],
             ),
             "csv": crate.spec(
                 version = "^1.1",
@@ -485,6 +494,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "dfx-core": crate.spec(
                 version = "^0.1.4",
+            ),
+            "duration-string": crate.spec(
+                version = "0.5.3"
             ),
             "dyn-clone": crate.spec(
                 version = "^1.0.14",
@@ -602,6 +614,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "humantime-serde": crate.spec(
                 version = "^1.1.1",
+            ),
+            "humansize": crate.spec(
+                version = "2.1.3",
             ),
             "hyper": crate.spec(
                 version = "^1.6.0",
@@ -1101,6 +1116,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "ratelimit": crate.spec(
                 version = "^0.9.1",
+            ),
+            "ratatui": crate.spec(
+                version = "0.29.0",
             ),
             "rayon": crate.spec(
                 version = "^1.10.0",

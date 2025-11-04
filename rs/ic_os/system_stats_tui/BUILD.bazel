@@ -1,0 +1,31 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
+
+rust_binary(
+    name = "system_stats_tui",
+    srcs = glob(
+        ["src/**/*.rs"],
+    ),
+    aliases = {},
+    crate_name = "system_stats_tui",
+    proc_macro_deps = [],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        # Should this maybe support macos as well?
+    ],
+    deps = [
+        "@crate_index//:chrono",
+        "@crate_index//:clap",
+        "@crate_index//:color-eyre",
+        "@crate_index//:crossterm",
+        "@crate_index//:duration-string",
+        "@crate_index//:futures",
+        "@crate_index//:futures-util",
+        "@crate_index//:humansize",
+        "@crate_index//:lazy_static",
+        "@crate_index//:prometheus-parse",
+        "@crate_index//:ratatui",
+        "@crate_index//:regex",
+        "@crate_index//:reqwest",
+        "@crate_index//:tokio",
+    ],
+)
