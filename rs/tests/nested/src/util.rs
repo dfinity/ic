@@ -1,7 +1,7 @@
 use std::io::Read;
 use std::str::FromStr;
 
-use anyhow::{Context, Error, Result, bail};
+use anyhow::{Context, Result, bail};
 use canister_test::PrincipalId;
 use ic_canister_client::Sender;
 use ic_consensus_system_test_utils::rw_message::install_nns_and_check_progress;
