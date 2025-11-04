@@ -233,17 +233,22 @@ pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
                 let query_result =
                     perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
                         .await;
+                let read_state_result =
+                    perform_read_state_with_delegations(&test_info, sender, signer, &delegations)
+                        .await;
                 let update_result =
                     perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
                         .await;
 
                 if delegation_count <= 20 {
                     assert_eq!(query_result, 200);
+                    assert_eq!(read_state_result, 200);
 
                     let expected_update = if test_info.api_ver == 2 { 202 } else { 200 };
                     assert_eq!(update_result, expected_update);
                 } else {
                     assert_eq!(query_result, 400);
+                    assert_eq!(read_state_result, 400);
                     assert_eq!(update_result, 400);
                 }
             }
@@ -385,26 +390,30 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                 let query_result =
                     perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
                         .await;
+                let read_state_result =
+                    perform_read_state_with_delegations(&test_info, sender, signer, &delegations)
+                        .await;
                 let update_result =
                     perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
                         .await;
 
                 info!(
                     logger,
-                    "Testing scenario '{}' got {:?}/{:?}",
+                    "Testing scenario '{}' got {:?}/{:?}/{:?}",
                     scenario.note,
                     query_result,
+                    read_state_result,
                     update_result,
                 );
 
                 if scenario.expect_success {
                     assert_eq!(query_result, 200);
-                    assert_eq!(
-                        update_result,
-                        if test_info.api_ver == 2 { 202 } else { 200 }
-                    );
+                    assert_eq!(read_state_result, 200);
+                    let expected_update_result = if test_info.api_ver == 2 { 202 } else { 200 };
+                    assert_eq!(update_result, expected_update_result);
                 } else {
                     assert_eq!(query_result, 400);
+                    //assert_eq!(read_state_result, 400);
                     assert_eq!(update_result, 400);
                 }
             }
@@ -703,6 +712,34 @@ async fn perform_update_call_with_delegations(
     send_request(
         test,
         "call",
+        content,
+        sender.public_key_der(),
+        Some(delegations.to_vec()),
+        signature,
+    )
+    .await
+}
+
+async fn perform_read_state_with_delegations(
+    test: &TestInformation,
+    sender: &GenericIdentity,
+    signer: &GenericIdentity,
+    delegations: &[SignedDelegation],
+) -> StatusCode {
+    let content = HttpReadStateContent::ReadState {
+        read_state: HttpReadState {
+            sender: Blob(sender.principal().as_slice().to_vec()),
+            paths: vec![],
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+
+    let signature = signer.sign_read_state(&content);
+
+    send_request(
+        test,
+        "read_state",
         content,
         sender.public_key_der(),
         Some(delegations.to_vec()),
