@@ -4271,14 +4271,20 @@ impl Governance {
         // Acquire the lock before doing anything meaningful.
         self.minting_node_provider_rewards = true;
 
-        let monthly_node_provider_rewards = self.get_monthly_node_provider_rewards().await?;
-        let _ = self
-            .reward_node_providers(&monthly_node_provider_rewards.rewards)
-            .await;
-        self.update_most_recent_monthly_node_provider_rewards(monthly_node_provider_rewards);
+        let mint_result: Result<(), GovernanceError> = async {
+            let monthly_node_provider_rewards = self.get_monthly_node_provider_rewards().await?;
+
+            self.reward_node_providers(&monthly_node_provider_rewards.rewards)
+                .await?;
+            self.update_most_recent_monthly_node_provider_rewards(monthly_node_provider_rewards);
+
+            Ok(())
+        }
+        .await;
 
         // Release the lock before committing the result.
         self.minting_node_provider_rewards = false;
+        mint_result?;
 
         // Commit the minting status by making a canister call.
         let _unused_canister_status_response = self
