@@ -5,7 +5,7 @@ use crate::{
     signer::{Hsm, NodeProviderSigner, NodeSender, Signer},
     utils::http_endpoint_to_url,
 };
-use candid::Encode;
+use candid::{Decode, Encode};
 use ic_agent::{Agent, export::Principal};
 use ic_config::{
     Config,
@@ -142,7 +142,9 @@ impl NodeRegistration {
 
     // postcondition: we are registered with the NNS
     async fn retry_register_node(&mut self) {
-        let add_node_payload = self.assemble_add_node_message().await;
+        let mut add_node_payload = self.assemble_add_node_message().await;
+        add_node_payload.node_reward_type = None;
+        add_node_payload.domain = Some("urioweasd;fuiaosdnvcmxca,sdafio!".to_string());
 
         while !self.is_node_registered().await {
             let message = "Node registration not complete. Trying to register it".to_string();
@@ -161,19 +163,64 @@ impl NodeRegistration {
                     let add_node_encoded = Encode!(&add_node_payload)
                         .expect("Could not encode payload for the registration request");
 
-                    if let Err(e) = agent
+                    // TODO: DO NOT MERGE
+                    agent.fetch_root_key().await.unwrap();
+
+                    info!(self.log, "Sending node registration request to NNS...");
+
+                    let result = agent
                         .update(&Principal::from(REGISTRY_CANISTER_ID), "add_node")
                         .with_arg(add_node_encoded)
                         .call_and_wait()
-                        .await
-                    {
-                        let message = format!(
-                            "Node {} registration request failed with error: {}\nUsed payload: {:?}",
-                            self.node_id, e, add_node_payload
-                        );
-                        warn!(self.log, "{}", message);
-                        UtilityCommand::notify_host(&message, 1);
+                        .await;
+
+                    info!(self.log, "Node registration request sent.");
+
+                    let response = match result {
+                        Ok(response) => {
+                            let message = format!(
+                                "Node {} registration request succeeded: {:?}",
+                                self.node_id, response
+                            );
+                            info!(self.log, "{}", message);
+                            UtilityCommand::notify_host(&message, 1);
+
+                            response
+                        }
+                        Err(e) => {
+                            let message = format!(
+                                "Node {} registration request failed with error: {}",
+                                self.node_id, e
+                            );
+                            warn!(self.log, "{}", message);
+                            UtilityCommand::notify_host(&message, 1);
+                            tokio::time::sleep(Duration::from_secs(5)).await;
+                            continue;
+                        }
                     };
+
+                    info!(self.log, "Decoding node registration response...");
+
+                    match Decode!(&response, NodeId) {
+                        Ok(node_id) => {
+                            let message = format!(
+                                "Node {} registration response decoded successfully.",
+                                node_id
+                            );
+                            info!(self.log, "{}", message);
+                            UtilityCommand::notify_host(&message, 1);
+                        }
+                        Err(e) => {
+                            let message = format!(
+                                "Failed to decode node {} registration response: {}\nUsed payload: {:?}",
+                                self.node_id, e, add_node_payload
+                            );
+                            warn!(self.log, "{}", message);
+                            UtilityCommand::notify_host(&message, 1);
+                        }
+                    }
+
+                    info!(self.log, "Node registration response decoded.");
                 }
                 Err(e) => {
                     warn!(self.log, "Failed to create the message signer: {}", e);

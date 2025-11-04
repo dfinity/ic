@@ -48,7 +48,7 @@ system_test_nns(
     name = "registration",
     env = MAINNET_ENV,
     flaky = True,  # flakiness rate of over 2% over the month from 2025-02-11 till 2025-03-11.
-    tags = ["long_test"],  # since it takes longer than 5 minutes.
+    # tags = ["long_test"],  # since it takes longer than 5 minutes.
     test_timeout = "eternal",
     uses_setupos_img = True,
     runtime_deps = IC_GATEWAY_RUNTIME_DEPS,
