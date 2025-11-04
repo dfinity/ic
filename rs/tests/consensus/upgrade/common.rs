@@ -273,7 +273,7 @@ async fn upgrade_to(
         subnet_node.get_ip_addr(),
     );
 
-    let state_hash_from_logs = fetch_latest_local_cup_hash_from_logs(log_stream).await;
+    let state_hash_from_logs = fetch_local_cup_hash_from_logs_until_graceful_exit(log_stream).await;
 
     info!(logger, "The orchestrator shut down the tasks gracefully");
     info!(
@@ -312,7 +312,7 @@ async fn upgrade_to(
 /// upcoming reboot).
 ///
 /// This function will thus loop indefinitely if an upgrade is not scheduled.
-async fn fetch_latest_local_cup_hash_from_logs(mut log_stream: LogStream) -> String {
+async fn fetch_local_cup_hash_from_logs_until_graceful_exit(mut log_stream: LogStream) -> String {
     let local_cup_regex =
         regex::Regex::new(r#"Persisted local CUP to disk: .*state_hash=([a-f0-9]{64})"#).unwrap();
     let orchestrator_shutdown = "Orchestrator shut down gracefully";
