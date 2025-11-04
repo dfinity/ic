@@ -17,6 +17,8 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL,
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
+use ic_protobuf::registry::node::v1::NodeRewardType;
+use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::registry::replica_version::v1::{
     GuestLaunchMeasurement, GuestLaunchMeasurementMetadata, GuestLaunchMeasurements,
 };
@@ -367,6 +369,9 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         chain_key_config,
         ..Default::default()
     };
+    let rewards_table = NodeRewardsTable {
+        table: BTreeMap::new(),
+    };
 
     let mut mutations = vec![
         insert(
@@ -384,6 +389,10 @@ pub fn invariant_compliant_mutation_with_subnet_id(
         insert(
             make_blessed_replica_versions_key().as_bytes(),
             blessed_replica_version.encode_to_vec(),
+        ),
+        insert(
+            ic_registry_keys::NODE_REWARDS_TABLE_KEY.as_bytes(),
+            rewards_table.encode_to_vec(),
         ),
     ];
     mutations.append(&mut make_add_node_registry_mutations(
@@ -894,7 +903,10 @@ pub fn generate_nidkg_initial_transcript(
 }
 
 /// Prepares all the payloads to add a new node, for tests.
-pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePublicKeys) {
+pub fn prepare_add_node_payload(
+    mutation_id: u8,
+    node_reward_type: NodeRewardType,
+) -> (AddNodePayload, ValidNodePublicKeys) {
     // As the node canister checks for validity of keys, we need to generate them
     // first
     let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
@@ -926,7 +938,7 @@ pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePu
         // Unused section follows
         p2p_flow_endpoints: Default::default(),
         prometheus_metrics_endpoint: Default::default(),
-        node_reward_type: None,
+        node_reward_type: Some(node_reward_type.to_string()),
     };
 
     (payload, node_public_keys)

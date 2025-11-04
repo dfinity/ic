@@ -20,7 +20,7 @@ fn check_caller() -> Result<(), MigrationCanisterError> {
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
-enum MigrationCanisterError {
+pub(crate) enum MigrationCanisterError {
     CallerNotAuthorized,
 }
 
