@@ -1,5 +1,5 @@
 [Unit]
-Description=GuestOS boot success monitoring service
+Description=GuestOS boot failure monitoring service
 DefaultDependencies=no
 # Only activate the failure if multi-user.target was reached (either successfully or with a failure)
 After=multi-user.target
