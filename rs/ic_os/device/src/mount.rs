@@ -368,3 +368,57 @@ pub mod testing {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::ensure;
+    use std::io::Write;
+    use std::process::Command;
+    use tempfile::NamedTempFile;
+
+    fn create_test_image() -> Result<NamedTempFile> {
+        let out = NamedTempFile::new()?;
+        out.as_file().set_len(16 * 1024 * 1024)?;
+        let temp_dir = TempDir::new()?;
+        write!(File::create(temp_dir.path().join("foo.txt"))?, "hello")?;
+
+        ensure!(
+            Command::new("mkfs.ext4")
+                .arg(out.path())
+                .arg("-d")
+                .arg(temp_dir.path())
+                .status()
+                .context("Could not start mkfs.ext4")?
+                .success(),
+            "mkfs.ext4 failed"
+        );
+
+        Ok(out)
+    }
+
+    #[tokio::test]
+    async fn test_loop_device_mount_drop_with_unmount_failure() {
+        let image = create_test_image().unwrap();
+
+        let mount = LoopDeviceMounter
+            .mount_range(
+                image.path().to_path_buf(),
+                0,
+                0,
+                MountOptions {
+                    file_system: FileSystem::Ext4,
+                },
+            )
+            .await
+            .unwrap();
+
+        let mount_point = mount.mount_point().to_path_buf();
+        // Force unmount to fail by keeping a file handle open
+        let _file = File::open(mount_point.join("foo.txt")).unwrap();
+
+        drop(mount);
+
+        assert!(mount_point.join("foo.txt").exists());
+    }
+}
