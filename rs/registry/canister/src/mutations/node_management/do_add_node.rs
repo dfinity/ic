@@ -23,6 +23,7 @@ use crate::mutations::node_management::{
     },
     do_remove_node_directly::RemoveNodeDirectlyPayload,
 };
+use crate::rate_limits::{commit_add_node_capacity, try_reserve_add_node_capacity};
 use ic_nervous_system_time_helpers::now_system_time;
 use ic_registry_canister_api::AddNodePayload;
 use ic_registry_keys::NODE_REWARDS_TABLE_KEY;
@@ -75,6 +76,12 @@ impl Registry {
         // (We use the http endpoint to be in line with what is used by the
         // release dashboard.)
         let http_endpoint = connection_endpoint_from_string(&payload.http_endpoint);
+
+        // 2a. Check IP-based rate limiting (1 node addition per day per IP)
+        let ip_addr = http_endpoint.ip_addr.clone();
+        let ip_reservation = try_reserve_add_node_capacity(now, ip_addr.clone())
+            .map_err(|e| format!("{LOG_PREFIX}do_add_node: {e}"))?;
+
         let nodes_with_same_ip = scan_for_nodes_by_ip(self, &http_endpoint.ip_addr);
         let mut mutations = Vec::new();
         let mut num_removed_same_ip_same_type = 0;
@@ -207,6 +214,11 @@ impl Registry {
             println!("{LOG_PREFIX}do_add_node did not use reservation capacity: {e}");
         }
 
+        // 11. Commit IP-based rate limiter reservation
+        if let Err(e) = commit_add_node_capacity(now, ip_reservation) {
+            println!("{LOG_PREFIX}do_add_node did not use IP reservation capacity: {e}");
+        }
+
         Ok(node_id)
     }
 
@@ -331,6 +343,7 @@ mod tests {
         invariant_compliant_registry, prepare_registry_with_nodes,
         registry_add_node_operator_for_node, registry_create_subnet_with_nodes,
     };
+    use crate::rate_limits::get_available_add_node_capacity;
     use ic_base_types::{NodeId, PrincipalId};
     use ic_config::crypto::CryptoConfig;
     use ic_crypto_node_key_generation::generate_node_keys_once;
@@ -883,6 +896,10 @@ mod tests {
 
         // Verify the new node is present in the registry
         assert!(registry.get_node(new_node_id).is_some());
+
+        // Verify node operator allowance is unchanged
+        let updated_operator = get_node_operator_record(&registry, node_operator_id).unwrap();
+        assert_eq!(updated_operator.node_allowance, 0);
     }
 
     #[test]
@@ -1171,5 +1188,121 @@ mod tests {
             error,
             "Rate Limit Capacity exceeded. Please wait and try again later."
         );
+    }
+
+    #[test]
+    fn test_ip_rate_limiting_for_add_node() {
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        let node_operator_id = PrincipalId::new_user_test_id(1);
+
+        // Add node operator record with sufficient allowance
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 10, // Enough for multiple nodes
+            ..Default::default()
+        };
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+
+        // Prepare an add_node payload.
+        let (template_payload, _) = prepare_add_node_payload(1);
+
+        let now = now_system_time();
+        let test_ip = connection_endpoint_from_string(&template_payload.http_endpoint).ip_addr;
+
+        let add_node_payload_with_same_ip = |i| {
+            let (mut new_payload, _) = prepare_add_node_payload(i);
+            new_payload
+                .http_endpoint
+                .clone_from(&template_payload.http_endpoint);
+            new_payload
+        };
+
+        // Check that we start with capacity available
+        let initial_capacity = get_available_add_node_capacity(test_ip.clone(), now);
+        assert_eq!(initial_capacity, 7, "Should start with 7 capacity");
+
+        // Act: Add first node with a specific IP - should succeed
+        let result_1 =
+            registry.do_add_node_(add_node_payload_with_same_ip(1), node_operator_id, now);
+        assert!(result_1.is_ok(), "First node addition should succeed");
+
+        assert_eq!(get_available_add_node_capacity(test_ip.clone(), now), 6,);
+
+        // The next 6 should also succeed.
+        for i in 2..=7 {
+            registry
+                .do_add_node_(add_node_payload_with_same_ip(i), node_operator_id, now)
+                .unwrap();
+        }
+        assert_eq!(
+            get_available_add_node_capacity(test_ip.clone(), now),
+            0,
+            "Capacity should be exhausted after 7 nodes"
+        );
+
+        let new_payload = add_node_payload_with_same_ip(8);
+        let result_2 = registry.do_add_node_(new_payload.clone(), node_operator_id, now);
+        assert!(
+            result_2.is_err(),
+            "Second node addition should fail due to rate limiting"
+        );
+        let error_message = result_2.unwrap_err();
+        assert!(
+            error_message.contains("Capacity exceeded") || error_message.contains("Rate"),
+            "Error message should mention rate/capacity limit, got: {error_message}"
+        );
+
+        // Act: Try again after 24 hours - should succeed
+        let one_day_later = now + std::time::Duration::from_secs(86401);
+        let after_day_capacity = get_available_add_node_capacity(test_ip.clone(), one_day_later);
+        assert_eq!(
+            after_day_capacity, 1,
+            "Capacity should be restored after 24 hours"
+        );
+
+        let result_3 = registry.do_add_node_(new_payload.clone(), node_operator_id, one_day_later);
+        assert!(
+            result_3.is_ok(),
+            "Node addition should succeed after 24 hours"
+        );
+
+        let result_4 = registry.do_add_node_(new_payload, node_operator_id, one_day_later);
+        let error_message = result_4.unwrap_err();
+        assert!(
+            error_message.contains("Capacity exceeded") || error_message.contains("Rate"),
+            "Error message should mention rate/capacity limit, got: {error_message}"
+        );
+    }
+
+    #[test]
+    fn test_ip_rate_limiting_different_ips() {
+        // Arrange
+        let mut registry = invariant_compliant_registry(0);
+        let node_operator_id = PrincipalId::new_user_test_id(1);
+
+        // Add node operator record with sufficient allowance
+        let node_operator_record = NodeOperatorRecord {
+            node_allowance: 10,
+            ..Default::default()
+        };
+        registry.maybe_apply_mutation_internal(vec![insert(
+            make_node_operator_record_key(node_operator_id),
+            node_operator_record.encode_to_vec(),
+        )]);
+
+        let now = now_system_time();
+
+        // Add 8 nodes with different IP address at the same time
+        for i in 0..8 {
+            let (payload, _) = prepare_add_node_payload(i);
+            let result = registry.do_add_node_(payload, node_operator_id, now);
+            assert!(
+                result.is_ok(),
+                "Attempt {i} should succeed but got {result:?}"
+            );
+        }
     }
 }

@@ -590,7 +590,7 @@ pub async fn install_registry_canister(
     init_payload: RegistryCanisterInitPayload,
 ) {
     let encoded = Encode!(&init_payload).unwrap();
-    install_rust_canister(canister, "registry-canister", &[], Some(encoded)).await;
+    install_rust_canister(canister, "registry-canister", &["test"], Some(encoded)).await;
 }
 
 /// Creates and installs the registry canister.
