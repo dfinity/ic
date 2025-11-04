@@ -329,6 +329,217 @@ mod withdrawal {
     }
 }
 
+mod withdrawal {
+    use candid::Principal;
+    use ic_ckdoge_minter::address::DogecoinAddress;
+    use ic_ckdoge_minter::candid_api::{RetrieveDogeStatus, RetrieveDogeWithApprovalArgs};
+    use ic_ckdoge_minter::lifecycle::init::Network;
+    use ic_ckdoge_minter::{
+        BitcoinAddress, BurnMemo, ChangeOutput, EventType, MintMemo, OutPoint, RetrieveBtcRequest,
+        UpdateBalanceArgs, Utxo, UtxoStatus, WithdrawalFee, candid_api::GetDogeAddressArgs,
+        memo_encode,
+    };
+    use ic_ckdoge_minter_test_utils::{
+        DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
+        into_outpoint, parse_dogecoin_address, txid,
+    };
+    use icrc_ledger_types::icrc1::account::Account;
+    use icrc_ledger_types::icrc1::transfer::Memo;
+    use icrc_ledger_types::icrc3::transactions::{Burn, Mint};
+    use pocket_ic::Time;
+    use std::array;
+
+    #[test]
+    fn should_withdraw_doge() {
+        let setup = Setup::default();
+        let minter = setup.minter();
+        let ledger = setup.ledger();
+        let dogecoin = setup.dogecoin();
+        let fee_percentiles = array::from_fn(|i| i as u64);
+        let median_fee = fee_percentiles[50];
+        assert_eq!(median_fee, 50);
+        dogecoin.set_fee_percentiles(fee_percentiles);
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+        let minter_address = minter.get_doge_address(
+            Principal::anonymous(),
+            &GetDogeAddressArgs {
+                owner: Some(minter.id()),
+                subaccount: None,
+            },
+        );
+
+        let deposit_address = minter.get_doge_address(
+            Principal::anonymous(),
+            &GetDogeAddressArgs {
+                owner: Some(account.owner),
+                subaccount: account.subaccount,
+            },
+        );
+
+        let utxo = Utxo {
+            height: 0,
+            outpoint: OutPoint {
+                txid: txid(),
+                vout: 1,
+            },
+            value: RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE,
+        };
+        dogecoin.simulate_transaction(utxo.clone(), deposit_address);
+
+        let utxo_status = minter
+            .update_balance(
+                account.owner,
+                &UpdateBalanceArgs {
+                    owner: Some(account.owner),
+                    subaccount: account.subaccount,
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            utxo_status,
+            vec![UtxoStatus::Minted {
+                block_index: 0,
+                minted_amount: utxo.value,
+                utxo: utxo.clone(),
+            }]
+        );
+
+        ledger
+            .assert_that_transaction(0_u64)
+            .equals_mint_ignoring_timestamp(Mint {
+                amount: utxo.value.into(),
+                to: account,
+                memo: Some(Memo::from(memo_encode(&MintMemo::Convert {
+                    txid: Some(utxo.outpoint.txid.as_ref()),
+                    vout: Some(utxo.outpoint.vout),
+                    kyt_fee: Some(0),
+                }))),
+                created_at_time: None,
+                fee: None,
+            });
+
+        minter.assert_that_events().contains_only_once_in_order(&[
+            EventType::CheckedUtxoV2 {
+                utxo: utxo.clone(),
+                account,
+            },
+            EventType::ReceivedUtxos {
+                mint_txid: Some(0),
+                to_account: account,
+                utxos: vec![utxo.clone()],
+            },
+        ]);
+
+        assert_eq!(utxo.value, ledger.icrc1_balance_of(account));
+        let _ledger_approval_index = ledger
+            .icrc2_approve(account, RETRIEVE_DOGE_MIN_AMOUNT, minter.id())
+            .unwrap();
+        assert_eq!(RETRIEVE_DOGE_MIN_AMOUNT, ledger.icrc1_balance_of(account));
+
+        let beneficiary_address =
+            DogecoinAddress::parse(DOGECOIN_ADDRESS_1, &Network::Mainnet).unwrap();
+        let time_of_retrieval = Time::from_nanos_since_unix_epoch(1760709476000000000);
+
+        setup.as_ref().set_time(time_of_retrieval);
+        let retrieve_doge_id = minter
+            .retrieve_doge_with_approval(
+                USER_PRINCIPAL,
+                &RetrieveDogeWithApprovalArgs {
+                    amount: RETRIEVE_DOGE_MIN_AMOUNT,
+                    from_subaccount: account.subaccount,
+                    address: DOGECOIN_ADDRESS_1.to_string(),
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            minter.retrieve_doge_status(retrieve_doge_id.block_index),
+            RetrieveDogeStatus::Pending
+        );
+        minter.assert_that_events().contains_only_once_in_order(&[
+            EventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
+                amount: RETRIEVE_DOGE_MIN_AMOUNT,
+                address: BitcoinAddress::P2pkh(
+                    beneficiary_address.as_bytes().to_vec().try_into().unwrap(),
+                ),
+                block_index: retrieve_doge_id.block_index,
+                received_at: time_of_retrieval.as_nanos_since_unix_epoch(),
+                kyt_provider: None,
+                reimbursement_account: Some(account),
+            }),
+        ]);
+
+        ledger
+            .assert_that_transaction(retrieve_doge_id.block_index)
+            .equals_burn_ignoring_timestamp(Burn {
+                amount: RETRIEVE_DOGE_MIN_AMOUNT.into(),
+                from: account,
+                spender: Some(minter.id().into()),
+                memo: Some(Memo::from(memo_encode(&BurnMemo::Convert {
+                    address: Some(DOGECOIN_ADDRESS_1),
+                    kyt_fee: None,
+                    status: None,
+                }))),
+                created_at_time: None,
+                fee: None,
+            });
+
+        let txid = minter.await_doge_transaction(retrieve_doge_id.block_index);
+        // TODO XC-496: fix fee handling
+        let change_amount = 1_000_300;
+        let withdrawal_fee = WithdrawalFee {
+            minter_fee: 300,
+            bitcoin_fee: 220,
+        };
+        minter
+            .assert_that_events()
+            .ignoring_timestamp()
+            .contains_only_once_in_order(&[EventType::SentBtcTransaction {
+                request_block_indices: vec![retrieve_doge_id.block_index],
+                txid,
+                utxos: vec![utxo.clone()],
+                change_output: Some(ChangeOutput {
+                    vout: 1,
+                    value: change_amount,
+                }),
+                submitted_at: 0, //not relevant
+                fee_per_vbyte: Some(1_500),
+                withdrawal_fee: Some(withdrawal_fee),
+            }]);
+        let mempool = dogecoin.mempool();
+        assert_eq!(
+            mempool.len(),
+            1,
+            "ckDOGE transaction did not appear in the mempool"
+        );
+        let tx = mempool
+            .get(&txid)
+            .expect("the mempool does not contain the withdrawal transaction");
+        assert_eq!(tx.input.len(), 1);
+        assert_eq!(tx.input[0].previous_output, into_outpoint(utxo.outpoint));
+
+        assert_eq!(tx.output.len(), 2);
+        let beneficiary = parse_dogecoin_address(tx.output.first().unwrap());
+        assert_eq!(DOGECOIN_ADDRESS_1, beneficiary.to_string());
+        let amount_received =
+            RETRIEVE_DOGE_MIN_AMOUNT - withdrawal_fee.bitcoin_fee - withdrawal_fee.minter_fee;
+        assert_eq!(amount_received, tx.output.first().unwrap().value.to_sat());
+
+        let change_beneficiary = parse_dogecoin_address(tx.output.get(1).unwrap());
+        assert_eq!(minter_address, change_beneficiary.to_string());
+        assert_eq!(change_amount, tx.output.get(1).unwrap().value.to_sat());
+
+        assert_eq!(
+            utxo.value - amount_received - change_amount,
+            withdrawal_fee.bitcoin_fee
+        );
+
+        assert_eq!(ledger.icrc1_balance_of(account), 0);
+    }
+}
+
 #[test]
 fn should_refresh_fee_percentiles() {
     let setup = Setup::default();
