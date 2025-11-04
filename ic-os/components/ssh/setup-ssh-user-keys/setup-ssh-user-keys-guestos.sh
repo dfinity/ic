@@ -16,17 +16,6 @@ copy_ssh_keys() {
     fi
 }
 
-if /opt/ic/bin/sev_active; then
-    ENABLE_TEE="true"
-    echo "SEV/TEE is active - SSH key copying will be disabled"
-elif [ $? -eq 1 ]; then
-    ENABLE_TEE="false"
-    echo "SEV/TEE is not active - SSH key copying will be enabled"
-else
-    echo "Error checking SEV/TEE status"
-    exit 1
-fi
-
 # Create home directories
 echo "Creating user home directories"
 for ACCOUNT in backup readonly admin; do
@@ -47,7 +36,7 @@ for ACCOUNT in backup readonly admin; do
     GUESTOS_AUTHORIZED_SSH_KEYS="/boot/config/accounts_ssh_authorized_keys/${ACCOUNT}"
     AUTHORIZED_KEYS_FILE="${HOMEDIR}/.ssh/authorized_keys"
 
-    if [ "${ENABLE_TEE}" != "true" ]; then
+    if [ "$SEV_ACTIVE" = 0 ]; then
         copy_ssh_keys "${GUESTOS_AUTHORIZED_SSH_KEYS}" "${AUTHORIZED_KEYS_FILE}"
     fi
 
