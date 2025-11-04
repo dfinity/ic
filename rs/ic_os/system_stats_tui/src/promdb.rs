@@ -349,6 +349,10 @@ impl<'a> IndexedSeries {
         self.1.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.1.is_empty()
+    }
+
     #[allow(dead_code)]
     pub fn clear(&mut self) {
         self.1.clear();
