@@ -223,7 +223,7 @@ MAINNET_NNS_CANISTER_DATA = [
     "@mainnet_canisters//:sns_root.wasm.gz",
     "@mainnet_canisters//:swap.wasm.gz",
     "@mainnet_canisters//:governance-canister_test.wasm.gz",
-    "//rs/migration_canister:migration-canister", # the migration canister is not yet deployed to the ICP mainnet
+    "//rs/migration_canister:migration-canister",  # the migration canister is not yet deployed to the ICP mainnet
 ]
 
 MAINNET_NNS_CANISTER_ENV = {
