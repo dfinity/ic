@@ -17,7 +17,6 @@ use ic_agent::Agent;
 use ic_consensus_system_test_utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message,
 };
-use ic_consensus_system_test_utils::ssh_access::execute_bash_command;
 use ic_consensus_system_test_utils::subnet::enable_chain_key_signing_on_subnet;
 use ic_consensus_system_test_utils::upgrade::{
     assert_assigned_replica_version, bless_replica_version, deploy_guestos_to_all_subnet_nodes,
@@ -107,7 +106,6 @@ pub fn upgrade(
     upgrade_version: &ReplicaVersion,
     subnet_type: SubnetType,
     ecdsa_canister_key: Option<&(MessageCanister, BTreeMap<MasterPublicKeyId, Vec<u8>>)>,
-    assert_graceful_orchestrator_tasks_exits: bool,
 ) -> (IcNodeSnapshot, Principal, String) {
     let logger = env.logger();
     let (subnet_id, subnet_node, faulty_node, redundant_nodes) =
@@ -177,7 +175,6 @@ pub fn upgrade(
         subnet_id,
         &subnet_node,
         upgrade_version,
-        assert_graceful_orchestrator_tasks_exits,
         &logger,
     ));
 
@@ -255,7 +252,6 @@ async fn upgrade_to(
     subnet_id: SubnetId,
     subnet_node: &IcNodeSnapshot,
     target_version: &ReplicaVersion,
-    assert_graceful_orchestrator_tasks_exits: bool,
     logger: &Logger,
 ) {
     const CUP_PATH: &str = "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb";
@@ -270,19 +266,16 @@ async fn upgrade_to(
     );
     deploy_guestos_to_all_subnet_nodes(nns_node, target_version, subnet_id).await;
 
-    if assert_graceful_orchestrator_tasks_exits {
-        info!(
-            logger,
-            "Checking if the node {} has produced a log \
-            indicating that the orchestrator has gracefully shut down the tasks",
-            subnet_node.get_ip_addr(),
-        );
-        assert_orchestrator_stopped_gracefully(subnet_node.clone()).await;
-        info!(logger, "The orchestrator shut down the tasks gracefully");
-    }
+    info!(
+        logger,
+        "Checking if the node {} has produced a log displaying local CUP info and one \
+        indicating that the orchestrator has gracefully shut down the tasks",
+        subnet_node.get_ip_addr(),
+    );
 
     let state_hash_from_logs = fetch_latest_local_cup_hash_from_logs(log_stream).await;
 
+    info!(logger, "The orchestrator shut down the tasks gracefully");
     info!(
         logger,
         "Extracted state hash from logs before node reboot: {}", state_hash_from_logs
@@ -315,21 +308,35 @@ async fn upgrade_to(
 }
 
 /// Fetch the latest local CUP state hash from the node logs by continously searching for matching
-/// log entries until the log stream ends, which happens when the node reboots.
+/// log entries until detecting that the orchestrator gracefully shut down (which indicates an
+/// upcoming reboot).
 ///
 /// This function will thus loop indefinitely if an upgrade is not scheduled.
 async fn fetch_latest_local_cup_hash_from_logs(mut log_stream: LogStream) -> String {
-    let re =
+    let local_cup_regex =
         regex::Regex::new(r#"Persisted local CUP to disk: .*state_hash=([a-f0-9]{64})"#).unwrap();
+    let orchestrator_shutdown = "Orchestrator shut down gracefully";
 
-    // The node is expected to reboot any time soon, at which point `.find()` will return an error.
-    // At that point, the last successful maatch will be the latest persisted CUP.
-    let mut log_entry = None;
-    while let Ok((_node, entry)) = log_stream.find(|_, line| re.is_match(line)).await {
-        log_entry = Some(entry);
+    // Stream log entries until detecting that the orchestrator has shut down gracefully, while
+    // always keeping track of the latest log entry matching the local CUP regex.
+    // If the stream ends without logging the shutdown message, the function will panic.
+    let mut local_cup_log_entry = None;
+    loop {
+        let (_, entry) = log_stream
+            .find(|_, line| local_cup_regex.is_match(line) || line.contains(orchestrator_shutdown))
+            .await
+            .expect("Orchestrator did not shut down gracefully");
+
+        if entry.contains(orchestrator_shutdown) {
+            break;
+        }
+
+        // Entry matches local CUP regex
+        local_cup_log_entry = Some(entry);
     }
 
-    re.captures(&log_entry.expect("No matching log entry found"))
+    local_cup_regex
+        .captures(&local_cup_log_entry.expect("Log displaying local CUP info not found"))
         .and_then(|caps| caps.get(1))
         .map(|m| m.as_str().to_string())
         .expect("Failed to extract state hash from log entry")
@@ -359,16 +366,4 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
         .await_status_is_healthy()
         .expect("Node not healthy");
     info!(logger, "Node started: {}", app_node.get_ip_addr());
-}
-
-async fn assert_orchestrator_stopped_gracefully(node: IcNodeSnapshot) {
-    const MESSAGE: &str = r"Orchestrator shut down gracefully";
-
-    let script = format!("journalctl -f | grep -q \"{MESSAGE}\"");
-
-    let ssh_session = node
-        .block_on_ssh_session()
-        .expect("Failed to establish SSH session");
-
-    execute_bash_command(&ssh_session, script).expect("Didn't find the appropriate log entry");
 }
