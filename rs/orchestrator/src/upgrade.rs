@@ -319,7 +319,6 @@ impl Upgrade {
                 self.replica_version,
                 new_replica_version
             );
-
             // Only downloads the new image if it doesn't already exists locally, i.e. it
             // was previously downloaded by `prepare_upgrade_if_scheduled()`, see
             // below.
