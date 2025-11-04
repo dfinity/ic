@@ -46,7 +46,7 @@ mock! {
 
      fn validate_ingress_payload(
          &self,
-         payload: &ic_types::batch::IngressPayload,
+         payload: &IngressPayload,
          past_ingress: &dyn ic_interfaces::ingress_manager::IngressSetQuery,
          context: &ValidationContext,
      ) -> Result<NumBytes, ic_interfaces::ingress_manager::IngressPayloadValidationError>;
