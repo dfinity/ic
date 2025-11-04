@@ -5188,7 +5188,7 @@ fn chunk_store_methods_succeed_from_canister_itself() {
     }
 }
 
-const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(190);
+const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222);
 
 #[test]
 fn empty_canister_memory_usage() {
@@ -6215,6 +6215,7 @@ fn rename_canister(
             version: new_version,
             total_num_changes: new_num_changes,
         },
+        requested_by: sender_canister.into(),
         sender_canister_version,
     };
 
@@ -6379,6 +6380,7 @@ fn can_rename_canister() {
         new_canister_id.into(),
         new_version,
         new_num_changes,
+        canister_id1.into(),
     );
     verify_rename_happened(
         canister_id2,
@@ -6423,6 +6425,7 @@ fn can_rename_canister() {
         third_canister_id.into(),
         third_version,
         third_num_changes,
+        canister_id1.into(),
     );
     verify_rename_happened(
         new_canister_id,
@@ -6460,6 +6463,7 @@ fn cannot_rename_from_ingress() {
             version: 0,
             total_num_changes: 0,
         },
+        requested_by: PrincipalId::new_anonymous(),
         sender_canister_version: 0,
     };
 

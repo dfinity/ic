@@ -37,7 +37,7 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
     BoundedVec, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, CanisterSnapshotResponse,
-    LoadCanisterSnapshotArgs, LogVisibilityV2, Method, Payload as _,
+    DeleteCanisterSnapshotArgs, LoadCanisterSnapshotArgs, LogVisibilityV2, Method, Payload as _,
     ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
     TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
     UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
@@ -867,7 +867,7 @@ fn test_memory_suite_grow_memory_cleanup_callback() {
 }
 
 #[test]
-fn test_memory_suite_take_snapshot() {
+fn test_memory_suite_take_snapshot_growing_memory_usage() {
     let op = |test: &mut ExecutionTest, canister_id, ()| {
         let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
         test.subnet_message(
@@ -880,6 +880,44 @@ fn test_memory_suite_take_snapshot() {
         scenario: Scenario::OtherManagement,
         memory_usage_change: MemoryUsageChange::Increase,
         setup: setup_universal_canister,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_take_snapshot_shrinking_memory_usage() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister_with_much_memory(test, canister_id);
+        // Take a "large" canister snapshot.
+        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let res = test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        );
+        let snapshot_id = CanisterSnapshotResponse::decode(&get_reply(res))
+            .unwrap()
+            .id;
+        // Reinstall the canister so that its memory usage is small and
+        // taking a new ("small") snapshot while replacing the "large" snapshot
+        // decreases the canister memory usage overall.
+        test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
+            .unwrap();
+        snapshot_id
+    };
+    let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
+        let take_canister_snapshot_args =
+            TakeCanisterSnapshotArgs::new(canister_id, Some(snapshot_id));
+        test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        )
+        .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
+        setup,
         op,
     };
     test_memory_suite(params);
@@ -917,7 +955,7 @@ fn test_memory_suite_replace_snapshot() {
 }
 
 #[test]
-fn test_memory_suite_load_snapshot() {
+fn test_memory_suite_load_snapshot_growing_memory_usage() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
         let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
@@ -943,6 +981,77 @@ fn test_memory_suite_load_snapshot() {
     let params = ScenarioParams {
         scenario: Scenario::OtherManagement,
         memory_usage_change: MemoryUsageChange::Increase,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_load_snapshot_shrinking_memory_usage() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister(test, canister_id);
+        // Take a "small" snapshot.
+        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let res = test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        );
+        let snapshot_id = CanisterSnapshotResponse::decode(&get_reply(res))
+            .unwrap()
+            .id;
+        // Grow the memory usage of the canister so that loading the "small" snapshot later
+        // decreases the canister memory usage.
+        let grow_payload = memory_grow_payload(GIB >> 16, GIB >> 16, true);
+        let msg_id = test.ingress_raw(canister_id, "update", grow_payload).0;
+        test.execute_all();
+        // Ensure that the update call to grow memory succeeded.
+        test.ingress_result(&msg_id).unwrap();
+        snapshot_id
+    };
+    let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
+        let load_canister_snapshot_args =
+            LoadCanisterSnapshotArgs::new(canister_id, snapshot_id, None);
+        test.subnet_message(
+            Method::LoadCanisterSnapshot,
+            load_canister_snapshot_args.encode(),
+        )
+        .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_delete_snapshot() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister_with_much_memory(test, canister_id);
+        let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+        let res = test.subnet_message(
+            Method::TakeCanisterSnapshot,
+            take_canister_snapshot_args.encode(),
+        );
+        CanisterSnapshotResponse::decode(&get_reply(res))
+            .unwrap()
+            .id
+    };
+    let op = |test: &mut ExecutionTest, canister_id, snapshot_id| {
+        let delete_canister_snapshot_args =
+            DeleteCanisterSnapshotArgs::new(canister_id, snapshot_id);
+        test.subnet_message(
+            Method::DeleteCanisterSnapshot,
+            delete_canister_snapshot_args.encode(),
+        )
+        .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
         setup,
         op,
     };
@@ -1119,7 +1228,7 @@ fn test_memory_suite_upload_chunk_idempotent() {
 fn take_snapshot_and_read_metadata(
     test: &mut ExecutionTest,
     canister_id: CanisterId,
-) -> ReadCanisterSnapshotMetadataResponse {
+) -> (SnapshotId, ReadCanisterSnapshotMetadataResponse) {
     let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
     let res = test.subnet_message(
         Method::TakeCanisterSnapshot,
@@ -1136,16 +1245,19 @@ fn take_snapshot_and_read_metadata(
         Method::ReadCanisterSnapshotMetadata,
         snapshot_metadata_args.encode(),
     );
-    ReadCanisterSnapshotMetadataResponse::decode(&get_reply(res)).unwrap()
+    let bytes = get_reply(res);
+    let metadata = ReadCanisterSnapshotMetadataResponse::decode(&bytes).unwrap();
+    (snapshot_id, metadata)
 }
 
 fn metadata_upload_payload(
     canister_id: CanisterId,
     metadata: ReadCanisterSnapshotMetadataResponse,
+    replace_snapshot: Option<SnapshotId>,
 ) -> UploadCanisterSnapshotMetadataArgs {
     UploadCanisterSnapshotMetadataArgs {
         canister_id: canister_id.get(),
-        replace_snapshot: None,
+        replace_snapshot,
         wasm_module_size: metadata.wasm_module_size,
         globals: metadata.globals,
         wasm_memory_size: metadata.wasm_memory_size,
@@ -1157,17 +1269,17 @@ fn metadata_upload_payload(
 }
 
 #[test]
-fn test_memory_suite_upload_canister_snapshot_metadata() {
+fn test_memory_suite_upload_canister_snapshot_metadata_growing_memory_usage() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
-        take_snapshot_and_read_metadata(test, canister_id)
+        take_snapshot_and_read_metadata(test, canister_id).1
     };
     let op = |test: &mut ExecutionTest,
               canister_id: CanisterId,
               metadata: ReadCanisterSnapshotMetadataResponse| {
         test.subnet_message(
             Method::UploadCanisterSnapshotMetadata,
-            metadata_upload_payload(canister_id, metadata).encode(),
+            metadata_upload_payload(canister_id, metadata, None).encode(),
         )
         .err()
     };
@@ -1181,13 +1293,45 @@ fn test_memory_suite_upload_canister_snapshot_metadata() {
 }
 
 #[test]
+fn test_memory_suite_upload_canister_snapshot_metadata_shrinking_memory_usage() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        setup_universal_canister_with_much_memory(test, canister_id);
+        // Take a "large" snapshot and read its metadata.
+        let (snapshot_id, mut metadata) = take_snapshot_and_read_metadata(test, canister_id);
+        // Update the metadata to make the snapshot "small"
+        // so that uploading the metadata while replacing the "large" snapshot
+        // decreases the canister memory usage overall.
+        metadata.wasm_memory_size = 0;
+        metadata.stable_memory_size = 0;
+        (snapshot_id, metadata)
+    };
+    let op =
+        |test: &mut ExecutionTest,
+         canister_id: CanisterId,
+         (snapshot_id, metadata): (SnapshotId, ReadCanisterSnapshotMetadataResponse)| {
+            test.subnet_message(
+                Method::UploadCanisterSnapshotMetadata,
+                metadata_upload_payload(canister_id, metadata, Some(snapshot_id)).encode(),
+            )
+            .err()
+        };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
 fn test_memory_suite_upload_canister_snapshot_data_wasm_module() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
-        let metadata = take_snapshot_and_read_metadata(test, canister_id);
+        let metadata = take_snapshot_and_read_metadata(test, canister_id).1;
         let res = test.subnet_message(
             Method::UploadCanisterSnapshotMetadata,
-            metadata_upload_payload(canister_id, metadata).encode(),
+            metadata_upload_payload(canister_id, metadata, None).encode(),
         );
         UploadCanisterSnapshotMetadataResponse::decode(&get_reply(res))
             .unwrap()
@@ -1219,10 +1363,10 @@ fn test_memory_suite_upload_canister_snapshot_data_wasm_module() {
 fn test_memory_suite_upload_canister_snapshot_data_wasm_chunk() {
     let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
         setup_universal_canister(test, canister_id);
-        let metadata = take_snapshot_and_read_metadata(test, canister_id);
+        let metadata = take_snapshot_and_read_metadata(test, canister_id).1;
         let res = test.subnet_message(
             Method::UploadCanisterSnapshotMetadata,
-            metadata_upload_payload(canister_id, metadata).encode(),
+            metadata_upload_payload(canister_id, metadata, None).encode(),
         );
         UploadCanisterSnapshotMetadataResponse::decode(&get_reply(res))
             .unwrap()
