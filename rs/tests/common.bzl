@@ -2,7 +2,7 @@
 Common dependencies for system-tests.
 """
 
-load("//bazel:mainnet-icos-images.bzl", "MAINNET_APP", "MAINNET_NNS")
+load("@mainnet_icos_versions//:defs.bzl", "MAINNET_APP", "MAINNET_NNS")
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
 MAINNET_ENV = {

@@ -1016,6 +1016,89 @@ http_file(
     url = "https://curl.se/ca/cacert-2024-11-26.pem",
 )
 
+mainnet_icos_images = use_repo_rule("//bazel:mainnet-icos-images.bzl", "mainnet_icos_images")
+
+# Mainnet ICOS images
+mainnet_icos_images(
+    name = "mainnet_latest_hostos_images",
+    parts = [
+        "hostos",
+        "latest_release",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_latest_hostos_images_dev",
+    dev = True,
+    parts = [
+        "hostos",
+        "latest_release",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_latest_guestos_images",
+    parts = [
+        "guestos",
+        "latest_release",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_latest_guestos_images_dev",
+    dev = True,
+    parts = [
+        "guestos",
+        "latest_release",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_nns_images",
+    parts = [
+        "guestos",
+        "subnets",
+        "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_nns_images_dev",
+    dev = True,
+    parts = [
+        "guestos",
+        "subnets",
+        "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_app_images",
+    parts = [
+        "guestos",
+        "subnets",
+        "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_app_images_dev",
+    dev = True,
+    parts = [
+        "guestos",
+        "subnets",
+        "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
 mainnet_icos_versions = use_repo_rule("//bazel:mainnet-icos-versions.bzl", "mainnet_icos_versions")
 
 mainnet_icos_versions(
