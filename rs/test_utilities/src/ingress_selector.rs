@@ -56,7 +56,7 @@ impl IngressSelector for FakeIngressSelector {
         &self,
         _past_payloads: &dyn IngressSetQuery,
         _context: &ValidationContext,
-        byte_limit: WireBytes,
+        byte_limit: NumBytes,
     ) -> PayloadWithSizeEstimate<IngressPayload> {
         let mut queue = self.queue.lock().unwrap();
 
@@ -73,6 +73,7 @@ impl IngressSelector for FakeIngressSelector {
             })
             .map(|(idx, _)| idx);
 
+        // Return the found payload or default
         let payload = match payload_idx {
             Some(idx) => queue
                 .remove(idx)
@@ -82,7 +83,7 @@ impl IngressSelector for FakeIngressSelector {
         };
 
         PayloadWithSizeEstimate {
-            wire_size_estimate: WireBytes::new(payload.total_ids_size_estimate().get()),
+            wire_size_estimate: NumBytes::from(payload.count_bytes() as u64),
             payload,
         }
     }
@@ -91,8 +92,8 @@ impl IngressSelector for FakeIngressSelector {
         payload: &IngressPayload,
         _past_payloads: &dyn IngressSetQuery,
         _context: &ValidationContext,
-    ) -> Result<WireBytes, IngressPayloadValidationError> {
-        Ok(WireBytes::new(payload.total_ids_size_estimate().get()))
+    ) -> Result<NumBytes, IngressPayloadValidationError> {
+        Ok(NumBytes::from(payload.count_bytes() as u64))
     }
 
     fn filter_past_payloads(

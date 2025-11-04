@@ -3,7 +3,7 @@ use ic_interfaces::{
     self_validating_payload::SelfValidatingPayloadBuilder,
 };
 use ic_types::{
-    Height, NumBytes, WireBytes,
+    Height, NumBytes,
     batch::{IngressPayload, ValidationContext},
 };
 
@@ -41,7 +41,7 @@ mock! {
          &self,
          past_ingress: &dyn ic_interfaces::ingress_manager::IngressSetQuery,
          context: &ValidationContext,
-         wire_byte_limit: WireBytes,
+         byte_limit: NumBytes,
      ) -> PayloadWithSizeEstimate<IngressPayload>;
 
      fn validate_ingress_payload(
@@ -49,7 +49,7 @@ mock! {
          payload: &IngressPayload,
          past_ingress: &dyn ic_interfaces::ingress_manager::IngressSetQuery,
          context: &ValidationContext,
-     ) -> Result<WireBytes, ic_interfaces::ingress_manager::IngressPayloadValidationError>;
+     ) -> Result<NumBytes, ic_interfaces::ingress_manager::IngressPayloadValidationError>;
 
      fn filter_past_payloads(
          &self,

@@ -121,7 +121,7 @@ pub trait IngressSelector: Send + Sync {
         &self,
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
-        wire_byte_limit: WireBytes,
+        byte_limit: NumBytes,
     ) -> PayloadWithSizeEstimate<IngressPayload>;
 
     /// Validates an IngressPayload against the past payloads and
@@ -145,7 +145,7 @@ pub trait IngressSelector: Send + Sync {
         payload: &IngressPayload,
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
-    ) -> Result<WireBytes, IngressPayloadValidationError>;
+    ) -> Result<NumBytes, IngressPayloadValidationError>;
 
     /// Extracts the sequence of past ingress messages from `past_payloads`. The
     /// past_ingress is actually a list of HashSet of MessageIds taken from the

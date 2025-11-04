@@ -52,7 +52,7 @@ impl IngressSelector for IngressManager {
         &self,
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
-        wire_byte_limit: WireBytes,
+        byte_limit: NumBytes,
     ) -> PayloadWithSizeEstimate<IngressPayload> {
         let _timer = self.metrics.ingress_selector_get_payload_time.start_timer();
         let memory_byte_limit = self.memory_byte_limit(wire_byte_limit);
@@ -71,7 +71,7 @@ impl IngressSelector for IngressManager {
                 );
                 return PayloadWithSizeEstimate {
                     payload: IngressPayload::default(),
-                    wire_size_estimate: WireBytes::new(0),
+                    wire_size_estimate: NumBytes::new(0),
                 };
             }
         };
@@ -86,7 +86,7 @@ impl IngressSelector for IngressManager {
                 );
                 return PayloadWithSizeEstimate {
                     payload: IngressPayload::default(),
-                    wire_size_estimate: WireBytes::new(0),
+                    wire_size_estimate: NumBytes::new(0),
                 };
             }
         }
@@ -155,10 +155,10 @@ impl IngressSelector for IngressManager {
             0 => {
                 return PayloadWithSizeEstimate {
                     payload: IngressPayload::default(),
-                    wire_size_estimate: WireBytes::new(0),
+                    wire_size_estimate: NumBytes::new(0),
                 };
             }
-            canister_count @ 1.. => NumBytes::new(memory_byte_limit.get() / canister_count as u64),
+            canister_count @ 1.. => byte_limit.get() as usize / canister_count,
         };
 
         let mut messages_in_payload = vec![];
@@ -306,7 +306,7 @@ impl IngressSelector for IngressManager {
         payload: &IngressPayload,
         past_ingress: &dyn IngressSetQuery,
         context: &ValidationContext,
-    ) -> Result<WireBytes, IngressPayloadValidationError> {
+    ) -> Result<NumBytes, IngressPayloadValidationError> {
         let _timer = self
             .metrics
             .ingress_selector_validate_payload_time
@@ -398,9 +398,7 @@ impl IngressSelector for IngressManager {
             )?;
         }
 
-        let (wire_size_estimate, _memory_size_estimate) = self.payload_size_estimates(payload);
-
-        Ok(wire_size_estimate)
+        Ok(NumBytes::from(payload.count_bytes() as u64))
     }
 
     fn filter_past_payloads(
@@ -1903,7 +1901,7 @@ mod tests {
         validation_context: ValidationContext,
         ingress_history_response: Result<(), IngressHistoryError>,
         state_manager_response: StateManagerResult<ReplicatedState>,
-    ) -> Result<WireBytes, IngressPayloadValidationError> {
+    ) -> Result<NumBytes, IngressPayloadValidationError> {
         with_test_replica_logger(|log| {
             with_test_pool_config(|pool_config| {
                 let mut ingress_hist_reader = MockIngressHistory::new();
@@ -1989,7 +1987,7 @@ mod tests {
             /*state_manager_response=*/ Ok(ReplicatedStateBuilder::default().build()),
         );
 
-        assert_eq!(validation_result, Ok(WireBytes::new(0)));
+        assert_eq!(validation_result, Ok(NumBytes::new(0)));
     }
 
     #[test]

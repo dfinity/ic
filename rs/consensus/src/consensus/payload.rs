@@ -11,7 +11,7 @@ use ic_interfaces::{
 };
 use ic_logger::{ReplicaLogger, error, warn};
 use ic_types::{
-    Height, NumBytes, Time, WireBytes,
+    Height, NumBytes, Time,
     batch::{BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     consensus::Payload,
     messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT,
@@ -116,11 +116,11 @@ impl BatchPayloadSectionBuilder {
                     .filter_past_payloads(past_payloads, proposal_context.validation_context);
                 let PayloadWithSizeEstimate {
                     payload: ingress,
-                    wire_size_estimate,
+                    wire_size_estimate: size,
                 } = builder.get_ingress_payload(
                     &past_payloads,
                     proposal_context.validation_context,
-                    WireBytes::new(max_size.get()),
+                    max_size,
                 );
 
                 // Validate the ingress payload as a safety measure
@@ -386,13 +386,11 @@ impl BatchPayloadSectionBuilder {
             Self::Ingress(builder) => {
                 let past_payloads = builder
                     .filter_past_payloads(past_payloads, proposal_context.validation_context);
-                Ok(builder
-                    .validate_ingress_payload(
-                        &payload.ingress,
-                        &past_payloads,
-                        proposal_context.validation_context,
-                    )
-                    .map(|bytes| NumBytes::new(bytes.get()))?)
+                Ok(builder.validate_ingress_payload(
+                    &payload.ingress,
+                    &past_payloads,
+                    proposal_context.validation_context,
+                )?)
             }
             Self::XNet(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);

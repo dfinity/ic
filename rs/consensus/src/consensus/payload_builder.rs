@@ -435,26 +435,24 @@ pub(crate) mod test {
             const CANISTER_HTTP_PAYLOAD_SIZE: NumBytes = NumBytes::new(256 * KB);
             const VETKD_PAYLOAD_SIZE: NumBytes = NumBytes::new(512 * KB);
             const QUERY_STATS_PAYLOAD_SIZE: NumBytes = NumBytes::new(MB);
-            const INGRESS_PAYLOAD_WIRE_SIZE: NumBytes = NumBytes::new(2 * MB);
+            const INGRESS_PAYLOAD_SIZE: NumBytes = NumBytes::new(2 * MB);
 
             let payload_builder = set_up_payload_builder(
                 registry,
                 MocksSettings {
                     vetkd_payload_to_return: vec![0; VETKD_PAYLOAD_SIZE.get() as usize],
                     expected_vetkd_payload_size_limit: MAX_BLOCK_SIZE,
-                    ingress_payload_size_to_return: WireBytes::new(INGRESS_PAYLOAD_WIRE_SIZE.get()),
-                    expected_ingress_payload_size_limit: WireBytes::new(
-                        (MAX_BLOCK_SIZE - VETKD_PAYLOAD_SIZE).get(),
-                    ),
+                    ingress_payload_size_to_return: INGRESS_PAYLOAD_SIZE,
+                    expected_ingress_payload_size_limit: MAX_BLOCK_SIZE - VETKD_PAYLOAD_SIZE,
                     bitcoin_payload_size_to_return: BITCOIN_PAYLOAD_SIZE,
                     expected_bitcoin_payload_size_limit: MAX_BLOCK_SIZE
                         - VETKD_PAYLOAD_SIZE
-                        - INGRESS_PAYLOAD_WIRE_SIZE,
+                        - INGRESS_PAYLOAD_SIZE,
                     xnet_payload_size_to_return: XNET_PAYLOAD_SIZE,
                     expected_xnet_payload_size_limit: NumBytes::new(
                         95 * (MAX_BLOCK_SIZE
                             - VETKD_PAYLOAD_SIZE
-                            - INGRESS_PAYLOAD_WIRE_SIZE
+                            - INGRESS_PAYLOAD_SIZE
                             - BITCOIN_PAYLOAD_SIZE)
                             .get()
                             / 100,
@@ -465,13 +463,13 @@ pub(crate) mod test {
                     ],
                     expected_http_outcalls_size_limit: MAX_BLOCK_SIZE
                         - VETKD_PAYLOAD_SIZE
-                        - INGRESS_PAYLOAD_WIRE_SIZE
+                        - INGRESS_PAYLOAD_SIZE
                         - BITCOIN_PAYLOAD_SIZE
                         - XNET_PAYLOAD_SIZE,
                     query_stats_payload_to_return: vec![0; QUERY_STATS_PAYLOAD_SIZE.get() as usize],
                     expected_query_stats_size_limit: MAX_BLOCK_SIZE
                         - VETKD_PAYLOAD_SIZE
-                        - INGRESS_PAYLOAD_WIRE_SIZE
+                        - INGRESS_PAYLOAD_SIZE
                         - BITCOIN_PAYLOAD_SIZE
                         - XNET_PAYLOAD_SIZE
                         - CANISTER_HTTP_PAYLOAD_SIZE,
@@ -512,7 +510,7 @@ pub(crate) mod test {
             let Dependencies { registry, .. } = dependencies(pool_config, 1);
 
             let settings = MocksSettings {
-                ingress_payload_size_to_return: WireBytes::new(ingress_payload_wire_size),
+                ingress_payload_size_to_return: NumBytes::from(ingress_payload_size),
                 query_stats_payload_to_return: vec![0; MB as usize],
                 vetkd_payload_to_return: vec![0; 512 * KB as usize],
                 http_outcalls_payload_to_return: vec![0; 256 * KB as usize],
@@ -571,8 +569,8 @@ pub(crate) mod test {
 
     #[derive(Clone)]
     struct MocksSettings {
-        ingress_payload_size_to_return: WireBytes,
-        expected_ingress_payload_size_limit: WireBytes,
+        ingress_payload_size_to_return: NumBytes,
+        expected_ingress_payload_size_limit: NumBytes,
         vetkd_payload_to_return: Vec<u8>,
         expected_vetkd_payload_size_limit: NumBytes,
         bitcoin_payload_size_to_return: NumBytes,
@@ -610,6 +608,7 @@ pub(crate) mod test {
             )
             .return_once(move |_, _, _| PayloadWithSizeEstimate {
                 wire_size_estimate: settings.ingress_payload_size_to_return,
+                // irrelevant what we return here
                 payload: IngressPayload::default(),
             });
 

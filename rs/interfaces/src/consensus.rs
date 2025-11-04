@@ -28,9 +28,12 @@ use ic_types::{
 pub mod errors;
 
 #[derive(Debug)]
+/// Contains a payload together with an estimate how many bytes the payload would take when sent
+/// over wire. This is not necessarily the same, or even close to, as the the size of the structure
+/// in the memory.
 pub struct PayloadWithSizeEstimate<T> {
     pub payload: T,
-    pub wire_size_estimate: WireBytes,
+    pub wire_size_estimate: NumBytes,
 }
 
 /// The [`PayloadBuilder`] is responsible for creating and validating payload that
