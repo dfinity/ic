@@ -81,7 +81,7 @@ jobs:
 
 # Because ci-pr-only is not run on merge groups, always mark the ci-pr-only-status as a success
 # This is a hack to get around the fact that status checks are still required for the merge queue, even if the workflow itself is not run
-  post-commit-status-ci-pr-only:
+  post-commit-status-ci-pr-only-merge-queue:
     name: Post Commit Status Merge Queue
     runs-on: ubuntu-latest
     if: github.event_name == 'merge_group'
