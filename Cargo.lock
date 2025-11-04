@@ -2541,12 +2541,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codicon"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12170080f3533d6f09a19f81596f836854d0fa4867dc32c8172b8474b4e9de61"
-
-[[package]]
 name = "colorchoice"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15688,7 +15682,6 @@ dependencies = [
  "p384",
  "pem 1.1.1",
  "rand 0.8.5",
- "raw-cpuid",
  "rcgen",
  "reqwest 0.12.15",
  "rsa",
@@ -22010,15 +22003,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-big-array"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "serde-bytes-repr"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22265,16 +22249,14 @@ dependencies = [
 
 [[package]]
 name = "sev"
-version = "6.2.1"
+version = "7.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1750ba11a6a6bba3c220da714caa0226aa34e417dce3975d2953062240717dea"
+checksum = "c2ff74d7e7d1cc172f3a45adec74fbeee928d71df095b85aaaf66eb84e1e31e6"
 dependencies = [
  "base64 0.22.1",
- "bincode",
  "bitfield",
  "bitflags 2.9.0",
  "byteorder",
- "codicon",
  "dirs",
  "hex",
  "iocuddle",
@@ -22282,9 +22264,6 @@ dependencies = [
  "libc",
  "p384",
  "rsa",
- "serde",
- "serde-big-array",
- "serde_bytes",
  "sha2 0.10.9",
  "static_assertions",
  "uuid",

@@ -1264,7 +1264,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.9.33",
             ),
             "sev": crate.spec(
-                version = "6.2",
+                version = "7.1",
                 default_features = False,
                 features = [
                     "crypto_nossl",
