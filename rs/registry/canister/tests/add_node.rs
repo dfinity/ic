@@ -210,7 +210,7 @@ fn node_is_not_created_when_above_capacity() {
         )
         .await;
 
-        let (mut payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type1);
+        let (payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type1);
         let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
@@ -229,7 +229,7 @@ fn node_is_not_created_when_above_capacity() {
         assert!(response.is_ok());
 
         // Try to add another node
-        let (mut payload, node_pks) = prepare_add_node_payload(2, NodeRewardType::Type1);
+        let (payload, node_pks) = prepare_add_node_payload(2, NodeRewardType::Type1);
         let node_id = node_pks.node_id();
 
         // Ensure there is no value for this new node
@@ -271,7 +271,7 @@ fn duplicated_nodes_are_removed_on_join() {
         .await;
 
         // Create a new node to join.
-        let (mut payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type1);
+        let (payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type1);
         let first_node_id = node_pks.node_id();
 
         // Ensure this node does not already exist.
@@ -291,7 +291,7 @@ fn duplicated_nodes_are_removed_on_join() {
 
         // Then, try to add another node.
         // Use the same ID so we can "duplicate" this node.
-        let (mut payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type1);
+        let (payload, node_pks) = prepare_add_node_payload(1, NodeRewardType::Type1);
         let second_node_id = node_pks.node_id();
 
         // Ensure this node does not already exist.

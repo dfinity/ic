@@ -6,6 +6,7 @@ use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_test_utils::registry::{
     invariant_compliant_mutation_as_atomic_req, prepare_add_node_payload,
 };
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_state_machine_tests::StateMachineBuilder;
 use ic_types::NodeId;
 use registry_canister::mutations::node_management::do_remove_node_directly::RemoveNodeDirectlyPayload;
@@ -62,15 +63,15 @@ fn test_rate_limiting_state_machine() {
     // initializes a node with the same IP address as `prepare_add_node_payload(0)`.
     let mut next_add_node_payload_id = 1;
     let mut next_add_node_payload = || {
-        let (payload, _) = prepare_add_node_payload(next_add_node_payload_id);
+        let (payload, _) =
+            prepare_add_node_payload(next_add_node_payload_id, NodeRewardType::Type1);
         next_add_node_payload_id += 1;
         payload
     };
 
     for _ in 0..70 {
-        // Create a simple add_node payload for testing
-        let (mut add_node_payload, _node_pks) = prepare_add_node_payload(1); // Use unique IDs
-        add_node_payload.node_reward_type = Some("type1".to_string());
+        // Create a simple add_node payload for testing with unique IP addresses
+        let add_node_payload = next_add_node_payload(); // Use unique IDs
 
         let node_id: NodeId = env
             .execute_ingress_as(
@@ -93,8 +94,7 @@ fn test_rate_limiting_state_machine() {
         .unwrap();
     }
 
-    let (mut add_node_payload, _node_pks) = prepare_add_node_payload(1); // Use unique IDs
-    add_node_payload.node_reward_type = Some("type1".to_string());
+    let add_node_payload = next_add_node_payload();
     let error = env
         .execute_ingress_as(
             node_operator,
