@@ -363,11 +363,23 @@ impl CatchUpPackageProvider {
                 std::io::Error::new(std::io::ErrorKind::InvalidData, e),
             )
         })?;
+
+        let state_hash = hex::encode(cup.content.state_hash.clone().get().0);
+
         info!(
             self.logger,
-            "Persisting CUP (registry version={}, height={}) to file {}",
+            "Persisting CUP (replica_version={}, registry_version={}, height={}, signed={}, state_hash={}, timestamp={}) to file {}",
+            cup.content.version(),
             cup.content.registry_version(),
-            cup.height(),
+            cup.content.height(),
+            cup.is_signed(),
+            state_hash,
+            cup.content
+                .block
+                .get_value()
+                .context
+                .time
+                .as_nanos_since_unix_epoch(),
             &cup_file_path.display(),
         );
         write_protobuf_using_tmp_file(&cup_file_path, cup_proto).map_err(|e| {
@@ -376,6 +388,12 @@ impl CatchUpPackageProvider {
                 e,
             )
         })?;
+        info!(
+            self.logger,
+            "Successfully persisted CUP (height={}, state_hash={})",
+            cup.content.height(),
+            state_hash,
+        );
 
         Ok(cup_file_path)
     }
@@ -449,17 +467,6 @@ impl CatchUpPackageProvider {
         // recreate the CUP on all orchestrators of the version B before starting the replica.
         if height > local_cup_height || height == local_cup_height && !latest_cup.is_signed() {
             self.persist_cup(&latest_cup_proto)?;
-
-            info!(
-                self.logger,
-                "Persisted local CUP to disk: replica_version={}, registry_version={}, height={}, signed={}, state_hash={}, timestamp={}",
-                latest_cup.content.version(),
-                latest_cup.content.registry_version(),
-                latest_cup.content.height(),
-                latest_cup.is_signed(),
-                hex::encode(latest_cup.content.state_hash.clone().get().0),
-                latest_cup.content.block.get_value().context.time,
-            );
         }
 
         Ok(latest_cup)
