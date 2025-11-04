@@ -86,6 +86,7 @@ type change_details = variant {
             version : nat64;
             total_num_changes : nat64;
         };
+        requested_by : principal;
     };
 };
 
@@ -628,6 +629,7 @@ type rename_canister_args = record {
      version : nat64;
      total_num_changes : nat64;
    };
+   requested_by : principal;
    sender_canister_version : nat64;
 };
 
