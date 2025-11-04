@@ -107,6 +107,10 @@
     "rev": "b5192581ccd35b67fe5a1f795ead9cbcd25956d6",
     "sha256": "8c8eb285de53ca5609abd7dc41ba3ec8eeb67708b81469311fd670e6738d7d0a"
   },
+  "migration": {
+    "rev": "ccc1ff6c7fd4dec3cadefcaf1eb168ee3892e03f",
+    "sha256": "2bcf1c2c8adba6f7bff5e7abda164f22e0a8f6a07120fbe3596c94234727d04c"
+  },
   "nns_dapp_test": {
     "sha256": "bf351f9bf770b9782a785aba5c83559527c4400dec022ad8537b02179cd58631",
     "tag": "proposal-139207"
