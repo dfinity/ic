@@ -12,13 +12,15 @@ use ic_embedders::{
         sandbox_safe_system_state::SandboxSafeSystemState,
     },
 };
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::Global;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    ExecutionState, ExportedFunctions, Memory, MessageMemoryUsage, NetworkTopology,
+    ExecutionState, ExportedFunctions, Memory, NetworkTopology,
     canister_state::execution_state::{WasmBinary, WasmMetadata},
     page_map::TestPageAllocatorFileDescriptorImpl,
 };

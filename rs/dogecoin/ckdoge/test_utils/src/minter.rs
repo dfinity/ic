@@ -93,7 +93,7 @@ impl MinterCanister {
                 })
                 .unwrap(),
             )
-            .expect("BUg: failed to call retrieve_doge_status");
+            .expect("BUG: failed to call retrieve_doge_status");
         Decode!(&call_result, RetrieveDogeStatus).unwrap()
     }
 
