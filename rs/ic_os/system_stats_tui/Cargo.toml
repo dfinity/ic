@@ -4,9 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
-color-eyre = { workspace = true }
 crossterm = { workspace = true }
 duration-string = { workspace = true }
 futures = { workspace = true }

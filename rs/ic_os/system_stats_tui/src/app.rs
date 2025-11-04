@@ -3,8 +3,8 @@ use super::event::EventHandler;
 use super::promdb::IndexedSeries;
 use super::promdb::ValueQuery;
 
+use anyhow::Result;
 use chrono::{Datelike, Timelike};
-use color_eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use humansize::{DECIMAL, format_size_i};
 use lazy_static::lazy_static;
@@ -663,7 +663,7 @@ impl App {
     }
 
     // Run the application's main loop.
-    pub async fn run(mut self, mut terminal: DefaultTerminal) -> color_eyre::Result<()> {
+    pub async fn run(mut self, mut terminal: DefaultTerminal) -> anyhow::Result<()> {
         self.running = true;
         while self.running {
             terminal.draw(|frame| self.render(frame))?;
@@ -1039,7 +1039,7 @@ impl App {
     }
 
     /// Handles the key events and updates the state of [`App`].
-    pub fn handle_key_events(&mut self, key_event: KeyEvent) -> color_eyre::Result<()> {
+    pub fn handle_key_events(&mut self, key_event: KeyEvent) -> anyhow::Result<()> {
         match key_event.code {
             KeyCode::Esc | KeyCode::Char('q') => self.events.send(AppEvent::Quit),
             KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {

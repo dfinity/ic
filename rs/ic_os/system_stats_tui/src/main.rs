@@ -32,9 +32,8 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() -> color_eyre::Result<()> {
+async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
-    color_eyre::install()?;
     let terminal = ratatui::init();
     let result = App::new(args.address, args.sampling_frequency)
         .run(terminal)

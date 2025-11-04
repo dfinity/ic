@@ -376,7 +376,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.10.0",
             ),
             "chrono": crate.spec(
-                version = "^0.4.38",
+                version = "^0.4.42",
                 default_features = False,
                 features = [
                     "alloc",
@@ -426,9 +426,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "console": crate.spec(
                 version = "^0.11",
-            ),
-            "color-eyre": crate.spec(
-                version = "0.6.5",
             ),
             "convert_case": crate.spec(
                 version = "^0.6.0",

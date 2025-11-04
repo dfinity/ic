@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::promdb::IndexedScrape;
-use color_eyre::eyre::OptionExt;
 use crossterm::event::Event as CrosstermEvent;
 use futures_util::FutureExt;
 use futures_util::StreamExt;
@@ -63,11 +62,7 @@ impl PollTask {
     /// Runs the event thread.
     ///
     /// This function emits tick events at a fixed rate and polls for crossterm events in between.
-    async fn run(
-        self,
-        hostname: String,
-        sample_freq: std::time::Duration,
-    ) -> color_eyre::Result<()> {
+    async fn run(self, hostname: String, sample_freq: std::time::Duration) -> anyhow::Result<()> {
         let mut tick = tokio::time::interval(sample_freq);
         let hostos_node_exporter = format!("{hostname}:9100/metrics");
         let guestos_node_exporter = format!("{hostname}:42372/metrics/guestos_node_exporter");
@@ -111,7 +106,7 @@ impl EventTask {
     /// Runs the event thread.
     ///
     /// This function emits tick events at a fixed rate and polls for crossterm events in between.
-    async fn run(self) -> color_eyre::Result<()> {
+    async fn run(self) -> anyhow::Result<()> {
         let mut reader = crossterm::event::EventStream::new();
         loop {
             let crossterm_event = reader.next().fuse();
@@ -164,11 +159,11 @@ impl EventHandler {
     /// This function returns an error if the sender channel is disconnected. This can happen if an
     /// error occurs in the event thread. In practice, this should not happen unless there is a
     /// problem with the underlying terminal.
-    pub async fn next(&mut self) -> color_eyre::Result<AppEvent> {
+    pub async fn next(&mut self) -> anyhow::Result<AppEvent> {
         self.receiver
             .recv()
             .await
-            .ok_or_eyre("Failed to receive event")
+            .ok_or(anyhow::anyhow!("Failed to receive event"))
     }
 
     /// Queue an app event to be sent to the event receiver.

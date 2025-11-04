@@ -14,8 +14,8 @@ rust_binary(
     ],
     deps = [
         "@crate_index//:chrono",
+        "@crate_index//:anyhow",
         "@crate_index//:clap",
-        "@crate_index//:color-eyre",
         "@crate_index//:crossterm",
         "@crate_index//:duration-string",
         "@crate_index//:futures",
