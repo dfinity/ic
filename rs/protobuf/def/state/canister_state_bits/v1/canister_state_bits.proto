@@ -302,6 +302,7 @@ message CanisterRename {
   types.v1.PrincipalId canister_id = 1;
   uint64 total_num_changes = 2;
   RenameTo rename_to = 3;
+  types.v1.PrincipalId requested_by = 4;
 }
 
 message RenameTo {
