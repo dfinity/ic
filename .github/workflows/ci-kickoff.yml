@@ -77,7 +77,7 @@ jobs:
       - uses: ./.github/actions/post-commit-status
         with:
           # on pull requests the github.sha is the merge commit - here we use the head commit so that it will show up on PRs
-          commit-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          commit-sha: ${{ github.event.pull_request.head.sha }}
           run-result: ${{ needs.ci-pr-only.result }}
           name: ci-pr-only-status
 
@@ -98,6 +98,6 @@ jobs:
       - uses: ./.github/actions/post-commit-status
         with:
           # on pull requests the github.sha is the merge commit - here we use the head commit so that it will show up on PRs
-          commit-sha: ${{ github.event.pull_request.head.sha || github.sha }}
+          commit-sha: ${{ github.sha }}
           run-result: 'success'
           name: ci-pr-only-status
