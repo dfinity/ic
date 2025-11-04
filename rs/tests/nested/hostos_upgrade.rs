@@ -119,8 +119,10 @@ pub fn upgrade_hostos(env: TestEnv) {
     .unwrap();
 
     info!(logger, "Waiting for Orchestrator dashboard...");
-    host.await_orchestrator_dashboard_accessible()
-        .unwrap_or_else(|e| try_logging_guestos_diagnostics(&host, &logger, e));
+    if let Err(e) = host.await_orchestrator_dashboard_accessible() {
+        try_logging_guestos_diagnostics(&host, &logger);
+        panic!("Orchestrator dashboard is not accessible: {e}");
+    }
 
     info!(logger, "Checking HostOS version after reboot");
     let new_version = check_hostos_version(&host);
