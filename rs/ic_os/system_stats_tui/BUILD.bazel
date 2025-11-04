@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 rust_library(
     name = "lib",
@@ -13,8 +13,8 @@ rust_library(
         # Should this maybe support macos as well?
     ],
     deps = [
-        "@crate_index//:chrono",
         "@crate_index//:anyhow",
+        "@crate_index//:chrono",
         "@crate_index//:clap",
         "@crate_index//:crossterm",
         "@crate_index//:duration-string",
@@ -37,14 +37,13 @@ rust_test(
 
 rust_binary(
     name = "system_stats_tui",
-    srcs = [ "src/main.rs" ],
+    srcs = ["src/main.rs"],
     deps = [
         ":lib",
+        "@crate_index//:anyhow",
         "@crate_index//:clap",
         "@crate_index//:duration-string",
-        "@crate_index//:tokio",
-        "@crate_index//:anyhow",
         "@crate_index//:ratatui",
+        "@crate_index//:tokio",
     ],
 )
-

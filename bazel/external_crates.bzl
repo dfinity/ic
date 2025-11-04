@@ -452,7 +452,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "crossterm": crate.spec(
                 version = "0.29.0",
                 features = [
-                    "event-stream"
+                    "event-stream",
                 ],
             ),
             "csv": crate.spec(
@@ -493,7 +493,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.1.4",
             ),
             "duration-string": crate.spec(
-                version = "0.5.3"
+                version = "0.5.3",
             ),
             "dyn-clone": crate.spec(
                 version = "^1.0.14",
