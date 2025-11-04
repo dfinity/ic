@@ -19,3 +19,6 @@ regex = { workspace = true }
 reqwest = { workspace = true }
 tokio = { workspace = true }
 
+[[bin]]
+name = "system-stats-tui"
+path = "src/main.rs"

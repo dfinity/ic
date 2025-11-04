@@ -1,11 +1,7 @@
-mod app;
-mod event;
-mod promdb;
-
 use std::time::Duration;
 
-use crate::app::App;
 use clap::Parser;
+use system_stats_tui::app::App;
 
 fn parse_duration(arg: &str) -> Result<Duration, String> {
     Ok(
