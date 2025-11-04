@@ -1347,7 +1347,6 @@ impl CyclesAccountManager {
     ) -> Cycles {
         match cost_schedule {
             CanisterCyclesCostSchedule::Free => Cycles::new(0),
-            //  return N * (1_000_000 + 50 * request_bytes + 140_000 * N + 800 * N * N + 50 * downloaded_bytes + 300 * request_ms + transform_instruction / 13 + transformed_response_bytes * (10 * N  + 650))
             CanisterCyclesCostSchedule::Normal => {
                 let n = subnet_size as u64;
                 (Cycles::new(1_000_000)

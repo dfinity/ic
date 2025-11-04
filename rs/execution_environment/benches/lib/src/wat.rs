@@ -30,6 +30,7 @@ pub enum Module {
 }
 
 impl Module {
+    /// Render a complete WAT module for a system call executing in a loop, with params and result.
     #[allow(clippy::wrong_self_convention)]
     pub fn from_ic0<N, P>(
         &self,
@@ -399,8 +400,8 @@ impl core::fmt::Display for DataSections {
         for (offset, bytes) in &self.sections {
             write!(
                 f,
-                r#"(data ({addres_space}.const {offset}) "{bytes}")"#,
-                addres_space = if self.use_64_bit { "i64" } else { "i32" },
+                r#"(data ({address_space}.const {offset}) "{bytes}")"#,
+                address_space = if self.use_64_bit { "i64" } else { "i32" },
                 offset = offset,
                 bytes = bytes
                     .iter()
