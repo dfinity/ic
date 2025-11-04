@@ -58,7 +58,7 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
         // .. And no change should have happened to the node rewards table
         let table =
             get_value::<NodeRewardsTable>(&registry, NODE_REWARDS_TABLE_KEY.as_bytes()).await;
-        assert!(table.is_none());
+        assert!(table.unwrap().table.is_empty());
 
         // Go through an upgrade cycle, and verify that it still works the same
         registry.upgrade_to_self_binary(vec![]).await.unwrap();
@@ -73,7 +73,7 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
 
         let table =
             get_value::<NodeRewardsTable>(&registry, NODE_REWARDS_TABLE_KEY.as_bytes()).await;
-        assert!(table.is_none());
+        assert!(table.unwrap().table.is_empty());
 
         Ok(())
     });
@@ -130,7 +130,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_the_node_rew
 
         let table =
             get_value::<NodeRewardsTable>(&registry, NODE_REWARDS_TABLE_KEY.as_bytes()).await;
-        assert!(table.is_none());
+        assert!(table.unwrap().table.is_empty());
 
         Ok(())
     });

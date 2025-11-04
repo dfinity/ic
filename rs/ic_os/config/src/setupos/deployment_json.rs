@@ -10,6 +10,7 @@ use url::Url;
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct DeploymentSettings {
     pub deployment: Deployment,
+    #[serde(default)]
     pub logging: Logging,
     pub nns: Nns,
     pub dev_vm_resources: VmResources,
@@ -20,6 +21,7 @@ pub struct DeploymentSettings {
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 pub struct CompatDeploymentSettings {
     pub deployment: Deployment,
+    #[serde(default)]
     pub logging: Logging,
     pub nns: Nns,
     pub vm_resources: Option<VmResources>,
@@ -36,8 +38,8 @@ pub struct Deployment {
     pub mgmt_mac: Option<String>,
 }
 
-// NODE-1681: Leftover from push-based logging. Remove in NODE-1681
-#[derive(PartialEq, Debug, Deserialize, Serialize)]
+// NODE-1762: Remove default once default attribute on mainnet nodes
+#[derive(PartialEq, Debug, Deserialize, Serialize, Default)]
 pub struct Logging {}
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
@@ -87,7 +89,6 @@ mod test {
                 "deployment_environment": "mainnet",
                 "mgmt_mac": null
               },
-              "logging": {},
               "nns": {
                 "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
               },
@@ -105,7 +106,6 @@ mod test {
     "deployment_environment": "mainnet",
     "mgmt_mac": null
   },
-  "logging": {},
   "nns": {
     "urls": ["https://icp-api.io", "https://icp0.io", "https://ic0.app"]
   },
