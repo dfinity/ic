@@ -2224,7 +2224,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn test_ordering_fairness(#[values(true, false)] hashes_in_blocks_enabled: bool) {
-        const WIRE_BYTES_LIMIT: WireBytes = WireBytes::new(ic_limits::MAX_BLOCK_PAYLOAD_SIZE);
+        const WIRE_BYTES_LIMIT: WireBytes = WireBytes::new(ic_limits::MAX_INGRESS_BYTES_PER_BLOCK);
         const CANISTERS_COUNT: u64 = 30;
         const INITIAL_QUOTA: usize =
             (ic_limits::MAX_INGRESS_BYTES_PER_BLOCK / CANISTERS_COUNT) as usize;
@@ -2285,7 +2285,10 @@ mod tests {
                         .filter(|msg| msg.canister_id() == canister_id)
                         .count();
 
-                    assert!(3 <= canister_messages_count && canister_messages_count <= 4);
+                    assert!(
+                        3 <= canister_messages_count && canister_messages_count <= 4,
+                        "{canister_messages_count} is not between 3 and 4"
+                    );
                 }
             },
         )
@@ -2349,10 +2352,10 @@ mod tests {
     #[rstest]
     #[case::limited_by_the_wire_limit(true, 100_000, 10 * EXPECTED_MESSAGE_ID_LENGTH, 10)]
     #[case::limited_by_the_wire_limit(false, 100_000, 10 * EXPECTED_MESSAGE_ID_LENGTH, 0)]
-    #[case::limited_by_the_mem_limit(true, 100_000, 1_500_000, 41)]
+    #[case::limited_by_the_mem_limit(true, 100_000, 1_500_000, 83)]
     #[case::limited_by_the_wire_limit(false, 100_000, 1_500_000, 14)]
-    #[case::limited_by_the_mem_limit(true, 100_000, 8_000_000, 41)]
-    #[case::limited_by_the_mem_limit(false, 100_000, 8_000_000, 41)]
+    #[case::limited_by_the_mem_limit(true, 100_000, 10_000_000, 83)]
+    #[case::limited_by_the_mem_limit(false, 100_000, 10_000_000, 83)]
     #[case::limited_by_the_msgs_count_limit(true, 1_000, 4_000_000, 1_000)]
     #[case::limited_by_the_msgs_count_limit(false, 1_000, 4_000_000, 1_000)]
     #[trace]
