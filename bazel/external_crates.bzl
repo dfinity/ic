@@ -1133,6 +1133,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "stream",
                 ],
             ),
+            "rexpect": crate.spec(
+                version = "0.6",
+            ),
             "ring": crate.spec(
                 version = "^0.17.7",
                 features = [
