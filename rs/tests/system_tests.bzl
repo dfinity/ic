@@ -345,10 +345,10 @@ def system_test(
 
     if uses_guestos_mainnet_app_img:
         env["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = MAINNET_APP["version"]
-        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_app_guest_img" if not uses_dev_mainnet else "@mainnet_app_guest_img_dev"
+        icos_images["ENV_DEPS__GUESTOS_DISK_IMG"] = "@mainnet_app_images//:guest-img" if not uses_dev_mainnet else "@mainnet_app_images_dev//:guest-img"
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_URL"] = icos_image_download_url(MAINNET_APP["version"], "guest-os", True) if not uses_dev_mainnet else icos_dev_image_download_url(MAINNET_APP["version"], "guest-os", True)
         env["ENV_DEPS__GUESTOS_INITIAL_UPDATE_IMG_HASH"] = MAINNET_APP["hash" if not uses_dev_mainnet else "dev_hash"]
-        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_app_guest_img//:launch-measurements-guest.json" if not uses_dev_mainnet else "@mainnet_app_guest_img_dev//:launch-measurements-guest.json"
+        _env_deps["ENV_DEPS__GUESTOS_INITIAL_LAUNCH_MEASUREMENTS_FILE"] = "@mainnet_app_images//:launch-measurements-guest.json" if not uses_dev_mainnet else "@mainnet_app_images_dev//:launch-measurements-guest.json"
 
     if uses_guestos_recovery_dev_img:
         info_file_vars["ENV_DEPS__GUESTOS_DISK_IMG_VERSION"] = ["STABLE_VERSION"]
