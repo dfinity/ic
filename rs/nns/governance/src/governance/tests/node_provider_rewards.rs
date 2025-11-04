@@ -1,3 +1,4 @@
+use crate::pb::v1::Vote::No;
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::Governance,
@@ -17,6 +18,8 @@ fn test_node_provider_rewards_read_from_correct_sources() {
         maximum_node_provider_rewards_e8s: None,
         registry_version: None,
         node_providers: vec![],
+        start_date: None,
+        end_date: None,
     };
 
     let rewards_2 = MonthlyNodeProviderRewards {
@@ -27,6 +30,8 @@ fn test_node_provider_rewards_read_from_correct_sources() {
         maximum_node_provider_rewards_e8s: None,
         registry_version: None,
         node_providers: vec![],
+        start_date: None,
+        end_date: None,
     };
     let mut governance = Governance::new(
         Default::default(),
@@ -67,6 +72,8 @@ fn test_list_node_provider_rewards_api() {
         maximum_node_provider_rewards_e8s: None,
         registry_version: None,
         node_providers: vec![],
+        start_date: None,
+        end_date: None,
     };
 
     let rewards_2 = MonthlyNodeProviderRewards {
@@ -77,6 +84,8 @@ fn test_list_node_provider_rewards_api() {
         maximum_node_provider_rewards_e8s: None,
         registry_version: None,
         node_providers: vec![],
+        start_date: None,
+        end_date: None,
     };
 
     let mut governance = Governance::new(
@@ -117,6 +126,8 @@ fn test_list_node_provider_rewards_api_with_paging_and_filters() {
             maximum_node_provider_rewards_e8s: None,
             registry_version: None,
             node_providers: vec![],
+            start_date: None,
+            end_date: None,
         };
         governance.update_most_recent_monthly_node_provider_rewards(rewards.clone());
         rewards_minted.push(rewards);
