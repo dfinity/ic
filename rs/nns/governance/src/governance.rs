@@ -129,10 +129,9 @@ use maplit::hashmap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use std::cell::{Cell, RefCell};
-use std::sync::Arc;
 use std::{
     borrow::Cow,
+    cell::{Cell, RefCell},
     cmp::{Ordering, max},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::{TryFrom, TryInto},
@@ -140,6 +139,7 @@ use std::{
     future::Future,
     ops::RangeInclusive,
     string::ToString,
+    sync::Arc,
     time::{Duration, SystemTime},
 };
 
@@ -1439,9 +1439,6 @@ pub struct Governance {
     /// For validating neuron related data.
     neuron_data_validator: NeuronDataValidator,
 
-    /// Scope guard for minting node provider rewards.
-    minting_node_provider_rewards: bool,
-
     rate_limiter: InMemoryRateLimiter<String>,
 }
 
@@ -1611,7 +1608,6 @@ impl Governance {
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
-            minting_node_provider_rewards: false,
             rate_limiter: new_rate_limiter(),
         }
     }
@@ -1638,7 +1634,6 @@ impl Governance {
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
-            minting_node_provider_rewards: false,
             rate_limiter: new_rate_limiter(),
         }
     }
@@ -1670,7 +1665,6 @@ impl Governance {
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
-            minting_node_provider_rewards: false,
             rate_limiter: new_rate_limiter(),
         }
     }
@@ -4270,13 +4264,21 @@ impl Governance {
 
     /// Mint and transfer monthly node provider rewards
     async fn mint_monthly_node_provider_rewards(&mut self) -> Result<(), GovernanceError> {
-        if self.minting_node_provider_rewards {
-            // There is an ongoing attempt to mint node provider rewards. Do nothing.
-            return Ok(());
+        // Return Err if another call is already in progress.
+        thread_local! {
+            static LOCK: RefCell<Option<u64>> = const { RefCell::new(None) };
         }
-
-        // Acquire the lock before doing anything meaningful.
-        self.minting_node_provider_rewards = true;
+        let release_on_drop = ic_nervous_system_lock::acquire(&LOCK, self.env.now());
+        if let Err(earlier_call_start_timestamp) = release_on_drop {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::Unavailable,
+                format!(
+                    "Another mint_monthly_node_provider_rewards call (started at {} \
+                     seconds since the UNIX epoch) is already in progress.",
+                    earlier_call_start_timestamp,
+                ),
+            ));
+        }
 
         let monthly_node_provider_rewards = if are_performance_based_rewards_enabled() {
             self.get_node_providers_rewards().await?
@@ -4288,9 +4290,6 @@ impl Governance {
             .reward_node_providers(&monthly_node_provider_rewards.rewards)
             .await;
         self.update_most_recent_monthly_node_provider_rewards(monthly_node_provider_rewards);
-
-        // Release the lock before committing the result.
-        self.minting_node_provider_rewards = false;
 
         // Commit the minting status by making a canister call.
         let _unused_canister_status_response = self
