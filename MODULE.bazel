@@ -1127,7 +1127,6 @@ canisters(
         "cycles_ledger": "cycles-ledger.wasm.gz",
         "cycles_ledger_index": "ic-icrc1-index-ng-u256.wasm.gz",
         "bitcoin_testnet": "ic-btc-canister.wasm.gz",
-        "migration": "migration-canister.wasm.gz",
         "dogecoin": "ic-doge-canister.wasm.gz",
         "migration": "migration-canister.wasm.gz",
     },
