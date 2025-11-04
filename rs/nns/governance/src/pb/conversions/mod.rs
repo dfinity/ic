@@ -3037,7 +3037,24 @@ impl TryFrom<ic_node_rewards_canister_api::DateUtc> for DateUtc {
         Ok(Self { year, month, day })
     }
 }
-
+impl From<pb::DateUtc> for pb_api::DateUtc {
+    fn from(item: pb::DateUtc) -> Self {
+        Self {
+            year: item.year,
+            month: item.month,
+            day: item.day,
+        }
+    }
+}
+impl From<pb_api::DateUtc> for pb::DateUtc {
+    fn from(item: pb_api::DateUtc) -> Self {
+        Self {
+            year: item.year,
+            month: item.month,
+            day: item.day,
+        }
+    }
+}
 impl From<pb::XdrConversionRate> for pb_api::XdrConversionRate {
     fn from(item: pb::XdrConversionRate) -> Self {
         Self {
@@ -3111,25 +3128,6 @@ impl From<pb_api::ListNodeProvidersResponse> for pb::ListNodeProvidersResponse {
         }
     }
 }
-impl From<pb::DateUtc> for pb_api::DateUtc {
-    fn from(item: pb::DateUtc) -> Self {
-        Self {
-            year: item.year,
-            month: item.month,
-            day: item.day,
-        }
-    }
-}
-impl From<pb_api::DateUtc> for pb::DateUtc {
-    fn from(item: pb_api::DateUtc) -> Self {
-        Self {
-            year: item.year,
-            month: item.month,
-            day: item.day,
-        }
-    }
-}
-
 impl From<pb::MonthlyNodeProviderRewards> for pb_api::MonthlyNodeProviderRewards {
     fn from(item: pb::MonthlyNodeProviderRewards) -> Self {
         Self {
