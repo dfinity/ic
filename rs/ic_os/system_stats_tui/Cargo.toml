@@ -4,19 +4,18 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-chrono = "0.4.42"
-clap = { version = "4.5.50", features = ["derive"] }
-clap_derive = { version = "4.0.0-rc.1" }
-color-eyre = "0.6.5"
-crossterm = { version = "0.29.0", features = ["event-stream"] }
-duration-string = "0.5.3"
-futures = "0.3.31"
-futures-util = "0.3.31"
-humansize = "2.1.3"
-lazy_static = "1.5.0"
-prometheus-parse = "0.2.5"
-ratatui = "0.29.0"
-regex = "1.12.2"
-reqwest = "0.12.24"
-tokio = { version = "~1", features = ["macros", "rt", "rt-multi-thread"] }
+chrono = { workspace = true }
+clap = { workspace = true }
+color-eyre = { workspace = true }
+crossterm = { workspace = true }
+duration-string = { workspace = true }
+futures = { workspace = true }
+futures-util = { workspace = true }
+humansize = { workspace = true }
+lazy_static = { workspace = true }
+prometheus-parse = { workspace = true }
+ratatui = { workspace = true }
+regex = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
 
