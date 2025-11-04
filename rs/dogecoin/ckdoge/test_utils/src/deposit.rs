@@ -1,6 +1,9 @@
 //! Helpers for the deposit flow, converting DOGE on Dogecoin into ckDOGE on ICP.
 //!
-//! The general idea is 1 struct for 1 user interaction.
+//! General design guidelines:
+//! * 1 public method for each user interaction.
+//! * Helper struct with only 1 or 2 public methods for auto-completion to become trivial.
+//! * Prefix in method's name (e.g. `minter_` or `dogecoin_`) indicates the involved component.
 use crate::Setup;
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
