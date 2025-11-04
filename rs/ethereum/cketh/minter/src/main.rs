@@ -76,10 +76,16 @@ fn validate_ckerc20_active() {
 fn setup_timers() {
     ic_cdk_timers::set_timer(Duration::from_secs(0), async {
         // Initialize the minter's public key to make the address known.
-        let _ = lazy_call_ecdsa_public_key().await;
+        // FIXME: If remove the `ic_cdk::spawn` here, //rs/ethereum/cketh/minter:integration_tests_tests/cketh_test will fail.
+        ic_cdk::spawn(async {
+            let _ = lazy_call_ecdsa_public_key().await;
+        })
     });
     // Start scraping logs immediately after the install, then repeat with the interval.
-    ic_cdk_timers::set_timer(Duration::from_secs(0), async { scrape_logs().await });
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async {
+        // FIXME: If remove the `ic_cdk::spawn` here, //rs/ethereum/cketh/minter:integration_tests_tests/ckerc20_test will fail.
+        ic_cdk::spawn(scrape_logs())
+    });
     ic_cdk_timers::set_timer_interval(SCRAPING_ETH_LOGS_INTERVAL, async || scrape_logs().await);
     ic_cdk_timers::set_timer_interval(PROCESS_ETH_RETRIEVE_TRANSACTIONS_INTERVAL, async || {
         process_retrieve_eth_requests().await
