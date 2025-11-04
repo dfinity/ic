@@ -70,6 +70,7 @@ EOF
         docker run --privileged -v /dev:/dev --rm final /usr/bin/bash -c "
             RUST_BACKTRACE=1 /guest_disk_test
         "
+        rm -rf /tmp/out
     "#,
         )
         .expect("Failed to run guest_disk_test");
@@ -96,6 +97,7 @@ EOF
         docker run --privileged -v /dev:/dev --rm final /usr/bin/bash -c "
             RUST_BACKTRACE=1 /device_test
         "
+        rm -rf /tmp/out
     "#,
         )
         .expect("Failed to run device_test");
