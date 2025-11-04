@@ -4,7 +4,7 @@ use anyhow::Result;
 use ic_agent::export::Principal;
 use ic_agent::{
     Identity,
-    identity::{AnonymousIdentity, Secp256k1Identity},
+    identity::{AnonymousIdentity, Prime256v1Identity, Secp256k1Identity},
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_registry_subnet_type::SubnetType;
@@ -74,11 +74,22 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing valid requests from an ECDSA identity. Should succeed."
+                "Testing valid requests from an ECDSA secp256k1 identity. Should succeed."
             );
             test_valid_request_succeeds(
                 node_url.as_str(),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
+                canister.canister_id(),
+            )
+            .await;
+
+            info!(
+                logger,
+                "Testing valid requests from an ECDSA secp256r1 identity. Should succeed."
+            );
+            test_valid_request_succeeds(
+                node_url.as_str(),
+                random_ecdsa_secp256r1_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -96,11 +107,22 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing request from an ECDSA identity but with missing signature. Should fail."
+                "Testing request from an ECDSA secp256k1 identity but with missing signature. Should fail."
             );
             test_request_with_empty_signature_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
+                canister.canister_id(),
+            )
+            .await;
+
+            info!(
+                logger,
+                "Testing request from an ECDSA secp256r1 identity but with missing signature. Should fail."
+            );
+            test_request_with_empty_signature_fails(
+                node_url.as_str(),
+                random_ecdsa_secp256r1_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -118,11 +140,11 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing request from an ECDSA identity signed by an ed25519 identity. Should fail."
+                "Testing request from an ECDSA secp256k1 identity signed by an ed25519 identity. Should fail."
             );
             test_request_signed_by_another_identity_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
                 random_ed25519_identity(),
                 canister.canister_id(),
             )
@@ -130,12 +152,24 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing request from an ed25519 identity signed by an ECDSA identity. Should fail."
+                "Testing request from an ECDSA secp256r1 identity signed by an ed25519 identity. Should fail."
+            );
+            test_request_signed_by_another_identity_fails(
+                node_url.as_str(),
+                random_ecdsa_secp256r1_identity(rng),
+                random_ed25519_identity(),
+                canister.canister_id(),
+            )
+            .await;
+
+            info!(
+                logger,
+                "Testing request from an ed25519 identity signed by an ECDSA secp256k1 identity. Should fail."
             );
             test_request_signed_by_another_identity_fails(
                 node_url.as_str(),
                 random_ed25519_identity(),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -154,23 +188,23 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing request from an ECDSA identity signed by another ECDSA identity. Should fail."
+                "Testing request from an ECDSA secp256k1 identity signed by another ECDSA secp256k1 identity. Should fail."
             );
             test_request_signed_by_another_identity_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(rng),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
                 canister.canister_id(),
             )
             .await;
 
             info!(
                 logger,
-                "Testing request from an ECDSA identity but with an ed25519 sender. Should fail."
+                "Testing request from an ECDSA secp256k1 identity but with an ed25519 sender. Should fail."
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
                 random_ed25519_identity(),
                 canister.canister_id(),
             )
@@ -178,12 +212,24 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing request from an ed25519 identity but with wrong (ECDSA) identity. Should fail."
+                "Testing request from an ECDSA secp256r1 identity but with an ed25519 sender. Should fail."
+            );
+            test_request_with_valid_signature_but_wrong_sender_fails(
+                node_url.as_str(),
+                random_ecdsa_secp256r1_identity(rng),
+                random_ed25519_identity(),
+                canister.canister_id(),
+            )
+            .await;
+
+            info!(
+                logger,
+                "Testing request from an ed25519 identity but with wrong (ECDSA secp256k1) identity. Should fail."
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
                 node_url.as_str(),
                 random_ed25519_identity(),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
                 canister.canister_id(),
             )
             .await;
@@ -202,12 +248,45 @@ pub fn request_signature_test(env: TestEnv) {
 
             info!(
                 logger,
-                "Testing request from an ECDSA identity but with wrong (ECDSA) identity. Should fail."
+                "Testing request from an ECDSA secp256k1 identity but with wrong (ECDSA secp256k1) identity. Should fail."
             );
             test_request_with_valid_signature_but_wrong_sender_fails(
                 node_url.as_str(),
-                random_ecdsa_identity(rng),
-                random_ecdsa_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
+                random_ecdsa_secp256k1_identity(rng),
+                canister.canister_id(),
+            )
+            .await;
+
+            info!(
+                logger,
+                "Testing request from an ECDSA secp256k1 identity but with empty domain separator. Should fail."
+            );
+            test_request_with_empty_domain_separator_fails(
+                node_url.as_str(),
+                random_ecdsa_secp256k1_identity(rng),
+                canister.canister_id(),
+            )
+            .await;
+
+            info!(
+                logger,
+                "Testing request from an ECDSA secp256r1 identity but with empty domain separator. Should fail."
+            );
+            test_request_with_empty_domain_separator_fails(
+                node_url.as_str(),
+                random_ecdsa_secp256r1_identity(rng),
+                canister.canister_id(),
+            )
+            .await;
+
+            info!(
+                logger,
+                "Testing request from an ed25519 identity but with empty domain separator. Should fail."
+            );
+            test_request_with_empty_domain_separator_fails(
+                node_url.as_str(),
+                random_ed25519_identity(),
                 canister.canister_id(),
             )
             .await;
@@ -215,8 +294,12 @@ pub fn request_signature_test(env: TestEnv) {
     });
 }
 
-pub fn random_ecdsa_identity<R: Rng + CryptoRng>(rng: &mut R) -> Secp256k1Identity {
+pub fn random_ecdsa_secp256k1_identity<R: Rng + CryptoRng>(rng: &mut R) -> Secp256k1Identity {
     Secp256k1Identity::from_private_key(k256::SecretKey::random(rng))
+}
+
+pub fn random_ecdsa_secp256r1_identity<R: Rng + CryptoRng>(rng: &mut R) -> Prime256v1Identity {
+    Prime256v1Identity::from_private_key(p256::SecretKey::random(rng))
 }
 
 // Test sending a query/update from the anonymous user that returns
@@ -472,4 +555,122 @@ async fn test_request_with_valid_signature_but_wrong_sender_fails<
         .unwrap();
 
     assert_eq!(res.status(), 400);
+}
+
+async fn test_request_with_empty_domain_separator_fails<T: Identity + 'static>(
+    url: &str,
+    identity: T,
+    canister_id: Principal,
+) {
+    // Try a query.
+    let content = HttpQueryContent::Query {
+        query: HttpUserQuery {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "query".to_string(),
+            arg: Blob(wasm().caller().reply_data_append().reply().build()),
+            sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+
+    let signature = sign_query_with_empty_domain_separator(&content, &identity);
+
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
+        sender_sig: Some(Blob(signature.signature.unwrap())),
+    };
+    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!("{url}api/v2/canister/{canister_id}/query"))
+        .header("Content-Type", "application/cbor")
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 400);
+
+    // Now try an update.
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "update".to_string(),
+            arg: Blob(wasm().caller().reply_data_append().reply().build()),
+            sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+
+    let signature = sign_update_with_empty_domain_separator(&content, &identity);
+
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
+        sender_sig: Some(Blob(signature.signature.unwrap())),
+    };
+    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
+    let client = reqwest::Client::new();
+    let res = client
+        .post(format!("{url}api/v2/canister/{canister_id}/call"))
+        .header("Content-Type", "application/cbor")
+        .body(body)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), 400);
+}
+
+pub fn sign_query_with_empty_domain_separator(
+    content: &HttpQueryContent,
+    identity: &impl Identity,
+) -> ic_agent::identity::Signature {
+    let HttpQueryContent::Query { query: content } = content;
+    let msg = ic_agent::agent::EnvelopeContent::Query {
+        ingress_expiry: content.ingress_expiry,
+        sender: Principal::from_slice(&content.sender),
+        canister_id: Principal::from_slice(&content.canister_id),
+        method_name: content.method_name.clone(),
+        arg: content.arg.0.clone(),
+        nonce: None,
+    };
+    let signable = msg.to_request_id().signable();
+    identity
+        .sign_arbitrary(truncate_domain_separator(&signable))
+        .unwrap()
+}
+
+pub fn sign_update_with_empty_domain_separator(
+    content: &HttpCallContent,
+    identity: &impl Identity,
+) -> ic_agent::identity::Signature {
+    let HttpCallContent::Call { update: content } = content;
+    let msg = ic_agent::agent::EnvelopeContent::Call {
+        ingress_expiry: content.ingress_expiry,
+        sender: Principal::from_slice(&content.sender),
+        canister_id: Principal::from_slice(&content.canister_id),
+        method_name: content.method_name.clone(),
+        arg: content.arg.0.clone(),
+        nonce: content.nonce.clone().map(|blob| blob.0),
+    };
+    let signable = msg.to_request_id().signable();
+    identity
+        .sign_arbitrary(truncate_domain_separator(&signable))
+        .unwrap()
+}
+
+fn truncate_domain_separator(signable: &[u8]) -> &[u8] {
+    const IC_REQUEST_DOMAIN_SEPARATOR: &[u8; 11] = b"\x0Aic-request";
+    const DOMAIN_SEPARATOR_LENGTH: usize = 11;
+    assert_eq!(
+        signable[..DOMAIN_SEPARATOR_LENGTH],
+        *IC_REQUEST_DOMAIN_SEPARATOR
+    );
+    &signable[DOMAIN_SEPARATOR_LENGTH..]
 }

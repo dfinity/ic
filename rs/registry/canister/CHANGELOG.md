@@ -10,6 +10,41 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 
 INSERT NEW RELEASES HERE
 
+
+# 2025-10-31: Proposal 139210
+
+http://dashboard.internetcomputer.org/proposal/139210
+
+## Changed
+
+* Allow unassigned nodes to have nonempty ssh_node_state_write_access.
+
+  * Why: Previously, it was believed that there is no way that a nonempty
+    ssh_node_state_write_access could be used constructively, but after
+    consulting the Consensus team, we (the Governance team) learned that this is
+    not true. In particular, it could be useful during a subnet recovery, even
+    though this capability generally wouldn't be used during a "typical" subnet
+    recovery.
+
+
+# 2025-10-24: Proposal 139085
+
+http://dashboard.internetcomputer.org/proposal/139085
+
+## Added
+
+* New set_subnet_operational_level method. This is only callable by
+  Governance. Currently, Governance has no active code path (in release builds)
+  that calls this method. However, once the SetSubnetOperationalLevel proposal
+  type is enabled, this will effectively become an active feature. This will be
+  used in a slightly improved subnet recovery procedure. Thus, this would only
+  be used in rare extraordinary situations.
+
+## Changed
+
+* `ssh_node_state_write_access` can have at most 50 elements. Previously, there
+  was no limit. (This brings this field in line with other ssh_*_access fields.)
+
 # 2025-10-17: Proposal 138992
 
 https://dashboard.internetcomputer.org/proposal/138992
