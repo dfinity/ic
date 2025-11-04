@@ -3,7 +3,7 @@ workspace(
 )
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load("//bazel:mainnet-icos-images.bzl", "get_mainnet_guestos_images", "get_mainnet_setupos_images")
+load("//bazel:mainnet-icos-images.bzl", "mainnet_icos_images")
 
 http_archive(
     name = "rules_rust",
@@ -48,7 +48,83 @@ load("//pre-commit:ormolu.bzl", "ormolu")
 
 ormolu(name = "ormolu")
 
-# Mainnet ICOS image support
-get_mainnet_setupos_images()
+# Mainnet ICOS images
+mainnet_icos_images(
+    name = "mainnet_latest_hostos_images",
+    parts = [
+        "hostos",
+        "latest_release",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
 
-get_mainnet_guestos_images()
+mainnet_icos_images(
+    name = "mainnet_latest_hostos_images_dev",
+    dev = True,
+    parts = [
+        "hostos",
+        "latest_release",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_latest_guestos_images",
+    parts = [
+        "guestos",
+        "latest_release",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_latest_guestos_images_dev",
+    dev = True,
+    parts = [
+        "guestos",
+        "latest_release",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_nns_images",
+    parts = [
+        "guestos",
+        "subnets",
+        "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_nns_images_dev",
+    dev = True,
+    parts = [
+        "guestos",
+        "subnets",
+        "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_app_images",
+    parts = [
+        "guestos",
+        "subnets",
+        "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
+
+mainnet_icos_images(
+    name = "mainnet_app_images_dev",
+    dev = True,
+    parts = [
+        "guestos",
+        "subnets",
+        "io67a-2jmkw-zup3h-snbwi-g6a5n-rm5dn-b6png-lvdpl-nqnto-yih6l-gqe",
+    ],
+    path = "//:mainnet-icos-revisions.json",
+)
