@@ -8,11 +8,9 @@
 # as it would not allow selective manipulation of SEV status between services — it is
 # equivalent of enabling/disabling SEV in the GuestOS VM config.
 
-case $(systemd-detect-virt --cvm) in
-  sev|sev-es|sev-snp)
+# We only support SEV-SNP and no older SEV variants (sev, sev-es)
+if [ "$(systemd-detect-virt --cvm)" = "sev-snp" ]; then
     echo "SEV_ACTIVE=1"
-    ;;
-  *)
+else
     echo "SEV_ACTIVE=0"
-    ;;
-esac
+fi
