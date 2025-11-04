@@ -18,8 +18,7 @@ Success::
 . NNS subnet is functional after the recovery.
 
 Variant::
-. This test variant performs the recovery upgrading the subnet without first blessing/electing the new replica version.
-. It also fixes the DFINITY-owned node through the guestos-recovery-upgrader like the other Node Providers instead of through SSH with ic-recovery.
+. This test variant performs the actions of Node Providers sequentially, i.e. one after another, instead of all in parallel.
 
 end::catalog[] */
 
@@ -45,9 +44,9 @@ fn main() -> Result<()> {
         .add_test(systest!(test; TestConfig {
             local_recovery: false,
             break_dfinity_owned_node: false,
-            add_and_bless_upgrade_version: false,
-            fix_dfinity_owned_node_like_np: true,
-            sequential_np_actions: false,
+            add_and_bless_upgrade_version: true,
+            fix_dfinity_owned_node_like_np: false,
+            sequential_np_actions: true,
         }))
         .with_timeout_per_test(Duration::from_secs(30 * 60))
         .with_overall_timeout(Duration::from_secs(45 * 60))

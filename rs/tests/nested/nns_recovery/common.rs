@@ -76,6 +76,7 @@ pub struct TestConfig {
     pub break_dfinity_owned_node: bool,
     pub add_and_bless_upgrade_version: bool,
     pub fix_dfinity_owned_node_like_np: bool,
+    pub sequential_np_actions: bool,
 }
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
@@ -432,7 +433,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             let recovery_img_hash = recovery_img_hash.clone();
             let artifacts_hash = artifacts_hash.clone();
 
-            handles.spawn(async move {
+            if cfg.sequential_np_actions {
                 simulate_node_provider_action(
                     &logger,
                     &env,
@@ -441,11 +442,25 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                     &recovery_img_hash,
                     &artifacts_hash,
                 )
-                .await
-            });
+                .await;
+            } else {
+                handles.spawn(async move {
+                    simulate_node_provider_action(
+                        &logger,
+                        &env,
+                        &vm,
+                        RECOVERY_GUESTOS_IMG_VERSION,
+                        &recovery_img_hash,
+                        &artifacts_hash,
+                    )
+                    .await
+                });
+            }
         }
 
-        handles.join_all().await;
+        if !cfg.sequential_np_actions {
+            handles.join_all().await;
+        }
     });
 
     info!(logger, "Ensure the subnet is healthy after the recovery");

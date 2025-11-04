@@ -37,3 +37,7 @@ path = "nr_local.rs"
 [[bin]]
 name = "ic-systest-nested-nns-recovery-no-bless-fix-like-np"
 path = "nr_no_bless_fix_like_np.rs"
+
+[[bin]]
+name = "ic-systest-nested-nns-recovery-sequential-np-actions"
+path = "nr_seq_np_actions.rs"
