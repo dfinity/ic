@@ -314,7 +314,8 @@ async fn upgrade_to(
 /// This function will thus loop indefinitely if an upgrade is not scheduled.
 async fn fetch_local_cup_hash_from_logs_until_graceful_exit(mut log_stream: LogStream) -> String {
     let local_cup_regex =
-        regex::Regex::new(r#"Persisted local CUP to disk: .*state_hash=([a-f0-9]{64})"#).unwrap();
+        regex::Regex::new(r#"Successfully persisted CUP \(.*state_hash=([a-f0-9]{64}).*\)"#)
+            .unwrap();
     let orchestrator_shutdown = "Orchestrator shut down gracefully";
 
     // Stream log entries until detecting that the orchestrator has shut down gracefully, while
