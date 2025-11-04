@@ -75,7 +75,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
-use chrono::{DateTime, NaiveDate};
+use chrono::NaiveDate;
 use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
 use disburse_maturity::initiate_maturity_disbursement;
 #[cfg(not(target_arch = "wasm32"))]
