@@ -352,11 +352,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "canbench": crate.spec(
                 git = "https://github.com/dfinity/canbench.git",
-                rev = "e8df43674c3bd635e49929094175294f148e8f41",
+                rev = "66ea29a88a62c17c3ac8c7c8538daecf931ddace",
             ),
             "canbench-rs": crate.spec(
                 git = "https://github.com/dfinity/canbench.git",
-                rev = "e8df43674c3bd635e49929094175294f148e8f41",
+                rev = "66ea29a88a62c17c3ac8c7c8538daecf931ddace",
             ),
             "candid": crate.spec(
                 version = "^0.10.17",
@@ -657,15 +657,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "ic-cdk": crate.spec(
                 git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "46c13b59cf96c3032428a8c7b6a2912caa5d4c90",
+                rev = "e1e611ea80d72f9836f910f7179b43685079ce15",
             ),
             "ic-cdk-executor": crate.spec(
                 git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "46c13b59cf96c3032428a8c7b6a2912caa5d4c90",
+                rev = "e1e611ea80d72f9836f910f7179b43685079ce15",
             ),
             "ic-cdk-timers": crate.spec(
                 git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "46c13b59cf96c3032428a8c7b6a2912caa5d4c90",
+                rev = "e1e611ea80d72f9836f910f7179b43685079ce15",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -695,7 +695,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "ic-management-canister-types": crate.spec(
                 git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "46c13b59cf96c3032428a8c7b6a2912caa5d4c90",
+                rev = "e1e611ea80d72f9836f910f7179b43685079ce15",
             ),
             "ic_principal": crate.spec(
                 version = "^0.1.1",
@@ -741,7 +741,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "ic-vetkeys": crate.spec(
                 git = "https://github.com/dfinity/vetkeys.git",
-                rev = "2a11926730e6f3953c77f1b347984c7c6bb314c5",
+                rev = "1d1497c86d86668fc6239e9fcc44ba9604fa1a29",
             ),
             "ic-wasm": crate.spec(
                 version = "^0.8.4",

@@ -1934,7 +1934,7 @@ dependencies = [
 [[package]]
 name = "canbench-rs"
 version = "0.3.0"
-source = "git+https://github.com/dfinity/canbench.git?rev=e8df43674c3bd635e49929094175294f148e8f41#e8df43674c3bd635e49929094175294f148e8f41"
+source = "git+https://github.com/dfinity/canbench.git?rev=66ea29a88a62c17c3ac8c7c8538daecf931ddace#66ea29a88a62c17c3ac8c7c8538daecf931ddace"
 dependencies = [
  "canbench-rs-macros",
  "candid",
@@ -1945,7 +1945,7 @@ dependencies = [
 [[package]]
 name = "canbench-rs-macros"
 version = "0.3.0"
-source = "git+https://github.com/dfinity/canbench.git?rev=e8df43674c3bd635e49929094175294f148e8f41#e8df43674c3bd635e49929094175294f148e8f41"
+source = "git+https://github.com/dfinity/canbench.git?rev=66ea29a88a62c17c3ac8c7c8538daecf931ddace#66ea29a88a62c17c3ac8c7c8538daecf931ddace"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7231,14 +7231,14 @@ dependencies = [
 [[package]]
 name = "ic-cdk"
 version = "0.19.0-beta.3"
-source = "git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90#46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=e1e611ea80d72f9836f910f7179b43685079ce15#e1e611ea80d72f9836f910f7179b43685079ce15"
 dependencies = [
  "candid",
  "ic-cdk-executor",
  "ic-cdk-macros",
  "ic-error-types 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "ic-management-canister-types 0.4.1",
- "ic0 1.0.1 (git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90)",
+ "ic0 1.0.1 (git+https://github.com/dfinity/cdk-rs.git?rev=e1e611ea80d72f9836f910f7179b43685079ce15)",
  "pin-project-lite",
  "serde",
  "serde_bytes",
@@ -7249,9 +7249,9 @@ dependencies = [
 [[package]]
 name = "ic-cdk-executor"
 version = "2.0.0-beta.1"
-source = "git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90#46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=e1e611ea80d72f9836f910f7179b43685079ce15#e1e611ea80d72f9836f910f7179b43685079ce15"
 dependencies = [
- "ic0 1.0.1 (git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90)",
+ "ic0 1.0.1 (git+https://github.com/dfinity/cdk-rs.git?rev=e1e611ea80d72f9836f910f7179b43685079ce15)",
  "slotmap",
  "smallvec",
 ]
@@ -7259,7 +7259,7 @@ dependencies = [
 [[package]]
 name = "ic-cdk-macros"
 version = "0.19.0-beta.3"
-source = "git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90#46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=e1e611ea80d72f9836f910f7179b43685079ce15#e1e611ea80d72f9836f910f7179b43685079ce15"
 dependencies = [
  "candid",
  "darling 0.20.11",
@@ -7271,10 +7271,10 @@ dependencies = [
 [[package]]
 name = "ic-cdk-timers"
 version = "1.0.0-beta.1"
-source = "git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90#46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=e1e611ea80d72f9836f910f7179b43685079ce15#e1e611ea80d72f9836f910f7179b43685079ce15"
 dependencies = [
  "ic-cdk-executor",
- "ic0 1.0.1 (git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90)",
+ "ic0 1.0.1 (git+https://github.com/dfinity/cdk-rs.git?rev=e1e611ea80d72f9836f910f7179b43685079ce15)",
  "slotmap",
 ]
 
@@ -10795,7 +10795,7 @@ dependencies = [
 [[package]]
 name = "ic-management-canister-types"
 version = "0.4.1"
-source = "git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90#46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=e1e611ea80d72f9836f910f7179b43685079ce15#e1e611ea80d72f9836f910f7179b43685079ce15"
 dependencies = [
  "candid",
  "serde",
@@ -15206,7 +15206,7 @@ dependencies = [
 [[package]]
 name = "ic-vetkeys"
 version = "0.5.0"
-source = "git+https://github.com/dfinity/vetkeys.git?rev=2a11926730e6f3953c77f1b347984c7c6bb314c5#2a11926730e6f3953c77f1b347984c7c6bb314c5"
+source = "git+https://github.com/dfinity/vetkeys.git?rev=1d1497c86d86668fc6239e9fcc44ba9604fa1a29#1d1497c86d86668fc6239e9fcc44ba9604fa1a29"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -15374,7 +15374,7 @@ checksum = "1499d08fd5be8f790d477e1865d63bab6a8d748300e141270c4296e6d5fdd6bc"
 [[package]]
 name = "ic0"
 version = "1.0.1"
-source = "git+https://github.com/dfinity/cdk-rs.git?rev=46c13b59cf96c3032428a8c7b6a2912caa5d4c90#46c13b59cf96c3032428a8c7b6a2912caa5d4c90"
+source = "git+https://github.com/dfinity/cdk-rs.git?rev=e1e611ea80d72f9836f910f7179b43685079ce15#e1e611ea80d72f9836f910f7179b43685079ce15"
 
 [[package]]
 name = "ic_bls12_381"
