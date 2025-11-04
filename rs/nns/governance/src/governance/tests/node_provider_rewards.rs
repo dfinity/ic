@@ -1,4 +1,3 @@
-use crate::pb::v1::Vote::No;
 use crate::test_utils::MockRandomness;
 use crate::{
     governance::Governance,
