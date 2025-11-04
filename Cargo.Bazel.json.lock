@@ -1,5 +1,5 @@
 {
-  "checksum": "6bdf7b6c7a3aa00a65d243c17c45142be38e4fddd342d2aae52942e9bb94e196",
+  "checksum": "91b0b3e92a4149c07aaaba4ec90dfb71321b2daf2c7961dfd6e58d58c86fe09a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21591,10 +21591,6 @@
             {
               "id": "ratelimit 0.9.1",
               "target": "ratelimit"
-            },
-            {
-              "id": "raw-cpuid 11.5.0",
-              "target": "raw_cpuid"
             },
             {
               "id": "rayon 1.10.0",
@@ -94440,7 +94436,6 @@
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
     "ratelimit 0.9.1",
-    "raw-cpuid 11.5.0",
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.1",
