@@ -110,14 +110,14 @@ rust_ic_test(
     data = [
         ":archive_canister.wasm.gz",
         ":archive_canister_u256.wasm.gz",
-        "@mainnet_ckbtc_ic-icrc1-archive//file",
-        "@mainnet_cketh_ic-icrc1-archive-u256//file",
+        "@mainnet_canisters//:ck_btc_archive.wasm.gz",
+        "@mainnet_canisters//:ck_eth_archive.wasm.gz",
     ],
     env = {
         "IC_ICRC1_ARCHIVE_WASM_U64_PATH": "$(rootpath :archive_canister.wasm.gz)",
         "IC_ICRC1_ARCHIVE_WASM_u256_PATH": "$(rootpath :archive_canister_u256.wasm.gz)",
-        "CKBTC_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_ckbtc_ic-icrc1-archive//file)",
-        "CKETH_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_cketh_ic-icrc1-archive-u256//file)",
+        "CKBTC_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_btc_archive.wasm.gz)",
+        "CKETH_IC_ICRC1_ARCHIVE_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ck_eth_archive.wasm.gz)",
     },
     deps = [
         # Keep sorted.

@@ -9,6 +9,7 @@ use ic_http_types::{HttpRequest, HttpResponse};
 #[cfg(feature = "pocket_ic")]
 pub use pocket_ic_query_call::{PocketIcAsyncHttpQuery, PocketIcHttpQuery};
 use regex::Regex;
+use std::fmt;
 use std::fmt::Debug;
 
 /// Provides fluent test assertions for metrics.
@@ -92,9 +93,9 @@ impl<T> MetricsAssert<T> {
     }
 
     /// Asserts that the metrics contain at least one entry matching the given Regex pattern.
-    pub fn assert_contains_metric_matching(self, pattern: &str) -> Self {
+    pub fn assert_contains_metric_matching<P: AsRef<str> + fmt::Display>(self, pattern: P) -> Self {
         assert!(
-            !self.find_metrics_matching(pattern).is_empty(),
+            !self.find_metrics_matching(pattern.as_ref()).is_empty(),
             "Expected to find metric matching '{}', but none matched in:\n{:?}",
             pattern,
             self.metrics

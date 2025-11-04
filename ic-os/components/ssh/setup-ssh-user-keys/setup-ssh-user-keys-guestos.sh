@@ -21,6 +21,13 @@ else
     exit 1
 fi
 
+# Create home directories
+for ACCOUNT in backup readonly admin; do
+    HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
+    mkdir -p "${HOMEDIR}"
+done
+
+# Setup SSH keys
 for ACCOUNT in backup readonly admin; do
     HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
     GROUP=$(id -ng "${ACCOUNT}")

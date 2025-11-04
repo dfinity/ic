@@ -1,12 +1,12 @@
 use crate::address::BitcoinAddress;
-use crate::logs::{P0, P1};
+use crate::logs::Priority;
 use crate::management::CallError;
 use crate::queries::WithdrawalFee;
 use crate::reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason};
 use crate::updates::update_balance::UpdateBalanceError;
 use async_trait::async_trait;
 use candid::{CandidType, Deserialize, Principal};
-use ic_canister_log::log;
+use canlog::log;
 use ic_cdk::bitcoin_canister;
 use ic_cdk::management_canister::SignWithEcdsaArgs;
 use ic_management_canister_types_private::DerivationPath;
@@ -100,27 +100,6 @@ pub const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 1_000;
 
 pub const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
 
-#[derive(Clone, Debug, Deserialize, serde::Serialize)]
-pub enum Priority {
-    P0,
-    P1,
-}
-
-#[derive(Clone, Debug, Deserialize, serde::Serialize)]
-pub struct LogEntry {
-    pub timestamp: u64,
-    pub priority: Priority,
-    pub file: String,
-    pub line: u32,
-    pub message: String,
-    pub counter: u64,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, serde::Serialize)]
-pub struct Log {
-    pub entries: Vec<LogEntry>,
-}
-
 #[derive(Debug, CandidType, Deserialize, Serialize)]
 pub struct MinterInfo {
     pub min_confirmations: u32,
@@ -137,6 +116,7 @@ pub struct ECDSAPublicKey {
 }
 
 pub type GetUtxosRequest = bitcoin_canister::GetUtxosRequest;
+pub type GetCurrentFeePercentilesRequest = bitcoin_canister::GetCurrentFeePercentilesRequest;
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct GetUtxosResponse {
@@ -246,7 +226,7 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
         Ok(response) => response.utxos,
         Err(e) => {
             log!(
-                P0,
+                Priority::Info,
                 "[fetch_main_utxos]: failed to fetch UTXOs for the main address {}: {}",
                 main_address.display(btc_network),
                 e
@@ -288,18 +268,29 @@ fn compute_min_withdrawal_amount(
 /// Returns an estimate for transaction fees in millisatoshi per vbyte. Returns
 /// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
-pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
+pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
+    runtime: &R,
+) -> Option<MillisatoshiPerByte> {
     let btc_network = state::read_state(|s| s.btc_network);
-    match management::get_current_fees(btc_network).await {
+    match runtime
+        .get_current_fee_percentiles(&bitcoin_canister::GetCurrentFeePercentilesRequest {
+            network: btc_network.into(),
+        })
+        .await
+    {
         Ok(fees) => {
             if btc_network == Network::Regtest {
                 return state::read_state(|s| s.estimate_median_fee_per_vbyte());
             }
+            log!(
+                Priority::Debug,
+                "[estimate_fee_per_vbyte]: update median fee per vbyte with {fees:?}"
+            );
             state::mutate_state(|s| s.update_median_fee_per_vbyte(fees))
         }
         Err(err) => {
             log!(
-                P0,
+                Priority::Info,
                 "[estimate_fee_per_vbyte]: failed to get median fee per vbyte: {}",
                 err
             );
@@ -339,7 +330,7 @@ fn reimburse_canceled_requests<R: CanisterRuntime>(
             }
         } else {
             log!(
-                P0,
+                Priority::Info,
                 "[reimburse_canceled_requests]: account is not found for retrieve_btc request ({:?})",
                 request
             );
@@ -379,7 +370,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
     let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
     let main_address = address::account_to_bitcoin_address(&ecdsa_public_key, &main_account);
 
-    let fee_millisatoshi_per_vbyte = match estimate_fee_per_vbyte().await {
+    let fee_millisatoshi_per_vbyte = match estimate_fee_per_vbyte(runtime).await {
         Some(fee) => fee,
         None => return,
     };
@@ -422,7 +413,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             }
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
-                    P0,
+                    Priority::Info,
                     "[submit_pending_requests]: error in building transaction ({:?})",
                     err
                 );
@@ -438,7 +429,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             }
             Err(BuildTxError::AmountTooLow) => {
                 log!(
-                    P0,
+                    Priority::Info,
                     "[submit_pending_requests]: dropping requests for total BTC amount {} to addresses {} (too low to cover the fees)",
                     tx::DisplayAmount(batch.iter().map(|req| req.amount).sum::<u64>()),
                     batch
@@ -462,7 +453,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             }
             Err(BuildTxError::DustOutput { address, amount }) => {
                 log!(
-                    P0,
+                    Priority::Info,
                     "[submit_pending_requests]: dropping a request for BTC amount {} to {} (too low to cover the fees)",
                     tx::DisplayAmount(amount),
                     address.display(s.btc_network)
@@ -491,7 +482,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             }
             Err(BuildTxError::NotEnoughFunds) => {
                 log!(
-                    P0,
+                    Priority::Info,
                     "[submit_pending_requests]: not enough funds to unsigned transaction for requests at block indexes [{}]",
                     batch
                         .iter()
@@ -508,7 +499,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
 
     if let Some((req, total_fee)) = maybe_sign_request {
         log!(
-            P1,
+            Priority::Debug,
             "[submit_pending_requests]: signing a new transaction: {}",
             hex::encode(tx::encode_into(&req.unsigned_tx, Vec::new()))
         );
@@ -540,14 +531,14 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                 });
 
                 log!(
-                    P0,
+                    Priority::Info,
                     "[submit_pending_requests]: sending a signed transaction {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
                 match runtime.send_transaction(&signed_tx, req.network).await {
                     Ok(()) => {
                         log!(
-                            P1,
+                            Priority::Debug,
                             "[submit_pending_requests]: successfully sent transaction {}",
                             &txid,
                         );
@@ -577,7 +568,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     }
                     Err(err) => {
                         log!(
-                            P0,
+                            Priority::Info,
                             "[submit_pending_requests]: failed to send a Bitcoin transaction: {}",
                             err
                         );
@@ -586,7 +577,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             }
             Err(err) => {
                 log!(
-                    P0,
+                    Priority::Info,
                     "[submit_pending_requests]: failed to sign a Bitcoin transaction: {}",
                     err
                 );
@@ -654,7 +645,7 @@ pub fn process_maybe_finalized_transactions<R: CanisterRuntime>(
 
     for txid in unstuck_transactions {
         log!(
-            P0,
+            Priority::Info,
             "[finalize_requests]: finalized transaction {} previously assumed to be stuck",
             &txid
         );
@@ -731,7 +722,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         Ok(response) => response.utxos,
         Err(e) => {
             log!(
-                P0,
+                Priority::Info,
                 "[finalize_requests]: failed to fetch UTXOs for the main address {}: {}",
                 main_address.display(btc_network),
                 e
@@ -757,7 +748,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
     //
     // Let's resubmit these transactions.
     log!(
-        P0,
+        Priority::Info,
         "[finalize_requests]: found {} stuck transactions: {}",
         maybe_finalized_transactions.len(),
         maybe_finalized_transactions
@@ -768,7 +759,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
     );
 
     // We shall use the latest fee estimate for replacement transactions.
-    let fee_per_vbyte = match estimate_fee_per_vbyte().await {
+    let fee_per_vbyte = match estimate_fee_per_vbyte(runtime).await {
         Some(fee) => fee,
         None => return,
     };
@@ -839,7 +830,7 @@ pub async fn resubmit_transactions<
         ) {
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
-                    P0,
+                    Priority::Info,
                     "[finalize_requests]: {:?}, transaction {} will be canceled",
                     err,
                     &submitted_tx.txid,
@@ -878,7 +869,7 @@ pub async fn resubmit_transactions<
             // Let's ignore this transaction and wait for fees to go down.
             Err(err) => {
                 log!(
-                    P1,
+                    Priority::Debug,
                     "[finalize_requests]: failed to rebuild stuck transaction {}: {:?}",
                     &submitted_tx.txid,
                     err
@@ -901,7 +892,7 @@ pub async fn resubmit_transactions<
             Ok(tx) => tx,
             Err(err) => {
                 log!(
-                    P0,
+                    Priority::Info,
                     "[finalize_requests]: failed to sign a BTC transaction: {}",
                     err
                 );
@@ -917,7 +908,7 @@ pub async fn resubmit_transactions<
                     // transaction with itself is not allowed, we still handle the transaction
                     // equality in case the fee computation rules change in the future.
                     log!(
-                        P0,
+                        Priority::Info,
                         "[finalize_requests]: resent transaction {} with a new signature. TX bytes: {}",
                         &new_txid,
                         hex::encode(tx::encode_into(&signed_tx, Vec::new()))
@@ -925,7 +916,7 @@ pub async fn resubmit_transactions<
                     continue;
                 }
                 log!(
-                    P0,
+                    Priority::Info,
                     "[finalize_requests]: sent transaction {} to replace stuck transaction {}. TX bytes: {}",
                     &new_txid,
                     &old_txid,
@@ -944,7 +935,7 @@ pub async fn resubmit_transactions<
             }
             Err(err) => {
                 log!(
-                    P0,
+                    Priority::Info,
                     "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new())),
                     &old_txid,
@@ -1448,6 +1439,15 @@ pub trait CanisterRuntime {
     /// Address controlled by the minter (via threshold ECDSA) for a given user.
     fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
 
+    /// Returns the frequency at which fee percentiles are refreshed.
+    fn refresh_fee_percentiles_frequency(&self) -> Duration;
+
+    /// Retrieves the current transaction fee percentiles.
+    async fn get_current_fee_percentiles(
+        &self,
+        request: &GetCurrentFeePercentilesRequest,
+    ) -> Result<Vec<u64>, CallError>;
+
     /// Fetches all unspent transaction outputs (UTXOs) associated with the provided address in the specified network.
     async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
 
@@ -1491,6 +1491,18 @@ pub struct IcCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
+    fn refresh_fee_percentiles_frequency(&self) -> Duration {
+        const ONE_HOUR: Duration = Duration::from_secs(3_600);
+        ONE_HOUR
+    }
+
+    async fn get_current_fee_percentiles(
+        &self,
+        request: &GetCurrentFeePercentilesRequest,
+    ) -> Result<Vec<u64>, CallError> {
+        management::bitcoin_get_current_fee_percentiles(request).await
+    }
+
     async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError> {
         management::bitcoin_get_utxos(request).await
     }
@@ -1571,7 +1583,11 @@ impl CanisterRuntime for IcCanisterRuntime {
             .candid()
             .map(|res: CheckAddressResponse| match res {
                 CheckAddressResponse::Failed => {
-                    log!(P0, "Discovered a tainted btc address {}", address);
+                    log!(
+                        Priority::Info,
+                        "Discovered a tainted btc address {}",
+                        address
+                    );
                     BtcAddressCheckStatus::Tainted
                 }
                 CheckAddressResponse::Passed => BtcAddressCheckStatus::Clean,

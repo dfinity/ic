@@ -48,7 +48,7 @@ pub struct RecoveryToolArgs {
 
     /// Flag to enter test mode
     #[clap(long)]
-    pub test: bool,
+    pub test_mode: bool,
 
     /// Flag to make the tool non interactive. No input from the user is requested.
     #[clap(long)]

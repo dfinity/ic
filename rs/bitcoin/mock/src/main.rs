@@ -165,6 +165,14 @@ fn bitcoin_get_current_fee_percentiles(
 
 #[candid_method(update)]
 #[update]
+fn dogecoin_get_current_fee_percentiles(
+    _: GetCurrentFeePercentilesRequest,
+) -> Vec<MillisatoshiPerByte> {
+    read_state(|s| s.fee_percentiles.clone())
+}
+
+#[candid_method(update)]
+#[update]
 fn set_fee_percentiles(fee_percentiles: Vec<MillisatoshiPerByte>) {
     mutate_state(|s| s.fee_percentiles = fee_percentiles);
 }

@@ -213,6 +213,7 @@ fn setup_ingress_state(now: Time, state_manager: &mut StateManagerImpl) {
             },
             now,
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
 
@@ -309,8 +310,9 @@ fn validate_payload(
     tip: &Block,
     payload_builder: &dyn PayloadBuilder,
 ) -> ValidationResult<PayloadValidationError> {
-    let past_payloads =
-        pool_reader.get_payloads_from_height(Height::from(CERTIFIED_HEIGHT + 1), tip.clone());
+    let past_payloads = pool_reader
+        .get_payloads_from_height(Height::from(CERTIFIED_HEIGHT + 1), tip.clone())
+        .unwrap();
     assert!(past_payloads.len() == (PAST_PAYLOAD_HEIGHT + 1) as usize);
     assert!(
         past_payloads.first().unwrap().0
