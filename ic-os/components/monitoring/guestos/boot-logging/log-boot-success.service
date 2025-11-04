@@ -7,7 +7,7 @@ Requires=multi-user.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# Print message to serial output which will be picked up by HostOS
+# Print success message to serial output which will be picked up by HostOS
 # The string is expected by guest_vm_runner (GUESTOS_BOOT_SUCCESS_MARKER)
 ExecStart=bash -c 'echo "GUESTOS BOOT SUCCESS" > /dev/ttyS0'
 

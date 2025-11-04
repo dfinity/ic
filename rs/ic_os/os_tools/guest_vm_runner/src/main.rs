@@ -1151,8 +1151,11 @@ mod tests {
         let mut fixture = TestFixture::new(valid_hostos_config());
         let mut service = fixture.start_service(GuestVMType::Default);
         service.wait_for_systemd_ready().await;
-        writeln!(fixture.guest_serial_log, "foo bar\n{GUESTOS_BOOT_SUCCESS_MARKER}").unwrap();
-        fixture.guest_serial_log.flush().unwrap();
+        writeln!(
+            fixture.guest_serial_log,
+            "foo bar\n{GUESTOS_BOOT_SUCCESS_MARKER}"
+        )
+        .unwrap();
         service
             .wait_for_console_contains(&["GuestOS boot succeeded"])
             .await;
@@ -1164,8 +1167,11 @@ mod tests {
         let mut fixture = TestFixture::new(valid_hostos_config());
         let mut service = fixture.start_service(GuestVMType::Default);
         service.wait_for_systemd_ready().await;
-        writeln!(fixture.guest_serial_log, "foo bar\n{GUESTOS_BOOT_FAILURE_MARKER}").unwrap();
-        fixture.guest_serial_log.flush().unwrap();
+        writeln!(
+            fixture.guest_serial_log,
+            "foo bar\n{GUESTOS_BOOT_FAILURE_MARKER}"
+        )
+        .unwrap();
         service
             .wait_for_console_contains(&["GuestOS boot failed", "foo bar"])
             .await;

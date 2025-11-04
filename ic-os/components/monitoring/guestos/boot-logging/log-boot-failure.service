@@ -7,9 +7,9 @@ After=multi-user.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# Print message to serial output which will be picked up by HostOS
+# Print error logs and failure to serial output which will be picked up by HostOS
 # The string is expected by guest_vm_runner (GUESTOS_BOOT_FAILURE_MARKER)
-ExecStart=bash -c 'echo "GUESTOS BOOT FAILURE" > /dev/ttyS0'
+ExecStart=bash -c 'systemctl status --failed --no-pager > /dev/ttyS0; echo "GUESTOS BOOT FAILURE" > /dev/ttyS0'
 
 [Install]
 # Only activate the failure if emergency.target or rescue.target was activated
