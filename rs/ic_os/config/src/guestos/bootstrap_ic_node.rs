@@ -323,7 +323,11 @@ mod tests {
         let test_root = TestRoot::new();
         let bootstrap_dir = create_test_bootstrap_dir(/*add_nns_public_key_override=*/ true);
 
-        let result = bootstrap_ic_node_impl(bootstrap_dir.path(), test_root.root_path(), /*is_sev_active*/false);
+        let result = bootstrap_ic_node_impl(
+            bootstrap_dir.path(),
+            test_root.root_path(),
+            /*is_sev_active*/ false,
+        );
         assert!(result.is_ok());
 
         // Verify files were copied correctly
