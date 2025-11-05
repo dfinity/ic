@@ -1,6 +1,7 @@
 use crate::{
-    CHECKPOINTS, DataLocation, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
-    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, OLD_IC_STATE, Recovery,
+    CHECKPOINTS, DataLocation, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_CONSENSUS_POOL_PATH,
+    IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, NEW_IC_STATE, OLD_IC_STATE,
+    Recovery,
     admin_helper::IcAdmin,
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
@@ -160,7 +161,7 @@ impl Step for MergeCertificationPoolsStep {
             point we encounter any invalid signatures, delete the offending and merged certification \
             pools and restart recovery from here.",
             self.work_dir.join("certifications"),
-            self.work_dir.join("data/ic_consensus_pool")
+            self.work_dir.join("data").join(IC_CONSENSUS_POOL_PATH)
         )
     }
 
@@ -183,7 +184,7 @@ impl Step for MergeCertificationPoolsStep {
         // Analyze and move full certifications
         let new_pool = CertificationPoolImpl::new(
             NodeId::from(PrincipalId::new_anonymous()),
-            ArtifactPoolConfig::new(self.work_dir.join("data/ic_consensus_pool")),
+            ArtifactPoolConfig::new(self.work_dir.join("data").join(IC_CONSENSUS_POOL_PATH)),
             self.logger.clone().into(),
             MetricsRegistry::new(),
         );
@@ -1138,9 +1139,8 @@ impl Step for CreateNNSRecoveryTarStep {
             exec_cmd(Command::new("cat").arg(self.output_dir.join(Self::get_sha_name())))?
         else {
             return Err(RecoveryError::invalid_output_error(format!(
-                "Could not read {}/{}",
-                self.output_dir.display(),
-                Self::get_sha_name()
+                "Could not read {}",
+                self.output_dir.join(Self::get_sha_name()).display(),
             )));
         };
         info!(self.logger, "{}", self.get_next_steps(sha256.trim()));
@@ -1319,13 +1319,13 @@ mod tests {
         let work_dir = tmp.path().to_path_buf();
         let pool1 = CertificationPoolImpl::new(
             node_test_id(0),
-            ArtifactPoolConfig::new(work_dir.join("certifications/ip1")),
+            ArtifactPoolConfig::new(work_dir.join("certifications").join("ip1")),
             logger.clone().into(),
             MetricsRegistry::new(),
         );
         let pool2 = CertificationPoolImpl::new(
             node_test_id(0),
-            ArtifactPoolConfig::new(work_dir.join("certifications/ip2")),
+            ArtifactPoolConfig::new(work_dir.join("certifications").join("ip2")),
             logger.clone().into(),
             MetricsRegistry::new(),
         );
@@ -1385,7 +1385,7 @@ mod tests {
 
         let new_pool = CertificationPoolImpl::new(
             node_test_id(0),
-            ArtifactPoolConfig::new(work_dir.join("data/ic_consensus_pool")),
+            ArtifactPoolConfig::new(work_dir.join("data").join("ic_consensus_pool")),
             logger.clone().into(),
             MetricsRegistry::new(),
         );
@@ -1442,7 +1442,7 @@ mod tests {
 
         let new_pool = CertificationPoolImpl::new(
             node_test_id(0),
-            ArtifactPoolConfig::new(work_dir.join("data/ic_consensus_pool")),
+            ArtifactPoolConfig::new(work_dir.join("data").join("ic_consensus_pool")),
             logger.clone().into(),
             MetricsRegistry::new(),
         );
