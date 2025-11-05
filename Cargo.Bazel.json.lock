@@ -1,5 +1,5 @@
 {
-  "checksum": "a6f8de64d4135708188382e1d73eeb6a01cd93f9b2ef4a6db25a303693291761",
+  "checksum": "95f92dcf4a98a5408fef7510c98a1582a957d8f18ce5a611b0acb2d062c5e2b6",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20995,7 +20995,11 @@
               "target": "ethnum"
             },
             {
-              "id": "evm_rpc_types 2.0.0",
+              "id": "evm_rpc_client 0.2.0",
+              "target": "evm_rpc_client"
+            },
+            {
+              "id": "evm_rpc_types 3.0.0",
               "target": "evm_rpc_types"
             },
             {
@@ -21591,6 +21595,10 @@
             {
               "id": "ratelimit 0.9.1",
               "target": "ratelimit"
+            },
+            {
+              "id": "raw-cpuid 11.5.0",
+              "target": "raw_cpuid"
             },
             {
               "id": "rayon 1.10.0",
@@ -25833,14 +25841,98 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "evm_rpc_types 2.0.0": {
-      "name": "evm_rpc_types",
-      "version": "2.0.0",
+    "evm_rpc_client 0.2.0": {
+      "name": "evm_rpc_client",
+      "version": "0.2.0",
       "package_url": "https://github.com/dfinity/evm-rpc-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_types/2.0.0/download",
-          "sha256": "5c9ed339a043ac9c0031bffdd89155d34b3d76f169a92eee16a3d5a5a8ca1bfc"
+          "url": "https://static.crates.io/crates/evm_rpc_client/0.2.0/download",
+          "sha256": "94f29eabef9267a8e6c416ad89d6b36d5ec9be5e6ffd143bd1b4514cfc7cfb9e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "evm_rpc_client",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "evm_rpc_client",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.17",
+              "target": "candid"
+            },
+            {
+              "id": "evm_rpc_types 3.0.0",
+              "target": "evm_rpc_types"
+            },
+            {
+              "id": "ic-cdk 0.18.7",
+              "target": "ic_cdk"
+            },
+            {
+              "id": "ic-error-types 0.2.0",
+              "target": "ic_error_types"
+            },
+            {
+              "id": "serde 1.0.219",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            },
+            {
+              "id": "strum 0.27.1",
+              "target": "strum"
+            },
+            {
+              "id": "thiserror 2.0.12",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.89",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.2.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "evm_rpc_types 3.0.0": {
+      "name": "evm_rpc_types",
+      "version": "3.0.0",
+      "package_url": "https://github.com/dfinity/evm-rpc-canister",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/evm_rpc_types/3.0.0/download",
+          "sha256": "bd456f71555aa2a0d99637037b30cd3d9d2899b8cf39d3dce21e248989d6f132"
         }
       },
       "targets": [
@@ -25908,7 +26000,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -94229,7 +94321,8 @@
     "escargot 0.5.7",
     "ethers-core 2.0.8",
     "ethnum 1.3.2",
-    "evm_rpc_types 2.0.0",
+    "evm_rpc_client 0.2.0",
+    "evm_rpc_types 3.0.0",
     "exec 0.3.1",
     "eyre 0.6.8",
     "ff 0.12.1",
@@ -94382,6 +94475,7 @@
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
     "ratelimit 0.9.1",
+    "raw-cpuid 11.5.0",
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.1",

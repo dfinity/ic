@@ -29,7 +29,7 @@ use config::setupos::{
 use config_types::{
     CONFIG_VERSION, DeploymentEnvironment, GuestOSConfig, GuestOSDevSettings, GuestOSSettings,
     GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings, Ipv4Config, Ipv6Config,
-    Logging, NetworkSettings, RecoveryConfig,
+    NetworkSettings, RecoveryConfig,
 };
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -533,7 +533,6 @@ fn create_guestos_config_for_node(
         node_reward_type: None,
         mgmt_mac,
         deployment_environment,
-        logging: Logging {},
         use_nns_public_key: false,
         nns_urls,
         use_node_operator_private_key: true,
@@ -676,7 +675,7 @@ fn create_setupos_config_image(
                 deployment_environment: DeploymentEnvironment::Testnet,
                 mgmt_mac: Some(mac.to_string()),
             },
-            logging: deployment_json::Logging {},
+            logging: deployment_json::Logging::default(),
             nns: deployment_json::Nns {
                 urls: vec![nns_url.clone()],
             },
