@@ -54,11 +54,13 @@ fn populate_nns_public_key_impl(
 }
 
 /// Bootstrap IC Node from a bootstrap package
+#[cfg(target_os = "linux")]
 pub fn bootstrap_ic_node(bootstrap_dir: &Path) -> Result<()> {
-    bootstrap_ic_node_impl(bootstrap_dir, Path::new("/"))
+    let is_sev_active = ic_sev::guest::is_sev_active()?;
+    bootstrap_ic_node_impl(bootstrap_dir, Path::new("/"), is_sev_active)
 }
 
-fn bootstrap_ic_node_impl(bootstrap_dir: &Path, root: &Path) -> Result<()> {
+fn bootstrap_ic_node_impl(bootstrap_dir: &Path, root: &Path, is_sev_active: bool) -> Result<()> {
     let config_root = root.join(CONFIG_ROOT_PATH);
     let state_root = root.join(STATE_ROOT_PATH);
     let configured_marker = config_root.join("CONFIGURED");
@@ -69,7 +71,6 @@ fn bootstrap_ic_node_impl(bootstrap_dir: &Path, root: &Path) -> Result<()> {
     }
 
     println!("Processing bootstrap data from {}", bootstrap_dir.display());
-    let is_sev_active = ic_sev::guest::is_sev_active()?;
     process_bootstrap(bootstrap_dir, &config_root, &state_root, is_sev_active)?;
     println!("Successfully processed bootstrap data");
 
@@ -102,22 +103,22 @@ fn process_bootstrap(
     Ok(())
 }
 
-fn copy_state_injection_files(extracted_dir: &Path, state_root: &Path) -> Result<()> {
-    let ic_crypto_src = extracted_dir.join("ic_crypto");
+fn copy_state_injection_files(bootstrap_dir: &Path, state_root: &Path) -> Result<()> {
+    let ic_crypto_src = bootstrap_dir.join("ic_crypto");
     let ic_crypto_dst = state_root.join("crypto");
     if ic_crypto_src.exists() {
         println!("Installing initial crypto material");
         copy_directory_recursive(&ic_crypto_src, &ic_crypto_dst)?;
     }
 
-    let ic_state_src = extracted_dir.join("ic_state");
+    let ic_state_src = bootstrap_dir.join("ic_state");
     let ic_state_dst = state_root.join("data/ic_state");
     if ic_state_src.exists() {
         println!("Installing initial state");
         copy_directory_recursive(&ic_state_src, &ic_state_dst)?;
     }
 
-    let ic_registry_src = extracted_dir.join("ic_registry_local_store");
+    let ic_registry_src = bootstrap_dir.join("ic_registry_local_store");
     let ic_registry_dst = state_root.join("data/ic_registry_local_store");
     if ic_registry_src.exists() {
         println!("Setting up initial ic_registry_local_store");
@@ -129,12 +130,12 @@ fn copy_state_injection_files(extracted_dir: &Path, state_root: &Path) -> Result
 
 /// Copy select bootstrap files from extracted directory to their destinations with custom SEV checker
 fn copy_bootstrap_files(
-    extracted_dir: &Path,
+    bootstrap_dir: &Path,
     config_root: &Path,
     state_root: &Path,
     is_sev_active: bool,
 ) -> Result<()> {
-    let node_op_key_src = extracted_dir.join("node_operator_private_key.pem");
+    let node_op_key_src = bootstrap_dir.join("node_operator_private_key.pem");
     let node_op_key_dst = state_root.join("data/node_operator_private_key.pem");
     if node_op_key_src.exists() {
         println!("Setting up initial node_operator_private_key.pem");
@@ -143,7 +144,7 @@ fn copy_bootstrap_files(
     }
 
     // set up initial ssh authorized keys
-    let ssh_keys_src = extracted_dir.join("accounts_ssh_authorized_keys");
+    let ssh_keys_src = bootstrap_dir.join("accounts_ssh_authorized_keys");
     let ssh_keys_dst = config_root.join("accounts_ssh_authorized_keys");
     if ssh_keys_src.exists() {
         println!("Setting up accounts_ssh_authorized_keys");
@@ -159,11 +160,11 @@ fn copy_bootstrap_files(
         #[cfg(feature = "dev")]
         {
             println!("SEV is active - allowing state injection files for dev variant");
-            copy_state_injection_files(extracted_dir, state_root)?;
+            copy_state_injection_files(bootstrap_dir, state_root)?;
         }
     } else {
         println!("SEV is not active - allowing state injection files");
-        copy_state_injection_files(extracted_dir, state_root)?;
+        copy_state_injection_files(bootstrap_dir, state_root)?;
     }
 
     Ok(())
@@ -322,7 +323,7 @@ mod tests {
         let test_root = TestRoot::new();
         let bootstrap_dir = create_test_bootstrap_dir(/*add_nns_public_key_override=*/ true);
 
-        let result = bootstrap_ic_node_impl(bootstrap_dir.path(), test_root.root_path(), false);
+        let result = bootstrap_ic_node_impl(bootstrap_dir.path(), test_root.root_path(), /*is_sev_active*/false);
         assert!(result.is_ok());
 
         // Verify files were copied correctly
@@ -495,7 +496,12 @@ mod tests {
 
         let bootstrap_dir = create_test_bootstrap_dir(/*add_nns_public_key_override=*/ false);
 
-        bootstrap_ic_node_impl(bootstrap_dir.path(), test_root.root_path()).unwrap();
+        bootstrap_ic_node_impl(
+            bootstrap_dir.path(),
+            test_root.root_path(),
+            /*is_sev_active*/ false,
+        )
+        .unwrap();
 
         // Verify existing files were NOT overridden
         assert_eq!(
