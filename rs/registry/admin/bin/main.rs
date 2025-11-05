@@ -2254,8 +2254,8 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
             .map(|s| parse_rewardable_nodes(s))
             .unwrap_or_default();
 
-        // TODO(DRE-583): Remove the deprecation notice after clients wrapping ic-admin
-        // manage to update their code to stop providing node_allowance.
+        // TODO(DRE-583): Remove the `--node-allowance` flag after callers of `ic-admin`
+        // have migrated to `--max-rewardable-nodes`.
         let node_allowance = self.node_allowance.map(|allowance| {
             if allowance != 0 {
                 eprintln!("WARNING: node allowance is deprecated and will be removed in the future. Overriding value to 0");
