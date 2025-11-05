@@ -209,6 +209,42 @@ fn counter_canister_call_test() {
                 .build(),
         )
         .unwrap();
+    let msg13_id = env1
+        .submit_ingress_as(
+            user_id,
+            canister_id1,
+            "update",
+            wasm()
+                .inter_update(
+                    canister_id2,
+                    CallArgs::default().other_side(
+                        wasm()
+                            .set_global_data(&vec![2; 2000000])
+                            .get_global_data()
+                            .append_and_reply(),
+                    ),
+                )
+                .build(),
+        )
+        .unwrap();
+    let msg14_id = env1
+        .submit_ingress_as(
+            user_id,
+            canister_id1,
+            "update",
+            wasm()
+                .inter_update(
+                    canister_id2,
+                    CallArgs::default().other_side(
+                        wasm()
+                            .set_global_data(&vec![2; 2000000])
+                            .get_global_data()
+                            .append_and_reply(),
+                    ),
+                )
+                .build(),
+        )
+        .unwrap();
 
     // Invoke a method on the 2nd subnet calling into the 1st subnet.
     let msg20_id = env2
@@ -237,11 +273,15 @@ fn counter_canister_call_test() {
         (
             env1.ingress_status(&msg10_id),
             env1.ingress_status(&msg11_id),
-            env1.ingress_status(&msg12_id)
+            env1.ingress_status(&msg12_id),
+            env1.ingress_status(&msg13_id),
+            env1.ingress_status(&msg14_id)
         ),
         (
-            IngressStatus::Unknown,
             IngressStatus::Known { .. },
+            IngressStatus::Known { .. },
+            IngressStatus::Known { .. },
+            IngressStatus::Unknown { .. },
             IngressStatus::Known { .. },
         )
     ));
@@ -253,9 +293,13 @@ fn counter_canister_call_test() {
         (
             env1.ingress_status(&msg10_id),
             env1.ingress_status(&msg11_id),
-            env1.ingress_status(&msg12_id)
+            env1.ingress_status(&msg12_id),
+            env1.ingress_status(&msg13_id),
+            env1.ingress_status(&msg14_id)
         ),
         (
+            IngressStatus::Known { .. },
+            IngressStatus::Known { .. },
             IngressStatus::Known { .. },
             IngressStatus::Known { .. },
             IngressStatus::Known { .. }
@@ -273,10 +317,13 @@ fn counter_canister_call_test() {
     ));
     env2.execute_round();
     env2.execute_round();
+    env2.execute_round();
+    env2.execute_round();
     // Finally, we need to execute multiple rounds on the 1st subnet
     // to induct all (large) responses from the 2nd subnet
     // and an inter-canister call from the 2nd into the 1st subnet
     // with large argument.
+    env1.execute_round();
     env1.execute_round();
     env1.execute_round();
     env1.execute_round();
