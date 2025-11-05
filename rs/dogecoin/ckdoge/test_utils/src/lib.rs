@@ -235,7 +235,7 @@ pub fn txid() -> Txid {
     Txid::from([42u8; 32])
 }
 
-pub fn utxo_wth_value(value: u64) -> Utxo {
+pub fn utxo_with_value(value: u64) -> Utxo {
     Utxo {
         height: 0,
         outpoint: OutPoint {

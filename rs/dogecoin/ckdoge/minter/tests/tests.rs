@@ -2,7 +2,7 @@ use candid::Principal;
 use ic_ckdoge_minter::candid_api::{RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError};
 use ic_ckdoge_minter_test_utils::{
     DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-    assert_trap, utxo_wth_value,
+    assert_trap, utxo_with_value,
 };
 use std::array;
 use std::time::Duration;
@@ -52,7 +52,7 @@ fn should_fail_withdrawal() {
     setup
         .deposit_flow()
         .minter_get_dogecoin_deposit_address(USER_PRINCIPAL)
-        .dogecoin_simulate_transaction(utxo_wth_value(RETRIEVE_DOGE_MIN_AMOUNT))
+        .dogecoin_simulate_transaction(utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT))
         .minter_update_balance()
         .expect_mint();
     let _ledger_approval_index = setup
@@ -151,7 +151,7 @@ mod get_doge_address {
 
 mod deposit {
     use ic_ckdoge_minter_test_utils::{
-        LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, utxo_wth_value,
+        LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, utxo_with_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
 
@@ -166,7 +166,7 @@ mod deposit {
         setup
             .deposit_flow()
             .minter_get_dogecoin_deposit_address(account)
-            .dogecoin_simulate_transaction(utxo_wth_value(
+            .dogecoin_simulate_transaction(utxo_with_value(
                 RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE,
             ))
             .minter_update_balance()
@@ -185,7 +185,7 @@ mod withdrawal {
     };
     use ic_ckdoge_minter_test_utils::{
         DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-        into_outpoint, parse_dogecoin_address, utxo_wth_value,
+        into_outpoint, parse_dogecoin_address, utxo_with_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
@@ -214,7 +214,7 @@ mod withdrawal {
                 subaccount: None,
             },
         );
-        let utxo = utxo_wth_value(RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE);
+        let utxo = utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE);
 
         setup
             .deposit_flow()
