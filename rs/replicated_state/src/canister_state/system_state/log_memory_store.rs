@@ -314,6 +314,14 @@ impl RingBuffer {
         ring_buffer
     }
 
+    fn dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
+        self.buffer.dirty_pages().collect()
+    }
+
+    fn into_page_map(self) -> PageMap {
+        self.buffer.into_page_map()
+    }
+
     fn read_header(&self) -> HeaderV1 {
         let mut bytes = [0; V1_PACKED_HEADER_SIZE];
         self.buffer.read(&mut bytes, HEADER_OFFSET);
@@ -323,14 +331,6 @@ impl RingBuffer {
     fn write_header(&mut self, header: &HeaderV1) {
         self.buffer
             .write(&HeaderV1Bytes::from(header), HEADER_OFFSET);
-    }
-
-    fn dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
-        self.buffer.dirty_pages().collect()
-    }
-
-    fn into_page_map(self) -> PageMap {
-        self.buffer.into_page_map()
     }
 
     pub fn capacity(&self) -> usize {
@@ -343,6 +343,43 @@ impl RingBuffer {
 
     pub fn next_id(&self) -> u64 {
         self.read_header().next_idx
+    }
+
+    fn read_lookup_slot(&self, slot_index: usize) -> LookupSlot {
+        let slot_offset = V1_LOOKUP_TABLE_OFFSET + (slot_index * SLOT_SIZE);
+        let mut slot_bytes = [0; SLOT_SIZE];
+        self.buffer.read(&mut slot_bytes, slot_offset);
+        LookupSlot::from(&slot_bytes)
+    }
+
+    fn write_lookup_slot(&mut self, slot_index: usize, slot: &LookupSlot) {
+        let slot_offset = V1_LOOKUP_TABLE_OFFSET + (slot_index * SLOT_SIZE);
+        let slot_bytes = LookupSlotBytes::from(slot);
+        self.buffer.write(&slot_bytes, slot_offset);
+    }
+
+    fn load_lookup_table(&mut self) {
+        let header = self.read_header();
+        let (head, tail, capacity) = (
+            header.lookup_head(),
+            header.lookup_tail(),
+            header.lookup_capacity(),
+        );
+        let mut lookup_table = Vec::with_capacity(capacity);
+        if !header.is_wrapped() {
+            for i in head..tail {
+                lookup_table.push(self.read_lookup_slot(i));
+            }
+        } else {
+            for i in head..capacity {
+                lookup_table.push(self.read_lookup_slot(i));
+            }
+            for i in 0..tail {
+                // TODO: fix special case when tail == head and buffer is full.
+                lookup_table.push(self.read_lookup_slot(i));
+            }
+        }
+        self.lookup_table = lookup_table;
     }
 
     fn read_u64(&self, offset: u64) -> u64 {
@@ -363,42 +400,6 @@ impl RingBuffer {
         bytes
     }
 
-    fn read_lookup_slot(&self, slot_index: usize) -> LookupSlot {
-        let slot_offset = V1_LOOKUP_TABLE_OFFSET + (slot_index * SLOT_SIZE);
-        let mut slot_bytes = [0; SLOT_SIZE];
-        self.buffer.read(&mut slot_bytes, slot_offset);
-        LookupSlot::from(&slot_bytes)
-    }
-
-    fn write_lookup_slot(&mut self, slot_index: usize, slot: &LookupSlot) {
-        let slot_offset = V1_LOOKUP_TABLE_OFFSET + (slot_index * SLOT_SIZE);
-        let slot_bytes = LookupSlotBytes::from(slot);
-        self.buffer.write(&slot_bytes, slot_offset);
-    }
-
-    fn load_lookup_table(&mut self) -> Vec<LookupSlot> {
-        let header = self.read_header();
-        let (head, tail, capacity) = (
-            header.lookup_head(),
-            header.lookup_tail(),
-            header.lookup_capacity(),
-        );
-        let mut slots = Vec::with_capacity(capacity);
-        if !header.is_wrapped() {
-            for i in head..tail {
-                slots.push(self.read_lookup_slot(i));
-            }
-        } else {
-            for i in head..capacity {
-                slots.push(self.read_lookup_slot(i));
-            }
-            for i in 0..tail {
-                slots.push(self.read_lookup_slot(i));
-            }
-        }
-        slots
-    }
-
     fn get(&self, offset: u64) -> DataEntry {
         let idx = self.read_u64(offset);
         let ts_nanos = self.read_u64(offset + 8);
@@ -413,6 +414,7 @@ impl RingBuffer {
     }
 
     fn pop_front(&mut self) -> Option<DataEntry> {
+        // TODO: figure out how to update the lookup table when popping entries.
         let mut header = self.read_header();
         if header.data_size == 0 {
             return None;
