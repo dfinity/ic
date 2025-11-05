@@ -15,12 +15,18 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//packages/canlog",
+        "//packages/ic-http-types",
+        "//packages/ic-metrics-assert:ic-metrics-assert_pocket_ic",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//packages/pocket-ic",
+        "//rs/bitcoin/mock",
         "//rs/dogecoin/ckdoge/minter:ckdoge_minter_lib",
         "//rs/ledger_suite/icrc1/ledger",
         "@crate_index//:assert_matches",
+        "@crate_index//:bitcoin",
         "@crate_index//:candid",
         "@crate_index//:ic-management-canister-types",
+        "@crate_index//:serde_json",
     ],
 )

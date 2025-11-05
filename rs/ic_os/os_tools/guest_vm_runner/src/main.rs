@@ -26,7 +26,9 @@ use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 use virt::connect::Connect;
 use virt::domain::Domain;
-use virt::sys::{VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING};
+use virt::sys::{
+    VIR_DOMAIN_CRASHED, VIR_DOMAIN_DESTROY_GRACEFUL, VIR_DOMAIN_NONE, VIR_DOMAIN_RUNNING,
+};
 
 mod boot_args;
 mod guest_direct_boot;
@@ -143,9 +145,7 @@ impl VirtualMachine {
         vm_domain_name: &str,
     ) -> Result<Self> {
         // Check if a domain with the same name already exists and, if so, try to destroy it
-        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name).context(
-            "Unable to create new domain while existing domain '{vm_domain_name}' exists.",
-        )?;
+        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
 
         let mut retries = 3;
         let domain = loop {
@@ -163,7 +163,7 @@ impl VirtualMachine {
                             "VM domain '{}' exists even though create_xml failed, attempting to destroy it before retry",
                             vm_domain_name
                         );
-                        let _ = Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
+                        Self::try_destroy_existing_vm(libvirt_connect, vm_domain_name);
                     }
                     retries -= 1;
                     continue;
@@ -180,32 +180,17 @@ impl VirtualMachine {
         })
     }
 
-    fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) -> Result<()> {
+    fn try_destroy_existing_vm(libvirt_connect: &Connect, vm_domain_name: &str) {
         if let Ok(existing_domain) = Domain::lookup_by_name(libvirt_connect, vm_domain_name) {
             eprintln!("Attempting to destroy existing '{vm_domain_name}' domain");
-            existing_domain
-                .destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL)
-                .context("Failed to destroy existing domain")?;
-            eprintln!("Successfully destroyed existing domain");
+            if let Err(err) = existing_domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
+                eprintln!("destroy_flags failed: {err}");
+            }
+            if let Err(err) = existing_domain.undefine() {
+                eprintln!("undefine failed: {err}");
+            }
         } else {
             eprintln!("No existing domain found to destroy");
-        }
-        Ok(())
-    }
-
-    /// Checks if the virtual machine is currently running
-    fn is_running(&self) -> bool {
-        let Ok(domain) = self.get_domain() else {
-            eprintln!("Failed to get domain");
-            return false;
-        };
-
-        match domain.get_state() {
-            Ok((state, _reason)) => state == VIR_DOMAIN_RUNNING,
-            Err(err) => {
-                eprintln!("Failed to get domain state: {err}");
-                false
-            }
         }
     }
 
@@ -216,7 +201,31 @@ impl VirtualMachine {
 
     /// Returns once the VM is no longer running.
     async fn wait_for_shutdown(&self) {
-        while self.is_running() {
+        loop {
+            let domain = match self.get_domain() {
+                Ok(domain) => domain,
+                Err(e) => {
+                    eprintln!("Failed to get domain: {e}");
+                    break;
+                }
+            };
+            match domain.get_state() {
+                Ok((VIR_DOMAIN_RUNNING, _reason)) => {
+                    // all good, VM is running
+                }
+                Ok((VIR_DOMAIN_CRASHED, reason)) => {
+                    eprintln!("VM crashed, reason: {reason}");
+                    break;
+                }
+                Ok((state, reason)) => {
+                    eprintln!("VM is in state {state}, reason: {reason}");
+                }
+                Err(e) => {
+                    eprintln!("Failed to get domain state: {e}");
+                    break;
+                }
+            }
+
             // Poll every 1s in production and 50ms in tests to speed up tests (in prod, we can
             // wait 1s between polls and we save some CPU cycles).
             #[cfg(not(test))]
@@ -230,14 +239,10 @@ impl VirtualMachine {
 impl Drop for VirtualMachine {
     /// Ensures the VM is properly shut down when the object is dropped
     fn drop(&mut self) {
-        if self.is_running() {
+        if let Ok(domain) = self.get_domain() {
             println!("Shutting down {} domain gracefully", self.domain_name);
-            if let Err(e) = self.get_domain().and_then(|domain| {
-                domain
-                    .destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL)
-                    .context("Failed to gracefully destroy domain")
-            }) {
-                eprintln!("{e}");
+            if let Err(e) = domain.destroy_flags(VIR_DOMAIN_DESTROY_GRACEFUL) {
+                eprintln!("Failed to gracefully destroy domain: {e}");
             }
         }
     }
@@ -636,8 +641,8 @@ mod tests {
     use super::*;
     use crate::systemd_notifier::testing::MockSystemdNotifier;
     use config_types::{
-        DeploymentEnvironment, DeterministicIpv6Config, HostOSSettings, ICOSSettings,
-        NetworkSettings,
+        DeploymentEnvironment, DeterministicIpv6Config, HostOSDevSettings, HostOSSettings,
+        ICOSSettings, NetworkSettings,
     };
     use ic_device::mount::GptPartitionProvider;
     use ic_device::mount::testing::ExtractingFilesystemMounter;
@@ -698,7 +703,7 @@ mod tests {
                 result = &mut self.task => {
                     panic!("{} stopped before becoming ready. Status: {result:?}", self.vm_domain_name);
                 }
-            };
+            }
         }
 
         async fn wait_for_vm_shutdown(&mut self) {
@@ -885,7 +890,6 @@ mod tests {
                 node_reward_type: None,
                 mgmt_mac: Default::default(),
                 deployment_environment: DeploymentEnvironment::Mainnet,
-                logging: Default::default(),
                 use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,
@@ -893,11 +897,17 @@ mod tests {
                 use_ssh_authorized_keys: false,
                 icos_dev_settings: Default::default(),
             },
+            #[allow(deprecated)]
             hostos_settings: HostOSSettings {
-                vm_memory: 490,
+                vm_memory: 16,
                 vm_cpu: "qemu".to_string(),
                 vm_nr_of_vcpus: 56,
                 verbose: false,
+                hostos_dev_settings: HostOSDevSettings {
+                    vm_memory: 16,
+                    vm_cpu: "qemu".to_string(),
+                    vm_nr_of_vcpus: 56,
+                },
             },
             guestos_settings: Default::default(),
         }
@@ -905,7 +915,10 @@ mod tests {
 
     fn invalid_hostos_config() -> HostOSConfig {
         let mut hostos_config = valid_hostos_config();
-        hostos_config.hostos_settings.vm_nr_of_vcpus = 0;
+        hostos_config
+            .hostos_settings
+            .hostos_dev_settings
+            .vm_nr_of_vcpus = 0;
         hostos_config
     }
 

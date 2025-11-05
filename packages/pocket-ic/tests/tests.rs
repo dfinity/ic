@@ -35,8 +35,8 @@ use wslpath::windows_to_wsl;
 
 mod common;
 
-// 2T cycles
-const INIT_CYCLES: u128 = 2_000_000_000_000;
+// 3T cycles
+const INIT_CYCLES: u128 = 3_000_000_000_000;
 
 #[derive(CandidType, Deserialize, Debug)]
 enum RejectionCode {
@@ -49,7 +49,7 @@ enum RejectionCode {
     Unknown,
 }
 
-// Create a counter canister and charge it with 2T cycles.
+// Create a counter canister and charge it with initial cycles.
 fn deploy_counter_canister(pic: &PocketIc) -> Principal {
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
@@ -794,7 +794,7 @@ async fn test_create_and_drop_instances_async() {
 async fn test_counter_canister_async() {
     let pic = pocket_ic::nonblocking::PocketIc::new().await;
 
-    // Create a counter canister and charge it with 2T cycles.
+    // Create a counter canister and charge it with initial cycles.
     let canister_id = pic.create_canister().await;
     pic.add_cycles(canister_id, INIT_CYCLES).await;
     pic.install_canister(canister_id, counter_wasm(), vec![], None)
@@ -846,7 +846,7 @@ fn install_very_large_wasm() {
     // Create a canister.
     let canister_id = pic.create_canister();
 
-    // Charge the canister with 2T cycles.
+    // Charge the canister with cycles.
     pic.add_cycles(canister_id, 100 * INIT_CYCLES);
 
     // Install the very large canister wasm on the canister.
@@ -1314,18 +1314,7 @@ fn test_vetkd() {
     }
 }
 
-#[test]
-fn test_canister_http() {
-    let pic = PocketIc::new();
-
-    // Create a canister and charge it with 2T cycles.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-
-    // Install the test canister wasm file on the canister.
-    let test_wasm = test_canister_wasm();
-    pic.install_canister(canister_id, test_wasm, vec![], None);
-
+fn test_canister_http(pic: &PocketIc, canister_id: Principal) {
     // Submit an update call to the test canister making a canister http outcall
     // and mock a canister http outcall response.
     let call_id = pic
@@ -1371,10 +1360,52 @@ fn test_canister_http() {
 }
 
 #[test]
+fn test_canister_http_on_fresh_and_resumed_instance() {
+    // create an empty PocketIC state to be used:
+    // - initially by a fresh PocketIC instance;
+    // - later by a PocketIC instance resumed from that state.
+    let state = PocketIcState::new();
+
+    // create a fresh PocketIC instance with two application subnets
+    // so that the latest registry version is different
+    // from the registry version at which one of the subnets was created
+    // (this scenario led to a bug in PocketIC canister http outcalls)
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_application_subnet()
+        .with_state(state)
+        .build();
+
+    // create a test canister on every subnet
+    let topology = pic.topology();
+    let mut canisters = vec![];
+    for app_subnet in topology.get_app_subnets() {
+        let canister_id = pic.create_canister_on_subnet(None, None, app_subnet);
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+        canisters.push(canister_id);
+    }
+    // ensure that canister http outcalls work on every subnet
+    for canister_id in &canisters {
+        test_canister_http(&pic, *canister_id);
+    }
+
+    // drop the first PocketIC instance and serialize its state
+    let state = pic.drop_and_take_state().unwrap();
+
+    // create the second PocketIC instance resuming from the existing state
+    let pic = PocketIcBuilder::new().with_state(state).build();
+    // ensure that canister http outcalls still work on every subnet
+    for canister_id in &canisters {
+        test_canister_http(&pic, *canister_id);
+    }
+}
+
+#[test]
 fn test_canister_http_with_transform() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1434,7 +1465,7 @@ fn test_canister_http_with_transform() {
 fn test_canister_http_with_diverging_responses() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1497,7 +1528,7 @@ fn test_canister_http_with_diverging_responses() {
 fn test_canister_http_with_one_additional_response() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 
@@ -1545,7 +1576,7 @@ fn test_canister_http_with_one_additional_response() {
 fn test_canister_http_timeout() {
     let pic = PocketIc::new();
 
-    // Create a canister and charge it with 2T cycles.
+    // Create a canister and charge it with initial cycles.
     let canister_id = pic.create_canister();
     pic.add_cycles(canister_id, INIT_CYCLES);
 

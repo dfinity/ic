@@ -13,15 +13,13 @@ use ic_embedders::{
 };
 use ic_heap_bytes::HeapBytes;
 use ic_interfaces::execution_environment::{
-    HypervisorError, HypervisorResult, WasmExecutionOutput,
+    HypervisorError, HypervisorResult, MessageMemoryUsage, WasmExecutionOutput,
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_metrics::buckets::{decimal_buckets_with_zero, linear_buckets};
-use ic_replicated_state::{
-    ExecutionState, MessageMemoryUsage, NetworkTopology, ReplicatedState, SystemState,
-};
+use ic_replicated_state::{ExecutionState, NetworkTopology, ReplicatedState, SystemState};
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterId, DiskBytes, NumBytes, NumInstructions, SubnetId, Time, messages::RequestMetadata,
@@ -182,7 +180,7 @@ impl Hypervisor {
         }
     }
 
-    pub fn new(
+    pub(crate) fn new(
         config: Config,
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
@@ -239,8 +237,7 @@ impl Hypervisor {
         }
     }
 
-    #[doc(hidden)]
-    pub fn new_for_testing(
+    pub(crate) fn new_for_testing(
         metrics_registry: &MetricsRegistry,
         own_subnet_id: SubnetId,
         log: ReplicaLogger,
@@ -275,9 +272,8 @@ impl Hypervisor {
 
     /// Wrapper around the standalone `execute`.
     /// NOTE: this is public to enable integration testing.
-    #[doc(hidden)]
     #[allow(clippy::too_many_arguments)]
-    pub fn execute(
+    pub(crate) fn execute(
         &self,
         api_type: ApiType,
         time: Time,
@@ -342,7 +338,7 @@ impl Hypervisor {
 
     /// Executes the given WebAssembly function with deterministic time slicing.
     #[allow(clippy::too_many_arguments)]
-    pub fn execute_dts(
+    pub(crate) fn execute_dts(
         &self,
         api_type: ApiType,
         execution_state: &ExecutionState,
@@ -441,15 +437,13 @@ impl Hypervisor {
         execution_result
     }
 
-    #[doc(hidden)]
-    pub fn clear_compilation_cache_for_testing(&self) {
+    pub(crate) fn clear_compilation_cache_for_testing(&self) {
         self.compilation_cache.clear_for_testing()
     }
 
-    /// Insert a compiled module in the compilation cache speed up tests by
-    /// skipping the Wasmtime compilation step.
-    #[doc(hidden)]
-    pub fn compilation_cache_insert_for_testing(
+    // Insert a compiled module in the compilation cache speed up tests by
+    // skipping the Wasmtime compilation step.
+    pub(crate) fn compilation_cache_insert_for_testing(
         &self,
         bytes: Vec<u8>,
         compiled_module: ic_embedders::SerializedModule,

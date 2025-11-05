@@ -87,6 +87,16 @@ fn set_tip_height(tip_height: u32) {
 #[candid_method(update)]
 #[update]
 fn bitcoin_get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
+    get_utxos(utxos_request)
+}
+
+#[candid_method(update)]
+#[update]
+fn dogecoin_get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
+    get_utxos(utxos_request)
+}
+
+fn get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
     read_state(|s| {
         assert_eq!(Network::from(utxos_request.network), s.network);
 
@@ -155,6 +165,14 @@ fn bitcoin_get_current_fee_percentiles(
 
 #[candid_method(update)]
 #[update]
+fn dogecoin_get_current_fee_percentiles(
+    _: GetCurrentFeePercentilesRequest,
+) -> Vec<MillisatoshiPerByte> {
+    read_state(|s| s.fee_percentiles.clone())
+}
+
+#[candid_method(update)]
+#[update]
 fn set_fee_percentiles(fee_percentiles: Vec<MillisatoshiPerByte>) {
     mutate_state(|s| s.fee_percentiles = fee_percentiles);
 }
@@ -162,6 +180,16 @@ fn set_fee_percentiles(fee_percentiles: Vec<MillisatoshiPerByte>) {
 #[candid_method(update)]
 #[update]
 fn bitcoin_send_transaction(transaction: SendTransactionRequest) {
+    send_transaction(transaction);
+}
+
+#[candid_method(update)]
+#[update]
+fn dogecoin_send_transaction(transaction: SendTransactionRequest) {
+    send_transaction(transaction);
+}
+
+fn send_transaction(transaction: SendTransactionRequest) {
     mutate_state(|s| {
         let cdk_network = match transaction.network {
             BitcoinNetwork::Mainnet => Network::Mainnet,

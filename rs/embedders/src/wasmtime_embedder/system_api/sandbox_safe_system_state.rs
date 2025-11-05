@@ -9,7 +9,7 @@ use ic_cycles_account_manager::{
     CyclesAccountManager, CyclesAccountManagerError, ResourceSaturation,
 };
 use ic_error_types::{ErrorCode, RejectCode, UserError};
-use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
+use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult, MessageMemoryUsage};
 use ic_limits::{LOG_CANISTER_OPERATION_CYCLES_THRESHOLD, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_logger::{ReplicaLogger, info};
 use ic_management_canister_types_private::{
@@ -24,7 +24,7 @@ use ic_replicated_state::canister_state::system_state::{
     CyclesUseCase, is_low_wasm_memory_hook_condition_satisfied,
 };
 use ic_replicated_state::{
-    CallOrigin, ExecutionTask, MessageMemoryUsage, NetworkTopology, SystemState,
+    CallOrigin, ExecutionTask, NetworkTopology, SystemState,
     canister_state::DEFAULT_QUEUE_CAPACITY, canister_state::execution_state::WasmExecutionMode,
 };
 use ic_types::batch::CanisterCyclesCostSchedule;
@@ -144,6 +144,11 @@ impl SystemStateModifications {
     /// Returns number of removed cycles in the state changes.
     pub fn removed_cycles(&self) -> Cycles {
         self.cycles_balance_change.get_removed_cycles()
+    }
+
+    /// Returns the number of *additional* reserved cycles.
+    pub fn reserved_cycles(&self) -> Cycles {
+        self.reserved_cycles
     }
 
     /// Returns number of newly created callbacks (i.e. enqueued requests).
@@ -358,8 +363,8 @@ impl SystemStateModifications {
                 .map_err(Self::error)?;
             if (call_context_balance_taken).get() > LOG_CANISTER_OPERATION_CYCLES_THRESHOLD {
                 match call_context.call_origin() {
-                    CallOrigin::CanisterUpdate(origin_canister_id, _, _)
-                    | CallOrigin::CanisterQuery(origin_canister_id, _) => info!(
+                    CallOrigin::CanisterUpdate(origin_canister_id, ..)
+                    | CallOrigin::CanisterQuery(origin_canister_id, ..) => info!(
                         logger,
                         "Canister {} accepted {} cycles from canister {}.",
                         own_canister_id,
@@ -1201,34 +1206,25 @@ impl SandboxSafeSystemState {
         if !should_check || old_memory_usage >= new_memory_usage {
             return Ok(());
         }
-        match self.memory_allocation {
-            MemoryAllocation::Reserved(limit) if new_memory_usage <= limit => Ok(()),
-            MemoryAllocation::Reserved(_) | MemoryAllocation::BestEffort => {
-                // Note that currently the memory usage of a canister cannot
-                // exceed its reserved limit. The `Reserved(_)` case is
-                // actually unreachable here, but we still handle it to keep
-                // this code robust.
-                let threshold = self.cycles_account_manager.freeze_threshold_cycles(
-                    self.freeze_threshold,
-                    self.memory_allocation,
-                    new_memory_usage,
-                    current_message_memory_usage,
-                    self.compute_allocation,
-                    self.subnet_size,
-                    self.cost_schedule,
-                    self.reserved_balance(),
-                );
-                if self.cycles_balance() >= threshold {
-                    Ok(())
-                } else {
-                    Err(HypervisorError::InsufficientCyclesInMemoryGrow {
-                        bytes: new_memory_usage - old_memory_usage,
-                        available: self.cycles_balance(),
-                        threshold,
-                        reveal_top_up: self.caller_is_controller(),
-                    })
-                }
-            }
+        let threshold = self.cycles_account_manager.freeze_threshold_cycles(
+            self.freeze_threshold,
+            self.memory_allocation,
+            new_memory_usage,
+            current_message_memory_usage,
+            self.compute_allocation,
+            self.subnet_size,
+            self.cost_schedule,
+            self.reserved_balance(),
+        );
+        if self.cycles_balance() >= threshold {
+            Ok(())
+        } else {
+            Err(HypervisorError::InsufficientCyclesInMemoryGrow {
+                bytes: new_memory_usage - old_memory_usage,
+                available: self.cycles_balance(),
+                threshold,
+                reveal_top_up: self.caller_is_controller(),
+            })
         }
     }
 
@@ -1325,103 +1321,57 @@ impl SandboxSafeSystemState {
         &mut self,
         allocated_bytes: NumBytes,
         subnet_memory_saturation: &ResourceSaturation,
-        api_type: &ApiType,
     ) -> HypervisorResult<()> {
-        if !self.should_reserve_storage_cycles(api_type) {
-            return Ok(());
-        }
-        match self.memory_allocation {
-            MemoryAllocation::Reserved(_) => Ok(()),
-            MemoryAllocation::BestEffort => {
-                let cycles_to_reserve = self.cycles_account_manager.storage_reservation_cycles(
-                    allocated_bytes,
-                    subnet_memory_saturation,
-                    self.subnet_size,
-                    self.cost_schedule,
-                );
+        let cycles_to_reserve = self.cycles_account_manager.storage_reservation_cycles(
+            allocated_bytes,
+            subnet_memory_saturation,
+            self.subnet_size,
+            self.cost_schedule,
+        );
 
-                if let Some(limit) = self.reserved_balance_limit
-                    && self.reserved_balance() + cycles_to_reserve > limit
-                {
-                    return Err(HypervisorError::ReservedCyclesLimitExceededInMemoryGrow {
-                        bytes: allocated_bytes,
-                        requested: self.reserved_balance() + cycles_to_reserve,
-                        limit,
-                    });
-                }
-
-                let old_balance = self.cycles_balance();
-                if old_balance < cycles_to_reserve {
-                    return Err(HypervisorError::InsufficientCyclesInMemoryGrow {
-                        bytes: allocated_bytes,
-                        available: old_balance,
-                        threshold: cycles_to_reserve,
-                        reveal_top_up: self.caller_is_controller(),
-                    });
-                }
-                let new_balance = old_balance - cycles_to_reserve;
-                self.update_balance_change(new_balance);
-                self.system_state_modifications.reserved_cycles += cycles_to_reserve;
-                Ok(())
-            }
+        if let Some(limit) = self.reserved_balance_limit
+            && self.reserved_balance() + cycles_to_reserve > limit
+        {
+            return Err(HypervisorError::ReservedCyclesLimitExceededInMemoryGrow {
+                bytes: allocated_bytes,
+                requested: self.reserved_balance() + cycles_to_reserve,
+                limit,
+            });
         }
+
+        let old_balance = self.cycles_balance();
+        if old_balance < cycles_to_reserve {
+            return Err(HypervisorError::InsufficientCyclesInMemoryGrow {
+                bytes: allocated_bytes,
+                available: old_balance,
+                threshold: cycles_to_reserve,
+                reveal_top_up: self.caller_is_controller(),
+            });
+        }
+        let new_balance = old_balance - cycles_to_reserve;
+        self.update_balance_change(new_balance);
+        self.system_state_modifications.reserved_cycles += cycles_to_reserve;
+        Ok(())
     }
 
     /// Condition for `OnLowWasmMemoryHook` is satisfied if the following holds:
     ///
-    /// 1. In the case of `memory_allocation`
-    ///    `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
-    /// 2. Without memory allocation
-    ///    `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+    ///   `wasm_memory_threshold > wasm_memory_limit - wasm_memory_usage`
     ///
     /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
     pub fn update_status_of_low_wasm_memory_hook_condition(
         &mut self,
-        memory_allocation: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
-        memory_usage: NumBytes,
         wasm_memory_usage: NumBytes,
     ) {
         let is_condition_satisfied = is_low_wasm_memory_hook_condition_satisfied(
-            memory_usage,
             wasm_memory_usage,
-            memory_allocation,
             wasm_memory_limit,
             self.wasm_memory_threshold,
         );
 
         self.system_state_modifications
             .on_low_wasm_memory_hook_condition_check_result = Some(is_condition_satisfied);
-    }
-
-    // Returns `true` if storage cycles need to be reserved for the given
-    // API type when growing memory.
-    fn should_reserve_storage_cycles(&self, api_type: &ApiType) -> bool {
-        match api_type {
-            ApiType::Update { .. }
-            | ApiType::SystemTask { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. }
-            | ApiType::Cleanup { .. } => true,
-
-            ApiType::Start { .. } | ApiType::Init { .. } | ApiType::PreUpgrade { .. } => {
-                // Individual endpoints of install_code do not reserve cycles.
-                // Instead, it is reserved at the end of install_code.
-                false
-            }
-
-            ApiType::InspectMessage { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::CompositeQuery { .. }
-            | ApiType::CompositeReplyCallback { .. }
-            | ApiType::CompositeRejectCallback { .. }
-            | ApiType::CompositeCleanup { .. } => {
-                // Queries do not reserve storage cycles because the state
-                // changes are discarded anyways.
-                false
-            }
-        }
     }
 
     /// Appends a log record to the system state changes.
@@ -1594,7 +1544,7 @@ mod tests {
             canister_test_id(0),
             CanisterStatusView::Running,
             NumSeconds::from(3600),
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             NumBytes::new(0),
             ComputeAllocation::default(),
             Default::default(),
@@ -1647,7 +1597,7 @@ mod tests {
             canister_test_id(0),
             CanisterStatusView::Running,
             NumSeconds::from(3600),
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             NumBytes::new(wasm_memory_threshold),
             ComputeAllocation::default(),
             Default::default(),
@@ -1687,66 +1637,43 @@ mod tests {
 
     fn helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
         wasm_memory_threshold: u64,
-        memory_allocation: Option<u64>,
         wasm_memory_limit: Option<u64>,
-        memory_usage: u64,
         wasm_memory_usage: u64,
     ) -> bool {
         let wasm_memory_limit = wasm_memory_limit.unwrap_or(4 * GIB);
-        let memory_usage_without_wasm_memory = memory_usage - wasm_memory_usage;
-        let wasm_capacity = memory_allocation.map_or(wasm_memory_limit, |memory_allocation| {
-            std::cmp::min(
-                memory_allocation - memory_usage_without_wasm_memory,
-                wasm_memory_limit,
-            )
-        });
-
-        wasm_capacity < wasm_memory_usage + wasm_memory_threshold
+        wasm_memory_limit < wasm_memory_usage + wasm_memory_threshold
     }
     #[test]
     fn test_on_low_wasm_memory_hook_condition_update() {
         for wasm_memory_threshold in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
-            for memory_allocation in [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
+            for wasm_memory_limit in [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
             {
-                for wasm_memory_limit in
-                    [None, Some(GIB), Some(2 * GIB), Some(3 * GIB), Some(4 * GIB)]
-                {
-                    for memory_usage_without_wasm_memory in [0, GIB] {
-                        for wasm_memory_usage in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
-                            let mut state =
-                                helper_create_state_for_hook_status(wasm_memory_threshold);
+                for wasm_memory_usage in [0, GIB, 2 * GIB, 3 * GIB, 4 * GIB] {
+                    let mut state = helper_create_state_for_hook_status(wasm_memory_threshold);
 
-                            assert_eq!(
-                                state
-                                    .system_state_modifications
-                                    .on_low_wasm_memory_hook_condition_check_result,
-                                None
-                            );
+                    assert_eq!(
+                        state
+                            .system_state_modifications
+                            .on_low_wasm_memory_hook_condition_check_result,
+                        None
+                    );
 
-                            let memory_usage = wasm_memory_usage + memory_usage_without_wasm_memory;
+                    state.update_status_of_low_wasm_memory_hook_condition(
+                        wasm_memory_limit.map(|m| m.into()),
+                        wasm_memory_usage.into(),
+                    );
 
-                            state.update_status_of_low_wasm_memory_hook_condition(
-                                memory_allocation.map(|m| m.into()),
-                                wasm_memory_limit.map(|m| m.into()),
-                                memory_usage.into(),
-                                wasm_memory_usage.into(),
-                            );
-
-                            assert_eq!(
-                                state
-                                    .system_state_modifications
-                                    .on_low_wasm_memory_hook_condition_check_result
-                                    .unwrap(),
-                                helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
-                                    wasm_memory_threshold,
-                                    memory_allocation,
-                                    wasm_memory_limit,
-                                    memory_usage,
-                                    wasm_memory_usage
-                                )
-                            );
-                        }
-                    }
+                    assert_eq!(
+                        state
+                            .system_state_modifications
+                            .on_low_wasm_memory_hook_condition_check_result
+                            .unwrap(),
+                        helper_is_condition_satisfied_for_on_low_wasm_memory_hook(
+                            wasm_memory_threshold,
+                            wasm_memory_limit,
+                            wasm_memory_usage
+                        )
+                    );
                 }
             }
         }

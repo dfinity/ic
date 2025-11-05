@@ -12,26 +12,35 @@ use strum::Display;
 use crate::{
     RequestState, ValidationError,
     canister_state::{
+        ValidationGuard, caller_allowed,
         events::find_event,
         migrations_disabled,
         requests::{find_request, insert_request},
+        set_allowlist,
     },
     rate_limited, start_timers,
     validation::validate_request,
 };
 
+#[derive(CandidType, Deserialize)]
+pub(crate) struct MigrationCanisterInitArgs {
+    allowlist: Option<Vec<Principal>>,
+}
+
 #[init]
-fn init() {
+fn init(args: MigrationCanisterInitArgs) {
     start_timers();
+    set_allowlist(args.allowlist);
 }
 
 #[post_upgrade]
-fn post_upgrade() {
+fn post_upgrade(args: MigrationCanisterInitArgs) {
     start_timers();
+    set_allowlist(args.allowlist);
 }
 
 #[derive(Clone, CandidType, Deserialize)]
-struct MigrateCanisterArgs {
+pub struct MigrateCanisterArgs {
     pub source: Principal,
     pub target: Principal,
 }
@@ -51,16 +60,28 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
     if migrations_disabled() {
         return Err(ValidationError::MigrationsDisabled);
     }
+    // Prevent too many interleaved validations.
+    let Ok(_guard) = ValidationGuard::new() else {
+        return Err(ValidationError::RateLimited);
+    };
     if rate_limited() {
         return Err(ValidationError::RateLimited);
     }
     let caller = msg_caller();
+    // For soft rollout purposes
+    if !caller_allowed(&caller) {
+        return Err(ValidationError::MigrationsDisabled);
+    }
     match validate_request(args.source, args.target, caller).await {
         Err(e) => {
             println!("Failed to validate request {}: {}", args, e);
             return Err(e);
         }
         Ok(request) => {
+            // Need to check the rate limit again
+            if rate_limited() {
+                return Err(ValidationError::RateLimited);
+            }
             println!("Accepted request {}", request);
             insert_request(RequestState::Accepted { request });
         }
@@ -69,7 +90,7 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
 }
 
 #[derive(Clone, Display, CandidType, Deserialize)]
-enum MigrationStatus {
+pub enum MigrationStatus {
     #[strum(to_string = "MigrationStatus::InProgress {{ status: {status} }}")]
     InProgress { status: String },
     #[strum(to_string = "MigrationStatus::Failed {{ reason: {reason}, time: {time} }}")]
@@ -103,7 +124,7 @@ fn migration_status(args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
 }
 
 #[derive(Clone, CandidType, Deserialize)]
-struct ListEventsArgs {
+pub(crate) struct ListEventsArgs {
     page_index: u64,
     page_size: u64,
 }

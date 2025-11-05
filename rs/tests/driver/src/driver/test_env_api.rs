@@ -144,10 +144,6 @@ use crate::{
         log_events,
         test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute},
     },
-    k8s::{
-        tnet::TNet,
-        virtualmachine::{destroy_vm, restart_vm, start_vm},
-    },
     retry_with_msg, retry_with_msg_async, retry_with_msg_async_quiet,
     util::{block_on, create_agent},
 };
@@ -191,6 +187,7 @@ use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use itertools::Itertools;
 use prost::Message;
+use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, debug, info, warn};
 use ssh2::Session;
@@ -223,6 +220,8 @@ const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(16
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
+const FW_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
+const FW_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
@@ -1027,6 +1026,82 @@ impl IcNodeSnapshot {
         })
         .expect("Could not install canister")
     }
+
+    pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {
+        let result = retry_with_msg!(
+            "wait_for_orchestrator_rule",
+            logger.clone(),
+            FW_RETRY_TIMEOUT,
+            FW_RETRY_BACKOFF,
+            || self.wait_for_orchestrator_fw_rule_once(logger)
+        );
+
+        result.context("Timed out waiting for orchestrator rule.".to_string())
+    }
+
+    fn wait_for_orchestrator_fw_rule_once(&self, logger: &Logger) -> Result<()> {
+        // This checks that the rule "meta skuid ic-http-adapter ip6 daddr ::1" was applied
+        // This is a hardcoded rule that is applied regardless of what is in the registry
+        // Hence a change in the registry won't affect this check
+        let script = r#"
+            set -e
+            ADAPTER_UID=$(id -u ic-http-adapter)
+            RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
+            
+            sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
+        "#;
+
+        match self.block_on_bash_script(script) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                debug!(logger, "Orchestrator rule not yet found.");
+                Err(e)
+            }
+        }
+    }
+
+    pub fn insert_egress_accept_rule_for_outcalls_adapter(
+        &self,
+        target: SocketAddr,
+    ) -> Result<String> {
+        self.insert_egress_rule_for_outcalls_adapter(target, "accept")
+    }
+
+    pub fn insert_egress_reject_rule_for_outcalls_adapter(
+        &self,
+        target: SocketAddr,
+    ) -> Result<String> {
+        self.insert_egress_rule_for_outcalls_adapter(target, "reject")
+    }
+
+    fn insert_egress_rule_for_outcalls_adapter(
+        &self,
+        target: SocketAddr,
+        action: &str,
+    ) -> Result<String> {
+        let ip = target.ip();
+        let port = target.port();
+        let node_id = self.node_id;
+
+        let family = match ip {
+            std::net::IpAddr::V4(_) => "ip",
+            std::net::IpAddr::V6(_) => "ip6",
+        };
+
+        let script = format!(
+            r#"
+            set -e
+            ADAPTER_UID=$(id -u ic-http-adapter)
+            echo "Inserting {action} rule on node {node_id} for destination {target}..."
+
+            sudo nft "insert rule {family} filter OUTPUT meta skuid $ADAPTER_UID {family} daddr {ip} tcp dport {port} {action}"
+            "#
+        );
+
+        self.block_on_bash_script(&script).context(format!(
+            "Failed to insert egress {action} rule on node {node_id} for target {target}"
+        ))
+    }
 }
 
 pub trait HasTopologySnapshot {
@@ -1266,12 +1341,6 @@ impl HasGroupSetup for TestEnv {
                         group_spec,
                     )
                     .unwrap();
-                }
-                InfraProvider::K8s => {
-                    let mut tnet =
-                        TNet::new(&group_base_name.replace('_', "-")).expect("new tnet failed");
-                    block_on(tnet.create()).expect("failed creating tnet");
-                    tnet.write_attribute(self);
                 }
             };
             group_setup.write_attribute(self);
@@ -1757,6 +1826,7 @@ pub struct NnsCustomizations {
     pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
     pub neurons: Option<Vec<Neuron>>,
     pub install_at_ids: bool,
+    pub registry_canister_init_payload: RegistryCanisterInitPayload,
 }
 
 impl NnsCustomizations {
@@ -1945,7 +2015,6 @@ pub struct HostedVm {
     farm: Farm,
     group_name: String,
     vm_name: String,
-    k8s: bool,
 }
 
 /// VmControl enables a user to interact with VMs, i.e. change their state.
@@ -1953,33 +2022,21 @@ pub struct HostedVm {
 /// unsuccessful.
 impl VmControl for HostedVm {
     fn kill(&self) {
-        if self.k8s {
-            block_on(destroy_vm(&self.vm_name)).expect("could not kill VM");
-        } else {
-            self.farm
-                .destroy_vm(&self.group_name, &self.vm_name)
-                .expect("could not kill VM");
-        }
+        self.farm
+            .destroy_vm(&self.group_name, &self.vm_name)
+            .expect("could not kill VM");
     }
 
     fn reboot(&self) {
-        if self.k8s {
-            block_on(restart_vm(&self.vm_name)).expect("could not reboot VM");
-        } else {
-            self.farm
-                .reboot_vm(&self.group_name, &self.vm_name)
-                .expect("could not reboot VM");
-        }
+        self.farm
+            .reboot_vm(&self.group_name, &self.vm_name)
+            .expect("could not reboot VM");
     }
 
     fn start(&self) {
-        if self.k8s {
-            block_on(start_vm(&self.vm_name)).expect("could not start VM");
-        } else {
-            self.farm
-                .start_vm(&self.group_name, &self.vm_name)
-                .expect("could not start VM");
-        }
+        self.farm
+            .start_vm(&self.group_name, &self.vm_name)
+            .expect("could not start VM");
     }
 }
 
@@ -1999,25 +2056,11 @@ where
         let farm_base_url = self.get_farm_url().unwrap();
         let farm = Farm::new(farm_base_url, env.logger());
 
-        let mut vm_name = self.vm_name();
-        let mut k8s = false;
-        if InfraProvider::read_attribute(&env) == InfraProvider::K8s {
-            k8s = true;
-            let tnet = TNet::read_attribute(&env);
-            let tnet_node = tnet
-                .nodes
-                .iter()
-                .find(|n| n.node_id.clone().expect("node_id missing") == vm_name.clone())
-                .expect("tnet doesn't have this node")
-                .clone();
-            vm_name = tnet_node.name.expect("nameless node");
-        }
-
+        let vm_name = self.vm_name();
         Box::new(HostedVm {
             farm,
             group_name: pot_setup.infra_group_name,
             vm_name,
-            k8s,
         })
     }
 }
@@ -2281,6 +2324,7 @@ pub async fn install_nns_canisters(
         install_at_ids,
         ledger_balances,
         neurons,
+        mut registry_canister_init_payload,
     } = nns_installation_builder.customizations.clone();
 
     let mut init_payloads = NnsInitPayloadsBuilder::new();
@@ -2332,7 +2376,31 @@ pub async fn install_nns_canisters(
 
     let registry_local_store = ic_prep_state_dir.registry_local_store_path();
     let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
-    init_payloads.with_initial_mutations(initial_mutations);
+    if !registry_canister_init_payload.mutations.is_empty() {
+        panic!(
+            "Provided registry canister init payload via NnsCustomizations weren't empty! These will be overriden by local store registry mutations"
+        );
+    }
+    registry_canister_init_payload.mutations = initial_mutations;
+    init_payloads.registry = {
+        let mut builder = RegistryCanisterInitPayloadBuilder::new();
+
+        for mutation in registry_canister_init_payload.mutations {
+            builder.push_init_mutate_request(mutation);
+        }
+
+        if registry_canister_init_payload.is_swapping_feature_enabled {
+            builder.enable_swapping_feature_globally();
+        }
+        for caller in registry_canister_init_payload.swapping_whitelisted_callers {
+            builder.whitelist_swapping_feature_caller(caller);
+        }
+        for subnet in registry_canister_init_payload.swapping_enabled_subnets {
+            builder.enable_swapping_feature_for_subnet(subnet);
+        }
+
+        builder
+    };
 
     let agent = InternalAgent::new(
         url,
@@ -2395,18 +2463,12 @@ where
     fn create_playnet_dns_records(&self, dns_records: Vec<DnsRecord>) -> String {
         let env = self.test_env();
         let log = env.logger();
-        if InfraProvider::read_attribute(&env) == InfraProvider::Farm {
-            let farm_base_url = self.get_farm_url().unwrap();
-            let farm = Farm::new(farm_base_url, log);
-            let group_setup = GroupSetup::read_attribute(&env);
-            let group_name = group_setup.infra_group_name;
-            farm.create_playnet_dns_records(&group_name, dns_records)
-                .expect("Failed to create playnet DNS records")
-        } else {
-            let tnet = TNet::read_attribute(&env);
-            block_on(tnet.create_playnet_dns_records(dns_records))
-                .expect("Failed to acquire a certificate for a playnet")
-        }
+        let farm_base_url = self.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, log);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let group_name = group_setup.infra_group_name;
+        farm.create_playnet_dns_records(&group_name, dns_records)
+            .expect("Failed to create playnet DNS records")
     }
 }
 
@@ -2423,18 +2485,12 @@ where
     fn acquire_playnet_certificate(&self) -> PlaynetCertificate {
         let env = self.test_env();
         let log = env.logger();
-        if InfraProvider::read_attribute(&env) == InfraProvider::Farm {
-            let farm_base_url = self.get_farm_url().unwrap();
-            let farm = Farm::new(farm_base_url, log);
-            let group_setup = GroupSetup::read_attribute(&env);
-            let group_name = group_setup.infra_group_name;
-            farm.acquire_playnet_certificate(&group_name)
-                .expect("Failed to acquire a certificate for a playnet")
-        } else {
-            let tnet = TNet::from_env(&env);
-            block_on(tnet.acquire_playnet_certificate())
-                .expect("Failed to acquire a certificate for a playnet")
-        }
+        let farm_base_url = self.get_farm_url().unwrap();
+        let farm = Farm::new(farm_base_url, log);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let group_name = group_setup.infra_group_name;
+        farm.acquire_playnet_certificate(&group_name)
+            .expect("Failed to acquire a certificate for a playnet")
     }
 }
 

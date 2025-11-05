@@ -564,6 +564,7 @@ pub fn install_nns(
                 .collect(),
         ),
         install_at_ids: false,
+        registry_canister_init_payload: Default::default(),
     };
 
     install_nns_with_customizations_and_check_progress(env.topology_snapshot(), nns_customizations);
@@ -698,17 +699,6 @@ pub fn generate_sns_workload_with_many_users<T, R>(
         block_on(workload.execute(aggr, fun)).expect("Workload execution has failed.")
     };
     env.emit_report(format!("{metrics}"));
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct SnsUsers {
-    participants: Vec<SaleParticipant>,
-}
-
-impl TestEnvAttribute for SnsUsers {
-    fn attribute_name() -> String {
-        "sns_users".to_string()
-    }
 }
 
 /// An SNS sale participant.

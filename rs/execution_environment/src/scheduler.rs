@@ -871,10 +871,7 @@ impl SchedulerImpl {
         }
         self.metrics
             .canister_memory_allocation
-            .observe(match canister.memory_allocation() {
-                MemoryAllocation::Reserved(bytes) => bytes.get() as f64,
-                MemoryAllocation::BestEffort => 0.0,
-            });
+            .observe(canister.memory_allocation().pre_allocated_bytes().get() as f64);
         self.metrics
             .canister_compute_allocation
             .observe(canister.compute_allocation().as_percent() as f64 / 100.0);
@@ -934,7 +931,7 @@ impl SchedulerImpl {
                         Arc::clone(&self.fd_factory),
                     ));
                     canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
-                    canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
+                    canister.system_state.memory_allocation = MemoryAllocation::default();
                     canister.system_state.clear_canister_history();
                     // Burn the remaining balance of the canister.
                     canister.system_state.burn_remaining_balance_for_uninstall();
@@ -2027,7 +2024,10 @@ fn observe_replicated_state_metrics(
             let old_call_contexts =
                 manager.call_contexts_older_than(state.time(), OLD_CALL_CONTEXT_CUTOFF_ONE_DAY);
             // Log all old call contexts, but not (nearly) every round.
-            if current_round.get() % SPAMMY_LOG_INTERVAL_ROUNDS == 0 {
+            if current_round
+                .get()
+                .is_multiple_of(SPAMMY_LOG_INTERVAL_ROUNDS)
+            {
                 for (origin, origin_time) in &old_call_contexts {
                     warn!(
                         logger,

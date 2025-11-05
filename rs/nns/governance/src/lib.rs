@@ -201,18 +201,11 @@ thread_local! {
     static DISABLE_NF_FUND_PROPOSALS: Cell<bool>
         = const { Cell::new(cfg!(not(any(feature = "canbench-rs", feature = "test")))) };
 
-    static ENABLE_KNOWN_NEURON_VOTING_HISTORY: Cell<bool> = const { Cell::new(true) };
-
-    static ENABLE_DEREGISTER_KNOWN_NEURON: Cell<bool> = const { Cell::new(true) };
-
     static ENABLE_COMPREHENSIVE_NEURON_LIST: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+        = const { Cell::new(true) };
 
     static ENABLE_NEURON_FOLLOW_RESTRICTIONS: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
-
-    static ENABLE_SET_SUBNET_OPERATIONAL_LEVEL: Cell<bool>
-        = const { Cell::new(cfg!(feature = "test")) };
+        = const { Cell::new(true) };
 }
 
 thread_local! {
@@ -236,34 +229,6 @@ pub fn temporarily_enable_nf_fund_proposals() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_nf_fund_proposals() -> Temporary {
     Temporary::new(&DISABLE_NF_FUND_PROPOSALS, true)
-}
-
-pub fn is_known_neuron_voting_history_enabled() -> bool {
-    ENABLE_KNOWN_NEURON_VOTING_HISTORY.get()
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_known_neuron_voting_history() -> Temporary {
-    Temporary::new(&ENABLE_KNOWN_NEURON_VOTING_HISTORY, true)
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_known_neuron_voting_history() -> Temporary {
-    Temporary::new(&ENABLE_KNOWN_NEURON_VOTING_HISTORY, false)
-}
-
-pub fn is_deregister_known_neuron_enabled() -> bool {
-    ENABLE_DEREGISTER_KNOWN_NEURON.get()
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_deregister_known_neuron() -> Temporary {
-    Temporary::new(&ENABLE_DEREGISTER_KNOWN_NEURON, true)
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_deregister_known_neuron() -> Temporary {
-    Temporary::new(&ENABLE_DEREGISTER_KNOWN_NEURON, false)
 }
 
 pub fn is_comprehensive_neuron_list_enabled() -> bool {
@@ -292,20 +257,6 @@ pub fn temporarily_enable_neuron_follow_restrictions() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_neuron_follow_restrictions() -> Temporary {
     Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, false)
-}
-
-pub fn is_set_subnet_operational_level_enabled() -> bool {
-    ENABLE_SET_SUBNET_OPERATIONAL_LEVEL.get()
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_set_subnet_operational_level() -> Temporary {
-    Temporary::new(&ENABLE_SET_SUBNET_OPERATIONAL_LEVEL, true)
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_set_subnet_operational_level() -> Temporary {
-    Temporary::new(&ENABLE_SET_SUBNET_OPERATIONAL_LEVEL, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {

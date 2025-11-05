@@ -15,6 +15,7 @@ use crate::{
 };
 use backoff::ExponentialBackoffBuilder;
 use get_if_addrs::get_if_addrs;
+use guest_upgrade_server::orchestrator::new_disk_encryption_key_exchange_server_agent_for_orchestrator;
 use ic_config::{
     Config,
     metrics::{Config as MetricsConfig, Exporter},
@@ -248,6 +249,12 @@ impl Orchestrator {
             registration.register_node().await;
         }
 
+        let disk_encryption_key_exchange_agent =
+            new_disk_encryption_key_exchange_server_agent_for_orchestrator(
+                tokio::runtime::Handle::current(),
+                Arc::clone(&registry_client),
+            );
+
         let upgrade = Some(
             Upgrade::new(
                 Arc::clone(&registry),
@@ -262,6 +269,7 @@ impl Orchestrator {
                 args.replica_binary_dir.clone(),
                 logger.clone(),
                 args.orchestrator_data_directory.clone(),
+                disk_encryption_key_exchange_agent,
             )
             .await,
         );

@@ -49,6 +49,7 @@ fn default_input_request(deadline: CoarseTime) -> RequestOrResponse {
         .sender(OTHER_CANISTER_ID)
         .receiver(CANISTER_ID)
         .deadline(deadline)
+        .payment(Cycles::new(2))
         .build()
         .into()
 }
@@ -59,6 +60,7 @@ fn default_input_response(callback_id: CallbackId, deadline: CoarseTime) -> Resp
         .respondent(OTHER_CANISTER_ID)
         .originator_reply_callback(callback_id)
         .deadline(deadline)
+        .refund(Cycles::new(1))
         .build()
 }
 
@@ -67,6 +69,7 @@ fn default_output_request() -> Arc<Request> {
         RequestBuilder::default()
             .sender(CANISTER_ID)
             .receiver(OTHER_CANISTER_ID)
+            .payment(Cycles::new(3))
             .build(),
     )
 }
@@ -103,7 +106,12 @@ impl CanisterStateFixture {
             .canister_state
             .system_state
             .new_call_context(
-                CallOrigin::CanisterUpdate(CANISTER_ID, CallbackId::from(1), NO_DEADLINE),
+                CallOrigin::CanisterUpdate(
+                    CANISTER_ID,
+                    CallbackId::from(1),
+                    NO_DEADLINE,
+                    String::from(""),
+                ),
                 Cycles::zero(),
                 Time::from_nanos_since_unix_epoch(0),
                 Default::default(),
@@ -473,12 +481,14 @@ fn canister_state_induct_messages_to_self_duplicate_of_paused_response(deadline:
         .receiver(CANISTER_ID)
         .sender_reply_callback(callback_id)
         .deadline(deadline)
+        .payment(Cycles::new(2))
         .build();
     let response = ResponseBuilder::default()
         .originator(CANISTER_ID)
         .respondent(CANISTER_ID)
         .originator_reply_callback(callback_id)
         .deadline(deadline)
+        .refund(Cycles::new(1))
         .build();
 
     // Make an input queue slot reservation.
@@ -670,7 +680,7 @@ fn system_subnet_remote_push_input_request_ignores_memory_reservation_and_execut
     let input_queue_type = InputQueueType::RemoteSubnet;
 
     // Tiny explicit allocation, not enough for a request.
-    canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::new(13));
+    canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::new(13));
     // And an execution state with non-zero size.
     canister_state.execution_state = Some(ExecutionState::new(
         Default::default(),
@@ -1257,7 +1267,7 @@ fn reverts_stopping_status_after_split() {
     let mut canister_state = CanisterStateFixture::new().canister_state;
     let mut call_context_manager = CallContextManager::default();
     call_context_manager.with_call_context(CallContext::new(
-        CallOrigin::Ingress(user_test_id(1), message_test_id(2)),
+        CallOrigin::Ingress(user_test_id(1), message_test_id(2), String::from("")),
         false,
         false,
         Cycles::from(0u128),

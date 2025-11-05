@@ -59,7 +59,6 @@ uvm_config_image(
 system_test(
     name = "reboot_toy",
     tags = [
-        "k8s",
         "manual",
     ],
     deps = [
@@ -111,6 +110,7 @@ rust_binary(
         # Keep sorted.
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nested",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],
