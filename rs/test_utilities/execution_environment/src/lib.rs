@@ -17,9 +17,9 @@ use ic_embedders::{
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 pub use ic_execution_environment::ExecutionResponse;
 use ic_execution_environment::{
-    CompilationCostHandling, ExecuteMessageResult, ExecutionEnvironment,
-    ExecutionServicesForTesting, Hypervisor, IngressFilterMetrics, InternalHttpQueryHandler,
-    RoundInstructions, RoundLimits, execute_canister,
+    CompilationCostHandling, DataCertificateWithDelegationMetadata, ExecuteMessageResult,
+    ExecutionEnvironment, ExecutionServicesForTesting, Hypervisor, IngressFilterMetrics,
+    InternalHttpQueryHandler, RoundInstructions, RoundLimits, execute_canister,
 };
 use ic_interfaces::execution_environment::{
     ChainKeySettings, ExecutionMode, IngressHistoryWriter, RegistryExecutionSettings,
@@ -1213,7 +1213,6 @@ impl ExecutionTest {
         canister_id: CanisterId,
         method_name: S,
         method_payload: Vec<u8>,
-        data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let state = Arc::new(self.state.take().unwrap());
 
@@ -1227,8 +1226,7 @@ impl ExecutionTest {
         let result = self.query_handler.query(
             query,
             Labeled::new(Height::from(0), Arc::clone(&state)),
-            data_certificate,
-            /*certification_delegation_metadata=*/ None,
+            None,
             true,
         );
 
@@ -1762,11 +1760,14 @@ impl ExecutionTest {
         // Currently, this height is only used for query stats collection and it doesn't matter which one we pass in here.
         // Even if consensus was running, it could be that all queries are actually running at height 0. The state passed in to
         // the query handler shouldn't have the height encoded, so there shouldn't be a mismatch between the two.
+        let data_certificate_with_delegation_metadata = DataCertificateWithDelegationMetadata {
+            data_certificate,
+            certificate_delegation_metadata,
+        };
         self.query_handler.query(
             query,
             Labeled::new(Height::from(0), state),
-            data_certificate,
-            certificate_delegation_metadata,
+            Some(data_certificate_with_delegation_metadata),
             true,
         )
     }

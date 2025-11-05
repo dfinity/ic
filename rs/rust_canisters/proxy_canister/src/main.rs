@@ -10,7 +10,7 @@ use candid::Principal;
 use futures::future::join_all;
 use futures::stream::{FuturesUnordered, StreamExt};
 use ic_cdk::api::call::RejectionCode;
-use ic_cdk::api::time;
+use ic_cdk::api::{data_certificate, time};
 use ic_cdk::{caller, spawn};
 use ic_cdk::{query, update};
 use ic_management_canister_types_private::{
@@ -267,6 +267,16 @@ fn very_large_but_allowed_transform(raw: TransformArgs) -> CanisterHttpResponseP
     transformed.body = vec![0; MAX_TRANSFORM_SIZE - overhead];
 
     transformed
+}
+
+#[query]
+fn data_certificate_in_transform(_raw: TransformArgs) -> CanisterHttpResponsePayload {
+    let data_certificate_present = data_certificate().is_some();
+    CanisterHttpResponsePayload {
+        status: 200,
+        body: data_certificate_present.to_string().into(),
+        headers: vec![],
+    }
 }
 
 fn main() {}
