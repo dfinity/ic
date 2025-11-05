@@ -1,16 +1,6 @@
-use crate::max_rewardable_nodes_mapping::MAX_REWARDABLE_NODES_MAPPING;
 use crate::{
-    certification::recertify_registry, mutations::node_management::common::get_key_family,
-    pb::v1::RegistryCanisterStableStorage, registry::Registry,
+    certification::recertify_registry, pb::v1::RegistryCanisterStableStorage, registry::Registry,
 };
-use ic_base_types::{NodeId, PrincipalId};
-use ic_protobuf::registry::node::v1::{NodeRecord, NodeRewardType};
-use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_registry_keys::{
-    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_RECORD_KEY_PREFIX, make_node_operator_record_key,
-    make_node_record_key,
-};
-use ic_registry_transport::{pb::v1::RegistryMutation, update};
 use prost::Message;
 use std::str::FromStr;
 
