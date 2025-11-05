@@ -7955,7 +7955,7 @@ impl Governance {
             minimum_xdr_permyriad_per_icp: Some(minimum_xdr_permyriad_per_icp),
             maximum_node_provider_rewards_e8s: Some(maximum_node_provider_rewards_e8s),
             node_providers: self.heap_data.node_providers.clone(),
-            ..Default::default()
+            registry_version: None,
         })
     }
 
