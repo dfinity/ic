@@ -113,7 +113,6 @@ impl Step for DownloadCertificationsStep {
                 i + 1,
             );
             let res = ssh_helper.rsync_with_retries(
-                Vec::<String>::default(),
                 &ssh_helper.remote_path(&cert_path),
                 &output_dir.join(ip.to_string()).join(""),
                 self.auto_retry,
@@ -352,7 +351,6 @@ impl Step for DownloadIcDataStep {
 
         for include in self.data_includes.iter() {
             ssh_helper.rsync_relative(
-                Vec::<String>::default(),
                 // Note the "." for relative paths (see rsync manual for --relative)
                 &ssh_helper.remote_path(PathBuf::from("/var/lib/ic/./data").join(include)),
                 &target,
@@ -361,7 +359,6 @@ impl Step for DownloadIcDataStep {
             if self.keep_downloaded_data {
                 rsync_relative(
                     &self.logger,
-                    Vec::<String>::default(),
                     // Note the "." for relative paths (see rsync manual for --relative)
                     &target.join(".").join("data").join(include),
                     &self.working_dir.join(""),
@@ -372,16 +369,11 @@ impl Step for DownloadIcDataStep {
         }
 
         if self.include_config {
-            ssh_helper.rsync(
-                Vec::<String>::default(),
-                &ssh_helper.remote_path(IC_JSON5_PATH),
-                &target,
-            )?;
+            ssh_helper.rsync(&ssh_helper.remote_path(IC_JSON5_PATH), &target)?;
 
             if self.keep_downloaded_data {
                 rsync(
                     &self.logger,
-                    Vec::<String>::default(),
                     &target.join(PathBuf::from(IC_JSON5_PATH).file_name().unwrap()),
                     &self.working_dir.join(""),
                     false,
@@ -687,7 +679,6 @@ impl Step for UploadStateAndRestartStep {
 
             info!(self.logger, "Uploading state...");
             ssh_helper.rsync(
-                Vec::<String>::default(),
                 &self.data_src.join(""),
                 &ssh_helper.remote_path(&upload_dir.join("")),
             )?;
@@ -982,14 +973,9 @@ impl Step for UploadCUPAndTarStep {
 
         let target = ssh_helper.remote_path(&upload_dir.join(""));
 
-        ssh_helper.rsync(
-            Vec::<String>::default(),
-            &self.work_dir.join("cup.proto"),
-            &target,
-        )?;
+        ssh_helper.rsync(&self.work_dir.join("cup.proto"), &target)?;
 
         ssh_helper.rsync(
-            Vec::<String>::default(),
             &self.work_dir.join("ic_registry_local_store.tar.zst"),
             &target,
         )?;
@@ -1138,7 +1124,6 @@ impl Step for DownloadRegistryStoreStep {
         }
 
         ssh_helper.rsync(
-            Vec::<String>::default(),
             &ssh_helper.remote_path(PathBuf::from(IC_DATA_PATH).join(IC_REGISTRY_LOCAL_STORE)),
             &self.work_dir.join(""),
         )?;
@@ -1183,11 +1168,7 @@ impl Step for UploadAndHostTarStep {
             upload_dir = upload_dir.display()
         ))?;
 
-        ssh_helper.rsync(
-            Vec::<String>::default(),
-            &self.tar,
-            &ssh_helper.remote_path(upload_dir.join("")),
-        )?;
+        ssh_helper.rsync(&self.tar, &ssh_helper.remote_path(upload_dir.join("")))?;
 
         ssh_helper.ssh("daemonize $(which python3) -m http.server --bind :: 8081".to_string())?;
 

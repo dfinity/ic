@@ -92,22 +92,19 @@ impl SshHelper {
     }
 
     /// Wrapper around `crate::file_sync_helper::rsync_with_retries`
-    pub fn rsync_with_retries<E, S, T>(
+    pub fn rsync_with_retries<S, T>(
         &self,
-        excludes: E,
         src: S,
         target: T,
         auto_retry: bool,
         max_retries: usize,
     ) -> RecoveryResult<Option<String>>
     where
-        E: IntoIterator<Item: AsRef<Path>> + Clone,
         S: AsRef<Path>,
         T: AsRef<Path>,
     {
         rsync_with_retries(
             &self.logger,
-            excludes,
             src,
             target,
             self.require_confirmation,
@@ -118,15 +115,13 @@ impl SshHelper {
     }
 
     /// Wrapper around `crate::file_sync_helper::rsync`
-    pub fn rsync<E, S, T>(&self, excludes: E, src: S, target: T) -> RecoveryResult<Option<String>>
+    pub fn rsync<S, T>(&self, src: S, target: T) -> RecoveryResult<Option<String>>
     where
-        E: IntoIterator<Item: AsRef<Path>>,
         S: AsRef<Path>,
         T: AsRef<Path>,
     {
         rsync(
             &self.logger,
-            excludes,
             src,
             target,
             self.require_confirmation,
@@ -134,20 +129,13 @@ impl SshHelper {
         )
     }
 
-    pub fn rsync_relative<E, S, T>(
-        &self,
-        excludes: E,
-        src: S,
-        target: T,
-    ) -> RecoveryResult<Option<String>>
+    pub fn rsync_relative<S, T>(&self, src: S, target: T) -> RecoveryResult<Option<String>>
     where
-        E: IntoIterator<Item: AsRef<Path>>,
         S: AsRef<Path>,
         T: AsRef<Path>,
     {
         rsync_relative(
             &self.logger,
-            excludes,
             src,
             target,
             self.require_confirmation,

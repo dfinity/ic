@@ -10,10 +10,10 @@ use crate::{
 use ic_base_types::SubnetId;
 use ic_metrics::MetricsRegistry;
 use ic_recovery::{
-    CUPS_DIR, IC_REGISTRY_LOCAL_STORE, Recovery,
+    Recovery,
     cli::consent_given,
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::rsync,
+    file_sync_helper::rsync_relative,
     registry_helper::VersionedRecoveryResult,
     steps::Step,
     util::parse_hex_str,
@@ -25,36 +25,49 @@ use ic_types::Height;
 use slog::{Logger, error, info};
 use url::Url;
 
-use std::net::IpAddr;
+use std::{net::IpAddr, path::PathBuf};
 
 pub(crate) struct CopyWorkDirStep {
     pub(crate) layout: Layout,
     pub(crate) logger: Logger,
+    pub(crate) data_includes: Vec<PathBuf>,
 }
 
 impl Step for CopyWorkDirStep {
     fn descr(&self) -> String {
         format!(
-            "Copying {} to {}. Excluding cups and registry local store",
-            self.layout.work_dir(TargetSubnet::Source).display(),
+            "Copying {} to {}.",
+            self.data_includes
+                .iter()
+                .map(|p| self
+                    .layout
+                    .work_dir(TargetSubnet::Source)
+                    .join(p)
+                    .display()
+                    .to_string())
+                .collect::<Vec<String>>()
+                .join(", "),
             self.layout.work_dir(TargetSubnet::Destination).display(),
         )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        rsync(
-            &self.logger,
-            vec![CUPS_DIR, IC_REGISTRY_LOCAL_STORE],
-            &format!("{}/", self.layout.work_dir(TargetSubnet::Source).display()),
-            &self
-                .layout
-                .work_dir(TargetSubnet::Destination)
-                .display()
-                .to_string(),
-            /*require_confirmation=*/ false,
-            /*key_file=*/ None,
-        )
-        .map(|_| ())
+        for include in &self.data_includes {
+            rsync_relative(
+                &self.logger,
+                // Note the "." for relative paths (see rsync manual for --relative)
+                &self
+                    .layout
+                    .work_dir(TargetSubnet::Source)
+                    .join(".")
+                    .join(include),
+                &self.layout.work_dir(TargetSubnet::Destination).join(""),
+                /*require_confirmation=*/ false,
+                /*key_file=*/ None,
+            )?;
+        }
+
+        Ok(())
     }
 }
 

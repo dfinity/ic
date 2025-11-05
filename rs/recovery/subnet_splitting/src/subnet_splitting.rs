@@ -18,7 +18,7 @@ use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_recovery::{
-    CUPS_DIR, NeuronArgs, Recovery, RecoveryArgs,
+    CUPS_DIR, IC_STATE_DIR, NeuronArgs, Recovery, RecoveryArgs,
     cli::{consent_given, read_optional, wait_for_confirmation},
     error::{RecoveryError, RecoveryResult},
     get_node_heights_from_metrics,
@@ -608,6 +608,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
             StepType::CopyDir => CopyWorkDirStep {
                 layout: self.layout.clone(),
                 logger: self.recovery.logger.clone(),
+                data_includes: vec![PathBuf::from(IC_STATE_DIR)],
             }
             .into(),
 

@@ -64,9 +64,8 @@ pub async fn download_binary(
 }
 
 /// If auto-retry is set to false, the user will be prompted for retries on rsync failures.
-pub fn rsync_with_retries<E, S, T>(
+pub fn rsync_with_retries<S, T>(
     logger: &Logger,
-    excludes: E,
     src: S,
     target: T,
     require_confirmation: bool,
@@ -75,14 +74,12 @@ pub fn rsync_with_retries<E, S, T>(
     max_retries: usize,
 ) -> RecoveryResult<Option<String>>
 where
-    E: IntoIterator<Item: AsRef<Path>> + Clone,
     S: AsRef<Path>,
     T: AsRef<Path>,
 {
     for _ in 0..max_retries {
         match rsync(
             logger,
-            excludes.clone(),
             src.as_ref(),
             target.as_ref(),
             require_confirmation,
@@ -107,76 +104,52 @@ where
 }
 
 /// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) and options
-/// `--archive --checksum --delete --partial --progress --no-g`. File and directory names part of
-/// `excludes` are discarded.
-pub fn rsync<E, S, T>(
+/// `--archive --checksum --delete --partial --progress --no-g`.
+pub fn rsync<S, T>(
     logger: &Logger,
-    excludes: E,
     src: S,
     target: T,
     require_confirmation: bool,
     key_file: Option<&PathBuf>,
 ) -> RecoveryResult<Option<String>>
 where
-    E: IntoIterator<Item: AsRef<Path>>,
     S: AsRef<Path>,
     T: AsRef<Path>,
 {
-    rsync_impl(
-        logger,
-        false,
-        excludes,
-        src,
-        target,
-        require_confirmation,
-        key_file,
-    )
+    rsync_impl(logger, false, src, target, require_confirmation, key_file)
 }
 
 /// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) with the
 /// same options as [rsync], but adding also the `--relative` option. See the manual for details on
-/// how this option affects the copy operation. File and directory names part of `excludes` are
-/// discarded.
-pub fn rsync_relative<E, S, T>(
+/// how this option affects the copy operation.
+pub fn rsync_relative<S, T>(
     logger: &Logger,
-    excludes: E,
     src: S,
     target: T,
     require_confirmation: bool,
     key_file: Option<&PathBuf>,
 ) -> RecoveryResult<Option<String>>
 where
-    E: IntoIterator<Item: AsRef<Path>>,
     S: AsRef<Path>,
     T: AsRef<Path>,
 {
-    rsync_impl(
-        logger,
-        true,
-        excludes,
-        src,
-        target,
-        require_confirmation,
-        key_file,
-    )
+    rsync_impl(logger, true, src, target, require_confirmation, key_file)
 }
 
 /// Internal implementation of [rsync] and [rsync_relative].
-fn rsync_impl<E, S, T>(
+fn rsync_impl<S, T>(
     logger: &Logger,
     relative: bool,
-    excludes: E,
     src: S,
     target: T,
     require_confirmation: bool,
     key_file: Option<&PathBuf>,
 ) -> RecoveryResult<Option<String>>
 where
-    E: IntoIterator<Item: AsRef<Path>>,
     S: AsRef<Path>,
     T: AsRef<Path>,
 {
-    let mut rsync = get_rsync_command(relative, excludes, src, target, key_file);
+    let mut rsync = get_rsync_command(relative, src, target, key_file);
 
     info!(logger, "");
     info!(logger, "About to execute:");
@@ -199,15 +172,8 @@ where
     }
 }
 
-fn get_rsync_command<E, S, T>(
-    relative: bool,
-    excludes: E,
-    src: S,
-    target: T,
-    key_file: Option<&PathBuf>,
-) -> Command
+fn get_rsync_command<S, T>(relative: bool, src: S, target: T, key_file: Option<&PathBuf>) -> Command
 where
-    E: IntoIterator<Item: AsRef<Path>>,
     S: AsRef<Path>,
     T: AsRef<Path>,
 {
@@ -222,11 +188,6 @@ where
     if relative {
         rsync.arg("--relative");
     }
-    rsync.args(
-        excludes
-            .into_iter()
-            .map(|e| format!("--exclude={}", e.as_ref().display())),
-    );
     rsync.arg(src.as_ref()).arg(target.as_ref());
     rsync.arg("-e").arg(ssh_helper::get_rsync_ssh_arg(key_file));
 
@@ -317,7 +278,6 @@ mod tests {
     fn get_rsync_command_test() {
         let rsync = get_rsync_command(
             true,
-            ["exclude1", "exclude2"],
             "/tmp/src",
             "/tmp/target",
             Some(&PathBuf::from("/tmp/key_file")),
@@ -334,8 +294,6 @@ mod tests {
                 "--progress",
                 "--no-g",
                 "--relative",
-                "--exclude=exclude1",
-                "--exclude=exclude2",
                 "/tmp/src",
                 "/tmp/target",
                 "-e",
