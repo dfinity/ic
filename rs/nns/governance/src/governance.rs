@@ -129,7 +129,7 @@ use maplit::hashmap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use std::cell::RefCell;
+use std::cell::Cell;
 use std::sync::Arc;
 use std::{
     borrow::Cow,
@@ -7890,38 +7890,37 @@ impl Governance {
         ))
     }
 
-    thread_local! {
-        static NRC_CALL_INFLIGHT: RefCell<bool> = const { RefCell::new(false) };
-        static NODE_PROVIDERS_REWARDS_CACHE: RefCell<Option<(u64, MonthlyNodeProviderRewards)>> = const { RefCell::new(None) };
-    }
     pub async fn get_node_providers_rewards_cached(
         &self,
     ) -> Result<MonthlyNodeProviderRewards, GovernanceError> {
-        let now = self.env.now();
-        let five_minutes_in_seconds = 5 * 60;
+        thread_local! {
+            static INFLIGHT: Cell<bool> = const { Cell::new(false) };
+            static CACHE: Cell<Option<(u64, MonthlyNodeProviderRewards)>> = const { Cell::new(None) };
+        }
 
-        if let Some((last_update_timestamp_seconds, rewards)) =
-            Self::NODE_PROVIDERS_REWARDS_CACHE.with(|cache| cache.borrow().clone())
-        {
+        let now = self.env.now();
+        const FIVE_MINUTES_IN_SECONDS: u64 = 5 * 60;
+
+        if let Some((last_update_timestamp_seconds, rewards)) = CACHE.get() {
             let time_since_last_update_seconds = now.saturating_sub(last_update_timestamp_seconds);
 
-            if time_since_last_update_seconds < five_minutes_in_seconds {
+            if time_since_last_update_seconds < FIVE_MINUTES_IN_SECONDS {
                 return Ok(rewards);
             }
         }
 
-        if Self::NRC_CALL_INFLIGHT.with_borrow(|i| i.clone()) {
+        if INFLIGHT.get() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::External,
                 "get_node_provider_rewards called while there is an inflight call to NRC",
             ));
         }
 
-        Self::NRC_CALL_INFLIGHT.replace(true);
+        INFLIGHT.set(true);
         let rewards = self.get_node_providers_rewards().await?;
-        Self::NRC_CALL_INFLIGHT.replace(false);
+        INFLIGHT.set(false);
 
-        Self::NODE_PROVIDERS_REWARDS_CACHE.replace(Some((now, rewards.clone())));
+        CACHE.set(Some((now, rewards.clone())));
 
         Ok(rewards)
     }
