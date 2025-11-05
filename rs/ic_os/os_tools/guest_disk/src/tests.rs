@@ -60,6 +60,7 @@ impl<'a> TestFixture<'a> {
         self.guestos_config = Self::create_guestos_config(true);
     }
 
+    #[allow(dead_code)]
     fn disable_sev(&mut self) {
         self.guestos_config = Self::create_guestos_config(false);
     }
