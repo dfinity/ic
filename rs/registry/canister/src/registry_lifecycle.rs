@@ -63,6 +63,8 @@ mod test {
         registry::{EncodedVersion, Version},
         registry_lifecycle::Registry,
     };
+    use prost::Message;
+
     fn stable_storage_from_registry(
         registry: &Registry,
         override_version: Option<Version>,
