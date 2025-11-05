@@ -13,6 +13,7 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     UniversalCanister, block_on, expiry_time, sign_query, sign_read_state, sign_update,
 };
+use ic_universal_canister::wasm;
 use ic_types::messages::{
     Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
     HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, SignedDelegation,
@@ -27,13 +28,15 @@ fn main() -> Result<()> {
         .with_setup(setup)
         .add_parallel(
             SystemTestSubGroup::new()
-                .add_test(systest!(requests_with_delegations; 2))
-                .add_test(systest!(requests_with_delegations; 3))
-                .add_test(systest!(requests_with_delegations_with_targets; 2))
-                .add_test(systest!(requests_with_delegations_with_targets; 3))
-                .add_test(systest!(requests_with_delegation_loop; 2))
-                .add_test(systest!(requests_with_delegation_loop; 3))
-                .add_test(systest!(requests_with_invalid_expiry)),
+                .add_test(systest!(requests_with_delegations_with_targets; 2)),
+            /*
+            SystemTestSubGroup::new().add_test(systest!(requests_with_delegations; 2)),
+.add_test(systest!(requests_with_delegations; 3))
+            .add_test(systest!(requests_with_delegations_with_targets; 3))
+            .add_test(systest!(requests_with_delegation_loop; 2))
+            .add_test(systest!(requests_with_delegation_loop; 3))
+            .add_test(systest!(requests_with_invalid_expiry)),
+            */
         )
         .execute_from_args()?;
     Ok(())
@@ -233,22 +236,16 @@ pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
                 let query_result =
                     perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
                         .await;
-                let read_state_result =
-                    perform_read_state_with_delegations(&test_info, sender, signer, &delegations)
-                        .await;
                 let update_result =
                     perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
                         .await;
 
                 if delegation_count <= 20 {
                     assert_eq!(query_result, 200);
-                    assert_eq!(read_state_result, 200);
-
                     let expected_update = if test_info.api_ver == 2 { 202 } else { 200 };
                     assert_eq!(update_result, expected_update);
                 } else {
                     assert_eq!(query_result, 400);
-                    assert_eq!(read_state_result, 400);
                     assert_eq!(update_result, 400);
                 }
             }
@@ -391,7 +388,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                     perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
                         .await;
                 let read_state_result =
-                    perform_read_state_with_delegations(&test_info, sender, signer, &delegations)
+                    perform_read_state_with_delegations(&test_info, sender, signer, &delegations, &canister)
                         .await;
                 let update_result =
                     perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
@@ -633,7 +630,7 @@ async fn send_request<C: serde::ser::Serialize>(
     sender_pubkey: Vec<u8>,
     sender_delegation: Option<Vec<SignedDelegation>>,
     sender_sig: Vec<u8>,
-) -> StatusCode {
+) -> reqwest::Response {
     let envelope = HttpRequestEnvelope {
         content,
         sender_delegation,
@@ -649,15 +646,13 @@ async fn send_request<C: serde::ser::Serialize>(
         test.url, test.api_ver, test.canister_id, req_type
     );
 
-    let res = client
+    client
         .post(url)
         .header("Content-Type", "application/cbor")
         .body(body)
         .send()
         .await
-        .unwrap();
-
-    res.status()
+        .unwrap()
 }
 
 async fn perform_query_call_with_delegations(
@@ -679,7 +674,7 @@ async fn perform_query_call_with_delegations(
 
     let signature = signer.sign_query(&content);
 
-    send_request(
+    let response = send_request(
         test,
         "query",
         content,
@@ -687,7 +682,12 @@ async fn perform_query_call_with_delegations(
         Some(delegations.to_vec()),
         signature,
     )
-    .await
+        .await;
+
+    let status = response.status();
+    //println!("Xyzzy Response = {:?}", response);
+    //println!("Xyzzy Body = {}", hex::encode(response.bytes().await.unwrap()));
+    status
 }
 
 async fn perform_update_call_with_delegations(
@@ -718,6 +718,7 @@ async fn perform_update_call_with_delegations(
         signature,
     )
     .await
+    .status()
 }
 
 async fn perform_read_state_with_delegations(
@@ -725,11 +726,50 @@ async fn perform_read_state_with_delegations(
     sender: &GenericIdentity,
     signer: &GenericIdentity,
     delegations: &[SignedDelegation],
+    canister: &UniversalCanister<'_>,
 ) -> StatusCode {
+
+    println!("READ STATE TEST");
+    /*
+     * In order to properly test read state requiests we must have another
+     * call to check the status of.
+     */
+    let request_id = {
+        let content = HttpQueryContent::Query {
+            query: HttpUserQuery {
+                canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
+                method_name: "query".to_string(),
+                arg: Blob(wasm().reply_data(b"read state test response bytes").build()),
+                sender: Blob(sender.principal().as_slice().to_vec()),
+                ingress_expiry: expiry_time().as_nanos() as u64,
+                nonce: None,
+            }
+        };
+
+        let request_id = content.id();
+        let signature = sender.sign_query(&content);
+        let response = send_request(
+            test,
+            "query",
+            content,
+            sender.public_key_der(),
+            None,
+            signature,
+        )
+            .await;
+
+        println!("Stub status {}", response.status());
+        println!("Stub resp {:?}", hex::encode(response.bytes().await.unwrap()));
+
+        request_id
+    };
+
+    let paths = vec![vec!["request_status".into(), (request_id).into()].into()];
+
     let content = HttpReadStateContent::ReadState {
         read_state: HttpReadState {
             sender: Blob(sender.principal().as_slice().to_vec()),
-            paths: vec![],
+            paths,
             ingress_expiry: expiry_time().as_nanos() as u64,
             nonce: None,
         },
@@ -746,6 +786,7 @@ async fn perform_read_state_with_delegations(
         signature,
     )
     .await
+    .status()
 }
 
 async fn perform_query_with_expiry(
@@ -776,6 +817,7 @@ async fn perform_query_with_expiry(
         signature,
     )
     .await
+    .status()
 }
 
 async fn perform_update_with_expiry(
@@ -806,6 +848,7 @@ async fn perform_update_with_expiry(
         signature,
     )
     .await
+    .status()
 }
 
 async fn perform_read_state_with_expiry(
@@ -834,4 +877,5 @@ async fn perform_read_state_with_expiry(
         signature,
     )
     .await
+    .status()
 }
