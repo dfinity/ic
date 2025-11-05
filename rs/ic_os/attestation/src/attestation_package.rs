@@ -4,6 +4,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use config_types::TrustedExecutionEnvironmentConfig;
 use ic_sev::guest::firmware::SevGuestFirmware;
 use sev::firmware::guest::AttestationReport;
+use sev::parser::ByteParser;
 use std::fmt::Debug;
 
 /// Generate an SEV Attestation Package based on the given SEV firmware,
