@@ -52,8 +52,6 @@ component_files = {
 
     # init
     Label("guestos/init/bootstrap-ic-node/bootstrap-ic-node.service"): "/etc/systemd/system/bootstrap-ic-node.service",
-    Label("guestos/init/mount-config/mount-config.sh"): "/opt/ic/bin/mount-config.sh",
-    Label("guestos/init/mount-config/mount-config.service"): "/etc/systemd/system/mount-config.service",
     Label("guestos/init/mount-config/maybe-disable-store-mounts.service"): "/etc/systemd/system/maybe-disable-store-mounts.service",
     Label("guestos/init/init-config/init-config.sh"): "/opt/ic/bin/init-config.sh",
     Label("guestos/init/init-config/init-config.service"): "/etc/systemd/system/init-config.service",
@@ -63,6 +61,7 @@ component_files = {
     Label("guestos/init/setup-encryption/override.conf"): "/etc/systemd/system/systemd-fsck@dev-mapper-var_crypt.service.d/override.conf",
     Label("guestos/init/setup-lvs/setup-lvs.service"): "/etc/systemd/system/setup-lvs.service",
     Label("guestos/init/setup-lvs/setup-lvs.sh"): "/opt/ic/bin/setup-lvs.sh",
+    Label("guestos/init/cleanup-config-bootstrap/cleanup-config-bootstrap.service"): "/etc/systemd/system/cleanup-config-bootstrap.service",
 
     # misc
     Label("misc/config/config-guestos.sh"): "/opt/ic/bin/config.sh",
