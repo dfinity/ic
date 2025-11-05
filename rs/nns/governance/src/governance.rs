@@ -1,6 +1,6 @@
 #![allow(deprecated)]
 use crate::{
-    are_nf_fund_proposals_disabled, decoder_config,
+    are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -27,6 +27,7 @@ use crate::{
         DateRangeFilter, latest_node_provider_rewards, list_node_provider_rewards,
         record_node_provider_rewards,
     },
+    pb,
     pb::{
         proposal_conversions::{convert_proposal, proposal_data_to_info},
         v1::{
@@ -74,6 +75,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use candid::{Decode, Encode};
+use chrono::NaiveDate;
 use cycles_minting_canister::{IcpXdrConversionRate, IcpXdrConversionRateCertifiedResponse};
 use disburse_maturity::initiate_maturity_disbursement;
 #[cfg(not(target_arch = "wasm32"))]
@@ -107,8 +109,12 @@ use ic_nns_governance_api::{
     proposal_validation,
     subnet_rental::SubnetRentalRequest,
 };
+use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
+};
+use ic_node_rewards_canister_api::providers_rewards::{
+    GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -4271,7 +4277,12 @@ impl Governance {
         // Acquire the lock before doing anything meaningful.
         self.minting_node_provider_rewards = true;
 
-        let monthly_node_provider_rewards = self.get_monthly_node_provider_rewards().await?;
+        let monthly_node_provider_rewards = if are_performance_based_rewards_enabled() {
+            self.get_node_providers_rewards().await?
+        } else {
+            self.get_monthly_node_provider_rewards().await?
+        };
+
         let _ = self
             .reward_node_providers(&monthly_node_provider_rewards.rewards)
             .await;
@@ -4333,6 +4344,28 @@ impl Governance {
                     )),
             }) => rewards,
             Some(_) => panic!("Should not be possible!"),
+        }
+    }
+
+    fn next_start_date_node_providers_rewards(&self) -> Result<DateUtc, GovernanceError> {
+        let latest_node_provider_rewards = self
+            .get_most_recent_monthly_node_provider_rewards()
+            .ok_or(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "No rewards found for the last month.",
+            ))?;
+
+        if let Some(end_date) = latest_node_provider_rewards.end_date {
+            let naive_date =
+                NaiveDate::from_ymd(end_date.year as i32, end_date.month, end_date.day);
+            let next_start_date = DateUtc::from(naive_date.succ());
+
+            Ok(next_start_date)
+        } else {
+            let next_start_date =
+                DateUtc::from_unix_timestamp_seconds(latest_node_provider_rewards.timestamp);
+
+            Ok(next_start_date)
         }
     }
 
@@ -7796,6 +7829,136 @@ impl Governance {
             })
     }
 
+    /// A helper for the Node Rewards Canister get_node_providers_rewards method
+    async fn get_node_providers_xdr_permyriad_rewards(
+        &self,
+        start_date: DateUtc,
+        end_date: DateUtc,
+    ) -> Result<BTreeMap<PrincipalId, u64>, GovernanceError> {
+        let response: Vec<u8> = self
+            .env
+            .call_canister_method(
+                NODE_REWARDS_CANISTER_ID,
+                "get_node_providers_rewards",
+                Encode!(&GetNodeProvidersRewardsRequest {
+                    from_day: start_date,
+                    to_day: end_date
+                })
+                .unwrap(),
+            )
+            .await
+            .map_err(|(code, msg)| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!(
+                        "Error calling 'get_node_providers_rewards': code: {code:?}, message: {msg}"
+                    ),
+                )
+            })?;
+
+        let response = Decode!(&response, GetNodeProvidersRewardsResponse).map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!(
+                    "Cannot decode return type from get_node_providers_rewards \
+                        as GetNodeProvidersRewardsResponse'. Error: {err}",
+                ),
+            )
+        })?;
+
+        if let Err(err_msg) = response {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Error calling 'get_node_providers_rewards': {err_msg}"),
+            ));
+        }
+
+        if let Ok(rewards) = response {
+            let rewards = rewards
+                .rewards_xdr_permyriad
+                .into_iter()
+                .map(|(principal, amount)| (PrincipalId::from(principal), amount))
+                .collect();
+            return Ok(rewards);
+        }
+
+        Err(GovernanceError::new_with_message(
+            ErrorType::Unspecified,
+            "get_node_providers_rewards returned empty response, \
+                which should be impossible.",
+        ))
+    }
+
+    /// Return the rewards that node providers should be awarded with.
+    ///
+    /// Fetches the map from node provider to XDR rewards valid between 'from' and 'to' boundaries from the
+    /// Node Rewards Canister, then fetches the average XDR to ICP conversion rate for
+    /// the last 30 days, then applies this conversion rate to convert each
+    /// node provider's XDR rewards to ICP.
+    pub async fn get_node_providers_rewards(
+        &self,
+    ) -> Result<MonthlyNodeProviderRewards, GovernanceError> {
+        let mut rewards = vec![];
+
+        let start_date = self.next_start_date_node_providers_rewards()?;
+        let now = self.env.now();
+
+        // Today we have collected up to and included node metrics of yesterday
+        // in the node rewards canister.
+        let end_date_timestamp_seconds = now.saturating_sub(ONE_DAY_SECONDS);
+        let end_date = DateUtc::from_unix_timestamp_seconds(end_date_timestamp_seconds);
+
+        // Maps node providers to their rewards in XDR
+        let rewards_per_node_provider = self
+            .get_node_providers_xdr_permyriad_rewards(start_date, end_date)
+            .await?;
+
+        // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
+        let icp_xdr_conversion_rate = self.get_average_icp_xdr_conversion_rate().await?.data;
+        let avg_xdr_permyriad_per_icp = icp_xdr_conversion_rate.xdr_permyriad_per_icp;
+
+        // Convert minimum_icp_xdr_rate to basis points for comparison with avg_xdr_permyriad_per_icp
+        let minimum_xdr_permyriad_per_icp = self
+            .economics()
+            .minimum_icp_xdr_rate
+            .saturating_mul(NetworkEconomics::ICP_XDR_RATE_TO_BASIS_POINT_MULTIPLIER);
+
+        let maximum_node_provider_rewards_e8s = self.economics().maximum_node_provider_rewards_e8s;
+
+        let xdr_permyriad_per_icp = max(avg_xdr_permyriad_per_icp, minimum_xdr_permyriad_per_icp);
+
+        // Iterate over all node providers, calculate their rewards, and append them to
+        // `rewards`
+        for np in &self.heap_data.node_providers {
+            if let Some(np_id) = &np.id {
+                let xdr_permyriad_reward = *rewards_per_node_provider.get(np_id).unwrap_or(&0);
+
+                if let Some(reward_node_provider) =
+                    get_node_provider_reward(np, xdr_permyriad_reward, xdr_permyriad_per_icp)
+                {
+                    rewards.push(reward_node_provider);
+                }
+            }
+        }
+
+        let xdr_conversion_rate = XdrConversionRate {
+            timestamp_seconds: icp_xdr_conversion_rate.timestamp_seconds,
+            xdr_permyriad_per_icp: icp_xdr_conversion_rate.xdr_permyriad_per_icp,
+        };
+
+        Ok(MonthlyNodeProviderRewards {
+            timestamp: now,
+            start_date: Some(pb::v1::DateUtc::try_from(start_date).expect("from date exists")),
+            end_date: Some(pb::v1::DateUtc::try_from(end_date).expect("to date exists")),
+            rewards,
+            xdr_conversion_rate: Some(xdr_conversion_rate.into()),
+            minimum_xdr_permyriad_per_icp: Some(minimum_xdr_permyriad_per_icp),
+            maximum_node_provider_rewards_e8s: Some(maximum_node_provider_rewards_e8s),
+            node_providers: self.heap_data.node_providers.clone(),
+            registry_version: None,
+        })
+    }
+
     /// Return the monthly rewards that node providers should be awarded
     ///
     /// Fetches the map from node provider to monthly XDR rewards from the
@@ -7803,7 +7966,7 @@ impl Governance {
     /// the last 30 days, then applies this conversion rate to convert each
     /// node provider's XDR rewards to ICP.
     pub async fn get_monthly_node_provider_rewards(
-        &mut self,
+        &self,
     ) -> Result<MonthlyNodeProviderRewards, GovernanceError> {
         let mut rewards = vec![];
 
@@ -7859,6 +8022,7 @@ impl Governance {
             maximum_node_provider_rewards_e8s: Some(maximum_node_provider_rewards_e8s),
             registry_version: Some(registry_version),
             node_providers: self.heap_data.node_providers.clone(),
+            ..Default::default()
         })
     }
 
@@ -7921,7 +8085,7 @@ impl Governance {
 
     /// A helper for the CMC's get_average_icp_xdr_conversion_rate method
     async fn get_average_icp_xdr_conversion_rate(
-        &mut self,
+        &self,
     ) -> Result<IcpXdrConversionRateCertifiedResponse, GovernanceError> {
         let cmc_response:
             Vec<u8> = self
