@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 set -e
 
@@ -36,8 +36,10 @@ download_images() {
     echo "Downloading HostOS upgrade image..."
     curl "$HOSTOS_UPGRADE_IMG" -o "$HOSTOS_UPGRADE_TAR" --fail --silent --show-error --clobber
 
-    echo "Downloading GuestOS image..."
-    curl "$GUESTOS_IMG" -o "$GUESTOS_TAR" --fail --silent --show-error --clobber
+    if [ -n "$GUESTOS_IMG" ]; then
+        echo "Downloading GuestOS image..."
+        curl "$GUESTOS_IMG" -o "$GUESTOS_TAR" --fail --silent --show-error --clobber
+    fi
 }
 
 setup_temp_mounts() {
@@ -53,6 +55,11 @@ install_new_hostos() {
 }
 
 install_new_guestos() {
+    if [ -z "$GUESTOS_IMG" ]; then
+        echo "No GuestOS image specified, skipping GuestOS upgrade."
+        return
+    fi
+
     echo "Installing GuestOS image..."
     mkdir -p "$GUESTOS_EXTRACT_DIR"
     tar -xavf "$GUESTOS_TAR" -C "$GUESTOS_EXTRACT_DIR"
@@ -155,11 +162,6 @@ if [ -z "$HOSTOS_UPGRADE_IMG" ]; then
     usage
     exit 2
 fi
-if [ -z "$GUESTOS_IMG" ]; then
-    echo "Missing required --guestos-img argument" >&2
-    usage
-    exit 2
-fi
 
 trap cleanup EXIT
 
@@ -176,7 +178,7 @@ target_alternative="$(/opt/ic/bin/manageboot.sh hostos target)"
 echo "Will update HostOS into: $target_alternative"
 mount_target_boot_partition "$target_alternative"
 
-# Read boot arguments from new GuestOS
+# Read boot arguments from new HostOS
 eval "$(cat "$TARGET_BOOT_PARTITION_MOUNT/boot_args")"
 boot_args_var=BOOT_ARGS_${target_alternative}
 

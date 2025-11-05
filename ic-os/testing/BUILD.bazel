@@ -14,9 +14,7 @@ all_component_files = component_files | {
 script = """
 components=$$(mktemp -d)
 trap 'rm -rf $$components' EXIT
-"""
-
-script += "".join([
+""" + "".join([
     "mkdir -p $$(dirname '$$components/{}')\n".format(target_path) +
     "install -m 0755 '$(execpath {})' '$$components/{}'\n".format(
         label,
