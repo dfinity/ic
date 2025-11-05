@@ -1,4 +1,4 @@
-use candid::{CandidType, Decode, Encode, Principal};
+use candid::{CandidType, Decode, Encode, Principal, Reserved};
 use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_management_canister_types::{CanisterLogRecord, CanisterSettings};
@@ -35,19 +35,19 @@ struct MigrationCanisterInitArgs {
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum ValidationError {
-    MigrationsDisabled,
-    RateLimited,
+    MigrationsDisabled(Reserved),
+    RateLimited(Reserved),
     ValidationInProgress { canister: Principal },
     MigrationInProgress { canister: Principal },
     CanisterNotFound { canister: Principal },
-    SameSubnet,
+    SameSubnet(Reserved),
     CallerNotController { canister: Principal },
     NotController { canister: Principal },
-    SourceNotStopped,
-    SourceNotReady,
-    TargetNotStopped,
-    TargetHasSnapshots,
-    SourceInsufficientCycles,
+    SourceNotStopped(Reserved),
+    SourceNotReady(Reserved),
+    TargetNotStopped(Reserved),
+    TargetHasSnapshots(Reserved),
+    SourceInsufficientCycles(Reserved),
     CallFailed { reason: String },
 }
 
@@ -240,7 +240,9 @@ async fn migrate_canister(
         )
         .await
         .unwrap();
-    Decode!(&res, Result<(), ValidationError>).unwrap()
+    Decode!(&res, Result<(), Option<ValidationError>>)
+        .unwrap()
+        .map_err(|err| err.unwrap())
 }
 
 async fn get_status(
@@ -518,8 +520,12 @@ async fn concurrent_migration(
         .unwrap();
     let raw_res1 = pic.await_call(msg_id1).await.unwrap();
     let raw_res2 = pic.await_call(msg_id2).await.unwrap();
-    let res1 = Decode!(&raw_res1, Result<(), ValidationError>).unwrap();
-    let res2 = Decode!(&raw_res2, Result<(), ValidationError>).unwrap();
+    let res1 = Decode!(&raw_res1, Result<(), Option<ValidationError>>)
+        .unwrap()
+        .map_err(|err| err.unwrap());
+    let res2 = Decode!(&raw_res2, Result<(), Option<ValidationError>>)
+        .unwrap()
+        .map_err(|err| err.unwrap());
 
     // One of the concurrent calls is a success and the other one is the expected validation error.
     assert!(res1.is_ok() || res2.is_ok());
@@ -614,7 +620,7 @@ async fn validation_fails_not_allowlisted() {
     let source = sources[0];
     let target = targets[0];
 
-    let Err(ValidationError::MigrationsDisabled) =
+    let Err(ValidationError::MigrationsDisabled(Reserved)) =
         migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
     else {
         panic!()
@@ -686,7 +692,7 @@ async fn validation_fails_same_canister() {
     let sender = source_controllers[0];
     let source = sources[0];
 
-    let Err(ValidationError::SameSubnet) = migrate_canister(
+    let Err(ValidationError::SameSubnet(Reserved)) = migrate_canister(
         &pic,
         sender,
         &MigrateCanisterArgs {
@@ -726,7 +732,7 @@ async fn validation_fails_same_subnet() {
         )
         .await;
 
-    let Err(ValidationError::SameSubnet) =
+    let Err(ValidationError::SameSubnet(Reserved)) =
         migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
     else {
         panic!()
@@ -831,7 +837,7 @@ async fn validation_fails_not_stopped() {
     pic.start_canister(source, Some(sender)).await.unwrap();
     assert!(matches!(
         migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
-        Err(ValidationError::SourceNotStopped)
+        Err(ValidationError::SourceNotStopped(Reserved))
     ));
 
     pic.stop_canister(source, Some(sender)).await.unwrap();
@@ -840,7 +846,7 @@ async fn validation_fails_not_stopped() {
     pic.start_canister(target, Some(sender)).await.unwrap();
     assert!(matches!(
         migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
-        Err(ValidationError::TargetNotStopped)
+        Err(ValidationError::TargetNotStopped(Reserved))
     ));
 }
 
@@ -869,7 +875,7 @@ async fn validation_fails_disabled() {
 
     assert!(matches!(
         migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
-        Err(ValidationError::MigrationsDisabled)
+        Err(ValidationError::MigrationsDisabled(Reserved))
     ));
 }
 
@@ -899,7 +905,7 @@ async fn validation_fails_snapshot() {
         .unwrap();
     assert!(matches!(
         migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
-        Err(ValidationError::TargetHasSnapshots)
+        Err(ValidationError::TargetHasSnapshots(Reserved))
     ));
 }
 
@@ -922,7 +928,7 @@ async fn validation_fails_insufficient_cycles() {
 
     assert!(matches!(
         migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
-        Err(ValidationError::SourceInsufficientCycles)
+        Err(ValidationError::SourceInsufficientCycles(Reserved))
     ));
 }
 
@@ -1248,7 +1254,7 @@ async fn parallel_migrations() {
         },
     )
     .await;
-    assert!(matches!(err, Err(ValidationError::RateLimited)));
+    assert!(matches!(err, Err(ValidationError::RateLimited(Reserved))));
 
     for _ in 0..10 {
         advance(&pic).await;
@@ -1308,10 +1314,12 @@ async fn parallel_validations() {
     let mut rate_limited_counter = 0;
     for msg_id in msg_ids.into_iter() {
         let res = pic.await_call(msg_id).await.unwrap();
-        let res = Decode!(&res, Result<(), ValidationError>).unwrap();
+        let res = Decode!(&res, Result<(), Option<ValidationError>>)
+            .unwrap()
+            .map_err(|err| err.unwrap());
         match res {
             Err(ValidationError::CallerNotController { .. }) => not_controller_counter += 1,
-            Err(ValidationError::RateLimited) => rate_limited_counter += 1,
+            Err(ValidationError::RateLimited(Reserved)) => rate_limited_counter += 1,
             _ => {
                 panic!()
             }
