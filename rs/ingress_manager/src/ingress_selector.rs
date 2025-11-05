@@ -158,7 +158,7 @@ impl IngressSelector for IngressManager {
                     wire_size_estimate: NumBytes::new(0),
                 };
             }
-            canister_count @ 1.. => wire_byte_limit.get() as usize / canister_count,
+            canister_count @ 1.. => memory_byte_limit.get() as usize / canister_count,
         };
 
         let mut messages_in_payload = vec![];
@@ -2222,12 +2222,24 @@ mod tests {
     }
 
     #[rstest]
+    #[case(true, 5, 2_000_000, 1)]
+    #[case(false, 5, 2_000_000, 1)]
+    #[case(true, 5, 1_000_000, 2)]
+    #[case(false, 5, 1_000_000, 1)]
+    #[case(true, 1, 1_000_000, 8)]
+    #[case(false, 1, 1_000_000, 4)]
+    #[case(true, 40, 25_000, 9)]
+    #[case(false, 40, 25_000, 5)]
+    #[trace]
     #[tokio::test]
-    async fn test_ordering_fairness(#[values(true, false)] hashes_in_blocks_enabled: bool) {
-        const WIRE_BYTES_LIMIT: NumBytes = NumBytes::new(ic_limits::MAX_INGRESS_BYTES_PER_BLOCK);
-        const CANISTERS_COUNT: u64 = 30;
-        const INITIAL_QUOTA: usize =
-            (ic_limits::MAX_INGRESS_BYTES_PER_BLOCK / CANISTERS_COUNT) as usize;
+    /// Tests that a single canister doesn't take too much of a block space
+    async fn test_ordering_fairness(
+        #[case] hashes_in_blocks_enabled: bool,
+        #[case] canister_count: u64,
+        #[case] ingress_message_size: usize,
+        #[case] max_expected_msgs_per_canister: usize,
+    ) {
+        const WIRE_BYTES_LIMIT: NumBytes = NumBytes::new(ic_limits::MAX_BLOCK_PAYLOAD_SIZE);
 
         let subnet_id = subnet_test_id(0);
         let registry = setup_registry(
@@ -2238,12 +2250,12 @@ mod tests {
 
         let mut payloads = Vec::new();
 
-        for canister_id in 0..CANISTERS_COUNT {
+        for canister_id in 0..canister_count {
             let canister_id = canister_test_id(canister_id);
             payloads.push(generate_ingress_with_params(
                 canister_id,
                 /* msg_count = */ 10,
-                /* bytes = */ INITIAL_QUOTA / 4,
+                ingress_message_size,
                 time + Duration::from_secs(30),
             ))
         }
@@ -2278,7 +2290,7 @@ mod tests {
                 );
                 let msgs: Vec<SignedIngress> = payload.payload.try_into().unwrap();
 
-                for i in 0..CANISTERS_COUNT {
+                for i in 0..canister_count {
                     let canister_id = canister_test_id(i);
                     let canister_messages_count = msgs
                         .iter()
@@ -2286,8 +2298,11 @@ mod tests {
                         .count();
 
                     assert!(
-                        3 <= canister_messages_count && canister_messages_count <= 4,
-                        "{canister_messages_count} is not between 3 and 4"
+                        max_expected_msgs_per_canister - 1 <= canister_messages_count
+                            && canister_messages_count <= max_expected_msgs_per_canister,
+                        "{canister_messages_count} is not between {} and {}",
+                        max_expected_msgs_per_canister - 1,
+                        max_expected_msgs_per_canister,
                     );
                 }
             },
