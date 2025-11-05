@@ -7,8 +7,6 @@ set -eo pipefail
 source /opt/ic/bin/logging.sh
 source /opt/ic/bin/metrics.sh
 
-SCRIPT="$(basename $0)[$$]"
-
 # List all block devices that could potentially contain the ic-bootstrap.tar configuration,
 # i.e. "removable" devices, devices with the serial "config"
 # or devices containing a filesystem with the label "CONFIG".
