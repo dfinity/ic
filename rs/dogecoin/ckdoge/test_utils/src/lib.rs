@@ -260,11 +260,7 @@ pub fn into_outpoint(
 pub fn parse_dogecoin_address(network: Network, tx_out: &TxOut) -> bitcoin::dogecoin::Address {
     bitcoin::dogecoin::Address::from_script(
         tx_out.script_pubkey.as_script(),
-        match network {
-            Network::Mainnet => bitcoin::dogecoin::Network::Dogecoin,
-            Network::Testnet => bitcoin::dogecoin::Network::Testnet,
-            Network::Regtest => bitcoin::dogecoin::Network::Regtest,
-        },
+        into_rust_dogecoin_network(network),
     )
     .unwrap_or_else(|e| {
         panic!(
@@ -272,4 +268,12 @@ pub fn parse_dogecoin_address(network: Network, tx_out: &TxOut) -> bitcoin::doge
             tx_out.script_pubkey
         )
     })
+}
+
+pub fn into_rust_dogecoin_network(network: Network) -> bitcoin::dogecoin::Network {
+    match network {
+        Network::Mainnet => bitcoin::dogecoin::Network::Dogecoin,
+        Network::Testnet => bitcoin::dogecoin::Network::Testnet,
+        Network::Regtest => bitcoin::dogecoin::Network::Regtest,
+    }
 }

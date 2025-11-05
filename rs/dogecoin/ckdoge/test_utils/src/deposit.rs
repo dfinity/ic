@@ -4,10 +4,9 @@
 //! * 1 public method for each user interaction.
 //! * Helper struct with only 1 or 2 public methods for auto-completion to become trivial.
 //! * Prefix in method's name (e.g. `minter_` or `dogecoin_`) indicates the involved component.
-use crate::Setup;
+use crate::{Setup, into_rust_dogecoin_network};
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
-use ic_ckdoge_minter::lifecycle::init::Network;
 use ic_ckdoge_minter::{
     EventType, MintMemo, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus, memo_encode,
 };
@@ -48,11 +47,7 @@ impl<S> DepositFlowStart<S> {
         let network = self.setup.as_ref().network();
         let deposit_address = bitcoin::dogecoin::Address::from_str(&deposit_address)
             .expect("BUG: invalid Dogecoin address")
-            .require_network(match network {
-                Network::Mainnet => bitcoin::dogecoin::Network::Dogecoin,
-                Network::Testnet => bitcoin::dogecoin::Network::Testnet,
-                Network::Regtest => bitcoin::dogecoin::Network::Regtest,
-            })
+            .require_network(into_rust_dogecoin_network(network))
             .unwrap_or_else(|e| panic!("BUG: address is not valid for network {network}: {e}",));
 
         DogecoinDepositTransactionFlow {
