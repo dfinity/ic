@@ -1,5 +1,9 @@
 {
+<<<<<<< HEAD
   "checksum": "0537548326e70188417ddb8b3353274771cc3fa048206ddca2abd13d73f3e3bf",
+=======
+  "checksum": "f22191ba3ba4ab3f93945cabbeca8443056ac1d74b08b956f9400e3dd9e5368f",
+>>>>>>> master
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14249,44 +14253,6 @@
       ],
       "license_file": null
     },
-    "codicon 3.0.0": {
-      "name": "codicon",
-      "version": "3.0.0",
-      "package_url": "https://github.com/psilocybin/codicon",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/codicon/3.0.0/download",
-          "sha256": "12170080f3533d6f09a19f81596f836854d0fa4867dc32c8172b8474b4e9de61"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "codicon",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "codicon",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "3.0.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE.txt"
-    },
     "colorchoice 1.0.0": {
       "name": "colorchoice",
       "version": "1.0.0",
@@ -21004,7 +20970,11 @@
               "target": "ethnum"
             },
             {
-              "id": "evm_rpc_types 2.0.0",
+              "id": "evm_rpc_client 0.2.0",
+              "target": "evm_rpc_client"
+            },
+            {
+              "id": "evm_rpc_types 3.0.0",
               "target": "evm_rpc_types"
             },
             {
@@ -21381,6 +21351,10 @@
               "target": "maxminddb"
             },
             {
+              "id": "memchr 2.7.4",
+              "target": "memchr"
+            },
+            {
               "id": "memmap2 0.9.5",
               "target": "memmap2"
             },
@@ -21602,10 +21576,6 @@
               "target": "ratelimit"
             },
             {
-              "id": "raw-cpuid 11.5.0",
-              "target": "raw_cpuid"
-            },
-            {
               "id": "rayon 1.10.0",
               "target": "rayon"
             },
@@ -21758,7 +21728,7 @@
               "target": "serde_yaml"
             },
             {
-              "id": "sev 6.2.1",
+              "id": "sev 7.1.0",
               "target": "sev"
             },
             {
@@ -25846,14 +25816,98 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "evm_rpc_types 2.0.0": {
-      "name": "evm_rpc_types",
-      "version": "2.0.0",
+    "evm_rpc_client 0.2.0": {
+      "name": "evm_rpc_client",
+      "version": "0.2.0",
       "package_url": "https://github.com/dfinity/evm-rpc-canister",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_types/2.0.0/download",
-          "sha256": "5c9ed339a043ac9c0031bffdd89155d34b3d76f169a92eee16a3d5a5a8ca1bfc"
+          "url": "https://static.crates.io/crates/evm_rpc_client/0.2.0/download",
+          "sha256": "94f29eabef9267a8e6c416ad89d6b36d5ec9be5e6ffd143bd1b4514cfc7cfb9e"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "evm_rpc_client",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "evm_rpc_client",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.17",
+              "target": "candid"
+            },
+            {
+              "id": "evm_rpc_types 3.0.0",
+              "target": "evm_rpc_types"
+            },
+            {
+              "id": "ic-cdk 0.18.7",
+              "target": "ic_cdk"
+            },
+            {
+              "id": "ic-error-types 0.2.0",
+              "target": "ic_error_types"
+            },
+            {
+              "id": "serde 1.0.219",
+              "target": "serde"
+            },
+            {
+              "id": "serde_json 1.0.132",
+              "target": "serde_json"
+            },
+            {
+              "id": "strum 0.27.1",
+              "target": "strum"
+            },
+            {
+              "id": "thiserror 2.0.12",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.89",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.2.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "evm_rpc_types 3.0.0": {
+      "name": "evm_rpc_types",
+      "version": "3.0.0",
+      "package_url": "https://github.com/dfinity/evm-rpc-canister",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/evm_rpc_types/3.0.0/download",
+          "sha256": "bd456f71555aa2a0d99637037b30cd3d9d2899b8cf39d3dce21e248989d6f132"
         }
       },
       "targets": [
@@ -25921,7 +25975,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -69039,54 +69093,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde-big-array 0.5.1": {
-      "name": "serde-big-array",
-      "version": "0.5.1",
-      "package_url": "https://github.com/est31/serde-big-array",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/serde-big-array/0.5.1/download",
-          "sha256": "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "serde_big_array",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "serde_big_array",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.5.1"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "serde-bytes-repr 0.1.5": {
       "name": "serde-bytes-repr",
       "version": "0.1.5",
@@ -70230,14 +70236,14 @@
       ],
       "license_file": null
     },
-    "sev 6.2.1": {
+    "sev 7.1.0": {
       "name": "sev",
-      "version": "6.2.1",
+      "version": "7.1.0",
       "package_url": "https://github.com/virtee/sev",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/sev/6.2.1/download",
-          "sha256": "1750ba11a6a6bba3c220da714caa0226aa34e417dce3975d2953062240717dea"
+          "url": "https://static.crates.io/crates/sev/7.1.0/download",
+          "sha256": "c2ff74d7e7d1cc172f3a45adec74fbeee928d71df095b85aaaf66eb84e1e31e6"
         }
       },
       "targets": [
@@ -70285,10 +70291,6 @@
               "target": "base64"
             },
             {
-              "id": "bincode 1.3.3",
-              "target": "bincode"
-            },
-            {
               "id": "bitfield 0.19.1",
               "target": "bitfield"
             },
@@ -70299,10 +70301,6 @@
             {
               "id": "byteorder 1.5.0",
               "target": "byteorder"
-            },
-            {
-              "id": "codicon 3.0.0",
-              "target": "codicon"
             },
             {
               "id": "dirs 6.0.0",
@@ -70329,19 +70327,7 @@
               "target": "rsa"
             },
             {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde-big-array 0.5.1",
-              "target": "serde_big_array"
-            },
-            {
-              "id": "serde_bytes 0.11.15",
-              "target": "serde_bytes"
-            },
-            {
-              "id": "sev 6.2.1",
+              "id": "sev 7.1.0",
               "target": "build_script_build"
             },
             {
@@ -70371,7 +70357,7 @@
           }
         },
         "edition": "2018",
-        "version": "6.2.1"
+        "version": "7.1.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -94221,7 +94207,8 @@
     "escargot 0.5.7",
     "ethers-core 2.0.8",
     "ethnum 1.3.2",
-    "evm_rpc_types 2.0.0",
+    "evm_rpc_client 0.2.0",
+    "evm_rpc_types 3.0.0",
     "exec 0.3.1",
     "eyre 0.6.8",
     "ff 0.12.1",
@@ -94316,6 +94303,7 @@
     "macaddr 1.0.1",
     "maplit 1.0.2",
     "maxminddb 0.24.0",
+    "memchr 2.7.4",
     "memmap2 0.9.5",
     "metrics-proxy 0.1.0",
     "minicbor 0.19.1",
@@ -94374,7 +94362,6 @@
     "rand_distr 0.4.3",
     "rand_pcg 0.3.1",
     "ratelimit 0.9.1",
-    "raw-cpuid 11.5.0",
     "rayon 1.10.0",
     "rcgen 0.13.1",
     "regex 1.11.1",
@@ -94415,7 +94402,7 @@
     "serde_regex 1.1.0",
     "serde_with 1.14.0",
     "serde_yaml 0.9.34+deprecated",
-    "sev 6.2.1",
+    "sev 7.1.0",
     "sha2 0.10.9",
     "sha3 0.10.8",
     "signal-hook 0.3.17",

@@ -1,9 +1,10 @@
 use crate::util::{expiry_time, sign_query, sign_update};
 
+use super::sign_read_state;
 use candid::{CandidType, Deserialize, Principal};
 use canister_test::PrincipalId;
-use ic_agent::identity::{BasicIdentity, Identity};
-use ic_agent::{Agent, agent::EnvelopeContent};
+use ic_agent::Agent;
+use ic_agent::identity::BasicIdentity;
 use ic_crypto_tree_hash::Path;
 use ic_types::Time;
 use ic_types::messages::{
@@ -236,11 +237,11 @@ impl AgentWithDelegation<'_> {
                 ingress_expiry: expiry_time().as_nanos() as u64,
             },
         };
-        let sig_blob = sign_read_state(&content, self.delegation_identity);
+        let sig = sign_read_state(&content, self.delegation_identity);
         let read_state_envelope: HttpRequestEnvelope<HttpReadStateContent> = HttpRequestEnvelope {
             content,
             sender_pubkey: Some(Blob(self.pubkey.clone().into_vec())),
-            sender_sig: Some(sig_blob),
+            sender_sig: Some(Blob(sig.signature.unwrap())),
             sender_delegation: Some(vec![ic_types::messages::SignedDelegation::new(
                 ic_types::messages::Delegation::new(
                     self.signed_delegation.delegation.pubkey.clone().into_vec(),
@@ -405,29 +406,4 @@ pub async fn install_universal_canister(
         .map_err(|err| format!("Couldn't install universal canister: {err}"))
         .unwrap();
     canister_id
-}
-
-pub fn sign_read_state(content: &HttpReadStateContent, identity: &BasicIdentity) -> Blob {
-    use ic_agent::hash_tree::Label;
-    use std::ops::Deref;
-    let HttpReadStateContent::ReadState {
-        read_state: content,
-    } = content;
-    let paths = content
-        .paths
-        .iter()
-        .map(|path| {
-            path.deref()
-                .iter()
-                .map(|label| Label::from_bytes(label.as_bytes()))
-                .collect::<Vec<_>>()
-        })
-        .collect();
-    let msg = EnvelopeContent::ReadState {
-        paths,
-        ingress_expiry: content.ingress_expiry,
-        sender: Principal::from_slice(&content.sender),
-    };
-    let sig = identity.sign(&msg).unwrap();
-    Blob(sig.signature.unwrap())
 }

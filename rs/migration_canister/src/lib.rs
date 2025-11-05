@@ -45,6 +45,10 @@ const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
 pub enum ValidationError {
     MigrationsDisabled,
     RateLimited,
+    #[strum(to_string = "ValidationError::ValidationInProgress {{ canister: {canister} }}")]
+    ValidationInProgress {
+        canister: Principal,
+    },
     #[strum(to_string = "ValidationError::MigrationInProgress {{ canister: {canister} }}")]
     MigrationInProgress {
         canister: Principal,

@@ -94,6 +94,7 @@ DEPENDENCIES = [
     "@crate_index//:build-info",
     "@crate_index//:bytes",
     "@crate_index//:candid",
+    "@crate_index//:chrono_canisters",
     "@crate_index//:comparable",
     "@crate_index//:dyn-clone",
     "@crate_index//:futures",

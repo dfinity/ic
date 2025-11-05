@@ -2410,12 +2410,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codicon"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12170080f3533d6f09a19f81596f836854d0fa4867dc32c8172b8474b4e9de61"
-
-[[package]]
 name = "colorchoice"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3582,6 +3576,7 @@ dependencies = [
  "escargot",
  "ethers-core",
  "ethnum",
+ "evm_rpc_client",
  "evm_rpc_types",
  "exec",
  "eyre",
@@ -3677,6 +3672,7 @@ dependencies = [
  "macaddr",
  "maplit",
  "maxminddb 0.24.0",
+ "memchr",
  "memmap2 0.9.5",
  "metrics-proxy",
  "minicbor",
@@ -3735,7 +3731,6 @@ dependencies = [
  "rand_distr",
  "rand_pcg 0.3.1",
  "ratelimit",
- "raw-cpuid",
  "rayon",
  "rcgen",
  "regex",
@@ -4478,10 +4473,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "evm_rpc_types"
-version = "2.0.0"
+name = "evm_rpc_client"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c9ed339a043ac9c0031bffdd89155d34b3d76f169a92eee16a3d5a5a8ca1bfc"
+checksum = "94f29eabef9267a8e6c416ad89d6b36d5ec9be5e6ffd143bd1b4514cfc7cfb9e"
+dependencies = [
+ "async-trait",
+ "candid",
+ "evm_rpc_types",
+ "ic-cdk",
+ "ic-error-types",
+ "serde",
+ "serde_json",
+ "strum 0.27.1",
+ "thiserror 2.0.12",
+]
+
+[[package]]
+name = "evm_rpc_types"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd456f71555aa2a0d99637037b30cd3d9d2899b8cf39d3dce21e248989d6f132"
 dependencies = [
  "candid",
  "canlog",
@@ -11536,15 +11548,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-big-array"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "serde-bytes-repr"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11761,16 +11764,14 @@ dependencies = [
 
 [[package]]
 name = "sev"
-version = "6.2.1"
+version = "7.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1750ba11a6a6bba3c220da714caa0226aa34e417dce3975d2953062240717dea"
+checksum = "c2ff74d7e7d1cc172f3a45adec74fbeee928d71df095b85aaaf66eb84e1e31e6"
 dependencies = [
  "base64 0.22.1",
- "bincode",
  "bitfield",
  "bitflags 2.9.0",
  "byteorder",
- "codicon",
  "dirs 6.0.0",
  "hex",
  "iocuddle",
@@ -11778,9 +11779,6 @@ dependencies = [
  "libc",
  "p384",
  "rsa",
- "serde",
- "serde-big-array",
- "serde_bytes",
  "sha2 0.10.9",
  "static_assertions",
  "uuid",

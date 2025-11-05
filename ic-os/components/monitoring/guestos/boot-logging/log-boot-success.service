@@ -1,0 +1,15 @@
+[Unit]
+Description=GuestOS boot success monitoring service
+# Only activate the success if multi-user.service was reached successfully
+After=multi-user.target
+Requires=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Print success message to serial output which will be picked up by HostOS
+# The string is expected by guest_vm_runner (GUESTOS_BOOT_SUCCESS_MARKER)
+ExecStart=bash -c 'echo "GUESTOS BOOT SUCCESS" > /dev/ttyS0'
+
+[Install]
+WantedBy=multi-user.target
