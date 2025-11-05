@@ -5457,6 +5457,7 @@ dependencies = [
  "ic_sev",
  "linux_kernel_command_line",
  "macaddr",
+ "memchr",
  "nix 0.24.3",
  "regex",
  "systemd",

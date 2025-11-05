@@ -99,6 +99,8 @@ component_files = {
     Label("monitoring/guestos/boot-metrics/boot-metrics.sh"): "/opt/ic/bin/boot-metrics.sh",
     Label("monitoring/guestos/boot-metrics/boot-metrics.service"): "/etc/systemd/system/boot-metrics.service",
     Label("monitoring/guestos/boot-metrics/boot-metrics.timer"): "/etc/systemd/system/boot-metrics.timer",
+    Label("monitoring/guestos/boot-logging/log-boot-failure.service"): "/etc/systemd/system/log-boot-failure.service",
+    Label("monitoring/guestos/boot-logging/log-boot-success.service"): "/etc/systemd/system/log-boot-success.service",
     Label("monitoring/guestos/metrics_tool.service"): "/etc/systemd/system/metrics_tool.service",
     Label("monitoring/guestos/metrics_tool.timer"): "/etc/systemd/system/metrics_tool.timer",
     Label("monitoring/node_exporter/node_exporter.crt"): "/etc/node_exporter/node_exporter.crt",
