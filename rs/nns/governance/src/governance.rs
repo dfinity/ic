@@ -7891,6 +7891,7 @@ impl Governance {
     }
 
     thread_local! {
+        static NRC_CALL_INFLIGHT: RefCell<bool> = const { RefCell::new(false) };
         static NODE_PROVIDERS_REWARDS_CACHE: RefCell<Option<(u64, MonthlyNodeProviderRewards)>> = const { RefCell::new(None) };
     }
     pub async fn get_node_providers_rewards_cached(
@@ -7909,10 +7910,18 @@ impl Governance {
             }
         }
 
+        if Self::NRC_CALL_INFLIGHT.with_borrow(|i| i.clone()) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                "get_node_provider_rewards called while there is an inflight call to NRC",
+            ));
+        }
+
+        Self::NRC_CALL_INFLIGHT.replace(true);
         let rewards = self.get_node_providers_rewards().await?;
-        Self::NODE_PROVIDERS_REWARDS_CACHE.with(|cache| {
-            cache.replace(Some((now, rewards.clone())));
-        });
+        Self::NRC_CALL_INFLIGHT.replace(false);
+
+        Self::NODE_PROVIDERS_REWARDS_CACHE.replace(Some((now, rewards.clone())));
 
         Ok(rewards)
     }
