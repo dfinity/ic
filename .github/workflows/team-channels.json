@@ -4,7 +4,6 @@
     "cross-chain-team": "eng-cross-chain-prs",
     "crypto-team": "eng-crypto-mr",
     "DRE": "eng-release-bots",
-    "execution": "eng-dsm-prs",
     "FinInt": "eng-fi-mrs",
     "ic-support": "ic-support-notifications",
     "ic-interface-owners": "interface-owners",
