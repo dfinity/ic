@@ -1,0 +1,7 @@
+[package]
+name = "ic-consensus-features"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
