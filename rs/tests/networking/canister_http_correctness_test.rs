@@ -305,12 +305,11 @@ fn no_data_certificate_in_transform_function(env: TestEnv) {
 
     let response = response.expect("Http call should succeed");
 
-    assert_eq!(response.status, 200);
-    assert_eq!(response.headers.len(), 0, "Headers: {:?}", response.headers);
-    assert_eq!(
-        response.body.as_str(),
-        "false", /* data_certificate().is_some() */
-    );
+    assert_eq!(response.headers.len(), 2, "Headers: {:?}", response.headers);
+    assert_eq!(response.headers[0].0, "data_certificate_present");
+    assert_eq!(response.headers[0].1, "false");
+    assert_eq!(response.headers[1].0, "in_replicated_execution");
+    assert_eq!(response.headers[1].1, "true");
 }
 
 fn test_non_existent_transform_function(env: TestEnv) {
