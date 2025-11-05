@@ -255,15 +255,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
         }
         match step_type {
             StepType::DownloadConsensusPool => {
-                // We could pick a node with highest finalization and CUP height automatically, but
-                // we might have a preference between nodes with same heights.
-                print_height_info(
-                    &self.logger,
-                    &self.recovery.registry_helper,
-                    self.params.subnet_id,
-                );
-
                 if self.params.download_pool_node.is_none() {
+                    // We could pick a node with highest finalization and CUP height automatically,
+                    // but we might have a preference between nodes with same heights.
+                    print_height_info(
+                        &self.logger,
+                        &self.recovery.registry_helper,
+                        self.params.subnet_id,
+                    );
+
                     self.params.download_pool_node = read_optional(
                         &self.logger,
                         "Enter consensus pool download IP (backup access required):",
