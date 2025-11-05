@@ -98,8 +98,8 @@ proptest! {
                 assert!(!payload.payload.is_empty());
 
                 // Check the size explicitly
-                assert!((payload.payload.total_ids_size_estimate().get() as u64) < MAX_BLOCK_SIZE);
-                assert!((payload.payload.total_messages_size_estimate().get() as u64) < MAX_INGRESS_BYTES_PER_BLOCK);
+                assert!(payload.payload.total_ids_size_estimate().get() < MAX_BLOCK_SIZE);
+                assert!(payload.payload.total_messages_size_estimate().get() < MAX_INGRESS_BYTES_PER_BLOCK);
                 assert!(payload.wire_size_estimate.get() < MAX_BLOCK_SIZE);
 
                 // Any payload generated should pass verification.

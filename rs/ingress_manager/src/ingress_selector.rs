@@ -202,7 +202,7 @@ impl IngressSelector for IngressManager {
                     };
 
                     let (ingress_wire_size, ingress_memory_size) =
-                        self.message_size_estimates(&ingress);
+                        self.message_size_estimates(ingress);
 
                     // Break criterion #1: global byte limit
                     if accumulated_wire_size + ingress_wire_size > wire_byte_limit
