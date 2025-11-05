@@ -65,12 +65,6 @@ mod test {
         registry::{EncodedVersion, Version},
         registry_lifecycle::Registry,
     };
-    use ic_base_types::PrincipalId;
-    use ic_registry_transport::insert;
-    use itertools::enumerate;
-    use maplit::btreemap;
-    use std::str::FromStr;
-
     fn stable_storage_from_registry(
         registry: &Registry,
         override_version: Option<Version>,
