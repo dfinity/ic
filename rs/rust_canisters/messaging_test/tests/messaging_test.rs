@@ -157,6 +157,6 @@ fn smoke_test() {
                 },
             );
         }
-        _ => unreachable!("the first call did not conclude successfully"),
+        _ => unreachable!("the second call did not conclude successfully"),
     }
 }
