@@ -30,10 +30,7 @@ pub fn canister_post_upgrade(
 
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
-        let mutations: Vec<_> = fill_node_operators_max_rewardable_nodes(registry)
-            .into_iter()
-            .chain(migrate_xph6u_nodes_to_type0(registry))
-            .collect();
+        let mutations: Vec<_> = vec![];
 
         if mutations.is_empty() {
             0 // No mutations required for this data migration.
@@ -68,66 +65,6 @@ pub fn canister_post_upgrade(
             registry.latest_version()
         );
     }
-}
-
-fn migrate_xph6u_nodes_to_type0(registry: &Registry) -> Vec<RegistryMutation> {
-    let mut mutations = Vec::new();
-    // DFINITY node operator with 28 nodes
-    let target_node_operator_id =
-        PrincipalId::from_str("xph6u-z3z2t-s7hh7-gtlxh-bbgbx-aatlm-eab4o-bsank-nqruh-3ub4q-sae")
-            .unwrap();
-
-    for (id, mut record) in
-        get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX).into_iter()
-    {
-        let node_operator_id = PrincipalId::try_from(&record.node_operator_id).unwrap();
-        let Some(some_reward_type) = record.node_reward_type else {
-            // If the node does not have a node_reward_type, we skip it.
-            continue;
-        };
-        let node_reward_type =
-            NodeRewardType::try_from(some_reward_type).expect("Invalid node_reward_type value");
-
-        if node_operator_id == target_node_operator_id && node_reward_type != NodeRewardType::Type0
-        {
-            record.node_reward_type = Some(NodeRewardType::Type0 as i32);
-            let node_id = NodeId::from(PrincipalId::from_str(&id).unwrap());
-            mutations.push(update(
-                make_node_record_key(node_id),
-                record.encode_to_vec(),
-            ));
-        }
-    }
-
-    mutations
-}
-
-fn fill_node_operators_max_rewardable_nodes(registry: &Registry) -> Vec<RegistryMutation> {
-    let mut mutations = Vec::new();
-    let max_rewardable_nodes_mapping = &MAX_REWARDABLE_NODES_MAPPING;
-
-    for (_, mut record) in
-        get_key_family::<NodeOperatorRecord>(registry, NODE_OPERATOR_RECORD_KEY_PREFIX).into_iter()
-    {
-        let node_operator_id = PrincipalId::try_from(&record.node_operator_principal_id).unwrap();
-        if !&record.max_rewardable_nodes.is_empty() {
-            continue;
-        }
-        if let Some(max_rewardable_nodes) =
-            max_rewardable_nodes_mapping.get(&node_operator_id).cloned()
-        {
-            record.max_rewardable_nodes = max_rewardable_nodes
-                .into_iter()
-                .map(|(node_reward_type, count)| (node_reward_type.to_string(), count))
-                .collect();
-            mutations.push(update(
-                make_node_operator_record_key(node_operator_id),
-                record.encode_to_vec(),
-            ));
-        }
-    }
-
-    mutations
 }
 
 #[cfg(test)]
