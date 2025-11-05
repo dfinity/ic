@@ -4262,22 +4262,36 @@ impl Governance {
         }
     }
 
-    /// Mint and transfer monthly node provider rewards
+    /// Mint and transfer monthly node provider rewards.
+    ///
+    /// This also returns Ok when another call is in progress. In this case, Ok
+    /// is returned IMMEDIATELY, i.e. does not wait until the work is actually
+    /// done before returnning.
     async fn mint_monthly_node_provider_rewards(&mut self) -> Result<(), GovernanceError> {
-        // Return Err if another call is already in progress.
+        // Return immediately if another call is already in progress.
         thread_local! {
             static LOCK: RefCell<Option<u64>> = const { RefCell::new(None) };
         }
         let release_on_drop = ic_nervous_system_lock::acquire(&LOCK, self.env.now());
         if let Err(earlier_call_start_timestamp) = release_on_drop {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::Unavailable,
-                format!(
-                    "Another mint_monthly_node_provider_rewards call (started at {} \
-                     seconds since the UNIX epoch) is already in progress.",
-                    earlier_call_start_timestamp,
-                ),
-            ));
+            // Log, but not too frequently (at most once every 5 minutes).
+            thread_local! {
+                static LAST_LOGGED_UNAVAILABLE_TIMESTAMP_SECONDS: RefCell<u64> = const { RefCell::new(0) };
+            }
+            let time_since_logged_seconds = LAST_LOGGED_UNAVAILABLE_TIMESTAMP_SECONDS
+                .with(|t| self.env.now().saturating_sub(*t.borrow()));
+            if time_since_logged_seconds > 5 * 60 {
+                println!(
+                    "{}Another mint_monthly_node_provider_rewards call (started at \
+                     {} seconds since the UNIX epoch) is already in progress.",
+                    LOG_PREFIX, earlier_call_start_timestamp,
+                );
+                LAST_LOGGED_UNAVAILABLE_TIMESTAMP_SECONDS.with(|t| {
+                    *t.borrow_mut() = self.env.now();
+                });
+            }
+
+            return Ok(());
         }
 
         let monthly_node_provider_rewards = if are_performance_based_rewards_enabled() {
@@ -6535,6 +6549,7 @@ impl Governance {
     pub fn get_ledger(&self) -> Arc<dyn IcpLedger + Send + Sync> {
         self.ledger.clone()
     }
+
     /// Triggers a reward distribution event if enough time has passed since
     /// the last one. This is intended to be called by a cron
     /// process.
