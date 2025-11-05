@@ -2227,7 +2227,7 @@ struct ProposeToAddNodeOperatorCmd {
     ///
     /// Example:
     /// '{ "type1.1": 10, "type3.1": 24 }'
-    #[clap(long)]
+    #[clap(long, required = true)]
     max_rewardable_nodes: Option<String>,
 }
 

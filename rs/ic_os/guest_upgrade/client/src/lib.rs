@@ -22,6 +22,7 @@ use rustls::ClientConfig;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
 use sev::firmware::guest::AttestationReport;
+use sev::parser::ByteParser;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpStream;

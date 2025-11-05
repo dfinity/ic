@@ -12,7 +12,7 @@ use nested::{HOST_VM_NAME, registration};
 
 use nested::util::{
     NODE_UPGRADE_BACKOFF, NODE_UPGRADE_TIMEOUT, check_hostos_version, elect_hostos_version,
-    get_host_boot_id, update_nodes_hostos_version,
+    get_host_boot_id, try_logging_guestos_diagnostics, update_nodes_hostos_version,
 };
 
 fn main() -> Result<()> {
@@ -119,7 +119,10 @@ pub fn upgrade_hostos(env: TestEnv) {
     .unwrap();
 
     info!(logger, "Waiting for Orchestrator dashboard...");
-    host.await_orchestrator_dashboard_accessible().unwrap();
+    if let Err(e) = host.await_orchestrator_dashboard_accessible() {
+        try_logging_guestos_diagnostics(&host, &logger);
+        panic!("Orchestrator dashboard is not accessible: {e}");
+    }
 
     info!(logger, "Checking HostOS version after reboot");
     let new_version = check_hostos_version(&host);

@@ -18,6 +18,7 @@ type ValidationError = variant {
   CallerNotController : record { canister : principal };
   TargetHasSnapshots;
   MigrationInProgress : record { canister : principal };
+  ValidationInProgress : record { canister : principal };
   SourceNotStopped;
   RateLimited;
   MigrationsDisabled;

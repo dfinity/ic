@@ -3,6 +3,9 @@ Enumerate every component file dependency for GuestOS
 """
 
 component_files = {
+    # environment
+    Label("guestos/environment/90-sev-status.sh"): "/etc/systemd/system-environment-generators/90-sev-status.sh",
+
     # early-boot
     Label("early-boot/relabel-machine-id/relabel-machine-id-guestos.sh"): "/opt/ic/bin/relabel-machine-id.sh",
     Label("early-boot/relabel-machine-id/relabel-machine-id.service"): "/etc/systemd/system/relabel-machine-id.service",
