@@ -1,5 +1,5 @@
 {
-  "checksum": "afcb7a54bf84d67cc8ce7489219918b2c8be9f702461085dfe2242c1bccd2c2a",
+  "checksum": "3f7e36525c54c6023611cf0733d3d8b7c2a46be830ec7beeee4a324fea460d05",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21374,6 +21374,10 @@
             {
               "id": "maxminddb 0.24.0",
               "target": "maxminddb"
+            },
+            {
+              "id": "memchr 2.7.4",
+              "target": "memchr"
             },
             {
               "id": "memmap2 0.9.5",
@@ -94413,6 +94417,7 @@
     "macaddr 1.0.1",
     "maplit 1.0.2",
     "maxminddb 0.24.0",
+    "memchr 2.7.4",
     "memmap2 0.9.5",
     "metrics-proxy 0.1.0",
     "minicbor 0.19.1",
