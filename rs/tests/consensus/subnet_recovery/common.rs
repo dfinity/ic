@@ -31,7 +31,7 @@ end::catalog[] */
 use crate::utils::{
     AdminAndUserKeys, Cursor, assert_subnet_is_broken, break_nodes,
     get_admin_keys_and_generate_readonly_keys, get_node_certification_share_height, halt_subnet,
-    local::app_subnet_recovery_local_cli_args, node_with_highest_certification_share_height,
+    local::app_subnet_recovery_local_cli_args, node_with_highest_cert_share_and_cup_heights,
     remote_recovery, unhalt_subnet,
 };
 use anyhow::bail;
@@ -482,8 +482,8 @@ fn app_subnet_recovery_test(env: TestEnv, cfg: TestConfig) {
         // poll from the node with highest certification, and we only need admin access on the
         // upload node to upload the state
 
-        let (download_pool_node, highest_cert_share) =
-            node_with_highest_certification_share_height(&app_subnet, &logger);
+        let (download_pool_node, highest_cert_share, _) =
+            node_with_highest_cert_share_and_cup_heights(&app_subnet, &logger);
         info!(
             logger,
             "Selected node {} ({:?}) as download pool with certification share height {}",

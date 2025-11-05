@@ -32,7 +32,7 @@
 use anyhow::Result;
 use ic_consensus_system_test_subnet_recovery::utils::{
     AdminAndUserKeys, break_nodes, get_admin_keys_and_generate_backup_keys,
-    node_with_highest_certification_share_height,
+    node_with_highest_cert_share_and_cup_heights,
 };
 use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nested_nns_recovery_common::{
@@ -149,7 +149,7 @@ fn log_instructions(env: TestEnv) {
     };
 
     loop {
-        let (_, highest_cert_share) = node_with_highest_certification_share_height(
+        let (_, highest_cert_share, _) = node_with_highest_cert_share_and_cup_heights(
             &env.topology_snapshot().root_subnet(),
             &logger,
         );
