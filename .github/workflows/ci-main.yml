@@ -14,6 +14,7 @@ permissions:
 
 env:
   CI_COMMIT_SHA: ${{ inputs.commit-sha }}
+  MERGE_BASE_SHA: ${{ github.event.pull_request.base.sha }} # required for candid backwards compatibility checks
   CI_JOB_NAME: ${{ github.job }}
   CI_PROJECT_DIR: ${{ github.workspace }}
   CI_EVENT_NAME: ${{ github.event_name }}
