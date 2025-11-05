@@ -4,7 +4,7 @@ mod events;
 mod ledger;
 mod minter;
 
-use crate::deposit::RetrieveDepositAddressFlow;
+use crate::deposit::DepositFlowStart;
 use crate::dogecoin::DogecoinCanister;
 use crate::ledger::LedgerCanister;
 pub use crate::minter::MinterCanister;
@@ -189,8 +189,8 @@ impl Setup {
         self.doge_network
     }
 
-    pub fn deposit_flow(&self) -> RetrieveDepositAddressFlow<&Setup> {
-        RetrieveDepositAddressFlow::new(self)
+    pub fn deposit_flow(&self) -> DepositFlowStart<&Setup> {
+        DepositFlowStart::new(self)
     }
 }
 
