@@ -215,6 +215,11 @@ impl CanisterLog {
         self.records.used_space()
     }
 
+    /// Returns true if the canister log buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        self.used_space() == 0
+    }
+
     /// Returns the remaining space in the canister log buffer.
     pub fn remaining_space(&self) -> usize {
         let records = &self.records;

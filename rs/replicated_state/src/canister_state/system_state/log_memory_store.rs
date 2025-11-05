@@ -233,6 +233,11 @@ impl LogMemoryStore {
         RingBuffer::new(self.data.clone()).used_space()
     }
 
+    /// Returns true if the canister log buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        self.used_space() == 0
+    }
+
     pub fn next_id(&self) -> u64 {
         RingBuffer::new(self.data.clone()).next_id()
     }

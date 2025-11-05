@@ -513,6 +513,14 @@ impl SystemStateModifications {
             system_state.global_timer = new_global_timer;
         }
 
+        // TODO(EXC-2118): cleanup population logic after migration is done.
+        // We need to copy existing canister_log to log_memory_store in order
+        // not to loose any log records until the migration is complete.
+        if system_state.log_memory_store.is_empty() && !system_state.canister_log.is_empty() {
+            system_state
+                .log_memory_store
+                .append_delta_log(&mut system_state.canister_log.clone());
+        }
         // Append delta log to the total canister log.
         let mut canister_log_copy = self.canister_log.clone();
         system_state
