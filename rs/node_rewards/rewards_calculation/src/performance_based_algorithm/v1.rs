@@ -197,7 +197,7 @@ mod tests {
         // --- Execution ---
         let result = RewardsCalculationV1::calculate_failure_rates(daily_metrics_by_subnet);
 
-        assert!(result.subnets_failure_rate.get(&subnet1).is_none());
+        assert!(!result.subnets_failure_rate.contains_key(&subnet1));
         assert_eq!(result.subnets_failure_rate.get(&subnet2), Some(&dec!(0.20)));
 
         let node_fr = result.nodes_metrics_daily.get(&s1_node1).unwrap();

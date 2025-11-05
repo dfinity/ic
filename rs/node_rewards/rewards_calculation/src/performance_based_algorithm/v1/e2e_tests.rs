@@ -675,7 +675,7 @@ fn test_empty_subnet_metrics() {
     let daily_result = &result.daily_results[&day];
     let provider_result = &daily_result.provider_results[&provider_id];
 
-    assert!(daily_result.subnets_failure_rate.get(&subnet_id).is_none());
+    assert!(!daily_result.subnets_failure_rate.contains_key(&subnet_id));
 
     // Node should have no penalty since no nodes assigned to the subnet
     let daily_nodes_rewards = &provider_result.daily_nodes_rewards[0];
