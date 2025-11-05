@@ -12,7 +12,7 @@ use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal_macros::dec;
 use std::cmp::max;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub mod results;
 pub mod test_utils;
@@ -249,78 +249,101 @@ trait PerformanceBasedAlgorithm {
     fn calculate_failure_rates(
         daily_metrics_by_subnet: BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>>,
     ) -> FailureRateResults {
-        fn calculate_daily_node_failure_rate(
-            num_blocks_proposed: u64,
-            num_blocks_failed: u64,
-        ) -> Decimal {
-            let total_blocks = Decimal::from(num_blocks_proposed + num_blocks_failed);
-            if total_blocks == Decimal::ZERO {
+        fn calculate_daily_node_failure_rate(proposed: u64, failed: u64) -> Decimal {
+            let total = Decimal::from(proposed + failed);
+            if total.is_zero() {
                 Decimal::ZERO
             } else {
-                let num_blocks_failed = Decimal::from(num_blocks_failed);
-                num_blocks_failed / total_blocks
+                Decimal::from(failed) / total
             }
         }
 
         let mut result = FailureRateResults::default();
 
-        for (subnet_id, subnet_nodes_metrics) in daily_metrics_by_subnet {
-            let nodes_original_failure_rate = subnet_nodes_metrics
+        // Find the maximum number of blocks proposed and failed for each node across all subnets.
+        // This is used in case one node joins multiple subnets the same day. In this case, the algorithm
+        // will assign the node to the subnet with the highest number of blocks proposed and failed.
+        let mut max_blocks_by_node: HashMap<NodeId, (SubnetId, NodeMetricsDailyRaw)> =
+            HashMap::new();
+
+        for (subnet_id, metrics_list) in daily_metrics_by_subnet {
+            for metric in metrics_list {
+                let total_blocks = metric.num_blocks_proposed + metric.num_blocks_failed;
+                max_blocks_by_node
+                    .entry(metric.node_id.clone())
+                    .and_modify(|(s, existing)| {
+                        let existing_total =
+                            existing.num_blocks_proposed + existing.num_blocks_failed;
+                        if total_blocks > existing_total {
+                            *s = subnet_id;
+                            *existing = metric.clone();
+                        }
+                    })
+                    .or_insert((subnet_id, metric));
+            }
+        }
+
+        // Group deduplicated metrics back by subnet.
+        let deduped_by_subnet: BTreeMap<SubnetId, Vec<NodeMetricsDailyRaw>> = max_blocks_by_node
+            .into_values()
+            .fold(BTreeMap::new(), |mut acc, (subnet, metric)| {
+                acc.entry(subnet).or_default().push(metric);
+                acc
+            });
+
+        // Compute failure rates per subnet and per node.
+        for (subnet_id, metrics_list) in deduped_by_subnet {
+            // Precompute node failure rates for this subnet.
+            let nodes_failure_rate: BTreeMap<_, _> = metrics_list
                 .iter()
-                .map(|metrics| {
-                    let original_failure_rate = calculate_daily_node_failure_rate(
-                        metrics.num_blocks_proposed,
-                        metrics.num_blocks_failed,
+                .map(|m| {
+                    let rate = calculate_daily_node_failure_rate(
+                        m.num_blocks_proposed,
+                        m.num_blocks_failed,
                     );
-                    (metrics.node_id, original_failure_rate)
+                    (m.node_id, rate)
                 })
-                .collect::<BTreeMap<_, _>>();
-            let nodes_failure_rate = nodes_original_failure_rate
+                .collect();
+
+            // Sort to find the subnet percentile failure rate.
+            let rates: Vec<_> = nodes_failure_rate
                 .values()
                 .cloned()
+                .sorted()
                 .collect::<Vec<_>>();
-            let subnet_failure_rate = if nodes_failure_rate.is_empty() {
+
+            let subnet_rate = if rates.is_empty() {
                 Decimal::ZERO
             } else {
-                let failure_rates = nodes_failure_rate.iter().sorted().collect::<Vec<_>>();
-
-                // Calculate the failure rate for the subnet based on the SUBNET_FAILURE_RATE_PERCENTILE
-                // of the failure rates for the subnet's nodes.
-                //
-                // Percentile is calculated using the Nearest Rank method.
-                let index = ((nodes_failure_rate.len() as f64)
-                    * Self::SUBNET_FAILURE_RATE_PERCENTILE)
-                    .ceil() as usize
-                    - 1;
-                *failure_rates[index]
+                // Nearest-rank percentile method.
+                let idx = (((rates.len() as f64) * Self::SUBNET_FAILURE_RATE_PERCENTILE).ceil()
+                    as isize
+                    - 1)
+                .max(0) as usize;
+                rates[idx]
             };
-            result
-                .subnets_failure_rate
-                .insert(subnet_id, subnet_failure_rate);
 
-            for NodeMetricsDailyRaw {
-                node_id,
-                num_blocks_proposed,
-                num_blocks_failed,
-            } in subnet_nodes_metrics
-            {
-                let original_failure_rate = nodes_original_failure_rate[&node_id];
-                let relative_failure_rate =
-                    max(Decimal::ZERO, original_failure_rate - subnet_failure_rate);
+            result.subnets_failure_rate.insert(subnet_id, subnet_rate);
+
+            // Compute each node’s relative failure rate.
+            for metric in metrics_list {
+                let original = nodes_failure_rate[&metric.node_id];
+                let relative = max(Decimal::ZERO, original - subnet_rate);
 
                 result.nodes_metrics_daily.insert(
-                    node_id,
+                    metric.node_id,
                     NodeMetricsDaily {
                         subnet_assigned: subnet_id,
-                        subnet_assigned_failure_rate: subnet_failure_rate,
-                        num_blocks_proposed,
-                        num_blocks_failed,
-                        original_failure_rate,
-                        relative_failure_rate,
+                        subnet_assigned_failure_rate: subnet_rate,
+                        num_blocks_proposed: metric.num_blocks_proposed,
+                        num_blocks_failed: metric.num_blocks_failed,
+                        original_failure_rate: original,
+                        relative_failure_rate: relative,
                     },
                 );
             }
         }
+
         result
     }
 
