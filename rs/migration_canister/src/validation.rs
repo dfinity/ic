@@ -33,24 +33,24 @@ pub async fn validate_request(
     // to prevent unauthorized callers from acquiring the lock
     // and blocking authorized callers from performing canister migration.
 
-    // 1. Is the caller controller of the source? This call also fails if we are not controller.
+    // 1. The source must not be equal to the target.
+    if source == target {
+        return Err(ValidationError::SameSubnet);
+    }
+
+    // 2. Is the caller controller of the source? This call also fails if we are not controller.
     let source_status = canister_status(source)
         .await
         .into_result(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected source and try again later.", source))?;
     if !source_status.settings.controllers.contains(&caller) {
         return Err(ValidationError::CallerNotController { canister: source });
     }
-    // 2. Is the caller controller of the target? This call also fails if we are not controller.
+    // 3. Is the caller controller of the target? This call also fails if we are not controller.
     let target_status = canister_status(target)
         .await
         .into_result(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected target and try again later.", target))?;
     if !target_status.settings.controllers.contains(&caller) {
         return Err(ValidationError::CallerNotController { canister: target });
-    }
-
-    // 3. The source must not be equal to the target.
-    if source == target {
-        return Err(ValidationError::SameSubnet);
     }
 
     // Now we can acquire the locks
@@ -87,7 +87,7 @@ pub async fn validate_request(
     if target_status.status != CanisterStatusType::Stopped {
         return Err(ValidationError::TargetNotStopped);
     }
-    // 0. Does the target have snapshots?
+    // 9. Does the target have snapshots?
     assert_no_snapshots(target).await.into_result(
         "Call to management canister `list_canister_snapshots` failed. Try again later.",
     )?;
