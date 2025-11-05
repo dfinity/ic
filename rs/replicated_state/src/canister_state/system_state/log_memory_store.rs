@@ -71,6 +71,27 @@ impl From<&HeaderV1Bytes> for HeaderV1 {
     }
 }
 
+impl HeaderV1 {
+    fn is_wrapped(&self) -> bool {
+        if self.data_tail == self.data_head {
+            return self.data_size > 0;
+        }
+        self.data_tail < self.data_head
+    }
+
+    fn lookup_capacity(&self) -> usize {
+        (self.lookup_table_pages as usize * PAGE_SIZE) / SLOT_SIZE
+    }
+
+    fn lookup_head(&self) -> usize {
+        (self.data_head as usize) / PAGE_SIZE
+    }
+
+    fn lookup_tail(&self) -> usize {
+        (self.data_tail as usize) / PAGE_SIZE
+    }
+}
+
 #[test]
 fn test_header_v1_roundtrip_serialization() {
     let original = HeaderV1 {
@@ -86,18 +107,6 @@ fn test_header_v1_roundtrip_serialization() {
     };
     let bytes = HeaderV1Bytes::from(&original);
     let recovered = HeaderV1::from(&bytes);
-    assert_eq!(original, recovered);
-}
-
-#[test]
-fn test_lookup_slot_serialization() {
-    let original = LookupSlot {
-        idx_min: 1,
-        ts_nanos_min: 2,
-        offset: 3,
-    };
-    let bytes = LookupSlotBytes::from(&original);
-    let recovered = LookupSlot::from(&bytes);
     assert_eq!(original, recovered);
 }
 
@@ -130,6 +139,18 @@ impl From<&LookupSlotBytes> for LookupSlot {
             offset: u64::from_le_bytes(bytes[16..24].try_into().unwrap()),
         }
     }
+}
+
+#[test]
+fn test_lookup_slot_serialization() {
+    let original = LookupSlot {
+        idx_min: 1,
+        ts_nanos_min: 2,
+        offset: 3,
+    };
+    let bytes = LookupSlotBytes::from(&original);
+    let recovered = LookupSlot::from(&bytes);
+    assert_eq!(original, recovered);
 }
 
 struct DataEntry {
@@ -355,13 +376,27 @@ impl RingBuffer {
         self.buffer.write(&slot_bytes, slot_offset);
     }
 
-    fn load_lookup_table(&mut self) {
-        let count = self.read_header().lookup_slots_count as usize;
-        self.lookup_table.clear();
-        self.lookup_table.reserve(count);
-        for i in 0..count {
-            self.lookup_table.push(self.read_lookup_slot(i));
+    fn load_lookup_table(&mut self) -> Vec<LookupSlot> {
+        let header = self.read_header();
+        let (head, tail, capacity) = (
+            header.lookup_head(),
+            header.lookup_tail(),
+            header.lookup_capacity(),
+        );
+        let mut slots = Vec::with_capacity(capacity);
+        if !header.is_wrapped() {
+            for i in head..tail {
+                slots.push(self.read_lookup_slot(i));
+            }
+        } else {
+            for i in head..capacity {
+                slots.push(self.read_lookup_slot(i));
+            }
+            for i in 0..tail {
+                slots.push(self.read_lookup_slot(i));
+            }
         }
+        slots
     }
 
     fn get(&self, offset: u64) -> DataEntry {
