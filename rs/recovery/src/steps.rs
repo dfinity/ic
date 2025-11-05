@@ -88,6 +88,9 @@ impl Step for DownloadCertificationsStep {
 
     fn exec(&self) -> RecoveryResult<()> {
         let cert_path = PathBuf::from(IC_DATA_PATH).join(IC_CERTIFICATIONS_PATH);
+        let output_dir = self.work_dir.join("certifications");
+        create_dir(&output_dir)?;
+
         let ips = get_member_ips(&self.registry_helper, self.subnet_id)?;
 
         let n = ips.len();
@@ -103,16 +106,6 @@ impl Step for DownloadCertificationsStep {
                 self.require_confirmation,
                 self.key_file.clone(),
             );
-            let data_src = ssh_helper.remote_path(&cert_path);
-            let target = self
-                .work_dir
-                .join("certifications")
-                .join(ip.to_string())
-                .join("");
-            if let Err(e) = create_dir(&target) {
-                warn!(self.logger, "Failed to create target dir: {:?}", e);
-                continue;
-            }
 
             info!(
                 self.logger,
@@ -121,8 +114,8 @@ impl Step for DownloadCertificationsStep {
             );
             let res = ssh_helper.rsync_with_retries(
                 Vec::<String>::default(),
-                &data_src,
-                &target,
+                &ssh_helper.remote_path(&cert_path),
+                &output_dir.join(ip.to_string()).join(""),
                 self.auto_retry,
                 5,
             );
@@ -379,9 +372,11 @@ impl Step for DownloadIcDataStep {
         }
 
         if self.include_config {
-            let config_src = ssh_helper.remote_path(IC_JSON5_PATH);
-
-            ssh_helper.rsync(Vec::<String>::default(), &config_src, &target)?;
+            ssh_helper.rsync(
+                Vec::<String>::default(),
+                &ssh_helper.remote_path(IC_JSON5_PATH),
+                &target,
+            )?;
 
             if self.keep_downloaded_data {
                 rsync(
@@ -690,9 +685,12 @@ impl Step for UploadStateAndRestartStep {
             );
             ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)?;
 
-            let target = ssh_helper.remote_path(&upload_dir.join(""));
             info!(self.logger, "Uploading state...");
-            ssh_helper.rsync(Vec::<String>::default(), &self.data_src.join(""), &target)?;
+            ssh_helper.rsync(
+                Vec::<String>::default(),
+                &self.data_src.join(""),
+                &ssh_helper.remote_path(&upload_dir.join("")),
+            )?;
 
             let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);
             let cmd_replace_state = format!(
@@ -1139,10 +1137,11 @@ impl Step for DownloadRegistryStoreStep {
             )));
         }
 
-        let data_src =
-            ssh_helper.remote_path(PathBuf::from(IC_DATA_PATH).join(IC_REGISTRY_LOCAL_STORE));
-
-        ssh_helper.rsync(Vec::<String>::default(), &data_src, &self.work_dir.join(""))?;
+        ssh_helper.rsync(
+            Vec::<String>::default(),
+            &ssh_helper.remote_path(PathBuf::from(IC_DATA_PATH).join(IC_REGISTRY_LOCAL_STORE)),
+            &self.work_dir.join(""),
+        )?;
 
         Ok(())
     }
@@ -1184,8 +1183,11 @@ impl Step for UploadAndHostTarStep {
             upload_dir = upload_dir.display()
         ))?;
 
-        let target = ssh_helper.remote_path(upload_dir.join(""));
-        ssh_helper.rsync(Vec::<String>::default(), &self.tar, &target)?;
+        ssh_helper.rsync(
+            Vec::<String>::default(),
+            &self.tar,
+            &ssh_helper.remote_path(upload_dir.join("")),
+        )?;
 
         ssh_helper.ssh("daemonize $(which python3) -m http.server --bind :: 8081".to_string())?;
 
