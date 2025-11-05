@@ -18,7 +18,7 @@ path = "bin/principal_to_hex.rs"
 askama = { workspace = true }
 candid = { workspace = true }
 ethnum = { workspace = true }
-evm_rpc_client = "0.2.0"
+evm_rpc_client = { git = "https://github.com/dfinity/evm-rpc-canister.git", rev = "d082726cd25dc97c7fc6912e82e89ac7c902e3f4" } # branch lwshang/cdk_0.19
 evm_rpc_types = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }

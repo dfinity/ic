@@ -513,10 +513,12 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 features = ["serde"],
             ),
             "evm_rpc_client": crate.spec(
-                version = "^0.2.0",
+                git = "https://github.com/dfinity/evm-rpc-canister.git",
+                rev = "d082726cd25dc97c7fc6912e82e89ac7c902e3f4",
             ),
             "evm_rpc_types": crate.spec(
-                version = "^3.0.0",
+                git = "https://github.com/dfinity/evm-rpc-canister.git",
+                rev = "d082726cd25dc97c7fc6912e82e89ac7c902e3f4",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",

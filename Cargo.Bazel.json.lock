@@ -1,9 +1,5 @@
 {
-<<<<<<< HEAD
-  "checksum": "0537548326e70188417ddb8b3353274771cc3fa048206ddca2abd13d73f3e3bf",
-=======
-  "checksum": "f22191ba3ba4ab3f93945cabbeca8443056ac1d74b08b956f9400e3dd9e5368f",
->>>>>>> master
+  "checksum": "a44a9cc0d63506f67561aaf2b0896d3da1dd3cef599fd352e124eff29dbb6a04",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -25821,9 +25817,12 @@
       "version": "0.2.0",
       "package_url": "https://github.com/dfinity/evm-rpc-canister",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_client/0.2.0/download",
-          "sha256": "94f29eabef9267a8e6c416ad89d6b36d5ec9be5e6ffd143bd1b4514cfc7cfb9e"
+        "Git": {
+          "remote": "https://github.com/dfinity/evm-rpc-canister.git",
+          "commitish": {
+            "Rev": "d082726cd25dc97c7fc6912e82e89ac7c902e3f4"
+          },
+          "strip_prefix": "evm_rpc_client"
         }
       },
       "targets": [
@@ -25848,7 +25847,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -25856,7 +25855,7 @@
               "target": "evm_rpc_types"
             },
             {
-              "id": "ic-cdk 0.18.7",
+              "id": "ic-cdk 0.19.0-beta.3",
               "target": "ic_cdk"
             },
             {
@@ -25905,9 +25904,12 @@
       "version": "3.0.0",
       "package_url": "https://github.com/dfinity/evm-rpc-canister",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/evm_rpc_types/3.0.0/download",
-          "sha256": "bd456f71555aa2a0d99637037b30cd3d9d2899b8cf39d3dce21e248989d6f132"
+        "Git": {
+          "remote": "https://github.com/dfinity/evm-rpc-canister.git",
+          "commitish": {
+            "Rev": "d082726cd25dc97c7fc6912e82e89ac7c902e3f4"
+          },
+          "strip_prefix": "evm_rpc_types"
         }
       },
       "targets": [
@@ -25948,7 +25950,7 @@
               "target": "ic_error_types"
             },
             {
-              "id": "ic-management-canister-types 0.3.3",
+              "id": "ic-management-canister-types 0.4.1",
               "target": "ic_management_canister_types"
             },
             {
