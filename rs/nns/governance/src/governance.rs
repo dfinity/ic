@@ -129,6 +129,7 @@ use maplit::hashmap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use std::cell::RefCell;
 use std::sync::Arc;
 use std::{
     borrow::Cow,
@@ -7887,6 +7888,33 @@ impl Governance {
             "get_node_providers_rewards returned empty response, \
                 which should be impossible.",
         ))
+    }
+
+    thread_local! {
+        static NODE_PROVIDERS_REWARDS_CACHE: RefCell<Option<(u64, MonthlyNodeProviderRewards)>> = const { RefCell::new(None) };
+    }
+    pub async fn get_node_providers_rewards_cached(
+        &self,
+    ) -> Result<MonthlyNodeProviderRewards, GovernanceError> {
+        let now = self.env.now();
+        let five_minutes_in_seconds = 5 * 60;
+
+        if let Some((last_update_timestamp_seconds, rewards)) =
+            Self::NODE_PROVIDERS_REWARDS_CACHE.with(|cache| cache.borrow().clone())
+        {
+            let time_since_last_update_seconds = now.saturating_sub(last_update_timestamp_seconds);
+
+            if time_since_last_update_seconds < five_minutes_in_seconds {
+                return Ok(rewards);
+            }
+        }
+
+        let rewards = self.get_node_providers_rewards().await?;
+        Self::NODE_PROVIDERS_REWARDS_CACHE.with(|cache| {
+            cache.replace(Some((now, rewards.clone())));
+        });
+
+        Ok(rewards)
     }
 
     /// Return the rewards that node providers should be awarded with.
