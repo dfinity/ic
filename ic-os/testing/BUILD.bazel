@@ -22,9 +22,7 @@ trap 'rm -rf $$components' EXIT
     )
     for label, target_path in all_component_files.items()
     if "/opt/ic/bin/" in target_path
-])
-
-script += "tar -cf $@ -C '$$components' .\n"
+]) + "tar -cf $@ -C '$$components' .\n"
 
 genrule(
     name = "reload_hostos_tar",
