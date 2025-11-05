@@ -23,7 +23,7 @@ use crate::{
 };
 
 #[derive(CandidType, Deserialize)]
-struct MigrationCanisterInitArgs {
+pub(crate) struct MigrationCanisterInitArgs {
     allowlist: Option<Vec<Principal>>,
 }
 
@@ -124,7 +124,7 @@ fn migration_status(args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
 }
 
 #[derive(Clone, CandidType, Deserialize)]
-struct ListEventsArgs {
+pub(crate) struct ListEventsArgs {
     page_index: u64,
     page_size: u64,
 }

@@ -2,7 +2,7 @@
 Common dependencies for system-tests.
 """
 
-load("//bazel:mainnet-icos-images.bzl", "MAINNET_APP", "MAINNET_NNS")
+load("@mainnet_icos_versions//:defs.bzl", "MAINNET_APP", "MAINNET_NNS")
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
 MAINNET_ENV = {
@@ -49,7 +49,7 @@ NNS_CANISTER_WASM_PROVIDERS = {
     },
     "migration-canister": {
         "tip-of-branch": "//rs/migration_canister:migration-canister",
-        "mainnet": "//rs/test_utilities:empty-wasm",
+        "mainnet": "@mainnet_canisters//:migration.wasm.gz",
     },
 }
 
