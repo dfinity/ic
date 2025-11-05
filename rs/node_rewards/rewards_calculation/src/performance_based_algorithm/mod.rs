@@ -270,7 +270,7 @@ trait PerformanceBasedAlgorithm {
             for metric in metrics_list {
                 let total_blocks = metric.num_blocks_proposed + metric.num_blocks_failed;
                 max_blocks_by_node
-                    .entry(metric.node_id.clone())
+                    .entry(metric.node_id)
                     .and_modify(|(s, existing)| {
                         let existing_total =
                             existing.num_blocks_proposed + existing.num_blocks_failed;
