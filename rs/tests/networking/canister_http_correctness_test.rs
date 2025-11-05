@@ -309,7 +309,7 @@ fn no_data_certificate_in_transform_function(env: TestEnv) {
     assert_eq!(response.headers[0].0, "data_certificate_present");
     assert_eq!(response.headers[0].1, "false");
     assert_eq!(response.headers[1].0, "in_replicated_execution");
-    assert_eq!(response.headers[1].1, "true");
+    assert_eq!(response.headers[1].1, "false");
 }
 
 fn test_non_existent_transform_function(env: TestEnv) {
