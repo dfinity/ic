@@ -777,7 +777,7 @@ async fn perform_read_state_with_delegations(
 
     let signature = signer.sign_read_state(&content);
 
-    send_request(
+    let response = send_request(
         test,
         "read_state",
         content,
@@ -785,8 +785,12 @@ async fn perform_read_state_with_delegations(
         Some(delegations.to_vec()),
         signature,
     )
-    .await
-    .status()
+        .await;
+
+
+    let status = response.status();
+    println!("Read state resp {:?}", hex::encode(response.bytes().await.unwrap()));
+    status
 }
 
 async fn perform_query_with_expiry(
