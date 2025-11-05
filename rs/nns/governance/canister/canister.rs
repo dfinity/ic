@@ -50,7 +50,7 @@ use std::{boxed::Box, time::Duration};
 #[cfg(feature = "test")]
 use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 
-use ic_nns_governance::canister_state::{CanisterRandomnessGenerator, GOVERNANCE, with_governance};
+use ic_nns_governance::canister_state::{CanisterRandomnessGenerator, with_governance};
 
 #[cfg(feature = "tla")]
 mod tla_ledger;
