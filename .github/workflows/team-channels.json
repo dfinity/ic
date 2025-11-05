@@ -4,11 +4,11 @@
     "cross-chain-team": "eng-cross-chain-prs",
     "crypto-team": "eng-crypto-mr",
     "DRE": "eng-release-bots",
-    "execution": "eng-execution-mrs",
+    "execution": "eng-dsm-prs",
     "FinInt": "eng-fi-mrs",
     "ic-support": "ic-support-notifications",
     "ic-interface-owners": "interface-owners",
-    "ic-message-routing-owners": "eng-message-routing-mr",
+    "ic-message-routing-owners": "eng-dsm-prs",
     "ic-owners-owners": "owners-owners",
     "InfraSec": "eng-infrasec",
     "languages": "eng-motoko",
@@ -21,5 +21,6 @@
     "research": "team-research",
     "runtime": "runtime-code-reviews",
     "sdk": "sdk",
-    "utopia": "eng-utopia"
+    "utopia": "eng-utopia",
+    "team-dsm": "eng-dsm-prs"
 }
