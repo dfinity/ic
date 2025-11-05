@@ -1,6 +1,6 @@
 #![allow(deprecated)]
 use crate::{
-    are_nf_fund_proposals_disabled, decoder_config,
+    are_nf_fund_proposals_disabled, are_performance_based_rewards_enabled, decoder_config,
     governance::{
         merge_neurons::{
             build_merge_neurons_response, calculate_merge_neurons_effect,
@@ -159,7 +159,6 @@ pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
 
-use crate::flags::are_performance_based_rewards_enabled;
 use crate::pb::v1::AddOrRemoveNodeProvider;
 use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
@@ -7897,7 +7896,7 @@ impl Governance {
     /// the last 30 days, then applies this conversion rate to convert each
     /// node provider's XDR rewards to ICP.
     pub async fn get_node_providers_rewards(
-        &mut self,
+        &self,
     ) -> Result<MonthlyNodeProviderRewards, GovernanceError> {
         let mut rewards = vec![];
 
@@ -7949,14 +7948,16 @@ impl Governance {
 
         Ok(MonthlyNodeProviderRewards {
             timestamp: now,
-            start_date: Some(pb::v1::DateUtc::try_from(start_date).expect("from date exists")),
-            end_date: Some(pb::v1::DateUtc::try_from(end_date).expect("to date exists")),
+            start_date: Some(
+                pb::v1::DateUtc::try_from(start_date).expect("start_date date exists"),
+            ),
+            end_date: Some(pb::v1::DateUtc::try_from(end_date).expect("end_date date exists")),
             rewards,
             xdr_conversion_rate: Some(xdr_conversion_rate.into()),
             minimum_xdr_permyriad_per_icp: Some(minimum_xdr_permyriad_per_icp),
             maximum_node_provider_rewards_e8s: Some(maximum_node_provider_rewards_e8s),
             node_providers: self.heap_data.node_providers.clone(),
-            ..Default::default()
+            registry_version: None,
         })
     }
 
@@ -7967,7 +7968,7 @@ impl Governance {
     /// the last 30 days, then applies this conversion rate to convert each
     /// node provider's XDR rewards to ICP.
     pub async fn get_monthly_node_provider_rewards(
-        &mut self,
+        &self,
     ) -> Result<MonthlyNodeProviderRewards, GovernanceError> {
         let mut rewards = vec![];
 
@@ -8086,7 +8087,7 @@ impl Governance {
 
     /// A helper for the CMC's get_average_icp_xdr_conversion_rate method
     async fn get_average_icp_xdr_conversion_rate(
-        &mut self,
+        &self,
     ) -> Result<IcpXdrConversionRateCertifiedResponse, GovernanceError> {
         let cmc_response:
             Vec<u8> = self
