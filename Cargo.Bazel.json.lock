@@ -1,5 +1,5 @@
 {
-  "checksum": "3f7e36525c54c6023611cf0733d3d8b7c2a46be830ec7beeee4a324fea460d05",
+  "checksum": "d23196ef48227c278358cda91f700131cf13d44207a90d5da3394d01b8eaf873",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -14240,44 +14240,6 @@
       ],
       "license_file": null
     },
-    "codicon 3.0.0": {
-      "name": "codicon",
-      "version": "3.0.0",
-      "package_url": "https://github.com/psilocybin/codicon",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/codicon/3.0.0/download",
-          "sha256": "12170080f3533d6f09a19f81596f836854d0fa4867dc32c8172b8474b4e9de61"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "codicon",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "codicon",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "3.0.0"
-      },
-      "license": "Apache-2.0",
-      "license_ids": [
-        "Apache-2.0"
-      ],
-      "license_file": "LICENSE.txt"
-    },
     "colorchoice 1.0.0": {
       "name": "colorchoice",
       "version": "1.0.0",
@@ -21376,10 +21338,6 @@
               "target": "maxminddb"
             },
             {
-              "id": "memchr 2.7.4",
-              "target": "memchr"
-            },
-            {
               "id": "memmap2 0.9.5",
               "target": "memmap2"
             },
@@ -21753,7 +21711,7 @@
               "target": "serde_yaml"
             },
             {
-              "id": "sev 6.2.1",
+              "id": "sev 7.1.0",
               "target": "sev"
             },
             {
@@ -69139,54 +69097,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde-big-array 0.5.1": {
-      "name": "serde-big-array",
-      "version": "0.5.1",
-      "package_url": "https://github.com/est31/serde-big-array",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/serde-big-array/0.5.1/download",
-          "sha256": "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "serde_big_array",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "serde_big_array",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.5.1"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
     "serde-bytes-repr 0.1.5": {
       "name": "serde-bytes-repr",
       "version": "0.1.5",
@@ -70330,14 +70240,14 @@
       ],
       "license_file": null
     },
-    "sev 6.2.1": {
+    "sev 7.1.0": {
       "name": "sev",
-      "version": "6.2.1",
+      "version": "7.1.0",
       "package_url": "https://github.com/virtee/sev",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/sev/6.2.1/download",
-          "sha256": "1750ba11a6a6bba3c220da714caa0226aa34e417dce3975d2953062240717dea"
+          "url": "https://static.crates.io/crates/sev/7.1.0/download",
+          "sha256": "c2ff74d7e7d1cc172f3a45adec74fbeee928d71df095b85aaaf66eb84e1e31e6"
         }
       },
       "targets": [
@@ -70385,10 +70295,6 @@
               "target": "base64"
             },
             {
-              "id": "bincode 1.3.3",
-              "target": "bincode"
-            },
-            {
               "id": "bitfield 0.19.1",
               "target": "bitfield"
             },
@@ -70399,10 +70305,6 @@
             {
               "id": "byteorder 1.5.0",
               "target": "byteorder"
-            },
-            {
-              "id": "codicon 3.0.0",
-              "target": "codicon"
             },
             {
               "id": "dirs 6.0.0",
@@ -70429,19 +70331,7 @@
               "target": "rsa"
             },
             {
-              "id": "serde 1.0.219",
-              "target": "serde"
-            },
-            {
-              "id": "serde-big-array 0.5.1",
-              "target": "serde_big_array"
-            },
-            {
-              "id": "serde_bytes 0.11.15",
-              "target": "serde_bytes"
-            },
-            {
-              "id": "sev 6.2.1",
+              "id": "sev 7.1.0",
               "target": "build_script_build"
             },
             {
@@ -70471,7 +70361,7 @@
           }
         },
         "edition": "2018",
-        "version": "6.2.1"
+        "version": "7.1.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -94417,7 +94307,6 @@
     "macaddr 1.0.1",
     "maplit 1.0.2",
     "maxminddb 0.24.0",
-    "memchr 2.7.4",
     "memmap2 0.9.5",
     "metrics-proxy 0.1.0",
     "minicbor 0.19.1",
@@ -94516,7 +94405,7 @@
     "serde_regex 1.1.0",
     "serde_with 1.14.0",
     "serde_yaml 0.9.34+deprecated",
-    "sev 6.2.1",
+    "sev 7.1.0",
     "sha2 0.10.9",
     "sha3 0.10.8",
     "signal-hook 0.3.17",
