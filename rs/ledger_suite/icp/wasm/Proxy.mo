@@ -5,7 +5,7 @@ import Ledger "./Ledger";
 /nix/store/62mpdxszlrj5j2048pjdmm4b6ls3xc6y-moc/bin/moc -o ledger_proxy.wasm Proxy.mo
 */
 
-actor Self {
+persistent actor Self {
 
   // Query blocks in the specified range from the [ledger] canister and check
   // that they equal to [result].
@@ -96,5 +96,5 @@ actor Self {
   private class range(x : Nat, y : Int) {
     var i = x;
     public func next() : ?Nat { if (i >= y) { null } else {let j = i; i += 1; ?j} };
-  }; 
+  };
 }

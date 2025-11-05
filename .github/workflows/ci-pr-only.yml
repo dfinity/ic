@@ -2,14 +2,13 @@ name: CI PR Only
 # Jobs that run on PRs, but no other pipelines
 
 on:
-  merge_group:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_call:
+    inputs:
+      commit-sha:
+        description: The commit sha to run the CI on
+        required: true
+        type: string
 
-concurrency:
-  # only triggered on PR, so head_ref will always be set
-  group: ${{ github.workflow }}-${{ github.head_ref }}
-  cancel-in-progress: true
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
   MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
@@ -30,6 +29,8 @@ jobs:
       - &checkout
         name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit-sha }}
 
   insta-tests:
     name: Quick Feedback Tests
@@ -37,7 +38,6 @@ jobs:
       labels: dind-small
     container: *container-setup
     timeout-minutes: 30
-    if: ${{ github.event_name != 'merge_group' }}
     steps:
       - *checkout
       - name: Run insta-tests
@@ -51,7 +51,6 @@ jobs:
     runs-on: *dind-large-setup
     container: *container-setup
     timeout-minutes: 90
-    if: ${{ github.event_name != 'merge_group' }}
     steps:
       - *checkout
       - name: Filter Relevant Files
@@ -76,7 +75,6 @@ jobs:
     name: Lock Generate
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ github.event_name != 'merge_group' }}
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     steps:
@@ -116,7 +114,6 @@ jobs:
     runs-on: ubuntu-latest
     container: *container-setup
     timeout-minutes: 30
-    if: ${{ github.event_name != 'merge_group' }}
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     steps:
@@ -149,7 +146,6 @@ jobs:
     name: Dependency Scan for PR
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: ${{ github.event_name != 'merge_group' }}
     permissions:
       contents: read
       pull-requests: write
