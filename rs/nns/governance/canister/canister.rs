@@ -50,7 +50,7 @@ use std::{boxed::Box, time::Duration};
 #[cfg(feature = "test")]
 use ic_nns_governance::governance::TimeWarp as GovTimeWarp;
 
-use ic_nns_governance::canister_state::{CanisterRandomnessGenerator, with_governance};
+use ic_nns_governance::canister_state::{CanisterRandomnessGenerator, GOVERNANCE, with_governance};
 
 #[cfg(feature = "tla")]
 mod tla_ledger;
@@ -405,7 +405,7 @@ async fn get_monthly_node_provider_rewards() -> Result<MonthlyNodeProviderReward
 #[update(hidden = true)]
 async fn get_node_provider_rewards() -> Result<MonthlyNodeProviderRewards, GovernanceError> {
     debug_log("get_node_provider_rewards");
-    let rewards = with_governance(|governance| governance.get_node_providers_rewards()).await?;
+    let rewards = Governance::get_node_providers_rewards(&GOVERNANCE).await?;
     Ok(MonthlyNodeProviderRewards::from(rewards))
 }
 

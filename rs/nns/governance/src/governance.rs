@@ -129,7 +129,9 @@ use maplit::hashmap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use std::cell::RefCell;
 use std::sync::Arc;
+use std::thread::LocalKey;
 use std::{
     borrow::Cow,
     cmp::{Ordering, max},
@@ -159,6 +161,7 @@ pub mod tla_macros;
 #[cfg(feature = "tla")]
 pub mod tla;
 
+use crate::canister_state::GOVERNANCE;
 use crate::pb::v1::AddOrRemoveNodeProvider;
 use crate::reward::distribution::RewardsDistribution;
 use crate::storage::with_voting_state_machines_mut;
@@ -4278,7 +4281,7 @@ impl Governance {
         self.minting_node_provider_rewards = true;
 
         let monthly_node_provider_rewards = if are_performance_based_rewards_enabled() {
-            self.get_node_providers_rewards().await?
+            Self::get_node_providers_rewards(&GOVERNANCE).await?
         } else {
             self.get_monthly_node_provider_rewards().await?
         };
@@ -6658,7 +6661,9 @@ impl Governance {
         let IcpXdrConversionRate {
             timestamp_seconds,
             xdr_permyriad_per_icp,
-        } = self.get_average_icp_xdr_conversion_rate().await?.data;
+        } = Self::get_average_icp_xdr_conversion_rate(&GOVERNANCE)
+            .await?
+            .data;
 
         self.heap_data.xdr_conversion_rate = XdrConversionRate {
             timestamp_seconds,
@@ -7831,12 +7836,12 @@ impl Governance {
 
     /// A helper for the Node Rewards Canister get_node_providers_rewards method
     async fn get_node_providers_xdr_permyriad_rewards(
-        &self,
+        governance: &'static LocalKey<RefCell<Governance>>,
         start_date: DateUtc,
         end_date: DateUtc,
     ) -> Result<BTreeMap<PrincipalId, u64>, GovernanceError> {
-        let response: Vec<u8> = self
-            .env
+        let env = governance.with_borrow(|g| g.env.clone());
+        let response: Vec<u8> = env
             .call_canister_method(
                 NODE_REWARDS_CANISTER_ID,
                 "get_node_providers_rewards",
@@ -7896,12 +7901,12 @@ impl Governance {
     /// the last 30 days, then applies this conversion rate to convert each
     /// node provider's XDR rewards to ICP.
     pub async fn get_node_providers_rewards(
-        &self,
+        governance: &'static LocalKey<RefCell<Governance>>,
     ) -> Result<MonthlyNodeProviderRewards, GovernanceError> {
         let mut rewards = vec![];
 
-        let start_date = self.next_start_date_node_providers_rewards()?;
-        let now = self.env.now();
+        let start_date = governance.with_borrow(|g| g.next_start_date_node_providers_rewards())?;
+        let now = governance.with_borrow(|g| g.env.now());
 
         // Today we have collected up to and included node metrics of yesterday
         // in the node rewards canister.
@@ -7909,27 +7914,32 @@ impl Governance {
         let end_date = DateUtc::from_unix_timestamp_seconds(end_date_timestamp_seconds);
 
         // Maps node providers to their rewards in XDR
-        let rewards_per_node_provider = self
-            .get_node_providers_xdr_permyriad_rewards(start_date, end_date)
-            .await?;
+        let rewards_per_node_provider =
+            Self::get_node_providers_xdr_permyriad_rewards(governance, start_date, end_date)
+                .await?;
 
         // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
-        let icp_xdr_conversion_rate = self.get_average_icp_xdr_conversion_rate().await?.data;
+        let icp_xdr_conversion_rate = Self::get_average_icp_xdr_conversion_rate(governance)
+            .await?
+            .data;
         let avg_xdr_permyriad_per_icp = icp_xdr_conversion_rate.xdr_permyriad_per_icp;
 
         // Convert minimum_icp_xdr_rate to basis points for comparison with avg_xdr_permyriad_per_icp
-        let minimum_xdr_permyriad_per_icp = self
-            .economics()
-            .minimum_icp_xdr_rate
-            .saturating_mul(NetworkEconomics::ICP_XDR_RATE_TO_BASIS_POINT_MULTIPLIER);
+        let minimum_xdr_permyriad_per_icp = governance.with_borrow(|g| {
+            g.economics()
+                .minimum_icp_xdr_rate
+                .saturating_mul(NetworkEconomics::ICP_XDR_RATE_TO_BASIS_POINT_MULTIPLIER)
+        });
 
-        let maximum_node_provider_rewards_e8s = self.economics().maximum_node_provider_rewards_e8s;
+        let maximum_node_provider_rewards_e8s =
+            governance.with_borrow(|g| g.economics().maximum_node_provider_rewards_e8s);
 
         let xdr_permyriad_per_icp = max(avg_xdr_permyriad_per_icp, minimum_xdr_permyriad_per_icp);
 
         // Iterate over all node providers, calculate their rewards, and append them to
         // `rewards`
-        for np in &self.heap_data.node_providers {
+        let node_providers = governance.with_borrow(|g| g.heap_data.node_providers.clone());
+        for np in &node_providers {
             if let Some(np_id) = &np.id {
                 let xdr_permyriad_reward = *rewards_per_node_provider.get(np_id).unwrap_or(&0);
 
@@ -7956,7 +7966,7 @@ impl Governance {
             xdr_conversion_rate: Some(xdr_conversion_rate.into()),
             minimum_xdr_permyriad_per_icp: Some(minimum_xdr_permyriad_per_icp),
             maximum_node_provider_rewards_e8s: Some(maximum_node_provider_rewards_e8s),
-            node_providers: self.heap_data.node_providers.clone(),
+            node_providers,
             registry_version: None,
         })
     }
@@ -7984,7 +7994,9 @@ impl Governance {
         })?;
 
         // The average (last 30 days) conversion rate from 10,000ths of an XDR to 1 ICP
-        let icp_xdr_conversion_rate = self.get_average_icp_xdr_conversion_rate().await?.data;
+        let icp_xdr_conversion_rate = Self::get_average_icp_xdr_conversion_rate(&GOVERNANCE)
+            .await?
+            .data;
         let avg_xdr_permyriad_per_icp = icp_xdr_conversion_rate.xdr_permyriad_per_icp;
 
         // Convert minimum_icp_xdr_rate to basis points for comparison with avg_xdr_permyriad_per_icp
@@ -8087,11 +8099,11 @@ impl Governance {
 
     /// A helper for the CMC's get_average_icp_xdr_conversion_rate method
     async fn get_average_icp_xdr_conversion_rate(
-        &self,
+        governance: &'static LocalKey<RefCell<Governance>>,
     ) -> Result<IcpXdrConversionRateCertifiedResponse, GovernanceError> {
+        let env = governance.with_borrow(|g| g.env.clone());
         let cmc_response:
-            Vec<u8> = self
-            .env
+            Vec<u8> = env
             .call_canister_method(
                 CYCLES_MINTING_CANISTER_ID,
                 "get_average_icp_xdr_conversion_rate",
