@@ -3,6 +3,9 @@ Enumerate every component file dependency for GuestOS
 """
 
 component_files = {
+    # environment
+    Label("guestos/environment/90-sev-status.sh"): "/etc/systemd/system-environment-generators/90-sev-status.sh",
+
     # early-boot
     Label("early-boot/relabel-machine-id/relabel-machine-id-guestos.sh"): "/opt/ic/bin/relabel-machine-id.sh",
     Label("early-boot/relabel-machine-id/relabel-machine-id.service"): "/etc/systemd/system/relabel-machine-id.service",
@@ -65,7 +68,6 @@ component_files = {
     Label("misc/config/config-guestos.sh"): "/opt/ic/bin/config.sh",
     Label("misc/logging.sh"): "/opt/ic/bin/logging.sh",
     Label("misc/metrics.sh"): "/opt/ic/bin/metrics.sh",
-    Label("misc/serial-getty@/guestos/override.conf"): "/etc/systemd/system/serial-getty@.service.d/override.conf",
     Label("misc/chrony/chrony.conf"): "/etc/chrony/chrony.conf",
     Label("misc/chrony/chrony-var.service"): "/etc/systemd/system/chrony-var.service",
     Label("misc/vsock/10-vhost-vsock.rules"): "/etc/udev/rules.d/10-vhost-vsock.rules",

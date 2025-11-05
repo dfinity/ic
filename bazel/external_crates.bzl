@@ -430,9 +430,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "convert_case": crate.spec(
                 version = "^0.6.0",
             ),
-            "raw-cpuid": crate.spec(
-                version = "11.5",
-            ),
             "crc32fast": crate.spec(
                 version = "^1.2.0",
             ),
@@ -513,8 +510,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.3.2",
                 features = ["serde"],
             ),
+            "evm_rpc_client": crate.spec(
+                version = "^0.2.0",
+            ),
             "evm_rpc_types": crate.spec(
-                version = "^2.0.0",
+                version = "^3.0.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
@@ -1133,6 +1133,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "stream",
                 ],
             ),
+            "rexpect": crate.spec(
+                version = "0.6",
+            ),
             "ring": crate.spec(
                 version = "^0.17.7",
                 features = [
@@ -1261,7 +1264,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.9.33",
             ),
             "sev": crate.spec(
-                version = "6.2",
+                version = "7.1",
                 default_features = False,
                 features = [
                     "crypto_nossl",
@@ -1563,26 +1566,26 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.235.0",
+                version = "^0.240.0",
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasm-smith": crate.spec(
-                version = "^0.235.0",
+                version = "^0.240.0",
                 default_features = False,
                 features = [
                     "wasmparser",
                 ],
             ),
             "wasmparser": crate.spec(
-                version = "^0.235.0",
+                version = "^0.240.0",
             ),
             "wasmprinter": crate.spec(
-                version = "^0.235.0",
+                version = "^0.240.0",
             ),
             "wasmtime": crate.spec(
-                version = "^35.0.0",
+                version = "^38.0.3",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1593,13 +1596,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^35.0.0",
+                version = "^38.0.3",
             ),
             "wast": crate.spec(
-                version = "^235.0.0",
+                version = "^240.0.0",
             ),
             "wat": crate.spec(
-                version = "^1.235.0",
+                version = "^1.240.0",
             ),
             "wee_alloc": crate.spec(
                 version = "^0.4.3",

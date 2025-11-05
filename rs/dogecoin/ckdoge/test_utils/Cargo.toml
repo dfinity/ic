@@ -8,6 +8,7 @@ documentation.workspace = true
 
 [dependencies]
 assert_matches = { workspace = true }
+bitcoin = { workspace = true }
 candid = { workspace = true }
 canlog = { path = "../../../../packages/canlog" }
 ic-bitcoin-canister-mock = { path = "../../../bitcoin/mock" }

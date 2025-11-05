@@ -4,11 +4,9 @@
     "cross-chain-team": "eng-cross-chain-prs",
     "crypto-team": "eng-crypto-mr",
     "DRE": "eng-release-bots",
-    "execution": "eng-execution-mrs",
     "FinInt": "eng-fi-mrs",
     "ic-support": "ic-support-notifications",
     "ic-interface-owners": "interface-owners",
-    "ic-message-routing-owners": "eng-message-routing-mr",
     "ic-owners-owners": "owners-owners",
     "InfraSec": "eng-infrasec",
     "languages": "eng-motoko",
@@ -19,7 +17,7 @@
     "pocket-ic": "pocket-ic",
     "Product Security": "eng-prodsec",
     "research": "team-research",
-    "runtime": "runtime-code-reviews",
     "sdk": "sdk",
+    "team-dsm": "eng-dsm-prs",
     "utopia": "eng-utopia"
 }
