@@ -175,6 +175,7 @@ members = [
     "rs/ic_os/config_types/compatibility_tests",
     "rs/ic_os/deterministic_ips",
     "rs/ic_os/device",
+    "rs/ic_os/dev_test_tools/bare_metal_deployment",
     "rs/ic_os/dev_test_tools/setupos-disable-checks",
     "rs/ic_os/dev_test_tools/setupos-image-config",
     "rs/ic_os/fstrim_tool",
@@ -791,6 +792,7 @@ rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
 serde_regex = "1.1.0"
+rexpect = "0.6"
 reqwest = { version = "0.12.15", default-features = false, features = [
     "blocking",
     "http2",
