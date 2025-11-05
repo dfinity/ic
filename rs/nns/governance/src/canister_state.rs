@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 
 thread_local! {
-    pub static GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
+    pub(crate) static GOVERNANCE: RefCell<Governance> = RefCell::new(Governance::new_uninitialized(
         Arc::new(CanisterEnv::new()),
         Arc::new(IcpLedgerCanister::<CdkRuntime>::new(LEDGER_CANISTER_ID)),
         Arc::new(CMCCanister::<CdkRuntime>::new()),
