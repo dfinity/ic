@@ -52,7 +52,9 @@ const SEV_CERTIFICATE_CACHE_DIR: &str = "/var/ic/sev/certificates";
 
 /// If we cannot decide from the logs within this timeout whether the GuestOS boot succeeded or
 /// failed, we dump GuestOS logs on the console.
-const GUESTOS_BOOT_TIMEOUT: Duration = Duration::from_secs(600);
+/// We have an alert that triggers if the subnet is not available after 5 minutes, we use the same
+/// timeout here.
+const GUESTOS_BOOT_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 /// The GuestOS will log one of these marker texts on the serial output.
 const GUESTOS_BOOT_SUCCESS_MARKER: &str = "GUESTOS BOOT SUCCESS";
@@ -551,7 +553,7 @@ impl GuestVmService {
         ));
 
         // Check for and display serial logs if they exist
-        let _ignore = self.display_serial_logs().await;
+        self.display_serial_logs().await;
 
         self.write_to_console_and_stdout(&format!(
             "Exiting so that systemd can restart {}",
@@ -597,7 +599,7 @@ impl GuestVmService {
             }
             Ok(Ok(false)) => {
                 self.write_to_console_and_stdout("GuestOS boot failed");
-                let _ = self.display_serial_logs().await;
+                self.display_serial_logs().await;
             }
             Ok(Err(err)) => {
                 self.write_to_console_and_stdout(&format!(
@@ -606,7 +608,7 @@ impl GuestVmService {
             }
             Err(_) => {
                 self.write_to_console_and_stdout("GuestOS boot timed out");
-                let _ = self.display_serial_logs().await;
+                self.display_serial_logs().await;
             }
         }
     }
@@ -647,7 +649,7 @@ impl GuestVmService {
     }
 
     /// Displays serial logs from the console log file if it exists
-    async fn display_serial_logs(&self) -> Result<()> {
+    async fn display_serial_logs(&self) {
         let serial_log_path = &self.vm_serial_log_path;
         if serial_log_path.exists() {
             self.write_to_console_and_stdout("#################################################");
@@ -657,18 +659,23 @@ impl GuestVmService {
             let tail_output = Command::new("tail")
                 .args(["-n", "100", serial_log_path.to_str().unwrap()])
                 .output()
-                .await
-                .context("Failed to tail serial log")?;
+                .await;
 
-            let logs = String::from_utf8_lossy(&tail_output.stdout);
-            for line in logs.lines() {
-                self.write_to_console_and_stdout(&format!("[GUESTOS] {line}"));
+            match tail_output {
+                Ok(tail_output) => {
+                    for line in String::from_utf8_lossy(&tail_output.stdout).lines() {
+                        self.write_to_console_and_stdout(&format!("[GUESTOS] {line}"));
+                    }
+                }
+                Err(err) => {
+                    self.write_to_console_and_stdout(&format!(
+                        "Failed to tail Guest serial log. {err}"
+                    ));
+                }
             }
         } else {
             self.write_to_console_and_stdout("No console log file found.");
         }
-
-        Ok(())
     }
 
     /// Monitors the virtual machine for shutdown or stop signals
