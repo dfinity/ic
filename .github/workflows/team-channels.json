@@ -18,6 +18,6 @@
     "Product Security": "eng-prodsec",
     "research": "team-research",
     "sdk": "sdk",
-    "utopia": "eng-utopia",
-    "team-dsm": "eng-dsm-prs"
+    "team-dsm": "eng-dsm-prs",
+    "utopia": "eng-utopia"
 }
