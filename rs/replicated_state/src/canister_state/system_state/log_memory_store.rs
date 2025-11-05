@@ -80,15 +80,19 @@ impl HeaderV1 {
     }
 
     fn lookup_capacity(&self) -> usize {
-        (self.lookup_table_pages as usize * PAGE_SIZE) / SLOT_SIZE
+        // We store one extra slot to avoid overlap of head and tail.
+        let full_capacity = (self.lookup_table_pages as usize * PAGE_SIZE) / SLOT_SIZE;
+        full_capacity - 1
     }
 
     fn lookup_head(&self) -> usize {
         (self.data_head as usize) / PAGE_SIZE
     }
 
-    fn lookup_tail(&self) -> usize {
-        (self.data_tail as usize) / PAGE_SIZE
+    fn lookup_pre_tail(&self) -> usize {
+        let capacity = self.lookup_capacity();
+        let lookup_tail = (self.data_tail as usize) / PAGE_SIZE;
+        (capacity + lookup_tail - 1) % capacity
     }
 }
 
@@ -110,7 +114,7 @@ fn test_header_v1_roundtrip_serialization() {
     assert_eq!(original, recovered);
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 #[repr(C, packed)]
 struct LookupSlot {
     idx_min: u64,
@@ -151,6 +155,53 @@ fn test_lookup_slot_serialization() {
     let bytes = LookupSlotBytes::from(&original);
     let recovered = LookupSlot::from(&bytes);
     assert_eq!(original, recovered);
+}
+
+// define and implement LookupTableIterator that iterates over lookup slots from head to pre_tail, adds extra slot for tail and handles wrapping.
+// iterator should start with data from header.lookup_head() and end with header.lookup_pre_tail() handling wrapping around the ring buffer.
+// after that the last extra slot for tail should be returned.
+struct LookupTableIterator<'a> {
+    ring_buffer: &'a RingBuffer,
+    capacity: usize,
+    current: usize,
+    pre_tail: usize,
+    done: bool,
+}
+
+impl<'a> LookupTableIterator<'a> {
+    fn new(ring_buffer: &'a RingBuffer) -> Self {
+        let header = ring_buffer.read_header();
+        println!("ABC header: {:?}", header);
+        Self {
+            ring_buffer,
+            capacity: header.lookup_capacity(),
+            current: header.lookup_head(),
+            pre_tail: header.lookup_pre_tail(),
+            done: false,
+        }
+    }
+}
+
+impl Iterator for LookupTableIterator<'_> {
+    type Item = LookupSlot;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+        let slot = self
+            .ring_buffer
+            .read_lookup_slot(self.current, self.capacity)
+            .ok()?;
+        if self.current == self.pre_tail {
+            self.current = self.capacity;
+        } else if self.current == self.capacity {
+            self.done = true;
+        } else {
+            self.current = (self.current + 1) % self.capacity;
+        }
+        Some(slot)
+    }
 }
 
 struct DataEntry {
@@ -310,6 +361,7 @@ impl RingBuffer {
             buffer: Buffer::new(page_map),
             lookup_table: Vec::new(),
         };
+        // TODO: init lookup table if not created yet.
         ring_buffer.load_lookup_table();
         ring_buffer
     }
@@ -325,6 +377,7 @@ impl RingBuffer {
     fn read_header(&self) -> HeaderV1 {
         let mut bytes = [0; V1_PACKED_HEADER_SIZE];
         self.buffer.read(&mut bytes, HEADER_OFFSET);
+        // TODO: add header validation.
         HeaderV1::from(&bytes)
     }
 
@@ -345,11 +398,20 @@ impl RingBuffer {
         self.read_header().next_idx
     }
 
-    fn read_lookup_slot(&self, slot_index: usize) -> LookupSlot {
+    fn read_lookup_slot(&self, slot_index: usize, capacity: usize) -> Result<LookupSlot, &str> {
+        // We store one extra slot to avoid overlap of head and tail.
+        let capacity_with_tail_slot = capacity + 1;
+        if slot_index >= capacity_with_tail_slot {
+            return Err("slot_index out of bounds");
+        }
         let slot_offset = V1_LOOKUP_TABLE_OFFSET + (slot_index * SLOT_SIZE);
         let mut slot_bytes = [0; SLOT_SIZE];
         self.buffer.read(&mut slot_bytes, slot_offset);
-        LookupSlot::from(&slot_bytes)
+        Ok(LookupSlot::from(&slot_bytes))
+    }
+
+    fn iter_slots(&self) -> impl Iterator<Item = LookupSlot> + '_ {
+        LookupTableIterator::new(self)
     }
 
     fn write_lookup_slot(&mut self, slot_index: usize, slot: &LookupSlot) {
@@ -359,27 +421,7 @@ impl RingBuffer {
     }
 
     fn load_lookup_table(&mut self) {
-        let header = self.read_header();
-        let (head, tail, capacity) = (
-            header.lookup_head(),
-            header.lookup_tail(),
-            header.lookup_capacity(),
-        );
-        let mut lookup_table = Vec::with_capacity(capacity);
-        if !header.is_wrapped() {
-            for i in head..tail {
-                lookup_table.push(self.read_lookup_slot(i));
-            }
-        } else {
-            for i in head..capacity {
-                lookup_table.push(self.read_lookup_slot(i));
-            }
-            for i in 0..tail {
-                // TODO: fix special case when tail == head and buffer is full.
-                lookup_table.push(self.read_lookup_slot(i));
-            }
-        }
-        self.lookup_table = lookup_table;
+        self.lookup_table = self.iter_slots().collect();
     }
 
     fn read_u64(&self, offset: u64) -> u64 {
