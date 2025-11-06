@@ -614,7 +614,7 @@ pub struct IcpFeatures {
     /// Deploys the bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
     /// Subnets: Bitcoin.
     pub bitcoin: Option<IcpFeaturesConfig>,
-    /// Deploys the dogecoin canister under the mainnet canister ID `gordg-fyaaa-aaaan-aaadq-cai` and configured for the testnet network.
+    /// Deploys the dogecoin canister under the testnet canister ID `hd7hi-kqaaa-aaaan-aaaea-cai` and configured for the regtest network.
     /// Subnets: Bitcoin.
     pub dogecoin: Option<IcpFeaturesConfig>,
     /// Deploys the canister migration orchestrator canister.

@@ -2249,8 +2249,9 @@ impl PocketIcSubnets {
             .state_machine
             .canister_exists(DOGECOIN_TESTNET_CANISTER_ID)
         {
-            // Create the Dogecoin (mainnet) canister with its ICP mainnet settings.
-            // These settings have been obtained by calling
+            // Create the Dogecoin (testnet) canister with the ICP mainnet settings of the Dogecoin mainnet canister.
+            // The Dogecoin testnet canister is empty on the ICP mainnet and thus its ICP mainnet settings are not necessarily representative.
+            // The ICP mainnet settings of the Dogecoin mainnet canister have been obtained by calling
             // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"gordg-fyaaa-aaaan-aaadq-cai";})' --ic`:
             //     settings = record {
             //       freezing_threshold = opt (2_592_000 : nat);
@@ -2288,7 +2289,7 @@ impl PocketIcSubnets {
             );
             assert_eq!(canister_id, DOGECOIN_TESTNET_CANISTER_ID);
 
-            // Install the Dogecoin (mainnet) canister.
+            // Install the Dogecoin (testnet) canister.
             let args = DogecoinInitConfig {
                 network: Some(DogecoinNetwork::Regtest),
                 fees: Some(DogecoinFees::testnet()),
