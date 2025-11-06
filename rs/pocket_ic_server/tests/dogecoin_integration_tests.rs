@@ -97,8 +97,8 @@ fn dogecoin_integration_test() {
 
     let doge_rpc = &dogecoind.rpc_client;
 
-    // `n` must be more than 100 (Coinbase maturity rule) so that the reward for the first block can be sent out
-    let mut n = 101;
+    // `n` must be more than 60 (Coinbase maturity rule) so that the reward for the first block can be sent out
+    let mut n = 61;
     // retry generating blocks until the dogecoind is up and running
     let start = std::time::Instant::now();
     loop {
