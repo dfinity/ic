@@ -16,12 +16,14 @@ const V1_LOOKUP_TABLE_OFFSET: usize = HEADER_OFFSET + V1_HEADER_SIZE;
 /// Prevents unbounded growth of `delta_log_sizes`.
 const DELTA_LOG_SIZES_CAP: usize = 100;
 
+const MAGIC: &[u8; 3] = b"LMS";
+
 const TMP_LOG_MEMORY_CAPACITY: usize = 4 * 1024 * 1024; // 4 MiB
 
 #[derive(Debug, PartialEq)]
 #[repr(C, packed)]
 struct HeaderV1 {
-    magic: [u8; 3], // "LMS"
+    magic: [u8; 3],
     version: u8,
 
     // Lookup table metadata.
@@ -84,8 +86,9 @@ impl HeaderV1 {
 
     fn lookup_capacity(&self) -> usize {
         // We store one extra slot to avoid overlap of head and tail.
-        let full_capacity = (self.lookup_table_pages as usize * PAGE_SIZE) / SLOT_SIZE;
-        full_capacity - 1
+        let capacity_with_extra_tail_slot =
+            (self.lookup_table_pages as usize * PAGE_SIZE) / SLOT_SIZE;
+        capacity_with_extra_tail_slot - 1
     }
 
     fn lookup_head(&self) -> usize {
@@ -193,10 +196,7 @@ impl Iterator for LookupTableIterator<'_> {
         if self.done {
             return None;
         }
-        let slot = self
-            .ring_buffer
-            .read_lookup_slot(self.current, self.capacity)
-            .ok()?;
+        let slot = self.ring_buffer.read_lookup_slot(self.current).ok()?;
         if self.current == self.pre_tail {
             self.current = self.capacity;
         } else if self.current == self.capacity {
@@ -236,7 +236,7 @@ fn init(data_capacity: usize) -> HeaderV1 {
     let lookup_table_pages = 1;
     let data_offset = V1_LOOKUP_TABLE_OFFSET + lookup_table_pages * PAGE_SIZE;
     HeaderV1 {
-        magic: *b"LMS",
+        magic: *MAGIC,
         version: 1,
         lookup_table_pages: lookup_table_pages as u16,
         lookup_slots_count: 0,
@@ -366,8 +366,7 @@ impl RingBuffer {
             buffer: Buffer::new(page_map),
             lookup_table: Vec::new(),
         };
-        // TODO: init lookup table if not created yet.
-        ring_buffer.load_lookup_table();
+        ring_buffer.init();
         ring_buffer
     }
 
@@ -379,10 +378,19 @@ impl RingBuffer {
         self.buffer.into_page_map()
     }
 
+    fn init(&mut self) {
+        let header = self.read_header();
+        if header.magic != *MAGIC {
+            let new_header = init(TMP_LOG_MEMORY_CAPACITY);
+            self.write_header(&new_header);
+        } else {
+            self.load_lookup_table();
+        }
+    }
+
     fn read_header(&self) -> HeaderV1 {
         let mut bytes = [0; V1_PACKED_HEADER_SIZE];
         self.buffer.read(&mut bytes, HEADER_OFFSET);
-        // TODO: add header validation.
         HeaderV1::from(&bytes)
     }
 
@@ -403,10 +411,10 @@ impl RingBuffer {
         self.read_header().next_idx
     }
 
-    fn read_lookup_slot(&self, slot_index: usize, capacity: usize) -> Result<LookupSlot, &str> {
+    fn read_lookup_slot(&self, slot_index: usize) -> Result<LookupSlot, &str> {
         // We store one extra slot to avoid overlap of head and tail.
-        let capacity_with_tail_slot = capacity + 1;
-        if slot_index >= capacity_with_tail_slot {
+        let capacity_with_extra_tail_slot = self.read_header().lookup_capacity() + 1;
+        if slot_index >= capacity_with_extra_tail_slot {
             return Err("slot_index out of bounds");
         }
         let slot_offset = V1_LOOKUP_TABLE_OFFSET + (slot_index * SLOT_SIZE);
