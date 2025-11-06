@@ -111,9 +111,7 @@ pub async fn process_controllers_changed(
     };
 
     // These checks are repeated because the canisters may have changed since validation:
-    let ProcessingResult::Success(source_status) =
-        canister_status(request.source, request.source_subnet).await
-    else {
+    let ProcessingResult::Success(source_status) = canister_status(request.source).await else {
         return ProcessingResult::NoProgress;
     };
     if source_status.status != CanisterStatusType::Stopped {
@@ -136,9 +134,7 @@ pub async fn process_controllers_changed(
         });
     }
 
-    let ProcessingResult::Success(target_status) =
-        canister_status(request.target, request.target_subnet).await
-    else {
+    let ProcessingResult::Success(target_status) = canister_status(request.target).await else {
         return ProcessingResult::NoProgress;
     };
     if target_status.status != CanisterStatusType::Stopped {

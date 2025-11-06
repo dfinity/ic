@@ -17,7 +17,7 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 thread_local! {
     static ALLOWLIST: RefCell<Option<Vec<Principal>>> = const { RefCell::new(None) };
 
-    static LOCKS: RefCell<Locks> = const {RefCell::new(Locks{ids: BTreeSet::new()}) };
+    static LOCKS: RefCell<BTreeSet<Lock>> = const {RefCell::new(BTreeSet::new()) };
 
     static ONGOING_VALIDATIONS: RefCell<u64> = const { RefCell::new(0)};
 
@@ -155,8 +155,35 @@ pub mod events {
 
 // ============================== Locks ============================== //
 
-struct Locks {
-    pub ids: BTreeSet<String>,
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+enum Lock {
+    Canister(Principal),
+    Method(String),
+}
+
+/// A way to acquire locks before performing async calls referring to a canister.
+pub struct CanisterGuard {
+    canister_id: Principal,
+}
+
+impl CanisterGuard {
+    pub fn new(canister_id: Principal) -> Result<Self, String> {
+        let lock = Lock::Canister(canister_id);
+        LOCKS.with_borrow_mut(|locks| {
+            if locks.contains(&lock) {
+                return Err("Failed to acquire lock".to_string());
+            }
+            locks.insert(lock);
+            Ok(Self { canister_id })
+        })
+    }
+}
+
+impl Drop for CanisterGuard {
+    fn drop(&mut self) {
+        let lock = Lock::Canister(self.canister_id);
+        LOCKS.with_borrow_mut(|locks| locks.remove(&lock));
+    }
 }
 
 /// A way to acquire locks before entering a critical section which may only
@@ -168,12 +195,12 @@ pub struct MethodGuard {
 impl MethodGuard {
     pub fn new(tag: &str) -> Result<Self, String> {
         let id = String::from(tag);
+        let lock = Lock::Method(id.clone());
         LOCKS.with_borrow_mut(|locks| {
-            let held_locks = &mut locks.ids;
-            if held_locks.contains(&id) {
+            if locks.contains(&lock) {
                 return Err("Failed to acquire lock".to_string());
             }
-            held_locks.insert(id.clone());
+            locks.insert(lock);
             Ok(Self { id })
         })
     }
@@ -181,7 +208,8 @@ impl MethodGuard {
 
 impl Drop for MethodGuard {
     fn drop(&mut self) {
-        LOCKS.with_borrow_mut(|locks| locks.ids.remove(&self.id));
+        let lock = Lock::Method(self.id.clone());
+        LOCKS.with_borrow_mut(|locks| locks.remove(&lock));
     }
 }
 

@@ -3099,13 +3099,35 @@ pub mod claim_or_refresh_neuron_from_account_response {
         NeuronId(NeuronId),
     }
 }
-/// The monthly Node Provider rewards as of a point in time.
+/// Date UTC used in NodeProviderRewards to define their validity boundaries
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct DateUtc {
+    pub year: u32,
+    pub month: u32,
+    pub day: u32,
+}
+/// The monthly Node Provider rewards, representing the distribution of rewards for a specific time period.
+///
+/// Prior to the introduction of the performance-based reward algorithm, rewards were computed from a
+/// single registry snapshot (identified by `registry_version`). After performance-based rewards were enabled,
+/// rewards depend on node metrics collected over a date range, making `start_date` and `end_date` essential
+/// for defining the covered period. In this case, `registry_version` is no longer set.
+///
+/// Summary of field usage:
+/// - Before performance-based rewards: `registry_version` is Some; `start_date` and `end_date` are None.
+/// - After performance-based rewards: `start_date` and `end_date` are Some; `registry_version` is None.
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
 pub struct MonthlyNodeProviderRewards {
     /// The time when the rewards were calculated.
     pub timestamp: u64,
+    /// The start date (included) that these rewards cover.
+    pub start_date: Option<DateUtc>,
+    /// The end date (included) that these rewards cover.
+    pub end_date: Option<DateUtc>,
     /// The Rewards calculated and rewarded.
     pub rewards: Vec<RewardNodeProvider>,
     /// The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.

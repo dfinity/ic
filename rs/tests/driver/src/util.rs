@@ -51,7 +51,7 @@ use ic_sns_swap::pb::v1::{NeuronBasketConstructionParameters, Params};
 use ic_test_identity::TEST_IDENTITY_KEYPAIR;
 use ic_types::{
     CanisterId, Cycles, PrincipalId,
-    messages::{HttpCallContent, HttpQueryContent},
+    messages::{HttpCallContent, HttpQueryContent, HttpReadStateContent},
 };
 use ic_universal_canister::{call_args, wasm as universal_canister_argument_builder};
 use ic_utils::{call::AsyncCall, interfaces::ManagementCanister};
@@ -1971,6 +1971,30 @@ pub fn sign_update(content: &HttpCallContent, identity: &impl Identity) -> Signa
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: content.nonce.clone().map(|blob| blob.0),
+    };
+    identity.sign(&msg).unwrap()
+}
+
+pub fn sign_read_state(content: &HttpReadStateContent, identity: &impl Identity) -> Signature {
+    use ic_agent::hash_tree::Label;
+    use std::ops::Deref;
+    let HttpReadStateContent::ReadState {
+        read_state: content,
+    } = content;
+    let paths = content
+        .paths
+        .iter()
+        .map(|path| {
+            path.deref()
+                .iter()
+                .map(|label| Label::from_bytes(label.as_bytes()))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let msg = EnvelopeContent::ReadState {
+        paths,
+        ingress_expiry: content.ingress_expiry,
+        sender: Principal::from_slice(&content.sender),
     };
     identity.sign(&msg).unwrap()
 }

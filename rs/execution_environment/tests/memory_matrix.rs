@@ -12,19 +12,21 @@ The runs ensure the following properties for every scenario:
 - the execution fails if the reserved cycles limit would be exceeded;
 - the execution fails if the canister would become frozen;
 - the execution fails if the canister does not have sufficient balance to reserve storage cycles;
-- the execution does not allocate additional cycles for canisters with memory allocation.
+- the execution does not allocate additional memory for canisters with memory allocation.
 
 The scenarios cover the following:
 - growing WASM/stable memory in canister (update) entry point;
 - growing WASM/stable memory in canister reply/cleanup callback;
-- taking a canister snapshot;
+- taking a canister snapshot (both growing and shrinking canister memory usage);
 - replacing a canister snapshot by a snapshot of the same size;
-- loading a canister snapshot;
+- loading a canister snapshot (both growing and shrinking canister memory usage);
+- deleting a canister snapshot;
 - installing code;
 - upgrading code with growing/shrinking memory and temporary memory growth in pre-upgrade;
 - reinstalling code with growing/shrinking memory;
 - uploading new chunk and uploading the same chunk again;
-- creating a new canister snapshot by uploading its metadata;
+- clearing the chunk store;
+- creating a new canister snapshot by uploading its metadata (both growing and shrinking canister memory usage);
 - uploading canister WASM module to its snapshot;
 - uploading canister WASM chunk to its snapshot;
 - increasing/decreasing canister memory allocation;
@@ -37,8 +39,8 @@ use ic_cycles_account_manager::ResourceSaturation;
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{
     BoundedVec, CanisterSettingsArgsBuilder, CanisterSnapshotDataOffset, CanisterSnapshotResponse,
-    DeleteCanisterSnapshotArgs, LoadCanisterSnapshotArgs, LogVisibilityV2, Method, Payload as _,
-    ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
+    ClearChunkStoreArgs, DeleteCanisterSnapshotArgs, LoadCanisterSnapshotArgs, LogVisibilityV2,
+    Method, Payload as _, ReadCanisterSnapshotMetadataArgs, ReadCanisterSnapshotMetadataResponse,
     TakeCanisterSnapshotArgs, UpdateSettingsArgs, UploadCanisterSnapshotDataArgs,
     UploadCanisterSnapshotMetadataArgs, UploadCanisterSnapshotMetadataResponse, UploadChunkArgs,
 };
@@ -217,8 +219,10 @@ where
                 _ => memory_usage_after_setup.get(),
             },
             MemoryUsageChange::Decrease => {
-                assert!(memory_usage_after_setup.get() >= GIB);
-                memory_usage_after_setup.get() - GIB
+                // Clearing the chunk store decreases the memory usage by 1MiB
+                // and thus we cannot have a larger offset in general.
+                assert!(memory_usage_after_setup.get() >= 512 * KIB);
+                memory_usage_after_setup.get() - 512 * KIB
             }
         },
         MemoryAllocation::Large => 80 * GIB,
@@ -1219,6 +1223,32 @@ fn test_memory_suite_upload_chunk_idempotent() {
     let params = ScenarioParams {
         scenario: Scenario::OtherManagement,
         memory_usage_change: MemoryUsageChange::None,
+        setup,
+        op,
+    };
+    test_memory_suite(params);
+}
+
+#[test]
+fn test_memory_suite_clear_chunk_store() {
+    let setup = |test: &mut ExecutionTest, canister_id: CanisterId| {
+        let upload_chunk_args = UploadChunkArgs {
+            canister_id: canister_id.get(),
+            chunk: vec![42; 1 << 20],
+        };
+        test.subnet_message(Method::UploadChunk, upload_chunk_args.encode())
+            .unwrap();
+    };
+    let op = |test: &mut ExecutionTest, canister_id: CanisterId, ()| {
+        let clear_chunk_store_args = ClearChunkStoreArgs {
+            canister_id: canister_id.get(),
+        };
+        test.subnet_message(Method::ClearChunkStore, clear_chunk_store_args.encode())
+            .err()
+    };
+    let params = ScenarioParams {
+        scenario: Scenario::OtherManagement,
+        memory_usage_change: MemoryUsageChange::Decrease,
         setup,
         op,
     };

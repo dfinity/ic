@@ -1472,10 +1472,19 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::ClearChunkStore) => {
+                let resource_saturation =
+                    self.subnet_memory_saturation(&round_limits.subnet_available_memory);
                 let res = ClearChunkStoreArgs::decode(payload).and_then(|args| {
                     let canister_id = args.get_canister_id();
-                    self.clear_chunk_store(*msg.sender(), &mut state, args)
-                        .map(|res| (res, Some(canister_id)))
+                    self.clear_chunk_store(
+                        *msg.sender(),
+                        &mut state,
+                        args,
+                        round_limits,
+                        registry_settings.subnet_size,
+                        &resource_saturation,
+                    )
+                    .map(|res| (res, Some(canister_id)))
                 });
                 ExecuteSubnetMessageResult::Finished {
                     response: res,
@@ -2437,10 +2446,21 @@ impl ExecutionEnvironment {
         sender: PrincipalId,
         state: &mut ReplicatedState,
         args: ClearChunkStoreArgs,
+        round_limits: &mut RoundLimits,
+        subnet_size: usize,
+        resource_saturation: &ResourceSaturation,
     ) -> Result<Vec<u8>, UserError> {
+        let cost_schedule = state.get_own_cost_schedule();
         let canister = get_canister_mut(args.get_canister_id(), state)?;
         self.canister_manager
-            .clear_chunk_store(sender, canister)
+            .clear_chunk_store(
+                sender,
+                canister,
+                round_limits,
+                subnet_size,
+                cost_schedule,
+                resource_saturation,
+            )
             .map(|()| EmptyBlob.encode())
             .map_err(|err| err.into())
     }
@@ -2666,6 +2686,7 @@ impl ExecutionEnvironment {
         let new_id = args.rename_to.get_canister_id();
         let to_version = args.rename_to.version;
         let to_total_num_changes = args.rename_to.total_num_changes;
+        let requested_by = args.requested_by();
 
         // Take canister out.
         let mut canister = match state.take_canister_state(&old_id) {
@@ -2688,6 +2709,7 @@ impl ExecutionEnvironment {
                 new_id,
                 to_version,
                 to_total_num_changes,
+                requested_by,
                 state,
                 round_limits,
             )
