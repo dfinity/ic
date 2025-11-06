@@ -8907,9 +8907,7 @@ fn invoke_cost_http_request_v2() {
         subnet_size,
         CanisterCyclesCostSchedule::Normal,
     );
-    let Ok(WasmResult::Reply(bytes)) = res else {
-        panic!("Expected reply, got {res:?}");
-    };
+    let bytes = get_reply(res);
     let actual_cost = Cycles::from(&bytes);
     assert_eq!(actual_cost, expected_cost,);
 }
