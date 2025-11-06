@@ -1066,6 +1066,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: Some(all_icp_features()),
         incomplete_state: None,
         initial_time: None,

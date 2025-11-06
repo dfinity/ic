@@ -1444,6 +1444,7 @@ pub async fn create_instance(
                     instance_config.icp_config.unwrap_or(IcpConfig::default()),
                     log_level,
                     instance_config.bitcoind_addr,
+                    instance_config.dogecoind_addr,
                     instance_config.icp_features,
                     instance_config.incomplete_state,
                     initial_time,

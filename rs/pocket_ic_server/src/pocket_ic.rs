@@ -12,7 +12,8 @@ use axum::{
     extract::State,
     response::{Html, IntoResponse},
 };
-use bitcoin::Network as BtcAdapterNetwork;
+use bitcoin::Network as BitcoinNetwork;
+use bitcoin::dogecoin::Network as DogecoinNetwork;
 use bytes::Bytes;
 use candid::{CandidType, Decode, Encode, Principal};
 use cycles_minting_canister::{
@@ -26,7 +27,7 @@ use hyper::header::{CONTENT_TYPE, HeaderValue};
 use hyper::{Method, StatusCode};
 use ic_boundary::{Health, RootKey, status};
 use ic_btc_adapter::config::{Config as BitcoinAdapterConfig, IncomingSource as BtcIncomingSource};
-use ic_btc_adapter::start_server as start_btc_server;
+use ic_btc_adapter::{AdapterNetwork, start_server as start_btc_server};
 use ic_btc_interface::{Fees as BtcFees, InitConfig as BtcInitConfig, Network as BtcNetwork};
 use ic_config::adapters::AdaptersConfig;
 use ic_config::execution_environment::MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT;
@@ -321,6 +322,7 @@ impl BitcoinAdapterParts {
     fn new(
         bitcoind_addr: Vec<SocketAddr>,
         uds_path: PathBuf,
+        network: AdapterNetwork,
         log_level: Option<Level>,
         replica_logger: ReplicaLogger,
         metrics_registry: MetricsRegistry,
@@ -332,7 +334,7 @@ impl BitcoinAdapterParts {
             logger: logger_config_from_level(log_level),
             incoming_source: BtcIncomingSource::Path(uds_path.clone()),
             address_limits: (1, 1),
-            ..BitcoinAdapterConfig::default_with(BtcAdapterNetwork::Regtest.into())
+            ..BitcoinAdapterConfig::default_with(network)
         };
         let adapter = tokio::spawn(async move {
             start_btc_server(replica_logger, metrics_registry, bitcoin_adapter_config).await
@@ -539,12 +541,14 @@ struct PocketIcSubnets {
     icp_config: IcpConfig,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
+    dogecoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
     initial_time: SystemTime,
     auto_progress_enabled: bool,
     gateway_port: Option<u16>,
     synced_registry_version: RegistryVersion,
     _bitcoin_adapter_parts: Option<BitcoinAdapterParts>,
+    _dogecoin_adapter_parts: Option<BitcoinAdapterParts>,
 }
 
 impl PocketIcSubnets {
@@ -559,6 +563,7 @@ impl PocketIcSubnets {
         icp_config: &IcpConfig,
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
+        dogecoin_adapter_uds_path: Option<PathBuf>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
@@ -649,6 +654,7 @@ impl PocketIcSubnets {
             .with_registry_data_provider(registry_data_provider.clone())
             .with_log_level(log_level)
             .with_bitcoin_testnet_uds_path(bitcoin_adapter_uds_path)
+            .with_dogecoin_testnet_uds_path(dogecoin_adapter_uds_path)
             .create_at_registry_version(create_at_registry_version)
     }
 
@@ -658,6 +664,7 @@ impl PocketIcSubnets {
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
         initial_time: SystemTime,
         auto_progress_enabled: bool,
@@ -686,12 +693,14 @@ impl PocketIcSubnets {
             icp_config,
             log_level,
             bitcoind_addr,
+            dogecoind_addr,
             icp_features,
             initial_time,
             auto_progress_enabled,
             gateway_port,
             synced_registry_version,
             _bitcoin_adapter_parts: None,
+            _dogecoin_adapter_parts: None,
         }
     }
 
@@ -777,6 +786,12 @@ impl PocketIcSubnets {
             } else {
                 None
             };
+        let dogecoin_adapter_uds_path =
+            if matches!(subnet_kind, SubnetKind::Bitcoin) && self.dogecoind_addr.is_some() {
+                Some(NamedTempFile::new().unwrap().into_temp_path().to_path_buf())
+            } else {
+                None
+            };
 
         let latest_registry_version = self.registry_data_provider.latest_version().get();
         let create_at_registry_version = if update_registry_and_system_canisters {
@@ -799,6 +814,7 @@ impl PocketIcSubnets {
             &self.icp_config,
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
+            dogecoin_adapter_uds_path.clone(),
         );
 
         if let Some(subnet_id) = subnet_id {
@@ -877,11 +893,22 @@ impl PocketIcSubnets {
         }
 
         // We need `StateMachine` components (metrics/logger)
-        // to create a bitcoin adapter (if applicable).
+        // to create a bitcoin/dogecoin adapter (if applicable).
         if let Some(bitcoin_adapter_uds_path) = bitcoin_adapter_uds_path {
             self._bitcoin_adapter_parts = Some(BitcoinAdapterParts::new(
                 self.bitcoind_addr.clone().unwrap(),
                 bitcoin_adapter_uds_path,
+                AdapterNetwork::Bitcoin(BitcoinNetwork::Regtest),
+                self.log_level,
+                sm.replica_logger.clone(),
+                sm.metrics_registry.clone(),
+            ));
+        }
+        if let Some(dogecoin_adapter_uds_path) = dogecoin_adapter_uds_path {
+            self._dogecoin_adapter_parts = Some(BitcoinAdapterParts::new(
+                self.dogecoind_addr.clone().unwrap(),
+                dogecoin_adapter_uds_path,
+                AdapterNetwork::Dogecoin(DogecoinNetwork::Testnet),
                 self.log_level,
                 sm.replica_logger.clone(),
                 sm.metrics_registry.clone(),
@@ -2475,6 +2502,7 @@ impl PocketIc {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn try_new(
         runtime: Arc<Runtime>,
         seed: u64,
@@ -2483,6 +2511,7 @@ impl PocketIc {
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
         incomplete_state: Option<IncompleteStateFlag>,
         initial_time: Option<Time>,
@@ -2740,6 +2769,7 @@ impl PocketIc {
             icp_config,
             log_level,
             bitcoind_addr,
+            dogecoind_addr,
             icp_features,
             initial_time,
             auto_progress_enabled,
@@ -4754,6 +4784,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
                 false,
                 None,
             )
@@ -4767,6 +4798,7 @@ mod tests {
                 },
                 None,
                 IcpConfig::default(),
+                None,
                 None,
                 None,
                 None,
