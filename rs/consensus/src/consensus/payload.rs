@@ -4,14 +4,14 @@ use crate::consensus::metrics::{
 use ic_consensus_utils::pool_reader::filter_past_payloads;
 use ic_interfaces::{
     batch_payload::{BatchPayloadBuilder, PastPayload, ProposalContext},
-    consensus::PayloadValidationError,
+    consensus::{PayloadValidationError, PayloadWithSizeEstimate},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
 };
 use ic_logger::{ReplicaLogger, error, warn};
 use ic_types::{
-    CountBytes, Height, NumBytes, Time,
+    Height, NumBytes, Time,
     batch::{BatchPayload, IngressPayload, SelfValidatingPayload, XNetPayload},
     consensus::Payload,
     messages::MAX_XNET_PAYLOAD_SIZE_ERROR_MARGIN_PERCENT,
@@ -114,12 +114,14 @@ impl BatchPayloadSectionBuilder {
             Self::Ingress(builder) => {
                 let past_payloads = builder
                     .filter_past_payloads(past_payloads, proposal_context.validation_context);
-                let ingress = builder.get_ingress_payload(
+                let PayloadWithSizeEstimate {
+                    payload: ingress,
+                    wire_size_estimate: size,
+                } = builder.get_ingress_payload(
                     &past_payloads,
                     proposal_context.validation_context,
                     max_size,
                 );
-                let size = NumBytes::new(ingress.count_bytes() as u64);
 
                 // Validate the ingress payload as a safety measure
                 if let Err(err) = builder.validate_ingress_payload(
@@ -384,12 +386,11 @@ impl BatchPayloadSectionBuilder {
             Self::Ingress(builder) => {
                 let past_payloads = builder
                     .filter_past_payloads(past_payloads, proposal_context.validation_context);
-                builder.validate_ingress_payload(
+                Ok(builder.validate_ingress_payload(
                     &payload.ingress,
                     &past_payloads,
                     proposal_context.validation_context,
-                )?;
-                Ok(NumBytes::new(payload.ingress.count_bytes() as u64))
+                )?)
             }
             Self::XNet(builder) => {
                 let past_payloads = builder.filter_past_payloads(past_payloads);
