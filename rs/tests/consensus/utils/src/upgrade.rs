@@ -43,8 +43,8 @@ pub fn fetch_unassigned_node_version(endpoint: &IcNodeSnapshot) -> Result<Replic
     Ok(ReplicaVersion::try_from(version)?)
 }
 
-pub fn assert_assigned_replica_version(
-    node: &IcNodeSnapshot,
+pub fn assert_assigned_replica_version<N: HasPublicApiUrl>(
+    node: &N,
     expected_version: &ReplicaVersion,
     logger: Logger,
 ) {
@@ -53,17 +53,19 @@ pub fn assert_assigned_replica_version(
 
 /// Waits until the node is healthy and running the given replica version.
 /// Panics if the timeout is reached while waiting.
-pub fn assert_assigned_replica_version_with_time(
-    node: &IcNodeSnapshot,
+pub fn assert_assigned_replica_version_with_time<N: HasPublicApiUrl>(
+    node: &N,
     expected_version: &ReplicaVersion,
     logger: Logger,
     total_secs: u64,
     backoff_secs: u64,
 ) {
+    let node_ip = node.get_public_addr().ip();
+
     info!(
         logger,
         "Waiting until the node {} is healthy and running replica version {}",
-        node.get_ip_addr(),
+        node_ip,
         expected_version
     );
 
@@ -79,8 +81,7 @@ pub fn assert_assigned_replica_version_with_time(
     let result = ic_system_test_driver::retry_with_msg!(
         format!(
             "Check if node {} is healthy and running replica version {}",
-            node.get_ip_addr(),
-            expected_version
+            node_ip, expected_version
         ),
         logger.clone(),
         secs(total_secs),
@@ -123,7 +124,9 @@ pub fn assert_assigned_replica_version_with_time(
 }
 
 /// Gets the replica version from the node if it is healthy.
-pub fn get_assigned_replica_version(node: &IcNodeSnapshot) -> Result<ReplicaVersion, String> {
+pub fn get_assigned_replica_version<N: HasPublicApiUrl>(
+    node: &N,
+) -> Result<ReplicaVersion, String> {
     let version = match node.status() {
         Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,
         Ok(status) => return Err(format!("Replica is not healthy: {status:?}")),

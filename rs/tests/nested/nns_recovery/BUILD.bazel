@@ -32,6 +32,7 @@ rust_library(
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
         "//rs/tests/nested",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:rand",
         "@crate_index//:sha2",

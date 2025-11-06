@@ -17,7 +17,7 @@ use ic_consensus_system_test_utils::{
         update_subnet_record, wait_until_authentication_is_granted,
     },
     subnet::assert_subnet_is_healthy,
-    upgrade::bless_replica_version,
+    upgrade::{assert_assigned_replica_version, bless_replica_version},
 };
 use ic_recovery::{
     RecoveryArgs,
@@ -37,6 +37,7 @@ use ic_system_test_driver::{
     retry_with_msg_async,
     util::block_on,
 };
+use ic_types::ReplicaVersion;
 use nested::util::{get_host_boot_id_async, setup_ic_infrastructure};
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
@@ -427,12 +428,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         let mut handles = JoinSet::new();
 
         for vm in hosts_to_fix {
-            let logger = logger.clone();
-            let env = env.clone();
-            let vm = vm.clone();
-            let recovery_img_hash = recovery_img_hash.clone();
-            let artifacts_hash = artifacts_hash.clone();
-
             if cfg.sequential_np_actions {
                 simulate_node_provider_action(
                     &logger,
@@ -441,9 +436,17 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                     RECOVERY_GUESTOS_IMG_VERSION,
                     &recovery_img_hash,
                     &artifacts_hash,
+                    &upgrade_version,
                 )
                 .await;
             } else {
+                let logger = logger.clone();
+                let env = env.clone();
+                let vm = vm.clone();
+                let recovery_img_hash = recovery_img_hash.clone();
+                let artifacts_hash = artifacts_hash.clone();
+                let upgrade_version = upgrade_version.clone();
+
                 handles.spawn(async move {
                     simulate_node_provider_action(
                         &logger,
@@ -452,6 +455,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                         RECOVERY_GUESTOS_IMG_VERSION,
                         &recovery_img_hash,
                         &artifacts_hash,
+                        &upgrade_version,
                     )
                     .await
                 });
@@ -464,10 +468,6 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
     });
 
     info!(logger, "Ensure the subnet is healthy after the recovery");
-    let nns_subnet =
-        block_on(topology.block_for_newer_registry_version_within_duration(secs(600), secs(10)))
-            .expect("Could not obtain updated registry.")
-            .root_subnet();
     let new_msg = "subnet recovery still works!";
     assert_subnet_is_healthy(
         &nns_subnet.nodes().collect::<Vec<_>>(),
@@ -486,6 +486,7 @@ async fn simulate_node_provider_action(
     img_version: &str,
     img_version_hash: &str,
     artifacts_hash: &str,
+    upgrade_version: &ReplicaVersion,
 ) {
     let host_boot_id_pre_reboot = get_host_boot_id_async(host).await;
 
@@ -551,6 +552,9 @@ async fn simulate_node_provider_action(
     impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
         .await
         .expect("Failed to spoof GuestOS DNS");
+
+    // Wait until the node has booted the expected GuestOS version
+    assert_assigned_replica_version(host, upgrade_version, logger.clone());
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, logger: &Logger) {
