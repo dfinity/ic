@@ -34,6 +34,9 @@ system_test(
     env = {
         "NODE_ROOT_TESTS_UVM_CONFIG_PATH": "$(rootpath :root_tests_config_image)",
     },
+    proc_macro_deps = [
+        "@crate_index//:indoc",
+    ],
     tags = [
         "long_test",  # The P90 duration of this test was over 6 minutes for the week starting on 2025-08-21.
     ],
