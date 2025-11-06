@@ -1,0 +1,299 @@
+use crate::{Setup, into_outpoint, parse_dogecoin_address};
+use candid::Principal;
+use ic_bitcoin_canister_mock::Utxo;
+use ic_ckdoge_minter::address::DogecoinAddress;
+use ic_ckdoge_minter::candid_api::{
+    GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalError,
+};
+use ic_ckdoge_minter::{
+    BitcoinAddress, BurnMemo, ChangeOutput, EventType, RetrieveBtcRequest, WithdrawalFee,
+    memo_encode,
+};
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::Memo;
+use icrc_ledger_types::icrc3::transactions::Burn;
+use std::collections::{BTreeMap, BTreeSet};
+
+/// Entry point in the withdrawal flow
+///
+/// Step 1: approve the minter to burn user's funds
+pub struct WithdrawalFlowStart<S> {
+    setup: S,
+}
+
+impl<S> WithdrawalFlowStart<S> {
+    pub fn new(setup: S) -> Self {
+        Self { setup }
+    }
+
+    pub fn ledger_approve_minter<A>(self, account: A, amount: u64) -> RetrieveDogeFlow<S>
+    where
+        A: Into<Account>,
+        S: AsRef<Setup>,
+    {
+        let account = account.into();
+        let _ledger_approval_index = self
+            .setup
+            .as_ref()
+            .ledger()
+            .icrc2_approve(account, amount, self.setup.as_ref().minter().id)
+            .expect("BUG: failed to approve minter");
+
+        RetrieveDogeFlow {
+            setup: self.setup,
+            account,
+        }
+    }
+}
+
+/// Step 2: Call `retrieve_doge_with_approval` on the minter
+pub struct RetrieveDogeFlow<S> {
+    setup: S,
+    account: Account,
+}
+
+impl<S> RetrieveDogeFlow<S>
+where
+    S: AsRef<Setup>,
+{
+    pub fn minter_retrieve_doge_with_approval(
+        self,
+        amount: u64,
+        address: impl Into<String>,
+    ) -> ProcessWithdrawal<S> {
+        use ic_ckdoge_minter::candid_api::RetrieveDogeWithApprovalArgs;
+
+        let address = address.into();
+        let Account { owner, subaccount } = self.account;
+        let balance_before = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
+        let result = self.setup.as_ref().minter().retrieve_doge_with_approval(
+            owner,
+            &RetrieveDogeWithApprovalArgs {
+                amount,
+                from_subaccount: subaccount,
+                address: address.clone(),
+            },
+        );
+
+        ProcessWithdrawal {
+            setup: self.setup,
+            account: self.account,
+            balance_before,
+            amount,
+            address,
+            result,
+        }
+    }
+}
+
+pub struct ProcessWithdrawal<S> {
+    setup: S,
+    account: Account,
+    balance_before: u64,
+    amount: u64,
+    address: String,
+    result: Result<RetrieveDogeOk, RetrieveDogeWithApprovalError>,
+}
+
+impl<S> ProcessWithdrawal<S>
+where
+    S: AsRef<Setup>,
+{
+    pub fn expect_withdrawal_request_accepted(self) -> DogecoinWithdrawalTransactionFlow<S> {
+        let retrieve_doge_id = self
+            .result
+            .expect("BUG: withdrawal request was not accepted!");
+
+        let address = DogecoinAddress::parse(&self.address, &self.setup.as_ref().network())
+            .expect("BUG: minter accepted a withdrawal request with an invalid dogecoin address!");
+
+        let minter = self.setup.as_ref().minter();
+        assert_eq!(
+            minter.retrieve_doge_status(retrieve_doge_id.block_index),
+            RetrieveDogeStatus::Pending
+        );
+        minter
+            .assert_that_events()
+            .ignoring_timestamp()
+            .contains_only_once_in_order(&[EventType::AcceptedRetrieveBtcRequest(
+                RetrieveBtcRequest {
+                    amount: self.amount,
+                    address: BitcoinAddress::P2pkh(address.as_bytes().to_vec().try_into().unwrap()),
+                    block_index: retrieve_doge_id.block_index,
+                    received_at: 0, //not relevant
+                    kyt_provider: None,
+                    reimbursement_account: Some(self.account),
+                },
+            )]);
+
+        let ledger = self.setup.as_ref().ledger();
+        ledger
+            .assert_that_transaction(retrieve_doge_id.block_index)
+            .equals_burn_ignoring_timestamp(Burn {
+                amount: self.amount.into(),
+                from: self.account,
+                spender: Some(minter.id().into()),
+                memo: Some(Memo::from(memo_encode(&BurnMemo::Convert {
+                    address: Some(&self.address),
+                    kyt_fee: None,
+                    status: None,
+                }))),
+                created_at_time: None,
+                fee: None,
+            });
+
+        let balance_after = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
+
+        assert_eq!(self.balance_before - balance_after, self.amount);
+
+        DogecoinWithdrawalTransactionFlow {
+            setup: self.setup,
+            amount: self.amount,
+            address,
+            retrieve_doge_id,
+        }
+    }
+}
+
+pub struct DogecoinWithdrawalTransactionFlow<S> {
+    setup: S,
+    amount: u64,
+    address: DogecoinAddress,
+    retrieve_doge_id: RetrieveDogeOk,
+}
+
+impl<S> DogecoinWithdrawalTransactionFlow<S>
+where
+    S: AsRef<Setup>,
+{
+    pub fn dogecoin_await_transaction(self, used_utxos: Vec<Utxo>) -> WithdrawalFlowEnd<S> {
+        let minter = self.setup.as_ref().minter();
+        let txid = minter.await_doge_transaction(self.retrieve_doge_id.block_index);
+
+        // TODO XC-496: fix fee handling
+        let change_amount = 1_000_300;
+        let withdrawal_fee = WithdrawalFee {
+            minter_fee: 300,
+            bitcoin_fee: 220,
+        };
+        minter
+            .assert_that_events()
+            .ignoring_timestamp()
+            .contains_only_once_in_order(&[EventType::SentBtcTransaction {
+                request_block_indices: vec![self.retrieve_doge_id.block_index],
+                txid,
+                utxos: used_utxos.clone(),
+                change_output: Some(ChangeOutput {
+                    vout: 1,
+                    value: change_amount,
+                }),
+                submitted_at: 0, //not relevant
+                fee_per_vbyte: Some(1_500),
+                withdrawal_fee: Some(withdrawal_fee),
+            }]);
+
+        let mut mempool = self.setup.as_ref().dogecoin().mempool();
+        assert_eq!(
+            mempool.len(),
+            1,
+            "ckDOGE transaction did not appear in the mempool"
+        );
+        let transaction = mempool
+            .remove(&txid)
+            .expect("the mempool does not contain the withdrawal transaction");
+
+        WithdrawalFlowEnd {
+            setup: self.setup,
+            amount: self.amount,
+            address: self.address,
+            withdrawal_fee,
+            used_utxos,
+            tx: transaction,
+        }
+    }
+}
+
+pub struct WithdrawalFlowEnd<S> {
+    setup: S,
+    amount: u64,
+    address: DogecoinAddress,
+    withdrawal_fee: WithdrawalFee,
+    used_utxos: Vec<Utxo>,
+    tx: bitcoin::Transaction,
+}
+
+impl<S> WithdrawalFlowEnd<S>
+where
+    S: AsRef<Setup>,
+{
+    pub fn verify_withdrawal_transaction(self) {
+        let tx_outpoints: BTreeSet<_> = self
+            .tx
+            .input
+            .iter()
+            .map(|input| input.previous_output)
+            .collect();
+        let total_inputs: u64 = self.used_utxos.iter().map(|input| input.value).sum();
+        let expected_outpoints: BTreeSet<_> = self
+            .used_utxos
+            .into_iter()
+            .map(|utxo| into_outpoint(utxo.outpoint))
+            .collect();
+        assert_eq!(tx_outpoints, expected_outpoints);
+
+        let network = self.setup.as_ref().network();
+        let minter = self.setup.as_ref().minter();
+        let minter_address = self
+            .setup
+            .as_ref()
+            .parse_dogecoin_address(minter.get_doge_address(
+                Principal::anonymous(),
+                &GetDogeAddressArgs {
+                    owner: Some(minter.id()),
+                    subaccount: None,
+                },
+            ));
+
+        // expect at least 2 outputs:
+        // 1) to beneficiary's address on Dogecoin
+        // 2) to minter's address for the change output
+        let outputs: BTreeMap<_, _> = self
+            .tx
+            .output
+            .iter()
+            .map(|output| (parse_dogecoin_address(network, output), output))
+            .collect();
+        assert_eq!(outputs.len(), self.tx.output.len());
+
+        let beneficiary_output = outputs
+            .get(
+                &self
+                    .setup
+                    .as_ref()
+                    .parse_dogecoin_address(self.address.display(&network)),
+            )
+            .expect("BUG: missing output to beneficiary");
+        assert!(
+            outputs.contains_key(&minter_address),
+            "BUG: missing change output"
+        );
+
+        let total_outputs: u64 = self
+            .tx
+            .output
+            .iter()
+            .map(|output| output.value.to_sat())
+            .sum();
+        assert_eq!(
+            total_inputs - total_outputs,
+            self.withdrawal_fee.bitcoin_fee
+        );
+        let total_fee = self.withdrawal_fee.bitcoin_fee + self.withdrawal_fee.minter_fee;
+        // Fee is shared across all outputs, excepted for the change output to the minter
+        // There might be a one-off error due to sharing the fee evenly across the involved outputs.
+        let fee_share_lower_bound = total_fee / (self.tx.output.len() as u64 - 1);
+        let fee_share_upper_bound = fee_share_lower_bound + 1;
+        let range = (self.amount - fee_share_upper_bound)..=(self.amount - fee_share_lower_bound);
+        assert!(range.contains(&beneficiary_output.value.to_sat()));
+    }
+}
