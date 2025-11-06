@@ -764,6 +764,10 @@ pub(crate) mod test {
             assert_eq!(node.data.height, 0);
             assert_eq!(node.data.header, genesis_block_header);
             assert_eq!(cache.get_active_chain_tip().header, genesis_block_header);
+
+            // key_bytes = 35 = 32 + 3
+            //     where 3 is key "TIP", 32 is the genesis hash len.
+            // val_bytes = 149, obtained after running this test.
             assert!(matches!(
                 cache.on_disk.as_ref().unwrap().total_header_bytes(),
                 Ok((35, 149))
@@ -876,8 +880,9 @@ pub(crate) mod test {
             assert_eq!(cache.metrics.on_disk_elements.get(), 4);
             assert_eq!(cache.metrics.in_memory_elements.get(), 1);
 
-            // key_bytes = 131 = 32 * 4 + 3 (where 3 is key "TIP")
-            // val_bytes is obtained after running this test.
+            // key_bytes = 131 = 32 * 4 + 3
+            //     where 3 is key "TIP", and 4 is on_disk_elements.
+            // val_bytes = 596, obtained after running this test.
             assert!(matches!(
                 cache.on_disk.as_ref().unwrap().total_header_bytes(),
                 Ok((131, 596))
