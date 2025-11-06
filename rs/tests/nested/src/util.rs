@@ -371,7 +371,7 @@ pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
     block_on_bash_script_and_log_with_timeout(
         logger,
         host,
-        "cat /var/log/libvirt/qemu/guestos-serial.log",
+        "sudo tail -n 200 /var/log/libvirt/qemu/guestos-serial.log",
         SSH_TIMEOUT,
     );
 
