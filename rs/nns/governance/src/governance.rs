@@ -129,7 +129,7 @@ use maplit::hashmap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::sync::Arc;
 use std::{
     borrow::Cow,
@@ -7895,13 +7895,15 @@ impl Governance {
     ) -> Result<MonthlyNodeProviderRewards, GovernanceError> {
         thread_local! {
             static INFLIGHT: Cell<bool> = const { Cell::new(false) };
-            static CACHE: Cell<Option<(u64, MonthlyNodeProviderRewards)>> = const { Cell::new(None) };
+            static CACHE: RefCell<Option<(u64, MonthlyNodeProviderRewards)>> = const { RefCell::new(None) };
         }
 
         let now = self.env.now();
         const FIVE_MINUTES_IN_SECONDS: u64 = 5 * 60;
 
-        if let Some((last_update_timestamp_seconds, rewards)) = CACHE.get() {
+        if let Some((last_update_timestamp_seconds, rewards)) =
+            CACHE.with(|cache| cache.borrow().clone())
+        {
             let time_since_last_update_seconds = now.saturating_sub(last_update_timestamp_seconds);
 
             if time_since_last_update_seconds < FIVE_MINUTES_IN_SECONDS {
@@ -7912,7 +7914,8 @@ impl Governance {
         if INFLIGHT.get() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::External,
-                "get_node_provider_rewards called while there is an inflight call to NRC",
+                "get_node_provider_rewards called while there is an inflight call to NRC.\
+                Please try again in 10 seconds.",
             ));
         }
 
