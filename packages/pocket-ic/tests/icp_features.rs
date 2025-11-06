@@ -69,6 +69,7 @@ fn all_icp_features() -> IcpFeatures {
         ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
         bitcoin: Some(IcpFeaturesConfig::DefaultConfig),
+        dogecoin: Some(IcpFeaturesConfig::DefaultConfig),
         canister_migration: Some(IcpFeaturesConfig::DefaultConfig),
     }
 }

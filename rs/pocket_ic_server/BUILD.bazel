@@ -84,6 +84,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-doge-interface",
     "@crate_index//:ic-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:itertools",
@@ -162,6 +163,7 @@ EXTERNAL_CANISTER_DATA = [
     "@sns_aggregator//file",
     "@mainnet_canisters//:nns_dapp_test.wasm.gz",
     "@mainnet_canisters//:bitcoin_testnet.wasm.gz",
+    "@mainnet_canisters//:dogecoin.wasm.gz",
 ]
 
 EXTERNAL_CANISTER_ENV = {
@@ -170,6 +172,7 @@ EXTERNAL_CANISTER_ENV = {
     "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator//file)",
     "NNS_DAPP_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:nns_dapp_test.wasm.gz)",
     "BITCOIN_TESTNET_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:bitcoin_testnet.wasm.gz)",
+    "DOGECOIN_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:dogecoin.wasm.gz)",
 }
 
 HEAD_NNS_CANISTER_DATA = [

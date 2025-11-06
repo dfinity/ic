@@ -1400,6 +1400,8 @@ pub async fn create_instance(
             nns_ui,
             /* `nns_ui` does not depend on `bitcoin` */
             bitcoin: _,
+            /* `nns_ui` does not depend on `dogecoin` */
+            dogecoin: _,
             /* `nns_ui` does not depend on `canister_migration` */
             canister_migration: _,
         } = icp_features;

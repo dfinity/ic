@@ -9180,6 +9180,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-doge-interface"
+version = "0.1.0"
+source = "git+https://github.com/dfinity/dogecoin-canister?rev=74e6dc9a10ba64d2dbad013282c26d74cd49863f#74e6dc9a10ba64d2dbad013282c26d74cd49863f"
+dependencies = [
+ "candid",
+ "datasize",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-dummy-getrandom-for-wasm"
 version = "0.1.0"
 dependencies = [
@@ -19309,6 +19320,7 @@ dependencies = [
  "ic-crypto-iccsa",
  "ic-crypto-sha2",
  "ic-crypto-utils-threshold-sig-der",
+ "ic-doge-interface",
  "ic-ed25519 0.4.0",
  "ic-error-types 0.2.0",
  "ic-gateway",
