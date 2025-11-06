@@ -72,8 +72,8 @@
     "tag": "cycles-ledger-v1.0.6"
   },
   "cycles_ledger_index": {
-    "rev": "83923a194d39835e8a7d9549f9f0831b962a60c2",
-    "sha256": "6c406b9dc332f3dc58b823518ab2b2c481467307ad9e540122f17bd9b926c123"
+    "rev": "e446c64d99a97e38166be23ff2bfade997d15ff7",
+    "sha256": "8df72887ab235f4533ee613b1bc7293ec8d62c866525b1425934cf992ef894a7"
   },
   "dogecoin": {
     "sha256": "0711bc8316c8f845596fb1a74a7e61e4151df5858e9e0fdde5afe03241cd4254",
