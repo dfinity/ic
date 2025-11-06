@@ -40,4 +40,7 @@ async fn main() {
             info!(logger, "Orchestrator shut down gracefully")
         }
     }
+
+    // Wait a bit to let Vector scrape all logs
+    tokio::time::sleep(Duration::from_secs(5)).await;
 }
