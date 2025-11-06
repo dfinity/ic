@@ -13,7 +13,7 @@ use std::time::SystemTime;
 #[derive(CandidType, serde::Deserialize)]
 pub struct SendRequest {
     pub destination_address: String,
-    pub amount_in_satoshi: u64,
+    pub amount_in_koinu: u64,
 }
 
 fn deploy_dogecoin_example_canister(pic: &PocketIc) -> Principal {
@@ -119,7 +119,7 @@ fn dogecoin_integration_test() {
         }
     }
 
-    let reward = 50 * 100_000_000; // 50 DOGE
+    let reward = 500_000 * 100_000_000; // 500,000 DOGE
 
     loop {
         if get_balance(&pic, dogecoin_example_canister_id, dogecoin_address.clone()) == n * reward {
@@ -130,7 +130,7 @@ fn dogecoin_integration_test() {
     let send_amount = 100_000_000; // 1 DOGE
     let send_request = SendRequest {
         destination_address: another_dogecoin_address.clone(),
-        amount_in_satoshi: send_amount,
+        amount_in_koinu: send_amount,
     };
     update_candid::<_, (String,)>(
         &pic,
