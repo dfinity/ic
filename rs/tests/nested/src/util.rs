@@ -344,12 +344,36 @@ pub fn block_on_bash_script_and_log<N: SshSession>(log: &Logger, node: &N, cmd: 
     }
 }
 
+/// Execute a bash script on a node via SSH with a custom timeout and log the output.
+pub fn block_on_bash_script_and_log_with_timeout<N: SshSession>(
+    log: &Logger,
+    node: &N,
+    cmd: &str,
+    timeout: Duration,
+) {
+    match node
+        .block_on_ssh_session_with_timeout(timeout)
+        .and_then(|session| node.block_on_bash_script_from_session(&session, cmd))
+    {
+        Ok(out) => info!(log, "{cmd}:\n{out}"),
+        Err(err) => warn!(log, "Failed to execute '{cmd}': {:?}", err),
+    }
+}
+
 /// Logs guestos diagnostics, used in the event of test failure
 pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
     info!(logger, "Logging GuestOS diagnostics...");
 
+    /// 10-second timeout prevents excessive logging when SSH is unavailable.
+    const SSH_TIMEOUT: Duration = Duration::from_secs(10);
+
     info!(logger, "GuestOS console logs...");
-    block_on_bash_script_and_log(logger, host, "cat /var/log/libvirt/qemu/guestos-serial.log");
+    block_on_bash_script_and_log_with_timeout(
+        logger,
+        host,
+        "cat /var/log/libvirt/qemu/guestos-serial.log",
+        SSH_TIMEOUT,
+    );
 
     match host.get_guest_ssh() {
         Ok(guest) => {
@@ -362,7 +386,7 @@ pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
             ];
 
             for cmd in diagnostics {
-                block_on_bash_script_and_log(logger, &guest, cmd);
+                block_on_bash_script_and_log_with_timeout(logger, &guest, cmd, SSH_TIMEOUT);
             }
         }
         Err(err) => {

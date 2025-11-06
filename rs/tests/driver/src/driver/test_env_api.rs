@@ -1478,13 +1478,17 @@ pub trait SshSession: HasTestEnv {
             .context("Failed to get SSH session")
     }
 
-    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
     fn block_on_ssh_session(&self) -> Result<Session> {
+        self.block_on_ssh_session_with_timeout(SSH_RETRY_TIMEOUT)
+    }
+
+    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    fn block_on_ssh_session_with_timeout(&self, timeout: Duration) -> Result<Session> {
         let ip = self.get_host_ip()?;
         retry_with_msg!(
             format!("get_ssh_session to {ip}"),
             self.test_env().logger(),
-            SSH_RETRY_TIMEOUT,
+            timeout,
             RETRY_BACKOFF,
             || { self.get_ssh_session() }
         )
