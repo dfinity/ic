@@ -77,13 +77,14 @@ if [ $FORCE_REPIN != "1" ] && bazel query @crate_index//:all >/dev/null; then
     exit 0
 fi
 
+# TODO: fix this
 if [ "${CRATES:-}" == "" ]; then
     echo "Repinning all crates"
-    CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
+    #CARGO_BAZEL_REPIN=1 bazel sync --only=crate_index
 else
     echo "Repinning ${#CRATES[@]} crates"
     for crate in "${CRATES[@]}"; do
         echo "Repinning crate: ${crate}"
-        CARGO_BAZEL_REPIN="${crate}" bazel sync --only=crate_index
+        #CARGO_BAZEL_REPIN="${crate}" bazel sync --only=crate_index
     done
 fi

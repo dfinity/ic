@@ -78,6 +78,10 @@ BUILD_INFO_REV = "701a696844fba5c87df162fbbc1ccef96f27c9d7"
 
 crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
 
+# Rust crates.
+# Build any crate with `@crate_index//:TODO`
+# Use particular version with `@crate_index//:VERSION`
+
 crate.spec(package="actix-rt",
                 version = "^2.10.0",
             )
@@ -192,15 +196,15 @@ crate.spec(package="bitcoin",
                     "serde",
                 ],
             )
-# crate.spec(package="bitcoin-0-28",
-#                 package = "bitcoin",
-#                 version = "^0.28.2",
-#                 features = [
-#                     "default",
-#                     "rand",
-#                     "use-serde",
-#                 ],
-#             )
+crate.spec(
+    package = "bitcoin",
+    version = "^0.28.2",
+    features = [
+        "default",
+        "rand",
+        "use-serde",
+    ],
+)
 crate.spec(package="bitflags",
                 version = "^1.2.1",
             )
@@ -1252,10 +1256,9 @@ crate.spec(package="syn",
                     "full",
                 ],
             )
-# crate.spec(package="syn2",
-#                 package = "syn",
-#                 version = "^2.0.101",
-#             )
+crate.spec(package = "syn",
+           version = "^2.0.101",
+            )
 crate.spec(package="syscalls",
                 version = "^0.6.18",
             )
@@ -1541,6 +1544,7 @@ crate.spec(package="zstd",
                 version = "^0.13.2",
             )
 
+# Crate annotations
 
 crate.annotation(
     crate = "openssl-sys",
@@ -1556,8 +1560,111 @@ crate.annotation(
 )
 
 crate.annotation(
-    crate = "metrics-proxy",
-    gen_binaries = ["metrics-proxy"],
+    crate = "canbench",
+    gen_binaries = ["canbench"],
+)
+
+crate.annotation(
+    crate = "cc",
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:cc_rs.patch"],
+)
+crate.annotation(
+    crate = "libssh2-sys",
+    # Patch for determinism issues
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:libssh2-sys.patch"],
+    build_script_data = [
+        "@openssl//:gen_dir",
+    ],
+)
+
+crate.annotation(
+    crate = "libz-sys",
+    crate_features = ["static"],
+)
+
+crate.annotation(
+    crate = "curve25519-dalek",
+    rustc_flags = [
+        "-C",
+        "opt-level=3",
+    ],
+)
+
+crate.annotation(
+    crate = "ic_bls12_381",
+    rustc_flags = [
+        "-C",
+        "opt-level=3",
+    ],
+)
+
+crate.annotation(
+    crate = "k256",
+    rustc_flags = [
+        "-C",
+        "opt-level=3",
+    ],
+)
+
+crate.annotation(
+    crate = "lmdb-rkv-sys",
+    # patch our fork of the lmdb-rkv-sys to allow specifying the path
+    # to the built static archive
+    patch_args = ["-p1"],
+    patches = ["@@//bazel:lmdb_rkv_sys.patch"],
+    build_script_data = [
+        "@lmdb//:liblmdb",
+        "@lmdb//:lmdb.h",
+    ],
+    build_script_env = {
+        "LMDB_OVERRIDE": "$(location @lmdb//:liblmdb)",
+        "LMDB_H_PATH": "$(location @lmdb//:lmdb.h)",
+    },
+)
+
+crate.annotation(
+    crate = "p256",
+    rustc_flags = [
+        "-C",
+        "opt-level=3",
+    ],
+)
+
+crate.annotation_select(
+    crate = "tikv-jemalloc-sys",
+    triples = ["x86_64-unknown-linux-gnu"],
+    # Avoid building jemalloc from rust (in part bc it creates builder-specific config files)
+    build_script_data = ["@jemalloc//:libjemalloc"],
+    build_script_env = {"JEMALLOC_OVERRIDE": "$(location @jemalloc//:libjemalloc)"},
+)
+
+# TODO: remove
+# crate.annotation(
+#     crate = "secp256k1-sys",
+#     # This specific version is used by ic-btc-kyt canister, which
+#     # requires an extra cfg flag to avoid linking issues.
+#     # Applying the same cfg to other versions of secp256k1-sys
+#     # may break other programs or tests.
+#     version = "0.10.0",
+#     rustc_flags = ["--cfg=rust_secp_no_symbol_renaming"],
+# )
+
+
+crate.annotation(
+    crate = "sha2",
+    rustc_flags = [
+        "-C",
+        "opt-level=3",
+    ],
+)
+
+crate.annotation(
+    crate = "ring",
+    build_script_env = {
+        "CFLAGS": "-fdebug-prefix-map=$${pwd}=/source",
+    },
 )
 
 crate.annotation(
@@ -1566,8 +1673,40 @@ crate.annotation(
 )
 
 crate.annotation(
-    crate = "canbench",
-    gen_binaries = ["canbench"],
+    crate = "librocksdb-sys",
+    build_script_env = {
+        # Bazel executors assign only one core when executing
+        # the build script, making rocksdb compilation
+        # extremely slow. Bazel doesn't provide any way to
+        # override this settings so we cheat by starting more
+        # processes in parallel.
+        #
+        # See IDX-2406.
+        "NUM_JOBS": "8",
+    },
+)
+
+
+crate.annotation(
+    crate = "pprof",
+    build_script_data = [
+        "@com_google_protobuf//:protoc",
+    ],
+    build_script_env = {
+        "PROTOC": "$(execpath @com_google_protobuf//:protoc)",
+    },
+)
+
+crate.annotation(
+    crate = "prost-build",
+    build_script_env = {
+        "PROTOC_NO_VENDOR": "1",
+    },
+)
+
+crate.annotation(
+    crate = "metrics-proxy",
+    gen_binaries = ["metrics-proxy"],
 )
 
 crate.from_specs(
