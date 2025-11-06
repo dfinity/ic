@@ -432,7 +432,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                 simulate_node_provider_action(
                     &logger,
                     &env,
-                    &vm,
+                    vm,
                     RECOVERY_GUESTOS_IMG_VERSION,
                     &recovery_img_hash,
                     &artifacts_hash,
