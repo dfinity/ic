@@ -439,12 +439,12 @@ rust_test(
     data = [
         ":pocket-ic-server",
         "//:dogecoind",
-        "@bitcoin_example_canister//file",
+        ":tests/basic_dogecoin.wasm.gz",
         "@mozilla_root_ca_store//file",
     ],
     env = {
         "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-        "DOGECOIN_EXAMPLE_CANISTER_WASM": "$(rootpath @bitcoin_example_canister//file)",
+        "DOGECOIN_EXAMPLE_CANISTER_WASM": "$(rootpath :tests/basic_dogecoin.wasm.gz)",
         "DOGECOIND_BIN": "$(rootpath //:dogecoind)",
         "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
     },
