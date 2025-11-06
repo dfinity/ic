@@ -21,6 +21,7 @@ const TMP_LOG_MEMORY_CAPACITY: usize = 4 * 1024 * 1024; // 4 MiB
 #[derive(Debug, PartialEq)]
 #[repr(C, packed)]
 struct HeaderV1 {
+    magic: [u8; 3], // "LMS"
     version: u8,
 
     // Lookup table metadata.
@@ -35,22 +36,23 @@ struct HeaderV1 {
     data_size: u64,
     next_idx: u64,
 }
-const V1_PACKED_HEADER_SIZE: usize = 53;
+const V1_PACKED_HEADER_SIZE: usize = 56;
 const _: () = assert!(std::mem::size_of::<HeaderV1>() == V1_PACKED_HEADER_SIZE);
 type HeaderV1Bytes = [u8; V1_PACKED_HEADER_SIZE];
 
 impl From<&HeaderV1> for HeaderV1Bytes {
     fn from(header: &HeaderV1) -> Self {
         let mut bytes = [0; V1_PACKED_HEADER_SIZE];
-        bytes[0] = header.version;
-        bytes[1..3].copy_from_slice(&header.lookup_table_pages.to_le_bytes());
-        bytes[3..5].copy_from_slice(&header.lookup_slots_count.to_le_bytes());
-        bytes[5..13].copy_from_slice(&header.data_offset.to_le_bytes());
-        bytes[13..21].copy_from_slice(&header.data_capacity.to_le_bytes());
-        bytes[21..29].copy_from_slice(&header.data_head.to_le_bytes());
-        bytes[29..37].copy_from_slice(&header.data_tail.to_le_bytes());
-        bytes[37..45].copy_from_slice(&header.data_size.to_le_bytes());
-        bytes[45..53].copy_from_slice(&header.next_idx.to_le_bytes());
+        bytes[0..3].copy_from_slice(&header.magic);
+        bytes[3] = header.version;
+        bytes[4..6].copy_from_slice(&header.lookup_table_pages.to_le_bytes());
+        bytes[6..8].copy_from_slice(&header.lookup_slots_count.to_le_bytes());
+        bytes[8..16].copy_from_slice(&header.data_offset.to_le_bytes());
+        bytes[16..24].copy_from_slice(&header.data_capacity.to_le_bytes());
+        bytes[24..32].copy_from_slice(&header.data_head.to_le_bytes());
+        bytes[32..40].copy_from_slice(&header.data_tail.to_le_bytes());
+        bytes[40..48].copy_from_slice(&header.data_size.to_le_bytes());
+        bytes[48..56].copy_from_slice(&header.next_idx.to_le_bytes());
         bytes
     }
 }
@@ -58,15 +60,16 @@ impl From<&HeaderV1> for HeaderV1Bytes {
 impl From<&HeaderV1Bytes> for HeaderV1 {
     fn from(bytes: &HeaderV1Bytes) -> Self {
         Self {
-            version: bytes[0],
-            lookup_table_pages: u16::from_le_bytes(bytes[1..3].try_into().unwrap()),
-            lookup_slots_count: u16::from_le_bytes(bytes[3..5].try_into().unwrap()),
-            data_offset: u64::from_le_bytes(bytes[5..13].try_into().unwrap()),
-            data_capacity: u64::from_le_bytes(bytes[13..21].try_into().unwrap()),
-            data_head: u64::from_le_bytes(bytes[21..29].try_into().unwrap()),
-            data_tail: u64::from_le_bytes(bytes[29..37].try_into().unwrap()),
-            data_size: u64::from_le_bytes(bytes[37..45].try_into().unwrap()),
-            next_idx: u64::from_le_bytes(bytes[45..53].try_into().unwrap()),
+            magic: [bytes[0], bytes[1], bytes[2]],
+            version: bytes[3],
+            lookup_table_pages: u16::from_le_bytes(bytes[4..6].try_into().unwrap()),
+            lookup_slots_count: u16::from_le_bytes(bytes[6..8].try_into().unwrap()),
+            data_offset: u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
+            data_capacity: u64::from_le_bytes(bytes[16..24].try_into().unwrap()),
+            data_head: u64::from_le_bytes(bytes[24..32].try_into().unwrap()),
+            data_tail: u64::from_le_bytes(bytes[32..40].try_into().unwrap()),
+            data_size: u64::from_le_bytes(bytes[40..48].try_into().unwrap()),
+            next_idx: u64::from_le_bytes(bytes[48..56].try_into().unwrap()),
         }
     }
 }
@@ -99,6 +102,7 @@ impl HeaderV1 {
 #[test]
 fn test_header_v1_roundtrip_serialization() {
     let original = HeaderV1 {
+        magic: *b"LMS",
         version: 1,
         lookup_table_pages: 2,
         lookup_slots_count: 3,
@@ -232,6 +236,7 @@ fn init(data_capacity: usize) -> HeaderV1 {
     let lookup_table_pages = 1;
     let data_offset = V1_LOOKUP_TABLE_OFFSET + lookup_table_pages * PAGE_SIZE;
     HeaderV1 {
+        magic: *b"LMS",
         version: 1,
         lookup_table_pages: lookup_table_pages as u16,
         lookup_slots_count: 0,
