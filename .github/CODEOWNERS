@@ -66,9 +66,9 @@ go_deps.bzl               @dfinity/idx
 /packages/ic-sha3/                              @dfinity/crypto-team
 /packages/ic-signature-verification/            @dfinity/crypto-team
 /packages/ic-vetkd-utils/                       @dfinity/crypto-team
-/packages/ic-call-chaos/                        @dfinity/ic-message-routing-owners
-/packages/ic-call-retry/                        @dfinity/ic-message-routing-owners
-/packages/ic-safe-upgrades/                     @dfinity/ic-message-routing-owners
+/packages/ic-call-chaos/                        @dfinity/team-dsm
+/packages/ic-call-retry/                        @dfinity/team-dsm
+/packages/ic-safe-upgrades/                     @dfinity/team-dsm
 
 # [IC-OS]
 /ic-os/                                                                 @dfinity/node
