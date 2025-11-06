@@ -2,6 +2,7 @@ use clap::Parser;
 use ic_http_endpoints_async_utils::shutdown_signal;
 use ic_logger::{info, new_replica_logger_from_config, warn};
 use orchestrator::{args::OrchestratorArgs, orchestrator::Orchestrator};
+use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
 #[tokio::main]
