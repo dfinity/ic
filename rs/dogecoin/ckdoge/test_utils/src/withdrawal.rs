@@ -58,7 +58,7 @@ where
 {
     pub fn minter_retrieve_doge_with_approval(
         self,
-        amount: u64,
+        withdrawal_amount: u64,
         address: impl Into<String>,
     ) -> ProcessWithdrawal<S> {
         use ic_ckdoge_minter::candid_api::RetrieveDogeWithApprovalArgs;
@@ -69,7 +69,7 @@ where
         let result = self.setup.as_ref().minter().retrieve_doge_with_approval(
             owner,
             &RetrieveDogeWithApprovalArgs {
-                amount,
+                amount: withdrawal_amount,
                 from_subaccount: subaccount,
                 address: address.clone(),
             },
@@ -79,7 +79,7 @@ where
             setup: self.setup,
             account: self.account,
             balance_before,
-            amount,
+            withdrawal_amount,
             address,
             result,
         }
@@ -90,7 +90,7 @@ pub struct ProcessWithdrawal<S> {
     setup: S,
     account: Account,
     balance_before: u64,
-    amount: u64,
+    withdrawal_amount: u64,
     address: String,
     result: Result<RetrieveDogeOk, RetrieveDogeWithApprovalError>,
 }
@@ -117,7 +117,7 @@ where
             .ignoring_timestamp()
             .contains_only_once_in_order(&[EventType::AcceptedRetrieveBtcRequest(
                 RetrieveBtcRequest {
-                    amount: self.amount,
+                    amount: self.withdrawal_amount,
                     address: BitcoinAddress::P2pkh(address.as_bytes().to_vec().try_into().unwrap()),
                     block_index: retrieve_doge_id.block_index,
                     received_at: 0, //not relevant
@@ -130,7 +130,7 @@ where
         ledger
             .assert_that_transaction(retrieve_doge_id.block_index)
             .equals_burn_ignoring_timestamp(Burn {
-                amount: self.amount.into(),
+                amount: self.withdrawal_amount.into(),
                 from: self.account,
                 spender: Some(minter.id().into()),
                 memo: Some(Memo::from(memo_encode(&BurnMemo::Convert {
@@ -144,11 +144,11 @@ where
 
         let balance_after = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
 
-        assert_eq!(self.balance_before - balance_after, self.amount);
+        assert_eq!(self.balance_before - balance_after, self.withdrawal_amount);
 
         DogecoinWithdrawalTransactionFlow {
             setup: self.setup,
-            amount: self.amount,
+            withdrawal_amount: self.withdrawal_amount,
             address,
             retrieve_doge_id,
         }
@@ -157,7 +157,7 @@ where
 
 pub struct DogecoinWithdrawalTransactionFlow<S> {
     setup: S,
-    amount: u64,
+    withdrawal_amount: u64,
     address: DogecoinAddress,
     retrieve_doge_id: RetrieveDogeOk,
 }
@@ -204,7 +204,8 @@ where
 
         WithdrawalFlowEnd {
             setup: self.setup,
-            amount: self.amount,
+            withdrawal_amount: self.withdrawal_amount,
+            change_amount,
             address: self.address,
             withdrawal_fee,
             used_utxos,
@@ -215,7 +216,8 @@ where
 
 pub struct WithdrawalFlowEnd<S> {
     setup: S,
-    amount: u64,
+    withdrawal_amount: u64,
+    change_amount: u64,
     address: DogecoinAddress,
     withdrawal_fee: WithdrawalFee,
     used_utxos: Vec<Utxo>,
@@ -273,9 +275,9 @@ where
                     .parse_dogecoin_address(self.address.display(&network)),
             )
             .expect("BUG: missing output to beneficiary");
-        assert!(
-            outputs.contains_key(&minter_address),
-            "BUG: missing change output"
+        assert_eq!(
+            outputs.get(&minter_address).unwrap().value.to_sat(),
+            self.change_amount
         );
 
         let total_outputs: u64 = self
@@ -293,7 +295,8 @@ where
         // There might be a one-off error due to sharing the fee evenly across the involved outputs.
         let fee_share_lower_bound = total_fee / (self.tx.output.len() as u64 - 1);
         let fee_share_upper_bound = fee_share_lower_bound + 1;
-        let range = (self.amount - fee_share_upper_bound)..=(self.amount - fee_share_lower_bound);
+        let range = (self.withdrawal_amount - fee_share_upper_bound)
+            ..=(self.withdrawal_amount - fee_share_lower_bound);
         assert!(range.contains(&beneficiary_output.value.to_sat()));
     }
 }
