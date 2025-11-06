@@ -764,6 +764,10 @@ pub(crate) mod test {
             assert_eq!(node.data.height, 0);
             assert_eq!(node.data.header, genesis_block_header);
             assert_eq!(cache.get_active_chain_tip().header, genesis_block_header);
+            assert!(matches!(
+                cache.on_disk.as_ref().unwrap().total_header_bytes(),
+                Ok((35, 149))
+            ));
             // Check initial metrics
             assert_eq!(cache.metrics.in_memory_elements.get(), 1);
             assert_eq!(cache.metrics.on_disk_elements.get(), 1);
@@ -782,6 +786,7 @@ pub(crate) mod test {
             }
             assert_eq!(cache.metrics.in_memory_elements.get(), 7);
             assert_eq!(cache.metrics.on_disk_elements.get(), 1);
+
             // Add more headers
             let intermediate = cache.get_active_chain_tip();
             let intermediate_hash = intermediate.header.block_hash();
@@ -870,6 +875,13 @@ pub(crate) mod test {
             assert_eq!(cache.metrics.anchor_height_on_disk.get(), 3);
             assert_eq!(cache.metrics.on_disk_elements.get(), 4);
             assert_eq!(cache.metrics.in_memory_elements.get(), 1);
+
+            // key_bytes = 131 = 32 * 4 + 3 (where 3 is key "TIP")
+            // val_bytes is obtained after running this test.
+            assert!(matches!(
+                cache.on_disk.as_ref().unwrap().total_header_bytes(),
+                Ok((131, 596))
+            ));
 
             assert!(cache.get_header(genesis_block_hash).is_some());
             let tips = get_tips_of(&cache, genesis_block_hash);
