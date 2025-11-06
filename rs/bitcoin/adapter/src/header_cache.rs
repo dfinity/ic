@@ -630,6 +630,9 @@ impl<Header: BlockchainHeader + Send + Sync + 'static> HybridHeaderCache<Header>
     ) -> Result<(), LMDBCacheError> {
         if let Some(on_disk) = &self.on_disk {
             let to_persist = self.in_memory.get_ancestor_chain(anchor);
+            self.metrics
+                .headers_pruned_from_memory
+                .observe(to_persist.len() as f64);
             // Only persist when there are more than 1 header because
             // get_ancestor_chain always returns at least 1 header.
             if to_persist.len() > 1 {
