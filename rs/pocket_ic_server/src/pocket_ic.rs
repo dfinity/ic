@@ -74,10 +74,10 @@ use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
-    CYCLES_MINTING_CANISTER_ID, DOGECOIN_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID,
-    LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID,
-    NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
-    SNS_WASM_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, DOGECOIN_TESTNET_CANISTER_ID, GOVERNANCE_CANISTER_ID,
+    IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID,
+    MIGRATION_CANISTER_ID, NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID,
+    SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_governance_api::{NetworkEconomics, Neuron, neuron::DissolveState};
@@ -915,7 +915,7 @@ impl PocketIcSubnets {
             self._dogecoin_adapter_parts = Some(BitcoinAdapterParts::new(
                 self.dogecoind_addr.clone().unwrap(),
                 dogecoin_adapter_uds_path,
-                AdapterNetwork::Dogecoin(DogecoinAdapterNetwork::Testnet),
+                AdapterNetwork::Dogecoin(DogecoinAdapterNetwork::Regtest),
                 self.log_level,
                 sm.replica_logger.clone(),
                 sm.metrics_registry.clone(),
@@ -2247,7 +2247,7 @@ impl PocketIcSubnets {
 
         if !btc_subnet
             .state_machine
-            .canister_exists(DOGECOIN_CANISTER_ID)
+            .canister_exists(DOGECOIN_TESTNET_CANISTER_ID)
         {
             // Create the Dogecoin (mainnet) canister with its ICP mainnet settings.
             // These settings have been obtained by calling
@@ -2269,7 +2269,7 @@ impl PocketIcSubnets {
             let settings = CanisterSettingsArgs {
                 controllers: Some(BoundedVec::new(vec![
                     ROOT_CANISTER_ID.get(),
-                    DOGECOIN_CANISTER_ID.get(),
+                    DOGECOIN_TESTNET_CANISTER_ID.get(),
                 ])),
                 compute_allocation: Some(0_u64.into()),
                 memory_allocation: Some(0_u64.into()),
@@ -2282,15 +2282,15 @@ impl PocketIcSubnets {
                 environment_variables: None,
             };
             let canister_id = btc_subnet.state_machine.create_canister_with_cycles(
-                Some(DOGECOIN_CANISTER_ID.get()),
+                Some(DOGECOIN_TESTNET_CANISTER_ID.get()),
                 Cycles::zero(),
                 Some(settings),
             );
-            assert_eq!(canister_id, DOGECOIN_CANISTER_ID);
+            assert_eq!(canister_id, DOGECOIN_TESTNET_CANISTER_ID);
 
             // Install the Dogecoin (mainnet) canister.
             let args = DogecoinInitConfig {
-                network: Some(DogecoinNetwork::Testnet),
+                network: Some(DogecoinNetwork::Regtest),
                 fees: Some(DogecoinFees::testnet()),
                 ..Default::default()
             };

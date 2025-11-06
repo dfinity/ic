@@ -44,6 +44,7 @@ pub const BITCOIN_TESTNET_CANISTER_INDEX: u64 = 0x1a00001;
 pub const BITCOIN_MAINNET_CANISTER_INDEX: u64 = 0x1a00004;
 // Dogecoin.
 pub const DOGECOIN_CANISTER_INDEX: u64 = 0x1a00007;
+pub const DOGECOIN_TESTNET_CANISTER_INDEX: u64 = 0x1a00008;
 
 // SNS Aggregator canister is deployed to the `x33ed` (SNS) subnet.
 pub const SNS_AGGREGATOR_CANISTER_INDEX: u64 = 0x2000010;
@@ -151,6 +152,9 @@ pub const BITCOIN_MAINNET_CANISTER_ID: CanisterId =
     CanisterId::from_u64(BITCOIN_MAINNET_CANISTER_INDEX);
 // 0x1_a00_007 (27262983) : gordg-fyaaa-aaaan-aaadq-cai
 pub const DOGECOIN_CANISTER_ID: CanisterId = CanisterId::from_u64(DOGECOIN_CANISTER_INDEX);
+// 0x1_a00_008 (27262984) : hd7hi-kqaaa-aaaan-aaaea-cai
+pub const DOGECOIN_TESTNET_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(DOGECOIN_TESTNET_CANISTER_INDEX);
 
 /// 0x2_000_010 (33_554_448): 3r4gx-wqaaa-aaaaq-aaaia-cai
 pub const SNS_AGGREGATOR_CANISTER_ID: CanisterId =

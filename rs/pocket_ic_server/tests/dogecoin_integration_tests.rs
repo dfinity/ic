@@ -1,5 +1,5 @@
 use bitcoin::dogecoin::{Address, Network as DogeNetwork};
-use candid::{CandidType, Encode, Principal};
+use candid::{CandidType, Encode, Nat, Principal};
 use ic_btc_adapter_test_utils::{
     bitcoind::{Conf, Daemon},
     rpc_client::RpcError,
@@ -27,7 +27,7 @@ fn deploy_dogecoin_example_canister(pic: &PocketIc) -> Principal {
     pic.install_canister(
         canister_id,
         dogecoin_example_canister_wasm.to_vec(),
-        Encode!(&Network::Testnet).unwrap(),
+        Encode!(&Network::Regtest).unwrap(),
         None,
     );
     canister_id
@@ -39,13 +39,13 @@ fn get_balance(
     dogecoin_address: String,
 ) -> u64 {
     loop {
-        if let Ok((balance,)) = update_candid::<_, (u64,)>(
+        if let Ok((balance,)) = update_candid::<_, (Nat,)>(
             pic,
             dogecoin_example_canister_id,
             "get_balance",
             (dogecoin_address.clone(),),
         ) {
-            break balance;
+            break balance.0.try_into().unwrap();
         }
     }
 }
