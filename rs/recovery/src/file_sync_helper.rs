@@ -107,7 +107,8 @@ where
 }
 
 /// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) and options
-/// `--delete`, `-acP`. File and directory names part of `excludes` are discarded.
+/// `--archive --checksum --delete --partial --progress --no-g`. File and directory names part of
+/// `excludes` are discarded.
 pub fn rsync<E, S, T>(
     logger: &Logger,
     excludes: E,
@@ -133,8 +134,8 @@ where
 }
 
 /// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) with the
-/// same options as [rsync], but adding also the `-R` option. See the manual for details on how
-/// this option affects the copy operation. File and directory names part of `excludes` are
+/// same options as [rsync], but adding also the `--relative` option. See the manual for details on
+/// how this option affects the copy operation. File and directory names part of `excludes` are
 /// discarded.
 pub fn rsync_relative<E, S, T>(
     logger: &Logger,
@@ -211,9 +212,15 @@ where
     T: AsRef<Path>,
 {
     let mut rsync = Command::new("rsync");
-    rsync.arg("--delete").arg("-acP").arg("--no-g");
+    rsync
+        .arg("--archive")
+        .arg("--checksum")
+        .arg("--delete")
+        .arg("--partial")
+        .arg("--progress")
+        .arg("--no-g");
     if relative {
-        rsync.arg("-R");
+        rsync.arg("--relative");
     }
     rsync.args(
         excludes
@@ -320,10 +327,13 @@ mod tests {
         assert_eq!(
             rsync.get_args().collect::<Vec<_>>(),
             vec![
+                "--archive",
+                "--checksum",
                 "--delete",
-                "-acP",
+                "--partial",
+                "--progress",
                 "--no-g",
-                "-R",
+                "--relative",
                 "--exclude=exclude1",
                 "--exclude=exclude2",
                 "/tmp/src",
