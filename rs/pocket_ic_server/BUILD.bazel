@@ -123,6 +123,7 @@ TEST_DEPENDENCIES = [
     "//rs/registry/transport",
     "//rs/types/management_canister_types",
     "//rs/types/types",
+    "@crate_index//:bitcoin",
     "@crate_index//:candid",
     "@crate_index//:candid_parser",
     "@crate_index//:flate2",
@@ -130,6 +131,7 @@ TEST_DEPENDENCIES = [
     "@crate_index//:ic-agent",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
+    "@crate_index//:ic-doge-interface",
     "@crate_index//:ic-gateway",
     "@crate_index//:ic-utils",
     "@crate_index//:nix",
@@ -424,6 +426,32 @@ rust_test(
         # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
         "requires-network",
         "test_all_platforms",
+    ],
+    deps = TEST_DEPENDENCIES,
+)
+
+rust_test(
+    name = "dogecoin_integration_tests",
+    srcs = [
+        "tests/dogecoin_integration_tests.rs",
+    ],
+    aliases = {},
+    data = [
+        ":pocket-ic-server",
+        "//:dogecoind",
+        "@bitcoin_example_canister//file",
+        "@mozilla_root_ca_store//file",
+    ],
+    env = {
+        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
+        "DOGECOIN_EXAMPLE_CANISTER_WASM": "$(rootpath @bitcoin_example_canister//file)",
+        "DOGECOIND_BIN": "$(rootpath //:dogecoind)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
+    },
+    tags = [
+        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
+        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+        "requires-network",
     ],
     deps = TEST_DEPENDENCIES,
 )
