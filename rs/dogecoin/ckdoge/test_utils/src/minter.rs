@@ -11,6 +11,7 @@ use ic_ckdoge_minter::{
 };
 use ic_management_canister_types::CanisterId;
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
+use pocket_ic::common::rest::RawMessageId;
 use pocket_ic::{PocketIc, RejectResponse};
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,7 +27,17 @@ impl MinterCanister {
         sender: Principal,
         args: &RetrieveDogeWithApprovalArgs,
     ) -> Result<std::vec::Vec<u8>, RejectResponse> {
-        self.env.update_call(
+        let msg_id = self
+            .submit_retrieve_doge_with_approval(sender, args)
+            .expect("BUG: failed to call retrieve_doge_with_approval");
+        self.env.await_call(msg_id)
+    }
+    pub fn submit_retrieve_doge_with_approval(
+        &self,
+        sender: Principal,
+        args: &RetrieveDogeWithApprovalArgs,
+    ) -> Result<RawMessageId, RejectResponse> {
+        self.env.submit_call(
             self.id,
             sender,
             "retrieve_doge_with_approval",

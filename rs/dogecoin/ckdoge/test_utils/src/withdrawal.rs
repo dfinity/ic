@@ -1,5 +1,5 @@
 use crate::{Setup, into_outpoint, parse_dogecoin_address};
-use candid::Principal;
+use candid::{Decode, Principal};
 use ic_bitcoin_canister_mock::Utxo;
 use ic_ckdoge_minter::address::DogecoinAddress;
 use ic_ckdoge_minter::candid_api::{
@@ -12,6 +12,8 @@ use ic_ckdoge_minter::{
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc3::transactions::Burn;
+use pocket_ic::RejectResponse;
+use pocket_ic::common::rest::RawMessageId;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Entry point in the withdrawal flow
@@ -65,20 +67,22 @@ where
 
         let address = address.into();
         let Account { owner, subaccount } = self.account;
-        let balance_before = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
-        let result = self.setup.as_ref().minter().retrieve_doge_with_approval(
-            owner,
-            &RetrieveDogeWithApprovalArgs {
-                amount: withdrawal_amount,
-                from_subaccount: subaccount,
-                address: address.clone(),
-            },
-        );
+        let result = self
+            .setup
+            .as_ref()
+            .minter()
+            .submit_retrieve_doge_with_approval(
+                owner,
+                &RetrieveDogeWithApprovalArgs {
+                    amount: withdrawal_amount,
+                    from_subaccount: subaccount,
+                    address: address.clone(),
+                },
+            );
 
         ProcessWithdrawal {
             setup: self.setup,
             account: self.account,
-            balance_before,
             withdrawal_amount,
             address,
             result,
@@ -89,10 +93,9 @@ where
 pub struct ProcessWithdrawal<S> {
     setup: S,
     account: Account,
-    balance_before: u64,
     withdrawal_amount: u64,
     address: String,
-    result: Result<RetrieveDogeOk, RetrieveDogeWithApprovalError>,
+    result: Result<RawMessageId, RejectResponse>,
 }
 
 impl<S> ProcessWithdrawal<S>
@@ -100,8 +103,10 @@ where
     S: AsRef<Setup>,
 {
     pub fn expect_withdrawal_request_accepted(self) -> DogecoinWithdrawalTransactionFlow<S> {
+        let balance_before = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
+
         let retrieve_doge_id = self
-            .result
+            .await_minter_response()
             .expect("BUG: withdrawal request was not accepted!");
 
         let address = DogecoinAddress::parse(&self.address, &self.setup.as_ref().network())
@@ -144,7 +149,7 @@ where
 
         let balance_after = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
 
-        assert_eq!(self.balance_before - balance_after, self.withdrawal_amount);
+        assert_eq!(balance_before - balance_after, self.withdrawal_amount);
 
         DogecoinWithdrawalTransactionFlow {
             setup: self.setup,
@@ -152,6 +157,23 @@ where
             address,
             retrieve_doge_id,
         }
+    }
+
+    pub fn expect_error_matching<P>(self, matcher: P)
+    where
+        P: FnOnce(RetrieveDogeWithApprovalError) -> bool,
+    {
+        let err = self.await_minter_response().expect_err("");
+        assert!(matcher(err))
+    }
+
+    fn await_minter_response(&self) -> Result<RetrieveDogeOk, RetrieveDogeWithApprovalError> {
+        let response = self
+            .result
+            .clone()
+            .and_then(|msg_id| self.setup.as_ref().env.await_call(msg_id))
+            .expect("BUG: call to retrieve_doge_with_approval failed");
+        Decode!(&response, Result<RetrieveDogeOk, RetrieveDogeWithApprovalError>).unwrap()
     }
 }
 

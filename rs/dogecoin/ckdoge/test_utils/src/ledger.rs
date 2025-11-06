@@ -1,3 +1,4 @@
+use crate::NNS_ROOT_PRINCIPAL;
 use candid::{Decode, Encode, Nat, Principal};
 use ic_management_canister_types::CanisterId;
 use icrc_ledger_types::icrc1::account::Account;
@@ -97,6 +98,16 @@ impl LedgerCanister {
             )
             .expect("BUG: failed to call icrc1_balance_of");
         Decode!(&call_result, Nat).unwrap().0.try_into().unwrap()
+    }
+
+    pub fn stop(&self) {
+        self.env
+            .stop_canister(self.id, Some(NNS_ROOT_PRINCIPAL))
+            .unwrap()
+    }
+
+    pub fn id(&self) -> CanisterId {
+        self.id
     }
 }
 
