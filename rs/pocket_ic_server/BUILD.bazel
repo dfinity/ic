@@ -438,8 +438,8 @@ rust_test(
     aliases = {},
     data = [
         ":pocket-ic-server",
-        "//:dogecoind",
         ":tests/basic_dogecoin.wasm.gz",
+        "//:dogecoind",
         "@mozilla_root_ca_store//file",
     ],
     env = {
