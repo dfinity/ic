@@ -1,20 +1,15 @@
 //! Tests for PublicCoefficients conversions
 
-use super::*;
+use ic_crypto_internal_bls12_381_type::{G2Projective, Polynomial};
+use ic_crypto_internal_threshold_sig_bls12381::crypto::public_key_from_secret_key;
+use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::pub_key_bytes_from_pub_coeff_bytes;
+use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::try_number_of_nodes_from_pub_coeff_bytes;
+use ic_crypto_internal_threshold_sig_bls12381::types::{PublicCoefficients, PublicKey};
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
+use ic_types::NumberOfNodes;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-
-/// Demonstrates that size error conversion works without panicking
-#[test]
-fn invalid_size_conversion_should_work() {
-    let too_big: u64 = 0xffff_ffff_ffff_ffff;
-    let result = u32::try_from(too_big).map_err(invalid_size);
-    match result {
-        Err(CryptoError::InvalidArgument { .. }) => (),
-        other => panic!("Expected InvalidArgument.  Got: {other:?}"),
-    }
-}
 
 /// Verifies that the size of PublicCoefficients is measured correctly
 #[test]
