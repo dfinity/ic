@@ -110,6 +110,10 @@ impl CanisterRuntime for DogeCanisterRuntime {
         .map_err(|err| CallError::from_cdk_call_error("dogecoin_send_transaction", err))
     }
 
+    fn block_frequency(&self) -> Duration {
+        Duration::from_secs(60)
+    }
+
     fn validate_config(&self, state: &CkBtcMinterState) {
         if state.check_fee > state.retrieve_btc_min_amount {
             ic_cdk::trap("check_fee cannot be greater than retrieve_btc_min_amount");

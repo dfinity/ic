@@ -1429,6 +1429,9 @@ pub trait CanisterRuntime {
         state.validate_config()
     }
 
+    /// How often is block produced
+    fn block_frequency(&self) -> Duration;
+
     fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
 
     /// Address controlled by the minter (via threshold ECDSA) for a given user.
@@ -1550,6 +1553,10 @@ impl CanisterRuntime for IcCanisterRuntime {
         network: Network,
     ) -> Result<(), CallError> {
         management::send_transaction(transaction, network).await
+    }
+
+    fn block_frequency(&self) -> Duration {
+        Duration::from_secs(600)
     }
 
     fn parse_address(
