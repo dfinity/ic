@@ -73,7 +73,7 @@ where
         self.setup
             .as_ref()
             .dogecoin()
-            .simulate_transaction(deposit_utxo.clone(), self.deposit_address.to_string());
+            .push_utxo(deposit_utxo.clone(), self.deposit_address.to_string());
 
         UpdateBalanceFlow {
             setup: self.setup,
