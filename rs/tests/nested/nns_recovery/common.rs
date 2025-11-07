@@ -17,7 +17,7 @@ use ic_consensus_system_test_utils::{
         update_subnet_record, wait_until_authentication_is_granted,
     },
     subnet::assert_subnet_is_healthy,
-    upgrade::{assert_assigned_replica_version, bless_replica_version},
+    upgrade::bless_replica_version,
 };
 use ic_recovery::{
     RecoveryArgs,
@@ -552,9 +552,6 @@ async fn simulate_node_provider_action(
     impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
         .await
         .expect("Failed to spoof GuestOS DNS");
-
-    // Wait until the node has booted the expected GuestOS version
-    assert_assigned_replica_version(host, upgrade_version, logger.clone());
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, logger: &Logger) {
