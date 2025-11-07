@@ -14,9 +14,9 @@ use std::fmt::Display;
     PartialOrd, Ord, Eq, candid::CandidType, candid::Deserialize, Clone, Copy, PartialEq, Debug,
 )]
 pub struct DateUtc {
-    pub day: Option<u32>,
-    pub month: Option<u32>,
     pub year: Option<u32>,
+    pub month: Option<u32>,
+    pub day: Option<u32>,
 }
 
 impl Display for DateUtc {

@@ -1,13 +1,16 @@
+mod deposit;
 mod dogecoin;
 mod events;
 mod ledger;
 mod minter;
 
+use crate::deposit::DepositFlowStart;
 use crate::dogecoin::DogecoinCanister;
 use crate::ledger::LedgerCanister;
 pub use crate::minter::MinterCanister;
 use bitcoin::TxOut;
 use candid::{Encode, Principal};
+use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_ckdoge_minter::{
     Txid, get_dogecoin_canister_id,
     lifecycle::init::{InitArgs, MinterArg, Mode, Network},
@@ -34,6 +37,7 @@ pub const MIN_CONFIRMATIONS: u32 = 60;
 
 pub struct Setup {
     pub env: Arc<PocketIc>,
+    doge_network: Network,
     dogecoin: CanisterId,
     minter: CanisterId,
     ledger: CanisterId,
@@ -153,6 +157,7 @@ impl Setup {
 
         Self {
             env,
+            doge_network,
             dogecoin,
             minter,
             ledger,
@@ -179,6 +184,14 @@ impl Setup {
             id: self.ledger,
         }
     }
+
+    pub fn network(&self) -> Network {
+        self.doge_network
+    }
+
+    pub fn deposit_flow(&self) -> DepositFlowStart<&Setup> {
+        DepositFlowStart::new(self)
+    }
 }
 
 impl Default for Setup {
@@ -187,9 +200,9 @@ impl Default for Setup {
     }
 }
 
-impl AsRef<PocketIc> for Setup {
-    fn as_ref(&self) -> &PocketIc {
-        &self.env
+impl AsRef<Setup> for Setup {
+    fn as_ref(&self) -> &Setup {
+        self
     }
 }
 
@@ -222,6 +235,17 @@ pub fn txid() -> Txid {
     Txid::from([42u8; 32])
 }
 
+pub fn utxo_with_value(value: u64) -> Utxo {
+    Utxo {
+        height: 0,
+        outpoint: OutPoint {
+            txid: txid(),
+            vout: 1,
+        },
+        value,
+    }
+}
+
 pub fn into_outpoint(
     value: ic_ckdoge_minter::OutPoint,
 ) -> bitcoin::blockdata::transaction::OutPoint {
@@ -233,10 +257,10 @@ pub fn into_outpoint(
     }
 }
 
-pub fn parse_dogecoin_address(tx_out: &TxOut) -> bitcoin::dogecoin::Address {
+pub fn parse_dogecoin_address(network: Network, tx_out: &TxOut) -> bitcoin::dogecoin::Address {
     bitcoin::dogecoin::Address::from_script(
         tx_out.script_pubkey.as_script(),
-        bitcoin::dogecoin::Network::Dogecoin,
+        into_rust_dogecoin_network(network),
     )
     .unwrap_or_else(|e| {
         panic!(
@@ -244,4 +268,12 @@ pub fn parse_dogecoin_address(tx_out: &TxOut) -> bitcoin::dogecoin::Address {
             tx_out.script_pubkey
         )
     })
+}
+
+pub fn into_rust_dogecoin_network(network: Network) -> bitcoin::dogecoin::Network {
+    match network {
+        Network::Mainnet => bitcoin::dogecoin::Network::Dogecoin,
+        Network::Testnet => bitcoin::dogecoin::Network::Testnet,
+        Network::Regtest => bitcoin::dogecoin::Network::Regtest,
+    }
 }

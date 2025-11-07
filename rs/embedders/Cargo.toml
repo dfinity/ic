@@ -9,6 +9,7 @@ version.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 bincode = { workspace = true }
+candid = { workspace = true }
 clap = { workspace = true }
 ic-base-types = { path = "../types/base_types" }
 ic-btc-interface = { workspace = true }
@@ -64,7 +65,6 @@ mach2 = "0.4.2"
 
 [dev-dependencies]
 assert_matches = { workspace = true }
-candid = { workspace = true }
 canister-test = { path = "../rust_canisters/canister_test" }
 criterion = { workspace = true }
 embedders_bench = { path = "benches/embedders_bench" }
