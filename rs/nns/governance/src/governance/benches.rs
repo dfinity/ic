@@ -11,7 +11,7 @@ use crate::{
     neuron_store::NeuronStore,
     pb::v1::{
         Ballot, BallotInfo, CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode,
-        KnownNeuron, ListProposalInfo, NnsFunction, Proposal, ProposalData, Topic, Vote,
+        KnownNeuron, NnsFunction, Proposal, ProposalData, Topic, Vote,
         install_code::CanisterInstallMode, proposal::Action,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
@@ -27,7 +27,7 @@ use ic_nns_common::{
     types::NeuronId,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api as api;
+use ic_nns_governance_api::{self as api};
 use icp_ledger::Subaccount;
 use maplit::{btreemap, hashmap};
 use rand::{Rng, SeedableRng};
@@ -684,7 +684,7 @@ fn list_proposals_benchmark() -> BenchResult {
             .unwrap();
     }
 
-    let request = ListProposalInfo {
+    let request = api::ListProposalInfoRequest {
         limit: 100,
         omit_large_fields: Some(true),
         ..Default::default()
@@ -727,7 +727,7 @@ fn list_proposals_benchmark() -> BenchResult {
     }
 
     bench_fn(|| {
-        let _ = governance.list_proposals(&PrincipalId::new_anonymous(), &request);
+        let _ = governance.list_proposals(&PrincipalId::new_anonymous(), request);
     })
 }
 
