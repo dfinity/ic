@@ -43,13 +43,13 @@ pub struct DailyNodeRewards {
     pub daily_node_failure_rate: Option<DailyNodeFailureRate>,
     pub performance_multiplier: Option<f64>,
     pub rewards_reduction: Option<f64>,
-    pub base_rewards_xdr_permyriad: Option<u64>,
-    pub adjusted_rewards_xdr_permyriad: Option<u64>,
+    pub base_rewards_xdr_permyriad: Option<f64>,
+    pub adjusted_rewards_xdr_permyriad: Option<f64>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct NodeTypeRegionBaseRewards {
-    pub monthly_xdr_permyriad: Option<u64>,
-    pub daily_xdr_permyriad: Option<u64>,
+    pub monthly_xdr_permyriad: Option<f64>,
+    pub daily_xdr_permyriad: Option<f64>,
     pub node_reward_type: Option<String>,
     pub region: Option<String>,
 }
@@ -57,13 +57,13 @@ pub struct NodeTypeRegionBaseRewards {
 pub struct Type3RegionBaseRewards {
     pub region: Option<String>,
     pub nodes_count: Option<u64>,
-    pub avg_rewards_xdr_permyriad: Option<u64>,
+    pub avg_rewards_xdr_permyriad: Option<f64>,
     pub avg_coefficient: Option<f64>,
-    pub daily_xdr_permyriad: Option<u64>,
+    pub daily_xdr_permyriad: Option<f64>,
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct DailyNodeProviderRewards {
-    pub rewards_total_xdr_permyriad: Option<u64>,
+    pub rewards_total_xdr_permyriad: Option<f64>,
     pub base_rewards: Vec<NodeTypeRegionBaseRewards>,
     pub base_rewards_type3: Vec<Type3RegionBaseRewards>,
     pub daily_nodes_rewards: Vec<DailyNodeRewards>,

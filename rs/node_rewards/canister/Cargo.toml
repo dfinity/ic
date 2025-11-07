@@ -37,6 +37,7 @@ ic-protobuf = { path = "../../protobuf" }
 mockall = { workspace = true }
 prost = { workspace = true }
 rewards-calculation = { path = "../rewards_calculation" }
+rust_decimal = "1.37.1"
 itertools = { workspace = true }
 chrono = { workspace = true }
 
