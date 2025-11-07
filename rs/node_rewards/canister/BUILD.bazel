@@ -30,7 +30,6 @@ DEPENDENCIES = [
     "@crate_index//:indexmap",
     "@crate_index//:itertools",
     "@crate_index//:prost",
-    "@crate_index//:rust_decimal",
 ]
 
 DEV_DEPENDENCIES = [

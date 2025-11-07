@@ -154,11 +154,7 @@ impl TryFrom<native_types::DailyNodeProviderRewards> for DailyNodeProviderReward
 
     fn try_from(src: native_types::DailyNodeProviderRewards) -> Result<Self, Self::Error> {
         Ok(Self {
-            rewards_total_xdr_permyriad: Some(
-                src.daily_total_rewards_xdr_permyriad
-                    .to_f64()
-                    .ok_or("Conversion to f64 failed (rewards_total_xdr_permyriad)")?,
-            ),
+            rewards_total_xdr_permyriad: Some(src.rewards_total_xdr_permyriad),
             base_rewards: src
                 .base_rewards
                 .into_iter()

@@ -129,10 +129,8 @@ trait PerformanceBasedAlgorithm {
             for (provider_id, provider_rewards) in &result_for_day.provider_results {
                 total_rewards_xdr_permyriad
                     .entry(*provider_id)
-                    .and_modify(|total| {
-                        *total += provider_rewards.daily_total_rewards_xdr_permyriad
-                    })
-                    .or_insert(provider_rewards.daily_total_rewards_xdr_permyriad);
+                    .and_modify(|total| *total += provider_rewards.rewards_total_xdr_permyriad)
+                    .or_insert(provider_rewards.rewards_total_xdr_permyriad);
             }
             daily_results.insert(day, result_for_day);
         }
@@ -547,7 +545,7 @@ trait PerformanceBasedAlgorithm {
         base_rewards_type3: Vec<Type3RegionBaseRewards>,
     ) -> DailyNodeProviderRewards {
         let mut results_by_node = Vec::new();
-        let mut rewards_total_xdr_permyriad = Decimal::ZERO;
+        let mut rewards_total_xdr_permyriad = 0;
 
         for node in rewardable_nodes {
             let node_status =
@@ -575,7 +573,10 @@ trait PerformanceBasedAlgorithm {
                 .remove(&node.node_id)
                 .expect("Adjusted rewards should be present in rewards");
 
-            rewards_total_xdr_permyriad += node_adjusted_rewards_xdr_permyriad;
+            rewards_total_xdr_permyriad += node_adjusted_rewards_xdr_permyriad
+                .trunc()
+                .to_u64()
+                .expect("failed to truncate node_adjusted_rewards_xdr_permyriad");
 
             results_by_node.push(DailyNodeRewards {
                 node_id: node.node_id,
@@ -591,7 +592,7 @@ trait PerformanceBasedAlgorithm {
         }
 
         DailyNodeProviderRewards {
-            daily_total_rewards_xdr_permyriad: rewards_total_xdr_permyriad,
+            rewards_total_xdr_permyriad,
             base_rewards,
             type3_base_rewards: base_rewards_type3,
             daily_nodes_rewards: results_by_node,

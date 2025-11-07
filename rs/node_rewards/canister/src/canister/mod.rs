@@ -28,7 +28,6 @@ use ic_types::{RegistryVersion, Time};
 use rewards_calculation::performance_based_algorithm::results::RewardsCalculatorResults;
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
 use rewards_calculation::types::{NodeMetricsDailyRaw, RewardableNode};
-use rust_decimal::prelude::ToPrimitive;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
@@ -289,7 +288,7 @@ impl NodeRewardsCanister {
         let rewards_xdr_permyriad = result
             .total_rewards_xdr_permyriad
             .into_iter()
-            .map(|(k, v)| (k.0, v.trunc().to_u64().expect("failed to trunc u64")))
+            .map(|(k, v)| (k.0, v))
             .collect();
 
         Ok(NodeProvidersRewards {

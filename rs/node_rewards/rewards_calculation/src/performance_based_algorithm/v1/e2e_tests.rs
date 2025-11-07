@@ -715,7 +715,7 @@ fn test_empty_rewardable_nodes() {
 
     // Should have no node results
     assert!(provider_result.daily_nodes_rewards.is_empty());
-    assert_eq!(provider_result.daily_total_rewards_xdr_permyriad, dec!(0.0));
+    assert_eq!(provider_result.rewards_total_xdr_permyriad, 0);
 }
 
 /// **Scenario**: Nodes with zero block scenarios
