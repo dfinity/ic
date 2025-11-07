@@ -1,12 +1,13 @@
-use crate::{Setup, into_outpoint, parse_dogecoin_address};
+use crate::{BLOCK_FREQUENCY, MIN_CONFIRMATIONS, Setup, into_outpoint, parse_dogecoin_address};
+use bitcoin::hashes::Hash;
 use candid::{Decode, Principal};
-use ic_bitcoin_canister_mock::Utxo;
+use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_ckdoge_minter::address::DogecoinAddress;
 use ic_ckdoge_minter::candid_api::{
     GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalError,
 };
 use ic_ckdoge_minter::{
-    BitcoinAddress, BurnMemo, ChangeOutput, EventType, RetrieveBtcRequest, WithdrawalFee,
+    BitcoinAddress, BurnMemo, ChangeOutput, EventType, RetrieveBtcRequest, Txid, WithdrawalFee,
     memo_encode,
 };
 use icrc_ledger_types::icrc1::account::Account;
@@ -15,6 +16,7 @@ use icrc_ledger_types::icrc3::transactions::Burn;
 use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::RawMessageId;
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
 
 /// Entry point in the withdrawal flow
 ///
@@ -227,6 +229,7 @@ where
         WithdrawalFlowEnd {
             setup: self.setup,
             withdrawal_amount: self.withdrawal_amount,
+            retrieve_doge_id: self.retrieve_doge_id,
             change_amount,
             address: self.address,
             withdrawal_fee,
@@ -239,6 +242,7 @@ where
 pub struct WithdrawalFlowEnd<S> {
     setup: S,
     withdrawal_amount: u64,
+    retrieve_doge_id: RetrieveDogeOk,
     change_amount: u64,
     address: DogecoinAddress,
     withdrawal_fee: WithdrawalFee,
@@ -320,5 +324,28 @@ where
         let range = (self.withdrawal_amount - fee_share_upper_bound)
             ..=(self.withdrawal_amount - fee_share_lower_bound);
         assert!(range.contains(&beneficiary_output.value.to_sat()));
+
+        //finalize transaction
+        self.setup
+            .as_ref()
+            .env
+            .advance_time(MIN_CONFIRMATIONS * BLOCK_FREQUENCY + Duration::from_secs(1));
+        let txid_bytes: [u8; 32] = self.tx.compute_txid().to_byte_array();
+        self.setup.as_ref().dogecoin().push_utxo(
+            Utxo {
+                value: self.change_amount,
+                height: 0,
+                outpoint: OutPoint {
+                    txid: txid_bytes.into(),
+                    vout: 1,
+                },
+            },
+            minter_address.to_string(),
+        );
+
+        assert_eq!(
+            minter.await_finalized_doge_transaction(self.retrieve_doge_id.block_index),
+            Txid::from(txid_bytes)
+        );
     }
 }

@@ -36,6 +36,7 @@ pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 50 * DOGE;
 pub const LEDGER_TRANSFER_FEE: u64 = DOGE / 100;
 const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
 pub const MIN_CONFIRMATIONS: u32 = 60;
+pub const BLOCK_FREQUENCY: Duration = Duration::from_secs(60);
 
 pub struct Setup {
     pub env: Arc<PocketIc>,
