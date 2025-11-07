@@ -210,7 +210,7 @@ mod withdrawal {
             .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
             .expect_withdrawal_request_accepted()
             .dogecoin_await_transaction(vec![utxo])
-            .verify_withdrawal_transaction()
+            .minter_await_finalized_transaction()
     }
 
     #[test]
