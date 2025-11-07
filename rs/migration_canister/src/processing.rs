@@ -111,9 +111,7 @@ pub async fn process_controllers_changed(
     };
 
     // These checks are repeated because the canisters may have changed since validation:
-    let ProcessingResult::Success(source_status) =
-        canister_status(request.source, request.source_subnet).await
-    else {
+    let ProcessingResult::Success(source_status) = canister_status(request.source).await else {
         return ProcessingResult::NoProgress;
     };
     if source_status.status != CanisterStatusType::Stopped {
@@ -136,9 +134,7 @@ pub async fn process_controllers_changed(
         });
     }
 
-    let ProcessingResult::Success(target_status) =
-        canister_status(request.target, request.target_subnet).await
-    else {
+    let ProcessingResult::Success(target_status) = canister_status(request.target).await else {
         return ProcessingResult::NoProgress;
     };
     if target_status.status != CanisterStatusType::Stopped {
@@ -202,6 +198,7 @@ pub async fn process_stopped(
         request.target,
         request.target_subnet,
         canister_history_total_num,
+        request.caller,
     )
     .await
     .map_success(|_| RequestState::RenamedTarget {
@@ -256,10 +253,6 @@ pub async fn process_updated(
     else {
         return ProcessingResult::NoProgress;
     };
-    println!(
-        "Registry versions: waiting for: {} source subnet: {} target subnet: {}",
-        registry_version, source_subnet_version, target_subnet_version
-    );
     if source_subnet_version < registry_version || target_subnet_version < registry_version {
         return ProcessingResult::NoProgress;
     }

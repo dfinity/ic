@@ -118,7 +118,7 @@ trait PerformanceBasedAlgorithm {
         }
 
         let reward_period = from_date.iter_days().take_while(|d| *d <= to_date);
-        let mut total_rewards_per_provider = BTreeMap::new();
+        let mut total_rewards_xdr_permyriad = BTreeMap::new();
         let mut daily_results = BTreeMap::new();
 
         // Process each day in the reward period
@@ -127,18 +127,13 @@ trait PerformanceBasedAlgorithm {
 
             // Accumulate total rewards per provider across all days
             for (provider_id, provider_rewards) in &result_for_day.provider_results {
-                total_rewards_per_provider
+                total_rewards_xdr_permyriad
                     .entry(*provider_id)
                     .and_modify(|total| *total += provider_rewards.rewards_total_xdr_permyriad)
                     .or_insert(provider_rewards.rewards_total_xdr_permyriad);
             }
             daily_results.insert(day, result_for_day);
         }
-
-        let total_rewards_xdr_permyriad = total_rewards_per_provider
-            .into_iter()
-            .map(|(provider_id, total)| (provider_id, total.trunc().to_u64().unwrap()))
-            .collect();
 
         Ok(RewardsCalculatorResults {
             total_rewards_xdr_permyriad,
@@ -550,7 +545,7 @@ trait PerformanceBasedAlgorithm {
         base_rewards_type3: Vec<Type3RegionBaseRewards>,
     ) -> DailyNodeProviderRewards {
         let mut results_by_node = Vec::new();
-        let mut rewards_total_xdr_permyriad = Decimal::ZERO;
+        let mut rewards_total_xdr_permyriad = 0;
 
         for node in rewardable_nodes {
             let node_status =
@@ -578,7 +573,10 @@ trait PerformanceBasedAlgorithm {
                 .remove(&node.node_id)
                 .expect("Adjusted rewards should be present in rewards");
 
-            rewards_total_xdr_permyriad += node_adjusted_rewards_xdr_permyriad;
+            rewards_total_xdr_permyriad += node_adjusted_rewards_xdr_permyriad
+                .trunc()
+                .to_u64()
+                .expect("failed to truncate node_adjusted_rewards_xdr_permyriad");
 
             results_by_node.push(DailyNodeRewards {
                 node_id: node.node_id,

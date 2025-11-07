@@ -2199,9 +2199,10 @@ struct ProposeToAddNodeOperatorCmd {
     /// The principal id of the node operator
     pub node_operator_principal_id: PrincipalId,
 
-    #[clap(long, required = true)]
+    #[clap(long, hide = true)]
+    /// Deprecated, will be removed in the future.
     /// The remaining number of nodes that could be added by this node operator
-    pub node_allowance: u64,
+    pub node_allowance: Option<u64>,
 
     //// The principal id of this node operator's provider
     pub node_provider_principal_id: PrincipalId,
@@ -2227,7 +2228,7 @@ struct ProposeToAddNodeOperatorCmd {
     ///
     /// Example:
     /// '{ "type1.1": 10, "type3.1": 24 }'
-    #[clap(long)]
+    #[clap(long, required = true)]
     max_rewardable_nodes: Option<String>,
 }
 
@@ -2253,6 +2254,15 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
             .map(|s| parse_rewardable_nodes(s))
             .unwrap_or_default();
 
+        // TODO(DRE-583): Remove the `--node-allowance` flag after callers of `ic-admin`
+        // have migrated to `--max-rewardable-nodes`.
+        let node_allowance = self.node_allowance.map(|allowance| {
+            if allowance != 0 {
+                eprintln!("WARNING: node allowance is deprecated and will be removed in the future. Overriding value to 0");
+            }
+            0
+        }).unwrap_or_default();
+
         let max_rewardable_nodes = self
             .max_rewardable_nodes
             .as_ref()
@@ -2260,7 +2270,7 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
 
         AddNodeOperatorPayload {
             node_operator_principal_id: Some(self.node_operator_principal_id),
-            node_allowance: self.node_allowance,
+            node_allowance,
             node_provider_principal_id: Some(self.node_provider_principal_id),
             dc_id: self
                 .dc_id

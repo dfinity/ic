@@ -558,17 +558,6 @@ impl InstallCodeHelper {
         self.canister.execution_state = Some(execution_state);
 
         let new_memory_usage = self.canister.memory_usage();
-        match self.canister.memory_allocation() {
-            MemoryAllocation::Reserved(reserved_bytes) => {
-                if new_memory_usage > reserved_bytes {
-                    return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
-                        memory_allocation_given: memory_allocation,
-                        memory_usage_needed: new_memory_usage,
-                    });
-                }
-            }
-            MemoryAllocation::BestEffort => (),
-        }
         self.update_allocated_bytes(
             old_memory_usage,
             old_wasm_custom_sections_memory_used,
@@ -588,8 +577,8 @@ impl InstallCodeHelper {
         new_wasm_custom_sections_memory_used: NumBytes,
         memory_allocation: MemoryAllocation,
     ) {
-        let old_bytes = memory_allocation.bytes().max(old_memory_usage);
-        let new_bytes = memory_allocation.bytes().max(new_memory_usage);
+        let old_bytes = memory_allocation.allocated_bytes(old_memory_usage);
+        let new_bytes = memory_allocation.allocated_bytes(new_memory_usage);
         if old_bytes <= new_bytes {
             self.allocated_bytes += new_bytes - old_bytes;
         } else {
@@ -731,14 +720,13 @@ impl InstallCodeHelper {
             execution_state.wasm_memory = wasm_memory;
             execution_state.stable_memory = stable_memory;
             execution_state.exported_globals = globals;
-            match self.canister.system_state.memory_allocation {
-                MemoryAllocation::Reserved(_) => {}
-                MemoryAllocation::BestEffort => {
-                    self.allocated_bytes += output.allocated_bytes;
-                    self.allocated_guaranteed_response_message_bytes +=
-                        output.allocated_guaranteed_response_message_bytes;
-                }
-            }
+            self.allocated_bytes += output.allocated_bytes;
+            debug_assert_eq!(
+                output.allocated_guaranteed_response_message_bytes,
+                NumBytes::new(0)
+            ); // no messages can be created during `install_code`
+            self.allocated_guaranteed_response_message_bytes +=
+                output.allocated_guaranteed_response_message_bytes;
             self.total_heap_delta +=
                 NumBytes::new((output.instance_stats.dirty_pages() * PAGE_SIZE) as u64);
         }
