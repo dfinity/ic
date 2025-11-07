@@ -129,10 +129,9 @@ use maplit::hashmap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use std::cell::RefCell;
-use std::sync::Arc;
 use std::{
     borrow::Cow,
+    cell::{Cell, RefCell},
     cmp::{Ordering, max},
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     convert::{TryFrom, TryInto},
@@ -140,6 +139,7 @@ use std::{
     future::Future,
     ops::RangeInclusive,
     string::ToString,
+    sync::Arc,
     time::{Duration, SystemTime},
 };
 
@@ -1439,9 +1439,6 @@ pub struct Governance {
     /// For validating neuron related data.
     neuron_data_validator: NeuronDataValidator,
 
-    /// Scope guard for minting node provider rewards.
-    minting_node_provider_rewards: bool,
-
     rate_limiter: InMemoryRateLimiter<String>,
 }
 
@@ -1611,7 +1608,6 @@ impl Governance {
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
-            minting_node_provider_rewards: false,
             rate_limiter: new_rate_limiter(),
         }
     }
@@ -1638,7 +1634,6 @@ impl Governance {
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
-            minting_node_provider_rewards: false,
             rate_limiter: new_rate_limiter(),
         }
     }
@@ -1670,7 +1665,6 @@ impl Governance {
             latest_gc_timestamp_seconds: 0,
             latest_gc_num_proposals: 0,
             neuron_data_validator: NeuronDataValidator::new(),
-            minting_node_provider_rewards: false,
             rate_limiter: new_rate_limiter(),
         }
     }
@@ -4268,15 +4262,37 @@ impl Governance {
         }
     }
 
-    /// Mint and transfer monthly node provider rewards
+    /// Mint and transfer monthly node provider rewards.
+    ///
+    /// This also returns Ok when another call is in progress. In this case, Ok
+    /// is returned IMMEDIATELY, i.e. does not wait until the work is actually
+    /// done before returnning.
     async fn mint_monthly_node_provider_rewards(&mut self) -> Result<(), GovernanceError> {
-        if self.minting_node_provider_rewards {
-            // There is an ongoing attempt to mint node provider rewards. Do nothing.
+        // Return immediately if another call is already in progress.
+        thread_local! {
+            static LOCK: RefCell<Option<u64>> = const { RefCell::new(None) };
+        }
+        let release_on_drop = ic_nervous_system_lock::acquire(&LOCK, self.env.now());
+        if let Err(earlier_call_start_timestamp) = release_on_drop {
+            // Log, but not too frequently (at most once every 5 minutes).
+            thread_local! {
+                static LAST_LOGGED_UNAVAILABLE_TIMESTAMP_SECONDS: RefCell<u64> = const { RefCell::new(0) };
+            }
+            let time_since_logged_seconds = LAST_LOGGED_UNAVAILABLE_TIMESTAMP_SECONDS
+                .with(|t| self.env.now().saturating_sub(*t.borrow()));
+            if time_since_logged_seconds > 5 * 60 {
+                println!(
+                    "{}Another mint_monthly_node_provider_rewards call (started at \
+                     {} seconds since the UNIX epoch) is already in progress.",
+                    LOG_PREFIX, earlier_call_start_timestamp,
+                );
+                LAST_LOGGED_UNAVAILABLE_TIMESTAMP_SECONDS.with(|t| {
+                    *t.borrow_mut() = self.env.now();
+                });
+            }
+
             return Ok(());
         }
-
-        // Acquire the lock before doing anything meaningful.
-        self.minting_node_provider_rewards = true;
 
         let monthly_node_provider_rewards = if are_performance_based_rewards_enabled() {
             self.get_node_providers_rewards().await?
@@ -4288,9 +4304,6 @@ impl Governance {
             .reward_node_providers(&monthly_node_provider_rewards.rewards)
             .await;
         self.update_most_recent_monthly_node_provider_rewards(monthly_node_provider_rewards);
-
-        // Release the lock before committing the result.
-        self.minting_node_provider_rewards = false;
 
         // Commit the minting status by making a canister call.
         let _unused_canister_status_response = self
@@ -6536,6 +6549,7 @@ impl Governance {
     pub fn get_ledger(&self) -> Arc<dyn IcpLedger + Send + Sync> {
         self.ledger.clone()
     }
+
     /// Triggers a reward distribution event if enough time has passed since
     /// the last one. This is intended to be called by a cron
     /// process.
@@ -7890,29 +7904,40 @@ impl Governance {
         ))
     }
 
-    thread_local! {
-        static NODE_PROVIDERS_REWARDS_CACHE: RefCell<Option<(u64, MonthlyNodeProviderRewards)>> = const { RefCell::new(None) };
-    }
     pub async fn get_node_providers_rewards_cached(
         &self,
     ) -> Result<MonthlyNodeProviderRewards, GovernanceError> {
+        thread_local! {
+            static INFLIGHT: Cell<bool> = const { Cell::new(false) };
+            static CACHE: RefCell<Option<(u64, MonthlyNodeProviderRewards)>> = const { RefCell::new(None) };
+        }
+
         let now = self.env.now();
-        let five_minutes_in_seconds = 5 * 60;
+        const FIVE_MINUTES_IN_SECONDS: u64 = 5 * 60;
 
         if let Some((last_update_timestamp_seconds, rewards)) =
-            Self::NODE_PROVIDERS_REWARDS_CACHE.with(|cache| cache.borrow().clone())
+            CACHE.with(|cache| cache.borrow().clone())
         {
             let time_since_last_update_seconds = now.saturating_sub(last_update_timestamp_seconds);
 
-            if time_since_last_update_seconds < five_minutes_in_seconds {
+            if time_since_last_update_seconds < FIVE_MINUTES_IN_SECONDS {
                 return Ok(rewards);
             }
         }
 
+        if INFLIGHT.get() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                "get_node_provider_rewards called while there is an inflight call to NRC.\
+                Please try again in 10 seconds.",
+            ));
+        }
+
+        INFLIGHT.set(true);
         let rewards = self.get_node_providers_rewards().await?;
-        Self::NODE_PROVIDERS_REWARDS_CACHE.with(|cache| {
-            cache.replace(Some((now, rewards.clone())));
-        });
+        INFLIGHT.set(false);
+
+        CACHE.set(Some((now, rewards.clone())));
 
         Ok(rewards)
     }

@@ -983,7 +983,10 @@ message GovernanceError {
     ERROR_TYPE_UNSPECIFIED = 0;
     // The operation was successfully completed.
     ERROR_TYPE_OK = 1;
-    // This operation is not available, e.g., not implemented.
+    // There have been too many instances of this operation recently. In
+    // practice, this usually just means that another instance of this operation
+    // is currently in flight, but another reason this might come up is rate
+    // limiting.
     ERROR_TYPE_UNAVAILABLE = 2;
     // The caller is not authorized to perform this operation.
     ERROR_TYPE_NOT_AUTHORIZED = 3;

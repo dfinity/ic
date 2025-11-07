@@ -19,4 +19,7 @@ on the process that this file is part of, see
 
 ## Fixed
 
+* Previously, a lock was released only in the happy case (during minting node
+  provider rewards). Now, it is released no matter how the function returns.
+
 ## Security
