@@ -598,7 +598,7 @@ impl Step for UploadStateAndRestartStep {
     fn exec(&self) -> RecoveryResult<()> {
         let account = SshUser::Admin;
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
-        let checkpoints = Recovery::list_directory_contents(&checkpoint_path)?;
+        let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
 
         let [max_checkpoint] = checkpoints.as_slice() else {
             return Err(RecoveryError::invalid_output_error(

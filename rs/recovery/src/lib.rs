@@ -230,7 +230,7 @@ impl Recovery {
         checkpoint_path: &Path,
         logger: &Logger,
     ) -> RecoveryResult<Height> {
-        let checkpoints = Self::list_directory_contents(checkpoint_path)?;
+        let checkpoints = Self::get_checkpoint_names(checkpoint_path)?;
         let (max_name, max_height) = Self::get_latest_checkpoint_name_and_height(checkpoint_path)?;
 
         for checkpoint in checkpoints {
@@ -482,7 +482,7 @@ impl Recovery {
     }
 
     /// Get names of all checkpoints currently on disk
-    pub fn list_directory_contents(path: &Path) -> RecoveryResult<Vec<String>> {
+    pub fn get_checkpoint_names(path: &Path) -> RecoveryResult<Vec<String>> {
         let res = read_dir(path)?
             .flatten()
             .filter_map(|e| {
@@ -519,7 +519,7 @@ impl Recovery {
     pub fn get_latest_checkpoint_name_and_height(
         checkpoints_path: &Path,
     ) -> RecoveryResult<(String, Height)> {
-        Self::list_directory_contents(checkpoints_path)?
+        Self::get_checkpoint_names(checkpoints_path)?
             .into_iter()
             .map(|name| parse_hex_str(&name).map(|height| (name, Height::from(height))))
             .collect::<RecoveryResult<Vec<_>>>()?
@@ -1140,7 +1140,7 @@ mod tests {
 
         assert_eq!(height, Height::from(64900));
         assert_eq!(
-            Recovery::list_directory_contents(checkpoints_dir.path()).unwrap(),
+            Recovery::get_checkpoint_names(checkpoints_dir.path()).unwrap(),
             vec![String::from("000000000000fd84")]
         );
     }
