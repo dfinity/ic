@@ -344,22 +344,6 @@ pub fn block_on_bash_script_and_log<N: SshSession>(log: &Logger, node: &N, cmd: 
     }
 }
 
-/// Execute a bash script on a node via SSH with a custom timeout and log the output.
-pub fn block_on_bash_script_and_log_with_timeout<N: SshSession>(
-    log: &Logger,
-    node: &N,
-    cmd: &str,
-    timeout: Duration,
-) {
-    match node
-        .block_on_ssh_session_with_timeout(timeout)
-        .and_then(|session| node.block_on_bash_script_from_session(&session, cmd))
-    {
-        Ok(out) => info!(log, "{cmd}:\n{out}"),
-        Err(err) => warn!(log, "Failed to execute '{cmd}': {:?}", err),
-    }
-}
-
 /// Logs guestos diagnostics, used in the event of test failure
 pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
     info!(logger, "Logging GuestOS diagnostics...");
@@ -367,12 +351,18 @@ pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
     /// 10-second timeout prevents excessive logging when SSH is unavailable.
     const SSH_TIMEOUT: Duration = Duration::from_secs(10);
 
+    let execute_and_log = |node: &dyn SshSession, cmd: &str| match node
+        .block_on_ssh_session_with_timeout(SSH_TIMEOUT)
+        .and_then(|session| node.block_on_bash_script_from_session(&session, cmd))
+    {
+        Ok(out) => info!(logger, "{cmd}:\n{out}"),
+        Err(err) => warn!(logger, "Failed to execute '{cmd}': {:?}", err),
+    };
+
     info!(logger, "GuestOS console logs...");
-    block_on_bash_script_and_log_with_timeout(
-        logger,
+    execute_and_log(
         host,
         "sudo tail -n 200 /var/log/libvirt/qemu/guestos-serial.log",
-        SSH_TIMEOUT,
     );
 
     match host.get_guest_ssh() {
@@ -386,7 +376,7 @@ pub fn try_logging_guestos_diagnostics(host: &NestedVm, logger: &Logger) {
             ];
 
             for cmd in diagnostics {
-                block_on_bash_script_and_log_with_timeout(logger, &guest, cmd, SSH_TIMEOUT);
+                execute_and_log(&guest, cmd);
             }
         }
         Err(err) => {
