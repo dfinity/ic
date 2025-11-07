@@ -15,6 +15,7 @@ fn call_context_origin() {
     let cc_id = ccm.new_call_context(
         CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE, String::from("")),
         Cycles::new(10),
+        None,
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
@@ -39,6 +40,7 @@ fn call_context_handling() {
             String::from(""),
         ),
         Cycles::zero(),
+        None,
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
@@ -50,6 +52,7 @@ fn call_context_handling() {
             String::from(""),
         ),
         Cycles::zero(),
+        Some(1),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
@@ -62,6 +65,7 @@ fn call_context_handling() {
             String::from(""),
         ),
         Cycles::zero(),
+        None,
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
