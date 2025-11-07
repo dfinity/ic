@@ -2525,7 +2525,7 @@ fn test_stats_best_effort() {
     assert_eq!(expected_queue_stats, queues.queue_stats);
     // Only one best-effort reject response (the dropped response is no longer in
     // the pool).
-    let reject_response = generate_timeout_response(&request4);
+    let reject_response = generate_reject_response(&request4, timeout_reject_context());
     let reject_response_size_bytes = reject_response.count_bytes();
     assert_eq!(
         &message_pool::MessageStats {
@@ -3504,6 +3504,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
                     sender: own_canister_id,
                     sender_reply_callback: CallbackId::from(callback_id),
                     payment: Cycles::from(7_u64),
+                    refund_id: Some(8),
                     method_name: "No-Op".to_string(),
                     method_payload: vec![],
                     metadata: Default::default(),
@@ -3565,6 +3566,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
                 respondent: from_canister,
                 originator_reply_callback: CallbackId::from(callback_id),
                 refund: Cycles::from(7_u64),
+                refund_id: Some(8),
                 response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
                     RejectCode::SysTransient,
                     "Request timed out.",

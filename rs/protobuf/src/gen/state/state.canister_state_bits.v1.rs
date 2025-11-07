@@ -5,6 +5,10 @@ pub struct CallContext {
     pub responded: bool,
     #[prost(message, optional, tag = "6")]
     pub available_funds: ::core::option::Option<super::super::queues::v1::Funds>,
+    /// The refund ID associated with the call, if a refund notification was
+    /// requested.
+    #[prost(uint64, optional, tag = "13")]
+    pub refund_id: ::core::option::Option<u64>,
     #[prost(bool, tag = "8")]
     pub deleted: bool,
     #[prost(uint64, tag = "9")]

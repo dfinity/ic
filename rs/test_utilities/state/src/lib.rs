@@ -546,6 +546,7 @@ impl CallContextBuilder {
             self.responded,
             false,
             Cycles::zero(),
+            None,
             self.time,
             Default::default(),
         )
@@ -832,6 +833,7 @@ pub fn register_callback(
         .new_call_context(
             CallOrigin::SystemTask,
             Cycles::zero(),
+            None,
             Time::from_nanos_since_unix_epoch(0),
             Default::default(),
         )
@@ -919,10 +921,11 @@ prop_compose! {
         signal_start_range: RangeInclusive<u64>,
         signal_count_range: RangeInclusive<usize>,
         with_reject_reasons: Vec<RejectReason>,
+        with_refund_notifications: bool,
     )(
         msg_start in msg_start_range,
         msgs in prop::collection::vec(
-            arbitrary::stream_message_with_config(true),
+            arbitrary::stream_message_with_config(true, with_refund_notifications),
             size_range,
         ),
         (signals_end, reject_signals) in arb_stream_signals(
@@ -956,6 +959,7 @@ prop_compose! {
             0..=10000,
             min_signal_count..=max_signal_count,
             RejectReason::all(),
+            true
         )
     ) -> Stream {
         stream

@@ -124,6 +124,8 @@ pub struct Request {
     pub metadata: Option<RequestMetadata>,
     #[serde(skip_serializing_if = "is_zero", default)]
     pub deadline: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund_id: Option<u64>,
 }
 
 /// Canonical representation of `ic_types::messages::Response`.
@@ -141,6 +143,8 @@ pub struct Response {
     pub cycles_refund: Option<Cycles>,
     #[serde(skip_serializing_if = "is_zero", default)]
     pub deadline: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund_id: Option<u64>,
 }
 
 /// Canonical representation of `ic_types::messages::Refund`.
@@ -150,6 +154,8 @@ pub struct Refund {
     #[serde(with = "serde_bytes")]
     pub recipient: Bytes,
     pub amount: Cycles,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund_id: Option<u64>,
 }
 
 /// Canonical representation of `ic_types::funds::Cycles`.
@@ -468,6 +474,7 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
     fn from(
         (request, certification_version): (&ic_types::messages::Request, CertificationVersion),
     ) -> Self {
+        assert!(request.refund_id.is_none() || certification_version >= CertificationVersion::V23);
         let funds = Funds {
             cycles: (&request.payment, certification_version).into(),
             icp: 0,
@@ -480,6 +487,7 @@ impl From<(&ic_types::messages::Request, CertificationVersion)> for Request {
             method_name: request.method_name.clone(),
             method_payload: request.method_payload.clone(),
             cycles_payment: None,
+            refund_id: request.refund_id,
             metadata: Some((&request.metadata).into()),
             deadline: request.deadline.as_secs_since_unix_epoch(),
         }
@@ -505,6 +513,7 @@ impl TryFrom<Request> for ic_types::messages::Request {
             ),
             sender_reply_callback: request.sender_reply_callback.into(),
             payment,
+            refund_id: request.refund_id,
             method_name: request.method_name,
             method_payload: request.method_payload,
             metadata: request.metadata.map_or_else(Default::default, From::from),
@@ -517,6 +526,7 @@ impl From<(&ic_types::messages::Response, CertificationVersion)> for Response {
     fn from(
         (response, certification_version): (&ic_types::messages::Response, CertificationVersion),
     ) -> Self {
+        assert!(response.refund_id.is_none() || certification_version >= CertificationVersion::V23);
         let funds = Funds {
             cycles: (&response.refund, certification_version).into(),
             icp: 0,
@@ -528,6 +538,7 @@ impl From<(&ic_types::messages::Response, CertificationVersion)> for Response {
             refund: funds,
             response_payload: (&response.response_payload, certification_version).into(),
             cycles_refund: None,
+            refund_id: response.refund_id,
             deadline: response.deadline.as_secs_since_unix_epoch(),
         }
     }
@@ -552,6 +563,7 @@ impl TryFrom<Response> for ic_types::messages::Response {
             ),
             originator_reply_callback: response.originator_reply_callback.into(),
             refund,
+            refund_id: response.refund_id,
             response_payload: response.response_payload.try_into()?,
             deadline: CoarseTime::from_secs_since_unix_epoch(response.deadline),
         })
@@ -563,9 +575,11 @@ impl From<(&ic_types::messages::Refund, CertificationVersion)> for Refund {
         (refund, certification_version): (&ic_types::messages::Refund, CertificationVersion),
     ) -> Self {
         assert!(certification_version >= CertificationVersion::V22);
+        assert!(refund.refund_id().is_none() || certification_version >= CertificationVersion::V23);
         Self {
             recipient: refund.recipient().get().to_vec(),
             amount: (&refund.amount(), certification_version).into(),
+            refund_id: refund.refund_id(),
         }
     }
 }
@@ -574,10 +588,22 @@ impl TryFrom<Refund> for ic_types::messages::Refund {
     type Error = ProxyDecodeError;
 
     fn try_from(refund: Refund) -> Result<Self, Self::Error> {
-        Ok(Self::anonymous(
-            ic_types::CanisterId::unchecked_from_principal(refund.recipient.as_slice().try_into()?),
-            refund.amount.try_into()?,
-        ))
+        if let Some(refund_id) = refund.refund_id {
+            Ok(Self::notification(
+                ic_types::CanisterId::unchecked_from_principal(
+                    refund.recipient.as_slice().try_into()?,
+                ),
+                refund_id,
+                refund.amount.try_into()?,
+            ))
+        } else {
+            Ok(Self::anonymous(
+                ic_types::CanisterId::unchecked_from_principal(
+                    refund.recipient.as_slice().try_into()?,
+                ),
+                refund.amount.try_into()?,
+            ))
+        }
     }
 }
 

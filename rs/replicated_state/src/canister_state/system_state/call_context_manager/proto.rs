@@ -11,6 +11,7 @@ impl From<&CallContext> for pb::CallContext {
             responded: item.responded,
             deleted: item.deleted,
             available_funds: Some((&funds).into()),
+            refund_id: item.refund_id,
             time_nanos: item.time.as_nanos_since_unix_epoch(),
             metadata: Some((&item.metadata).into()),
             instructions_executed: item.instructions_executed.get(),
@@ -29,6 +30,7 @@ impl TryFrom<pb::CallContext> for CallContext {
             responded: value.responded,
             deleted: value.deleted,
             available_cycles: funds.cycles(),
+            refund_id: value.refund_id,
             time: Time::from_nanos_since_unix_epoch(value.time_nanos),
             metadata: value
                 .metadata

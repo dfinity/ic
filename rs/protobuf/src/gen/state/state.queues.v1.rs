@@ -75,6 +75,9 @@ pub struct Request {
     pub method_payload: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "7")]
     pub cycles_payment: ::core::option::Option<Cycles>,
+    /// / If set, identifies a _refund notification_, else an _anonymous refund_.
+    #[prost(uint64, optional, tag = "10")]
+    pub refund_id: ::core::option::Option<u64>,
     #[prost(message, optional, tag = "8")]
     pub metadata: ::core::option::Option<RequestMetadata>,
     /// If non-zero, this is a best-effort call.
@@ -98,6 +101,9 @@ pub struct Response {
     pub originator_reply_callback: u64,
     #[prost(message, optional, tag = "4")]
     pub refund: ::core::option::Option<Funds>,
+    /// / If set, identifies a _refund notification_, else an _anonymous refund_.
+    #[prost(uint64, optional, tag = "9")]
+    pub refund_id: ::core::option::Option<u64>,
     #[prost(message, optional, tag = "7")]
     pub cycles_refund: ::core::option::Option<Cycles>,
     /// If non-zero, this is a best-effort call.

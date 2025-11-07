@@ -805,6 +805,7 @@ impl<'a> QueryContext<'a> {
                 originator_reply_callback: request.sender_reply_callback,
                 response_payload: payload,
                 refund: Cycles::zero(),
+                refund_id: request.refund_id,
                 deadline: request.deadline,
             })
         };
@@ -996,6 +997,7 @@ impl<'a> QueryContext<'a> {
                         respondent: canister_id,
                         originator_reply_callback: callback_id,
                         refund: Cycles::zero(),
+                        refund_id: None,
                         response_payload: payload,
                         // `CallOrigin::CanisterQuery` has no deadline.
                         deadline: NO_DEADLINE,
@@ -1058,6 +1060,7 @@ impl<'a> QueryContext<'a> {
                     respondent: canister_id,
                     originator_reply_callback: callback_id,
                     refund: Cycles::zero(),
+                    refund_id: None,
                     response_payload: Payload::Reject(RejectContext::from(error)),
                     // `CallOrigin::CanisterQuery` has no deadline.
                     deadline: NO_DEADLINE,

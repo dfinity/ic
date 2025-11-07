@@ -1360,6 +1360,7 @@ impl Scheduler for SchedulerImpl {
                             respondent: CanisterId::ic_00(),
                             originator_reply_callback: response.callback,
                             refund: Cycles::zero(),
+                            refund_id: None,
                             response_payload: response.payload,
                             deadline: NO_DEADLINE,
                         }

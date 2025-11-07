@@ -29,7 +29,7 @@ pub fn stream_header(_certification_version: CertificationVersion) -> StreamHead
     StreamHeader::new(23.into(), 25.into(), 256.into(), reject_signals, flags)
 }
 
-pub fn request(_certification_version: CertificationVersion) -> StreamMessage {
+pub fn request(certification_version: CertificationVersion) -> StreamMessage {
     let metadata = RequestMetadata::new(1, Time::from_nanos_since_unix_epoch(100_000));
     let deadline = CoarseTime::from_secs_since_unix_epoch(8);
     Request {
@@ -37,6 +37,11 @@ pub fn request(_certification_version: CertificationVersion) -> StreamMessage {
         sender: canister_test_id(2),
         sender_reply_callback: CallbackId::from(3),
         payment: Cycles::new(4),
+        refund_id: if certification_version >= CertificationVersion::V23 {
+            Some(5)
+        } else {
+            None
+        },
         method_name: "test".to_string(),
         method_payload: vec![6],
         metadata,
@@ -45,26 +50,36 @@ pub fn request(_certification_version: CertificationVersion) -> StreamMessage {
     .into()
 }
 
-pub fn response(_certification_version: CertificationVersion) -> StreamMessage {
+pub fn response(certification_version: CertificationVersion) -> StreamMessage {
     let deadline = CoarseTime::from_secs_since_unix_epoch(7);
     Response {
         originator: canister_test_id(6),
         respondent: canister_test_id(5),
         originator_reply_callback: CallbackId::from(4),
         refund: Cycles::new(3),
+        refund_id: if certification_version >= CertificationVersion::V23 {
+            Some(2)
+        } else {
+            None
+        },
         response_payload: Payload::Data(vec![1]),
         deadline,
     }
     .into()
 }
 
-pub fn reject_response(_certification_version: CertificationVersion) -> StreamMessage {
+pub fn reject_response(certification_version: CertificationVersion) -> StreamMessage {
     let deadline = CoarseTime::from_secs_since_unix_epoch(7);
     Response {
         originator: canister_test_id(6),
         respondent: canister_test_id(5),
         originator_reply_callback: CallbackId::from(4),
         refund: Cycles::new(3),
+        refund_id: if certification_version >= CertificationVersion::V23 {
+            Some(2)
+        } else {
+            None
+        },
         response_payload: Payload::Reject(RejectContext::new(RejectCode::SysFatal, "Oops")),
         deadline,
     }
@@ -74,4 +89,9 @@ pub fn reject_response(_certification_version: CertificationVersion) -> StreamMe
 pub fn anonymous_refund(certification_version: CertificationVersion) -> StreamMessage {
     assert!(certification_version >= CertificationVersion::V22);
     Refund::anonymous(canister_test_id(7), Cycles::new(8)).into()
+}
+
+pub fn refund_notification(certification_version: CertificationVersion) -> StreamMessage {
+    assert!(certification_version >= CertificationVersion::V22);
+    Refund::notification(canister_test_id(7), 8, Cycles::new(9)).into()
 }

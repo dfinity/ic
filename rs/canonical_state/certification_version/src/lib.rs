@@ -7,10 +7,12 @@ pub enum CertificationVersion {
     V19 = 19,
     /// Excluded loopback stream from the certified state.
     V20 = 20,
-    /// Add `canister_ranges` subtree to the certified state.
+    /// Adds `canister_ranges` subtree to the certified state.
     V21 = 21,
-    /// Switch from `RequestOrResponse` to `StreamMessage`, adding `refund` variant.
+    /// Switch from `RequestOrResponse` to `StreamMessage`, adding `Refund` variant.
     V22 = 22,
+    /// Adds `refund_id` to `Request`, `Response` and `Refund` messages.
+    V23 = 23,
 }
 
 #[derive(Eq, PartialEq, Debug)]
@@ -54,7 +56,7 @@ pub const MIN_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = Certificat
 ///
 /// The replica will panic if requested to certify using a version higher than
 /// this.
-pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V22;
+pub const MAX_SUPPORTED_CERTIFICATION_VERSION: CertificationVersion = CertificationVersion::V23;
 
 /// Returns a list of all certification versions from `MIN_SUPPORTED_CERTIFICATION_VERSION`
 /// up to `MAX_SUPPORTED_CERTIFICATION_VERSION`.

@@ -312,6 +312,7 @@ fn get_xnet_payload_respects_signal_limit(
         10..=20, // signal_start_range
         (MAX_SIGNALS - 10)..=MAX_SIGNALS, // signal_count_range
         RejectReason::all(),
+        true
     ))]
     out_stream: Stream,
 
@@ -322,6 +323,7 @@ fn get_xnet_payload_respects_signal_limit(
         10..=20, // signal_start_range
         0..=10, // signal_count_range
         RejectReason::all(),
+        true
     ))]
     in_stream: Stream,
 ) {

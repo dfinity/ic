@@ -1764,6 +1764,7 @@ fn stream_roundtrip_encoding() {
             receiver: *REMOTE_CANISTER,
             sender_reply_callback: CallbackId::from(1),
             payment: Cycles::from(123_456_789_u128),
+            refund_id: Some(2),
             method_name: "method_1".into(),
             method_payload: [2_u8, 17_u8, 29_u8, 113_u8].into(),
             metadata: RequestMetadata::new(17, Time::from_nanos_since_unix_epoch(123)),
@@ -1779,6 +1780,7 @@ fn stream_roundtrip_encoding() {
             respondent: *REMOTE_CANISTER,
             originator_reply_callback: CallbackId::from(2),
             refund: Cycles::from(234_567_u128),
+            refund_id: Some(3),
             response_payload: Payload::Data([13_u8, 44_u8, 1_u8].into()),
             deadline: CoarseTime::from_secs_since_unix_epoch(7428),
         }

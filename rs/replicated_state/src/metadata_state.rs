@@ -764,6 +764,7 @@ impl SystemMetadata {
                     respondent: request.receiver,
                     originator_reply_callback: request.sender_reply_callback,
                     refund: request.payment,
+                    refund_id: request.refund_id,
                     response_payload: Payload::Reject(RejectContext::new(
                         RejectCode::SysTransient,
                         format!("Canister {canister_id} migrated during a subnet split"),
@@ -831,6 +832,9 @@ pub struct Stream {
     /// Estimated byte size of `self.messages`.
     messages_size_bytes: usize,
 
+    /// Number of `Refund` messages in the stream.
+    refund_count: usize,
+
     /// Stream flags observed in the header of the reverse stream.
     reverse_stream_flags: StreamFlags,
 
@@ -844,6 +848,7 @@ impl Default for Stream {
         let signals_end = Default::default();
         let reject_signals = VecDeque::default();
         let messages_size_bytes = Self::calculate_size_bytes(&messages);
+        let refund_count = Self::calculate_refund_count(&messages);
         let reverse_stream_flags = StreamFlags {
             deprecated_responses_only: false,
         };
@@ -853,6 +858,7 @@ impl Default for Stream {
             signals_end,
             reject_signals,
             messages_size_bytes,
+            refund_count,
             reverse_stream_flags,
             guaranteed_response_counts,
         }
@@ -862,16 +868,7 @@ impl Default for Stream {
 impl Stream {
     /// Creates a new `Stream` with the given `messages` and `signals_end`.
     pub fn new(messages: StreamIndexedQueue<StreamMessage>, signals_end: StreamIndex) -> Self {
-        let messages_size_bytes = Self::calculate_size_bytes(&messages);
-        let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
-        Self {
-            messages,
-            signals_end,
-            reject_signals: VecDeque::new(),
-            messages_size_bytes,
-            reverse_stream_flags: Default::default(),
-            guaranteed_response_counts,
-        }
+        Self::with_signals(messages, signals_end, VecDeque::new())
     }
 
     /// Creates a new `Stream` with the given `messages`, `signals_end` and `reject_signals`.
@@ -881,12 +878,14 @@ impl Stream {
         reject_signals: VecDeque<RejectSignal>,
     ) -> Self {
         let messages_size_bytes = Self::calculate_size_bytes(&messages);
+        let refund_count = Self::calculate_refund_count(&messages);
         let guaranteed_response_counts = Self::calculate_guaranteed_response_counts(&messages);
         Self {
             messages,
             signals_end,
             reject_signals,
             messages_size_bytes,
+            refund_count,
             reverse_stream_flags: Default::default(),
             guaranteed_response_counts,
         }
@@ -925,6 +924,11 @@ impl Stream {
         self.messages.end()
     }
 
+    /// Returns the number of `Refund` messages in the stream.
+    pub fn refund_count(&self) -> usize {
+        self.refund_count
+    }
+
     /// Returns the number of guaranteed responses in the stream for each responding canister.
     pub fn guaranteed_response_counts(&self) -> &BTreeMap<CanisterId, usize> {
         &self.guaranteed_response_counts
@@ -933,6 +937,9 @@ impl Stream {
     /// Appends the given message to the tail of the stream.
     pub fn push(&mut self, message: StreamMessage) {
         self.messages_size_bytes += message.count_bytes();
+        if let StreamMessage::Refund(_) = &message {
+            self.refund_count += 1;
+        }
         if let StreamMessage::Response(response) = &message
             && !response.is_best_effort()
         {
@@ -945,6 +952,10 @@ impl Stream {
         debug_assert_eq!(
             Self::calculate_size_bytes(&self.messages),
             self.messages_size_bytes
+        );
+        debug_assert_eq!(
+            Self::calculate_refund_count(&self.messages),
+            self.refund_count
         );
         debug_assert_eq!(
             Self::calculate_guaranteed_response_counts(&self.messages),
@@ -992,6 +1003,14 @@ impl Stream {
             debug_assert_eq!(
                 Self::calculate_size_bytes(&self.messages),
                 self.messages_size_bytes
+            );
+
+            if let StreamMessage::Refund(_) = &msg {
+                self.refund_count -= 1;
+            }
+            debug_assert_eq!(
+                Self::calculate_refund_count(&self.messages),
+                self.refund_count
             );
 
             if let StreamMessage::Response(response) = &msg
@@ -1065,7 +1084,21 @@ impl Stream {
 
     /// Calculates the estimated byte size of the given messages.
     fn calculate_size_bytes(messages: &StreamIndexedQueue<StreamMessage>) -> usize {
-        messages.iter().map(|(_, m)| m.count_bytes()).sum()
+        messages.iter().map(|(_, msg)| msg.count_bytes()).sum()
+    }
+
+    /// Calculates the estimated byte size of all `Refunds` in `messages`.
+    fn calculate_refund_count(messages: &StreamIndexedQueue<StreamMessage>) -> usize {
+        messages
+            .iter()
+            .map(|(_, meg)| {
+                if let StreamMessage::Refund(_) = meg {
+                    1
+                } else {
+                    0
+                }
+            })
+            .sum()
     }
 
     fn calculate_guaranteed_response_counts(

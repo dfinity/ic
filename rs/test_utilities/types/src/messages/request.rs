@@ -19,6 +19,7 @@ impl Default for RequestBuilder {
                 sender: canister_test_id(1),
                 sender_reply_callback: CallbackId::from(0),
                 payment: Cycles::zero(),
+                refund_id: None,
                 method_name: name.to_string(),
                 method_payload: Vec::new(),
                 metadata: Default::default(),
@@ -56,6 +57,12 @@ impl RequestBuilder {
     /// Sets the `payment` field.
     pub fn payment(mut self, payment: Cycles) -> Self {
         self.request.payment = payment;
+        self
+    }
+
+    /// Sets the `refund_id` field.
+    pub fn refund_id(mut self, refund_id: Option<u64>) -> Self {
+        self.request.refund_id = refund_id;
         self
     }
 

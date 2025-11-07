@@ -74,6 +74,8 @@ message Request {
   string method_name = 5;
   bytes method_payload = 6;
   Cycles cycles_payment = 7;
+  /// If set, identifies a _refund notification_, else an _anonymous refund_.
+  optional uint64 refund_id = 10;
   RequestMetadata metadata = 8;
   // If non-zero, this is a best-effort call.
   uint32 deadline_seconds = 9;
@@ -91,6 +93,8 @@ message Response {
   types.v1.CanisterId respondent = 2;
   uint64 originator_reply_callback = 3;
   Funds refund = 4;
+  /// If set, identifies a _refund notification_, else an _anonymous refund_.
+  optional uint64 refund_id = 9;
   oneof response_payload {
     bytes data = 5;
     RejectContext reject = 6;
