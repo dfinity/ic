@@ -14,7 +14,8 @@ rust_library(
 )
 
 rust_library(
-    name = "retry__use_calL_chaos",
+    name = "retry__use_call_chaos",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_features = ["use_call_chaos"],
     crate_name = "ic_call_retry",

@@ -2,13 +2,14 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 rust_canister(
     name = "upgrader-test-canister",
+    testonly = True,
     srcs = ["src/lib.rs"],
     service_file = "canister.did",
     deps = [
         # Keep sorted.
         "//packages/ic-call-chaos/call-chaos",
-        "//packages/ic-call-retry/retry:retry__use_calL_chaos",
-        "//packages/ic-safe-upgrades/safe_upgrades:safe_upgrades__use_calL_chaos",
+        "//packages/ic-call-retry/retry:retry__use_call_chaos",
+        "//packages/ic-safe-upgrades/safe_upgrades:safe_upgrades__use_call_chaos",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:lazy_static",

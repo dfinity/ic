@@ -18,7 +18,8 @@ rust_library(
 )
 
 rust_library(
-    name = "safe_upgrades__use_calL_chaos",
+    name = "safe_upgrades__use_call_chaos",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_features = ["use_call_chaos"],
     crate_name = "ic_safe_upgrades",
@@ -26,7 +27,7 @@ rust_library(
     deps = [
         # Keep sorted
         "//packages/ic-call-chaos/call-chaos",
-        "//packages/ic-call-retry/retry:retry__use_calL_chaos",
+        "//packages/ic-call-retry/retry:retry__use_call_chaos",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
         "@crate_index//:ic-management-canister-types",

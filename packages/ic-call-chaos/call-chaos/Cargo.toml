@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["Ognjen Maric <ognjen.maric@dfinity.org>"]
 description = "Chaos monkey library for Internet Computer calls"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/oggy-dfin/ic_call_utils"
+repository = "https://github.com/dfinity/ic"
 
 [dependencies]
 futures = { workspace = true }

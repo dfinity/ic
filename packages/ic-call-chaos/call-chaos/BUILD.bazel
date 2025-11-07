@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "call-chaos",
+    testonly = True,
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_call_chaos",
     version = "0.1.0",

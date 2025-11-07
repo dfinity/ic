@@ -2,6 +2,7 @@ load("//bazel:canisters.bzl", "rust_canister")
 
 rust_canister(
     name = "call-chaos-test-canister-no-chaos",
+    testonly = True,
     srcs = ["src/lib.rs"],
     features = [],
     service_file = "canister.did",
@@ -14,6 +15,7 @@ rust_canister(
 
 rust_canister(
     name = "call-chaos-test-canister",
+    testonly = True,
     srcs = ["src/lib.rs"],
     crate_features = ["use_call_chaos"],
     service_file = "canister.did",
