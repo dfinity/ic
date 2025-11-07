@@ -1478,6 +1478,7 @@ pub trait SshSession: HasTestEnv {
             .context("Failed to get SSH session")
     }
 
+    /// Convenience wrapper for `block_on_ssh_session_with_timeout` with a default timeout.
     fn block_on_ssh_session(&self) -> Result<Session> {
         self.block_on_ssh_session_with_timeout(SSH_RETRY_TIMEOUT)
     }
