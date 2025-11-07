@@ -19,7 +19,7 @@ use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-use crate::state::CkBtcMinterState;
+use crate::state::{CkBtcMinterState, read_state};
 use crate::updates::get_btc_address;
 use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
@@ -208,7 +208,7 @@ fn undo_sign_request(requests: BTreeSet<state::RetrieveBtcRequest>, utxos: Vec<U
 /// previous retrieve BTC requests.
 async fn fetch_main_utxos<R: CanisterRuntime>(
     main_account: &Account,
-    main_address: &BitcoinAddress,
+    main_address: &String,
     runtime: &R,
 ) -> Vec<Utxo> {
     let (btc_network, min_confirmations) =
@@ -216,20 +216,25 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
 
     let utxos = match management::get_utxos(
         btc_network,
-        &main_address.display(btc_network),
+        main_address,
         min_confirmations,
         management::CallSource::Minter,
         runtime,
     )
     .await
     {
-        Ok(response) => response.utxos,
+        Ok(response) => {
+            log!(
+                Priority::Info,
+                "[fetch_main_utxos]: UTXOs for {main_address}: {:?}",
+                response.utxos
+            );
+            response.utxos
+        }
         Err(e) => {
             log!(
                 Priority::Info,
-                "[fetch_main_utxos]: failed to fetch UTXOs for the main address {}: {}",
-                main_address.display(btc_network),
-                e
+                "[fetch_main_utxos]: failed to fetch UTXOs for the main address {main_address}: {e}",
             );
             return vec![];
         }
@@ -666,13 +671,33 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
     // The list of transactions that are likely to be finalized, indexed by the transaction id.
     let mut maybe_finalized_transactions: BTreeMap<Txid, state::SubmittedBtcTransaction> =
         state::read_state(|s| {
-            let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network);
+            let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network, runtime);
+
+            log!(
+                Priority::Info,
+                "[finalize_requests]: now {now}, wait_time {}",
+                wait_time.as_secs()
+            );
             s.submitted_transactions
                 .iter()
+                .inspect(|req| {
+                    log!(
+                        Priority::Info,
+                        "[finalize_requests]: submitted_transactions at {:?}, threshold: {}, now {now}",
+                        req.submitted_at,
+                        req.submitted_at + (wait_time.as_nanos() as u64)
+                    );
+                })
                 .filter(|&req| req.submitted_at + (wait_time.as_nanos() as u64) < now)
                 .map(|req| (req.txid, req.clone()))
                 .collect()
         });
+
+    log!(
+        Priority::Info,
+        "[finalize_requests]: maybe_finalized_transactions {}",
+        maybe_finalized_transactions.len()
+    );
 
     if maybe_finalized_transactions.is_empty() {
         return;
@@ -683,8 +708,17 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         subaccount: None,
     };
 
-    let main_address = address::account_to_bitcoin_address(&ecdsa_public_key, &main_account);
-    let new_utxos = fetch_main_utxos(&main_account, &main_address, runtime).await;
+    let (main_address, main_address_str) = read_state(|s| {
+        (
+            runtime.derive_minter_address(s),
+            runtime.derive_minter_address_str(s),
+        )
+    });
+    let new_utxos = fetch_main_utxos(&main_account, &main_address_str, runtime).await;
+    log!(
+        Priority::Info,
+        "[finalize_requests]: main_address {main_address:?} new_utxos: {new_utxos:?}",
+    );
 
     state::mutate_state(|state| {
         process_maybe_finalized_transactions(
@@ -1436,7 +1470,7 @@ pub trait CanisterRuntime {
         state.validate_config()
     }
 
-    /// How often is block produced
+    /// How often a is block produced.
     fn block_frequency(&self) -> Duration;
 
     fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
@@ -1446,6 +1480,9 @@ pub trait CanisterRuntime {
 
     /// Derive address controlled by the minter.
     fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress;
+
+    /// Derive address controlled by the minter.
+    fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String;
 
     /// Returns the frequency at which fee percentiles are refreshed.
     fn refresh_fee_percentiles_frequency(&self) -> Duration;
@@ -1588,6 +1625,10 @@ impl CanisterRuntime for IcCanisterRuntime {
             .as_ref()
             .expect("bug: the ECDSA public key must be initialized");
         address::account_to_bitcoin_address(ecdsa_public_key, &main_account)
+    }
+
+    fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String {
+        self.derive_minter_address(state).display(state.btc_network)
     }
 
     async fn check_address(

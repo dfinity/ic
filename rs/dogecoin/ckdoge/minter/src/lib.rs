@@ -167,6 +167,15 @@ impl CanisterRuntime for DogeCanisterRuntime {
         }
     }
 
+    fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String {
+        let main_account = Account {
+            owner: ic_cdk::api::canister_self(),
+            subaccount: None,
+        };
+        let minter_address = updates::account_to_p2pkh_address_from_state(state, &main_account);
+        minter_address.display(&Network::from(state.btc_network))
+    }
+
     async fn check_address(
         &self,
         _btc_checker_principal: Option<Principal>,

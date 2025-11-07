@@ -59,6 +59,7 @@ pub mod mock {
             fn block_frequency(&self) -> Duration;
             fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
             fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress;
+            fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String;
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
             async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
