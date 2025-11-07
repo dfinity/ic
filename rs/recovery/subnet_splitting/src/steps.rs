@@ -36,17 +36,13 @@ pub(crate) struct CopyWorkDirStep {
 impl Step for CopyWorkDirStep {
     fn descr(&self) -> String {
         format!(
-            "Copying {} to {}.",
+            "Copying {} from {} to {}.",
             self.data_includes
                 .iter()
-                .map(|p| self
-                    .layout
-                    .work_dir(TargetSubnet::Source)
-                    .join(p)
-                    .display()
-                    .to_string())
+                .map(|p| p.display().to_string())
                 .collect::<Vec<String>>()
                 .join(", "),
+            self.layout.work_dir(TargetSubnet::Source).display(),
             self.layout.work_dir(TargetSubnet::Destination).display(),
         )
     }
