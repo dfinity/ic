@@ -1,6 +1,6 @@
 load("@python_deps//:requirements.bzl", "requirement")
 load("@rules_python//python:defs.bzl", "py_test")
-load("//bazel:candid.bzl", "did_git_test")
+load("//bazel/candid:defs.bzl", "did_git_test")
 
 did_git_test(
     name = "example_did_git_test",
