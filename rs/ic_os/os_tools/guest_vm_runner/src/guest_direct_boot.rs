@@ -6,7 +6,6 @@ use anyhow::Result;
 use grub::{BootAlternative, BootCycle, GrubEnv, WithDefault};
 use ic_device::mount::{FileSystem, MountOptions, PartitionProvider};
 use std::fs::File;
-use std::process::Command;
 use tempfile::NamedTempFile;
 use uuid::Uuid;
 
