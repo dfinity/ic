@@ -206,7 +206,7 @@ fn test_enforce_https(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("http://[{webserver_ipv6}]:20443"),
+                url: format!("http://[{webserver_ipv6}]"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -244,7 +244,7 @@ fn test_transform_function_is_executed(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443"),
+                url: format!("https://[{webserver_ipv6}]"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -288,7 +288,7 @@ fn test_non_existent_transform_function(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443"),
+                url: format!("https://[{webserver_ipv6}]"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -328,7 +328,7 @@ fn test_composite_transform_function_is_not_allowed(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443"),
+                url: format!("https://[{webserver_ipv6}]"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -363,7 +363,7 @@ fn test_no_cycles_attached(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("http://[{webserver_ipv6}]:20443"),
+                url: format!("http://[{webserver_ipv6}]"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -415,7 +415,7 @@ fn test_max_possible_request_size(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443/request_size"),
+                url: format!("https://[{webserver_ipv6}]/request_size"),
                 headers,
                 method: HttpMethod::POST,
                 body: Some(body),
@@ -461,7 +461,7 @@ fn test_max_possible_request_size_exceeded(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443/request_size"),
+                url: format!("https://[{webserver_ipv6}]/request_size"),
                 headers,
                 method: HttpMethod::POST,
                 body: Some(body),
@@ -498,7 +498,7 @@ fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{webserver_ipv6}]:20443"),
+        url: format!("https://[{webserver_ipv6}]"),
         headers: vec![],
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
@@ -543,7 +543,7 @@ fn test_4096_max_response_cycle_case_1(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{webserver_ipv6}]:20443"),
+        url: format!("https://[{webserver_ipv6}]"),
         headers: vec![],
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
@@ -582,7 +582,7 @@ fn test_4096_max_response_cycle_case_2(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{webserver_ipv6}]:20443"),
+        url: format!("https://[{webserver_ipv6}]"),
         headers: vec![],
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
@@ -629,7 +629,7 @@ fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443"),
+                url: format!("https://[{webserver_ipv6}]"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -653,7 +653,7 @@ fn test_max_response_bytes_too_large(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443"),
+                url: format!("https://[{webserver_ipv6}]"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -687,7 +687,7 @@ fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443"),
+                url: format!("https://[{webserver_ipv6}]"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -719,7 +719,7 @@ fn test_transform_that_bloats_on_the_2mb_limit_with_custom_max_response_bytes(en
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443"),
+                url: format!("https://[{webserver_ipv6}]"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -759,7 +759,7 @@ fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443"),
+                url: format!("https://[{webserver_ipv6}]"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -799,7 +799,7 @@ fn test_post_request(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443/post"),
+                url: format!("https://[{webserver_ipv6}]/post"),
                 headers: vec![HttpHeader {
                     name: "content-type".to_string(),
                     value: "application/x-www-form-urlencoded".to_string(),
@@ -844,7 +844,7 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443/bytes/{n}"),
+                url: format!("https://[{webserver_ipv6}]/bytes/{n}"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -890,7 +890,7 @@ fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: 
             &handlers,
             RemoteHttpRequest {
                 request: UnvalidatedCanisterHttpRequestArgs {
-                    url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n + 1),
+                    url: format!("https://[{webserver_ipv6}]/bytes/{}", n + 1),
                     headers: vec![],
                     method: HttpMethod::GET,
                     body: Some("".as_bytes().to_vec()),
@@ -931,7 +931,7 @@ fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443/bytes/{n}"),
+                url: format!("https://[{webserver_ipv6}]/bytes/{n}"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -975,7 +975,7 @@ fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env:
             &handlers,
             RemoteHttpRequest {
                 request: UnvalidatedCanisterHttpRequestArgs {
-                    url: format!("https://[{webserver_ipv6}]:20443/bytes/{}", n + 1),
+                    url: format!("https://[{webserver_ipv6}]/bytes/{}", n + 1),
                     headers: vec![],
                     method: HttpMethod::GET,
                     body: Some("".as_bytes().to_vec()),
@@ -1006,7 +1006,7 @@ fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443/delay/40"),
+                url: format!("https://[{webserver_ipv6}]/delay/40"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -1043,7 +1043,7 @@ fn test_that_redirects_are_not_followed(env: TestEnv) {
         &handlers,
         RemoteHttpRequest {
             request: UnvalidatedCanisterHttpRequestArgs {
-                url: format!("https://[{webserver_ipv6}]:20443/redirect/10"),
+                url: format!("https://[{webserver_ipv6}]/redirect/10"),
                 headers: vec![],
                 method: HttpMethod::GET,
                 body: Some("".as_bytes().to_vec()),
@@ -1192,10 +1192,7 @@ fn test_get_hello_world_call(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
     let expected_body = "hello_world";
 
-    let url = format!(
-        "https://[{}]:20443/{}/{}",
-        webserver_ipv6, "ascii", expected_body
-    );
+    let url = format!("https://[{}]/{}/{}", webserver_ipv6, "ascii", expected_body);
 
     let max_response_bytes = 666;
 
@@ -1244,7 +1241,7 @@ fn test_request_header_total_size_within_the_48_kib_limit(env: TestEnv) {
     }
 
     let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{webserver_ipv6}]:20443"),
+        url: format!("https://[{webserver_ipv6}]"),
         headers,
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
@@ -1292,7 +1289,7 @@ fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
     });
 
     let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{webserver_ipv6}]:20443"),
+        url: format!("https://[{webserver_ipv6}]"),
         headers,
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
@@ -1331,7 +1328,7 @@ fn test_response_header_total_size_within_the_48_kib_limit(env: TestEnv) {
     // with the specified value length, after accounting also for the
     // overhead headers (e.g. content-length, date, etc.)
     let url = format!(
-        "https://[{webserver_ipv6}]:20443/large_response_total_header_size/{MAX_HEADER_NAME_LENGTH}/{TOTAL_HEADER_NAME_AND_VALUE_LENGTH}",
+        "https://[{webserver_ipv6}]/large_response_total_header_size/{MAX_HEADER_NAME_LENGTH}/{TOTAL_HEADER_NAME_AND_VALUE_LENGTH}",
     );
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1380,7 +1377,7 @@ fn test_response_header_total_size_over_the_48_kib_limit(env: TestEnv) {
     // with the specified value length, after accounting also for the
     // overhead headers (e.g. content-length, date, etc.)
     let url = format!(
-        "https://[{}]:20443/large_response_total_header_size/{}/{}",
+        "https://[{}]/large_response_total_header_size/{}/{}",
         webserver_ipv6,
         MAX_HEADER_NAME_LENGTH,
         TOTAL_HEADER_NAME_AND_VALUE_LENGTH + 1,
@@ -1426,7 +1423,7 @@ fn test_request_header_name_and_value_within_limits(env: TestEnv) {
     }];
 
     let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{webserver_ipv6}]:20443"),
+        url: format!("https://[{webserver_ipv6}]"),
         headers,
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
@@ -1458,7 +1455,7 @@ fn test_request_header_name_too_long(env: TestEnv) {
     }];
 
     let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{webserver_ipv6}]:20443"),
+        url: format!("https://[{webserver_ipv6}]"),
         headers,
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
@@ -1499,7 +1496,7 @@ fn test_request_header_value_too_long(env: TestEnv) {
     }];
 
     let request = UnvalidatedCanisterHttpRequestArgs {
-        url: format!("https://[{webserver_ipv6}]:20443"),
+        url: format!("https://[{webserver_ipv6}]"),
         headers,
         method: HttpMethod::GET,
         body: Some("".as_bytes().to_vec()),
@@ -1534,9 +1531,8 @@ fn test_response_header_name_within_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let url = format!(
-        "https://[{webserver_ipv6}]:20443/long_response_header_name/{MAX_HEADER_NAME_LENGTH}",
-    );
+    let url =
+        format!("https://[{webserver_ipv6}]/long_response_header_name/{MAX_HEADER_NAME_LENGTH}",);
 
     let (response, _) = block_on(submit_outcall(
         &handlers,
@@ -1563,7 +1559,7 @@ fn test_response_header_name_over_limit(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let url = format!(
-        "https://[{}]:20443/long_response_header_name/{}",
+        "https://[{}]/long_response_header_name/{}",
         webserver_ipv6,
         MAX_HEADER_NAME_LENGTH + 1,
     );
@@ -1603,9 +1599,8 @@ fn test_response_header_value_within_limit(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let url = format!(
-        "https://[{webserver_ipv6}]:20443/long_response_header_value/{MAX_HEADER_VALUE_LENGTH}",
-    );
+    let url =
+        format!("https://[{webserver_ipv6}]/long_response_header_value/{MAX_HEADER_VALUE_LENGTH}",);
 
     let request = UnvalidatedCanisterHttpRequestArgs {
         url,
@@ -1634,7 +1629,7 @@ fn test_response_header_value_over_limit(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let url = format!(
-        "https://[{}]:20443/long_response_header_value/{}",
+        "https://[{}]/long_response_header_value/{}",
         webserver_ipv6,
         MAX_HEADER_VALUE_LENGTH + 1,
     );
@@ -1676,7 +1671,7 @@ fn test_post_call(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
     let expected_body = "POST";
 
-    let url = format!("https://[{}]:20443/{}", webserver_ipv6, "anything");
+    let url = format!("https://[{}]/{}", webserver_ipv6, "anything");
     let body = Some("hello_world".as_bytes().to_vec());
     let headers = vec![
         HttpHeader {
@@ -1724,7 +1719,7 @@ fn test_head_call(env: TestEnv) {
 
     let long_x_string = "x".repeat(6666);
     let url = format!(
-        "https://[{}]:20443/{}/{}",
+        "https://[{}]/{}/{}",
         webserver_ipv6, "anything", long_x_string
     );
     let body = Some("hello_world".as_bytes().to_vec());
@@ -1779,7 +1774,7 @@ fn test_only_headers_with_custom_max_response_bytes(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let n = 0;
-    let url = format!("https://[{}]:20443/{}/{}", webserver_ipv6, "equal_bytes", n);
+    let url = format!("https://[{}]/{}/{}", webserver_ipv6, "equal_bytes", n);
 
     //   { Response headers
     //       date: Jan 1 1970 00:00:00 GMT
@@ -1819,7 +1814,7 @@ fn test_only_headers_with_custom_max_response_bytes_exceeded(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     let n = 0;
-    let url = format!("https://[{}]:20443/{}/{}", webserver_ipv6, "equal_bytes", n);
+    let url = format!("https://[{}]/{}/{}", webserver_ipv6, "equal_bytes", n);
 
     //   { Response headers
     //       date: Jan 1 1970 00:00:00 GMT
@@ -1867,10 +1862,7 @@ fn test_non_ascii_url_is_accepted(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
     let expected_body = "안녕하세요";
 
-    let url = format!(
-        "https://[{}]:20443/{}/{}",
-        webserver_ipv6, "ascii", expected_body
-    );
+    let url = format!("https://[{}]/{}/{}", webserver_ipv6, "ascii", expected_body);
 
     let max_response_bytes = 666;
 
@@ -1905,7 +1897,7 @@ fn test_max_url_length(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let base_url = format!("https://[{}]:20443/{}/", webserver_ipv6, "ascii");
+    let base_url = format!("https://[{}]/{}/", webserver_ipv6, "ascii");
     let remaining_space = MAX_CANISTER_HTTP_URL_SIZE - base_url.len();
     let expected_body = "x".repeat(remaining_space);
 
@@ -1940,7 +1932,7 @@ fn test_max_url_length_exceeded(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
 
-    let base_url = format!("https://[{}]:20443/{}/", webserver_ipv6, "ascii");
+    let base_url = format!("https://[{}]/{}/", webserver_ipv6, "ascii");
     let remaining_space = MAX_CANISTER_HTTP_URL_SIZE - base_url.len();
     // Add one more character to exceed the limit.
     let expected_body = "x".repeat(remaining_space + 1);
@@ -1982,10 +1974,7 @@ fn test_max_url_length_exceeded(env: TestEnv) {
 fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let url = format!(
-        "https://[{}]:20443/{}/{}",
-        webserver_ipv6, "ascii", "hello_world"
-    );
+    let url = format!("https://[{}]/{}/{}", webserver_ipv6, "ascii", "hello_world");
 
     let proxy_canister_id_1 = get_proxy_canister_id(&env);
     // Create another proxy canister;
@@ -2041,7 +2030,7 @@ fn test_max_number_of_response_headers(env: TestEnv) {
 
     let response_headers = HTTP_HEADERS_MAX_NUMBER - HTTPBIN_OVERHEAD_RESPONSE_HEADERS;
     let url = format!(
-        "https://[{}]:20443/{}/{}",
+        "https://[{}]/{}/{}",
         webserver_ipv6, "many_response_headers", response_headers
     );
 
@@ -2080,7 +2069,7 @@ fn test_max_number_of_response_headers_exceeded(env: TestEnv) {
 
     let response_headers = HTTP_HEADERS_MAX_NUMBER - HTTPBIN_OVERHEAD_RESPONSE_HEADERS + 1;
     let url = format!(
-        "https://[{}]:20443/{}/{}",
+        "https://[{}]/{}/{}",
         webserver_ipv6, "many_response_headers", response_headers
     );
 
@@ -2126,7 +2115,7 @@ fn test_max_number_of_request_headers(env: TestEnv) {
 
     let request = RemoteHttpRequest {
         request: UnvalidatedCanisterHttpRequestArgs {
-            url: format!("https://[{webserver_ipv6}]:20443/anything"),
+            url: format!("https://[{webserver_ipv6}]/anything"),
             headers,
             method: HttpMethod::POST,
             body: None,
@@ -2148,7 +2137,7 @@ fn test_max_number_of_request_headers(env: TestEnv) {
 fn test_max_number_of_request_headers_exceeded(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let url = format!("https://[{webserver_ipv6}]:20443/anything");
+    let url = format!("https://[{webserver_ipv6}]/anything");
 
     let headers = (0..HTTP_HEADERS_MAX_NUMBER + 1)
         .map(|i| HttpHeader {
@@ -2198,10 +2187,7 @@ fn test_max_number_of_request_headers_exceeded(env: TestEnv) {
 fn check_caller_id_on_transform_function(env: TestEnv) {
     let handlers = Handlers::new(&env);
     let webserver_ipv6 = get_universal_vm_address(&env);
-    let url = format!(
-        "https://[{}]:20443/{}/{}",
-        webserver_ipv6, "ascii", "hello_world"
-    );
+    let url = format!("https://[{}]/{}/{}", webserver_ipv6, "ascii", "hello_world");
 
     let request = UnvalidatedCanisterHttpRequestArgs {
         url,

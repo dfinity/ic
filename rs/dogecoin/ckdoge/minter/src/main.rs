@@ -1,14 +1,17 @@
-use ic_cdk::{init, post_upgrade, update};
-use ic_ckbtc_minter::state::eventlog::EventType;
+use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
-use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
+use ic_ckdoge_minter::candid_api::RetrieveDogeStatusRequest;
 use ic_ckdoge_minter::{
-    DOGECOIN_CANISTER_RUNTIME,
-    candid_api::{RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError},
+    DOGECOIN_CANISTER_RUNTIME, Event, EventType, GetEventsArg,
+    candid_api::{
+        GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalArgs,
+        RetrieveDogeWithApprovalError,
+    },
     lifecycle::init::MinterArg,
     updates,
 };
+use ic_http_types::{HttpRequest, HttpResponse};
 
 #[init]
 fn init(args: MinterArg) {
@@ -31,6 +34,19 @@ fn init(args: MinterArg) {
 fn setup_tasks() {
     schedule_now(TaskType::ProcessLogic(true), &DOGECOIN_CANISTER_RUNTIME);
     schedule_now(TaskType::RefreshFeePercentiles, &DOGECOIN_CANISTER_RUNTIME);
+}
+
+#[unsafe(export_name = "canister_global_timer")]
+fn timer() {
+    // ic_ckbtc_minter::timer invokes ic_cdk::spawn
+    // which must be wrapped in in_executor_context
+    // as required by the new ic-cdk-executor.
+    ic_cdk::futures::in_executor_context(|| {
+        #[cfg(feature = "self_check")]
+        ok_or_die(check_invariants());
+
+        ic_ckbtc_minter::timer(DOGECOIN_CANISTER_RUNTIME);
+    });
 }
 
 #[post_upgrade]
@@ -111,6 +127,37 @@ fn check_invariants() -> Result<(), String> {
 
         Ok(())
     })
+}
+
+#[query]
+fn retrieve_doge_status(req: RetrieveDogeStatusRequest) -> RetrieveDogeStatus {
+    ic_ckbtc_minter::state::read_state(|s| {
+        RetrieveDogeStatus::from(s.retrieve_btc_status_v2(req.block_index))
+    })
+}
+
+// TODO XC-495: Currently events from ckBTC are re-used and it might be worthwhile to split
+// both types of events:
+// 1) ckBTC has some deprecated events only for backwards-compatibility purposes
+// 2) Some events, related to KYT are not applicable to Dogecoin.
+// 3) Some fundamental types like BitcoinAddress are also misused to fit in a Dogecoin address.
+#[query(hidden = true)]
+fn get_events(args: GetEventsArg) -> Vec<Event> {
+    const MAX_EVENTS_PER_QUERY: usize = 2000;
+
+    ic_ckbtc_minter::storage::events()
+        .skip(args.start as usize)
+        .take(MAX_EVENTS_PER_QUERY.min(args.length as usize))
+        .collect()
+}
+
+#[query(hidden = true)]
+fn http_request(req: HttpRequest) -> HttpResponse {
+    if ic_cdk::api::in_replicated_execution() {
+        ic_cdk::trap("update call rejected");
+    }
+
+    ic_ckbtc_minter::queries::http_request(req)
 }
 
 fn main() {}

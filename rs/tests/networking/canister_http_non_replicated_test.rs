@@ -55,7 +55,7 @@ pub fn test(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     block_on(async {
-        let url = format!("https://[{webserver_ipv6}]:20443/random");
+        let url = format!("https://[{webserver_ipv6}]/random");
         test_non_replicated_random_endpoint_works(&proxy_canister, url.clone(), &logger).await;
 
         test_fully_replicated_random_endpoint_fails(&proxy_canister, url, &logger).await;

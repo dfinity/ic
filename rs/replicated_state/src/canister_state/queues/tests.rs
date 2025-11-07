@@ -141,13 +141,16 @@ impl CanisterQueuesFixture {
     /// Times out all messages with deadlines: all requests in output queues (best
     /// effort or guaranteed response); and all best effort messages, except
     /// responses in input queues.
-    fn time_out_all_messages_with_deadlines(&mut self) -> Cycles {
+    fn time_out_all_messages_with_deadlines(&mut self) -> RefundPool {
+        let mut refunds = RefundPool::default();
         self.queues.time_out_messages(
             Time::from_nanos_since_unix_epoch(u64::MAX),
             &self.this,
             &BTreeMap::default(),
+            &mut refunds,
             &FakeDropMessageMetrics::default(),
-        )
+        );
+        refunds
     }
 
     fn available_output_request_slots(&self) -> usize {
@@ -235,27 +238,42 @@ fn time_out_messages(
     current_time: Time,
     own_canister_id: &CanisterId,
     local_canisters: &BTreeMap<CanisterId, CanisterState>,
-) -> (usize, Cycles) {
+) -> (usize, RefundPool) {
+    let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
-    let lost_cycles =
-        queues.time_out_messages(current_time, own_canister_id, local_canisters, &metrics);
+    queues.time_out_messages(
+        current_time,
+        own_canister_id,
+        local_canisters,
+        &mut refunds,
+        &metrics,
+    );
     let timed_out_messages = metrics.timed_out_messages.borrow().values().sum();
-    (timed_out_messages, lost_cycles)
+    (timed_out_messages, refunds)
 }
 
 fn shed_largest_message(
     queues: &mut CanisterQueues,
     own_canister_id: &CanisterId,
     local_canisters: &BTreeMap<CanisterId, CanisterState>,
-) -> (bool, Cycles) {
+) -> (bool, RefundPool) {
+    let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
-    let (message_shed, lost_cycles) =
-        queues.shed_largest_message(own_canister_id, local_canisters, &metrics);
+    let message_shed =
+        queues.shed_largest_message(own_canister_id, local_canisters, &mut refunds, &metrics);
 
     let shed_messages: usize = metrics.shed_messages.borrow().values().sum();
     assert_eq!(message_shed as usize, shed_messages);
 
-    (message_shed, lost_cycles)
+    (message_shed, refunds)
+}
+
+fn refund_pool(refunds: &[(CanisterId, Cycles)]) -> RefundPool {
+    let mut refund_pool = RefundPool::new();
+    for (canister_id, cycles) in refunds {
+        refund_pool.add(*canister_id, *cycles);
+    }
+    refund_pool
 }
 
 /// Can push one request to the output queues.
@@ -685,11 +703,11 @@ fn test_shed_largest_message() {
     // Shed the two requests.
     let local_canisters = Default::default();
     assert_eq!(
-        (true, Cycles::zero()),
+        (true, RefundPool::default()),
         shed_largest_message(&mut queues, &this, &local_canisters)
     );
     assert_eq!(
-        (true, Cycles::zero()),
+        (true, RefundPool::default()),
         shed_largest_message(&mut queues, &this, &local_canisters)
     );
 
@@ -702,7 +720,7 @@ fn test_shed_largest_message() {
 
     // And nothing else to shed.
     assert_eq!(
-        (false, Cycles::zero()),
+        (false, RefundPool::default()),
         shed_largest_message(&mut queues, &this, &local_canisters)
     );
 }
@@ -740,7 +758,7 @@ fn test_shed_inbound_response() {
     // Shed the largest response (callback ID 3).
     let memory_usage3 = queues.best_effort_message_memory_usage();
     assert_eq!(
-        (true, Cycles::new(10)),
+        (true, refund_pool(&[(this, Cycles::new(10))])),
         shed_largest_message(&mut queues, &this, &NO_LOCAL_CANISTERS)
     );
     let memory_usage2 = queues.best_effort_message_memory_usage();
@@ -748,7 +766,7 @@ fn test_shed_inbound_response() {
 
     // Shed the next largest response (callback ID 2).
     assert_eq!(
-        (true, Cycles::new(10)),
+        (true, refund_pool(&[(this, Cycles::new(10))])),
         shed_largest_message(&mut queues, &this, &NO_LOCAL_CANISTERS)
     );
     let memory_usage1 = queues.best_effort_message_memory_usage();
@@ -761,7 +779,7 @@ fn test_shed_inbound_response() {
 
     // There's nothing else to shed.
     assert_eq!(
-        (false, Cycles::zero()),
+        (false, RefundPool::default()),
         shed_largest_message(&mut queues, &this, &NO_LOCAL_CANISTERS)
     );
 
@@ -785,7 +803,7 @@ fn test_shed_inbound_response() {
 }
 
 #[test]
-fn test_shed_largest_message_reports_lost_cycles() {
+fn test_shed_largest_message_generates_refunds() {
     let mut canister_queues = CanisterQueues::default();
 
     // Cartesian product of best-effort inbound / outbound, request / response; with
@@ -799,17 +817,20 @@ fn test_shed_largest_message_reports_lost_cycles() {
     let outbound_request = request_with_payment(2, SOME_DEADLINE, 1 << 2);
     let outbound_response = response_with_refund(3, SOME_DEADLINE, 1 << 3);
 
-    // Inbound best-effort request: cycles are lost.
+    // Inbound best-effort request: refund message enqueued.
     let own_canister_id = inbound_request.receiver;
     canister_queues
         .push_input(inbound_request.clone().into(), LocalSubnet)
         .unwrap();
     assert_eq!(
-        (true, inbound_request.payment),
+        (
+            true,
+            refund_pool(&[(inbound_request.sender, inbound_request.payment)])
+        ),
         shed_largest_message(&mut canister_queues, &own_canister_id, &BTreeMap::new())
     );
 
-    // Inbound best-effort response: cycles are lost.
+    // Inbound best-effort response: refund message enqueued.
     canister_queues
         .push_output_request(request(0, SOME_DEADLINE).into(), UNIX_EPOCH)
         .unwrap();
@@ -818,7 +839,10 @@ fn test_shed_largest_message_reports_lost_cycles() {
         .push_input(inbound_response.clone().into(), LocalSubnet)
         .unwrap();
     assert_eq!(
-        (true, inbound_response.refund),
+        (
+            true,
+            refund_pool(&[(inbound_response.originator, inbound_response.refund)])
+        ),
         shed_largest_message(&mut canister_queues, &own_canister_id, &BTreeMap::new())
     );
     assert_eq!(
@@ -828,12 +852,12 @@ fn test_shed_largest_message_reports_lost_cycles() {
         canister_queues.pop_input()
     );
 
-    // Outbound best-effort request: cycles are refunded.
+    // Outbound best-effort request: reject response with refund enqueued.
     canister_queues
         .push_output_request(outbound_request.clone().into(), UNIX_EPOCH)
         .unwrap();
     assert_eq!(
-        (true, Cycles::zero()),
+        (true, RefundPool::default()),
         shed_largest_message(&mut canister_queues, &own_canister_id, &BTreeMap::new())
     );
     assert_matches!(
@@ -841,14 +865,17 @@ fn test_shed_largest_message_reports_lost_cycles() {
         Some(CanisterInput::Response(response)) if response.refund == outbound_request.payment
     );
 
-    // Outbound best-effort response: cycles are lost.
+    // Outbound best-effort response: refund message enqueued.
     canister_queues
         .push_input(request(0, SOME_DEADLINE).into(), LocalSubnet)
         .unwrap();
     canister_queues.pop_input().unwrap();
     canister_queues.push_output_response(outbound_response.clone().into());
     assert_eq!(
-        (true, outbound_response.refund),
+        (
+            true,
+            refund_pool(&[(outbound_response.originator, outbound_response.refund)])
+        ),
         shed_largest_message(&mut canister_queues, &own_canister_id, &BTreeMap::new())
     );
 }
@@ -1018,7 +1045,7 @@ impl CanisterQueuesMultiFixture {
     /// Times out all messages with deadlines: all requests in output queues (best
     /// effort or guaranteed response); and all best effort messages, except
     /// responses in input queues.
-    fn time_out_all_messages_with_deadlines(&mut self) -> (usize, Cycles) {
+    fn time_out_all_messages_with_deadlines(&mut self) -> (usize, RefundPool) {
         time_out_messages(
             &mut self.queues,
             Time::from_nanos_since_unix_epoch(u64::MAX),
@@ -1413,16 +1440,16 @@ fn new_queues_with_stale_references() -> (CanisterQueues, Vec<Request>) {
 
     // Time out requests @0, @1 and @4 (deadlines 1000, 1001, 1002), including the
     // only request from canister 1; and the first and last request from canister 2.
+    let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
-    assert_eq!(
-        Cycles::zero(),
-        queues.time_out_messages(
-            coarse_time(1003).into(),
-            &own_canister_id,
-            &local_canisters,
-            &metrics,
-        )
+    queues.time_out_messages(
+        coarse_time(1003).into(),
+        &own_canister_id,
+        &local_canisters,
+        &mut refunds,
+        &metrics,
     );
+    assert!(refunds.is_empty());
     assert_eq!(
         btreemap! {
             ("request", "inbound", "best-effort") => 3,
@@ -1530,7 +1557,7 @@ fn canister_queues_with_empty_queues_in_input_schedules() -> CanisterQueues {
 
     // Time out the messages from `other_1`, `other_3`, `other_4` and `other_6`.
     assert_eq!(
-        (4, Cycles::zero()),
+        (4, RefundPool::default()),
         fixture.time_out_all_messages_with_deadlines()
     );
     assert_eq!(Ok(()), fixture.queues.test_invariants());
@@ -1731,7 +1758,7 @@ fn test_push_into_empty_queue_in_input_schedule() {
 
     // Time out all messages.
     assert_eq!(
-        (2, Cycles::zero()),
+        (2, RefundPool::default()),
         fixture.time_out_all_messages_with_deadlines()
     );
     assert_eq!(Ok(()), fixture.queues.test_invariants());
@@ -2127,7 +2154,10 @@ fn canister_queues_proto_with_inbound_responses() -> pb_queues::CanisterQueues {
 
     // Shed the response for callback 3.
     assert_eq!(
-        (true, Cycles::new(10)),
+        (
+            true,
+            refund_pool(&[(response3.originator, response3.refund)])
+        ),
         shed_largest_message(&mut queues, &canister_id, &BTreeMap::new())
     );
     assert_eq!(
@@ -2462,10 +2492,14 @@ fn test_stats_best_effort() {
 
     // Time out the one message with a deadline of less than 20 (the outgoing
     // request; generating a reject response) and shed the incoming response.
+    let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
-    assert_eq!(
-        Cycles::zero(),
-        queues.time_out_messages(t20.into(), &request4.sender, &BTreeMap::new(), &metrics)
+    queues.time_out_messages(
+        t20.into(),
+        &request4.sender,
+        &BTreeMap::new(),
+        &mut refunds,
+        &metrics,
     );
     assert_eq!(
         btreemap! {
@@ -2473,8 +2507,12 @@ fn test_stats_best_effort() {
         },
         *metrics.timed_out_messages.borrow(),
     );
+    assert!(refunds.is_empty());
     assert_eq!(
-        (true, Cycles::new(10)),
+        (
+            true,
+            refund_pool(&[(response2.originator, response2.refund)])
+        ),
         shed_largest_message(&mut queues, &response2.respondent, &BTreeMap::new())
     );
 
@@ -2631,16 +2669,16 @@ fn test_stats_guaranteed_response() {
 
     // Time out the one message that has an (implicit) deadline (the outgoing
     // request), pop the incoming response and the generated reject response.
+    let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
-    assert_eq!(
-        Cycles::zero(),
-        queues.time_out_messages(
-            coarse_time(u32::MAX).into(),
-            &request4.sender,
-            &BTreeMap::new(),
-            &metrics,
-        )
+    queues.time_out_messages(
+        coarse_time(u32::MAX).into(),
+        &request4.sender,
+        &BTreeMap::new(),
+        &mut refunds,
+        &metrics,
     );
+    assert!(refunds.is_empty());
     assert_eq!(
         btreemap! {
             ("request", "outbound", "guaranteed response") => 1,
@@ -2771,19 +2809,19 @@ fn test_stats_oversized_requests() {
 
     // Shed the outgoing best-effort request and time out the outgoing guaranteed one.
     assert_eq!(
-        (true, Cycles::zero()),
+        (true, RefundPool::default()),
         shed_largest_message(&mut queues, &best_effort.sender, &BTreeMap::new())
     );
+    let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
-    assert_eq!(
-        Cycles::zero(),
-        queues.time_out_messages(
-            coarse_time(u32::MAX).into(),
-            &best_effort.sender,
-            &BTreeMap::new(),
-            &metrics,
-        )
+    queues.time_out_messages(
+        coarse_time(u32::MAX).into(),
+        &best_effort.sender,
+        &BTreeMap::new(),
+        &mut refunds,
+        &metrics,
     );
+    assert!(refunds.is_empty());
     assert_eq!(
         btreemap! {
             ("request", "outbound", "guaranteed response") => 1,
@@ -3492,7 +3530,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
     // 3 messages dropped. Zero cycles lost (all were refunded).
     let current_time = t0 + REQUEST_LIFETIME + Duration::from_secs(1);
     assert_eq!(
-        (3, Cycles::zero()),
+        (3, RefundPool::default()),
         time_out_messages(
             &mut canister_queues,
             current_time,
@@ -3553,7 +3591,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
 
     let current_time = t1 + REQUEST_LIFETIME + Duration::from_secs(1);
     assert_eq!(
-        (1, Cycles::zero()),
+        (1, RefundPool::default()),
         time_out_messages(
             &mut canister_queues,
             current_time,
@@ -3583,7 +3621,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
 }
 
 #[test]
-fn time_out_messages_reports_lost_cycles() {
+fn time_out_messages_produces_refunds() {
     let mut canister_queues = CanisterQueues::default();
 
     // Cartesian product of inbound / outbound, best-effort / guaranteed, request /
@@ -3644,19 +3682,19 @@ fn time_out_messages_reports_lost_cycles() {
     //  3. `outbound_guaranteed_request`
     //  4. `outbound_best_effort_response`
     //
-    // From among these, only the cycles attached to (1) and (4) are lost (reject
-    // responses with refunds are generated for both outbound requests).
+    // From among these, only the cycles attached to (1) and (4) produce refund
+    // messages (reject responses with refunds are generated for both outbound
+    // requests).
     let current_time = UNIX_EPOCH + 2 * REQUEST_LIFETIME;
     let own_canister_id = inbound_best_effort_request.sender;
+    let mut refunds = RefundPool::default();
     let metrics = FakeDropMessageMetrics::default();
-    assert_eq!(
-        inbound_best_effort_request.payment + outbound_best_effort_response.refund,
-        canister_queues.time_out_messages(
-            current_time,
-            &own_canister_id,
-            &BTreeMap::new(),
-            &metrics
-        ),
+    canister_queues.time_out_messages(
+        current_time,
+        &own_canister_id,
+        &BTreeMap::new(),
+        &mut refunds,
+        &metrics,
     );
     assert_eq!(
         btreemap! {
@@ -3666,6 +3704,19 @@ fn time_out_messages_reports_lost_cycles() {
             ("response", "outbound", "best-effort") => 1,
         },
         *metrics.timed_out_messages.borrow(),
+    );
+    assert_eq!(
+        refund_pool(&[
+            (
+                inbound_best_effort_request.sender,
+                inbound_best_effort_request.payment
+            ),
+            (
+                outbound_best_effort_response.originator,
+                outbound_best_effort_response.refund
+            )
+        ]),
+        refunds
     );
 }
 
@@ -3886,6 +3937,57 @@ mod mainnet_compatibility_tests {
 
             assert_eq!(queues.pop_input(), None);
             assert!(!queues.has_input());
+        }
+    }
+
+    #[cfg(test)]
+    mod refunds_test {
+
+        use super::super::*;
+        use super::*;
+
+        const OUTPUT_NAME: &str = "refunds.pbuf";
+        const CANISTER_ID: CanisterId = CanisterId::from_u64(42);
+        const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(13);
+
+        fn make_refund_pool() -> refunds::RefundPool {
+            let mut refund_pool = refunds::RefundPool::new();
+
+            refund_pool.add(CANISTER_ID, Cycles::new(100));
+            refund_pool.add(OTHER_CANISTER_ID, Cycles::new(200));
+            refund_pool.add(CANISTER_ID, Cycles::new(200));
+
+            refund_pool
+        }
+
+        #[test]
+        #[ignore]
+        fn serialize() {
+            let refund_pool = make_refund_pool();
+
+            let proto_refunds: pb_queues::Refunds = (&refund_pool).into();
+            let serialized = proto_refunds.encode_to_vec();
+
+            let output_path = std::path::Path::new(OUTPUT_NAME);
+            File::create(output_path)
+                .unwrap()
+                .write_all(&serialized)
+                .unwrap();
+        }
+
+        #[test]
+        #[ignore]
+        fn deserialize() {
+            let serialized = std::fs::read(OUTPUT_NAME).expect("Could not read file");
+            let proto_refunds = pb_queues::Refunds::decode(&serialized as &[u8])
+                .expect("Failed to deserialize the protobuf");
+            let refunds = refunds::RefundPool::try_from((
+                proto_refunds,
+                &StrictMetrics as &dyn CheckpointLoadingMetrics,
+            ))
+            .expect("Failed to convert the protobuf to RefundPool");
+
+            assert_eq!(make_refund_pool(), refunds);
         }
     }
 }

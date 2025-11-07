@@ -24,12 +24,12 @@ use anyhow::{Context, Result, bail};
 use config::hostos::guestos_bootstrap_image::BootstrapOptions;
 use config::setupos::{
     config_ini::ConfigIniSettings,
-    deployment_json::{self, DeploymentSettings},
+    deployment_json::{self, CompatDeploymentSettings},
 };
 use config_types::{
     CONFIG_VERSION, DeploymentEnvironment, GuestOSConfig, GuestOSDevSettings, GuestOSSettings,
     GuestOSUpgradeConfig, GuestVMType, ICOSDevSettings, ICOSSettings, Ipv4Config, Ipv6Config,
-    Logging, NetworkSettings, RecoveryConfig,
+    NetworkSettings, RecoveryConfig,
 };
 use ic_base_types::NodeId;
 use ic_prep_lib::{
@@ -200,7 +200,7 @@ pub fn init_ic(
         Some(nns_subnet_idx.unwrap_or(0)),
         Some(ic_os_update_img_url),
         Some(ic_os_update_img_sha256),
-        ic_os_launch_measurements,
+        Some(ic_os_launch_measurements),
         Some(whitelist),
         ic.node_operator,
         ic.node_provider,
@@ -533,7 +533,6 @@ fn create_guestos_config_for_node(
         node_reward_type: None,
         mgmt_mac,
         deployment_environment,
-        logging: Logging {},
         use_nns_public_key: false,
         nns_urls,
         use_node_operator_private_key: true,
@@ -671,20 +670,25 @@ fn create_setupos_config_image(
         node_operator_private_key.as_deref(),
         nns_public_key_override,
         Some(&ssh_authorized_pub_keys_dir.join("admin")),
-        DeploymentSettings {
+        CompatDeploymentSettings {
             deployment: deployment_json::Deployment {
                 deployment_environment: DeploymentEnvironment::Testnet,
                 mgmt_mac: Some(mac.to_string()),
             },
-            logging: deployment_json::Logging {},
+            logging: deployment_json::Logging::default(),
             nns: deployment_json::Nns {
                 urls: vec![nns_url.clone()],
             },
-            vm_resources: deployment_json::VmResources {
+            vm_resources: Some(deployment_json::VmResources {
                 memory: (vm_spec.memory_ki_b / 2 / 1024 / 1024) as u32,
                 cpu: cpu.to_string(),
                 nr_of_vcpus: (vm_spec.v_cpus / 2) as u32,
-            },
+            }),
+            dev_vm_resources: Some(deployment_json::VmResources {
+                memory: (vm_spec.memory_ki_b / 2 / 1024 / 1024) as u32,
+                cpu: cpu.to_string(),
+                nr_of_vcpus: (vm_spec.v_cpus / 2) as u32,
+            }),
         },
     )
     .context("Could not create SetupOS config")?;

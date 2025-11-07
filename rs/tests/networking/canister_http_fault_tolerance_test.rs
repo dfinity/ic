@@ -152,7 +152,7 @@ pub fn test(env: TestEnv) {
                     >,
                     RemoteHttpRequest {
                         request: UnvalidatedCanisterHttpRequestArgs {
-                            url: format!("https://[{webserver_ipv6}]:20443/anything/{n}"),
+                            url: format!("https://[{webserver_ipv6}]/anything/{n}"),
                             headers: vec![],
                             method: HttpMethod::GET,
                             body: Some("".as_bytes().to_vec()),
@@ -271,7 +271,7 @@ pub fn test(env: TestEnv) {
                             Option<Result<RemoteHttpResponse, (RejectionCode, String)>>,
                             String,
                         >,
-                        format!("https://[{webserver_ipv6}]:20443/anything/{n}"),
+                        format!("https://[{webserver_ipv6}]/anything/{n}"),
                     )
                     .await
                     .expect("Failed to call proxy canister.");

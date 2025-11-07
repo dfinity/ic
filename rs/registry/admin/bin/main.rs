@@ -10,8 +10,8 @@ use cycles_minting_canister::{
     UpdateSubnetTypeArgs,
 };
 use helpers::{
-    get_proposer_and_sender, get_subnet_ids, get_subnet_record_with_details, parse_proposal_url,
-    shortened_pid_string, shortened_subnet_string,
+    get_node_record_pb, get_proposer_and_sender, get_subnet_ids, get_subnet_record_with_details,
+    parse_proposal_url, shortened_pid_string, shortened_subnet_string,
 };
 use ic_btc_interface::{Fees, Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
@@ -392,6 +392,19 @@ enum SubCommand {
     /// Submits a proposal to add an SNS wasm (e.g. Governance, Ledger, etc) to the SNS-WASM NNS
     /// canister.
     ProposeToAddWasmToSnsWasm(ProposeToAddWasmToSnsWasmCmd),
+
+    /// Sets three things:
+    ///
+    ///     1. In SubnetRecord:
+    ///         1. is_halted = false
+    ///         2. ssh_readonly_access = vec![]
+    ///     2. In NodeRecord:
+    ///         1. ssh_node_state_write_access = vec![]
+    ///
+    /// This is done at the end of subnet recovery. See also
+    /// propose-to-take-subnet-offline-for-repairs. This generally rolls back
+    /// the changes made by that command.
+    ProposeToBringSubnetBackOnlineAfterRepairs(ProposeToBringSubnetBackOnlineAfterRepairsCmd),
 
     /// Submits a proposal to change an existing canister on NNS.
     ProposeToChangeNnsCanister(ProposeToChangeNnsCanisterCmd),
@@ -909,6 +922,61 @@ impl From<NodeSshAccessFlagValue> for NodeSshAccess {
         Self {
             node_id: Some(node_id),
             public_keys: Some(public_keys),
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to bring a subnet back online after repairs.
+#[derive_common_proposal_fields]
+#[derive(Parser, ProposalMetadata)]
+struct ProposeToBringSubnetBackOnlineAfterRepairsCmd {
+    /// Which subnet is being brought back online.
+    #[clap(long)]
+    pub subnet: PrincipalId,
+}
+
+impl ProposalTitle for ProposeToBringSubnetBackOnlineAfterRepairsCmd {
+    fn title(&self) -> String {
+        let subnet_id = self.subnet.to_string();
+        let subnet_id = subnet_id.split('-').next().unwrap();
+        format!("Bring Subnet {subnet_id} Back Online After Repairs")
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<SetSubnetOperationalLevelPayload>
+    for ProposeToBringSubnetBackOnlineAfterRepairsCmd
+{
+    async fn payload(&self, agent: &Agent) -> SetSubnetOperationalLevelPayload {
+        let registry_canister = RegistryCanister::new_with_agent(agent.clone());
+
+        let subnet_id = SubnetId::from(self.subnet);
+        let subnet_record = get_subnet_record(&registry_canister, subnet_id).await;
+
+        // Clear the ssh_node_state_write_access field in NodeRecords that
+        // belong to the subnet (but only on nodes where it is currently
+        // actually set).
+        let mut ssh_node_state_write_access = vec![];
+        for node_id in subnet_record.membership {
+            let node_id = NodeId::from(PrincipalId::from_str(&node_id).unwrap());
+            let node_record = get_node_record_pb(&registry_canister, node_id).await;
+            if !node_record.ssh_node_state_write_access.is_empty() {
+                // The current NodeRecord has a non-empty
+                // ssh_node_state_write_access, so clear that field for the
+                // current node in the set_subnet_operational_level request that
+                // we are currently building.
+                ssh_node_state_write_access.push(NodeSshAccess {
+                    node_id: Some(node_id),
+                    public_keys: Some(vec![]),
+                });
+            }
+        }
+
+        SetSubnetOperationalLevelPayload {
+            subnet_id: Some(subnet_id),
+            operational_level: Some(operational_level::NORMAL),
+            ssh_readonly_access: Some(vec![]),
+            ssh_node_state_write_access: Some(ssh_node_state_write_access),
         }
     }
 }
@@ -2131,9 +2199,10 @@ struct ProposeToAddNodeOperatorCmd {
     /// The principal id of the node operator
     pub node_operator_principal_id: PrincipalId,
 
-    #[clap(long, required = true)]
+    #[clap(long, hide = true)]
+    /// Deprecated, will be removed in the future.
     /// The remaining number of nodes that could be added by this node operator
-    pub node_allowance: u64,
+    pub node_allowance: Option<u64>,
 
     //// The principal id of this node operator's provider
     pub node_provider_principal_id: PrincipalId,
@@ -2159,7 +2228,7 @@ struct ProposeToAddNodeOperatorCmd {
     ///
     /// Example:
     /// '{ "type1.1": 10, "type3.1": 24 }'
-    #[clap(long)]
+    #[clap(long, required = true)]
     max_rewardable_nodes: Option<String>,
 }
 
@@ -2185,6 +2254,15 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
             .map(|s| parse_rewardable_nodes(s))
             .unwrap_or_default();
 
+        // TODO(DRE-583): Remove the `--node-allowance` flag after callers of `ic-admin`
+        // have migrated to `--max-rewardable-nodes`.
+        let node_allowance = self.node_allowance.map(|allowance| {
+            if allowance != 0 {
+                eprintln!("WARNING: node allowance is deprecated and will be removed in the future. Overriding value to 0");
+            }
+            0
+        }).unwrap_or_default();
+
         let max_rewardable_nodes = self
             .max_rewardable_nodes
             .as_ref()
@@ -2192,7 +2270,7 @@ impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
 
         AddNodeOperatorPayload {
             node_operator_principal_id: Some(self.node_operator_principal_id),
-            node_allowance: self.node_allowance,
+            node_allowance,
             node_provider_principal_id: Some(self.node_provider_principal_id),
             dc_id: self
                 .dc_id
@@ -5163,6 +5241,21 @@ async fn main() {
             propose_action_from_command(cmd, canister_client, proposer).await;
         }
         SubCommand::ProposeToTakeSubnetOfflineForRepairs(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::SetSubnetOperationalLevel,
+                make_canister_client(
+                    reachable_nns_urls,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToBringSubnetBackOnlineAfterRepairs(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
             propose_external_proposal_from_command(
                 cmd,

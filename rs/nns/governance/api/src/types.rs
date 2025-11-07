@@ -48,6 +48,8 @@ pub struct BallotInfo {
     candid::CandidType, candid::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug, Default,
 )]
 pub struct NeuronInfo {
+    /// The unique identifier of the neuron.
+    pub id: Option<NeuronId>,
     /// The exact time at which this data was computed. This means, for
     /// example, that the exact time that this neuron will enter the
     /// dissolved state, assuming it is currently dissolving, is given
@@ -1442,7 +1444,10 @@ pub mod governance_error {
         Unspecified = 0,
         /// The operation was successfully completed.
         Ok = 1,
-        /// This operation is not available, e.g., not implemented.
+        /// There have been too many instances of this operation recently. In
+        /// practice, this usually just means that another instance of this operation
+        /// is currently in flight, but another reason this might come up is rate
+        /// limiting.
         Unavailable = 2,
         /// The caller is not authorized to perform this operation.
         NotAuthorized = 3,
@@ -3097,13 +3102,35 @@ pub mod claim_or_refresh_neuron_from_account_response {
         NeuronId(NeuronId),
     }
 }
-/// The monthly Node Provider rewards as of a point in time.
+/// Date UTC used in NodeProviderRewards to define their validity boundaries
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct DateUtc {
+    pub year: u32,
+    pub month: u32,
+    pub day: u32,
+}
+/// The monthly Node Provider rewards, representing the distribution of rewards for a specific time period.
+///
+/// Prior to the introduction of the performance-based reward algorithm, rewards were computed from a
+/// single registry snapshot (identified by `registry_version`). After performance-based rewards were enabled,
+/// rewards depend on node metrics collected over a date range, making `start_date` and `end_date` essential
+/// for defining the covered period. In this case, `registry_version` is no longer set.
+///
+/// Summary of field usage:
+/// - Before performance-based rewards: `registry_version` is Some; `start_date` and `end_date` are None.
+/// - After performance-based rewards: `start_date` and `end_date` are Some; `registry_version` is None.
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
 pub struct MonthlyNodeProviderRewards {
     /// The time when the rewards were calculated.
     pub timestamp: u64,
+    /// The start date (included) that these rewards cover.
+    pub start_date: Option<DateUtc>,
+    /// The end date (included) that these rewards cover.
+    pub end_date: Option<DateUtc>,
     /// The Rewards calculated and rewarded.
     pub rewards: Vec<RewardNodeProvider>,
     /// The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.
@@ -4444,15 +4471,15 @@ pub struct MaturityDisbursement {
     candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
 )]
 pub struct GetNeuronIndexRequest {
-    exclusive_start_neuron_id: Option<NeuronId>,
-    page_size: Option<u32>,
+    pub exclusive_start_neuron_id: Option<NeuronId>,
+    pub page_size: Option<u32>,
 }
 
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Default, Clone, PartialEq,
 )]
 pub struct NeuronIndexData {
-    neurons: Vec<NeuronInfo>,
+    pub neurons: Vec<NeuronInfo>,
 }
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]

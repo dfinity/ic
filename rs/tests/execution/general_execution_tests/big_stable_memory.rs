@@ -179,6 +179,13 @@ pub fn can_access_big_heap_and_big_stable_memory(env: TestEnv) {
                 .await
                 .unwrap();
 
+            // Update memory allocation of canister to 4GiB.
+            mgr.update_settings(&canister_id)
+                .with_memory_allocation(4u64 * 1024 * 1024 * 1024)
+                .call_and_wait()
+                .await
+                .unwrap();
+
             // Grow stable memory by 5GiB. Should succeed and the canister is now using
             // 9GiB.
             agent
@@ -198,21 +205,6 @@ pub fn can_access_big_heap_and_big_stable_memory(env: TestEnv) {
                 .call_and_wait()
                 .await
                 .unwrap();
-
-            // Update memory allocation of canister to 12GiB.
-            mgr.update_settings(&canister_id)
-                .with_memory_allocation(12u64 * 1024 * 1024 * 1024)
-                .call_and_wait()
-                .await
-                .unwrap();
-
-            // Grow stable memory by another 5GiB. Should fail.
-            let res = agent
-                .update(&canister_id, "grow_stable_memory")
-                .call_and_wait()
-                .await;
-
-            assert_reject(res, RejectCode::CanisterError);
         }
     })
 }

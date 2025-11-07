@@ -170,7 +170,7 @@ impl ResponseHelper {
             .refund_for_response_transmission(
                 round.log,
                 round.counters.response_cycles_refund_error,
-                response,
+                &response.response_payload,
                 original.callback.prepayment_for_response_transmission,
                 original.subnet_size,
                 round.cost_schedule,

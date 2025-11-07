@@ -119,7 +119,7 @@ fn test(env: TestEnv) {
             Some(&target_version),
             Some(sha256),
             vec![upgrade_url],
-            guest_launch_measurements,
+            Some(guest_launch_measurements),
             vec![],
         )
         .await;

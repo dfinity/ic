@@ -44,7 +44,6 @@
 
 *.sh        //pre-commit:shfmt-check
 *.py        //pre-commit:ruff-lint
-*.hs        //pre-commit:ormolu-lint
 *.proto     //pre-commit:protobuf-format-check
             //pre-commit:buf-breaking
 

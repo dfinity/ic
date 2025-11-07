@@ -378,9 +378,11 @@ fn list_neurons(req: ListNeurons) -> ListNeuronsResponse {
 }
 
 #[query]
-fn get_neuron_index(_req: GetNeuronIndexRequest) -> Result<NeuronIndexData, GovernanceError> {
+fn get_neuron_index(req: GetNeuronIndexRequest) -> Result<NeuronIndexData, GovernanceError> {
     debug_log("get_neuron_index");
-    Ok(NeuronIndexData::default())
+    governance()
+        .get_neuron_index(req, caller())
+        .map_err(GovernanceError::from)
 }
 
 #[query]
@@ -397,6 +399,13 @@ async fn get_monthly_node_provider_rewards() -> Result<MonthlyNodeProviderReward
 {
     debug_log("get_monthly_node_provider_rewards");
     let rewards = governance_mut().get_monthly_node_provider_rewards().await?;
+    Ok(MonthlyNodeProviderRewards::from(rewards))
+}
+
+#[update(hidden = true)]
+async fn get_node_provider_rewards() -> Result<MonthlyNodeProviderRewards, GovernanceError> {
+    debug_log("get_node_provider_rewards");
+    let rewards = governance().get_node_providers_rewards_cached().await?;
     Ok(MonthlyNodeProviderRewards::from(rewards))
 }
 

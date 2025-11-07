@@ -11,7 +11,7 @@ use ic_protobuf::registry::{
     hostos_version::v1::HostosVersionRecord, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
-    CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX,
+    CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
     get_api_boundary_node_record_node_id, get_node_record_node_id, make_node_record_key,
     make_subnet_list_record_key,
 };
@@ -43,6 +43,18 @@ impl error::Error for InvariantCheckError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         None
     }
+}
+
+/// Returns all node records in the snapshot.
+pub(crate) fn get_all_node_records(snapshot: &RegistrySnapshot) -> Vec<NodeRecord> {
+    let mut nodes: Vec<NodeRecord> = Vec::new();
+    for (k, v) in snapshot {
+        if k.starts_with(NODE_RECORD_KEY_PREFIX.as_bytes()) {
+            let record = NodeRecord::decode(v.as_slice()).unwrap();
+            nodes.push(record);
+        }
+    }
+    nodes
 }
 
 pub(crate) fn get_value_from_snapshot<T: Message + Default>(
