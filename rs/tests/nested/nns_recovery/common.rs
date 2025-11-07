@@ -552,6 +552,41 @@ async fn simulate_node_provider_action(
     impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
         .await
         .expect("Failed to spoof GuestOS DNS");
+
+    // Wait until the node has booted the expected GuestOS version
+    retry_with_msg_async!(
+        format!(
+            "Waiting until GuestOS {} reboots on the upgrade version {}",
+            host.vm_name(),
+            upgrade_version
+        ),
+        &logger,
+        secs(600),
+        secs(10),
+        || async {
+            match host.status_async().await {
+                Ok(status) => {
+                    if let Some(version_str) = &status.impl_version
+                        && let Ok(version) = ReplicaVersion::try_from(version_str.as_str())
+                        && version == *upgrade_version
+                    {
+                        return Ok(());
+                    }
+
+                    bail!(
+                        "GuestOS is running version {:?}, expected {:?}",
+                        status.impl_version,
+                        upgrade_version
+                    )
+                }
+                Err(err) => {
+                    bail!("GuestOS is rebooting: {:?}", err)
+                }
+            }
+        }
+    )
+    .await
+    .expect("GuestOS did not reboot on the upgrade version");
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, logger: &Logger) {
