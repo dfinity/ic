@@ -581,15 +581,22 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
     }
 }
 
-fn finalization_time_estimate(min_confirmations: u32, network: Network) -> Duration {
-    Duration::from_nanos(
-        min_confirmations as u64
-            * match network {
-                Network::Mainnet => 10 * MIN_NANOS,
-                Network::Testnet => MIN_NANOS,
-                Network::Regtest => SEC_NANOS,
-            },
-    )
+fn finalization_time_estimate<R: CanisterRuntime>(
+    min_confirmations: u32,
+    network: Network,
+    runtime: &R,
+) -> Duration {
+    const ONE_MINUTE: Duration = Duration::from_secs(60);
+    const ONE_SECOND: Duration = Duration::from_secs(1);
+
+    let block_time = runtime.block_frequency();
+    let estimated_block_time = match network {
+        Network::Mainnet => block_time,
+        // make things snappier for testing purposes
+        Network::Testnet => block_time.min(ONE_MINUTE),
+        Network::Regtest => block_time.min(ONE_SECOND),
+    };
+    min_confirmations * estimated_block_time
 }
 
 /// Returns identifiers of finalized transactions from the list of `candidates` according to the
