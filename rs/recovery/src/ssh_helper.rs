@@ -4,6 +4,7 @@ use crate::{
     command_helper::exec_cmd,
     error::RecoveryError,
     file_sync_helper::{rsync, rsync_relative, rsync_with_retries},
+    util::SshUser,
 };
 use slog::{Logger, info, warn};
 use std::{
@@ -29,7 +30,7 @@ const SSH_ARGS: &[&str] = &[
 /// arguments.
 pub struct SshHelper {
     logger: Logger,
-    pub account: String,
+    pub ssh_user: SshUser,
     pub ip: IpAddr,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
@@ -38,14 +39,14 @@ pub struct SshHelper {
 impl SshHelper {
     pub fn new(
         logger: Logger,
-        account: String,
+        ssh_user: SshUser,
         ip: IpAddr,
         require_confirmation: bool,
         key_file: Option<PathBuf>,
     ) -> Self {
         Self {
             logger,
-            account,
+            ssh_user,
             ip,
             require_confirmation,
             key_file,
@@ -55,8 +56,13 @@ impl SshHelper {
     /// Return a remote path string usable by commands like `rsync`.
     pub fn remote_path<P: AsRef<Path>>(&self, path: P) -> String {
         match self.ip {
-            IpAddr::V4(_) => format!("{}@{}:{}", self.account, self.ip, path.as_ref().display()),
-            IpAddr::V6(_) => format!("{}@[{}]:{}", self.account, self.ip, path.as_ref().display()),
+            IpAddr::V4(_) => format!("{}@{}:{}", self.ssh_user, self.ip, path.as_ref().display()),
+            IpAddr::V6(_) => format!(
+                "{}@[{}]:{}",
+                self.ssh_user,
+                self.ip,
+                path.as_ref().display()
+            ),
         }
     }
 
@@ -86,7 +92,7 @@ impl SshHelper {
         if let Some(file) = &self.key_file {
             ssh.arg("-i").arg(file);
         }
-        ssh.arg(format!("{}@{}", self.account, self.ip));
+        ssh.arg(format!("{}@{}", self.ssh_user, self.ip));
         ssh.arg(commands);
         ssh
     }

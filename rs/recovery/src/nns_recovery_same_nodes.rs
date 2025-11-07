@@ -371,7 +371,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 if let Some(node_ip) = self.params.download_pool_node {
                     let ssh_helper = SshHelper::new(
                         self.recovery.logger.clone(),
-                        SshUser::Backup.to_string(),
+                        SshUser::Backup,
                         node_ip,
                         self.recovery.ssh_confirmation,
                         self.params.backup_key_file.clone(),
@@ -394,7 +394,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 Some(DataLocation::Remote(node_ip)) => {
                     let ssh_helper = SshHelper::new(
                         self.recovery.logger.clone(),
-                        SshUser::Admin.to_string(),
+                        SshUser::Admin,
                         node_ip,
                         self.recovery.ssh_confirmation,
                         self.recovery.admin_key_file.clone(),

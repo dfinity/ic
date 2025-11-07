@@ -287,7 +287,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 if let Some(node_ip) = self.params.download_node {
                     let ssh_helper = SshHelper::new(
                         self.recovery.logger.clone(),
-                        SshUser::Admin.to_string(),
+                        SshUser::Admin,
                         node_ip,
                         self.recovery.ssh_confirmation,
                         self.recovery.admin_key_file.clone(),
@@ -307,7 +307,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 if let Some(node_ip) = self.params.download_node {
                     let ssh_helper = SshHelper::new(
                         self.recovery.logger.clone(),
-                        SshUser::Admin.to_string(),
+                        SshUser::Admin,
                         node_ip,
                         self.recovery.ssh_confirmation,
                         self.recovery.admin_key_file.clone(),
@@ -382,9 +382,11 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                 if let (Some(aux_user), Some(aux_ip)) =
                     (self.params.aux_user.clone(), self.params.aux_ip)
                 {
-                    Ok(Box::new(
-                        self.recovery.get_upload_and_host_tar(aux_user, aux_ip, tar),
-                    ))
+                    Ok(Box::new(self.recovery.get_upload_and_host_tar(
+                        SshUser::Other(aux_user),
+                        aux_ip,
+                        tar,
+                    )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

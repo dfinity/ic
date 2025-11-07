@@ -353,7 +353,7 @@ impl Recovery {
         include_config: bool,
     ) -> RecoveryResult<impl Step + use<>> {
         if ssh_helper.wait_for_access().is_err() {
-            ssh_helper.account = SshUser::Admin.to_string();
+            ssh_helper.ssh_user = SshUser::Admin;
             if !ssh_helper.can_connect() {
                 return Err(RecoveryError::invalid_output_error("SSH access denied"));
             }
@@ -361,7 +361,7 @@ impl Recovery {
 
         info!(
             self.logger,
-            "Continuing with account: {}", ssh_helper.account
+            "Continuing with account: {}", ssh_helper.ssh_user
         );
 
         Ok(DownloadIcDataStep {
@@ -945,13 +945,13 @@ impl Recovery {
     /// Return an [UploadAndHostTarStep] to upload and host a tar file on the given auxiliary host
     pub fn get_upload_and_host_tar(
         &self,
-        aux_host: String,
+        aux_user: SshUser,
         aux_ip: IpAddr,
         tar: PathBuf,
     ) -> impl Step + use<> {
         UploadAndHostTarStep {
             logger: self.logger.clone(),
-            aux_host,
+            aux_user,
             aux_ip,
             tar,
             require_confirmation: self.ssh_confirmation,

@@ -591,7 +591,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 };
                 let ssh_helper = SshHelper::new(
                     self.recovery.logger.clone(),
-                    ssh_user.to_string(),
+                    ssh_user,
                     node_ip,
                     self.recovery.ssh_confirmation,
                     key_file,

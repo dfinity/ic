@@ -13,11 +13,12 @@ use std::{
 use std::{future::Future, path::Path, str::FromStr};
 use tokio::runtime::Runtime;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub enum SshUser {
     Admin,
     Readonly,
     Backup,
+    Other(String),
 }
 
 impl fmt::Display for SshUser {
@@ -26,6 +27,7 @@ impl fmt::Display for SshUser {
             SshUser::Admin => write!(f, "admin"),
             SshUser::Readonly => write!(f, "readonly"),
             SshUser::Backup => write!(f, "backup"),
+            SshUser::Other(user) => write!(f, "{}", user),
         }
     }
 }

@@ -101,7 +101,7 @@ impl Step for DownloadCertificationsStep {
         for (i, ip) in ips.iter().enumerate() {
             let ssh_helper = SshHelper::new(
                 self.logger.clone(),
-                self.ssh_user.to_string(),
+                self.ssh_user.clone(),
                 *ip,
                 self.require_confirmation,
                 self.key_file.clone(),
@@ -613,7 +613,7 @@ impl Step for UploadStateAndRestartStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let account = SshUser::Admin;
+        let ssh_user = SshUser::Admin;
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
         let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
 
@@ -641,7 +641,7 @@ impl Step for UploadStateAndRestartStep {
         if let DataLocation::Remote(node_ip) = self.upload_method {
             let ssh_helper = SshHelper::new(
                 self.logger.clone(),
-                account.to_string(),
+                ssh_user.clone(),
                 node_ip,
                 self.require_confirmation,
                 self.key_file.clone(),
@@ -665,7 +665,7 @@ impl Step for UploadStateAndRestartStep {
                 copy_to = copy_to.display()
             );
             let cmd_create_and_copy_checkpoint_dir = format!(
-                "sudo mkdir -p {copy_to_parent}; {cp}; sudo chown -R {account} {upload_dir};",
+                "sudo mkdir -p {copy_to_parent}; {cp}; sudo chown -R {ssh_user} {upload_dir};",
                 copy_to_parent = copy_to.parent().unwrap().display(),
                 upload_dir = upload_dir.display()
             );
@@ -797,7 +797,7 @@ impl Step for StopReplicaStep {
     fn exec(&self) -> RecoveryResult<()> {
         let ssh_helper = SshHelper::new(
             self.logger.clone(),
-            SshUser::Admin.to_string(),
+            SshUser::Admin,
             self.node_ip,
             self.require_confirmation,
             self.key_file.clone(),
@@ -949,7 +949,7 @@ impl Step for UploadCUPAndTarStep {
     fn exec(&self) -> RecoveryResult<()> {
         let ssh_helper = SshHelper::new(
             self.logger.clone(),
-            SshUser::Admin.to_string(),
+            SshUser::Admin,
             self.node_ip,
             self.require_confirmation,
             self.key_file.clone(),
@@ -1090,7 +1090,7 @@ impl Step for DownloadRegistryStoreStep {
     fn exec(&self) -> RecoveryResult<()> {
         let ssh_helper = SshHelper::new(
             self.logger.clone(),
-            self.ssh_user.to_string(),
+            self.ssh_user.clone(),
             self.node_ip,
             self.require_confirmation,
             self.key_file.clone(),
@@ -1133,7 +1133,7 @@ impl Step for DownloadRegistryStoreStep {
 
 pub struct UploadAndHostTarStep {
     pub logger: Logger,
-    pub aux_host: String,
+    pub aux_user: SshUser,
     pub aux_ip: IpAddr,
     pub tar: PathBuf,
     pub require_confirmation: bool,
@@ -1150,7 +1150,7 @@ impl Step for UploadAndHostTarStep {
     fn descr(&self) -> String {
         format!(
             "Installing daemonize & python3 on {}@[{}], uploading and hosting {}",
-            self.aux_host,
+            self.aux_user,
             self.aux_ip,
             self.tar.display()
         )
@@ -1159,7 +1159,7 @@ impl Step for UploadAndHostTarStep {
     fn exec(&self) -> RecoveryResult<()> {
         let ssh_helper = SshHelper::new(
             self.logger.clone(),
-            self.aux_host.clone(),
+            self.aux_user.clone(),
             self.aux_ip,
             self.require_confirmation,
             self.key_file.clone(),
