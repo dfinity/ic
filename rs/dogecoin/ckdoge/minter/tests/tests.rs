@@ -246,6 +246,9 @@ mod withdrawal {
                 matches!(e, RetrieveDogeWithApprovalError::TemporarilyUnavailable(_))
             })
     }
+
+    #[test]
+    fn should_resubmit_transaction() {}
 }
 
 #[test]

@@ -333,5 +333,6 @@ where
                 txid: txid_bytes.into(),
             },
         ]);
+        minter.self_check();
     }
 }
