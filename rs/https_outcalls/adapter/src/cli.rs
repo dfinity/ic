@@ -163,7 +163,7 @@ pub mod test {
             "logger": {
                 "level": "info",
                 "format": "json"
-            },
+            }
         }       
         "#;
         let mut tmpfile = NamedTempFile::new().expect("Failed to create tmp file");
