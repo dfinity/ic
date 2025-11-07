@@ -1617,10 +1617,6 @@ pub mod testing {
 
         /// Testing only: Adds the given refund to the subnet-wide refund pool.
         fn add_refund(&mut self, receiver: CanisterId, amount: Cycles);
-
-        /// Testing only: Consumes and returns the contents of the refund pool, in
-        /// priority order.
-        fn take_all_refunds(&mut self) -> Vec<Refund>;
     }
 
     impl ReplicatedStateTesting for ReplicatedState {
@@ -1656,16 +1652,6 @@ pub mod testing {
 
         fn add_refund(&mut self, receiver: CanisterId, amount: Cycles) {
             self.refunds.add(receiver, amount);
-        }
-
-        fn take_all_refunds(&mut self) -> Vec<Refund> {
-            let mut contents = Vec::with_capacity(self.refunds.len());
-            self.refunds.retain(|refund| {
-                contents.push(*refund);
-                false
-            });
-            assert_eq!(self.refunds.len(), 0);
-            contents
         }
     }
 
