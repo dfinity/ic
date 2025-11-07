@@ -347,5 +347,10 @@ where
             minter.await_finalized_doge_transaction(self.retrieve_doge_id.block_index),
             Txid::from(txid_bytes)
         );
+        minter.assert_that_events().contains_only_once_in_order(&[
+            EventType::ConfirmedBtcTransaction {
+                txid: txid_bytes.into(),
+            },
+        ]);
     }
 }
