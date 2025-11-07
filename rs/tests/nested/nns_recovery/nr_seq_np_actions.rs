@@ -49,7 +49,6 @@ fn main() -> Result<()> {
             sequential_np_actions: true,
         }))
         .with_timeout_per_test(Duration::from_secs(35 * 60))
-        .with_overall_timeout(Duration::from_secs(50 * 60))
         .execute_from_args()?;
 
     Ok(())
