@@ -3,7 +3,6 @@ load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite
 DEPENDENCIES = [
     # Keep sorted.
     "//packages/ic-ed25519",
-    "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/secrets_containers",
