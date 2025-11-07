@@ -401,9 +401,7 @@ impl Step for CopyLocalIcStateStep {
                 dst_parent.display()
             );
 
-            let mut mkdir = Command::new("mkdir");
-            mkdir.arg("-p").arg(&dst_parent);
-            confirm_exec_cmd(&mut mkdir, log)?;
+            create_dir(&dst_parent)?;
 
             let mut cp = Command::new("cp");
             cp.arg("-r").arg(src).arg(dst_parent);
