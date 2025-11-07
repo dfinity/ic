@@ -16,8 +16,12 @@ use ic_system_test_driver::{
 use ic_types::{ReplicaVersion, SubnetId, messages::ReplicaHealthStatus};
 use prost::Message;
 use slog::{Logger, info};
-use std::{convert::TryFrom, io::Read, path::Path, sync::Arc};
-use tokio::sync::Mutex;
+use std::{
+    convert::TryFrom,
+    io::Read,
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 pub async fn get_blessed_replica_versions(
     registry_canister: &RegistryCanister,
@@ -118,13 +122,13 @@ pub async fn assert_assigned_replica_version_with_time_async<N: HasPublicApiUrl>
         || {
             let state_cl = Arc::clone(&state);
             async move {
-                let mut s = state_cl.lock().await;
                 match get_assigned_replica_version_async(node).await {
                     Ok(ver) if &ver == expected_version => {
-                        *s = State::Finished;
+                        *state_cl.lock().unwrap() = State::Finished;
                         Ok(())
                     }
                     Ok(ver) => {
+                        let mut s = state_cl.lock().unwrap();
                         *s = if *s == State::Uninitialized || *s == State::OldVersion {
                             State::OldVersion
                         } else {
@@ -137,7 +141,7 @@ pub async fn assert_assigned_replica_version_with_time_async<N: HasPublicApiUrl>
                         )
                     }
                     Err(err) => {
-                        *s = State::Reboot;
+                        *state_cl.lock().unwrap() = State::Reboot;
                         bail!("Error reading replica version: {:?}", err)
                     }
                 }
@@ -147,7 +151,7 @@ pub async fn assert_assigned_replica_version_with_time_async<N: HasPublicApiUrl>
     .await;
     if let Err(error) = result {
         info!(logger, "Error: {}", error);
-        match *state.lock().await {
+        match *state.lock().unwrap() {
             State::Uninitialized => panic!("No version is fetched at all!"),
             State::OldVersion => panic!("Replica was running the old version only!"),
             State::Reboot => {
