@@ -354,7 +354,7 @@ impl LMDBHeaderCache {
                 Err(err) => Err(err),
             }),
             cache.log,
-            "iniialize genesis"
+            "initialize genesis"
         )?;
         let start = std::time::Instant::now();
         let (key_bytes, val_bytes) = cache.total_header_bytes()?;
