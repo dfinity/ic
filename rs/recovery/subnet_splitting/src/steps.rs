@@ -55,7 +55,16 @@ impl Step for CopyWorkDirStep {
         for include in &self.data_includes {
             rsync_relative(
                 &self.logger,
-                // Note the "." for relative paths (see rsync manual for --relative)
+                // Note the "." for relative paths:
+                //
+                // Ex.: `includes` is vec!["file1", "dir1/dir2"]
+                //   - `rsync --relative source/./file1 destination/`
+                //      will copy `file1` into `destination/file1`
+                //   - `rsync --relative source/./dir1/dir2 destination/`
+                //      will copy `dir2` (and its contents) into `destination/dir1/dir2`,
+                //      whereas the more naive `rsync source/dir1/dir2 destination/`
+                //      would copy `dir2` (and its contents) into `destination/dir2`
+                // See rsync manual at --relative for more details.
                 &self
                     .layout
                     .work_dir(TargetSubnet::Source)

@@ -129,6 +129,7 @@ impl SshHelper {
         )
     }
 
+    /// Wrapper around `crate::file_sync_helper::rsync_relative`
     pub fn rsync_relative<S, T>(&self, src: S, target: T) -> RecoveryResult<Option<String>>
     where
         S: AsRef<Path>,

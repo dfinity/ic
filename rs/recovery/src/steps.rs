@@ -328,7 +328,16 @@ impl Step for DownloadIcDataStep {
 
         for include in self.data_includes.iter() {
             self.ssh_helper.rsync_relative(
-                // Note the "." for relative paths (see rsync manual for --relative)
+                // Note the "." for relative paths:
+                //
+                // Ex.: `includes` is vec!["file1", "dir1/dir2"]
+                //   - `rsync --relative remote:/var/lib/ic/./data/file1 target/`
+                //      will copy `file1` into `target/data/file1`
+                //   - `rsync --relative remote:/var/lib/ic/./data/dir1/dir2 target/`
+                //      will copy `dir2` (and its contents) into `target/data/dir1/dir2`,
+                //      whereas the more naive `rsync remote:/var/lib/ic/data/dir1/dir2 target/`
+                //      would copy `dir2` (and its contents) into `target/dir2`
+                // See rsync manual at --relative for more details.
                 &self
                     .ssh_helper
                     .remote_path(PathBuf::from("/var/lib/ic/./data").join(include)),
@@ -338,7 +347,16 @@ impl Step for DownloadIcDataStep {
             if self.keep_downloaded_data {
                 rsync_relative(
                     &self.logger,
-                    // Note the "." for relative paths (see rsync manual for --relative)
+                    // Note the "." for relative paths:
+                    //
+                    // Ex.: `includes` is vec!["file1", "dir1/dir2"]
+                    //   - `rsync --relative target/./data/file1 working_dir/`
+                    //      will copy `file1` into `working_dir/data/file1`
+                    //   - `rsync --relative target/./data/dir1/dir2 working_dir/`
+                    //      will copy `dir2` (and its contents) into `working_dir/data/dir1/dir2`,
+                    //      whereas the more naive `rsync target/data/dir1/dir2 working_dir/`
+                    //      would copy `dir2` (and its contents) into `working_dir/dir2`
+                    // See rsync manual at --relative for more details.
                     &target.join(".").join("data").join(include),
                     &self.working_dir.join(""),
                     false,
