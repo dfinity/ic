@@ -7,6 +7,8 @@ use pocket_ic::PocketIc;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+pub type Mempool = BTreeMap<Txid, bitcoin::Transaction>;
+
 pub struct DogecoinCanister {
     pub(crate) env: Arc<PocketIc>,
     pub(crate) id: CanisterId,
@@ -39,7 +41,7 @@ impl DogecoinCanister {
             .expect("failed to set fee percentiles");
     }
 
-    pub fn mempool(&self) -> BTreeMap<Txid, bitcoin::Transaction> {
+    pub fn mempool(&self) -> Mempool {
         use bitcoin::consensus::Decodable;
 
         fn vec_to_txid(vec: Vec<u8>) -> Txid {
@@ -66,5 +68,25 @@ impl DogecoinCanister {
                 (vec_to_txid(tx.compute_txid().as_byte_array().to_vec()), tx)
             })
             .collect()
+    }
+
+    pub fn await_mempool<F>(&self, condition: F) -> Mempool
+    where
+        F: Fn(&Mempool) -> bool,
+    {
+        const MAX_TICKS: u8 = 10;
+
+        let mut num_ticks = 0;
+        loop {
+            if num_ticks >= MAX_TICKS {
+                panic!("BUG: condition not satisfied in mempool");
+            }
+            let mempool = self.mempool();
+            if condition(&mempool) {
+                return mempool;
+            }
+            self.env.tick();
+            num_ticks += 1;
+        }
     }
 }

@@ -2,6 +2,7 @@ use crate::{BLOCK_FREQUENCY, MIN_CONFIRMATIONS, Setup, into_outpoint, parse_doge
 use bitcoin::hashes::Hash;
 use candid::{Decode, Principal};
 use ic_bitcoin_canister_mock::{OutPoint, Utxo};
+use ic_ckdoge_minter::MIN_RESUBMISSION_DELAY;
 use ic_ckdoge_minter::address::DogecoinAddress;
 use ic_ckdoge_minter::candid_api::{
     GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalError,
@@ -288,7 +289,7 @@ where
             retrieve_doge_id: self.retrieve_doge_id,
             change_amount,
             minter_address,
-            tx,
+            sent_transactions: vec![tx],
         }
     }
 }
@@ -298,7 +299,7 @@ pub struct WithdrawalFlowEnd<S> {
     retrieve_doge_id: RetrieveDogeOk,
     change_amount: u64,
     minter_address: bitcoin::dogecoin::Address,
-    tx: bitcoin::Transaction,
+    sent_transactions: Vec<bitcoin::Transaction>,
 }
 
 impl<S> WithdrawalFlowEnd<S>
@@ -306,12 +307,30 @@ where
     S: AsRef<Setup>,
 {
     pub fn minter_await_finalized_transaction(self) {
+        assert_eq!(
+            self.sent_transactions.len(),
+            1,
+            "BUG: expected exactly one transaction"
+        );
+        let sent_tx = self.sent_transactions.first().unwrap().compute_txid();
+        self.finalize_transaction(sent_tx);
+    }
+
+    pub fn minter_await_finalized_transaction_by<F>(self, selector: F)
+    where
+        F: FnOnce(&[bitcoin::Transaction]) -> &bitcoin::Transaction,
+    {
+        let tx_to_finalize = selector(&self.sent_transactions).compute_txid();
+        self.finalize_transaction(tx_to_finalize);
+    }
+
+    fn finalize_transaction(self, txid: bitcoin::Txid) {
         let minter = self.setup.as_ref().minter();
         self.setup
             .as_ref()
             .env
             .advance_time(MIN_CONFIRMATIONS * BLOCK_FREQUENCY + Duration::from_secs(1));
-        let txid_bytes: [u8; 32] = self.tx.compute_txid().to_byte_array();
+        let txid_bytes: [u8; 32] = txid.to_byte_array();
         self.setup.as_ref().dogecoin().push_utxo(
             Utxo {
                 value: self.change_amount,
@@ -335,4 +354,57 @@ where
         ]);
         minter.self_check();
     }
+
+    pub fn minter_await_resubmission(mut self) -> Self {
+        assert!(
+            !self.sent_transactions.is_empty(),
+            "BUG: no transactions to resubmit"
+        );
+        let setup = self.setup.as_ref();
+        let minter = setup.minter();
+        let dogecoin = setup.dogecoin();
+        let mempool_before = dogecoin.mempool();
+        setup
+            .env
+            .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
+        let mut mempool_after =
+            dogecoin.await_mempool(|mempool| mempool.len() > mempool_before.len());
+
+        let new_txid = minter.await_doge_transaction(self.retrieve_doge_id.block_index);
+        let new_tx = mempool_after
+            .remove(&new_txid)
+            .expect("BUG: did not find resubmit transaction");
+        assert_replacement_transaction(self.sent_transactions.last().unwrap(), &new_tx);
+        self.sent_transactions.push(new_tx);
+        self
+    }
+}
+
+fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Transaction) {
+    const MIN_RELAY_FEE_PER_KB: u64 = 1_000;
+
+    fn input_utxos(tx: &bitcoin::Transaction) -> Vec<bitcoin::OutPoint> {
+        tx.input.iter().map(|txin| txin.previous_output).collect()
+    }
+
+    fn output_script_pubkey(tx: &bitcoin::Transaction) -> BTreeSet<&bitcoin::script::ScriptBuf> {
+        tx.output
+            .iter()
+            .map(|output| &output.script_pubkey)
+            .collect()
+    }
+
+    assert_ne!(old.compute_txid(), new.compute_txid());
+    assert_eq!(input_utxos(old), input_utxos(new));
+    assert_eq!(output_script_pubkey(old), output_script_pubkey(new));
+
+    let new_out_value = new.output.iter().map(|out| out.value.to_sat()).sum::<u64>();
+    let prev_out_value = old.output.iter().map(|out| out.value.to_sat()).sum::<u64>();
+    // TODO XC-496: fix fee handling
+    let relay_cost = new.vsize() as u64 * MIN_RELAY_FEE_PER_KB / 1000;
+
+    assert!(
+        new_out_value + relay_cost <= prev_out_value,
+        "the transaction fees should have increased by at least {relay_cost}. prev out value: {prev_out_value}, new out value: {new_out_value}"
+    );
 }

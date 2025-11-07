@@ -814,7 +814,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
                 state::audit::replace_transaction(s, old_txid, new_tx, reason, runtime);
             })
         },
-        &IC_CANISTER_RUNTIME,
+        runtime,
     )
     .await
 }
