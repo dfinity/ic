@@ -9,6 +9,7 @@ use crate::{
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
+    ssh_helper::SshHelper,
     util::{DataLocation, SshUser},
 };
 use clap::Parser;
@@ -284,14 +285,19 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
 
             StepType::DownloadConsensusPool => {
                 if let Some(node_ip) = self.params.download_node {
-                    let ssh_user = SshUser::Admin;
-                    let key_file = self.recovery.admin_key_file.clone();
-
+                    let ssh_helper = SshHelper::new(
+                        self.recovery.logger.clone(),
+                        SshUser::Admin.to_string(),
+                        node_ip,
+                        self.recovery.ssh_confirmation,
+                        self.recovery.admin_key_file.clone(),
+                    );
                     let includes = self.recovery.get_consensus_pool_includes();
+
                     Ok(Box::new(self.recovery.get_download_data_step(
-                        node_ip, ssh_user, key_file, /*keep_downloaded_data=*/ false,
-                        includes, /*include_config=*/ false,
-                    )))
+                        ssh_helper, /*keep_downloaded_data=*/ false, includes,
+                        /*include_config=*/ false,
+                    )?))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
@@ -299,16 +305,19 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
 
             StepType::DownloadState => {
                 if let Some(node_ip) = self.params.download_node {
-                    let ssh_user = SshUser::Admin;
-                    let key_file = self.recovery.admin_key_file.clone();
+                    let ssh_helper = SshHelper::new(
+                        self.recovery.logger.clone(),
+                        SshUser::Admin.to_string(),
+                        node_ip,
+                        self.recovery.ssh_confirmation,
+                        self.recovery.admin_key_file.clone(),
+                    );
+                    let includes = Recovery::get_state_includes(Some(&ssh_helper))?;
 
-                    let includes =
-                        self.recovery
-                            .get_state_includes(node_ip, ssh_user, key_file.clone())?;
                     Ok(Box::new(self.recovery.get_download_data_step(
-                        node_ip, ssh_user, key_file, /*keep_downloaded_state=*/ false,
-                        includes, /*include_config=*/ true,
-                    )))
+                        ssh_helper, /*keep_downloaded_state=*/ false, includes,
+                        /*include_config=*/ true,
+                    )?))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }

@@ -52,7 +52,7 @@ pub mod recovery_iterator;
 pub mod recovery_state;
 pub mod registry_helper;
 pub mod replay_helper;
-pub(crate) mod ssh_helper;
+pub mod ssh_helper;
 pub mod steps;
 pub mod util;
 
@@ -68,6 +68,7 @@ pub const IC_STATE: &str = "ic_state";
 pub const NEW_IC_STATE: &str = "new_ic_state";
 pub const OLD_IC_STATE: &str = "old_ic_state";
 pub const IC_REGISTRY_LOCAL_STORE: &str = "ic_registry_local_store";
+pub const STATES_METADATA: &str = "states_metadata.pbuf";
 pub const CHECKPOINTS: &str = "checkpoints";
 
 #[derive(Clone, PartialEq, Debug, Deserialize, Serialize)]
@@ -116,7 +117,7 @@ pub struct Recovery {
     pub registry_helper: RegistryHelper,
 
     pub admin_key_file: Option<PathBuf>,
-    ssh_confirmation: bool,
+    pub ssh_confirmation: bool,
 
     pub logger: Logger,
 }
@@ -324,22 +325,18 @@ impl Recovery {
     }
 
     /// Return the list of paths to include when downloading the ic_state with rsync.
-    /// These are the paths leading to the latest CUP checkpoint.
-    pub fn get_state_includes(
-        &self,
-        node_ip: IpAddr,
-        ssh_user: SshUser,
-        key_file: Option<PathBuf>,
-    ) -> RecoveryResult<Vec<PathBuf>> {
-        let latest_checkpoint_name = Self::get_latest_checkpoint_name_remotely(&SshHelper::new(
-            self.logger.clone(),
-            ssh_user.to_string(),
-            node_ip,
-            self.ssh_confirmation,
-            key_file,
-        ))?;
+    /// One of them is the latest checkpoint, which is looked up remotely via ssh if an `ssh_helper`
+    /// is given, or locally on disk otherwise.
+    pub fn get_state_includes(ssh_helper: Option<&SshHelper>) -> RecoveryResult<Vec<PathBuf>> {
+        let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
+        let latest_checkpoint_name = if let Some(ssh_helper) = ssh_helper {
+            Self::get_latest_checkpoint_name_remotely(ssh_helper, &ic_checkpoints_path)?
+        } else {
+            Self::get_latest_checkpoint_name_and_height(&ic_checkpoints_path)?.0
+        };
 
         Ok(vec![
+            PathBuf::from(IC_STATE).join(STATES_METADATA),
             PathBuf::from(IC_STATE)
                 .join(CHECKPOINTS)
                 .join(latest_checkpoint_name),
@@ -350,25 +347,32 @@ impl Recovery {
     /// node to the recovery data directory using the given account.
     pub fn get_download_data_step(
         &self,
-        node_ip: IpAddr,
-        ssh_user: SshUser,
-        key_file: Option<PathBuf>,
+        mut ssh_helper: SshHelper,
         keep_downloaded_data: bool,
         data_includes: Vec<PathBuf>,
         include_config: bool,
-    ) -> impl Step + use<> {
-        DownloadIcDataStep {
+    ) -> RecoveryResult<impl Step + use<>> {
+        if ssh_helper.wait_for_access().is_err() {
+            ssh_helper.account = SshUser::Admin.to_string();
+            if !ssh_helper.can_connect() {
+                return Err(RecoveryError::invalid_output_error("SSH access denied"));
+            }
+        }
+
+        info!(
+            self.logger,
+            "Continuing with account: {}", ssh_helper.account
+        );
+
+        Ok(DownloadIcDataStep {
             logger: self.logger.clone(),
-            ssh_user,
-            node_ip,
+            ssh_helper,
             backup_dir: self.data_dir.clone(),
             keep_downloaded_data,
             working_dir: self.work_dir.clone(),
-            require_confirmation: self.ssh_confirmation,
-            key_file,
             data_includes,
             include_config,
-        }
+        })
     }
 
     /// Return a [CopyLocalIcStateStep] copying the ic_state of the current
@@ -491,13 +495,14 @@ impl Recovery {
     }
 
     /// Get the name of the latest checkpoint currently on the remote node
-    pub fn get_latest_checkpoint_name_remotely(ssh_helper: &SshHelper) -> RecoveryResult<String> {
+    pub fn get_latest_checkpoint_name_remotely(
+        ssh_helper: &SshHelper,
+        checkpoints_path: &Path,
+    ) -> RecoveryResult<String> {
         ssh_helper
             .ssh(format!(
                 "ls -1 {} | sort | tail -n 1",
-                PathBuf::from(IC_DATA_PATH)
-                    .join(IC_CHECKPOINTS_PATH)
-                    .display()
+                checkpoints_path.display()
             ))
             .and_then(|output| {
                 output

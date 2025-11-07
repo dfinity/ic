@@ -280,20 +280,17 @@ impl Step for MergeCertificationPoolsStep {
 
 pub struct DownloadIcDataStep {
     pub logger: Logger,
-    pub ssh_user: SshUser,
-    pub node_ip: IpAddr,
+    pub ssh_helper: SshHelper,
     pub backup_dir: PathBuf,
     pub working_dir: PathBuf,
     pub keep_downloaded_data: bool,
-    pub require_confirmation: bool,
-    pub key_file: Option<PathBuf>,
     pub data_includes: Vec<PathBuf>,
     pub include_config: bool,
 }
 
 impl Step for DownloadIcDataStep {
     fn descr(&self) -> String {
-        let data_src = format!("[{}]:{}", self.node_ip, IC_DATA_PATH);
+        let data_src = format!("[{}]:{}", self.ssh_helper.ip, IC_DATA_PATH);
         let mut descr = format!(
             "Download node data {} from {}",
             self.data_includes
@@ -305,7 +302,7 @@ impl Step for DownloadIcDataStep {
         );
 
         if self.include_config {
-            let config_src = format!("[{}]:{}", self.node_ip, IC_JSON5_PATH);
+            let config_src = format!("[{}]:{}", self.ssh_helper.ip, IC_JSON5_PATH);
             descr.push_str(&format!(" and config from {}", config_src));
         }
         if self.keep_downloaded_data {
@@ -322,26 +319,6 @@ impl Step for DownloadIcDataStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        let mut ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            self.ssh_user.to_string(),
-            self.node_ip,
-            self.require_confirmation,
-            self.key_file.clone(),
-        );
-
-        if ssh_helper.wait_for_access().is_err() {
-            ssh_helper.account = SshUser::Admin.to_string();
-            if !ssh_helper.can_connect() {
-                return Err(RecoveryError::invalid_output_error("SSH access denied"));
-            }
-        }
-
-        info!(
-            self.logger,
-            "Continuing with account: {}", ssh_helper.account
-        );
-
         let target = if self.keep_downloaded_data {
             &self.backup_dir
         } else {
@@ -350,9 +327,11 @@ impl Step for DownloadIcDataStep {
         .join("");
 
         for include in self.data_includes.iter() {
-            ssh_helper.rsync_relative(
+            self.ssh_helper.rsync_relative(
                 // Note the "." for relative paths (see rsync manual for --relative)
-                &ssh_helper.remote_path(PathBuf::from("/var/lib/ic/./data").join(include)),
+                &self
+                    .ssh_helper
+                    .remote_path(PathBuf::from("/var/lib/ic/./data").join(include)),
                 &target,
             )?;
 
@@ -369,7 +348,8 @@ impl Step for DownloadIcDataStep {
         }
 
         if self.include_config {
-            ssh_helper.rsync(&ssh_helper.remote_path(IC_JSON5_PATH), &target)?;
+            self.ssh_helper
+                .rsync(&self.ssh_helper.remote_path(IC_JSON5_PATH), &target)?;
 
             if self.keep_downloaded_data {
                 rsync(
@@ -406,27 +386,29 @@ impl Step for CopyLocalIcStateStep {
         let log = self.require_confirmation.then_some(&self.logger);
 
         // State
-        let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
-        let (latest_checkpoint, _) =
-            Recovery::get_latest_checkpoint_name_and_height(&ic_checkpoints_path)?;
-        info!(self.logger, "Found latest checkpoint: {latest_checkpoint}");
+        let includes = Recovery::get_state_includes(None)?;
+        for include in includes.iter() {
+            let src = PathBuf::from(IC_DATA_PATH).join(include);
+            let dst_parent = self
+                .working_dir
+                .join("data")
+                .join(include.parent().unwrap());
 
-        let recovery_checkpoints_path = self.working_dir.join("data").join(IC_CHECKPOINTS_PATH);
+            info!(
+                self.logger,
+                "Copying {} to {}",
+                src.display(),
+                dst_parent.display()
+            );
 
-        info!(self.logger, "Creating recovery checkpoint directory");
-        let mut mkdir = Command::new("mkdir");
-        mkdir.arg("-p").arg(&recovery_checkpoints_path);
-        confirm_exec_cmd(&mut mkdir, log)?;
+            let mut mkdir = Command::new("mkdir");
+            mkdir.arg("-p").arg(&dst_parent);
+            confirm_exec_cmd(&mut mkdir, log)?;
 
-        info!(
-            self.logger,
-            "Moving latest checkpoint into recovery directory"
-        );
-        let mut cp = Command::new("cp");
-        cp.arg("-R")
-            .arg(ic_checkpoints_path.join(latest_checkpoint))
-            .arg(recovery_checkpoints_path);
-        confirm_exec_cmd(&mut cp, log)?;
+            let mut cp = Command::new("cp");
+            cp.arg("-r").arg(src).arg(dst_parent);
+            confirm_exec_cmd(&mut cp, log)?;
+        }
 
         // Config
         let mut cp = Command::new("cp");
@@ -654,9 +636,11 @@ impl Step for UploadStateAndRestartStep {
             // To improve rsync times, we copy the latest checkpoint to the
             // upload directory.
             let upload_dir = PathBuf::from(IC_DATA_PATH).join(NEW_IC_STATE);
+            let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
             // path of latest checkpoint on upload node
-            let copy_from = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH).join(
-                Recovery::get_latest_checkpoint_name_remotely(&ssh_helper).unwrap_or_default(),
+            let copy_from = ic_checkpoints_path.join(
+                Recovery::get_latest_checkpoint_name_remotely(&ssh_helper, &ic_checkpoints_path)
+                    .unwrap_or_default(),
             );
             // path and name of checkpoint after replay
             let copy_to = upload_dir.join(CHECKPOINTS).join(max_checkpoint);

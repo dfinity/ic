@@ -25,6 +25,7 @@ use ic_recovery::{
     recovery_iterator::RecoveryIterator,
     recovery_state::{HasRecoveryState, RecoveryState},
     registry_helper::RegistryPollingStrategy,
+    ssh_helper::SshHelper,
     steps::{AdminStep, Step, UploadStateAndRestartStep},
     util::{DataLocation, SshUser},
 };
@@ -583,26 +584,28 @@ impl RecoveryIterator<StepType, StepTypeIter> for SubnetSplitting {
                 let Some(node_ip) = self.params.download_node_source else {
                     return Err(RecoveryError::StepSkipped);
                 };
-
                 let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
                     (SshUser::Readonly, self.params.readonly_key_file.clone())
                 } else {
                     (SshUser::Admin, self.recovery.admin_key_file.clone())
                 };
-
-                let mut includes =
-                    self.recovery
-                        .get_state_includes(node_ip, ssh_user, key_file.clone())?;
+                let ssh_helper = SshHelper::new(
+                    self.recovery.logger.clone(),
+                    ssh_user.to_string(),
+                    node_ip,
+                    self.recovery.ssh_confirmation,
+                    key_file,
+                );
+                let mut includes = Recovery::get_state_includes(Some(&ssh_helper))?;
                 includes.push(PathBuf::from(CUPS_DIR));
+
                 self.recovery
                     .get_download_data_step(
-                        node_ip,
-                        ssh_user,
-                        key_file,
+                        ssh_helper,
                         self.params.keep_downloaded_state == Some(true),
                         includes,
                         /*include_config=*/ true,
-                    )
+                    )?
                     .into()
             }
             StepType::CopyDir => CopyWorkDirStep {
