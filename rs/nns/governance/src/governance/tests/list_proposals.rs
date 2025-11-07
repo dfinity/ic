@@ -90,6 +90,7 @@ fn make_proposal(governance: &mut Governance, action: Action) {
                 summary: "Summary".to_string(),
                 url: "".to_string(),
                 action: Some(action),
+                self_describing_action: None,
             },
         )
         .now_or_never()

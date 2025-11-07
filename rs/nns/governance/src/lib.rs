@@ -206,6 +206,9 @@ thread_local! {
 
     static ENABLE_NEURON_FOLLOW_RESTRICTIONS: Cell<bool>
         = const { Cell::new(true) };
+
+    static ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS: Cell<bool>
+        = const { Cell::new(cfg!(feature = "test")) };
 }
 
 thread_local! {
@@ -265,6 +268,20 @@ pub fn temporarily_enable_neuron_follow_restrictions() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_neuron_follow_restrictions() -> Temporary {
     Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, false)
+}
+
+pub fn is_self_describing_proposal_actions_enabled() -> bool {
+    ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS.get()
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_enable_self_describing_proposal_actions() -> Temporary {
+    Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, true)
+}
+
+#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
+pub fn temporarily_disable_self_describing_proposal_actions() -> Temporary {
+    Temporary::new(&ENABLE_SELF_DESCIBING_PROPOSAL_ACTIONS, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {

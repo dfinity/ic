@@ -27,13 +27,14 @@ use ic_nns_governance_api::test_api::TimeWarp;
 use ic_nns_governance_api::{
     ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse,
     GetNeuronIndexRequest, GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-    Governance as ApiGovernanceProto, GovernanceError, ListKnownNeuronsResponse,
-    ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListNodeProvidersResponse,
-    ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronCommandRequest,
-    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
-    Neuron, NeuronIndexData, NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary,
-    RewardEvent, SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+    GetPendingProposalsRequest, Governance as ApiGovernanceProto, GovernanceError,
+    ListKnownNeuronsResponse, ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons,
+    ListNeuronsResponse, ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse,
+    ListNodeProvidersResponse, ListProposalInfoRequest, ListProposalInfoResponse,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse,
+    MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronIndexData, NeuronInfo,
+    NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
+    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
     SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     governance::GovernanceCachedMetrics,
@@ -360,9 +361,9 @@ fn get_neurons_fund_audit_info(
 }
 
 #[query]
-fn get_pending_proposals() -> Vec<ProposalInfo> {
+fn get_pending_proposals(req: Option<GetPendingProposalsRequest>) -> Vec<ProposalInfo> {
     debug_log("get_pending_proposals");
-    with_governance(|governance| governance.get_pending_proposals(&caller()))
+    with_governance(|governance| governance.get_pending_proposals(&caller(), req))
 }
 
 #[query]

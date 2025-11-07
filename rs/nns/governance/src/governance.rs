@@ -27,9 +27,9 @@ use crate::{
         DateRangeFilter, latest_node_provider_rewards, list_node_provider_rewards,
         record_node_provider_rewards,
     },
-    pb,
     pb::{
-        proposal_conversions::{convert_proposal, proposal_data_to_info},
+        self,
+        proposal_conversions::{ProposalDisplayOptions, proposal_data_to_info},
         v1::{
             ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem,
             ExecuteNnsFunction, Followees, FulfillSubnetRentalRequest,
@@ -102,11 +102,13 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-    GetNeuronIndexRequest, ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse,
-    ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronResponse, NeuronIndexData,
+    GetNeuronIndexRequest, GetPendingProposalsRequest, ListNeuronVotesRequest, ListNeurons,
+    ListNeuronsResponse, ListProposalInfoResponse, ManageNeuronResponse, NeuronIndexData,
     NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
-    proposal_validation,
+    proposal_validation::{
+        validate_proposal_summary, validate_proposal_title, validate_proposal_url,
+    },
     subnet_rental::SubnetRentalRequest,
 };
 use ic_node_rewards_canister_api::DateUtc;
@@ -3635,8 +3637,7 @@ impl Governance {
             .map(|proposal_data| {
                 proposal_data_to_info(
                     proposal_data,
-                    false,
-                    false,
+                    ProposalDisplayOptions::for_get_proposal_info(),
                     &caller_neurons,
                     now_seconds,
                     voting_period_seconds,
@@ -3712,9 +3713,16 @@ impl Governance {
     ///   EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX. The caller can
     ///   retrieve dropped payloads by calling `get_proposal_info` for
     ///   each proposal of interest.
-    pub fn get_pending_proposals(&self, caller: &PrincipalId) -> Vec<ProposalInfo> {
+    pub fn get_pending_proposals(
+        &self,
+        caller: &PrincipalId,
+        req: Option<GetPendingProposalsRequest>,
+    ) -> Vec<ProposalInfo> {
         let now = self.env.now();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
+        let use_self_describing_action = req
+            .and_then(|r| r.use_self_describing_action)
+            .unwrap_or(false);
         self.heap_data
             .proposals
             .values()
@@ -3722,8 +3730,7 @@ impl Governance {
             .map(|data| {
                 proposal_data_to_info(
                     data,
-                    true,
-                    false,
+                    ProposalDisplayOptions::for_get_pending_proposals(use_self_describing_action),
                     &caller_neurons,
                     now,
                     self.voting_period_seconds(),
@@ -3879,8 +3886,10 @@ impl Governance {
             .map(|(_, proposal_data)| {
                 proposal_data_to_info(
                     proposal_data,
-                    true,
-                    req.omit_large_fields.unwrap_or_default(),
+                    ProposalDisplayOptions::for_list_proposals(
+                        req.omit_large_fields.unwrap_or_default(),
+                        false,
+                    ),
                     &caller_neurons,
                     now,
                     self.voting_period_seconds(),
@@ -5136,9 +5145,9 @@ impl Governance {
             }
         }
 
-        proposal_validation::validate_user_submitted_proposal_fields(&convert_proposal(
-            proposal, true,
-        ))?;
+        validate_proposal_title(&proposal.title)?;
+        validate_proposal_summary(&proposal.summary)?;
+        validate_proposal_url(&proposal.url)?;
 
         if !proposal.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
