@@ -124,8 +124,8 @@ fn test_header_v1_roundtrip_serialization() {
 #[derive(Debug, PartialEq, Copy, Clone)]
 #[repr(C, packed)]
 struct LookupSlot {
-    idx_min: u64,
-    ts_nanos_min: u64,
+    idx: u64,
+    ts_nanos: u64,
     offset: u64,
 }
 const SLOT_SIZE: usize = 24;
@@ -135,8 +135,8 @@ type LookupSlotBytes = [u8; SLOT_SIZE];
 impl From<&LookupSlot> for LookupSlotBytes {
     fn from(slot: &LookupSlot) -> Self {
         let mut bytes = [0; SLOT_SIZE];
-        bytes[0..8].copy_from_slice(&slot.idx_min.to_le_bytes());
-        bytes[8..16].copy_from_slice(&slot.ts_nanos_min.to_le_bytes());
+        bytes[0..8].copy_from_slice(&slot.idx.to_le_bytes());
+        bytes[8..16].copy_from_slice(&slot.ts_nanos.to_le_bytes());
         bytes[16..24].copy_from_slice(&slot.offset.to_le_bytes());
         bytes
     }
@@ -145,8 +145,8 @@ impl From<&LookupSlot> for LookupSlotBytes {
 impl From<&LookupSlotBytes> for LookupSlot {
     fn from(bytes: &LookupSlotBytes) -> Self {
         Self {
-            idx_min: u64::from_le_bytes(bytes[0..8].try_into().unwrap()),
-            ts_nanos_min: u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
+            idx: u64::from_le_bytes(bytes[0..8].try_into().unwrap()),
+            ts_nanos: u64::from_le_bytes(bytes[8..16].try_into().unwrap()),
             offset: u64::from_le_bytes(bytes[16..24].try_into().unwrap()),
         }
     }
@@ -155,8 +155,8 @@ impl From<&LookupSlotBytes> for LookupSlot {
 #[test]
 fn test_lookup_slot_serialization() {
     let original = LookupSlot {
-        idx_min: 1,
-        ts_nanos_min: 2,
+        idx: 1,
+        ts_nanos: 2,
         offset: 3,
     };
     let bytes = LookupSlotBytes::from(&original);
@@ -492,15 +492,15 @@ impl RingBuffer {
     }
 
     fn push_back(&mut self, entry: &DataEntry) {
-        let added_size = entry.data_size() as u64;
+        let bytes: Vec<u8> = entry.into();
+        let added_size = bytes.len() as u64;
         self.make_free_space_within_limit(added_size);
         // writing new entry into the buffer has 2 cases:
         // 1) there is enough space at the end of the buffer
         // 2) we need to wrap around
-        let bytes: Vec<u8> = entry.into();
         let mut header = self.read_header();
         let data_tail_offset = (header.data_offset + header.data_tail) as usize;
-        if header.data_tail + added_size <= header.data_capacity {
+        if header.data_tail + added_size < header.data_capacity {
             // case 1
             self.buffer.write(&bytes, data_tail_offset);
         } else {
