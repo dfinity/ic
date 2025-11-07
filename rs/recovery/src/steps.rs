@@ -1141,6 +1141,12 @@ pub struct UploadAndHostTarStep {
     pub key_file: Option<PathBuf>,
 }
 
+impl UploadAndHostTarStep {
+    pub fn get_upload_dir_name() -> PathBuf {
+        PathBuf::from("/tmp").join("recovery_registry")
+    }
+}
+
 impl Step for UploadAndHostTarStep {
     fn descr(&self) -> String {
         format!(
@@ -1160,7 +1166,7 @@ impl Step for UploadAndHostTarStep {
             self.key_file.clone(),
         );
 
-        let upload_dir = PathBuf::from("/tmp").join("recovery_registry");
+        let upload_dir = UploadAndHostTarStep::get_upload_dir_name();
 
         ssh_helper.ssh("nix-env -i daemonize python3".to_string())?;
         ssh_helper.ssh(format!(
