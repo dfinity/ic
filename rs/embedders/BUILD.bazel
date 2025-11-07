@@ -47,6 +47,7 @@ rust_library(
         "//rs/utils/lru_cache",
         "@crate_index//:anyhow",
         "@crate_index//:bincode",
+        "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
         "@crate_index//:itertools",
         "@crate_index//:libc",
