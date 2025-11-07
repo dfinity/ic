@@ -138,13 +138,13 @@ impl<Network: BlockchainNetwork + Send + Sync> GetSuccessorsHandler<Network> {
             .map(|handle| handle.is_finished())
             .unwrap_or(true);
         if is_finished {
-            *handle = Some({
-                self.metrics
-                    .prune_headers_anchor_height
-                    .set(anchor_height as i64);
+            self.metrics
+                .prune_headers_anchor_height
+                .set(anchor_height as i64);
+            *handle = Some(
                 self.state
-                    .persist_and_prune_headers_below_anchor(request.anchor)
-            });
+                    .persist_and_prune_headers_below_anchor(request.anchor),
+            );
         }
 
         let (blocks, next, obsolete_blocks) = {
