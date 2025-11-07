@@ -11,13 +11,12 @@ use ic_system_test_driver::{
         get_governance_canister, submit_deploy_guestos_to_all_subnet_nodes_proposal,
         submit_update_elected_replica_versions_proposal, vote_execute_proposal_assert_executed,
     },
-    util::{block_on, runtime_from_url},
+    util::runtime_from_url,
 };
 use ic_types::{ReplicaVersion, SubnetId, messages::ReplicaHealthStatus};
 use prost::Message;
 use slog::{Logger, info};
-use std::{convert::TryFrom, io::Read, path::Path, sync::Arc};
-use tokio::sync::Mutex;
+use std::{convert::TryFrom, io::Read, path::Path};
 
 pub async fn get_blessed_replica_versions(
     registry_canister: &RegistryCanister,
@@ -49,40 +48,12 @@ pub fn assert_assigned_replica_version<N: HasPublicApiUrl>(
     expected_version: &ReplicaVersion,
     logger: Logger,
 ) {
-    block_on(assert_assigned_replica_version_async(
-        node,
-        expected_version,
-        logger,
-    ))
-}
-
-pub async fn assert_assigned_replica_version_async<N: HasPublicApiUrl>(
-    node: &N,
-    expected_version: &ReplicaVersion,
-    logger: Logger,
-) {
-    assert_assigned_replica_version_with_time_async(node, expected_version, logger, 600, 10).await
-}
-
-pub fn assert_assigned_replica_version_with_time<N: HasPublicApiUrl>(
-    node: &N,
-    expected_version: &ReplicaVersion,
-    logger: Logger,
-    total_secs: u64,
-    backoff_secs: u64,
-) {
-    block_on(assert_assigned_replica_version_with_time_async(
-        node,
-        expected_version,
-        logger,
-        total_secs,
-        backoff_secs,
-    ))
+    assert_assigned_replica_version_with_time(node, expected_version, logger, 600, 10)
 }
 
 /// Waits until the node is healthy and running the given replica version.
 /// Panics if the timeout is reached while waiting.
-pub async fn assert_assigned_replica_version_with_time_async<N: HasPublicApiUrl>(
+pub fn assert_assigned_replica_version_with_time<N: HasPublicApiUrl>(
     node: &N,
     expected_version: &ReplicaVersion,
     logger: Logger,
@@ -106,48 +77,41 @@ pub async fn assert_assigned_replica_version_with_time_async<N: HasPublicApiUrl>
         OldVersionAgain,
         Finished,
     }
-    let state = Arc::new(Mutex::new(State::Uninitialized));
-    let result = ic_system_test_driver::retry_with_msg_async!(
+    let mut state = State::Uninitialized;
+    let result = ic_system_test_driver::retry_with_msg!(
         format!(
             "Check if node {} is healthy and running replica version {}",
             node_ip, expected_version
         ),
-        &logger,
+        logger.clone(),
         secs(total_secs),
         secs(backoff_secs),
-        || {
-            let state_cl = Arc::clone(&state);
-            async move {
-                let mut s = state_cl.lock().await;
-                match get_assigned_replica_version_async(node).await {
-                    Ok(ver) if &ver == expected_version => {
-                        *s = State::Finished;
-                        Ok(())
-                    }
-                    Ok(ver) => {
-                        *s = if *s == State::Uninitialized || *s == State::OldVersion {
-                            State::OldVersion
-                        } else {
-                            State::OldVersionAgain
-                        };
-                        bail!(
-                            "Node is running the old replica version: {}. Expected: {}",
-                            ver,
-                            expected_version
-                        )
-                    }
-                    Err(err) => {
-                        *s = State::Reboot;
-                        bail!("Error reading replica version: {:?}", err)
-                    }
+        || match get_assigned_replica_version(node) {
+            Ok(ver) if &ver == expected_version => {
+                state = State::Finished;
+                Ok(())
+            }
+            Ok(ver) => {
+                if state == State::Uninitialized || state == State::OldVersion {
+                    state = State::OldVersion
+                } else {
+                    state = State::OldVersionAgain
                 }
+                bail!(
+                    "Node is running the old replica version: {}. Expected: {}",
+                    ver,
+                    expected_version
+                )
+            }
+            Err(err) => {
+                state = State::Reboot;
+                bail!("Error reading replica version: {:?}", err)
             }
         }
-    )
-    .await;
+    );
     if let Err(error) = result {
         info!(logger, "Error: {}", error);
-        match *state.lock().await {
+        match state {
             State::Uninitialized => panic!("No version is fetched at all!"),
             State::OldVersion => panic!("Replica was running the old version only!"),
             State::Reboot => {
@@ -159,17 +123,11 @@ pub async fn assert_assigned_replica_version_with_time_async<N: HasPublicApiUrl>
     }
 }
 
+/// Gets the replica version from the node if it is healthy.
 pub fn get_assigned_replica_version<N: HasPublicApiUrl>(
     node: &N,
 ) -> Result<ReplicaVersion, String> {
-    block_on(get_assigned_replica_version_async(node))
-}
-
-/// Gets the replica version from the node if it is healthy.
-pub async fn get_assigned_replica_version_async<N: HasPublicApiUrl>(
-    node: &N,
-) -> Result<ReplicaVersion, String> {
-    let version = match node.status_async().await {
+    let version = match node.status() {
         Ok(status) if Some(ReplicaHealthStatus::Healthy) == status.replica_health_status => status,
         Ok(status) => return Err(format!("Replica is not healthy: {status:?}")),
         Err(err) => return Err(err.to_string()),
