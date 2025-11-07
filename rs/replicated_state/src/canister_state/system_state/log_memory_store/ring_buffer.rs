@@ -2,7 +2,7 @@ use crate::canister_state::system_state::log_memory_store::{
     header::{HeaderV1, HeaderV1Blob},
     log_record::LogRecord,
     lookup::{LookupEntry, LookupTable},
-    memory::{MemoryAddress, MemoryPosition, MemorySize},
+    memory::{MemoryAddress, MemorySize},
 };
 use crate::page_map::{Buffer, PAGE_SIZE, PageIndex, PageMap};
 use ic_sys::PageBytes;
@@ -77,14 +77,15 @@ impl RingBuffer {
         // 2) we need to wrap around
         let mut h = self.read_header();
         let tail = h.data_offset + h.data_tail;
-        if h.data_tail + added_size < MemoryPosition::new(h.data_capacity.get()) {
-            // case 1
+        let remaining_size = h.data_capacity - h.data_tail;
+        if added_size <= remaining_size {
+            // case 1: no wrap
             self.write_bytes(tail, &bytes);
         } else {
-            // case 2
-            let threshold = (h.data_capacity - h.data_tail).as_usize();
-            self.write_bytes(tail, &bytes[..threshold]);
-            self.write_bytes(h.data_offset, &bytes[threshold..]);
+            // case 2: wrap
+            let (first, second) = bytes.split_at(remaining_size.as_usize());
+            self.write_bytes(tail, first);
+            self.write_bytes(h.data_offset, second);
         }
         h.data_back = h.data_tail; // Save current tail as back, last available record.
         h.data_tail = (h.data_tail + added_size) % h.data_capacity;
@@ -102,18 +103,19 @@ impl RingBuffer {
         }
     }
 
+    /// Write bytes into buffer.
     fn write_bytes(&mut self, addr: MemoryAddress, bytes: &[u8]) {
         self.buffer.write(bytes, addr.get());
     }
 
-    /// Generic method to read a vector of bytes from buffer.
+    /// Read a vector of bytes from buffer.
     fn read_vec(&self, addr: MemoryAddress, len: usize) -> Vec<u8> {
         let mut bytes = vec![0; len];
         self.buffer.read(&mut bytes, addr.get());
         bytes
     }
 
-    /// Generic method to read fixed-size data from buffer.
+    /// Read fixed-size data from buffer.
     fn read_bytes<const N: usize>(&self, addr: MemoryAddress) -> [u8; N] {
         let mut bytes = [0; N];
         self.buffer.read(&mut bytes, addr.get());
@@ -198,13 +200,15 @@ impl RingBuffer {
 
     fn read_lookup_table(&self) -> LookupTable {
         let header = self.read_header();
-        let bytes = self.read_vec(
-            V1_LOOKUP_TABLE_OFFSET.try_into().unwrap(),
-            header.lookup_table_used_bytes(),
-        );
+        let bytes = self.read_vec(V1_LOOKUP_TABLE_OFFSET, header.lookup_table_used_bytes());
         let mut lookup_table = LookupTable::from(&bytes);
         lookup_table.set_front(self.front_lookup_entry().unwrap());
         lookup_table.set_back(self.back_lookup_entry().unwrap());
         lookup_table
+    }
+
+    fn write_lookup_table(&mut self, lookup_table: &LookupTable) {
+        let bytes = Vec::from(lookup_table);
+        self.write_bytes(V1_LOOKUP_TABLE_OFFSET, &bytes);
     }
 }

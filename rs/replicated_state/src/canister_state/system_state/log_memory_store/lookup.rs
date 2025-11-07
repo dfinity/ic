@@ -1,7 +1,5 @@
 use super::byte_rw::{ByteReader, ByteWriter};
-use crate::canister_state::system_state::log_memory_store::memory::{
-    MemoryAddress, MemoryPosition, MemorySize,
-};
+use crate::canister_state::system_state::log_memory_store::memory::MemoryPosition;
 use std::convert::From;
 
 #[derive(Debug, PartialEq)]
@@ -40,6 +38,21 @@ impl From<&Vec<u8>> for LookupTable {
     }
 }
 
+impl From<&LookupTable> for Vec<u8> {
+    fn from(table: &LookupTable) -> Self {
+        let mut bytes = vec![0; table.entries.len() * LOOKUP_ENTRY_SIZE];
+        let mut writer = ByteWriter::new(&mut bytes);
+
+        for entry in &table.entries {
+            writer.write_u64(entry.idx);
+            writer.write_u64(entry.ts_nanos);
+            writer.write_u64(entry.position.get());
+        }
+
+        bytes
+    }
+}
+
 impl LookupTable {
     pub fn new() -> Self {
         Self {
@@ -56,15 +69,6 @@ impl LookupTable {
     pub fn set_back(&mut self, entry: LookupEntry) {
         self.back = Some(entry);
     }
-
-    // pub fn push_back(&mut self, entry: LookupEntry) {
-    //     if self.front.is_none() {
-    //         self.front = Some(entry);
-    //     }
-    //     self.back = Some(entry);
-    //     let entry_index = entry.position
-    //     // TODO: populate entries
-    // }
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -114,7 +118,7 @@ impl From<&LookupEntry> for LookupEntryBlob {
 
         writer.write_u64(entry.idx);
         writer.write_u64(entry.ts_nanos);
-        writer.write_u64(entry.position.get() as u64);
+        writer.write_u64(entry.position.get());
 
         Self(blob)
     }
