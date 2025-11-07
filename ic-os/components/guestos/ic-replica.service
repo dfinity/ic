@@ -7,6 +7,10 @@ Wants=generate-ic-config.service
 After=ic-crypto-csp.service
 Wants=ic-crypto-csp.service
 ConditionPathExists=/run/config/guest_vm_type/default
+After=network-online.target
+Wants=network-online.target
+After=systemd-journal-gatewayd.service
+Wants=systemd-journal-gatewayd.service
 
 [Service]
 UMask=026
