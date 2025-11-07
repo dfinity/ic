@@ -564,6 +564,7 @@ pub fn install_nns(
                 .collect(),
         ),
         install_at_ids: false,
+        registry_canister_init_payload: Default::default(),
     };
 
     install_nns_with_customizations_and_check_progress(env.topology_snapshot(), nns_customizations);

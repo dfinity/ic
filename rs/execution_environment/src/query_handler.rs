@@ -52,7 +52,7 @@ use std::{
 use tokio::sync::oneshot;
 use tower::{Service, util::BoxCloneService};
 
-pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
+pub(crate) use self::query_scheduler::QueryScheduler;
 use ic_management_canister_types_private::{
     CanisterIdRecord, FetchCanisterLogsRequest, Payload, QueryMethod,
 };

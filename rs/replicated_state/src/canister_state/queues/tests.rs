@@ -803,7 +803,7 @@ fn test_shed_inbound_response() {
 }
 
 #[test]
-fn test_shed_largest_message_reports_lost_cycles() {
+fn test_shed_largest_message_generates_refunds() {
     let mut canister_queues = CanisterQueues::default();
 
     // Cartesian product of best-effort inbound / outbound, request / response; with
@@ -1449,7 +1449,7 @@ fn new_queues_with_stale_references() -> (CanisterQueues, Vec<Request>) {
         &mut refunds,
         &metrics,
     );
-    assert_eq!(0, refunds.len());
+    assert!(refunds.is_empty());
     assert_eq!(
         btreemap! {
             ("request", "inbound", "best-effort") => 3,
@@ -2507,7 +2507,7 @@ fn test_stats_best_effort() {
         },
         *metrics.timed_out_messages.borrow(),
     );
-    assert_eq!(RefundPool::default(), refunds);
+    assert!(refunds.is_empty());
     assert_eq!(
         (
             true,
@@ -2678,7 +2678,7 @@ fn test_stats_guaranteed_response() {
         &mut refunds,
         &metrics,
     );
-    assert_eq!(RefundPool::default(), refunds);
+    assert!(refunds.is_empty());
     assert_eq!(
         btreemap! {
             ("request", "outbound", "guaranteed response") => 1,
@@ -2821,7 +2821,7 @@ fn test_stats_oversized_requests() {
         &mut refunds,
         &metrics,
     );
-    assert_eq!(RefundPool::default(), refunds);
+    assert!(refunds.is_empty());
     assert_eq!(
         btreemap! {
             ("request", "outbound", "guaranteed response") => 1,
@@ -3621,7 +3621,7 @@ fn time_out_messages_pushes_correct_reject_responses() {
 }
 
 #[test]
-fn time_out_messages_reports_lost_cycles() {
+fn time_out_messages_produces_refunds() {
     let mut canister_queues = CanisterQueues::default();
 
     // Cartesian product of inbound / outbound, best-effort / guaranteed, request /

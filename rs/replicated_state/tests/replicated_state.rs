@@ -275,6 +275,16 @@ impl ReplicatedStateFixture {
             .balance()
             .into()
     }
+
+    fn take_all_refunds(&mut self) -> Vec<Refund> {
+        let mut refunds = Vec::with_capacity(self.state.refunds().len());
+        self.state.take_refunds(|refund| {
+            refunds.push(*refund);
+            true
+        });
+        assert!(self.state.refunds().is_empty());
+        refunds
+    }
 }
 
 fn assert_execution_memory_taken(total_memory_usage: usize, fixture: &ReplicatedStateFixture) {
@@ -599,19 +609,19 @@ fn memory_taken_by_canister_history() {
 
     // Test small fixed memory allocation.
     let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
-    canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::from(2));
+    canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(2));
     assert_execution_memory_taken(canister_history_memory, &fixture);
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 
     // Test large fixed memory allocation.
     let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
-    canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::from(888));
+    canister_state.system_state.memory_allocation = MemoryAllocation::from(NumBytes::from(888));
     assert_execution_memory_taken(888, &fixture);
     assert_canister_history_memory_taken(canister_history_memory, &fixture);
 
     // Reset canister memory allocation.
     let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
-    canister_state.system_state.memory_allocation = MemoryAllocation::BestEffort;
+    canister_state.system_state.memory_allocation = MemoryAllocation::default();
 
     // Test a system subnet.
     fixture.state.metadata.own_subnet_type = SubnetType::System;
@@ -932,7 +942,7 @@ fn time_out_messages_generates_refunds() {
     // Check that a refund to `remote_canister_id` was generated.
     assert_eq!(
         [Refund::anonymous(remote_canister_id, Cycles::new(13))],
-        *fixture.state.take_all_refunds()
+        *fixture.take_all_refunds()
     );
 }
 
@@ -956,7 +966,7 @@ fn time_out_messages_in_subnet_queues() {
     assert_eq!(1, fixture.time_out_messages());
     assert_eq!(
         [Refund::anonymous(CANISTER_ID, Cycles::new(13))],
-        *fixture.state.take_all_refunds()
+        *fixture.take_all_refunds()
     );
 
     // Second request should still be in the queue.
@@ -1012,7 +1022,7 @@ fn enforce_best_effort_message_limit() {
         CANISTER_ID,
         Cycles::new((1 << 1) + (1 << 2) + (1 << 3)),
     )];
-    assert_eq!(expected_refunds, *fixture.state.take_all_refunds());
+    assert_eq!(expected_refunds, *fixture.take_all_refunds());
 
     // A second identical call should be a no-op.
     assert_eq!(

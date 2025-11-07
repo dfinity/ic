@@ -1494,11 +1494,11 @@ impl CanisterQueues {
     /// Updates the stats, replaces shed inbound responses with compact reject
     /// responses, generates reject responses for expired outbound requests, etc.
     ///
-    /// `input_queue_type_fn` is required to determine the appropriate sender
-    /// schedule to update when generating a reject response.
-    ///
     /// Enqueues a refund message if the message had attached cycles and no reject
     /// response refunding the cycles was enqueued.
+    ///
+    /// `input_queue_type_fn` is required to determine the appropriate sender
+    /// schedule to update when generating a reject response.
     fn on_message_dropped(
         &mut self,
         reference: SomeReference,
@@ -1569,11 +1569,11 @@ impl CanisterQueues {
     /// request. Updates the stats for the dropped message and the generated
     /// response.
     ///
-    /// `input_queue_type_fn` is required to determine the appropriate sender
-    /// schedule to update when generating a reject response.
-    ///
     /// Enqueues a refund message if the message had attached cycles and no reject
     /// response refunding the cycles was enqueued.
+    ///
+    /// `input_queue_type_fn` is required to determine the appropriate sender
+    /// schedule to update when generating a reject response.
     fn on_outbound_message_dropped(
         &mut self,
         reference: OutboundReference,

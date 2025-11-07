@@ -14,7 +14,8 @@ use ic_system_test_driver::driver::ic::InternetComputer;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::systest;
-use slog::info;
+use nested::util::block_on_bash_script_and_log;
+use slog::{error, info};
 use std::time::Duration;
 
 const POST_KILL_SLEEP_DURATION: Duration = Duration::from_secs(5);
@@ -27,8 +28,8 @@ fn setup(env: TestEnv) {
 }
 
 fn test(env: TestEnv) {
-    let log = env.logger();
-    let node = env.get_first_healthy_system_node_snapshot();
+    let log = &env.logger();
+    let node = &env.get_first_healthy_system_node_snapshot();
     let node_id = node.node_id;
     let vm = node.vm();
     let num_kill_start_iterations = std::env::var("NUM_KILL_START_ITERATIONS")
@@ -52,12 +53,17 @@ fn test(env: TestEnv) {
 
         info!(log, "Starting node: {node_id} ...");
         vm.start();
-        node.await_status_is_healthy().expect("Node not healthy");
-
-        let cmd =
-            "findmnt /var/lib/ic/backup && findmnt /var/lib/ic/crypto && findmnt /var/lib/ic/data";
-        let out = node.block_on_bash_script(cmd).unwrap();
-        info!(log, "{cmd}:\n{out}");
+        if let Err(err) = node.await_status_is_healthy() {
+            error!(
+                log,
+                "Node {node_id} is not healthy because {err:?}. Dumping its journal so we can debug why ..."
+            );
+            block_on_bash_script_and_log(log, node, "journalctl -b");
+            panic!("Exiting with a failure because node was not healthy!")
+        }
+        block_on_bash_script_and_log(log, node, "findmnt /var/lib/ic/backup");
+        block_on_bash_script_and_log(log, node, "findmnt /var/lib/ic/crypto");
+        block_on_bash_script_and_log(log, node, "findmnt /var/lib/ic/data");
     }
 }
 
