@@ -113,8 +113,8 @@ impl Step for DownloadCertificationsStep {
                 i + 1,
             );
             let res = ssh_helper.rsync_with_retries(
-                &ssh_helper.remote_path(&cert_path),
-                &output_dir.join(ip.to_string()).join(""),
+                ssh_helper.remote_path(&cert_path),
+                output_dir.join(ip.to_string()).join(""),
                 self.auto_retry,
                 5,
             );
@@ -338,8 +338,7 @@ impl Step for DownloadIcDataStep {
                 //      whereas the more naive `rsync remote:/var/lib/ic/data/dir1/dir2 target/`
                 //      would copy `dir2` (and its contents) into `target/dir2`
                 // See rsync manual at --relative for more details.
-                &self
-                    .ssh_helper
+                self.ssh_helper
                     .remote_path(PathBuf::from("/var/lib/ic/./data").join(include)),
                 &target,
             )?;
@@ -357,8 +356,8 @@ impl Step for DownloadIcDataStep {
                     //      whereas the more naive `rsync target/data/dir1/dir2 working_dir/`
                     //      would copy `dir2` (and its contents) into `working_dir/dir2`
                     // See rsync manual at --relative for more details.
-                    &target.join(".").join("data").join(include),
-                    &self.working_dir.join(""),
+                    target.join(".").join("data").join(include),
+                    self.working_dir.join(""),
                     false,
                     None,
                 )?;
@@ -367,13 +366,13 @@ impl Step for DownloadIcDataStep {
 
         if self.include_config {
             self.ssh_helper
-                .rsync(&self.ssh_helper.remote_path(IC_JSON5_PATH), &target)?;
+                .rsync(self.ssh_helper.remote_path(IC_JSON5_PATH), &target)?;
 
             if self.keep_downloaded_data {
                 rsync(
                     &self.logger,
-                    &target.join(PathBuf::from(IC_JSON5_PATH).file_name().unwrap()),
-                    &self.working_dir.join(""),
+                    target.join(PathBuf::from(IC_JSON5_PATH).file_name().unwrap()),
+                    self.working_dir.join(""),
                     false,
                     None,
                 )?;
@@ -679,8 +678,8 @@ impl Step for UploadStateAndRestartStep {
 
             info!(self.logger, "Uploading state...");
             ssh_helper.rsync(
-                &self.data_src.join(""),
-                &ssh_helper.remote_path(&upload_dir.join("")),
+                self.data_src.join(""),
+                ssh_helper.remote_path(upload_dir.join("")),
             )?;
 
             let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);
@@ -971,12 +970,12 @@ impl Step for UploadCUPAndTarStep {
             upload_dir = upload_dir.display()
         ))?;
 
-        let target = ssh_helper.remote_path(&upload_dir.join(""));
+        let target = ssh_helper.remote_path(upload_dir.join(""));
 
-        ssh_helper.rsync(&self.work_dir.join("cup.proto"), &target)?;
+        ssh_helper.rsync(self.work_dir.join("cup.proto"), &target)?;
 
         ssh_helper.rsync(
-            &self.work_dir.join("ic_registry_local_store.tar.zst"),
+            self.work_dir.join("ic_registry_local_store.tar.zst"),
             &target,
         )?;
 
@@ -1124,8 +1123,8 @@ impl Step for DownloadRegistryStoreStep {
         }
 
         ssh_helper.rsync(
-            &ssh_helper.remote_path(PathBuf::from(IC_DATA_PATH).join(IC_REGISTRY_LOCAL_STORE)),
-            &self.work_dir.join(""),
+            ssh_helper.remote_path(PathBuf::from(IC_DATA_PATH).join(IC_REGISTRY_LOCAL_STORE)),
+            self.work_dir.join(""),
         )?;
 
         Ok(())
@@ -1174,7 +1173,7 @@ impl Step for UploadAndHostTarStep {
             upload_dir = upload_dir.display()
         ))?;
 
-        ssh_helper.rsync(&self.tar, &ssh_helper.remote_path(upload_dir.join("")))?;
+        ssh_helper.rsync(&self.tar, ssh_helper.remote_path(upload_dir.join("")))?;
 
         ssh_helper.ssh("daemonize $(which python3) -m http.server --bind :: 8081".to_string())?;
 

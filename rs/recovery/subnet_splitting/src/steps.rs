@@ -61,12 +61,11 @@ impl Step for CopyWorkDirStep {
                 //      whereas the more naive `rsync source/dir1/dir2 destination/`
                 //      would copy `dir2` (and its contents) into `destination/dir2`
                 // See rsync manual at --relative for more details.
-                &self
-                    .layout
+                self.layout
                     .work_dir(TargetSubnet::Source)
                     .join(".")
                     .join(include),
-                &self.layout.work_dir(TargetSubnet::Destination).join(""),
+                self.layout.work_dir(TargetSubnet::Destination).join(""),
                 /*require_confirmation=*/ false,
                 /*key_file=*/ None,
             )?;
