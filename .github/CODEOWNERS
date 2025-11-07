@@ -246,8 +246,6 @@ go_deps.bzl               @dfinity/idx
 /rs/test_utilities/execution_environment/               @dfinity/team-dsm
 /rs/test_utilities/in_memory_logger/                    @dfinity/consensus
 /rs/test_utilities/metrics                              @dfinity/consensus @dfinity/team-dsm
-/rs/test_utilities/src/crypto.rs                        @dfinity/consensus
-/rs/test_utilities/src/crypto/                          @dfinity/consensus
 /rs/test_utilities/src/cycles_account_manager.rs        @dfinity/team-dsm
 /rs/test_utilities/state/                               @dfinity/team-dsm
 /rs/test_utilities/types/src/batch/                     @dfinity/consensus
