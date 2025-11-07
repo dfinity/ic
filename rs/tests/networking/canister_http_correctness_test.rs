@@ -219,6 +219,7 @@ fn test_enforce_https(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -256,6 +257,7 @@ fn test_transform_function_is_executed(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -299,6 +301,7 @@ fn test_non_existent_transform_function(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -338,6 +341,7 @@ fn test_composite_transform_function_is_not_allowed(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -372,6 +376,7 @@ fn test_no_cycles_attached(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: 0,
         },
@@ -423,6 +428,7 @@ fn test_max_possible_request_size(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -468,6 +474,7 @@ fn test_max_possible_request_size_exceeded(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -504,6 +511,7 @@ fn test_2mb_response_cycle_for_rejection_path(env: TestEnv) {
         }),
         max_response_bytes: None,
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, _) = block_on(async move {
@@ -548,6 +556,7 @@ fn test_4096_max_response_cycle_case_1(env: TestEnv) {
         }),
         max_response_bytes: Some(16384),
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, _) = block_on(async move {
@@ -586,6 +595,7 @@ fn test_4096_max_response_cycle_case_2(env: TestEnv) {
         }),
         max_response_bytes: Some(16384),
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, _) = block_on(async move {
@@ -626,6 +636,7 @@ fn test_max_response_bytes_2_mb_returns_ok(env: TestEnv) {
                 transform: None,
                 max_response_bytes: Some((MAX_MAX_RESPONSE_BYTES) as u64),
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -649,6 +660,7 @@ fn test_max_response_bytes_too_large(env: TestEnv) {
                 transform: None,
                 max_response_bytes: Some((MAX_MAX_RESPONSE_BYTES + 1) as u64),
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -688,6 +700,7 @@ fn test_transform_that_bloats_on_the_2mb_limit(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -719,6 +732,7 @@ fn test_transform_that_bloats_on_the_2mb_limit_with_custom_max_response_bytes(en
                 }),
                 max_response_bytes: Some(max_response_bytes),
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -758,6 +772,7 @@ fn test_transform_that_bloats_response_above_2mb_limit(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -800,6 +815,7 @@ fn test_post_request(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -835,6 +851,7 @@ fn test_http_endpoint_response_is_within_limits_with_custom_max_response_bytes(e
                 transform: None,
                 max_response_bytes: Some(max_response_bytes),
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -880,6 +897,7 @@ fn test_http_endpoint_response_is_too_large_with_custom_max_response_bytes(env: 
                     transform,
                     max_response_bytes: Some(max_response_bytes),
                     is_replicated: None,
+                    pricing_version: None,
                 },
                 cycles: HTTP_REQUEST_CYCLE_PAYMENT,
             },
@@ -920,6 +938,7 @@ fn test_http_endpoint_response_is_within_limits_with_default_max_response_bytes(
                 transform: None,
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -963,6 +982,7 @@ fn test_http_endpoint_response_is_too_large_with_default_max_response_bytes(env:
                     transform,
                     max_response_bytes: None,
                     is_replicated: None,
+                    pricing_version: None,
                 },
                 cycles: HTTP_REQUEST_CYCLE_PAYMENT,
             },
@@ -999,6 +1019,7 @@ fn test_http_endpoint_with_delayed_response_is_rejected(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1035,6 +1056,7 @@ fn test_that_redirects_are_not_followed(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1065,6 +1087,7 @@ fn test_http_calls_to_ic_fails(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1103,6 +1126,7 @@ fn test_invalid_domain_name(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1143,6 +1167,7 @@ fn test_invalid_ip(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1179,6 +1204,7 @@ fn test_get_hello_world_call(env: TestEnv) {
         transform: None,
         max_response_bytes: Some(max_response_bytes),
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1222,6 +1248,7 @@ fn test_request_header_total_size_within_the_48_kib_limit(env: TestEnv) {
         transform: None,
         max_response_bytes: None,
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1269,6 +1296,7 @@ fn test_request_header_total_size_over_the_48_kib_limit(env: TestEnv) {
         transform: None,
         max_response_bytes: None,
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1314,6 +1342,7 @@ fn test_response_header_total_size_within_the_48_kib_limit(env: TestEnv) {
                 transform: None,
                 max_response_bytes: Some(DEFAULT_MAX_RESPONSE_BYTES),
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1365,6 +1394,7 @@ fn test_response_header_total_size_over_the_48_kib_limit(env: TestEnv) {
                 transform: None,
                 max_response_bytes: Some(DEFAULT_MAX_RESPONSE_BYTES),
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1400,6 +1430,7 @@ fn test_request_header_name_and_value_within_limits(env: TestEnv) {
         transform: None,
         max_response_bytes: None,
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, _) = block_on(submit_outcall(
@@ -1431,6 +1462,7 @@ fn test_request_header_name_too_long(env: TestEnv) {
         transform: None,
         max_response_bytes: None,
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1471,6 +1503,7 @@ fn test_request_header_value_too_long(env: TestEnv) {
         transform: None,
         max_response_bytes: None,
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1512,6 +1545,7 @@ fn test_response_header_name_within_limit(env: TestEnv) {
                 transform: None,
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1541,6 +1575,7 @@ fn test_response_header_name_over_limit(env: TestEnv) {
                 transform: None,
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1575,6 +1610,7 @@ fn test_response_header_value_within_limit(env: TestEnv) {
         transform: None,
         max_response_bytes: None,
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, _) = block_on(submit_outcall(
@@ -1606,6 +1642,7 @@ fn test_response_header_value_over_limit(env: TestEnv) {
         transform: None,
         max_response_bytes: None,
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1656,6 +1693,7 @@ fn test_post_call(env: TestEnv) {
         transform: None,
         max_response_bytes,
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, _) = block_on(submit_outcall(
@@ -1705,6 +1743,7 @@ fn test_head_call(env: TestEnv) {
         transform: None,
         max_response_bytes,
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, _) = block_on(submit_outcall(
@@ -1759,6 +1798,7 @@ fn test_only_headers_with_custom_max_response_bytes(env: TestEnv) {
                 transform: None,
                 max_response_bytes,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1798,6 +1838,7 @@ fn test_only_headers_with_custom_max_response_bytes_exceeded(env: TestEnv) {
                 transform: None,
                 max_response_bytes,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -1833,6 +1874,7 @@ fn test_non_ascii_url_is_accepted(env: TestEnv) {
         transform: None,
         max_response_bytes: Some(max_response_bytes),
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1870,6 +1912,7 @@ fn test_max_url_length(env: TestEnv) {
         transform: None,
         max_response_bytes: None,
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, _) = block_on(submit_outcall(
@@ -1904,6 +1947,7 @@ fn test_max_url_length_exceeded(env: TestEnv) {
         transform: None,
         max_response_bytes: None,
         is_replicated: None,
+        pricing_version: None,
     };
 
     let (response, refunded_cycles) = block_on(submit_outcall(
@@ -1953,6 +1997,7 @@ fn reference_transform_function_exposed_by_different_canister(env: TestEnv) {
         body: Some("".as_bytes().to_vec()),
         max_response_bytes: None,
         is_replicated: None,
+        pricing_version: None,
         transform: Some(TransformContext {
             function: TransformFunc(candid::Func {
                 principal: proxy_canister_id_2.into(),
@@ -2000,6 +2045,7 @@ fn test_max_number_of_response_headers(env: TestEnv) {
                 transform: None,
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -2038,6 +2084,7 @@ fn test_max_number_of_response_headers_exceeded(env: TestEnv) {
                 transform: None,
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
@@ -2075,6 +2122,7 @@ fn test_max_number_of_request_headers(env: TestEnv) {
             transform: None,
             max_response_bytes: None,
             is_replicated: None,
+            pricing_version: None,
         },
         cycles: HTTP_REQUEST_CYCLE_PAYMENT,
     };
@@ -2148,6 +2196,7 @@ fn check_caller_id_on_transform_function(env: TestEnv) {
         body: Some("".as_bytes().to_vec()),
         max_response_bytes: None,
         is_replicated: None,
+        pricing_version: None,
         transform: Some(TransformContext {
             function: TransformFunc(candid::Func {
                 principal: get_proxy_canister_id(&env).into(),
