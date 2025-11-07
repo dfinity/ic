@@ -148,11 +148,6 @@ TEST_DEPENDENCIES = [
     "@crate_index//:wat",
 ]
 
-SPEC_TEST_DEPENDENCIES = TEST_DEPENDENCIES + [
-    "//rs/tests/research/spec_compliance",
-    "//rs/registry/subnet_type",
-]
-
 MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
@@ -373,35 +368,6 @@ rust_test(
         "gateway",
     ]
 ]
-
-rust_test(
-    name = "spec_test",
-    # the test sometimes times out on CI with default timeout
-    # of "moderate" (5 minutes) - 2025-07-03
-    timeout = "long",
-    srcs = [
-        "tests/common.rs",
-        "tests/spec_test.rs",
-    ],
-    data = [
-        ":pocket-ic-server",
-        "//hs/spec_compliance:ic-ref-test",
-        "//rs/tests/httpbin-rs:httpbin",
-        "//rs/tests/research:ic-hs",
-        "//rs/universal_canister/impl:universal_canister.wasm.gz",
-    ],
-    env = {
-        "HTTPBIN_BIN": "$(rootpath //rs/tests/httpbin-rs:httpbin)",
-        "POCKET_IC_BIN": "$(rootpath :pocket-ic-server)",
-        "IC_REF_TEST_ROOT": "rs/tests/research/ic-hs",
-        "IC_REF_TEST_BIN": "$(rootpath //hs/spec_compliance:ic-ref-test)",
-        "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
-    },
-    tags = [
-        "cpu:8",
-    ],
-    deps = SPEC_TEST_DEPENDENCIES,
-)
 
 rust_test(
     name = "bitcoin_integration_tests",

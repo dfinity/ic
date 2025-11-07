@@ -1216,7 +1216,10 @@ pub mod governance_error {
         Unspecified = 0,
         /// The operation was successfully completed.
         Ok = 1,
-        /// This operation is not available, e.g., not implemented.
+        /// There have been too many instances of this operation recently. In
+        /// practice, this usually just means that another instance of this operation
+        /// is currently in flight, but another reason this might come up is rate
+        /// limiting.
         Unavailable = 2,
         /// The caller is not authorized to perform this operation.
         NotAuthorized = 3,

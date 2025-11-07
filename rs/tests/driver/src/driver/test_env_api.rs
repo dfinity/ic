@@ -2389,13 +2389,22 @@ pub async fn install_nns_canisters(
             builder.push_init_mutate_request(mutation);
         }
 
-        if registry_canister_init_payload.is_swapping_feature_enabled {
+        if registry_canister_init_payload
+            .is_swapping_feature_enabled
+            .unwrap_or_default()
+        {
             builder.enable_swapping_feature_globally();
         }
-        for caller in registry_canister_init_payload.swapping_whitelisted_callers {
+        for caller in registry_canister_init_payload
+            .swapping_whitelisted_callers
+            .unwrap_or_default()
+        {
             builder.whitelist_swapping_feature_caller(caller);
         }
-        for subnet in registry_canister_init_payload.swapping_enabled_subnets {
+        for subnet in registry_canister_init_payload
+            .swapping_enabled_subnets
+            .unwrap_or_default()
+        {
             builder.enable_swapping_feature_for_subnet(subnet);
         }
 
