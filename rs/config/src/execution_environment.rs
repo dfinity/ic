@@ -133,7 +133,7 @@ pub const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 pub const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
 
 // The ID of the staging Bitcoin mainnet and testnet canisters.
-// These canisters may be used in the future to testing and to validate some canister upgrades.
+// These canisters may be used in the future to test and validate canister upgrades.
 const BITCOIN_MAINNET_STAGING_CANISTER_ID: &str = "axowo-ciaaa-aaaad-acs7q-cai";
 const BITCOIN_TESTNET_STAGING_CANISTER_ID: &str = "ljyeq-zaaaa-aaaad-actaa-cai";
 
