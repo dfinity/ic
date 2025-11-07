@@ -1090,14 +1090,8 @@ impl Stream {
     fn calculate_refund_count(messages: &StreamIndexedQueue<StreamMessage>) -> usize {
         messages
             .iter()
-            .map(|(_, meg)| {
-                if let StreamMessage::Refund(_) = meg {
-                    1
-                } else {
-                    0
-                }
-            })
-            .sum()
+            .filter(|(_, msg)| matches!(msg, StreamMessage::Refund(_)))
+            .count()
     }
 
     fn calculate_guaranteed_response_counts(
