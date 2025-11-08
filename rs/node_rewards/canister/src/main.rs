@@ -66,17 +66,6 @@ fn panic_if_caller_not_governance() {
     }
 }
 
-#[query(
-    hidden = true,
-    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
-)]
-fn http_request(request: HttpRequest) -> HttpResponse {
-    match request.path() {
-        "/metrics" => serve_metrics(),
-        _ => HttpResponseBuilder::not_found().build(),
-    }
-}
-
 #[cfg(any(feature = "test", test))]
 #[query(hidden = true)]
 fn get_registry_value(key: String) -> Result<Option<Vec<u8>>, String> {
@@ -111,6 +100,17 @@ fn get_node_providers_rewards_calculation(
     }
 
     NodeRewardsCanister::get_node_providers_rewards_calculation(&CANISTER, request)
+}
+
+#[query(
+    hidden = true,
+    decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
+)]
+fn http_request(request: HttpRequest) -> HttpResponse {
+    match request.path() {
+        "/metrics" => serve_metrics(),
+        _ => HttpResponseBuilder::not_found().build(),
+    }
 }
 
 #[cfg(test)]
