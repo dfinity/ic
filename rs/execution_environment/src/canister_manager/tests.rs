@@ -7320,6 +7320,34 @@ fn create_canister_insufficient_cycles_for_memory_allocation() {
 }
 
 #[test]
+fn create_canister_updates_subnet_available_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+
+    let canister_id = test.create_canister(Cycles::from(10 * T));
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .memory_allocation()
+            .pre_allocated_bytes()
+            .get(),
+        0,
+    );
+
+    let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
+    assert!(subnet_available_memory < initial_subnet_available_memory);
+    let subnet_memory_usage = initial_subnet_available_memory - subnet_available_memory;
+    let canister_history_memory_usage = test
+        .canister_state(canister_id)
+        .canister_history_memory_usage()
+        .get();
+    assert!(canister_history_memory_usage > 0);
+    assert_eq!(subnet_memory_usage, canister_history_memory_usage);
+}
+
+#[test]
 fn create_canister_updates_subnet_available_memory_for_memory_allocation() {
     const MEMORY_ALLOCATION: u64 = 10 * GIB;
 
