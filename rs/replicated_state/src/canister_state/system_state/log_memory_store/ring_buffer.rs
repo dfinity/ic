@@ -2,7 +2,7 @@ use crate::canister_state::system_state::log_memory_store::{
     header::{HeaderV1, HeaderV1Blob},
     log_record::LogRecord,
     lookup::{LookupEntry, LookupTable},
-    memory::{MemoryAddress, MemorySize},
+    memory::{MemoryAddress, MemoryPosition, MemorySize},
 };
 use crate::page_map::{Buffer, PAGE_SIZE, PageIndex, PageMap};
 use ic_sys::PageBytes;
@@ -172,38 +172,25 @@ impl RingBuffer {
         })
     }
 
-    fn front_lookup_entry(&self) -> Option<LookupEntry> {
-        let header = self.read_header();
-        if header.is_empty() {
+    fn lookup_entry(&self, position: MemoryPosition) -> Option<LookupEntry> {
+        let h = self.read_header();
+        if h.is_empty() {
             return None;
         }
-        let record = self.read_record_without_content(header.data_offset + header.data_head)?;
+        let record = self.read_record_without_content(h.data_offset + position)?;
         Some(LookupEntry {
             idx: record.idx,
             ts_nanos: record.ts_nanos,
-            position: header.data_head,
-        })
-    }
-
-    fn back_lookup_entry(&self) -> Option<LookupEntry> {
-        let header = self.read_header();
-        if header.is_empty() {
-            return None;
-        }
-        let record = self.read_record_without_content(header.data_offset + header.data_back)?;
-        Some(LookupEntry {
-            idx: record.idx,
-            ts_nanos: record.ts_nanos,
-            position: header.data_back,
+            position,
         })
     }
 
     fn read_lookup_table(&self) -> LookupTable {
-        let header = self.read_header();
-        let bytes = self.read_vec(V1_LOOKUP_TABLE_OFFSET, header.lookup_table_used_bytes());
+        let h = self.read_header();
+        let bytes = self.read_vec(V1_LOOKUP_TABLE_OFFSET, h.lookup_table_used_bytes());
         let mut lookup_table = LookupTable::from(&bytes);
-        lookup_table.set_front(self.front_lookup_entry().unwrap());
-        lookup_table.set_back(self.back_lookup_entry().unwrap());
+        lookup_table.set_front(self.lookup_entry(h.data_head).unwrap());
+        lookup_table.set_back(self.lookup_entry(h.data_back).unwrap());
         lookup_table
     }
 
