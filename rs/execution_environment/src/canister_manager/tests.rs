@@ -4787,6 +4787,34 @@ fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
 }
 
 #[test]
+fn uninstall_code_on_empty_canister_updates_subnet_available_memory_for_memory_allocation() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MEMORY_ALLOCATION: u64 = 10 * GIB;
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(MEMORY_ALLOCATION)
+                .build(),
+        )
+        .unwrap();
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+
+    test.uninstall_code(canister_id).unwrap();
+
+    let final_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+    assert_eq!(
+        final_subnet_available_memory,
+        initial_subnet_available_memory
+    );
+}
+
+#[test]
 fn uninstall_code_with_wrong_controller_fails() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
