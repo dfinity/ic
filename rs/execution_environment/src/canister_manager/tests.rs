@@ -110,6 +110,7 @@ use wirm::wasmparser;
 use super::InstallCodeResult;
 use prometheus::IntCounter;
 
+const GIB: u64 = 1 << 30;
 const T: u128 = 1_000_000_000_000;
 
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
@@ -7227,6 +7228,38 @@ fn create_canister_insufficient_cycles_for_memory_allocation() {
     result.unwrap().assert_contains_reject(
         "Cannot increase memory allocation to 1024.00 MiB due to insufficient cycles.",
     );
+}
+
+#[test]
+fn create_canister_updates_subnet_available_memory_for_memory_allocation() {
+    const MEMORY_ALLOCATION: u64 = 10 * GIB;
+
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::from(10 * T),
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(MEMORY_ALLOCATION)
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .memory_allocation()
+            .pre_allocated_bytes()
+            .get(),
+        MEMORY_ALLOCATION,
+    );
+
+    let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
+    assert!(subnet_available_memory < initial_subnet_available_memory);
+    let subnet_memory_usage = initial_subnet_available_memory - subnet_available_memory;
+    assert_eq!(subnet_memory_usage, MEMORY_ALLOCATION);
 }
 
 #[test]
