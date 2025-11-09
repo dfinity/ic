@@ -1190,7 +1190,6 @@ impl CanisterManager {
         sender: PrincipalId,
         canister_id_to_delete: CanisterId,
         state: &mut ReplicatedState,
-        round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         if let Ok(canister_id) = CanisterId::try_from(sender)
             && canister_id == canister_id_to_delete
@@ -1218,16 +1217,7 @@ impl CanisterManager {
 
         // Take out the canister from `ReplicatedState`.
         let canister_to_delete = state.take_canister_state(&canister_id_to_delete).unwrap();
-        let canister_memory_allocated_bytes = canister_to_delete.memory_allocated_bytes();
-
-        // Delete canister snapshots that are stored separately in `ReplicatedState`.
         state.delete_snapshots(canister_to_delete.canister_id());
-
-        round_limits.subnet_available_memory.increment(
-            canister_memory_allocated_bytes,
-            NumBytes::from(0),
-            NumBytes::from(0),
-        );
 
         // Leftover cycles in the balance are considered `consumed`.
         let leftover_cycles = NominalCycles::from(canister_to_delete.system_state.balance());

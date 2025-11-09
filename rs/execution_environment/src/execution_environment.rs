@@ -941,7 +941,7 @@ impl ExecutionEnvironment {
 
                     let result = self
                         .canister_manager
-                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state, round_limits)
+                        .delete_canister(*msg.sender(), args.get_canister_id(), &mut state)
                         .map(|()| (EmptyBlob.encode(), Some(args.get_canister_id())))
                         .map_err(|err| err.into());
 
