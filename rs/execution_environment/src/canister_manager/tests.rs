@@ -4743,6 +4743,50 @@ fn uninstall_code_on_empty_canister() {
 }
 
 #[test]
+fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(CYCLES);
+
+    let canister_history_memory_usage = |test: &mut ExecutionTest| {
+        let canister_history_memory_usage = test
+            .canister_state(canister_id)
+            .canister_history_memory_usage()
+            .get();
+        let canister_memory_usage = test.canister_state(canister_id).memory_usage().get();
+        let canister_memory_allocated_bytes = test
+            .canister_state(canister_id)
+            .memory_allocated_bytes()
+            .get();
+        assert_eq!(canister_history_memory_usage, canister_memory_usage);
+        assert_eq!(canister_memory_usage, canister_memory_allocated_bytes);
+        canister_history_memory_usage
+    };
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+    let initial_canister_history_memory_usage = canister_history_memory_usage(&mut test);
+    assert!(initial_canister_history_memory_usage > 0);
+
+    test.uninstall_code(canister_id).unwrap();
+
+    let final_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+    assert!(final_subnet_available_memory < initial_subnet_available_memory);
+    let final_canister_history_memory_usage = canister_history_memory_usage(&mut test);
+    assert!(final_canister_history_memory_usage > initial_canister_history_memory_usage);
+
+    let extra_subnet_memory_usage = initial_subnet_available_memory - final_subnet_available_memory;
+    let extra_canister_history_memory_usage =
+        final_canister_history_memory_usage - initial_canister_history_memory_usage;
+    assert_eq!(
+        extra_subnet_memory_usage,
+        extra_canister_history_memory_usage
+    );
+}
+
+#[test]
 fn uninstall_code_with_wrong_controller_fails() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
