@@ -1878,6 +1878,95 @@ fn delete_stopped_canister_succeeds_once() {
 }
 
 #[test]
+fn delete_canister_updates_subnet_available_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.universal_canister().unwrap();
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(0)
+            .build(),
+        sender_canister_version: None,
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().stable64_grow(100_000).reply().build(),
+    )
+    .unwrap();
+
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopped
+    );
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+    let canister_memory_usage = test.canister_state(canister_id).memory_usage().get();
+    let canister_memory_allocated_bytes = test
+        .canister_state(canister_id)
+        .memory_allocated_bytes()
+        .get();
+    assert_eq!(canister_memory_usage, canister_memory_allocated_bytes);
+    assert!(canister_memory_allocated_bytes > 6 * GIB); // 100,000 WASM pages > 6 GiB
+
+    test.delete_canister(canister_id).unwrap();
+
+    let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
+    assert!(subnet_available_memory > initial_subnet_available_memory);
+    let freed_subnet_memory_usage = subnet_available_memory - initial_subnet_available_memory;
+    assert_eq!(freed_subnet_memory_usage, canister_memory_allocated_bytes);
+}
+
+#[test]
+fn delete_canister_updates_subnet_available_memory_for_memory_allocation() {
+    const MEMORY_ALLOCATION: u64 = 6 * GIB;
+
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let canister_id = test.universal_canister().unwrap();
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(0)
+            .with_memory_allocation(MEMORY_ALLOCATION)
+            .build(),
+        sender_canister_version: None,
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopped
+    );
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+    let canister_memory_usage = test.canister_state(canister_id).memory_usage().get();
+    let canister_memory_allocated_bytes = test
+        .canister_state(canister_id)
+        .memory_allocated_bytes()
+        .get();
+    assert!(canister_memory_usage < canister_memory_allocated_bytes);
+    assert_eq!(canister_memory_allocated_bytes, MEMORY_ALLOCATION);
+
+    test.delete_canister(canister_id).unwrap();
+
+    let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
+    assert!(subnet_available_memory > initial_subnet_available_memory);
+    let freed_subnet_memory_usage = subnet_available_memory - initial_subnet_available_memory;
+    assert_eq!(freed_subnet_memory_usage, canister_memory_allocated_bytes);
+}
+
+#[test]
 fn calling_deleted_canister_fails() {
     // We cannot use `ExecutionTestBuilder` here since calling a deleted canister
     // results in a panic.
