@@ -110,6 +110,7 @@ use wirm::wasmparser;
 use super::InstallCodeResult;
 use prometheus::IntCounter;
 
+const GIB: u64 = 1 << 30;
 const T: u128 = 1_000_000_000_000;
 
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
