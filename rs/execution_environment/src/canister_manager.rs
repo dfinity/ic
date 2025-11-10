@@ -1190,6 +1190,7 @@ impl CanisterManager {
         sender: PrincipalId,
         canister_id_to_delete: CanisterId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         if let Ok(canister_id) = CanisterId::try_from(sender)
             && canister_id == canister_id_to_delete
@@ -1217,7 +1218,16 @@ impl CanisterManager {
 
         // Take out the canister from `ReplicatedState`.
         let canister_to_delete = state.take_canister_state(&canister_id_to_delete).unwrap();
+        let canister_memory_allocated_bytes = canister_to_delete.memory_allocated_bytes();
+
+        // Delete canister snapshots that are stored separately in `ReplicatedState`.
         state.delete_snapshots(canister_to_delete.canister_id());
+
+        round_limits.subnet_available_memory.increment(
+            canister_memory_allocated_bytes,
+            NumBytes::from(0),
+            NumBytes::from(0),
+        );
 
         // Leftover cycles in the balance are considered `consumed`.
         let leftover_cycles = NominalCycles::from(canister_to_delete.system_state.balance());
@@ -1648,12 +1658,42 @@ impl CanisterManager {
         &self,
         sender: PrincipalId,
         canister: &mut CanisterState,
+        round_limits: &mut RoundLimits,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+        resource_saturation: &ResourceSaturation,
     ) -> Result<(), CanisterManagerError> {
         // Allow the canister itself to perform this operation.
         if sender != canister.system_state.canister_id.into() {
             validate_controller(canister, &sender)?
         }
+
+        let memory_usage = canister.memory_usage();
+        let wasm_chunk_store_size = canister.wasm_chunk_store_memory_usage();
+        debug_assert!(memory_usage >= wasm_chunk_store_size);
+        let new_memory_usage = memory_usage.saturating_sub(&wasm_chunk_store_size);
+        let validated_cycles_and_memory_usage = self.cycles_and_memory_usage_checks(
+            subnet_size,
+            cost_schedule,
+            canister,
+            sender,
+            Cycles::zero(),
+            round_limits,
+            new_memory_usage,
+            memory_usage,
+            resource_saturation,
+        )?;
+
         canister.system_state.wasm_chunk_store = WasmChunkStore::new(Arc::clone(&self.fd_factory));
+        self.cycles_and_memory_usage_updates(
+            subnet_size,
+            cost_schedule,
+            canister,
+            sender,
+            round_limits,
+            validated_cycles_and_memory_usage,
+        );
+
         Ok(())
     }
 
@@ -2957,6 +2997,7 @@ impl CanisterManager {
         new_id: CanisterId,
         to_version: u64,
         to_total_num_changes: u64,
+        requested_by: PrincipalId,
         state: &mut ReplicatedState,
         round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
@@ -3002,6 +3043,7 @@ impl CanisterManager {
                 new_id.into(),
                 to_version,
                 to_total_num_changes,
+                requested_by,
             ),
         );
         round_limits

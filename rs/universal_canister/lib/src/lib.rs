@@ -768,6 +768,12 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn cost_http_request_v2(mut self, data: &[u8]) -> Self {
+        self = self.push_bytes(data);
+        self.0.push(Ops::CostHttpRequestV2 as u8);
+        self
+    }
+
     pub fn cost_sign_with_ecdsa(mut self, data: &[u8], curve: u32) -> Self {
         self = self.push_bytes(data);
         self = self.push_int(curve);

@@ -22,6 +22,7 @@ exports_files(
         "//ic-os/guestos:__subpackages__",
         "//ic-os/hostos:__subpackages__",
         "//ic-os/setupos:__subpackages__",
+        "//ic-os/testing:__subpackages__",
     ],
 )
 

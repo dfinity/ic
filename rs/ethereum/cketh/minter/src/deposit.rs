@@ -1,23 +1,28 @@
-use crate::eth_logs::{
-    LogParser, LogScraping, ReceivedErc20LogScraping, ReceivedEthLogScraping,
-    ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError, report_transaction_error,
+use crate::{
+    eth_logs::{
+        LogParser, LogScraping, ReceivedErc20LogScraping, ReceivedEthLogScraping,
+        ReceivedEthOrErc20LogScraping, ReceivedEvent, ReceivedEventError, report_transaction_error,
+    },
+    eth_rpc::{Topic, is_response_too_large},
+    eth_rpc_client::{
+        ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE, HEADER_SIZE_LIMIT, MIN_ATTACHED_CYCLES,
+        MultiCallError, NoReduction, ToReducedWithStrategy, rpc_client,
+    },
+    guard::TimerGuard,
+    logs::{DEBUG, INFO},
+    numeric::{BlockNumber, BlockRangeInclusive, LedgerMintIndex},
+    state::{
+        State, TaskType, audit::process_event, eth_logs_scraping::LogScrapingId, event::EventType,
+        mutate_state, read_state,
+    },
 };
-use crate::eth_rpc::{Topic, is_response_too_large};
-use crate::eth_rpc_client::{EthRpcClient, MultiCallError};
-use crate::guard::TimerGuard;
-use crate::logs::{DEBUG, INFO};
-use crate::numeric::{BlockNumber, BlockRangeInclusive, LedgerMintIndex};
-use crate::state::eth_logs_scraping::LogScrapingId;
-use crate::state::{
-    State, TaskType, audit::process_event, event::EventType, mutate_state, read_state,
-};
-use evm_rpc_types::{BlockTag, GetLogsArgs, Hex20, Hex32, LogEntry, Nat256};
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient, IcRuntime};
+use evm_rpc_types::{Hex32, LogEntry};
 use ic_canister_log::log;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;
-use std::collections::VecDeque;
-use std::time::Duration;
+use std::{collections::VecDeque, time::Duration};
 
 async fn mint() {
     use icrc_ledger_client_cdk::{CdkRuntime, ICRC1Client};
@@ -156,9 +161,12 @@ pub async fn scrape_logs() {
 
 pub async fn update_last_observed_block_number() -> Option<BlockNumber> {
     let block_height = read_state(State::ethereum_block_height);
-    match read_state(EthRpcClient::from_state)
-        .eth_get_block_by_number(BlockTag::from(block_height.clone()))
+    match read_state(rpc_client)
+        .get_block_by_number(block_height.clone())
+        .with_cycles(MIN_ATTACHED_CYCLES)
+        .send()
         .await
+        .reduce_with_strategy(NoReduction)
     {
         Ok(latest_block) => {
             let block_number = Some(BlockNumber::from(latest_block.number));
@@ -202,7 +210,7 @@ where
         "[scrape_contract_logs]: Scraping {} logs in block range {block_range}",
         S::ID
     );
-    let rpc_client = read_state(EthRpcClient::from_state);
+    let rpc_client = read_state(rpc_client);
     for block_range in block_range.into_chunks(max_block_spread) {
         match scrape_block_range::<S>(
             &rpc_client,
@@ -226,7 +234,7 @@ where
 }
 
 async fn scrape_block_range<S>(
-    rpc_client: &EthRpcClient,
+    rpc_client: &EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles>,
     contract_address: Address,
     topics: Vec<Topic>,
     block_range: BlockRangeInclusive,
@@ -241,16 +249,18 @@ where
         let range = subranges.pop_front().unwrap();
         let (from_block, to_block) = range.clone().into_inner();
 
-        let request = GetLogsArgs {
-            from_block: Some(BlockTag::Number(Nat256::from(from_block))),
-            to_block: Some(BlockTag::Number(Nat256::from(to_block))),
-            addresses: vec![Hex20::from(contract_address.into_bytes())],
-            topics: Some(into_evm_topic(topics.clone())),
-        };
-
         let result = rpc_client
-            .eth_get_logs(request)
+            .get_logs(vec![contract_address.into_bytes()])
+            .with_from_block(from_block)
+            .with_to_block(to_block)
+            .with_topics(into_evm_topic(topics.clone()))
+            .with_cycles(MIN_ATTACHED_CYCLES)
+            .with_response_size_estimate(
+                ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
+            )
+            .send()
             .await
+            .reduce_with_strategy(NoReduction)
             .map(<S::Parser>::parse_all_logs);
 
         match result {
