@@ -3,13 +3,11 @@ mod events;
 mod flow;
 mod ledger;
 mod minter;
-mod withdrawal;
 
 use crate::dogecoin::DogecoinCanister;
-use crate::flow::deposit::DepositFlowStart;
+use crate::flow::{deposit::DepositFlowStart, withdrawal::WithdrawalFlowStart};
 use crate::ledger::LedgerCanister;
 pub use crate::minter::MinterCanister;
-use crate::withdrawal::WithdrawalFlowStart;
 use bitcoin::TxOut;
 use candid::{Encode, Principal};
 use ic_bitcoin_canister_mock::{OutPoint, Utxo};
