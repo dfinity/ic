@@ -33,7 +33,7 @@ use ic_system_test_driver::driver::{
 };
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
-use proxy_canister::{FlexibleRemoteHttpRequest, UnvalidatedCanisterHttpRequestArgs};
+use proxy_canister::FlexibleRemoteHttpRequest;
 use slog::{Logger, info};
 
 fn main() -> Result<()> {
@@ -108,7 +108,7 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
             let expected_error_msg = "FlexibleHttpRequest is not yet implemented";
 
             match res {
-                Ok(response_body) => {
+                Ok(_) => {
                     bail!("Update call succeeded unexpectedly.");
                 }
                 Err((code, message)) => {
