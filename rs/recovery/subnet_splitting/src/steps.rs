@@ -56,6 +56,7 @@ impl Step for CopyWorkDirStep {
             /*require_confirmation=*/ false,
             /*key_file=*/ None,
         )
+        .map(|_| ())
     }
 }
 
