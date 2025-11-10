@@ -563,7 +563,7 @@ impl Recovery {
         }
     }
 
-    /// Return an [UploadAndRestartStep] to upload the current recovery state to
+    /// Return an [UploadStateAndRestartStep] to upload the current recovery state to
     /// a node and restart it.
     pub fn get_upload_state_and_restart_step(
         &self,
@@ -705,8 +705,7 @@ impl Recovery {
         })
     }
 
-    /// Return an [UploadAndRestartStep] to upload the current recovery state to
-    /// a node and restart it.
+    /// Return an [WaitForCUPStep] to wait until the recovery CUP is present on the given node.
     pub fn get_wait_for_cup_step(&self, node_ip: IpAddr) -> impl Step + use<> {
         WaitForCUPStep {
             logger: self.logger.clone(),
