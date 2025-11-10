@@ -9,7 +9,10 @@ use ic_node_rewards_canister::canister::NodeRewardsCanister;
 use ic_node_rewards_canister::storage::{
     LAST_DAY_SYNCED, METRICS_MANAGER, RegistryStoreStableMemoryBorrower,
 };
-use ic_node_rewards_canister::timer_tasks::HourlySyncTask;
+use ic_node_rewards_canister::telemetry::PROMETHEUS_METRICS;
+use ic_node_rewards_canister::timer_tasks::{
+    GetNodeProvidersRewardsInstructionsExporter, HourlySyncTask, NodeProvidersRewardsExporter,
+};
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
@@ -58,6 +61,8 @@ fn post_upgrade() {
 
 pub fn schedule_timers() {
     HourlySyncTask::new(&CANISTER).schedule(&METRICS_REGISTRY);
+    GetNodeProvidersRewardsInstructionsExporter::new(&CANISTER).schedule(&METRICS_REGISTRY);
+    NodeProvidersRewardsExporter::new(&CANISTER).schedule(&METRICS_REGISTRY);
 }
 
 fn panic_if_caller_not_governance() {
@@ -102,13 +107,21 @@ fn get_node_providers_rewards_calculation(
     NodeRewardsCanister::get_node_providers_rewards_calculation(&CANISTER, request)
 }
 
+pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    METRICS_REGISTRY.with_borrow(|registry| registry.encode("node_rewards", w))?;
+    PROMETHEUS_METRICS.with_borrow(|p| p.encode_metrics(w))
+}
+
 #[query(
     hidden = true,
     decode_with = "candid::decode_one_with_decoding_quota::<100000,_>"
 )]
 fn http_request(request: HttpRequest) -> HttpResponse {
     match request.path() {
-        "/metrics" => serve_metrics(),
+        "/metrics" => {
+            ic_cdk::println!("Requesting metrics...");
+            serve_metrics(|encoder| encode_metrics(encoder))
+        }
         _ => HttpResponseBuilder::not_found().build(),
     }
 }
