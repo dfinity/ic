@@ -3,6 +3,11 @@
 
 source /opt/ic/bin/config.sh
 
+# Restricted PATH for rbash commands
+# IMPORTANT: /opt/ic/bin must come FIRST so 'bash' resolves to /opt/ic/bin/bash (rbash)
+# instead of /bin/bash, preventing shell escape. Standard commands still work via /bin.
+RESTRICTED_PATH="/opt/ic/bin:/bin:/usr/bin"
+
 # Show available commands
 show_menu() {
     echo "=== HostOS Limited Console ==="
@@ -46,7 +51,7 @@ execute_command() {
             ;;
         "config-json")
             echo "=== /boot/config/config.json ==="
-            cat /boot/config/config.json 
+            PATH="$RESTRICTED_PATH" /bin/rbash -c "less /boot/config/config.json"
             ;;
         "network-config-settings")
             echo "=== Network Settings from Config ==="
@@ -63,9 +68,7 @@ execute_command() {
             echo "Type 'exit' to return to the limited console menu."
             echo ""
             # Start rbash with restricted environment and PATH
-            # IMPORTANT: /opt/ic/bin must come FIRST so 'bash' resolves to /opt/ic/bin/bash (rbash)
-            # instead of /bin/bash, preventing shell escape. Standard commands still work via /bin.
-            PATH="/opt/ic/bin:/bin:/usr/bin" /bin/rbash
+            PATH="$RESTRICTED_PATH" /bin/rbash
             ;;
         "clear")
             clear
