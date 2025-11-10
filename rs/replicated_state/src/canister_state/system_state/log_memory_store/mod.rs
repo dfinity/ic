@@ -1,9 +1,10 @@
 mod byte_rw;
-mod memory;
 mod header;
 mod log_record;
 mod lookup;
+mod memory;
 mod ring_buffer;
+mod struct_io;
 
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};

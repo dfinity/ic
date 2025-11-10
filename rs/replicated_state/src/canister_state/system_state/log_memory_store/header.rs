@@ -9,12 +9,12 @@ use crate::page_map::PAGE_SIZE;
 /// This is the in-memory representation of the header.
 #[derive(Debug, PartialEq)]
 pub(crate) struct HeaderV1 {
-    magic: [u8; 3],
-    version: u8,
+    pub magic: [u8; 3],
+    pub version: u8,
 
     // Lookup table metadata.
-    lookup_table_pages: u16,
-    lookup_entries_count: u16,
+    pub lookup_table_pages: u16,
+    pub lookup_entries_count: u16,
 
     // Data area metadata.
     pub data_offset: MemoryAddress,

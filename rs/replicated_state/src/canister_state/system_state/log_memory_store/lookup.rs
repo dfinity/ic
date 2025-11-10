@@ -1,41 +1,39 @@
 use super::byte_rw::{ByteReader, ByteWriter};
-use crate::canister_state::system_state::log_memory_store::memory::MemoryPosition;
+use crate::canister_state::system_state::log_memory_store::{
+    log_record::LogRecord, memory::MemoryPosition,
+};
 use std::convert::From;
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct LookupTable {
+    entries: Vec<LookupEntry>,
+    bucket_size: usize,
+
     front: Option<LookupEntry>,
     back: Option<LookupEntry>,
-    entries: Vec<LookupEntry>,
 }
 
-impl From<&Vec<u8>> for LookupTable {
-    fn from(bytes: &Vec<u8>) -> Self {
-        // Each entry is a fixed-size record; anything else is a bug.
-        debug_assert_eq!(
-            bytes.len() % LOOKUP_ENTRY_SIZE,
-            0,
-            "lookup table bytes must be a multiple of LOOKUP_ENTRY_SIZE",
-        );
+pub(crate) fn to_entries(bytes: &Vec<u8>) -> Vec<LookupEntry> {
+    // Each entry is a fixed-size record; anything else is a bug.
+    debug_assert_eq!(
+        bytes.len() % LOOKUP_ENTRY_SIZE,
+        0,
+        "lookup table bytes must be a multiple of LOOKUP_ENTRY_SIZE",
+    );
 
-        let entry_count = bytes.len() / LOOKUP_ENTRY_SIZE;
-        let mut reader = ByteReader::new(bytes);
-        let mut entries = Vec::with_capacity(entry_count);
+    let entry_count = bytes.len() / LOOKUP_ENTRY_SIZE;
+    let mut reader = ByteReader::new(bytes);
+    let mut entries = Vec::with_capacity(entry_count);
 
-        for _ in 0..entry_count {
-            entries.push(LookupEntry {
-                idx: reader.read_u64(),
-                ts_nanos: reader.read_u64(),
-                position: MemoryPosition::new(reader.read_u64()),
-            });
-        }
-
-        Self {
-            front: None,
-            back: None,
-            entries,
-        }
+    for _ in 0..entry_count {
+        entries.push(LookupEntry {
+            idx: reader.read_u64(),
+            ts_nanos: reader.read_u64(),
+            position: MemoryPosition::new(reader.read_u64()),
+        });
     }
+
+    entries
 }
 
 impl From<&LookupTable> for Vec<u8> {
@@ -54,11 +52,12 @@ impl From<&LookupTable> for Vec<u8> {
 }
 
 impl LookupTable {
-    pub fn new() -> Self {
+    pub fn new(entries: Vec<LookupEntry>) -> Self {
         Self {
+            entries,
+            bucket_size: 1, // TODO: fix this.
             front: None,
             back: None,
-            entries: Vec::new(),
         }
     }
 
@@ -68,6 +67,26 @@ impl LookupTable {
 
     pub fn set_back(&mut self, entry: LookupEntry) {
         self.back = Some(entry);
+    }
+
+    /// Updates or appends a lookup entry for the given log record at the specified position.
+    pub fn update(&mut self, record: &LogRecord, position: MemoryPosition) {
+        let entry = LookupEntry {
+            idx: record.idx,
+            ts_nanos: record.ts_nanos,
+            position,
+        };
+        let index = self.bucket_index_of(position);
+        if index < self.entries.len() {
+            self.entries[index] = entry;
+        } else {
+            self.entries.push(entry);
+        }
+    }
+
+    /// Calculates bucket index for a given memory position.
+    fn bucket_index_of(&self, position: MemoryPosition) -> usize {
+        (position.get() as usize) / self.bucket_size
     }
 }
 
@@ -79,71 +98,3 @@ pub(crate) struct LookupEntry {
 }
 pub(crate) const LOOKUP_ENTRY_SIZE: usize = 24;
 const _: () = assert!(std::mem::size_of::<LookupEntry>() == LOOKUP_ENTRY_SIZE);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct LookupEntryBlob([u8; LOOKUP_ENTRY_SIZE]);
-
-impl LookupEntryBlob {
-    /// Creates a new zeroed lookup entry blob.
-    pub const fn new() -> Self {
-        Self([0; LOOKUP_ENTRY_SIZE])
-    }
-
-    /// Returns a reference to the underlying byte array for reading/writing to memory.
-    pub fn as_bytes(&self) -> &[u8; LOOKUP_ENTRY_SIZE] {
-        &self.0
-    }
-
-    /// Returns a mutable reference to the underlying byte array for reading from memory.
-    pub fn as_mut_bytes(&mut self) -> &mut [u8; LOOKUP_ENTRY_SIZE] {
-        &mut self.0
-    }
-
-    /// Creates a LookupEntryBlob from a raw byte array.
-    pub fn from_bytes(bytes: [u8; LOOKUP_ENTRY_SIZE]) -> Self {
-        Self(bytes)
-    }
-}
-
-impl Default for LookupEntryBlob {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl From<&LookupEntry> for LookupEntryBlob {
-    fn from(entry: &LookupEntry) -> Self {
-        let mut blob = [0; LOOKUP_ENTRY_SIZE];
-        let mut writer = ByteWriter::new(&mut blob);
-
-        writer.write_u64(entry.idx);
-        writer.write_u64(entry.ts_nanos);
-        writer.write_u64(entry.position.get());
-
-        Self(blob)
-    }
-}
-
-impl From<&LookupEntryBlob> for LookupEntry {
-    fn from(blob: &LookupEntryBlob) -> Self {
-        let mut reader = ByteReader::new(&blob.0);
-
-        Self {
-            idx: reader.read_u64(),
-            ts_nanos: reader.read_u64(),
-            position: MemoryPosition::new(reader.read_u64()),
-        }
-    }
-}
-
-#[test]
-fn test_lookup_slot_serialization() {
-    let original = LookupEntry {
-        idx: 1,
-        ts_nanos: 2,
-        position: MemoryPosition::new(3),
-    };
-    let blob = LookupEntryBlob::from(&original);
-    let recovered = LookupEntry::from(&LookupEntryBlob::from_bytes(*blob.as_bytes()));
-    assert_eq!(original, recovered);
-}
