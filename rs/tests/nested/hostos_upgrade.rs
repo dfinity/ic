@@ -96,7 +96,7 @@ pub fn upgrade_hostos(env: TestEnv) {
 
     info!(logger, "Waiting for the HostOS upgrade to apply...");
 
-    retry_with_msg!(
+    if let Err(e) = retry_with_msg!(
         format!(
             "Waiting until the host's boot ID changes from its pre upgrade value of '{host_boot_id_pre_upgrade}'"
         ),
@@ -115,8 +115,10 @@ pub fn upgrade_hostos(env: TestEnv) {
                 bail!("Host boot ID is still '{host_boot_id_pre_upgrade}'")
             }
         }
-    )
-    .unwrap();
+    ) {
+        try_logging_guestos_diagnostics(&host, &logger);
+        panic!("Failed to see the host boot ID change from '{host_boot_id_pre_upgrade}': {e}");
+    }
 
     info!(logger, "Waiting for Orchestrator dashboard...");
     if let Err(e) = host.await_orchestrator_dashboard_accessible() {

@@ -110,6 +110,8 @@ use wirm::wasmparser;
 use super::InstallCodeResult;
 use prometheus::IntCounter;
 
+const MIB: u64 = 1 << 20;
+const GIB: u64 = 1 << 30;
 const T: u128 = 1_000_000_000_000;
 
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
@@ -1875,6 +1877,86 @@ fn delete_stopped_canister_succeeds_once() {
         err.description()
             .contains(&format!("Canister {canister_id} not found"))
     );
+}
+
+/// Tests that subnet available memory is updated properly after deleting a canister
+/// with 1 GiB of stable memory and ~1 GiB of snapshot memory.
+fn delete_canister_updates_subnet_available_memory_for_memory_allocation(memory_allocation: u64) {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+
+    let canister_id = test.universal_canister().unwrap();
+
+    // Set memory allocation to the given value.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(0)
+            .with_memory_allocation(memory_allocation)
+            .build(),
+        sender_canister_version: None,
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    // Grow stable memory to `1 << 14` WASM pages, i.e., 1 GiB.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().stable64_grow(1 << 14).reply().build(),
+    )
+    .unwrap();
+
+    // Take canister snapshot => ~1 GiB of snapshot memory.
+    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+    test.subnet_message(
+        Method::TakeCanisterSnapshot,
+        take_canister_snapshot_args.encode(),
+    )
+    .unwrap();
+
+    // Stop the canister so that it can be deleted.
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopped
+    );
+
+    // The canister memory usage should be ~2 GiB.
+    let canister_memory_usage = test.canister_state(canister_id).memory_usage().get();
+    assert!(2 * GIB <= canister_memory_usage);
+    assert!(canister_memory_usage <= 2 * GIB + 10 * MIB);
+
+    let subnet_available_memory_before_deletion =
+        test.subnet_available_memory().get_execution_memory() as u64;
+    let canister_memory_allocated_bytes = test
+        .canister_state(canister_id)
+        .memory_allocated_bytes()
+        .get();
+
+    test.delete_canister(canister_id).unwrap();
+
+    let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
+    assert_eq!(subnet_available_memory, initial_subnet_available_memory);
+    assert!(subnet_available_memory > subnet_available_memory_before_deletion);
+    let freed_subnet_memory_usage =
+        subnet_available_memory - subnet_available_memory_before_deletion;
+    assert_eq!(freed_subnet_memory_usage, canister_memory_allocated_bytes);
+}
+
+#[test]
+fn delete_canister_updates_subnet_available_memory() {
+    const MEMORY_ALLOCATION: u64 = 6 * GIB;
+
+    // First we test with a small memory allocation, i.e., the allocated bytes
+    // correspond to the actual canister memory usage.
+    delete_canister_updates_subnet_available_memory_for_memory_allocation(0);
+
+    // Next we test with a large memory allocation, i.e., the allocated bytes
+    // correspond to that (large) memory allocation.
+    delete_canister_updates_subnet_available_memory_for_memory_allocation(MEMORY_ALLOCATION);
 }
 
 #[test]
