@@ -76,7 +76,8 @@ impl LookupTable {
         valid_entries
     }
 
-    pub fn get_inclusive_range(
+    // Function returns a range [start, end) of memory positions.
+    pub fn get_range(
         &self,
         filter: &Option<FetchCanisterLogsFilter>,
     ) -> (MemoryPosition, MemoryPosition) {
@@ -115,7 +116,7 @@ impl LookupTable {
             }
         };
 
-        match filter {
+        let (start, end) = match filter {
             None => {
                 // Return latest range limited by MAX_RANGE_BYTES.
                 // Use left fallback for start to avoid dropping earlier valid data.
@@ -134,7 +135,14 @@ impl LookupTable {
                 let end = find_end_by_key(range.end, |e| e.ts_nanos);
                 (start, clamp_to_max_range(start, end))
             }
+        };
+        // If start == end they point to the same bucket which can have records,
+        // so we need to adjust end to the next bucket.
+        if start == end {
+            // TODO: handle case when buffer is full and they are pointing to the same bucket.
+            return (start, end + MemorySize::new(BUCKET_SIZE as u64));
         }
+        (start, end)
     }
 }
 

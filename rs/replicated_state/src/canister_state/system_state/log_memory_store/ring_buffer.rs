@@ -5,7 +5,9 @@ use crate::canister_state::system_state::log_memory_store::{
     struct_io::StructIO,
 };
 use crate::page_map::{PAGE_SIZE, PageIndex, PageMap};
-use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
+use ic_management_canister_types_private::{
+    CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRange,
+};
 use ic_sys::PageBytes;
 
 const MAGIC: &[u8; 3] = b"LMS";
@@ -22,12 +24,15 @@ struct RingBuffer {
 impl RingBuffer {
     pub fn new(page_map: PageMap, data_capacity: MemorySize) -> Self {
         let mut io = StructIO::new(page_map);
+        let data_offset = V1_LOOKUP_TABLE_OFFSET.add_size(MemorySize::new(
+            (LOOKUP_TABLE_PAGES as u64) * (PAGE_SIZE as u64),
+        ));
         let header = HeaderV1 {
             magic: *MAGIC,
             version: 1,
             lookup_table_pages: LOOKUP_TABLE_PAGES,
             lookup_entries_count: 0,
-            data_offset: V1_LOOKUP_TABLE_OFFSET,
+            data_offset,
             data_capacity,
             data_size: MemorySize::new(0),
             data_head: MemoryPosition::new(0),
@@ -74,7 +79,7 @@ impl RingBuffer {
             return Vec::new();
         }
 
-        let (start, end) = self.io.read_lookup_table().get_inclusive_range(&filter);
+        let (start, end) = self.io.read_lookup_table().get_range(&filter);
         let mut result = Vec::new();
         let mut position = start;
         let filter_ref = filter.as_ref();
@@ -157,3 +162,146 @@ impl RingBuffer {
         self.io.write_lookup_table(&lookup_table);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::canister_state::system_state::log_memory_store::memory::MemorySize;
+    use crate::page_map::PageMap;
+
+    #[test]
+    fn test_ring_buffer_initialization() {
+        let page_map = PageMap::new_for_testing();
+        let data_capacity = MemorySize::new(2 * 1024 * 1024); // 2 MB
+        let ring_buffer = RingBuffer::new(page_map, data_capacity);
+        assert_eq!(ring_buffer.capacity(), data_capacity.get() as usize);
+        assert_eq!(ring_buffer.used_space(), 0);
+        assert_eq!(ring_buffer.next_id(), 0);
+    }
+
+    fn log_record(idx: u64, ts_nanos: u64, message: &str) -> LogRecord {
+        LogRecord {
+            idx,
+            ts_nanos,
+            len: message.len() as u32,
+            content: message.as_bytes().to_vec(),
+        }
+    }
+
+    #[test]
+    fn push_and_pop_order_preserved() {
+        let page_map = PageMap::new_for_testing();
+        let data_capacity = MemorySize::new(4096);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
+
+        let a = log_record(0, 100, "a");
+        let b = log_record(1, 200, "bb");
+
+        rb.push_back(&a);
+        rb.push_back(&b);
+
+        assert_eq!(rb.used_space(), a.bytes_len() + b.bytes_len());
+        assert_eq!(rb.pop_front().unwrap(), a);
+        assert_eq!(rb.pop_front().unwrap(), b);
+        assert!(rb.pop_front().is_none());
+    }
+
+    #[test]
+    fn wraps_around_correctly() {
+        let page_map = PageMap::new_for_testing();
+        // tiny capacity to force wrap quickly
+        let data_capacity = MemorySize::new(128);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
+
+        // push until wrap occurs
+        for i in 0..10u64 {
+            let r = log_record(i, i * 10 + 1, "x");
+            rb.push_back(&r);
+            // Keep popping occasionally to exercise head movement
+            if i % 3 == 0 {
+                let _ = rb.pop_front();
+            }
+        }
+
+        // drain remaining and ensure order is monotonic by idx
+        let mut last_idx = None;
+        while let Some(rec) = rb.pop_front() {
+            if let Some(prev) = last_idx {
+                assert!(rec.idx > prev);
+            }
+            last_idx = Some(rec.idx);
+        }
+    }
+
+    #[test]
+    fn evicts_old_records_when_full() {
+        let page_map = PageMap::new_for_testing();
+        let data_capacity = MemorySize::new(256);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
+
+        // append many records until buffer forces eviction
+        for i in 0..20u64 {
+            let r = log_record(i, i, "payload");
+            rb.push_back(&r);
+        }
+
+        // used_space must be <= capacity and next idx advanced
+        assert!(rb.used_space() <= data_capacity.get() as usize);
+        assert!(rb.next_id() > 0);
+        // popping all remaining records should produce increasing idxs
+        let mut last = None;
+        while let Some(rec) = rb.pop_front() {
+            if let Some(prev) = last {
+                assert!(rec.idx > prev);
+            }
+            last = Some(rec.idx);
+        }
+    }
+
+    #[test]
+    fn lookup_table_and_records_filtering() {
+        let page_map = PageMap::new_for_testing();
+        let data_capacity = MemorySize::new(4096);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
+
+        let r0 = log_record(0, 1000, "alpha");
+        let r1 = log_record(1, 2000, "beta");
+        let r2 = log_record(2, 3000, "gamma");
+
+        rb.push_back(&r0);
+        rb.push_back(&r1);
+        rb.push_back(&r2);
+
+        // No filter
+        let res = rb.records(None);
+        assert_eq!(res.len(), 3);
+        assert_eq!(res[0].idx, 0);
+        assert_eq!(res[1].idx, 1);
+        assert_eq!(res[2].idx, 2);
+
+        // Filter by idx range [1, 2)
+        let res = rb.records(Some(FetchCanisterLogsFilter::ByIdx(
+            FetchCanisterLogsRange { start: 1, end: 2 },
+        )));
+        assert_eq!(res.len(), 1);
+        assert_eq!(res[0].idx, 1);
+
+        // Filter by timestamp range [1500, 3500)
+        let res = rb.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
+            FetchCanisterLogsRange {
+                start: 1500,
+                end: 3500,
+            },
+        )));
+        assert_eq!(res.len(), 2);
+        assert_eq!(res[0].idx, 1);
+        assert_eq!(res[1].idx, 2);
+    }
+}
+
+/*
+bazel test //rs/replicated_state/... \
+  --test_output=streamed \
+  --test_arg=--nocapture \
+  --test_arg=test_ring_buffer_push_pop
+*/
