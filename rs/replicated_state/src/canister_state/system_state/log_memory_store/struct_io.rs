@@ -64,6 +64,19 @@ impl StructIO {
         HeaderV1::from(&HeaderV1Blob::from_bytes(self.read_bytes(HEADER_OFFSET)))
     }
 
+    pub fn read_lookup_table(&self) -> LookupTable {
+        let h = self.read_header();
+        let bytes = self.read_vec(V1_LOOKUP_TABLE_OFFSET, h.lookup_table_used_bytes());
+        let mut lookup_table = LookupTable::new(to_entries(&bytes));
+        lookup_table.set_front(self.read_lookup_entry(h.data_head));
+        lookup_table
+    }
+
+    pub fn write_lookup_table(&mut self, lookup_table: &LookupTable) {
+        let bytes = Vec::from(lookup_table);
+        self.write_bytes(V1_LOOKUP_TABLE_OFFSET, &bytes);
+    }
+
     /// Retrieves a log record at the given address, if it exists.
     pub fn read_record(&self, addr: MemoryAddress) -> Option<LogRecord> {
         self.read_header().validate_address(addr)?;
@@ -76,20 +89,6 @@ impl StructIO {
             ts_nanos,
             len,
             content,
-        })
-    }
-
-    /// Reads only the header of a log record at the given offset, without its content.
-    fn read_record_without_content(&self, addr: MemoryAddress) -> Option<LogRecord> {
-        self.read_header().validate_address(addr)?;
-        let idx = self.read_u64(addr);
-        let ts_nanos = self.read_u64(addr + MemorySize::new(8));
-        let len = self.read_u32(addr + MemorySize::new(16));
-        Some(LogRecord {
-            idx,
-            ts_nanos,
-            len,
-            content: Vec::new(),
         })
     }
 
@@ -106,17 +105,17 @@ impl StructIO {
         })
     }
 
-    fn read_lookup_table(&self) -> LookupTable {
-        let h = self.read_header();
-        let bytes = self.read_vec(V1_LOOKUP_TABLE_OFFSET, h.lookup_table_used_bytes());
-        let mut lookup_table = LookupTable::new(to_entries(&bytes));
-        lookup_table.set_front(self.read_lookup_entry(h.data_head).unwrap());
-        lookup_table.set_back(self.read_lookup_entry(h.data_back).unwrap());
-        lookup_table
-    }
-
-    fn write_lookup_table(&mut self, lookup_table: &LookupTable) {
-        let bytes = Vec::from(lookup_table);
-        self.write_bytes(V1_LOOKUP_TABLE_OFFSET, &bytes);
+    /// Reads only the header of a log record at the given offset, without its content.
+    fn read_record_without_content(&self, addr: MemoryAddress) -> Option<LogRecord> {
+        self.read_header().validate_address(addr)?;
+        let idx = self.read_u64(addr);
+        let ts_nanos = self.read_u64(addr + MemorySize::new(8));
+        let len = self.read_u32(addr + MemorySize::new(16));
+        Some(LogRecord {
+            idx,
+            ts_nanos,
+            len,
+            content: Vec::new(),
+        })
     }
 }

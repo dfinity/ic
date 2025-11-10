@@ -21,12 +21,11 @@ pub(crate) struct HeaderV1 {
     pub data_capacity: MemorySize,
     pub data_size: MemorySize,
     pub data_head: MemoryPosition,
-    pub data_back: MemoryPosition,
     pub data_tail: MemoryPosition,
     pub next_idx: u64,
 }
 
-const V1_PACKED_HEADER_SIZE: usize = 64;
+const V1_PACKED_HEADER_SIZE: usize = 56;
 const _: () = assert!(std::mem::size_of::<HeaderV1>() == V1_PACKED_HEADER_SIZE);
 
 /// A byte array wrapper for serialized header data.
@@ -76,7 +75,6 @@ impl From<&HeaderV1> for HeaderV1Blob {
         writer.write_u64(header.data_capacity.get());
         writer.write_u64(header.data_size.get());
         writer.write_u64(header.data_head.get());
-        writer.write_u64(header.data_back.get());
         writer.write_u64(header.data_tail.get());
         writer.write_u64(header.next_idx);
 
@@ -98,7 +96,6 @@ impl From<&HeaderV1Blob> for HeaderV1 {
             data_capacity: reader.read_u64().into(),
             data_size: reader.read_u64().into(),
             data_head: reader.read_u64().into(),
-            data_back: reader.read_u64().into(),
             data_tail: reader.read_u64().into(),
             next_idx: reader.read_u64(),
         }
@@ -165,9 +162,8 @@ mod tests {
             data_capacity: MemorySize::new(5),
             data_size: MemorySize::new(6),
             data_head: MemoryPosition::new(7),
-            data_back: MemoryPosition::new(8),
-            data_tail: MemoryPosition::new(9),
-            next_idx: 10,
+            data_tail: MemoryPosition::new(8),
+            next_idx: 9,
         };
 
         let blob = HeaderV1Blob::from(&original);

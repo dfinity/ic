@@ -31,7 +31,6 @@ impl RingBuffer {
             data_capacity,
             data_size: MemorySize::new(0),
             data_head: MemoryPosition::new(0),
-            data_back: MemoryPosition::new(0),
             data_tail: MemoryPosition::new(0),
             next_idx: 0,
         };
@@ -77,12 +76,7 @@ impl RingBuffer {
         }
         let record = self.io.read_record(h.data_offset + h.data_head)?;
         let removed_size = MemorySize::new(record.bytes_len() as u64);
-        let new_head = (h.data_head + removed_size) % h.data_capacity;
-        if h.data_head == h.data_back {
-            // If we removed the last available record, move data_back to the new head as well.
-            h.data_back = new_head;
-        }
-        h.data_head = new_head;
+        h.data_head = (h.data_head + removed_size) % h.data_capacity;
         h.data_size = h.data_size.saturating_sub(removed_size);
         self.io.write_header(&h);
         Some(record)
@@ -108,8 +102,7 @@ impl RingBuffer {
             self.io.write_bytes(tail, first);
             self.io.write_bytes(h.data_offset, second);
         }
-        // self.lookup_table.update(&record, h.data_tail); // TODO: implement.
-        h.data_back = h.data_tail; // Save current tail as back, last available record.
+        self.update_lookup_table_last(record, h.data_tail);
         h.data_tail = (h.data_tail + added_size) % h.data_capacity;
         h.data_size = h.data_size.saturating_add(added_size);
         h.next_idx = record.idx + 1;
@@ -123,5 +116,11 @@ impl RingBuffer {
                 break; // No more records to pop, limit reached.
             }
         }
+    }
+
+    fn update_lookup_table_last(&mut self, record: &LogRecord, position: MemoryPosition) {
+        let mut lookup_table = self.io.read_lookup_table();
+        lookup_table.update_last(record, position);
+        self.io.write_lookup_table(&lookup_table);
     }
 }

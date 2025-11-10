@@ -10,7 +10,6 @@ pub(crate) struct LookupTable {
     bucket_size: usize,
 
     front: Option<LookupEntry>,
-    back: Option<LookupEntry>,
 }
 
 pub(crate) fn to_entries(bytes: &Vec<u8>) -> Vec<LookupEntry> {
@@ -57,20 +56,31 @@ impl LookupTable {
             entries,
             bucket_size: 1, // TODO: fix this.
             front: None,
-            back: None,
         }
     }
 
-    pub fn set_front(&mut self, entry: LookupEntry) {
-        self.front = Some(entry);
+    pub fn set_front(&mut self, entry: Option<LookupEntry>) {
+        self.front = entry;
     }
 
-    pub fn set_back(&mut self, entry: LookupEntry) {
-        self.back = Some(entry);
+    pub fn get_valid_entries(&self) -> Vec<LookupEntry> {
+        let front = match self.front {
+            Some(entry) => entry,
+            None => return vec![],
+        };
+        let mut valid_entries: Vec<LookupEntry> = self
+            .entries
+            .iter()
+            .filter(|e| front.idx < e.idx)
+            .cloned()
+            .collect();
+        valid_entries.push(front);
+        valid_entries.sort_by_key(|e| e.idx);
+        valid_entries
     }
 
     /// Updates or appends a lookup entry for the given log record at the specified position.
-    pub fn update(&mut self, record: &LogRecord, position: MemoryPosition) {
+    pub fn update_last(&mut self, record: &LogRecord, position: MemoryPosition) {
         let entry = LookupEntry {
             idx: record.idx,
             ts_nanos: record.ts_nanos,
