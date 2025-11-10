@@ -120,6 +120,36 @@ impl CanisterHttpRequestArgs {
     }
 }
 
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///   url : text;
+///   max_response_bytes : opt nat64;
+///   headers : vec http_header;
+///   method : variant { get; head; post };
+///   body : opt blob;
+///   transform : opt record {
+///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
+///     context : blob;
+///   };
+/// }
+/// ```s
+#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+pub struct FlexibleCanisterHttpRequestArgs {
+    pub url: String,
+    pub headers: BoundedHttpHeaders,
+    #[serde(deserialize_with = "ic_utils::deserialize::deserialize_option_blob")]
+    pub body: Option<Vec<u8>>,
+    pub method: HttpMethod,
+    pub transform: Option<TransformContext>,
+    pub total_requests: Option<u32>,
+    pub min_responses: Option<u32>,
+    pub max_responses: Option<u32>,
+}
+
+impl Payload<'_> for FlexibleCanisterHttpRequestArgs {}
+
+//TODO(urgent): add tests for the flexible too.
 #[test]
 fn test_http_headers_max_number() {
     // This test verifies the number of HTTP headers stays within the allowed limit.

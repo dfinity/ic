@@ -78,6 +78,7 @@ pub enum Method {
     DeleteCanister,
     DepositCycles,
     HttpRequest,
+    HttpFlexibleRequest,
     ECDSAPublicKey,
     InstallCode,
     InstallChunkedCode,
