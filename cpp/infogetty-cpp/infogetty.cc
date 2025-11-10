@@ -200,7 +200,8 @@ main(int argc, char** argv)
             "limited-console",
             0
         };
-        check_panic_errno(::execve(cmdline[0], const_cast<char**>(cmdline), environ), opts.tty_dev, "execve limited-console failed");
+        char* const empty_env[] = { NULL };
+        check_panic_errno(::execve(cmdline[0], const_cast<char**>(cmdline), empty_env), opts.tty_dev, "execve limited-console failed");
     } else {
         // Drop into shell. We do this via the "login" binary which establishes
         // everything nicely to have a login session.
