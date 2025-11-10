@@ -28,7 +28,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:19aa596f49db34ece26a1a2903e6fabcd8766025b3dc543546fbef341ef910a2
+      image: ghcr.io/dfinity/ic-build@sha256:da93235247c6651bae459e4e8cc987fccb37f0d53294b30f7e1ae57c0b553557
       options: >-
          -e NODE_NAME --privileged --cgroupns host
     steps:

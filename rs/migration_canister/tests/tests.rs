@@ -37,6 +37,7 @@ struct MigrationCanisterInitArgs {
 pub enum ValidationError {
     MigrationsDisabled,
     RateLimited,
+    ValidationInProgress { canister: Principal },
     MigrationInProgress { canister: Principal },
     CanisterNotFound { canister: Principal },
     SameSubnet,
@@ -490,6 +491,111 @@ async fn migration_succeeds() {
     };
 }
 
+async fn concurrent_migration(
+    pic: &PocketIc,
+    sender: Principal,
+    args1: MigrateCanisterArgs,
+    args2: MigrateCanisterArgs,
+    duplicate_canister: Principal,
+) {
+    let msg_id1 = pic
+        .submit_call(
+            MIGRATION_CANISTER_ID.into(),
+            sender,
+            "migrate_canister",
+            Encode!(&args1).unwrap(),
+        )
+        .await
+        .unwrap();
+    let msg_id2 = pic
+        .submit_call(
+            MIGRATION_CANISTER_ID.into(),
+            sender,
+            "migrate_canister",
+            Encode!(&args2).unwrap(),
+        )
+        .await
+        .unwrap();
+    let raw_res1 = pic.await_call(msg_id1).await.unwrap();
+    let raw_res2 = pic.await_call(msg_id2).await.unwrap();
+    let res1 = Decode!(&raw_res1, Result<(), ValidationError>).unwrap();
+    let res2 = Decode!(&raw_res2, Result<(), ValidationError>).unwrap();
+
+    // One of the concurrent calls is a success and the other one is the expected validation error.
+    assert!(res1.is_ok() || res2.is_ok());
+    assert!(res1.is_err() || res2.is_err());
+    if let Err(err) = res1 {
+        assert!(
+            matches!(err, ValidationError::ValidationInProgress { canister } if canister == duplicate_canister)
+        );
+    }
+    if let Err(err) = res2 {
+        assert!(
+            matches!(err, ValidationError::ValidationInProgress { canister } if canister == duplicate_canister)
+        );
+    }
+}
+
+#[tokio::test]
+async fn concurrent_migration_source() {
+    const NUM_MIGRATIONS: usize = 2;
+    let Setup {
+        pic,
+        sources,
+        targets,
+        source_controllers,
+        ..
+    } = setup(Settings {
+        num_migrations: NUM_MIGRATIONS as u64,
+        ..Settings::default()
+    })
+    .await;
+    let sender = source_controllers[0];
+    let source = sources[0];
+    let target1 = targets[0];
+    let target2 = targets[1];
+
+    let args1 = MigrateCanisterArgs {
+        source,
+        target: target1,
+    };
+    let args2 = MigrateCanisterArgs {
+        source,
+        target: target2,
+    };
+    concurrent_migration(&pic, sender, args1, args2, source).await;
+}
+
+#[tokio::test]
+async fn concurrent_migration_target() {
+    const NUM_MIGRATIONS: usize = 2;
+    let Setup {
+        pic,
+        sources,
+        targets,
+        source_controllers,
+        ..
+    } = setup(Settings {
+        num_migrations: NUM_MIGRATIONS as u64,
+        ..Settings::default()
+    })
+    .await;
+    let sender = source_controllers[0];
+    let source1 = sources[0];
+    let source2 = sources[1];
+    let target = targets[0];
+
+    let args1 = MigrateCanisterArgs {
+        source: source1,
+        target,
+    };
+    let args2 = MigrateCanisterArgs {
+        source: source2,
+        target,
+    };
+    concurrent_migration(&pic, sender, args1, args2, target).await;
+}
+
 #[tokio::test]
 async fn validation_fails_not_allowlisted() {
     let special_caller = Principal::self_authenticating(vec![42]);
@@ -539,7 +645,8 @@ async fn validation_fails_not_found() {
     let source = sources[0];
     let target = targets[0];
     let nonexistent_canister = Principal::from_text("222ay-6aaaa-aaaah-alvrq-cai").unwrap();
-    let Err(ValidationError::CanisterNotFound { canister }) = migrate_canister(
+
+    let err = migrate_canister(
         &pic,
         sender,
         &MigrateCanisterArgs {
@@ -548,26 +655,49 @@ async fn validation_fails_not_found() {
         },
     )
     .await
-    else {
-        panic!()
-    };
-    assert_eq!(canister, nonexistent_canister);
+    .unwrap_err();
+    assert!(
+        matches!(err, ValidationError::CallFailed { reason } if reason.contains(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected source and try again later.", nonexistent_canister)))
+    );
 
-    // sender not controller of target
-    let bad_sender = source_controllers[1];
-    let Err(ValidationError::CanisterNotFound { canister }) = migrate_canister(
+    let err = migrate_canister(
         &pic,
-        bad_sender,
+        sender,
         &MigrateCanisterArgs {
             source,
             target: nonexistent_canister,
         },
     )
     .await
+    .unwrap_err();
+    assert!(
+        matches!(err, ValidationError::CallFailed { reason } if reason.contains(&format!("Call to management canister (`canister_status`) failed. Ensure that the canister {} is the expected target and try again later.", nonexistent_canister)))
+    );
+}
+
+#[tokio::test]
+async fn validation_fails_same_canister() {
+    let Setup {
+        pic,
+        sources,
+        source_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    let source = sources[0];
+
+    let Err(ValidationError::SameSubnet) = migrate_canister(
+        &pic,
+        sender,
+        &MigrateCanisterArgs {
+            source,
+            target: source,
+        },
+    )
+    .await
     else {
         panic!()
     };
-    assert_eq!(canister, nonexistent_canister);
 }
 
 #[tokio::test]
@@ -581,9 +711,21 @@ async fn validation_fails_same_subnet() {
     } = setup(Settings::default()).await;
     let sender = source_controllers[0];
     let source = sources[0];
+
+    // Create a target canister on the same subnet.
+    let mut new_controllers = source_controllers.clone();
+    new_controllers.push(MIGRATION_CANISTER_ID.into());
     let target = pic
-        .create_canister_on_subnet(Some(sender), None, source_subnet)
+        .create_canister_on_subnet(
+            Some(sender),
+            Some(CanisterSettings {
+                controllers: Some(new_controllers),
+                ..Default::default()
+            }),
+            source_subnet,
+        )
         .await;
+
     let Err(ValidationError::SameSubnet) =
         migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
     else {

@@ -28,13 +28,13 @@ type DailyNodeRewards = record {
   daily_node_failure_rate: opt DailyNodeFailureRate;
   performance_multiplier: opt float64;
   rewards_reduction: opt float64;
-  base_rewards_xdr_permyriad: opt nat64;
-  adjusted_rewards_xdr_permyriad: opt nat64;
+  base_rewards_xdr_permyriad: opt float64;
+  adjusted_rewards_xdr_permyriad: opt float64;
 };
 
 type NodeTypeRegionBaseRewards = record {
-  monthly_xdr_permyriad: opt nat64;
-  daily_xdr_permyriad: opt nat64;
+  monthly_xdr_permyriad: opt float64;
+  daily_xdr_permyriad: opt float64;
   node_reward_type: opt text;
   region: opt text;
 };
@@ -42,9 +42,9 @@ type NodeTypeRegionBaseRewards = record {
 type Type3BaseRewards = record {
   region: opt text;
   nodes_count: opt nat64;
-  avg_rewards_xdr_permyriad: opt nat64;
+  avg_rewards_xdr_permyriad: opt float64;
   avg_coefficient: opt float64;
-  daily_xdr_permyriad: opt nat64;
+  daily_xdr_permyriad: opt float64;
 };
 
 type DailyNodeProviderRewards = record {
