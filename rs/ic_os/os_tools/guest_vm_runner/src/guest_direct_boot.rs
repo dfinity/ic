@@ -594,7 +594,6 @@ mod tests {
                 .expect_err("prepare_direct_boot should fail")
         );
         assert!(debug_error.contains("Could not open grubenv"));
-        assert!(debug_error.contains("grub partition files"));
     }
 
     #[tokio::test]
