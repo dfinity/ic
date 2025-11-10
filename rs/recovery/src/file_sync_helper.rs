@@ -116,49 +116,65 @@ where
     S: AsRef<Path>,
     T: AsRef<Path>,
 {
-    rsync_impl(logger, false, src, target, require_confirmation, key_file)
+    let rsync_cmd = get_rsync_command(src, target, key_file);
+    exec_rsync(logger, rsync_cmd, require_confirmation)
 }
 
-/// Copy the files from src to target using [rsync](https://linux.die.net/man/1/rsync) with the
-/// same options as [rsync], but adding also the `--relative` option. See the manual for details on
-/// how this option affects the copy operation.
-pub fn rsync_relative<S, T>(
+/// Copy the specified includes from src to target using [rsync](https://linux.die.net/man/1/rsync).
+pub fn rsync_includes<I, S, T>(
     logger: &Logger,
+    includes: I,
     src: S,
     target: T,
     require_confirmation: bool,
     key_file: Option<&PathBuf>,
 ) -> RecoveryResult<Option<String>>
 where
+    I: IntoIterator<Item: AsRef<Path>>,
     S: AsRef<Path>,
     T: AsRef<Path>,
 {
-    rsync_impl(logger, true, src, target, require_confirmation, key_file)
+    let mut outputs = Vec::new();
+
+    for include in includes {
+        // Note the "." for relative paths:
+        //
+        // Ex.: `includes` is vec!["file1", "dir1/dir2"]
+        //   - `rsync --relative src/./file1 target/`
+        //      will copy `file1` into `target/file1`
+        //   - `rsync --relative src/./dir1/dir2 target/`
+        //      will copy `dir2` (and its contents) into `target/dir1/dir2`,
+        //      whereas the more naive `rsync src/dir1/dir2 target/`
+        //      would copy `dir2` (and its contents) into `target/dir2`
+        // See rsync manual at --relative for more details.
+        let mut rsync_cmd = get_rsync_command(
+            src.as_ref().join(".").join(include),
+            target.as_ref().join(""),
+            key_file,
+        );
+        rsync_cmd.arg("--relative");
+
+        if let Some(out) = exec_rsync(logger, rsync_cmd, require_confirmation)? {
+            outputs.push(out);
+        }
+    }
+
+    Ok((!outputs.is_empty()).then(|| outputs.join("\n")))
 }
 
-/// Internal implementation of [rsync] and [rsync_relative].
-fn rsync_impl<S, T>(
+fn exec_rsync(
     logger: &Logger,
-    relative: bool,
-    src: S,
-    target: T,
+    mut rsync_cmd: Command,
     require_confirmation: bool,
-    key_file: Option<&PathBuf>,
-) -> RecoveryResult<Option<String>>
-where
-    S: AsRef<Path>,
-    T: AsRef<Path>,
-{
-    let mut rsync = get_rsync_command(relative, src, target, key_file);
-
+) -> RecoveryResult<Option<String>> {
     info!(logger, "");
     info!(logger, "About to execute:");
-    info!(logger, "{:?}", rsync);
+    info!(logger, "{:?}", rsync_cmd);
     if require_confirmation {
         wait_for_confirmation(logger);
     }
     info!(logger, "Starting transfer, waiting for output...");
-    match exec_cmd(&mut rsync) {
+    match exec_cmd(&mut rsync_cmd) {
         Err(RecoveryError::CommandError(Some(24), msg)) => {
             warn!(logger, "Masking rsync warning (code 24)");
             info!(logger, "{}", msg);
@@ -172,7 +188,7 @@ where
     }
 }
 
-fn get_rsync_command<S, T>(relative: bool, src: S, target: T, key_file: Option<&PathBuf>) -> Command
+fn get_rsync_command<S, T>(src: S, target: T, key_file: Option<&PathBuf>) -> Command
 where
     S: AsRef<Path>,
     T: AsRef<Path>,
@@ -185,9 +201,6 @@ where
         .arg("--partial")
         .arg("--progress")
         .arg("--no-g");
-    if relative {
-        rsync.arg("--relative");
-    }
     rsync.arg(src.as_ref()).arg(target.as_ref());
     rsync.arg("-e").arg(ssh_helper::get_rsync_ssh_arg(key_file));
 
@@ -277,7 +290,6 @@ mod tests {
     #[test]
     fn get_rsync_command_test() {
         let rsync = get_rsync_command(
-            true,
             "/tmp/src",
             "/tmp/target",
             Some(&PathBuf::from("/tmp/key_file")),
@@ -293,7 +305,6 @@ mod tests {
                 "--partial",
                 "--progress",
                 "--no-g",
-                "--relative",
                 "/tmp/src",
                 "/tmp/target",
                 "-e",

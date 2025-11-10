@@ -429,7 +429,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         self.recovery.ssh_confirmation,
                         key_file,
                     );
-                    let includes = Recovery::get_state_includes(Some(&ssh_helper))?;
+                    let includes = Recovery::get_ic_state_includes(Some(&ssh_helper))?;
 
                     Ok(Box::new(self.recovery.get_download_data_step(
                         ssh_helper,

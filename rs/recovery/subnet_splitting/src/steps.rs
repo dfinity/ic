@@ -13,7 +13,7 @@ use ic_recovery::{
     Recovery,
     cli::consent_given,
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::rsync_relative,
+    file_sync_helper::rsync_includes,
     registry_helper::VersionedRecoveryResult,
     steps::Step,
     util::parse_hex_str,
@@ -48,30 +48,14 @@ impl Step for CopyWorkDirStep {
     }
 
     fn exec(&self) -> RecoveryResult<()> {
-        for include in &self.data_includes {
-            rsync_relative(
-                &self.logger,
-                // Note the "." for relative paths:
-                //
-                // Ex.: `includes` is vec!["file1", "dir1/dir2"]
-                //   - `rsync --relative source/./file1 destination/`
-                //      will copy `file1` into `destination/file1`
-                //   - `rsync --relative source/./dir1/dir2 destination/`
-                //      will copy `dir2` (and its contents) into `destination/dir1/dir2`,
-                //      whereas the more naive `rsync source/dir1/dir2 destination/`
-                //      would copy `dir2` (and its contents) into `destination/dir2`
-                // See rsync manual at --relative for more details.
-                self.layout
-                    .work_dir(TargetSubnet::Source)
-                    .join(".")
-                    .join(include),
-                self.layout.work_dir(TargetSubnet::Destination).join(""),
-                /*require_confirmation=*/ false,
-                /*key_file=*/ None,
-            )?;
-        }
-
-        Ok(())
+        rsync_includes(
+            &self.logger,
+            &self.data_includes,
+            self.layout.work_dir(TargetSubnet::Source),
+            self.layout.work_dir(TargetSubnet::Destination),
+            /*require_confirmation=*/ false,
+            /*key_file=*/ None,
+        )
     }
 }
 

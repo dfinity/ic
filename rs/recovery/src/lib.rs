@@ -324,10 +324,11 @@ impl Recovery {
         includes
     }
 
-    /// Return the list of paths to include when downloading the ic_state with rsync.
+    /// Return the list of paths to include when downloading a node's "production" state with
+    /// rsync.
     /// One of them is the latest checkpoint, which is looked up remotely via ssh if an `ssh_helper`
     /// is given, or locally on disk otherwise.
-    pub fn get_state_includes(ssh_helper: Option<&SshHelper>) -> RecoveryResult<Vec<PathBuf>> {
+    pub fn get_ic_state_includes(ssh_helper: Option<&SshHelper>) -> RecoveryResult<Vec<PathBuf>> {
         let ic_checkpoints_path = PathBuf::from(IC_DATA_PATH).join(IC_CHECKPOINTS_PATH);
         let latest_checkpoint_name = if let Some(ssh_helper) = ssh_helper {
             Self::get_latest_checkpoint_name_remotely(ssh_helper, &ic_checkpoints_path)?
@@ -335,12 +336,22 @@ impl Recovery {
             Self::get_latest_checkpoint_name_and_height(&ic_checkpoints_path)?.0
         };
 
-        Ok(vec![
-            PathBuf::from(IC_STATE).join(STATES_METADATA),
-            PathBuf::from(IC_STATE)
-                .join(CHECKPOINTS)
-                .join(latest_checkpoint_name),
-        ])
+        Ok(
+            Self::get_state_includes_with_given_checkpoint(&latest_checkpoint_name)
+                .iter()
+                .map(|p| PathBuf::from(IC_STATE).join(p))
+                .collect(),
+        )
+    }
+
+    /// Return the list of paths to include when downloading/uploading the state with rsync.
+    ///
+    /// This function must be updated if the state layout ever changes.
+    pub fn get_state_includes_with_given_checkpoint(checkpoint_name: &str) -> Vec<PathBuf> {
+        vec![
+            PathBuf::from(STATES_METADATA),
+            PathBuf::from(CHECKPOINTS).join(checkpoint_name),
+        ]
     }
 
     /// Return a [DownloadIcDataStep] downloading some data of the given

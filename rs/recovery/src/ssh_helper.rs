@@ -3,7 +3,7 @@ use crate::{
     cli::wait_for_confirmation,
     command_helper::exec_cmd,
     error::RecoveryError,
-    file_sync_helper::{rsync, rsync_relative, rsync_with_retries},
+    file_sync_helper::{rsync, rsync_includes, rsync_with_retries},
     util::SshUser,
 };
 use slog::{Logger, info, warn};
@@ -135,14 +135,21 @@ impl SshHelper {
         )
     }
 
-    /// Wrapper around `crate::file_sync_helper::rsync_relative`
-    pub fn rsync_relative<S, T>(&self, src: S, target: T) -> RecoveryResult<Option<String>>
+    /// Wrapper around `crate::file_sync_helper::rsync_includes`
+    pub fn rsync_includes<I, S, T>(
+        &self,
+        includes: I,
+        src: S,
+        target: T,
+    ) -> RecoveryResult<Option<String>>
     where
+        I: IntoIterator<Item: AsRef<Path>>,
         S: AsRef<Path>,
         T: AsRef<Path>,
     {
-        rsync_relative(
+        rsync_includes(
             &self.logger,
+            includes,
             src,
             target,
             self.require_confirmation,

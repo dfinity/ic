@@ -5,7 +5,7 @@ use crate::{
     admin_helper::IcAdmin,
     command_helper::{confirm_exec_cmd, exec_cmd},
     error::{RecoveryError, RecoveryResult},
-    file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_relative},
+    file_sync_helper::{clear_dir, create_dir, read_dir, rsync, rsync_includes},
     get_member_ips, get_node_heights_from_metrics,
     registry_helper::RegistryHelper,
     replay_helper,
@@ -323,50 +323,28 @@ impl Step for DownloadIcDataStep {
             &self.backup_dir
         } else {
             &self.working_dir
-        }
-        .join("");
+        };
 
-        for include in self.data_includes.iter() {
-            self.ssh_helper.rsync_relative(
-                // Note the "." for relative paths:
-                //
-                // Ex.: `includes` is vec!["file1", "dir1/dir2"]
-                //   - `rsync --relative remote:/var/lib/ic/./data/file1 target/`
-                //      will copy `file1` into `target/data/file1`
-                //   - `rsync --relative remote:/var/lib/ic/./data/dir1/dir2 target/`
-                //      will copy `dir2` (and its contents) into `target/data/dir1/dir2`,
-                //      whereas the more naive `rsync remote:/var/lib/ic/data/dir1/dir2 target/`
-                //      would copy `dir2` (and its contents) into `target/dir2`
-                // See rsync manual at --relative for more details.
-                self.ssh_helper
-                    .remote_path(PathBuf::from("/var/lib/ic/./data").join(include)),
-                &target,
+        self.ssh_helper.rsync_includes(
+            &self.data_includes,
+            self.ssh_helper.remote_path(PathBuf::from(IC_DATA_PATH)),
+            target.join("data"),
+        )?;
+
+        if self.keep_downloaded_data {
+            rsync_includes(
+                &self.logger,
+                &self.data_includes,
+                target.join("data"),
+                self.working_dir.join("data"),
+                false,
+                None,
             )?;
-
-            if self.keep_downloaded_data {
-                rsync_relative(
-                    &self.logger,
-                    // Note the "." for relative paths:
-                    //
-                    // Ex.: `includes` is vec!["file1", "dir1/dir2"]
-                    //   - `rsync --relative target/./data/file1 working_dir/`
-                    //      will copy `file1` into `working_dir/data/file1`
-                    //   - `rsync --relative target/./data/dir1/dir2 working_dir/`
-                    //      will copy `dir2` (and its contents) into `working_dir/data/dir1/dir2`,
-                    //      whereas the more naive `rsync target/data/dir1/dir2 working_dir/`
-                    //      would copy `dir2` (and its contents) into `working_dir/dir2`
-                    // See rsync manual at --relative for more details.
-                    target.join(".").join("data").join(include),
-                    self.working_dir.join(""),
-                    false,
-                    None,
-                )?;
-            }
         }
 
         if self.include_config {
             self.ssh_helper
-                .rsync(self.ssh_helper.remote_path(IC_JSON5_PATH), &target)?;
+                .rsync(self.ssh_helper.remote_path(IC_JSON5_PATH), target.join(""))?;
 
             if self.keep_downloaded_data {
                 rsync(
@@ -403,7 +381,7 @@ impl Step for CopyLocalIcStateStep {
         let log = self.require_confirmation.then_some(&self.logger);
 
         // State
-        let includes = Recovery::get_state_includes(None)?;
+        let includes = Recovery::get_ic_state_includes(None)?;
         for include in includes.iter() {
             let src = PathBuf::from(IC_DATA_PATH).join(include);
             let dst_parent = self
@@ -677,9 +655,11 @@ impl Step for UploadStateAndRestartStep {
             ssh_helper.ssh(cmd_create_and_copy_checkpoint_dir)?;
 
             info!(self.logger, "Uploading state...");
-            ssh_helper.rsync(
-                self.data_src.join(""),
-                ssh_helper.remote_path(upload_dir.join("")),
+            let includes = Recovery::get_state_includes_with_given_checkpoint(max_checkpoint);
+            ssh_helper.rsync_includes(
+                &includes,
+                &self.data_src,
+                &ssh_helper.remote_path(&upload_dir),
             )?;
 
             let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);

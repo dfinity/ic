@@ -312,7 +312,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
                         self.recovery.ssh_confirmation,
                         self.recovery.admin_key_file.clone(),
                     );
-                    let includes = Recovery::get_state_includes(Some(&ssh_helper))?;
+                    let includes = Recovery::get_ic_state_includes(Some(&ssh_helper))?;
 
                     Ok(Box::new(self.recovery.get_download_data_step(
                         ssh_helper, /*keep_downloaded_state=*/ false, includes,
