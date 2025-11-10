@@ -269,6 +269,7 @@ system_test_nns(
     env = UNIVERSAL_CANISTER_ENV,
     tags = [
         "long_test",
+        "manual",  # temporarily disabled on CI. TODO(NET-1784): re-enable this.
     ],
     test_driver_target = ":nns_delegation_test",
     # The test will is long because we upgrade a subnet and then wait for a delegation to be refreshed
