@@ -160,6 +160,7 @@ impl CanisterManager {
             // cannot carry cycles, it does not make sense to allow them from users.
             | Ok(Ic00Method::DepositCycles)
             | Ok(Ic00Method::HttpRequest)
+            | Ok(Ic00Method::FlexibleHttpRequest)
             // Nobody pays for `raw_rand`, so this cannot be used via ingress messages
             | Ok(Ic00Method::RawRand)
             // Bitcoin messages require cycles, so we reject all ingress messages.

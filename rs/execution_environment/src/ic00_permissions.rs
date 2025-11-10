@@ -63,7 +63,10 @@ impl Ic00MethodPermissions {
                 does_not_run_on_aborted_canister: false,
                 installs_code: false,
             },
-            Ic00Method::CreateCanister | Ic00Method::HttpRequest | Ic00Method::RawRand => Self {
+            Ic00Method::CreateCanister
+            | Ic00Method::HttpRequest
+            | Ic00Method::FlexibleHttpRequest
+            | Ic00Method::RawRand => Self {
                 method,
                 allow_remote_subnet_sender: false,
                 allow_only_nns_subnet_sender: false,

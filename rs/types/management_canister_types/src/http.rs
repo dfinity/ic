@@ -132,6 +132,9 @@ impl CanisterHttpRequestArgs {
 ///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
 ///     context : blob;
 ///   };
+///   total_requests : opt nat32;
+///   min_responses : opt nat32;
+///   max_responses : opt nat32;
 /// }
 /// ```s
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
