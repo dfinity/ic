@@ -68,14 +68,34 @@ impl RingBuffer {
         self.io.read_header().next_idx
     }
 
-    pub fn records(&self, _filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
-        // let lookup_table = self.io.read_lookup_table();
-        // let (from, to) = lookup_table.get_range(&filter);
-        // let mut records = Vec::new();
-        // let mut h = self.io.read_header();
-        // let mut position = h.data_head;
-        // todo!()
-        vec![]
+    pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
+        let header = self.io.read_header();
+        if header.is_empty() {
+            return Vec::new();
+        }
+
+        let (start, end) = self.io.read_lookup_table().get_inclusive_range(&filter);
+        let mut result = Vec::new();
+        let mut position = start;
+        let filter_ref = filter.as_ref();
+
+        while position <= end {
+            let abs_position = header.data_offset + position;
+            let record = match self.io.read_record(abs_position) {
+                Some(r) => r,
+                None => break, // Stop when no more records can be read.
+            };
+            if filter_ref.is_none_or(|f| record.matches(f)) {
+                result.push(record.to_canister_log_record());
+            }
+            let record_size = MemorySize::new(record.bytes_len() as u64);
+            if record_size.get() == 0 {
+                break; // Prevent infinite loop on corrupted record.
+            }
+            position = (position + record_size) % header.data_capacity;
+        }
+
+        result
     }
 
     /// Removes the first log record and returns it, or None if the ring buffer is empty.

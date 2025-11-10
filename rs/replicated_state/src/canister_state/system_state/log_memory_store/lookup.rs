@@ -76,7 +76,7 @@ impl LookupTable {
         valid_entries
     }
 
-    pub fn get_range(
+    pub fn get_inclusive_range(
         &self,
         filter: &Option<FetchCanisterLogsFilter>,
     ) -> (MemoryPosition, MemoryPosition) {

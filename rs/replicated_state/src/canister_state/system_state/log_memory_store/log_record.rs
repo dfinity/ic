@@ -1,4 +1,5 @@
 use super::byte_rw::ByteWriter;
+use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct LogRecord {
@@ -11,6 +12,22 @@ pub(crate) struct LogRecord {
 impl LogRecord {
     pub fn bytes_len(&self) -> usize {
         8 + 8 + 4 + self.content.len()
+    }
+
+    pub fn matches(&self, filter: &FetchCanisterLogsFilter) -> bool {
+        let is_ok = |x: u64, start: u64, end: u64| start <= x && x < end; // [start, end)
+        match filter {
+            FetchCanisterLogsFilter::ByIdx(r) => is_ok(self.idx, r.start, r.end),
+            FetchCanisterLogsFilter::ByTimestampNanos(r) => is_ok(self.ts_nanos, r.start, r.end),
+        }
+    }
+
+    pub fn to_canister_log_record(&self) -> CanisterLogRecord {
+        CanisterLogRecord {
+            idx: self.idx,
+            timestamp_nanos: self.ts_nanos,
+            content: self.content.clone(),
+        }
     }
 }
 
