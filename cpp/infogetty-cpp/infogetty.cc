@@ -200,8 +200,9 @@ main(int argc, char** argv)
             "limited-console",
             0
         };
-        char* const empty_env[] = { NULL };
-        check_panic_errno(::execve(cmdline[0], const_cast<char**>(cmdline), empty_env), opts.tty_dev, "execve limited-console failed");
+        // Minimal environment with only TERM set (needed for terminal commands like 'clear')
+        char* const minimal_env[] = { (char*)"TERM=linux", NULL };
+        check_panic_errno(::execve(cmdline[0], const_cast<char**>(cmdline), minimal_env), opts.tty_dev, "execve limited-console failed");
     } else {
         // Drop into shell. We do this via the "login" binary which establishes
         // everything nicely to have a login session.
