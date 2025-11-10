@@ -18,13 +18,13 @@ Success::
 . NNS subnet is functional after the recovery.
 
 Variant::
-. This test variant performs the recovery on a large NNS subnet, better reflecting the scale of the production NNS.
+. This test variant performs the actions of Node Providers sequentially, i.e. one after another, instead of all in parallel.
 
 end::catalog[] */
 
 use anyhow::Result;
 use ic_nested_nns_recovery_common::{
-    LARGE_DKG_INTERVAL, LARGE_SUBNET_SIZE, SetupConfig, TestConfig, setup, test,
+    DKG_INTERVAL, SUBNET_SIZE, SetupConfig, TestConfig, setup, test,
 };
 use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use std::time::Duration;
@@ -36,8 +36,8 @@ fn main() -> Result<()> {
                 env,
                 SetupConfig {
                     impersonate_upstreams: true,
-                    subnet_size: LARGE_SUBNET_SIZE,
-                    dkg_interval: LARGE_DKG_INTERVAL,
+                    subnet_size: SUBNET_SIZE,
+                    dkg_interval: DKG_INTERVAL,
                 },
             )
         })
@@ -46,9 +46,9 @@ fn main() -> Result<()> {
             break_dfinity_owned_node: false,
             add_and_bless_upgrade_version: true,
             fix_dfinity_owned_node_like_np: false,
-            sequential_np_actions: false,
+            sequential_np_actions: true,
         }))
-        .with_timeout_per_test(Duration::from_secs(50 * 60))
+        .with_timeout_per_test(Duration::from_secs(35 * 60))
         .execute_from_args()?;
 
     Ok(())
