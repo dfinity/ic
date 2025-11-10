@@ -28,7 +28,7 @@
 //! registry, the switch-over is *not* atomic. This is the reason why the
 //! switch-over is handled in this component.
 
-use crate::internal_state::InternalState;
+use crate::internal_state::{InternalState, write_certified_changes_to_local_store};
 use ic_config::{
     Config,
     metrics::{Config as MetricsConfig, Exporter},
@@ -39,7 +39,7 @@ use ic_interfaces_registry::{RegistryClient, ZERO_REGISTRY_VERSION};
 use ic_logger::{ReplicaLogger, debug, error, info, warn};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore, LocalStoreImpl};
+use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
     NodeId, RegistryVersion, crypto::threshold_sig::ThresholdSigPublicKey,
@@ -277,49 +277,27 @@ impl RegistryReplicator {
         // Fill the local registry store by polling the registry canister until we get no
         // more changes.
         loop {
-            // Note, code duplicate in internal_state.rs poll()
-            match registry_canister
-                .get_certified_changes_since(registry_version.get(), &nns_pub_key)
-                .await
+            match write_certified_changes_to_local_store(
+                &registry_canister,
+                &nns_pub_key,
+                local_store.as_ref(),
+                registry_version,
+            )
+            .await
             {
-                Ok((mut records, _, _t)) => {
-                    // We fetched the latest version.
-                    if records.is_empty() {
+                Ok(last_stored_version) => {
+                    if last_stored_version == registry_version {
+                        // The last stored version is the same as the requested version, which
+                        // means we fetched the latest version.
                         break;
                     }
-                    records.sort_by_key(|tr| tr.version);
-                    let changelog = records.iter().fold(Changelog::default(), |mut cl, r| {
-                        let rel_version = (r.version - registry_version).get();
-                        if cl.len() < rel_version as usize {
-                            cl.push(ChangelogEntry::default());
-                        }
-                        cl.last_mut().unwrap().push(KeyMutation {
-                            key: r.key.clone(),
-                            value: r.value.clone(),
-                        });
-                        cl
-                    });
 
-                    let entries = changelog.len();
-
-                    changelog
-                        .into_iter()
-                        .enumerate()
-                        .try_for_each(|(i, cle)| {
-                            let v = registry_version + RegistryVersion::from(i as u64 + 1);
-                            local_store.store(v, cle)
-                        })
-                        .expect("Could not write to local store.");
-
-                    registry_version += RegistryVersion::from(entries as u64);
+                    info!(
+                        logger,
+                        "Stored registry versions up to: {}", last_stored_version
+                    );
+                    registry_version = last_stored_version;
                     timeout = 1;
-
-                    if entries > 0 {
-                        info!(
-                            logger,
-                            "Stored registry versions up to: {}", registry_version
-                        );
-                    }
                 }
                 Err(e) => {
                     warn!(
@@ -482,6 +460,8 @@ impl Drop for RegistryReplicator {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
     use candid::Encode;
     use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
@@ -490,7 +470,7 @@ mod tests {
     use ic_nervous_system_integration_tests::pocket_ic_helpers::install_canister;
     use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
     use ic_nns_test_utils::common::{NnsInitPayloadsBuilder, build_test_registry_wasm};
-    use ic_registry_local_store::LocalStoreWriter;
+    use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStoreWriter};
     use ic_registry_transport::{
         deserialize_atomic_mutate_response,
         pb::v1::{RegistryMutation, registry_mutation::Type},
@@ -701,18 +681,16 @@ mod tests {
         //
         // Check local store
         //
-        let expected_changelog = expected_records
-            .iter()
-            .fold(Changelog::default(), |mut cl, r| {
-                if cl.len() < r.version.get() as usize {
-                    cl.push(ChangelogEntry::default());
-                }
-                cl.last_mut().unwrap().push(KeyMutation {
-                    key: r.key.clone(),
-                    value: r.value.clone(),
+        let mut expected_changelog: BTreeMap<RegistryVersion, ChangelogEntry> = BTreeMap::new();
+        for record in expected_records {
+            expected_changelog
+                .entry(record.version)
+                .or_default()
+                .push(KeyMutation {
+                    key: record.key.clone(),
+                    value: record.value.clone(),
                 });
-                cl
-            });
+        }
         assert_eq!(
             expected_changelog.len(),
             expected_latest_version.get() as usize
@@ -721,7 +699,7 @@ mod tests {
             local_store
                 .get_changelog_since_version(ZERO_REGISTRY_VERSION)
                 .unwrap(),
-            expected_changelog
+            expected_changelog.values().cloned().collect::<Vec<_>>()
         );
     }
 

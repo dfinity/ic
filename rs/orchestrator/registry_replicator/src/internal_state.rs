@@ -17,7 +17,7 @@ use ic_registry_keys::{
     CANISTER_RANGES_PREFIX, ROOT_SUBNET_ID_KEY, make_canister_ranges_key,
     make_subnet_list_record_key, make_subnet_record_key,
 };
-use ic_registry_local_store::{Changelog, ChangelogEntry, KeyMutation, LocalStore};
+use ic_registry_local_store::{ChangelogEntry, KeyMutation, LocalStore};
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_types::{
@@ -146,57 +146,31 @@ impl InternalState {
             (None, None) => return Err("No remote registry canister configured.".to_string()),
         };
 
-        // Poll registry canister and apply changes to local changelog
-        // Note, code duplicate in registry_replicator.rs initialize_local_store()
-        let mut resp = match registry_canister
-            .get_certified_changes_since(latest_version.get(), &nns_pub_key)
-            .await
+        match write_certified_changes_to_local_store(
+            &registry_canister,
+            &nns_pub_key,
+            self.local_store.as_ref(),
+            latest_version,
+        )
+        .await
         {
-            Ok((records, _, _)) => {
+            Ok(last_stored_version) => {
                 self.failed_poll_count = 0;
-                records
+                if last_stored_version != latest_version {
+                    info!(
+                        self.logger,
+                        "Stored registry versions up to: {}", last_stored_version
+                    );
+                }
+                Ok(())
             }
             Err(e) => {
                 self.failed_poll_count += 1;
-                return Err(format!(
+                Err(format!(
                     "Error when trying to fetch updates from NNS: {e:?}",
-                ));
+                ))
             }
-        };
-
-        resp.sort_by_key(|tr| tr.version);
-        let changelog = resp.iter().fold(Changelog::default(), |mut cl, r| {
-            let rel_version = (r.version - latest_version).get();
-            if cl.len() < rel_version as usize {
-                cl.push(ChangelogEntry::default());
-            }
-            cl.last_mut().unwrap().push(KeyMutation {
-                key: r.key.clone(),
-                value: r.value.clone(),
-            });
-            cl
-        });
-
-        let entries = changelog.len();
-
-        changelog
-            .into_iter()
-            .enumerate()
-            .try_for_each(|(i, cle)| {
-                let v = latest_version + RegistryVersion::from(i as u64 + 1);
-                self.local_store.store(v, cle)
-            })
-            .expect("Writing to the FS failed: Stop.");
-
-        if entries > 0 {
-            info!(
-                self.logger,
-                "Stored registry versions up to: {}",
-                latest_version + RegistryVersion::from(entries as u64)
-            );
         }
-
-        Ok(())
     }
 
     /// Iff at version `latest_version` the node id of this node appears on a
@@ -398,6 +372,51 @@ impl InternalState {
             }
         }
     }
+}
+
+/// Poll the registry canister for certified changes since `from_version`, and
+/// write them to the local store.
+/// Returns the latest registry version written to the local store, or an error if
+/// fetching the changes failed.
+/// Panics if writing to the local store fails.
+pub async fn write_certified_changes_to_local_store(
+    registry_canister: &RegistryCanister,
+    nns_pub_key: &ThresholdSigPublicKey,
+    local_store: &dyn LocalStore,
+    from_version: RegistryVersion,
+) -> Result<RegistryVersion, String> {
+    let (mut records, _, _) = registry_canister
+        .get_certified_changes_since(from_version.get(), nns_pub_key)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    records.sort_by_key(|tr| tr.version);
+
+    let mut changelog: BTreeMap<RegistryVersion, ChangelogEntry> = BTreeMap::new();
+    for record in records {
+        changelog
+            .entry(record.version)
+            .or_default()
+            .push(KeyMutation {
+                key: record.key.clone(),
+                value: record.value.clone(),
+            });
+    }
+
+    let last_version = changelog
+        .last_key_value()
+        .map(|(last_version, _)| *last_version)
+        .unwrap_or(from_version); // If `changelog` is empty, i.e. no new changes.
+
+    for (registry_version, changelog_entry) in changelog {
+        local_store
+            .store(registry_version, changelog_entry)
+            .expect("Writing to the FS failed at version {registry_version}");
+    }
+
+    // If the local store did not panic in the loop above, then `last_version` is indeed the last
+    // version stored on disk.
+    Ok(last_version)
 }
 
 /// Standalone function for switch-over logic, for unit testing.
