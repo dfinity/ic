@@ -102,11 +102,14 @@ impl RingBuffer {
             self.io.write_bytes(tail, first);
             self.io.write_bytes(h.data_offset, second);
         }
-        self.update_lookup_table_last(record, h.data_tail);
+        let last_record_position = h.data_tail;
         h.data_tail = (h.data_tail + added_size) % h.data_capacity;
         h.data_size = h.data_size.saturating_add(added_size);
         h.next_idx = record.idx + 1;
         self.io.write_header(&h);
+
+        // Update the lookup table after writing the record and updating the header.
+        self.update_lookup_table_last(record, last_record_position);
     }
 
     /// Ensures there is enough free space for bytes_len by removing old records.
