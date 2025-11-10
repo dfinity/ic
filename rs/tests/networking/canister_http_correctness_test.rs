@@ -300,6 +300,7 @@ fn no_data_certificate_in_transform_function(env: TestEnv) {
                 }),
                 max_response_bytes: None,
                 is_replicated: None,
+                pricing_version: None,
             },
             cycles: HTTP_REQUEST_CYCLE_PAYMENT,
         },
