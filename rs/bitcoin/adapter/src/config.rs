@@ -51,7 +51,7 @@ pub struct Config<Network> {
     pub address_limits: (usize, usize),
     /// Directory that stores cached data
     pub cache_dir: Option<PathBuf>,
-    /// Ping timeout duration.
+    /// Request timeout duration.
     pub request_timeout: Option<Duration>,
 }
 
