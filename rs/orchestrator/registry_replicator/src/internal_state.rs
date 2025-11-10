@@ -541,21 +541,16 @@ mod test {
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{CanisterId, PrincipalId, SubnetId};
+    use ic_types::{CanisterId, SubnetId};
+    use ic_types_test_utils::ids::SUBNET_2;
+    use ic_types_test_utils::ids::SUBNET_3;
+    use ic_types_test_utils::ids::{NODE_1, SUBNET_1};
     use std::collections::BTreeMap;
     use std::convert::TryFrom;
     use std::sync::Arc;
     use tempfile::TempDir;
 
     const TEST_POLL_DELAY: Duration = Duration::from_secs(1);
-
-    fn create_test_subnet_id(id: u64) -> SubnetId {
-        SubnetId::from(PrincipalId::new_subnet_test_id(id))
-    }
-
-    fn create_test_node_id(id: u64) -> NodeId {
-        NodeId::from(PrincipalId::new_node_test_id(id))
-    }
 
     fn create_threshold_sig_public_key(byte: u8) -> ThresholdSigPublicKey {
         let (_, pk, _) = CertificateBuilder::new(CanisterData {
@@ -650,10 +645,7 @@ mod test {
                     RegistryVersion::from(1),
                     vec![KeyMutation {
                         key: ROOT_SUBNET_ID_KEY.to_string(),
-                        value: Some(
-                            ic_types::subnet_id_into_protobuf(create_test_subnet_id(1))
-                                .encode_to_vec(),
-                        ),
+                        value: Some(ic_types::subnet_id_into_protobuf(SUBNET_1).encode_to_vec()),
                     }],
                 )
                 .expect("Failed to set root subnet ID");
@@ -661,7 +653,7 @@ mod test {
                 .store(
                     RegistryVersion::from(2),
                     vec![KeyMutation {
-                        key: make_crypto_threshold_signing_pubkey_key(create_test_subnet_id(1)),
+                        key: make_crypto_threshold_signing_pubkey_key(SUBNET_1),
                         value: Some(
                             PbPublicKey::from(create_threshold_sig_public_key(1)).encode_to_vec(),
                         ),
@@ -672,7 +664,7 @@ mod test {
                 .store(
                     RegistryVersion::from(3),
                     vec![KeyMutation {
-                        key: make_node_record_key(create_test_node_id(1)),
+                        key: make_node_record_key(NODE_1),
                         value: Some(
                             NodeRecord {
                                 http: Some(http_endpoint.clone()),
@@ -687,10 +679,10 @@ mod test {
                 .store(
                     RegistryVersion::from(4),
                     vec![KeyMutation {
-                        key: make_subnet_record_key(create_test_subnet_id(1)),
+                        key: make_subnet_record_key(SUBNET_1),
                         value: Some(
                             SubnetRecord {
-                                membership: vec![create_test_node_id(1).get().to_vec()],
+                                membership: vec![NODE_1.get().to_vec()],
                                 ..Default::default()
                             }
                             .encode_to_vec(),
@@ -753,9 +745,9 @@ mod test {
 
     #[test]
     fn test_apply_switch_over_modifies_last_changelog_entry_and_updates_keys_as_expected() {
-        let old_nns_subnet_id = create_test_subnet_id(1);
-        let new_nns_subnet_id = create_test_subnet_id(2);
-        let other_subnet_id = create_test_subnet_id(3);
+        let old_nns_subnet_id = SUBNET_1;
+        let new_nns_subnet_id = SUBNET_2;
+        let other_subnet_id = SUBNET_3;
         let new_nns_subnet_record = create_test_subnet_record(true, SubnetType::Application);
 
         // Create routing table with old NNS subnet and another subnet

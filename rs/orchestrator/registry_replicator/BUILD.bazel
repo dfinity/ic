@@ -42,6 +42,7 @@ DEV_DEPENDENCIES = [
     "//rs/registry/proto_data_provider",
     "//rs/registry/transport",
     "//rs/test_utilities/logger",
+    "//rs/types/types_test_utils",
     "@crate_index//:candid",
     "@crate_index//:rand",
 ]
