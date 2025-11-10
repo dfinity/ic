@@ -211,7 +211,7 @@ impl RegistryReplicator {
         logger: &ReplicaLogger,
         config: &Config,
     ) -> (Vec<Url>, Option<ThresholdSigPublicKey>) {
-        let nns_urls = match config.registration.nns_url.clone() {
+        let nns_urls = match &config.registration.nns_url {
             None => {
                 info!(logger, "No NNS Url is configured.");
                 vec![]
@@ -228,7 +228,7 @@ impl RegistryReplicator {
                 .collect::<Vec<Url>>(),
         };
 
-        let nns_pub_key = match config.registration.nns_pub_key_pem.clone() {
+        let nns_pub_key = match &config.registration.nns_pub_key_pem {
             None => {
                 info!(logger, "No NNS public key is configured.");
                 None
