@@ -35,28 +35,21 @@ pub async fn set_exclusive_controller(canister_id: Principal) -> ProcessingResul
             controllers: Some(vec![canister_self()]),
         },
     };
-    match Call::bounded_wait(Principal::management_canister(), "update_settings")
+    match Call::unbounded_wait(Principal::management_canister(), "update_settings")
         .with_arg(args)
         .await
     {
         Ok(_) => ProcessingResult::Success(()),
-        // if we fail due to not being controller, this is a fatal failure
         Err(e) => {
             println!("Call `update_settings` for {} failed: {:?}", canister_id, e);
             match e {
                 ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
                 | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
                 ic_cdk::call::CallFailed::CallRejected(call_rejected) => {
-                    if call_rejected
-                        .reject_message()
-                        .contains("Only the controllers of the canister")
-                    {
-                        ProcessingResult::FatalFailure(format!(
-                            "Failed to set controller of canister {canister_id}"
-                        ))
-                    } else {
-                        ProcessingResult::NoProgress
-                    }
+                    ProcessingResult::FatalFailure(format!(
+                        "Failed to set controller of canister {canister_id}: {}",
+                        call_rejected
+                    ))
                 }
             }
         }
@@ -68,14 +61,14 @@ pub async fn set_original_controllers(
     canister_id: Principal,
     controllers: Vec<Principal>,
     subnet_id: Principal,
-) -> ProcessingResult<(), Infallible> {
+) -> ProcessingResult<(), String> {
     let args = UpdateSettingsArgs {
         canister_id,
         settings: CanisterSettings {
             controllers: Some(controllers),
         },
     };
-    match Call::bounded_wait(subnet_id, "update_settings")
+    match Call::unbounded_wait(subnet_id, "update_settings")
         .with_arg(args)
         .await
     {
@@ -85,18 +78,10 @@ pub async fn set_original_controllers(
             ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
             | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
             ic_cdk::call::CallFailed::CallRejected(call_rejected) => {
-                if call_rejected
-                    .reject_message()
-                    .contains("Only the controllers of the canister")
-                {
-                    ProcessingResult::Success(())
-                } else {
-                    println!(
-                        "Call `update_settings` for canister: {} subnet: {} failed: {:?}",
-                        canister_id, subnet_id, e
-                    );
-                    ProcessingResult::NoProgress
-                }
+                ProcessingResult::FatalFailure(format!(
+                    "Failed to restore controllers of canister {canister_id}: {}",
+                    call_rejected
+                ))
             }
         },
     }

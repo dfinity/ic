@@ -597,6 +597,72 @@ async fn concurrent_migration_target() {
 }
 
 #[tokio::test]
+async fn source_deleted_before_migration() {
+    let Setup {
+        pic,
+        sources,
+        targets,
+        source_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    let source = sources[0];
+    let target = targets[0];
+
+    let args = MigrateCanisterArgs { source, target };
+    migrate_canister(&pic, sender, &args).await.unwrap();
+
+    // Delete the source right away after requesting its migration.
+    pic.delete_canister(source, Some(sender)).await.unwrap();
+
+    for _ in 0..10 {
+        // advance time so that timers are triggered
+        pic.advance_time(Duration::from_secs(1)).await;
+        pic.tick().await;
+    }
+
+    let status = get_status(&pic, sender, &args).await;
+    assert_eq!(status.len(), 1);
+    assert!(matches!(
+        &status[0],
+        MigrationStatus::Failed {reason, ..} if reason.contains(&format!("Failed to set controller of canister {}", source))
+    ));
+}
+
+#[tokio::test]
+async fn target_deleted_before_migration() {
+    let Setup {
+        pic,
+        sources,
+        targets,
+        source_controllers,
+        ..
+    } = setup(Settings::default()).await;
+    let sender = source_controllers[0];
+    let source = sources[0];
+    let target = targets[0];
+
+    let args = MigrateCanisterArgs { source, target };
+    migrate_canister(&pic, sender, &args).await.unwrap();
+
+    // Delete the target right away after requesting its migration.
+    pic.delete_canister(target, Some(sender)).await.unwrap();
+
+    for _ in 0..10 {
+        // advance time so that timers are triggered
+        pic.advance_time(Duration::from_secs(1)).await;
+        pic.tick().await;
+    }
+
+    let status = get_status(&pic, sender, &args).await;
+    assert_eq!(status.len(), 1);
+    assert!(matches!(
+        &status[0],
+        MigrationStatus::Failed {reason, ..} if reason.contains(&format!("Failed to set controller of canister {}", target))
+    ));
+}
+
+#[tokio::test]
 async fn validation_fails_not_allowlisted() {
     let special_caller = Principal::self_authenticating(vec![42]);
     let Setup {

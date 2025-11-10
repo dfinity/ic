@@ -341,7 +341,7 @@ pub async fn process_all_failed() {
     );
 }
 
-/// Accepts a `Failed` request, returns `Event::Failed` or must be retried.
+/// Accepts a `Failed` request, returns `Event::Failed`.
 // TODO: Confirm this only occurs before `rename_canister`, otherwise the subnet_id args are wrong.
 async fn process_failed(request: RequestState) -> ProcessingResult<EventType, Infallible> {
     let RequestState::Failed { request, reason } = request else {
@@ -355,21 +355,31 @@ async fn process_failed(request: RequestState) -> ProcessingResult<EventType, In
         request.source_subnet,
     )
     .await;
+    match res1 {
+        ProcessingResult::Success(_) => (),
+        ProcessingResult::NoProgress => println!(
+            "Error: no progress when restoring controllers of canister {}",
+            request.source
+        ),
+        ProcessingResult::FatalFailure(ref reason) => println!("Error: {}", reason),
+    };
+
     let res2 = set_original_controllers(
         request.target,
         request.target_original_controllers.clone(),
         request.target_subnet,
     )
     .await;
+    match res2 {
+        ProcessingResult::Success(_) => (),
+        ProcessingResult::NoProgress => println!(
+            "Error: no progress when restoring controllers of canister {}",
+            request.target
+        ),
+        ProcessingResult::FatalFailure(ref reason) => println!("Error: {}", reason),
+    };
 
-    if res1.is_fatal_failure() || res2.is_fatal_failure() {
-        println!("Error: Unreachable: `set_original_controllers` must not return Failure");
-    }
-    // If any did not succeed, we have to retry later.
-    if res1.is_no_progress() || res2.is_no_progress() {
-        return ProcessingResult::NoProgress;
-    }
-    // We successfully returned controllership.
+    // We successfully attempted to return controllership.
     ProcessingResult::Success(EventType::Failed { request, reason })
 }
 
