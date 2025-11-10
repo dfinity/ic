@@ -1,5 +1,6 @@
 mod state;
 
+use crate::errors::Details;
 use crate::{
     convert,
     convert::state::State,
@@ -42,6 +43,7 @@ use on_wire::{FromWire, IntoWire};
 use rosetta_core::convert::principal_id_from_public_key;
 use serde_json::{Number, Value, from_value, map::Map};
 use std::convert::{TryFrom, TryInto};
+use tracing::log::{debug, warn};
 
 /// This module converts from ledger_canister data structures to Rosetta data
 /// structures
@@ -111,8 +113,15 @@ pub fn operations_to_requests(
         if o.coin_change.is_some() {
             return Err(op_error(o, "Coin changes are not permitted".into()));
         }
-        let account = from_model_account_identifier(o.account.as_ref().unwrap())
-            .map_err(|e| op_error(o, e))?;
+        let account = from_model_account_identifier(o.account.as_ref().unwrap()).map_err(|e| {
+            op_error(
+                o,
+                format!(
+                    "error converting '{:?}' to account identifier: {e:?}",
+                    o.account.as_ref()
+                ),
+            )
+        })?;
 
         let validate_neuron_management_op = || {
             if o.amount.is_some() && o.type_.parse::<OperationType>()? != OperationType::Disburse {
@@ -136,7 +145,12 @@ pub fn operations_to_requests(
             }
         };
 
-        match o.type_.parse::<OperationType>()? {
+        let parsed_type = o.type_.parse::<OperationType>().map_err(|e| {
+            let err_msg = format!("Error parsing operation type '{}': {e}", o.type_);
+            debug!("{}", err_msg);
+            ApiError::InvalidTransaction(false, Details::from(err_msg))
+        })?;
+        match parsed_type {
             OperationType::Transaction => {
                 let amount = o
                     .amount

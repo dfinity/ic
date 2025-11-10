@@ -1,13 +1,3 @@
-use candid::Encode;
-use ic_nns_common::pb::v1::NeuronId;
-use ic_types::{
-    PrincipalId,
-    messages::{Blob, HttpCanisterUpdate, MessageId},
-};
-use icp_ledger::{Memo, Operation, SendArgs, Tokens};
-use rand::Rng;
-use std::{collections::HashMap, sync::Arc, time::Duration};
-
 use crate::{
     convert,
     convert::{make_read_state_from_update, to_arg, to_model_account_identifier},
@@ -28,11 +18,21 @@ use crate::{
         StopDissolve,
     },
 };
+use candid::Encode;
+use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance_api::{
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
     manage_neuron::{self, Command, NeuronIdOrSubaccount, configure},
 };
+use ic_types::{
+    PrincipalId,
+    messages::{Blob, HttpCanisterUpdate, MessageId},
+};
+use icp_ledger::{Memo, Operation, SendArgs, Tokens};
+use rand::Rng;
 use rosetta_core::convert::principal_id_from_public_key;
+use std::{collections::HashMap, sync::Arc, time::Duration};
+use tracing::log::{debug, warn};
 
 impl RosettaRequestHandler {
     /// Generate an Unsigned Transaction and Signing Payloads.
@@ -49,7 +49,9 @@ impl RosettaRequestHandler {
         let ops = msg.operations.clone();
 
         let pks = msg.public_keys.clone().ok_or_else(|| {
-            ApiError::internal_error("Expected field 'public_keys' to be populated")
+            const NO_PUBLIC_KEYS: &str = "Expected field 'public_keys' to be populated";
+            debug!("{NO_PUBLIC_KEYS}");
+            ApiError::internal_error(NO_PUBLIC_KEYS)
         })?;
         let transactions =
             convert::operations_to_requests(&ops, false, self.ledger.token_symbol())?;
