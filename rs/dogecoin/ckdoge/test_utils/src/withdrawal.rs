@@ -90,6 +90,7 @@ where
     }
 }
 
+/// Step 3: wait for the withdrawal to be processed by the minter
 pub struct ProcessWithdrawal<S> {
     setup: S,
     account: Account,
@@ -177,6 +178,7 @@ where
     }
 }
 
+/// Step 4: wait for the Dogecoin transaction
 pub struct DogecoinWithdrawalTransactionFlow<S> {
     setup: S,
     withdrawal_amount: u64,
@@ -236,6 +238,8 @@ where
     }
 }
 
+/// Step 5: wait for enough confirmations for the transaction to be considered fiunalized by the minter.
+// TODO XC-496: transaction finalization
 pub struct WithdrawalFlowEnd<S> {
     setup: S,
     withdrawal_amount: u64,
