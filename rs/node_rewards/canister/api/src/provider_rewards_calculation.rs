@@ -63,7 +63,8 @@ pub struct Type3RegionBaseRewards {
 }
 #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct DailyNodeProviderRewards {
-    pub rewards_total_xdr_permyriad: Option<u64>,
+    pub total_base_rewards_xdr_permyriad: Option<u64>,
+    pub total_adjusted_rewards_xdr_permyriad: Option<u64>,
     pub base_rewards: Vec<NodeTypeRegionBaseRewards>,
     pub base_rewards_type3: Vec<Type3RegionBaseRewards>,
     pub daily_nodes_rewards: Vec<DailyNodeRewards>,

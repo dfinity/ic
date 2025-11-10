@@ -154,7 +154,8 @@ impl TryFrom<native_types::DailyNodeProviderRewards> for DailyNodeProviderReward
 
     fn try_from(src: native_types::DailyNodeProviderRewards) -> Result<Self, Self::Error> {
         Ok(Self {
-            rewards_total_xdr_permyriad: Some(src.rewards_total_xdr_permyriad),
+            total_base_rewards_xdr_permyriad: Some(src.total_base_rewards_xdr_permyriad),
+            total_adjusted_rewards_xdr_permyriad: Some(src.total_adjusted_rewards_xdr_permyriad),
             base_rewards: src
                 .base_rewards
                 .into_iter()
