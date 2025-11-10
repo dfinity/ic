@@ -428,43 +428,32 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
         let mut handles = JoinSet::new();
 
         for vm in hosts_to_fix {
-            if cfg.sequential_np_actions {
+            let logger = logger.clone();
+            let env = env.clone();
+            let vm = vm.clone();
+            let recovery_img_hash = recovery_img_hash.clone();
+            let artifacts_hash = artifacts_hash.clone();
+            let upgrade_version = upgrade_version.clone();
+
+            handles.spawn(async move {
                 simulate_node_provider_action(
                     &logger,
                     &env,
-                    vm,
+                    &vm,
                     RECOVERY_GUESTOS_IMG_VERSION,
                     &recovery_img_hash,
                     &artifacts_hash,
                     &upgrade_version,
                 )
-                .await;
-            } else {
-                let logger = logger.clone();
-                let env = env.clone();
-                let vm = vm.clone();
-                let recovery_img_hash = recovery_img_hash.clone();
-                let artifacts_hash = artifacts_hash.clone();
-                let upgrade_version = upgrade_version.clone();
+                .await
+            });
 
-                handles.spawn(async move {
-                    simulate_node_provider_action(
-                        &logger,
-                        &env,
-                        &vm,
-                        RECOVERY_GUESTOS_IMG_VERSION,
-                        &recovery_img_hash,
-                        &artifacts_hash,
-                        &upgrade_version,
-                    )
-                    .await
-                });
+            if cfg.sequential_np_actions {
+                handles.join_next().await;
             }
         }
 
-        if !cfg.sequential_np_actions {
-            handles.join_all().await;
-        }
+        handles.join_all().await;
     });
 
     info!(logger, "Ensure the subnet is healthy after the recovery");
