@@ -691,8 +691,6 @@ fn test_cycles_ledger() {
     .0
     .unwrap();
 
-    // The cycles ledger index reports a wrong balance due to a bug in the interaction between the cycles ledger and its index
-    // (this bug is independent of PocketIC and to be fixed separately).
     check_balance(test_identity, 0);
     check_cycles(init_cycles);
 
@@ -717,8 +715,6 @@ fn test_cycles_ledger() {
     .0
     .unwrap();
 
-    // The cycles ledger index reports a wrong balance due to a bug in the interaction between the cycles ledger and its index
-    // (this bug is independent of PocketIC and to be fixed separately).
     check_balance(Principal::anonymous(), 0);
     check_cycles(init_cycles + anonymous_balance);
 }
