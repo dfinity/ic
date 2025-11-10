@@ -2,21 +2,24 @@ use super::byte_rw::{ByteReader, ByteWriter};
 use crate::canister_state::system_state::log_memory_store::{
     log_record::LogRecord, memory::MemoryPosition,
 };
+use crate::page_map::PAGE_SIZE;
 use std::convert::From;
 
-const BUCKET_SIZE: usize = 4 * 1024; // 4 KiB per bucket.
+/// Size of each bucket in the lookup table.
+const BUCKET_SIZE: usize = PAGE_SIZE;
+const _: () = assert!(BUCKET_SIZE >= PAGE_SIZE); // Should not be lower than 4 KiB OS page size.
 
-/// `LookupTable` — compact index mapping fixed-size buckets of the data region
+/// A compact index mapping fixed-size buckets of the data region
 /// to their latest known log record within each bucket.
 ///
 /// Each bucket covers `BUCKET_SIZE` bytes. When a new record is written, the
-/// corresponding bucket entry is updated with its `{idx, ts_nanos, position}`.
+/// corresponding bucket entry is updated with its latest log record lookup entry.
 ///
 /// The table also stores `front` — the oldest available record in the ring
 /// buffer — to define the lower bound of the valid record range.
 #[derive(Debug, PartialEq)]
 pub(crate) struct LookupTable {
-    /// One entry per bucket — holds the latest `{idx, ts_nanos, position}`.
+    /// One entry per bucket — holds the latest log record lookup entry.
     entries: Vec<LookupEntry>,
 
     /// The oldest available record (front) in the ring buffer.
