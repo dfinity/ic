@@ -201,6 +201,12 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
     chmod 0644 /opt/ic/share/*
 
+# Create wrapper script to prevent bash escape in restricted shell
+# A symlink won't work because bash checks its invocation name ($0), not the symlink target
+RUN echo '#!/bin/sh' > /opt/ic/bin/bash && \
+    echo 'exec /bin/rbash "$@"' >> /opt/ic/bin/bash && \
+    chmod 0755 /opt/ic/bin/bash
+
 # ------ DEV VARIANT ---------------------------------------------
 
 # The following steps apply conditionally to the dev image ONLY

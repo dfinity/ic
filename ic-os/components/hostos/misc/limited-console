@@ -63,7 +63,9 @@ execute_command() {
             echo "Type 'exit' to return to the limited console menu."
             echo ""
             # Start rbash with restricted environment and PATH
-            PATH="/bin:/usr/bin:/opt/ic/bin" /bin/rbash
+            # IMPORTANT: /opt/ic/bin must come FIRST so 'bash' resolves to /opt/ic/bin/bash (rbash)
+            # instead of /bin/bash, preventing shell escape. Standard commands still work via /bin.
+            PATH="/opt/ic/bin:/bin:/usr/bin" /bin/rbash
             ;;
         "clear")
             clear
