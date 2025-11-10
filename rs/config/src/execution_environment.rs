@@ -133,7 +133,7 @@ pub const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 pub const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
 
 // The ID of the staging Bitcoin mainnet canister.
-// This canisters may be used in the future for testing and to validate canister upgrades.
+// This canister may be used in the future for testing and to validate canister upgrades.
 const BITCOIN_MAINNET_STAGING_CANISTER_ID: &str = "axowo-ciaaa-aaaad-acs7q-cai";
 
 // The ID of the "soft launch" Bitcoin mainnet canister.
@@ -150,7 +150,7 @@ pub const DOGECOIN_TESTNET_CANISTER_ID: &str = "hd7hi-kqaaa-aaaan-aaaea-cai";
 pub const DOGECOIN_MAINNET_CANISTER_ID: &str = "gordg-fyaaa-aaaan-aaadq-cai";
 
 // The ID of the staging Dogecoin mainnet canister.
-// This canisters may be used in the future for testing and to validate canister upgrades.
+// This canister may be used in the future for testing and to validate canister upgrades.
 const DOGECOIN_MAINNET_STAGING_CANISTER_ID: &str = "bhuiy-ciaaa-aaaad-abwea-cai";
 
 /// The capacity of the Wasm compilation cache.
