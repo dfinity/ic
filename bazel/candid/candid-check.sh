@@ -39,4 +39,5 @@ echo "$DID_PATH passed candid checks"
 if [[ "${ENABLE_ALSO_REVERSE:-}" == "1" ]]; then
     echo "running also-reverse check"
     "$DID_CHECK_BIN" "$tmpfile" "$DID_PATH"
+    echo "$DID_PATH passed reversed candid checks"
 fi
