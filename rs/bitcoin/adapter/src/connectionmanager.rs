@@ -27,7 +27,7 @@ use crate::{
         AddressBook, AddressBookError, AddressEntry, AddressTimestamp, validate_services,
     },
     common::{BlockHeight, BlockchainNetwork, DEFAULT_CHANNEL_BUFFER_SIZE, MINIMUM_VERSION_NUMBER},
-    config::Config,
+    config::{Config, DEFAULT_PING_TIMEOUT},
     connection::{Connection, ConnectionConfig, ConnectionState, PingState},
     metrics::RouterMetrics,
     stream::{StreamConfig, StreamEvent, StreamEventKind},
@@ -114,6 +114,7 @@ pub struct ConnectionManager<Network: BlockchainNetwork> {
     /// This field is used for the version nonce generation.
     rng: StdRng,
     metrics: RouterMetrics,
+    ping_timeout: Duration,
 }
 
 impl<Network: BlockchainNetwork> ConnectionManager<Network> {
@@ -146,6 +147,9 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
             network_message_sender,
             stream_event_receiver,
             metrics,
+            ping_timeout: config
+                .ping_timeout
+                .unwrap_or(Duration::from_secs(DEFAULT_PING_TIMEOUT)),
         }
     }
 
@@ -332,6 +336,7 @@ impl<Network: BlockchainNetwork> ConnectionManager<Network> {
             address_entry,
             handle: join_handle,
             writer,
+            ping_timeout: self.ping_timeout,
         });
         self.connections.insert(address, conn);
         Ok(())
@@ -980,6 +985,7 @@ mod test {
                     address_entry: AddressEntry::Discovered(addr),
                     handle: tokio::task::spawn(async {}),
                     writer,
+                    ping_timeout: manager.ping_timeout,
                 },
                 ConnectionState::Connected { timestamp },
                 timestamp,
@@ -1024,6 +1030,7 @@ mod test {
                     address_entry: AddressEntry::Seed(addr),
                     handle: tokio::task::spawn(async {}),
                     writer: writer.clone(),
+                    ping_timeout: manager.ping_timeout,
                 },
                 ConnectionState::AwaitingAddresses {
                     timestamp: timestamp1,
@@ -1036,6 +1043,7 @@ mod test {
                     address_entry: AddressEntry::Seed(addr2),
                     handle: tokio::task::spawn(async {}),
                     writer,
+                    ping_timeout: manager.ping_timeout,
                 },
                 ConnectionState::AwaitingAddresses {
                     timestamp: timestamp2,
@@ -1094,6 +1102,7 @@ mod test {
                     address_entry: AddressEntry::Seed(addr),
                     handle: tokio::task::spawn(async {}),
                     writer: writer.clone(),
+                    ping_timeout: manager.ping_timeout,
                 },
                 ConnectionState::AwaitingAddresses {
                     timestamp: timestamp1,
@@ -1106,6 +1115,7 @@ mod test {
                     address_entry: AddressEntry::Seed(addr2),
                     handle: tokio::task::spawn(async {}),
                     writer,
+                    ping_timeout: manager.ping_timeout,
                 },
                 ConnectionState::HandshakeComplete,
                 timestamp2,
@@ -1156,6 +1166,7 @@ mod test {
                 address_entry: AddressEntry::Discovered(socket_2),
                 handle: tokio::task::spawn(async {}),
                 writer,
+                ping_timeout: manager.ping_timeout,
             },
             ConnectionState::Connected { timestamp },
             timestamp,
@@ -1204,6 +1215,7 @@ mod test {
                 address_entry: AddressEntry::Seed(socket_2),
                 handle: tokio::task::spawn(async {}),
                 writer,
+                ping_timeout: manager.ping_timeout,
             },
             ConnectionState::Connected { timestamp },
             timestamp,

@@ -5,8 +5,6 @@ use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
 
 /// This const represents how often a ping should be sent.
 const PING_INTERVAL: Duration = Duration::from_secs(120);
-/// This const represents how long the adapter should wait for a pong message.
-const PING_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// This enum is used to represent possible errors seen when utilizing
 /// the [Connection](crate::connection::Connection) struct.
@@ -32,6 +30,8 @@ pub struct ConnectionConfig<NetworkMessage> {
     pub handle: JoinHandle<()>,
     /// This field is used to send network messages to the related stream.
     pub writer: UnboundedSender<NetworkMessage>,
+    /// This field is used to specify ping timeout duration.
+    pub ping_timeout: Duration,
 }
 
 /// This enum represents the various states that the connection could be in.
@@ -91,6 +91,8 @@ pub struct Connection<NetworkMessage> {
     writer: UnboundedSender<NetworkMessage>,
     /// This field is used to track the current ping status.
     ping_state: PingState,
+    /// Ping timeout
+    ping_timeout: Duration,
 }
 
 impl<NetworkMessage> Connection<NetworkMessage> {
@@ -101,6 +103,7 @@ impl<NetworkMessage> Connection<NetworkMessage> {
             address_entry,
             handle,
             writer,
+            ping_timeout,
         } = config;
 
         let timestamp = SystemTime::now();
@@ -113,6 +116,7 @@ impl<NetworkMessage> Connection<NetworkMessage> {
             ping_state: PingState::Idle {
                 last_pong_at: timestamp,
             },
+            ping_timeout,
         }
     }
 
@@ -234,7 +238,7 @@ impl<NetworkMessage> Connection<NetworkMessage> {
                 ping_sent_at,
                 nonce: _,
             } => match ping_sent_at.elapsed() {
-                Ok(duration) => duration > PING_TIMEOUT,
+                Ok(duration) => duration > self.ping_timeout,
                 // Somehow the connection has a system time from the future.
                 // In this case, the ping should be marked as timed out.
                 Err(_) => true,
@@ -270,6 +274,7 @@ mod test {
                 address_entry,
                 handle,
                 writer,
+                ping_timeout,
             } = config;
 
             Self {
@@ -278,6 +283,7 @@ mod test {
                 state,
                 writer,
                 ping_state: PingState::Idle { last_pong_at },
+                ping_timeout,
             }
         }
     }
@@ -298,6 +304,7 @@ mod test {
                 address_entry,
                 handle,
                 writer,
+                ping_timeout: Duration::from_secs(crate::config::DEFAULT_PING_TIMEOUT),
             }),
             reader,
         )
