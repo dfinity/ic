@@ -185,6 +185,8 @@ pub enum SystemApiCallId {
     CostCreateCanister,
     /// Tracker for `ic0.cost_http_request()`
     CostHttpRequest,
+    /// Tracker for `ic0.cost_http_request_v2()`
+    CostHttpRequestV2,
     /// Tracker for `ic0.cost_sign_with_ecdsa()`
     CostSignWithEcdsa,
     /// Tracker for `ic0.cost_sign_with_schnorr()`
@@ -1310,6 +1312,14 @@ pub trait SystemApi {
         &self,
         request_size: u64,
         max_res_bytes: u64,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
+    fn ic0_cost_http_request_v2(
+        &self,
+        params_src: usize,
+        params_size: usize,
         dst: usize,
         heap: &mut [u8],
     ) -> HypervisorResult<()>;

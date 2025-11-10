@@ -1216,7 +1216,10 @@ pub mod governance_error {
         Unspecified = 0,
         /// The operation was successfully completed.
         Ok = 1,
-        /// This operation is not available, e.g., not implemented.
+        /// There have been too many instances of this operation recently. In
+        /// practice, this usually just means that another instance of this operation
+        /// is currently in flight, but another reason this might come up is rate
+        /// limiting.
         Unavailable = 2,
         /// The caller is not authorized to perform this operation.
         NotAuthorized = 3,
@@ -3235,7 +3238,35 @@ pub struct ListNodeProvidersResponse {
     #[prost(message, repeated, tag = "1")]
     pub node_providers: ::prost::alloc::vec::Vec<NodeProvider>,
 }
-/// The monthly Node Provider rewards as of a point in time.
+/// Date UTC used in NodeProviderRewards to define their validity boundaries
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct DateUtc {
+    #[prost(uint32, tag = "1")]
+    pub year: u32,
+    #[prost(uint32, tag = "2")]
+    pub month: u32,
+    #[prost(uint32, tag = "3")]
+    pub day: u32,
+}
+/// The monthly Node Provider rewards, representing the distribution of rewards for a specific time period.
+///
+/// Prior to the introduction of the performance-based reward algorithm, rewards were computed from a
+/// single registry snapshot (identified by `registry_version`). After performance-based rewards were enabled,
+/// rewards depend on node metrics collected over a date range, making `start_date` and `end_date` essential
+/// for defining the covered period. In this case, `registry_version` is no longer set.
+///
+/// Summary of field usage:
+/// - Before performance-based rewards: `registry_version` is Some; `start_date` and `end_date` are None.
+/// - After performance-based rewards:  `start_date` and `end_date` are Some; `registry_version` is None.
 #[derive(
     candid::CandidType,
     candid::Deserialize,
@@ -3249,6 +3280,12 @@ pub struct MonthlyNodeProviderRewards {
     /// The time when the rewards were calculated.
     #[prost(uint64, tag = "1")]
     pub timestamp: u64,
+    /// The start date (included) that these rewards cover.
+    #[prost(message, optional, tag = "8")]
+    pub start_date: ::core::option::Option<DateUtc>,
+    /// The end date (included) that these rewards cover.
+    #[prost(message, optional, tag = "9")]
+    pub end_date: ::core::option::Option<DateUtc>,
     /// The Rewards calculated and rewarded.
     #[prost(message, repeated, tag = "2")]
     pub rewards: ::prost::alloc::vec::Vec<RewardNodeProvider>,

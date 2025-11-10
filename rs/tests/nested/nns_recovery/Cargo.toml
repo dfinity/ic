@@ -12,6 +12,7 @@ ic_consensus_system_test_subnet_recovery = { path = "../../consensus/subnet_reco
 ic_consensus_system_test_utils = { path = "../../consensus/utils" }
 ic-recovery = { path = "../../../recovery" }
 ic-system-test-driver = { path = "../../driver" }
+ic-types = { path = "../../../types/types" }
 nested = { path = "../../nested" }
 rand = { workspace = true }
 sha2 = { workspace = true }
@@ -37,3 +38,7 @@ path = "nr_local.rs"
 [[bin]]
 name = "ic-systest-nested-nns-recovery-no-bless-fix-like-np"
 path = "nr_no_bless_fix_like_np.rs"
+
+[[bin]]
+name = "ic-systest-nested-nns-recovery-sequential-np-actions"
+path = "nr_seq_np_actions.rs"

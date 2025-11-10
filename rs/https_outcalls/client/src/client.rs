@@ -8,7 +8,7 @@ use ic_https_outcalls_service::{
 };
 use ic_interfaces::execution_environment::{TransformExecutionInput, TransformExecutionService};
 use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
-use ic_logger::{ReplicaLogger, info};
+use ic_logger::{ReplicaLogger, info, warn};
 use ic_management_canister_types_private::{CanisterHttpResponsePayload, TransformArgs};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
@@ -139,10 +139,32 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         http_method: request_http_method,
                         max_response_bytes: request_max_response_bytes,
                         transform: request_transform,
+                        pricing_version: request_pricing_version,
                         ..
                     },
                 socks_proxy_addrs,
             } = canister_http_request;
+
+            if request_pricing_version == ic_types::canister_http::PricingVersion::PayAsYouGo {
+                warn!(
+                    log,
+                    "Canister HTTP request with PayAsYouGo pricing is not supported yet: request_id {}, sender {}, process_id: {}",
+                    request_id,
+                    request_sender,
+                    std::process::id(),
+                );
+                let _ = permit.send(CanisterHttpResponse {
+                    id: request_id,
+                    timeout: request_timeout,
+                    canister_id: request_sender,
+                    content: CanisterHttpResponseContent::Reject(CanisterHttpReject {
+                        reject_code: RejectCode::SysFatal,
+                        message: "Canister HTTP request with PayAsYouGo pricing is not supported"
+                            .to_string(),
+                    }),
+                });
+                return;
+            }
 
             let adapter_req_timer = Instant::now();
             let max_response_size_bytes = request_max_response_bytes
@@ -384,7 +406,7 @@ mod tests {
     use ic_interfaces::execution_environment::{QueryExecutionError, QueryExecutionResponse};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities_types::messages::RequestBuilder;
-    use ic_types::canister_http::{Replication, Transform};
+    use ic_types::canister_http::{PricingVersion, Replication, Transform};
     use ic_types::{
         Time, canister_http::CanisterHttpMethod, messages::CallbackId, time::UNIX_EPOCH,
         time::current_time,
@@ -476,6 +498,7 @@ mod tests {
                 }),
                 time: UNIX_EPOCH,
                 replication: Replication::FullyReplicated,
+                pricing_version: PricingVersion::Legacy,
             },
             socks_proxy_addrs: vec![],
         }
