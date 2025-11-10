@@ -31,6 +31,12 @@ thread_local! {
 
 const MAX_TRANSFORM_SIZE: usize = 2_000_000;
 
+//TODO(urgent): add something here, and a system test to check that we actually return "not yet implemented" for flexible requests.
+// #[update]
+// async fn send_flexible_request(
+//     request: 
+// )
+
 #[update]
 async fn send_requests_in_parallel(
     request: RemoteHttpStressRequest,

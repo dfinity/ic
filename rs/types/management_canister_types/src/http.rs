@@ -373,4 +373,10 @@ pub struct CanisterHttpResponsePayload {
     pub body: Vec<u8>,
 }
 
+pub struct FlexibleCanisterHttpResponsePayload {
+    pub responses: Vec<CanisterHttpResponsePayload>,
+    //TODO(urgent) continue this. 
+    pub error: Option<>
+}
+
 impl Payload<'_> for CanisterHttpResponsePayload {}

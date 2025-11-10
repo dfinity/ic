@@ -14,6 +14,8 @@ use ic_management_canister_types_private::{
     BoundedHttpHeaders, HttpHeader, HttpMethod, Payload, TransformContext,
 };
 
+pub struct RemoteHt
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct RemoteHttpRequest {
     pub request: UnvalidatedCanisterHttpRequestArgs,
