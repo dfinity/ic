@@ -1,8 +1,10 @@
 use super::byte_rw::{ByteReader, ByteWriter};
 use crate::canister_state::system_state::log_memory_store::{
-    log_record::LogRecord, memory::MemoryPosition,
+    log_record::LogRecord,
+    memory::{MemoryPosition, MemorySize},
 };
 use crate::page_map::PAGE_SIZE;
+use ic_management_canister_types_private::FetchCanisterLogsFilter;
 use std::convert::From;
 
 /// Size of each bucket in the lookup table.
@@ -38,22 +40,6 @@ impl LookupTable {
         self.front = entry;
     }
 
-    pub fn get_valid_entries(&self) -> Vec<LookupEntry> {
-        let front = match self.front {
-            Some(entry) => entry,
-            None => return vec![],
-        };
-        let mut valid_entries: Vec<LookupEntry> = self
-            .entries
-            .iter()
-            .filter(|e| front.idx < e.idx)
-            .cloned()
-            .collect();
-        valid_entries.push(front);
-        valid_entries.sort_by_key(|e| e.idx);
-        valid_entries
-    }
-
     /// Updates or appends a lookup entry for the given log record at the specified position.
     pub fn update_last(&mut self, record: &LogRecord, position: MemoryPosition) {
         let entry = LookupEntry {
@@ -72,6 +58,83 @@ impl LookupTable {
     /// Calculates bucket index for a given memory position.
     fn bucket_index_of(&self, position: MemoryPosition) -> usize {
         (position.get() as usize) / BUCKET_SIZE
+    }
+
+    fn get_valid_entries(&self) -> Vec<LookupEntry> {
+        let front = match self.front {
+            Some(entry) => entry,
+            None => return vec![],
+        };
+        let mut valid_entries: Vec<LookupEntry> = self
+            .entries
+            .iter()
+            .filter(|e| front.idx < e.idx)
+            .cloned()
+            .collect();
+        valid_entries.push(front);
+        valid_entries.sort_by_key(|e| e.idx);
+        valid_entries
+    }
+
+    pub fn get_range(
+        &self,
+        filter: &Option<FetchCanisterLogsFilter>,
+    ) -> (MemoryPosition, MemoryPosition) {
+        const MAX_RANGE_BYTES: MemorySize = MemorySize::new(2_000_000); // 2 MB
+
+        let entries = self.get_valid_entries();
+        if entries.is_empty() {
+            return (MemoryPosition::new(0), MemoryPosition::new(0));
+        }
+
+        // Left fallback for start: exact match or previous entry.
+        let find_start_by_key = |key: u64, key_fn: fn(&LookupEntry) -> u64| -> MemoryPosition {
+            match entries.binary_search_by_key(&key, key_fn) {
+                Ok(idx) => entries[idx].position,      // Exact match.
+                Err(0) => entries[0].position,         // Outside range, return first.
+                Err(idx) => entries[idx - 1].position, // Left fallback.
+            }
+        };
+
+        // Right fallback for end: exact match or next entry.
+        let find_end_by_key = |key: u64, key_fn: fn(&LookupEntry) -> u64| -> MemoryPosition {
+            match entries.binary_search_by_key(&key, key_fn) {
+                Ok(idx) => entries[idx].position, // Exact match.
+                Err(idx) if idx < entries.len() => entries[idx].position, // Right fallback.
+                _ => entries.last().unwrap().position, // Outside range, return last.
+            }
+        };
+
+        // Clamp `end` so (end - start) <= MAX_RANGE_BYTES.
+        let clamp_to_max_range = |start: MemoryPosition, end: MemoryPosition| -> MemoryPosition {
+            let max_allowed_end = start + MAX_RANGE_BYTES;
+            if end > max_allowed_end {
+                find_end_by_key(max_allowed_end.get(), |e| e.position.get())
+            } else {
+                end
+            }
+        };
+
+        match filter {
+            None => {
+                // Return latest range limited by MAX_RANGE_BYTES.
+                // Use left fallback for start to avoid dropping earlier valid data.
+                let end = entries.last().unwrap().position;
+                let min_allowed_start = end.saturating_sub(MAX_RANGE_BYTES);
+                let start = find_start_by_key(min_allowed_start.get(), |e| e.position.get());
+                (start, end)
+            }
+            Some(FetchCanisterLogsFilter::ByIdx(range)) => {
+                let start = find_start_by_key(range.start, |e| e.idx);
+                let end = find_end_by_key(range.end, |e| e.idx);
+                (start, clamp_to_max_range(start, end))
+            }
+            Some(FetchCanisterLogsFilter::ByTimestampNanos(range)) => {
+                let start = find_start_by_key(range.start, |e| e.ts_nanos);
+                let end = find_end_by_key(range.end, |e| e.ts_nanos);
+                (start, clamp_to_max_range(start, end))
+            }
+        }
     }
 }
 

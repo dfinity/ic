@@ -38,6 +38,10 @@ impl MemoryPosition {
     pub const fn get(self) -> u64 {
         self.0
     }
+
+    pub fn saturating_sub(self, rhs: MemorySize) -> Self {
+        Self(self.0.saturating_sub(rhs.0))
+    }
 }
 
 impl MemorySize {

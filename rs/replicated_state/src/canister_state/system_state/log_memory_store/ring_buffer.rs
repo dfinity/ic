@@ -1,11 +1,11 @@
 use crate::canister_state::system_state::log_memory_store::{
     header::HeaderV1,
     log_record::LogRecord,
-    lookup::LookupTable,
     memory::{MemoryAddress, MemoryPosition, MemorySize},
     struct_io::StructIO,
 };
 use crate::page_map::{PAGE_SIZE, PageIndex, PageMap};
+use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_sys::PageBytes;
 
 const MAGIC: &[u8; 3] = b"LMS";
@@ -66,6 +66,16 @@ impl RingBuffer {
 
     pub fn next_id(&self) -> u64 {
         self.io.read_header().next_idx
+    }
+
+    pub fn records(&self, _filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
+        // let lookup_table = self.io.read_lookup_table();
+        // let (from, to) = lookup_table.get_range(&filter);
+        // let mut records = Vec::new();
+        // let mut h = self.io.read_header();
+        // let mut position = h.data_head;
+        // todo!()
+        vec![]
     }
 
     /// Removes the first log record and returns it, or None if the ring buffer is empty.
