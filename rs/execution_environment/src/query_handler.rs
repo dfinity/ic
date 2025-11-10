@@ -511,19 +511,27 @@ impl Service<TransformExecutionInput> for HttpQueryHandler {
                 // Otherwise, retrieving the state in the Query service in `http_endpoints` can lead to queries being queued up,
                 // with a reference to older states which can cause out-of-memory crashes.
 
-                let state = state_reader.get_latest_state();
-                let time = state.get_ref().metadata.batch_time;
-                let certified_height_used_for_execution = state.height();
-                let height_diff = certified_height_used_for_execution
-                    .get()
-                    .saturating_sub(latest_certified_height_pre_schedule.get());
-                http_query_handler_metrics
-                    .height_diff_during_query_scheduling
-                    .observe(height_diff as f64);
+                let result = match state_reader.get_latest_certified_state() {
+                    Some(state) => {
+                        let time = state.get_ref().metadata.batch_time;
 
-                let response = internal.query(query, state, None, enable_query_stats_tracking);
+                        let certified_height_used_for_execution = state.height();
+                        let height_diff = certified_height_used_for_execution
+                            .get()
+                            .saturating_sub(latest_certified_height_pre_schedule.get());
+                        http_query_handler_metrics
+                            .height_diff_during_query_scheduling
+                            .observe(height_diff as f64);
 
-                let _ = tx.send(Ok(Ok((response, time))));
+                        let response =
+                            internal.query(query, state, None, enable_query_stats_tracking);
+
+                        Ok((response, time))
+                    }
+                    None => Err(QueryExecutionError::CertifiedStateUnavailable),
+                };
+
+                let _ = tx.send(Ok(result));
             }
             start.elapsed()
         });
