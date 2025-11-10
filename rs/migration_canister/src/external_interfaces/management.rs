@@ -73,7 +73,6 @@ pub async fn set_original_controllers(
         .await
     {
         Ok(_) => ProcessingResult::Success(()),
-        // If we fail due to not being controller, this is a success
         Err(ref e) => match e {
             ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)
             | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
