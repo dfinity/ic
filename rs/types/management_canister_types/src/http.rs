@@ -152,7 +152,6 @@ pub struct FlexibleCanisterHttpRequestArgs {
 
 impl Payload<'_> for FlexibleCanisterHttpRequestArgs {}
 
-//TODO(urgent): add tests for the flexible too.
 #[test]
 fn test_http_headers_max_number() {
     // This test verifies the number of HTTP headers stays within the allowed limit.
@@ -371,12 +370,6 @@ pub struct CanisterHttpResponsePayload {
     pub headers: Vec<HttpHeader>,
     #[serde(with = "serde_bytes")]
     pub body: Vec<u8>,
-}
-
-pub struct FlexibleCanisterHttpResponsePayload {
-    pub responses: Vec<CanisterHttpResponsePayload>,
-    //TODO(urgent) continue this. 
-    pub error: Option<>
 }
 
 impl Payload<'_> for CanisterHttpResponsePayload {}
