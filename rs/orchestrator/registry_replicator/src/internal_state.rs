@@ -123,11 +123,15 @@ impl InternalState {
             self.registry_canister_fallback.as_ref(),
         ) {
             (_, Some(fallback)) if self.failed_poll_count >= MAX_CONSECUTIVE_FAILURES => {
+                // After several failed attempts to poll the NNS, try the config URLs once, which
+                // would possibly fix the local store for the next poll.
                 info!(
                     self.logger,
                     "Polling NNS failed {} times consecutively, trying config urls once...",
                     self.failed_poll_count
                 );
+                // Set to -1 so that the counter is set back to 0 both on success and failure of the
+                // poll.
                 self.failed_poll_count = -1;
                 Arc::clone(fallback)
             }
