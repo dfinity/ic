@@ -18,11 +18,20 @@ use ic_quic_transport::Transport;
 use ic_types::{
     NodeId,
     artifact::ConsensusMessageId,
-    consensus::{BlockPayload, ConsensusMessage},
+    consensus::{
+        BlockPayload, ConsensusMessage,
+        idkg::{IDkgArtifactId, IDkgMessage, IDkgObject},
+    },
+    crypto::canister_threshold_sig::idkg::{IDkgTranscriptId, SignedIDkgDealing},
     messages::{SignedIngress, SignedRequestBytes},
 };
 use rand::{SeedableRng, rngs::SmallRng, seq::IteratorRandom};
 use tokio::time::{Instant, sleep_until, timeout_at};
+
+use crate::fetch_stripped_artifact::{
+    assembler::{StrippedMessage, StrippedMessageId},
+    types::rpc::{GetDealingInBlockRequest, GetDealingInBlockResponse},
+};
 
 use super::{
     metrics::{FetchStrippedConsensusArtifactMetrics, IngressSenderMetrics},
@@ -34,7 +43,8 @@ use super::{
 
 type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + Sync>>;
 
-const URI: &str = "/block/ingress/rpc";
+const INGRESS_URI: &str = "/block/ingress/rpc";
+const DEALING_URI: &str = "/block/dealing/rpc";
 const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -42,6 +52,7 @@ const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
 pub(super) struct Pools {
     pub(super) consensus_pool: ValidatedPoolReaderRef<ConsensusMessage>,
     pub(super) ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+    pub(super) idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
     pub(super) metrics: IngressSenderMetrics,
 }
 
@@ -59,7 +70,7 @@ enum PoolsAccessError {
 
 impl Pools {
     /// Retrieves the request [`SignedIngress`] from either of the pools.
-    fn get(
+    fn get_ingress(
         &self,
         signed_ingress_id: &SignedIngressId,
         block_proposal_id: &ConsensusMessageId,
@@ -113,17 +124,77 @@ impl Pools {
             }
         }
     }
+
+    fn get_dealing(
+        &self,
+        dealing_id: &IDkgArtifactId,
+        block_proposal_id: &ConsensusMessageId,
+    ) -> Result<SignedIDkgDealing, PoolsAccessError> {
+        // First check if the requested dealing exists in the IDkg Pool.
+        if let Some(IDkgMessage::Dealing(signed_dealing)) =
+            self.idkg_pool.read().unwrap().get(dealing_id)
+        {
+            return Ok(signed_dealing);
+        }
+
+        // Otherwise find the block which should contain the dealing.
+        let Some(consensus_artifact) = self.consensus_pool.read().unwrap().get(block_proposal_id)
+        else {
+            self.metrics.ingress_messages_not_found.inc();
+            return Err(PoolsAccessError::BlockNotFound);
+        };
+
+        // Double check it is indeed a Block Proposal
+        let ConsensusMessage::BlockProposal(block_proposal) = consensus_artifact else {
+            return Err(PoolsAccessError::NotABlockProposal);
+        };
+
+        let BlockPayload::Data(data_payload) = block_proposal.as_ref().payload.as_ref() else {
+            return Err(PoolsAccessError::SummaryBlock);
+        };
+
+        let Some(idkg) = &data_payload.idkg else {
+            return Err(PoolsAccessError::NotABlockProposal);
+        };
+
+        let IDkgArtifactId::Dealing(prefix, data) = &dealing_id else {
+            return Err(PoolsAccessError::NotABlockProposal);
+        };
+
+        let transcript_id = IDkgTranscriptId::new(
+            data.get_ref().subnet_id,
+            prefix.get_ref().group_tag(),
+            data.get_ref().height,
+        );
+        let Some(transcript) = idkg.idkg_transcripts.get(&transcript_id) else {
+            return Err(PoolsAccessError::NotABlockProposal);
+        };
+
+        let Some(signed_dealing) = transcript
+            .verified_dealings
+            .values()
+            .find(|v| v.content.message_id() == *dealing_id)
+        else {
+            return Err(PoolsAccessError::NotABlockProposal);
+        };
+
+        Ok(signed_dealing.content.clone())
+    }
 }
 
 pub(super) fn build_axum_router(pools: Pools) -> Router {
     Router::new()
-        .route(URI, any(rpc_handler))
+        .route(INGRESS_URI, any(ingress_rpc_handler))
+        .route(DEALING_URI, any(dealing_rpc_handler))
         .with_state(pools)
         // Disable request size limit since consensus might push artifacts larger than limit.
         .layer(DefaultBodyLimit::disable())
 }
 
-async fn rpc_handler(State(pools): State<Pools>, payload: Bytes) -> Result<Bytes, StatusCode> {
+async fn ingress_rpc_handler(
+    State(pools): State<Pools>,
+    payload: Bytes,
+) -> Result<Bytes, StatusCode> {
     let join_handle = tokio::task::spawn_blocking(move || {
         let request_proto: pb::GetIngressMessageInBlockRequest =
             pb::GetIngressMessageInBlockRequest::proxy_decode(&payload)
@@ -131,7 +202,7 @@ async fn rpc_handler(State(pools): State<Pools>, payload: Bytes) -> Result<Bytes
         let request = GetIngressMessageInBlockRequest::try_from(request_proto)
             .map_err(|_| StatusCode::BAD_REQUEST)?;
 
-        match pools.get(&request.signed_ingress_id, &request.block_proposal_id) {
+        match pools.get_ingress(&request.signed_ingress_id, &request.block_proposal_id) {
             Ok(serialized_ingress_message) => Ok::<_, StatusCode>(Bytes::from(
                 pb::GetIngressMessageInBlockResponse::proxy_encode(
                     GetIngressMessageInBlockResponse {
@@ -155,15 +226,48 @@ async fn rpc_handler(State(pools): State<Pools>, payload: Bytes) -> Result<Bytes
     Ok(bytes)
 }
 
+async fn dealing_rpc_handler(
+    State(pools): State<Pools>,
+    payload: Bytes,
+) -> Result<Bytes, StatusCode> {
+    let join_handle = tokio::task::spawn_blocking(move || {
+        let request_proto: pb::GetDealingInBlockRequest =
+            pb::GetDealingInBlockRequest::proxy_decode(&payload)
+                .map_err(|_| StatusCode::BAD_REQUEST)?;
+        let request = GetDealingInBlockRequest::try_from(request_proto)
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+        match pools.get_dealing(&request.dealing_id, &request.block_proposal_id) {
+            Ok(signed_dealing) => {
+                Ok::<_, StatusCode>(Bytes::from(pb::GetDealingInBlockResponse::proxy_encode(
+                    GetDealingInBlockResponse { signed_dealing },
+                )))
+            }
+            Err(PoolsAccessError::IngressMessageNotFound | PoolsAccessError::BlockNotFound) => {
+                Err(StatusCode::NOT_FOUND)
+            }
+            Err(PoolsAccessError::NotABlockProposal | PoolsAccessError::SummaryBlock) => {
+                Err(StatusCode::BAD_REQUEST)
+            }
+        }
+    });
+
+    let bytes = join_handle
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
+
+    Ok(bytes)
+}
+
 /// Downloads the missing ingress messages from a random peer.
-pub(crate) async fn download_ingress<P: Peers>(
+pub(crate) async fn download_stripped_message<P: Peers>(
     transport: Arc<dyn Transport>,
-    signed_ingress_id: SignedIngressId,
+    stripped_message_id: StrippedMessageId,
     block_proposal_id: ConsensusMessageId,
     log: &ReplicaLogger,
     metrics: &FetchStrippedConsensusArtifactMetrics,
     peer_rx: P,
-) -> (SignedIngress, NodeId) {
+) -> (StrippedMessage, NodeId) {
     metrics.active_ingress_message_downloads.inc();
     let mut artifact_download_timeout = ExponentialBackoffBuilder::new()
         .with_initial_interval(MIN_ARTIFACT_RPC_TIMEOUT)
@@ -173,12 +277,24 @@ pub(crate) async fn download_ingress<P: Peers>(
 
     let mut rng = SmallRng::from_entropy();
 
-    let request = GetIngressMessageInBlockRequest {
-        signed_ingress_id: signed_ingress_id.clone(),
-        block_proposal_id,
+    let request = match &stripped_message_id {
+        StrippedMessageId::Ingress(signed_ingress_id) => {
+            let request = GetIngressMessageInBlockRequest {
+                signed_ingress_id: signed_ingress_id.clone(),
+                block_proposal_id,
+            };
+            let bytes = Bytes::from(pb::GetIngressMessageInBlockRequest::proxy_encode(request));
+            Request::builder().uri(INGRESS_URI).body(bytes).unwrap()
+        }
+        StrippedMessageId::Dealing(idkg_artifact_id) => {
+            let request = GetDealingInBlockRequest {
+                dealing_id: idkg_artifact_id.clone(),
+                block_proposal_id,
+            };
+            let bytes = Bytes::from(pb::GetDealingInBlockRequest::proxy_encode(request));
+            Request::builder().uri(DEALING_URI).body(bytes).unwrap()
+        }
     };
-    let bytes = Bytes::from(pb::GetIngressMessageInBlockRequest::proxy_encode(request));
-    let request = Request::builder().uri(URI).body(bytes).unwrap();
 
     loop {
         let next_request_at = Instant::now()
@@ -188,16 +304,39 @@ pub(crate) async fn download_ingress<P: Peers>(
         if let Some(peer) = { peer_rx.peers().into_iter().choose(&mut rng) } {
             match timeout_at(next_request_at, transport.rpc(&peer, request.clone())).await {
                 Ok(Ok(response)) if response.status() == StatusCode::OK => {
-                    if let Some(ingress_message) = parse_response(response.into_body(), metrics) {
-                        if SignedIngressId::from(&ingress_message) == signed_ingress_id {
-                            metrics.active_ingress_message_downloads.dec();
-                            return (ingress_message, peer);
-                        } else {
-                            metrics.report_download_error("mismatched_signed_ingress_id");
-                            warn!(
-                                log,
-                                "Peer {} responded with wrong artifact for advert", peer
-                            );
+                    match &stripped_message_id {
+                        StrippedMessageId::Ingress(signed_ingress_id) => {
+                            if let Some(ingress_message) =
+                                parse_ingress_response(response.into_body(), metrics)
+                            {
+                                if SignedIngressId::from(&ingress_message) == *signed_ingress_id {
+                                    metrics.active_ingress_message_downloads.dec();
+                                    return (StrippedMessage::Ingress(ingress_message), peer);
+                                } else {
+                                    metrics.report_download_error("mismatched_signed_ingress_id");
+                                    warn!(
+                                        log,
+                                        "Peer {} responded with wrong artifact for advert", peer
+                                    );
+                                }
+                            }
+                        }
+                        StrippedMessageId::Dealing(idkg_artifact_id) => {
+                            if let Some(dealing) =
+                                parse_dealing_response(response.into_body(), metrics)
+                            {
+                                let id = dealing.message_id();
+                                if id == *idkg_artifact_id {
+                                    metrics.active_ingress_message_downloads.dec();
+                                    return (StrippedMessage::Dealing(id, dealing), peer);
+                                } else {
+                                    metrics.report_download_error("mismatched_dealing_id");
+                                    warn!(
+                                        log,
+                                        "Peer {} responded with wrong artifact for advert", peer
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -217,7 +356,7 @@ pub(crate) async fn download_ingress<P: Peers>(
     }
 }
 
-fn parse_response(
+fn parse_ingress_response(
     body: Bytes,
     metrics: &FetchStrippedConsensusArtifactMetrics,
 ) -> Option<SignedIngress> {
@@ -236,6 +375,20 @@ fn parse_response(
     };
 
     Some(ingress)
+}
+
+fn parse_dealing_response(
+    body: Bytes,
+    metrics: &FetchStrippedConsensusArtifactMetrics,
+) -> Option<SignedIDkgDealing> {
+    let Ok(response) = pb::GetDealingInBlockResponse::proxy_decode(&body).and_then(
+        |proto: pb::GetDealingInBlockResponse| GetDealingInBlockResponse::try_from(proto),
+    ) else {
+        metrics.report_download_error("response_decoding_failed");
+        return None;
+    };
+
+    Some(response.signed_dealing)
 }
 
 #[cfg(test)]

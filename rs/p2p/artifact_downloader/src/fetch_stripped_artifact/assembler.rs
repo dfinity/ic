@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -9,21 +10,37 @@ use ic_interfaces::p2p::consensus::{
 };
 use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::proxy::ProxyDecodeError;
-use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{
+    proxy::ProxyDecodeError,
+    registry::subnet::v1::{
+        IDkgDealing as IDkgDealingProto, IDkgSignedDealingTuple, SignatureTuple,
+        VerifiedIDkgDealing,
+    },
+};
+use ic_protobuf::{proxy::try_from_option_field, types::v1 as pb};
 use ic_quic_transport::Transport;
 use ic_types::{
-    CountBytes, NodeId,
+    CountBytes, NodeId, NodeIndex,
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
     batch::IngressPayload,
-    consensus::{BlockProposal, ConsensusMessage},
+    consensus::{
+        BlockProposal, ConsensusMessage,
+        idkg::{IDkgArtifactId, IDkgMessage, IDkgObject},
+    },
+    crypto::{
+        BasicSigOf, Signed,
+        canister_threshold_sig::idkg::{
+            BatchSignedIDkgDealing, IDkgDealing, IDkgTranscriptId, SignedIDkgDealing,
+        },
+    },
     messages::SignedIngress,
+    node_id_into_protobuf,
+    signature::{BasicSignature, BasicSignatureBatch},
 };
 
-use crate::FetchArtifact;
+use crate::{FetchArtifact, fetch_stripped_artifact::download::download_stripped_message};
 
 use super::{
-    download::download_ingress,
     metrics::{FetchStrippedConsensusArtifactMetrics, IngressMessageSource, IngressSenderMetrics},
     stripper::Strippable,
     types::{
@@ -82,6 +99,7 @@ impl<Pool: ValidatedPoolReader<ConsensusMessage>>
 pub struct FetchStrippedConsensusArtifact {
     log: ReplicaLogger,
     ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+    idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
     fetch_stripped: FetchArtifact<MaybeStrippedConsensusMessage>,
     transport: Arc<dyn Transport>,
     node_id: NodeId,
@@ -94,16 +112,19 @@ impl FetchStrippedConsensusArtifact {
         rt: tokio::runtime::Handle,
         consensus_pool: Arc<RwLock<Pool>>,
         ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+        idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
         bouncer_factory: Arc<dyn BouncerFactory<ConsensusMessageId, Pool>>,
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
     ) -> (impl Fn(Arc<dyn Transport>) -> Self, axum::Router) {
         let ingress_pool_clone = ingress_pool.clone();
+        let idkg_pool_clone = idkg_pool.clone();
         let consensus_pool_clone = consensus_pool.clone();
 
         let router = super::download::build_axum_router(super::download::Pools {
             consensus_pool: consensus_pool_clone,
             ingress_pool: ingress_pool_clone,
+            idkg_pool: idkg_pool_clone,
             metrics: IngressSenderMetrics::new(&metrics_registry),
         });
 
@@ -123,6 +144,7 @@ impl FetchStrippedConsensusArtifact {
             Self {
                 log: log.clone(),
                 ingress_pool: ingress_pool.clone(),
+                idkg_pool: idkg_pool.clone(),
                 fetch_stripped,
                 transport,
                 node_id,
@@ -179,13 +201,14 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             .start_timer();
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
-        let stripped_ingress_ids = assembler.missing_ingress_messages();
+        let stripped_message_ids = assembler.missing_stripped_messages();
         // For each stripped object in the message, try to fetch it either from the local pools
         // or from a random peer who is advertising it.
-        for stripped_ingress_id in stripped_ingress_ids {
+        for stripped_message_id in stripped_message_ids {
             join_set.spawn(get_or_fetch(
-                stripped_ingress_id,
+                stripped_message_id,
                 self.ingress_pool.clone(),
+                self.idkg_pool.clone(),
                 self.transport.clone(),
                 id.as_ref().clone(),
                 self.log.clone(),
@@ -199,26 +222,44 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         let mut ingress_messages_from_peers = 0;
 
         while let Some(join_result) = join_set.join_next().await {
-            let Ok((ingress, peer_id)) = join_result else {
+            let Ok((message, peer_id)) = join_result else {
                 return AssembleResult::Unwanted;
             };
 
-            if peer_id == self.node_id {
-                ingress_messages_from_ingress_pool += 1;
-            } else {
-                self.metrics
-                    .missing_ingress_messages_bytes
-                    .observe(ingress.count_bytes() as f64);
-                ingress_messages_from_peers += 1;
-            }
+            match message {
+                StrippedMessage::Ingress(ingress) => {
+                    if peer_id == self.node_id {
+                        ingress_messages_from_ingress_pool += 1;
+                    } else {
+                        self.metrics
+                            .missing_ingress_messages_bytes
+                            .observe(ingress.count_bytes() as f64);
+                        ingress_messages_from_peers += 1;
+                    }
 
-            if let Err(err) = assembler.try_insert_ingress_message(ingress) {
-                warn!(
-                    self.log,
-                    "Failed to ingress message {}. This is a bug.", err
-                );
+                    if let Err(err) = assembler.try_insert_ingress_message(ingress) {
+                        warn!(
+                            self.log,
+                            "Failed to ingress message {}. This is a bug.", err
+                        );
 
-                return AssembleResult::Unwanted;
+                        return AssembleResult::Unwanted;
+                    }
+                }
+                StrippedMessage::Dealing(id, signed_dealing) => {
+                    if peer_id == self.node_id {
+                        ingress_messages_from_ingress_pool += 1;
+                    }
+
+                    if let Err(err) = assembler.try_insert_dealing_message(id, signed_dealing) {
+                        warn!(
+                            self.log,
+                            "Failed to inserrt dealing message {}. This is a bug.", err
+                        );
+
+                        return AssembleResult::Unwanted;
+                    }
+                }
             }
         }
 
@@ -254,11 +295,22 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
     }
 }
 
+pub(super) enum StrippedMessageId {
+    Ingress(SignedIngressId),
+    Dealing(IDkgArtifactId),
+}
+
+pub(super) enum StrippedMessage {
+    Ingress(SignedIngress),
+    Dealing(IDkgArtifactId, SignedIDkgDealing),
+}
+
 /// Tries to get the missing object either from the pool(s) or from the peers who are advertising
 /// it.
 async fn get_or_fetch<P: Peers>(
-    signed_ingress_id: SignedIngressId,
+    stripped_message_id: StrippedMessageId,
     ingress_pool: ValidatedPoolReaderRef<SignedIngress>,
+    idkg_pool: ValidatedPoolReaderRef<IDkgMessage>,
     transport: Arc<dyn Transport>,
     // Id of the *full* artifact which should contain the missing data
     full_consensus_message_id: ConsensusMessageId,
@@ -266,29 +318,52 @@ async fn get_or_fetch<P: Peers>(
     metrics: Arc<FetchStrippedConsensusArtifactMetrics>,
     node_id: NodeId,
     peer_rx: P,
-) -> (SignedIngress, NodeId) {
-    // First check if the ingress message exists in the Ingress Pool.
-    if let Some(ingress_message) = ingress_pool
-        .read()
-        .unwrap()
-        .get(&signed_ingress_id.ingress_message_id)
-    {
-        // Make sure that this is the correct ingress message. [`IngressMessageId`] does _not_
-        // uniquely identify ingress messages, we thus need to perform an extra check.
-        if SignedIngressId::from(&ingress_message) == signed_ingress_id {
-            return (ingress_message, node_id);
+) -> (StrippedMessage, NodeId) {
+    match stripped_message_id {
+        StrippedMessageId::Ingress(signed_ingress_id) => {
+            // First check if the ingress message exists in the Ingress Pool.
+            if let Some(ingress_message) = ingress_pool
+                .read()
+                .unwrap()
+                .get(&signed_ingress_id.ingress_message_id)
+            {
+                // Make sure that this is the correct ingress message. [`IngressMessageId`] does _not_
+                // uniquely identify ingress messages, we thus need to perform an extra check.
+                if SignedIngressId::from(&ingress_message) == signed_ingress_id {
+                    return (StrippedMessage::Ingress(ingress_message), node_id);
+                }
+            }
+            download_stripped_message(
+                transport,
+                StrippedMessageId::Ingress(signed_ingress_id),
+                full_consensus_message_id,
+                &log,
+                &metrics,
+                peer_rx,
+            )
+            .await
+        }
+        StrippedMessageId::Dealing(dealing_id) => {
+            // First check if the ingress message exists in the idkg Pool.
+            if let Some(IDkgMessage::Dealing(signed_dealing)) =
+                idkg_pool.read().unwrap().get(&dealing_id)
+            {
+                return (
+                    StrippedMessage::Dealing(dealing_id, signed_dealing),
+                    node_id,
+                );
+            }
+            download_stripped_message(
+                transport,
+                StrippedMessageId::Dealing(dealing_id),
+                full_consensus_message_id,
+                &log,
+                &metrics,
+                peer_rx,
+            )
+            .await
         }
     }
-
-    download_ingress(
-        transport,
-        signed_ingress_id,
-        full_consensus_message_id,
-        &log,
-        &metrics,
-        peer_rx,
-    )
-    .await
 }
 
 #[derive(Debug, PartialEq, Error)]
@@ -302,7 +377,11 @@ pub(crate) enum InsertionError {
 #[derive(Debug, Error)]
 pub(crate) enum AssemblyError {
     #[error("The block proposal is missing ingress message with id {0}")]
-    Missing(IngressMessageId),
+    MissingIngress(IngressMessageId),
+    #[error("The block proposal is missing dealing message with id {0:?}")]
+    MissingDealing(IDkgArtifactId),
+    #[error("The block proposal is missing transcript with id {0}")]
+    MissingTranscript(IDkgTranscriptId),
     #[error("The block proposal cannot be deserialized {0}")]
     DeserializationFailed(ProxyDecodeError),
 }
@@ -310,6 +389,21 @@ pub(crate) enum AssemblyError {
 struct BlockProposalAssembler {
     stripped_block_proposal: StrippedBlockProposal,
     ingress_messages: Vec<(SignedIngressId, Option<SignedIngress>)>,
+    signed_dealings: BTreeMap<
+        IDkgTranscriptId,
+        BTreeMap<
+            u32,
+            Signed<
+                DealingOrId,
+                BasicSignatureBatch<Signed<IDkgDealing, BasicSignature<IDkgDealing>>>,
+            >,
+        >,
+    >,
+}
+
+enum DealingOrId {
+    Dealing(SignedIDkgDealing),
+    ID(IDkgArtifactId),
 }
 
 impl BlockProposalAssembler {
@@ -321,23 +415,55 @@ impl BlockProposalAssembler {
                 .iter()
                 .map(|signed_ingress_id| (signed_ingress_id.clone(), None))
                 .collect(),
+            signed_dealings: stripped_block_proposal
+                .stripped_dealings
+                .stripped_dealings
+                .iter()
+                .map(|(transcript_id, dealings)| {
+                    let dealings = dealings
+                        .iter()
+                        .map(|(index, dealing)| {
+                            (
+                                *index,
+                                Signed {
+                                    content: DealingOrId::ID(dealing.content.clone()),
+                                    signature: dealing.signature.clone(),
+                                },
+                            )
+                        })
+                        .collect();
+                    (transcript_id.clone(), dealings)
+                })
+                .collect(),
             stripped_block_proposal,
         }
     }
 
     /// Returns the list of ingress messages which have been stripped from the block.
-    pub(crate) fn missing_ingress_messages(&self) -> Vec<SignedIngressId> {
-        self.ingress_messages
+    pub(crate) fn missing_stripped_messages(&self) -> Vec<StrippedMessageId> {
+        let ingress =
+            self.ingress_messages
+                .iter()
+                .filter_map(|(signed_ingress_id, maybe_ingress)| {
+                    if maybe_ingress.is_none() {
+                        Some(StrippedMessageId::Ingress(signed_ingress_id.clone()))
+                    } else {
+                        None
+                    }
+                });
+
+        let dealings = self
+            .signed_dealings
             .iter()
-            .filter_map(|(signed_ingress_id, maybe_ingress)| {
-                if maybe_ingress.is_none() {
-                    Some(signed_ingress_id)
-                } else {
-                    None
+            .flat_map(|(_, dealings)| dealings.values())
+            .filter_map(|dealing| match &dealing.content {
+                DealingOrId::Dealing(_) => None,
+                DealingOrId::ID(idkg_artifact_id) => {
+                    Some(StrippedMessageId::Dealing(idkg_artifact_id.clone()))
                 }
-            })
-            .cloned()
-            .collect()
+            });
+
+        ingress.chain(dealings).collect()
     }
 
     /// Tries to insert a missing ingress message into the block.
@@ -363,20 +489,63 @@ impl BlockProposalAssembler {
         }
     }
 
+    /// Tries to insert a missing ingress message into the block.
+    pub(crate) fn try_insert_dealing_message(
+        &mut self,
+        signed_dealing_id: IDkgArtifactId,
+        signed_dealing: SignedIDkgDealing,
+    ) -> Result<(), InsertionError> {
+        let IDkgArtifactId::Dealing(prefix, data) = &signed_dealing_id else {
+            return Err(InsertionError::NotNeeded);
+        };
+
+        let transcript_id = IDkgTranscriptId::new(
+            data.get_ref().subnet_id,
+            prefix.get_ref().group_tag(),
+            data.get_ref().height,
+        );
+
+        // We can have at most 1000 elements in the vector, so it should be reasonably fast to do a
+        // linear scan here.
+        let dealings = self
+            .signed_dealings
+            .get_mut(&transcript_id)
+            .ok_or(InsertionError::NotNeeded)?;
+
+        let dealing = dealings
+            .values_mut()
+            .find(|dealing| {
+                if let DealingOrId::ID(id) = &dealing.content
+                    && *id == signed_dealing_id
+                {
+                    true
+                } else {
+                    false
+                }
+            })
+            .ok_or(InsertionError::NotNeeded)?;
+
+        dealing.content = DealingOrId::Dealing(signed_dealing);
+        Ok(())
+    }
+
     /// Tries to reassemble a block.
     ///
     /// Fails if there are still some ingress messages missing,
     /// or the assembled proposal can't be deserialized.
     pub(crate) fn try_assemble(self) -> Result<BlockProposal, AssemblyError> {
-        let mut reconstructed_block_proposal_proto = self
-            .stripped_block_proposal
-            .block_proposal_without_ingresses_proto;
+        let BlockProposalAssembler {
+            stripped_block_proposal,
+            ingress_messages,
+            signed_dealings,
+        } = self;
+        let mut reconstructed_block_proposal_proto =
+            stripped_block_proposal.block_proposal_without_ingresses_proto;
 
-        let ingresses = self
-            .ingress_messages
+        let ingresses = ingress_messages
             .into_iter()
             .map(|(id, message)| {
-                message.ok_or_else(|| AssemblyError::Missing(id.ingress_message_id))
+                message.ok_or_else(|| AssemblyError::MissingIngress(id.ingress_message_id))
             })
             .collect::<Result<Vec<_>, _>>()?;
         let reconstructed_ingress_payload = IngressPayload::from(ingresses);
@@ -384,13 +553,91 @@ impl BlockProposalAssembler {
         let reconstructed_ingress_payload_proto =
             pb::IngressPayload::from(&reconstructed_ingress_payload);
 
+        let mut dealings = signed_dealings
+            .into_iter()
+            .map(|(transcript_id, dealings)| {
+                let dealings = dealings
+                    .into_iter()
+                    .map(|(index, dealing_batch)| {
+                        let dealing = match dealing_batch.content {
+                            DealingOrId::Dealing(dealing) => dealing,
+                            DealingOrId::ID(id) => return Err(AssemblyError::MissingDealing(id)),
+                        };
+                        Ok(verified_idkg_dealing_proto(
+                            index,
+                            Signed {
+                                content: dealing,
+                                signature: dealing_batch.signature.clone(),
+                            },
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok((transcript_id.clone(), dealings))
+            })
+            .collect::<Result<BTreeMap<IDkgTranscriptId, Vec<_>>, _>>()?;
+
         if let Some(block) = reconstructed_block_proposal_proto.value.as_mut() {
             block.ingress_payload = Some(reconstructed_ingress_payload_proto);
+            if let Some(idkg) = block.idkg_payload.as_mut() {
+                for transcript in &mut idkg.idkg_transcripts {
+                    let transcript_id =
+                        try_from_option_field(transcript.transcript_id.as_ref(), "transcript_id")
+                            .unwrap();
+                    transcript.verified_dealings = dealings
+                        .remove(&transcript_id)
+                        .ok_or_else(|| AssemblyError::MissingTranscript(transcript_id))?
+                }
+            }
         }
 
         reconstructed_block_proposal_proto
             .try_into()
             .map_err(AssemblyError::DeserializationFailed)
+    }
+}
+
+fn verified_idkg_dealing_proto(
+    dealer_index: NodeIndex,
+    signed_dealing: BatchSignedIDkgDealing,
+) -> VerifiedIDkgDealing {
+    let Signed {
+        content: signed_dealing,
+        signature: batch_signature,
+    } = signed_dealing;
+    let Signed {
+        content:
+            IDkgDealing {
+                transcript_id,
+                internal_dealing_raw,
+            },
+        signature: dealing_signature,
+    } = signed_dealing;
+    let dealing_proto = IDkgDealingProto {
+        transcript_id: Some((&transcript_id).into()),
+        raw_dealing: internal_dealing_raw,
+    };
+    VerifiedIDkgDealing {
+        dealer_index,
+        signed_dealing_tuple: Some(IDkgSignedDealingTuple {
+            dealer: Some(node_id_into_protobuf(dealing_signature.signer)),
+            dealing: Some(dealing_proto),
+            signature: dealing_signature.signature.get().0,
+        }),
+        support_tuples: batch_signature
+            .signatures_map
+            .into_iter()
+            .map(|(signer, signature)| signature_tuple_proto(signer, signature))
+            .collect(),
+    }
+}
+
+fn signature_tuple_proto(
+    signer: NodeId,
+    signature: BasicSigOf<SignedIDkgDealing>,
+) -> SignatureTuple {
+    SignatureTuple {
+        signer: Some(node_id_into_protobuf(signer)),
+        signature: signature.get().0,
     }
 }
 

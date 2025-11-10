@@ -66,6 +66,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
+use ic_system_test_driver::driver::simulate_network::ProductionSubnetTopology;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
@@ -91,7 +92,7 @@ use std::time::Duration;
 use tokio::runtime::{Builder, Runtime};
 
 // Environment parameters
-const NODES_COUNT: usize = 25;
+const NODES_COUNT: usize = 34;
 const SUCCESS_THRESHOLD: f64 = 0.33; // If more than 33% of the expected calls are successful the test passes
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 const TESTING_PERIOD: Duration = Duration::from_secs(900); // testing time under load
@@ -101,17 +102,17 @@ const MAX_RUNTIME_THREADS: usize = 64;
 const MAX_RUNTIME_BLOCKING_THREADS: usize = MAX_RUNTIME_THREADS;
 
 // Network parameters
-const BANDWIDTH_MBITS: u32 = 80; // artificial cap on bandwidth
+const BANDWIDTH_MBITS: u32 = 300; // artificial cap on bandwidth
 const LATENCY: Duration = Duration::from_millis(120); // artificial added latency
 const NETWORK_SIMULATION: FixedNetworkSimulation = FixedNetworkSimulation::new()
     .with_latency(LATENCY)
     .with_bandwidth(BANDWIDTH_MBITS);
 
 // Signature parameters
-const PRE_SIGNATURES_TO_CREATE: u32 = 40;
+const PRE_SIGNATURES_TO_CREATE: u32 = 200;
 const MAX_QUEUE_SIZE: u32 = 30;
 const CANISTER_COUNT: usize = 4;
-const SIGNATURE_REQUESTS_PER_SECOND: f64 = 9.0;
+const SIGNATURE_REQUESTS_PER_SECOND: f64 = 5.0;
 
 const SMALL_MSG_SIZE_BYTES: usize = 32;
 #[allow(dead_code)]
@@ -206,7 +207,7 @@ pub fn setup(env: TestEnv) {
                         .collect(),
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
-                    max_parallel_pre_signature_transcripts_in_creation: None,
+                    max_parallel_pre_signature_transcripts_in_creation: Some(20),
                 })
                 .add_nodes(NODES_COUNT),
         )
@@ -223,7 +224,7 @@ pub fn setup(env: TestEnv) {
 pub fn test(env: TestEnv) {
     let download_p8s_data =
         std::env::var("DOWNLOAD_P8S_DATA").is_ok_and(|v| v == "true" || v == "1");
-    tecdsa_performance_test(env, false, download_p8s_data);
+    tecdsa_performance_test(env, true, download_p8s_data);
 }
 
 pub fn tecdsa_performance_test(
@@ -320,6 +321,8 @@ pub fn tecdsa_performance_test(
         info!(log, "Optional Step: Modify all nodes' traffic using tc");
         app_subnet.apply_network_settings(NETWORK_SIMULATION);
     }
+
+    std::thread::sleep(Duration::from_secs(60));
 
     // create the runtime that lives until this variable is dropped.
     info!(

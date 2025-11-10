@@ -1013,7 +1013,10 @@ mod tests {
     use crate::test_utils::*;
     use assert_matches::assert_matches;
     use ic_consensus_utils::crypto::SignVerify;
-    use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        CanisterThresholdSigTestEnvironment, generate_ecdsa_presig_quadruple,
+        generate_key_transcript,
+    };
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_interfaces::p2p::consensus::{MutablePool, UnvalidatedArtifact};
     use ic_test_utilities_consensus::idkg::*;
@@ -1604,25 +1607,36 @@ mod tests {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let key_id = fake_ecdsa_idkg_master_public_key_id();
-                let env = CanisterThresholdSigTestEnvironment::new(1, &mut rng);
-                let crypto = env.nodes.iter().next().unwrap().crypto();
-                let (_, complaint_handler) =
-                    create_complaint_dependencies_with_crypto(pool_config, logger, Some(crypto));
-                let id = create_transcript_id_with_height(2, Height::from(20));
-                let transcript = create_transcript(&key_id, id, &[NODE_2]);
-                let complaint = create_complaint(id, NODE_2, NODE_3);
-                let opening = create_opening(id, NODE_2, NODE_3, NODE_4);
-                let changeset: Vec<_> = complaint_handler
-                    .crypto_verify_opening(
-                        opening.message_id(),
-                        &transcript,
-                        opening.clone(),
-                        &complaint,
-                    )
-                    .into_iter()
-                    .collect();
-                // assert that the mock opening does not pass real crypto check
-                assert!(is_handle_invalid(&changeset, &opening.message_id()));
+                let env = CanisterThresholdSigTestEnvironment::new(34, &mut rng);
+                let (dealers, receivers) = env.choose_dealers_and_receivers(&ic_crypto_test_utils_canister_threshold_sigs::IDkgParticipants::AllNodesAsDealersAndReceivers, &mut rng);
+                let k = generate_key_transcript(
+                    &env,
+                    &dealers,
+                    &receivers,
+                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                    &mut rng,
+                );
+                let p = generate_ecdsa_presig_quadruple(
+                    &env,
+                    &dealers,
+                    &receivers,
+                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                    &k,
+                    &mut rng,
+                );
+                let t = p.kappa_times_lambda();
+                println!("Internal: {}", t.internal_transcript_raw.len());
+                for (x, d) in t.verified_dealings.values().enumerate() {
+                    println!(
+                        "Dealing {x}: {}",
+                        d.content.content.internal_dealing_raw.len()
+                    );
+                    println!("Sig: {}", d.content.signature.signature.get_ref().0.len());
+                    for (y, s) in d.signature.signatures_map.values().enumerate() {
+                        println!("Sig share {y}: {}", s.get_ref().0.len());
+                    }
+                }
+                panic!("Done now");
             })
         })
     }

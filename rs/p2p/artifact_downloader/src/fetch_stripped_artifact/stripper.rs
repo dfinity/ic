@@ -1,7 +1,14 @@
+use std::collections::BTreeMap;
+
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    artifact::IdentifiableArtifact, batch::IngressPayload, consensus::ConsensusMessage,
+    artifact::IdentifiableArtifact,
+    batch::IngressPayload,
+    consensus::{ConsensusMessage, idkg::IDkgObject},
+    crypto::Signed,
 };
+
+use crate::fetch_stripped_artifact::types::stripped::StrippedIDkgDealings;
 
 use super::types::{
     SignedIngressId,
@@ -35,15 +42,45 @@ impl Strippable for ConsensusMessage {
                 // Remove the ingress payload from the proto.
                 if let Some(block) = proto.value.as_mut() {
                     block.ingress_payload = None;
+                    if let Some(idkg) = block.idkg_payload.as_mut() {
+                        for t in &mut idkg.idkg_transcripts {
+                            t.verified_dealings = vec![];
+                        }
+                    }
                 }
 
                 let data_payload = block_proposal.content.as_ref().payload.as_ref().as_data();
-                let stripped_ingress_payload = data_payload.batch.ingress.strip();
+                let stripped_ingress_payload = data_payload.batch.ingress.clone().strip();
+
+                let transcripts = data_payload
+                    .idkg
+                    .as_ref()
+                    .map(|idkg| idkg.idkg_transcripts.clone())
+                    .unwrap_or_default();
+                let stripped_dealings = transcripts
+                    .into_iter()
+                    .map(|(id, transcript)| {
+                        let dealings = transcript
+                            .verified_dealings
+                            .iter()
+                            .map(|(dealer_index, signed_dealing)| {
+                                let dealing_id = signed_dealing.content.message_id();
+                                let signed_dealing_hash = Signed {
+                                    content: dealing_id,
+                                    signature: signed_dealing.signature.clone(),
+                                };
+                                (*dealer_index, signed_dealing_hash)
+                            })
+                            .collect::<Vec<_>>();
+                        (id, dealings)
+                    })
+                    .collect::<Vec<_>>();
 
                 MaybeStrippedConsensusMessage::StrippedBlockProposal(StrippedBlockProposal {
                     block_proposal_without_ingresses_proto: proto,
                     stripped_ingress_payload,
                     unstripped_consensus_message_id,
+                    stripped_dealings: StrippedIDkgDealings { stripped_dealings },
                 })
             }
             msg => MaybeStrippedConsensusMessage::Unstripped(msg),
