@@ -52,7 +52,7 @@ pub struct Config<Network> {
     /// Directory that stores cached data
     pub cache_dir: Option<PathBuf>,
     /// Ping timeout duration.
-    pub ping_timeout: Option<Duration>,
+    pub request_timeout: Option<Duration>,
 }
 
 /// Set the default idle seconds to one hour.
@@ -60,20 +60,19 @@ fn default_idle_seconds() -> u64 {
     3600
 }
 
-/// Default ping timeout is 30 seconds
-pub const DEFAULT_PING_TIMEOUT: u64 = 30;
+/// Default request timeout is 30 seconds.
+pub const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
-/// For Regtest ping timeout is 5 seconds.
-pub const REGTEST_PING_TIMEOUT: u64 = 5;
+/// For Regtest request timeout is set to 5 seconds.
+pub const REGTEST_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Return the ping timeout duration according to the network.
-fn ping_timeout(network: AdapterNetwork) -> Duration {
-    let timeout_secs = match network {
+/// Return the request timeout duration according to the network.
+fn request_timeout(network: AdapterNetwork) -> Duration {
+    match network {
         AdapterNetwork::Bitcoin(bitcoin::Network::Regtest)
-        | AdapterNetwork::Dogecoin(bitcoin::dogecoin::Network::Regtest) => REGTEST_PING_TIMEOUT,
-        _ => DEFAULT_PING_TIMEOUT,
-    };
-    Duration::from_secs(timeout_secs)
+        | AdapterNetwork::Dogecoin(bitcoin::dogecoin::Network::Regtest) => REGTEST_REQUEST_TIMEOUT,
+        _ => DEFAULT_REQUEST_TIMEOUT,
+    }
 }
 
 /// This function is used to get the address limits for the `AddressBook`
@@ -119,8 +118,13 @@ impl<Network> Config<Network> {
             incoming_source: self.incoming_source,
             address_limits: self.address_limits,
             cache_dir: self.cache_dir,
-            ping_timeout: self.ping_timeout,
+            request_timeout: self.request_timeout,
         }
+    }
+
+    /// Return the request timeout setting, and use default value if not set.
+    pub fn request_timeout(&self) -> Duration {
+        self.request_timeout.unwrap_or(DEFAULT_REQUEST_TIMEOUT)
     }
 }
 
@@ -138,7 +142,7 @@ impl<Network: Copy + Into<AdapterNetwork>> Config<Network> {
             incoming_source: Default::default(),
             address_limits: address_limits(network.into()),
             cache_dir: None,
-            ping_timeout: Some(ping_timeout(network.into())),
+            request_timeout: Some(request_timeout(network.into())),
         }
     }
 }

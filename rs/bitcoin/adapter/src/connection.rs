@@ -245,6 +245,9 @@ impl<NetworkMessage> Connection<NetworkMessage> {
             },
             PingState::Idle { last_pong_at: _ } => false,
         };
+        if timed_out {
+            eprintln!("ping timed out after = {}s", self.ping_timeout.as_secs());
+        }
         timed_out && self.is_available()
     }
 }
@@ -304,7 +307,7 @@ mod test {
                 address_entry,
                 handle,
                 writer,
-                ping_timeout: Duration::from_secs(crate::config::DEFAULT_PING_TIMEOUT),
+                ping_timeout: crate::config::DEFAULT_REQUEST_TIMEOUT,
             }),
             reader,
         )
