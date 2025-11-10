@@ -135,7 +135,6 @@ pub const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
 // The ID of the staging Bitcoin mainnet and testnet canisters.
 // These canisters may be used in the future to test and validate canister upgrades.
 const BITCOIN_MAINNET_STAGING_CANISTER_ID: &str = "axowo-ciaaa-aaaad-acs7q-cai";
-const BITCOIN_TESTNET_STAGING_CANISTER_ID: &str = "ljyeq-zaaaa-aaaad-actaa-cai";
 
 // The ID of the "soft launch" Bitcoin mainnet canister.
 // This is a canister that will be used to run the bitcoin mainnet state pre-launch
@@ -366,7 +365,6 @@ impl Default for Config {
         let [
             bitcoin_testnet_canister_id,
             bitcoin_mainnet_canister_id,
-            bitcoin_testnet_staging_canister_id,
             bitcoin_mainnet_staging_canister_id,
             bitcoin_mainnet_soft_launch_canister_id,
             dogegoin_testnet_canister_id,
@@ -376,7 +374,6 @@ impl Default for Config {
         ] = expect_canister_id([
             BITCOIN_TESTNET_CANISTER_ID,
             BITCOIN_MAINNET_CANISTER_ID,
-            BITCOIN_TESTNET_STAGING_CANISTER_ID,
             BITCOIN_MAINNET_STAGING_CANISTER_ID,
             BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID,
             DOGECOIN_TESTNET_CANISTER_ID,
@@ -425,7 +422,6 @@ impl Default for Config {
                 privileged_access: vec![
                     bitcoin_testnet_canister_id,
                     bitcoin_mainnet_canister_id,
-                    bitcoin_testnet_staging_canister_id,
                     bitcoin_mainnet_staging_canister_id,
                     bitcoin_mainnet_soft_launch_canister_id,
                     dogegoin_testnet_canister_id,
@@ -492,9 +488,9 @@ mod tests {
     use crate::execution_environment::{
         BITCOIN_MAINNET_CANISTER_ID, BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID,
         BITCOIN_MAINNET_STAGING_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID,
-        BITCOIN_TESTNET_STAGING_CANISTER_ID, Config, DOGECOIN_MAINNET_CANISTER_ID,
-        DOGECOIN_MAINNET_STAGING_CANISTER_ID, DOGECOIN_TESTNET_CANISTER_ID,
-        DOGECOIN_TESTNET_STAGING_CANISTER_ID, expect_canister_id,
+        Config, DOGECOIN_MAINNET_CANISTER_ID, DOGECOIN_MAINNET_STAGING_CANISTER_ID,
+        DOGECOIN_TESTNET_CANISTER_ID, DOGECOIN_TESTNET_STAGING_CANISTER_ID,
+        expect_canister_id,
     };
     use std::collections::BTreeSet;
 
@@ -503,7 +499,6 @@ mod tests {
         let expected: BTreeSet<_> = expect_canister_id([
             BITCOIN_TESTNET_CANISTER_ID,
             BITCOIN_MAINNET_CANISTER_ID,
-            BITCOIN_TESTNET_STAGING_CANISTER_ID,
             BITCOIN_MAINNET_STAGING_CANISTER_ID,
             BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID,
             DOGECOIN_TESTNET_CANISTER_ID,
