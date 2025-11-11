@@ -3,7 +3,7 @@ use crate::events::MinterEventAssert;
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
 use ic_ckdoge_minter::{
-    Event, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
+    Event, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
         RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
@@ -11,6 +11,7 @@ use ic_ckdoge_minter::{
 };
 use ic_management_canister_types::CanisterId;
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
+use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::common::rest::RawMessageId;
 use pocket_ic::{PocketIc, RejectResponse};
 use std::sync::Arc;
@@ -70,6 +71,24 @@ impl MinterCanister {
             .update_call_get_doge_address(sender, args)
             .expect("BUG: failed to call get_doge_address");
         Decode!(&call_result, String).unwrap()
+    }
+
+    pub fn get_known_utxos<A: Into<Account>>(&self, args: A) -> Vec<Utxo> {
+        let Account { owner, subaccount } = args.into();
+        let call_result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "get_known_utxos",
+                Encode!(&UpdateBalanceArgs {
+                    owner: Some(owner),
+                    subaccount
+                })
+                .unwrap(),
+            )
+            .expect("BUG: failed to call get_known_utxos");
+        Decode!(&call_result, Vec<Utxo>).unwrap()
     }
 
     pub fn update_balance(
