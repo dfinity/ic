@@ -221,11 +221,6 @@ where
             }]);
 
         let mut mempool = self.setup.as_ref().dogecoin().mempool();
-        assert_eq!(
-            mempool.len(),
-            1,
-            "ckDOGE transaction did not appear in the mempool"
-        );
         let tx = mempool
             .remove(&txid)
             .expect("the mempool does not contain the withdrawal transaction");

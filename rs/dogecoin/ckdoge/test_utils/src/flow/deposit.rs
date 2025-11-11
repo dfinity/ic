@@ -171,7 +171,7 @@ where
                     account: self.account,
                 },
                 EventType::ReceivedUtxos {
-                    mint_txid: Some(0),
+                    mint_txid: Some(mint_index),
                     to_account: self.account,
                     utxos: vec![self.deposit_utxo],
                 },

@@ -36,6 +36,8 @@ const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
 pub const MIN_CONFIRMATIONS: u32 = 60;
 pub const BLOCK_FREQUENCY: Duration = Duration::from_secs(60);
 
+pub use flow::withdrawal::WithdrawalFlowEnd;
+
 pub struct Setup {
     pub env: Arc<PocketIc>,
     doge_network: Network,
@@ -245,15 +247,15 @@ pub fn assert_trap<T: Debug>(result: Result<T, RejectResponse>, message: &str) {
     );
 }
 
-pub fn txid() -> Txid {
-    Txid::from([42u8; 32])
+pub fn txid(bytes: [u8; 32]) -> Txid {
+    Txid::from(bytes)
 }
 
 pub fn utxo_with_value(value: u64) -> Utxo {
     Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: txid(),
+            txid: txid([42u8; 32]),
             vout: 1,
         },
         value,

@@ -178,7 +178,7 @@ mod withdrawal {
     use ic_ckdoge_minter::candid_api::RetrieveDogeWithApprovalError;
     use ic_ckdoge_minter_test_utils::{
         DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-        utxo_with_value,
+        WithdrawalFlowEnd, txid, utxo_with_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use std::array;
@@ -215,35 +215,59 @@ mod withdrawal {
 
     #[test]
     fn should_resubmit_transaction() {
+        fn deposit_and_withdraw(setup: &Setup, id: u8) -> WithdrawalFlowEnd<&Setup> {
+            let account = Account {
+                owner: USER_PRINCIPAL,
+                subaccount: Some([id; 32]),
+            };
+            let mut utxo = utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE);
+            utxo.outpoint.txid = txid([id; 32]);
+
+            setup
+                .deposit_flow()
+                .minter_get_dogecoin_deposit_address(account)
+                .dogecoin_simulate_transaction(utxo.clone())
+                .minter_update_balance()
+                .expect_mint();
+
+            setup
+                .withdrawal_flow()
+                .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
+                .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
+                .expect_withdrawal_request_accepted()
+                .dogecoin_await_transaction(vec![utxo.clone()])
+        }
+
         let setup = Setup::default();
         let dogecoin = setup.dogecoin();
         let fee_percentiles = array::from_fn(|i| i as u64);
         let median_fee = fee_percentiles[50];
         assert_eq!(median_fee, 50);
         dogecoin.set_fee_percentiles(fee_percentiles);
-        let account = Account {
-            owner: USER_PRINCIPAL,
-            subaccount: Some([42_u8; 32]),
-        };
-        let utxo = utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE);
 
-        setup
-            .deposit_flow()
-            .minter_get_dogecoin_deposit_address(account)
-            .dogecoin_simulate_transaction(utxo.clone())
-            .minter_update_balance()
-            .expect_mint();
-
-        setup
-            .withdrawal_flow()
-            .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
-            .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
-            .expect_withdrawal_request_accepted()
-            .dogecoin_await_transaction(vec![utxo])
+        // Finalize oldest transaction
+        deposit_and_withdraw(&setup, 42)
             .minter_await_resubmission()
             .minter_await_finalized_transaction_by(|sent| {
                 assert_eq!(sent.len(), 2);
                 &sent[0]
+            });
+
+        // Finalize newest transaction
+        deposit_and_withdraw(&setup, 43)
+            .minter_await_resubmission()
+            .minter_await_finalized_transaction_by(|sent| {
+                assert_eq!(sent.len(), 2);
+                &sent[1]
+            });
+
+        // Finalize middle transaction
+        deposit_and_withdraw(&setup, 44)
+            .minter_await_resubmission()
+            .minter_await_resubmission()
+            .minter_await_finalized_transaction_by(|sent| {
+                assert_eq!(sent.len(), 3);
+                &sent[1]
             });
     }
 
