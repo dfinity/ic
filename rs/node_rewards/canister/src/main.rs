@@ -10,7 +10,7 @@ use ic_node_rewards_canister::storage::{
 };
 use ic_node_rewards_canister::telemetry::PROMETHEUS_METRICS;
 use ic_node_rewards_canister::timer_tasks::{
-    GetNodeProvidersRewardsInstructionsExporter, HourlySyncTask, NodeProvidersRewardsExporter,
+    GetNodeProvidersRewardsInstructionsExporter, HourlySyncTask,
 };
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
@@ -61,7 +61,6 @@ fn post_upgrade() {
 pub fn schedule_timers() {
     HourlySyncTask::new(&CANISTER).schedule(&METRICS_REGISTRY);
     GetNodeProvidersRewardsInstructionsExporter::new(&CANISTER).schedule(&METRICS_REGISTRY);
-    NodeProvidersRewardsExporter::new(&CANISTER).schedule(&METRICS_REGISTRY);
 }
 
 fn panic_if_caller_not_governance() {
@@ -135,32 +134,6 @@ fn http_request(request: HttpRequest) -> HttpResponse {
                 }
             }
         }
-        "/rewards-metrics" => {
-            let page: usize = request
-                .raw_query_param("page")
-                .and_then(|s| s.parse::<usize>().ok())
-                .unwrap_or(0);
-
-            let limit: usize = request
-                .raw_query_param("limit")
-                .and_then(|s| s.parse::<usize>().ok())
-                .unwrap_or(10);
-
-            match PROMETHEUS_METRICS
-                .with_borrow(|p| p.encode_rewards_calculation_metrics_paginated(page, limit))
-            {
-                Ok(metrics) => HttpResponseBuilder::ok()
-                    .header("Content-Type", "text/plain; version=0.0.4")
-                    .header("Cache-Control", "no-store")
-                    .with_body_and_content_length(metrics)
-                    .build(),
-                Err(err) => {
-                    HttpResponseBuilder::server_error(format!("Failed to encode metrics: {err}"))
-                        .build()
-                }
-            }
-        }
-
         _ => HttpResponseBuilder::not_found().build(),
     }
 }

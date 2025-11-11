@@ -16,7 +16,7 @@ pub type GetNodeProvidersRewardsCalculationResponse = Result<DailyResults, Strin
 // in the future without breaking clients that consume the API.
 //
 // Check rewards_calculation/performance_based_algorithm/results.rs for the explanations of the fields.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug, Default)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct NodeMetricsDaily {
     pub subnet_assigned: Option<PrincipalId>,
     pub subnet_assigned_failure_rate: Option<f64>,
@@ -69,7 +69,7 @@ pub struct DailyNodeProviderRewards {
     pub base_rewards_type3: Vec<Type3RegionBaseRewards>,
     pub daily_nodes_rewards: Vec<DailyNodeRewards>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug, Default)]
+#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, Debug)]
 pub struct DailyResults {
     pub subnets_failure_rate: BTreeMap<SubnetId, f64>,
     pub provider_results: BTreeMap<PrincipalId, DailyNodeProviderRewards>,
