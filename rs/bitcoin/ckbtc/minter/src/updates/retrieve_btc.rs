@@ -152,7 +152,7 @@ pub async fn retrieve_btc<R: CanisterRuntime>(
     state::read_state(|s| s.mode.is_withdrawal_available_for(&caller))
         .map_err(RetrieveBtcError::TemporarilyUnavailable)?;
 
-    let ecdsa_public_key = init_ecdsa_public_key().await;
+    let _ecdsa_public_key = init_ecdsa_public_key().await;
     let main_address = state::read_state(|s| runtime.derive_minter_address(s));
 
     if args.address == main_address.display(state::read_state(|s| s.btc_network)) {
@@ -250,7 +250,7 @@ pub async fn retrieve_btc_with_approval<R: CanisterRuntime>(
     state::read_state(|s| s.mode.is_withdrawal_available_for(&caller))
         .map_err(RetrieveBtcWithApprovalError::TemporarilyUnavailable)?;
 
-    let ecdsa_public_key = init_ecdsa_public_key().await;
+    let _ecdsa_public_key = init_ecdsa_public_key().await;
     let main_address = state::read_state(|s| runtime.derive_minter_address(s));
 
     if args.address == main_address.display(state::read_state(|s| s.btc_network)) {

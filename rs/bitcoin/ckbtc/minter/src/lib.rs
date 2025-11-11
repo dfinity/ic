@@ -50,7 +50,6 @@ mod tests;
 
 /// Time constants
 const SEC_NANOS: u64 = 1_000_000_000;
-const MIN_NANOS: u64 = 60 * SEC_NANOS;
 /// The minimum number of pending request in the queue before we try to make
 /// a batch transaction.
 pub const MIN_PENDING_REQUESTS: usize = 20;
