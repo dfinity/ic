@@ -124,7 +124,6 @@ impl CanisterHttpRequestArgs {
 /// ```text
 /// record {
 ///   url : text;
-///   max_response_bytes : opt nat64;
 ///   headers : vec http_header;
 ///   method : variant { get; head; post };
 ///   body : opt blob;
