@@ -1,20 +1,24 @@
+use crate::BLOCK_FREQUENCY;
+use crate::MIN_CONFIRMATIONS;
 use crate::{Setup, into_outpoint, parse_dogecoin_address};
 use candid::{Decode, Principal};
-use ic_bitcoin_canister_mock::Utxo;
-use ic_ckdoge_minter::address::DogecoinAddress;
-use ic_ckdoge_minter::candid_api::{
-    GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalError,
-};
+use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_ckdoge_minter::{
-    BitcoinAddress, BurnMemo, ChangeOutput, EventType, RetrieveBtcRequest, WithdrawalFee,
+    BitcoinAddress, BurnMemo, ChangeOutput, EventType, MIN_RESUBMISSION_DELAY, RetrieveBtcRequest,
+    Txid, WithdrawalFee,
+    address::DogecoinAddress,
+    candid_api::{
+        GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalError,
+    },
     memo_encode,
 };
-use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::Memo;
-use icrc_ledger_types::icrc3::transactions::Burn;
-use pocket_ic::RejectResponse;
-use pocket_ic::common::rest::RawMessageId;
+use icrc_ledger_types::{
+    icrc1::{account::Account, transfer::Memo},
+    icrc3::transactions::Burn,
+};
+use pocket_ic::{RejectResponse, common::rest::RawMessageId};
 use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
 
 /// Entry point in the withdrawal flow
 ///
@@ -222,48 +226,15 @@ where
             1,
             "ckDOGE transaction did not appear in the mempool"
         );
-        let transaction = mempool
+        let tx = mempool
             .remove(&txid)
             .expect("the mempool does not contain the withdrawal transaction");
 
-        WithdrawalFlowEnd {
-            setup: self.setup,
-            withdrawal_amount: self.withdrawal_amount,
-            change_amount,
-            address: self.address,
-            withdrawal_fee,
-            used_utxos,
-            tx: transaction,
-        }
-    }
-}
-
-/// Step 5: wait for enough confirmations for the transaction to be considered finalized by the minter.
-// TODO XC-496: transaction finalization
-pub struct WithdrawalFlowEnd<S> {
-    setup: S,
-    withdrawal_amount: u64,
-    change_amount: u64,
-    address: DogecoinAddress,
-    withdrawal_fee: WithdrawalFee,
-    used_utxos: Vec<Utxo>,
-    tx: bitcoin::Transaction,
-}
-
-impl<S> WithdrawalFlowEnd<S>
-where
-    S: AsRef<Setup>,
-{
-    pub fn verify_withdrawal_transaction(self) {
-        let tx_outpoints: BTreeSet<_> = self
-            .tx
-            .input
-            .iter()
-            .map(|input| input.previous_output)
-            .collect();
-        let total_inputs: u64 = self.used_utxos.iter().map(|input| input.value).sum();
-        let expected_outpoints: BTreeSet<_> = self
-            .used_utxos
+        let tx_outpoints: BTreeSet<_> =
+            tx.input.iter().map(|input| input.previous_output).collect();
+        let total_inputs: u64 = used_utxos.iter().map(|input| input.value).sum();
+        let expected_outpoints: BTreeSet<_> = used_utxos
+            .clone()
             .into_iter()
             .map(|utxo| into_outpoint(utxo.outpoint))
             .collect();
@@ -285,13 +256,12 @@ where
         // expect at least 2 outputs:
         // 1) to beneficiary's address on Dogecoin
         // 2) to minter's address for the change output
-        let outputs: BTreeMap<_, _> = self
-            .tx
+        let outputs: BTreeMap<_, _> = tx
             .output
             .iter()
             .map(|output| (parse_dogecoin_address(network, output), output))
             .collect();
-        assert_eq!(outputs.len(), self.tx.output.len());
+        assert_eq!(outputs.len(), tx.output.len());
 
         let beneficiary_output = outputs
             .get(
@@ -303,26 +273,144 @@ where
             .expect("BUG: missing output to beneficiary");
         assert_eq!(
             outputs.get(&minter_address).unwrap().value.to_sat(),
-            self.change_amount
+            change_amount
         );
 
-        let total_outputs: u64 = self
-            .tx
-            .output
-            .iter()
-            .map(|output| output.value.to_sat())
-            .sum();
-        assert_eq!(
-            total_inputs - total_outputs,
-            self.withdrawal_fee.bitcoin_fee
-        );
-        let total_fee = self.withdrawal_fee.bitcoin_fee + self.withdrawal_fee.minter_fee;
+        let total_outputs: u64 = tx.output.iter().map(|output| output.value.to_sat()).sum();
+        assert_eq!(total_inputs - total_outputs, withdrawal_fee.bitcoin_fee);
+        let total_fee = withdrawal_fee.bitcoin_fee + withdrawal_fee.minter_fee;
         // Fee is shared across all outputs, excepted for the change output to the minter
         // There might be a one-off error due to sharing the fee evenly across the involved outputs.
-        let fee_share_lower_bound = total_fee / (self.tx.output.len() as u64 - 1);
+        let fee_share_lower_bound = total_fee / (tx.output.len() as u64 - 1);
         let fee_share_upper_bound = fee_share_lower_bound + 1;
         let range = (self.withdrawal_amount - fee_share_upper_bound)
             ..=(self.withdrawal_amount - fee_share_lower_bound);
         assert!(range.contains(&beneficiary_output.value.to_sat()));
+
+        WithdrawalFlowEnd {
+            setup: self.setup,
+            retrieve_doge_id: self.retrieve_doge_id,
+            change_amount,
+            minter_address,
+            sent_transactions: vec![tx],
+        }
     }
+}
+
+/// Step 5: wait for enough confirmations for the transaction to be considered finalized by the minter.
+pub struct WithdrawalFlowEnd<S> {
+    setup: S,
+    retrieve_doge_id: RetrieveDogeOk,
+    change_amount: u64,
+    minter_address: bitcoin::dogecoin::Address,
+    sent_transactions: Vec<bitcoin::Transaction>,
+}
+
+impl<S> WithdrawalFlowEnd<S>
+where
+    S: AsRef<Setup>,
+{
+    pub fn minter_await_finalized_transaction(self) {
+        assert_eq!(
+            self.sent_transactions.len(),
+            1,
+            "BUG: expected exactly one transaction"
+        );
+        let sent_tx = self.sent_transactions.first().unwrap().compute_txid();
+        self.finalize_transaction(sent_tx);
+    }
+
+    pub fn minter_await_finalized_transaction_by<F>(self, selector: F)
+    where
+        F: FnOnce(&[bitcoin::Transaction]) -> &bitcoin::Transaction,
+    {
+        let tx_to_finalize = selector(&self.sent_transactions).compute_txid();
+        self.finalize_transaction(tx_to_finalize);
+    }
+
+    fn finalize_transaction(self, txid: bitcoin::Txid) {
+        use bitcoin::hashes::Hash;
+
+        let minter = self.setup.as_ref().minter();
+        self.setup
+            .as_ref()
+            .env
+            .advance_time(MIN_CONFIRMATIONS * BLOCK_FREQUENCY + Duration::from_secs(1));
+        let txid_bytes: [u8; 32] = txid.to_byte_array();
+        self.setup.as_ref().dogecoin().push_utxo(
+            Utxo {
+                value: self.change_amount,
+                height: 0,
+                outpoint: OutPoint {
+                    txid: txid_bytes.into(),
+                    vout: 1,
+                },
+            },
+            self.minter_address.to_string(),
+        );
+
+        assert_eq!(
+            minter.await_finalized_doge_transaction(self.retrieve_doge_id.block_index),
+            Txid::from(txid_bytes)
+        );
+        minter.assert_that_events().contains_only_once_in_order(&[
+            EventType::ConfirmedBtcTransaction {
+                txid: txid_bytes.into(),
+            },
+        ]);
+        minter.self_check();
+    }
+
+    pub fn minter_await_resubmission(mut self) -> Self {
+        assert!(
+            !self.sent_transactions.is_empty(),
+            "BUG: no transactions to resubmit"
+        );
+        let setup = self.setup.as_ref();
+        let minter = setup.minter();
+        let dogecoin = setup.dogecoin();
+        let mempool_before = dogecoin.mempool();
+        setup
+            .env
+            .advance_time(MIN_RESUBMISSION_DELAY + Duration::from_secs(1));
+        let mut mempool_after =
+            dogecoin.await_mempool(|mempool| mempool.len() > mempool_before.len());
+
+        let new_txid = minter.await_doge_transaction(self.retrieve_doge_id.block_index);
+        let new_tx = mempool_after
+            .remove(&new_txid)
+            .expect("BUG: did not find resubmit transaction");
+        assert_replacement_transaction(self.sent_transactions.last().unwrap(), &new_tx);
+        self.sent_transactions.push(new_tx);
+        self
+    }
+}
+
+fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Transaction) {
+    const MIN_RELAY_FEE_PER_KB: u64 = 1_000;
+
+    fn input_utxos(tx: &bitcoin::Transaction) -> Vec<bitcoin::OutPoint> {
+        tx.input.iter().map(|txin| txin.previous_output).collect()
+    }
+
+    fn output_script_pubkey(tx: &bitcoin::Transaction) -> BTreeSet<&bitcoin::script::ScriptBuf> {
+        tx.output
+            .iter()
+            .map(|output| &output.script_pubkey)
+            .collect()
+    }
+
+    assert_ne!(old.compute_txid(), new.compute_txid());
+    assert_eq!(input_utxos(old), input_utxos(new));
+    assert_eq!(output_script_pubkey(old), output_script_pubkey(new));
+
+    let new_out_value = new.output.iter().map(|out| out.value.to_sat()).sum::<u64>();
+    let prev_out_value = old.output.iter().map(|out| out.value.to_sat()).sum::<u64>();
+    // TODO XC-496: fix fee handling
+    let relay_cost = new.vsize() as u64 * MIN_RELAY_FEE_PER_KB / 1000;
+
+    assert!(
+        new_out_value + relay_cost <= prev_out_value,
+        "the transaction fees should have increased by at least {relay_cost}. prev out value: {prev_out_value}, new out value: {new_out_value}"
+    );
 }
