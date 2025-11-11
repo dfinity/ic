@@ -1,21 +1,10 @@
-use crate::{
-    eth_rpc::Hash,
-    lifecycle::EthereumNetwork,
-    logs::{INFO, PrintProxySink, TRACE_HTTP},
-    numeric::TransactionCount,
-    state::State,
-};
-use candid::Nat;
-use evm_rpc_client::{EvmRpcClient, IcRuntime, OverrideRpcConfig};
+use crate::{lifecycle::EthereumNetwork, logs::INFO, state::State};
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient, IcRuntime};
 use evm_rpc_types::{
-    Block, BlockTag, ConsensusStrategy, EthSepoliaService, FeeHistory, FeeHistoryArgs, GetLogsArgs,
-    GetLogsRpcConfig as EvmGetLogsRpcConfig, GetTransactionCountArgs as EvmGetTransactionCountArgs,
-    Hex20, HttpOutcallError, LogEntry, MultiRpcResult as EvmMultiRpcResult,
-    RpcConfig as EvmRpcConfig, RpcError, RpcService as EvmRpcService,
-    RpcServices as EvmRpcServices, SendRawTransactionStatus, TransactionReceipt,
+    ConsensusStrategy, EthSepoliaService, HttpOutcallError, MultiRpcResult as EvmMultiRpcResult,
+    RpcError, RpcService as EvmRpcService, RpcServices as EvmRpcServices,
 };
 use ic_canister_log::log;
-use ic_ethereum_types::Address;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Debug,
@@ -31,152 +20,46 @@ mod tests;
 // the headers size to 8 KiB. We chose a lower limit because headers observed on most providers
 // fit in the constant defined below, and if there is spike, then the payload size adjustment
 // should take care of that.
-const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
+pub const HEADER_SIZE_LIMIT: u64 = 2 * 1024;
 // We expect most of the calls to contain zero events.
-const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
-const TOTAL_NUMBER_OF_PROVIDERS: u8 = 4;
+pub const ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE: u64 = 100;
 
-#[derive(Debug)]
-pub struct EthRpcClient {
-    evm_rpc_client: EvmRpcClient<IcRuntime, PrintProxySink>,
-}
+pub const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
 
-impl EthRpcClient {
-    pub fn from_state(state: &State) -> Self {
-        fn rpc_config(strategy: ConsensusStrategy) -> EvmRpcConfig {
-            EvmRpcConfig {
-                response_consensus: Some(strategy),
-                ..EvmRpcConfig::default()
-            }
-        }
+pub fn rpc_client(state: &State) -> EvmRpcClient<IcRuntime, CandidResponseConverter, DoubleCycles> {
+    const TOTAL_NUMBER_OF_PROVIDERS: u8 = 4;
+    const MAX_NUM_RETRIES: u32 = 10;
 
-        let chain = state.ethereum_network();
-        let evm_rpc_id = state.evm_rpc_id();
-        const MIN_ATTACHED_CYCLES: u128 = 500_000_000_000;
+    let chain = state.ethereum_network();
+    let evm_rpc_id = state.evm_rpc_id();
 
-        let providers = match chain {
-            EthereumNetwork::Mainnet => EvmRpcServices::EthMainnet(None),
-            EthereumNetwork::Sepolia => EvmRpcServices::EthSepolia(Some(vec![
-                EthSepoliaService::BlockPi,
-                EthSepoliaService::PublicNode,
-                EthSepoliaService::Alchemy,
-                EthSepoliaService::Ankr,
-            ])),
-        };
-        let min_threshold = match chain {
-            EthereumNetwork::Mainnet => 3_u8,
-            EthereumNetwork::Sepolia => 2_u8,
-        };
-        assert!(
-            min_threshold <= TOTAL_NUMBER_OF_PROVIDERS,
-            "BUG: min_threshold too high"
-        );
-        let response_consensus = ConsensusStrategy::Threshold {
+    let providers = match chain {
+        EthereumNetwork::Mainnet => EvmRpcServices::EthMainnet(None),
+        EthereumNetwork::Sepolia => EvmRpcServices::EthSepolia(Some(vec![
+            EthSepoliaService::BlockPi,
+            EthSepoliaService::PublicNode,
+            EthSepoliaService::Alchemy,
+            EthSepoliaService::Ankr,
+        ])),
+    };
+
+    let min_threshold = match chain {
+        EthereumNetwork::Mainnet => 3_u8,
+        EthereumNetwork::Sepolia => 2_u8,
+    };
+    assert!(
+        min_threshold <= TOTAL_NUMBER_OF_PROVIDERS,
+        "BUG: min_threshold too high"
+    );
+
+    EvmRpcClient::builder(IcRuntime, evm_rpc_id)
+        .with_rpc_sources(providers)
+        .with_consensus_strategy(ConsensusStrategy::Threshold {
             total: Some(TOTAL_NUMBER_OF_PROVIDERS),
             min: min_threshold,
-        };
-        let evm_rpc_client = EvmRpcClient::builder_for_ic(TRACE_HTTP)
-            .with_providers(providers)
-            .with_evm_canister_id(evm_rpc_id)
-            .with_min_attached_cycles(MIN_ATTACHED_CYCLES)
-            .with_override_rpc_config(OverrideRpcConfig {
-                eth_get_block_by_number: Some(rpc_config(response_consensus.clone())),
-                eth_get_logs: Some(EvmGetLogsRpcConfig {
-                    response_size_estimate: Some(
-                        ETH_GET_LOGS_INITIAL_RESPONSE_SIZE_ESTIMATE + HEADER_SIZE_LIMIT,
-                    ),
-                    response_consensus: Some(response_consensus.clone()),
-                    ..Default::default()
-                }),
-                eth_fee_history: Some(rpc_config(response_consensus.clone())),
-                eth_get_transaction_receipt: Some(rpc_config(response_consensus.clone())),
-                eth_get_transaction_count: Some(rpc_config(response_consensus.clone())),
-                eth_send_raw_transaction: Some(rpc_config(response_consensus)),
-            })
-            .build();
-
-        Self { evm_rpc_client }
-    }
-
-    pub async fn eth_get_logs(
-        &self,
-        params: GetLogsArgs,
-    ) -> Result<Vec<LogEntry>, MultiCallError<Vec<LogEntry>>> {
-        self.evm_rpc_client
-            .eth_get_logs(params)
-            .await
-            .reduce_with_strategy(NoReduction)
-    }
-
-    pub async fn eth_get_block_by_number(
-        &self,
-        block: BlockTag,
-    ) -> Result<Block, MultiCallError<Block>> {
-        self.evm_rpc_client
-            .eth_get_block_by_number(block)
-            .await
-            .reduce_with_strategy(NoReduction)
-    }
-
-    pub async fn eth_get_transaction_receipt(
-        &self,
-        tx_hash: Hash,
-    ) -> Result<Option<TransactionReceipt>, MultiCallError<Option<TransactionReceipt>>> {
-        self.evm_rpc_client
-            .eth_get_transaction_receipt(tx_hash.to_string())
-            .await
-            .reduce_with_strategy(NoReduction)
-    }
-
-    pub async fn eth_fee_history(
-        &self,
-        params: FeeHistoryArgs,
-    ) -> Result<FeeHistory, MultiCallError<FeeHistory>> {
-        self.evm_rpc_client
-            .eth_fee_history(params)
-            .await
-            .reduce_with_strategy(StrictMajorityByKey::new(|fee_history: &FeeHistory| {
-                Nat::from(fee_history.oldest_block.clone())
-            }))
-    }
-
-    pub async fn eth_send_raw_transaction(
-        &self,
-        raw_signed_transaction_hex: String,
-    ) -> Result<SendRawTransactionStatus, MultiCallError<SendRawTransactionStatus>> {
-        self.evm_rpc_client
-            .eth_send_raw_transaction(raw_signed_transaction_hex)
-            .await
-            .reduce_with_strategy(AnyOf)
-    }
-
-    pub async fn eth_get_finalized_transaction_count(
-        &self,
-        address: Address,
-    ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        self.evm_rpc_client
-            .eth_get_transaction_count(EvmGetTransactionCountArgs {
-                address: Hex20::from(address.into_bytes()),
-                block: BlockTag::Finalized,
-            })
-            .await
-            .map(TransactionCount::from)
-            .reduce_with_strategy(NoReduction)
-    }
-
-    pub async fn eth_get_latest_transaction_count(
-        &self,
-        address: Address,
-    ) -> Result<TransactionCount, MultiCallError<TransactionCount>> {
-        self.evm_rpc_client
-            .eth_get_transaction_count(EvmGetTransactionCountArgs {
-                address: Hex20::from(address.into_bytes()),
-                block: BlockTag::Latest,
-            })
-            .await
-            .map(TransactionCount::from)
-            .reduce_with_strategy(MinByKey::new(|count: &TransactionCount| *count))
-    }
+        })
+        .with_retry_strategy(DoubleCycles::with_max_num_retries(MAX_NUM_RETRIES))
+        .build()
 }
 
 /// Aggregates responses of different providers to the same query.

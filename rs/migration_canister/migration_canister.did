@@ -1,5 +1,41 @@
-type MigrationCanisterInitPayload = record {};
-
-service : (opt MigrationCanisterInitPayload) -> {
-
+type ListEventsArgs = record { page_size : nat64; page_index : nat64 };
+type MigrationStatus = variant {
+  Failed : record { time : nat64; reason : text };
+  Succeeded : record { time : nat64 };
+  InProgress : record { status : text };
 };
+
+type MigrateCanisterArgs = record { source : principal; target : principal };
+
+type MigrationCanisterResult = variant { Ok; Err : MigrationCanisterError };
+type MigrationCanisterError = variant { CallerNotAuthorized };
+
+type ValidationResult = variant { Ok; Err : ValidationError };
+type ValidationError = variant {
+  CanisterNotFound : record { canister : principal };
+  CallFailed : record { reason : text };
+  NotController : record { canister : principal };
+  CallerNotController : record { canister : principal };
+  TargetHasSnapshots;
+  MigrationInProgress : record { canister : principal };
+  ValidationInProgress : record { canister : principal };
+  SourceNotStopped;
+  RateLimited;
+  MigrationsDisabled;
+  SourceNotReady;
+  SourceInsufficientCycles;
+  SameSubnet;
+  TargetNotStopped;
+};
+
+type MigrationCanisterInitArgs = record { allowlist : opt vec principal };
+
+service : (MigrationCanisterInitArgs) -> {
+  disable_api : () -> (MigrationCanisterResult);
+  enable_api : () -> (MigrationCanisterResult);
+  list_events : (ListEventsArgs) -> (vec MigrationStatus) query;
+  migrate_canister : (MigrateCanisterArgs) -> (ValidationResult);
+  // The same `(source, target)` pair might be processed again after a failure
+  // and thus we return a vector.
+  migration_status : (MigrateCanisterArgs) -> (vec MigrationStatus) query;
+}

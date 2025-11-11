@@ -198,6 +198,7 @@ fn assert_outcall_result(
                             max_response_bytes: None,
                             // Not replicated, as the /ip endpoint returns different results on each call.
                             is_replicated: Some(false),
+                            pricing_version: None,
                         },
                         cycles: 500_000_000_000,
                     },

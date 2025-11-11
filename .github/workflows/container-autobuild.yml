@@ -44,16 +44,15 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
           token: ${{ steps.app-token.outputs.token }}
-          fetch-depth: 8
 
       - name: Set Env Variables
         shell: bash
-        id: envs
+        id: cfg
         run: |
-          # Set relevant env variables
+          # Set relevant outputs
           set -eExuo pipefail
-          IMAGE_TAG="$(ci/container/get-image-tag.sh)"
-          echo "IMAGE_TAG=${IMAGE_TAG}" >> "$GITHUB_ENV"
+          image_tag="$(ci/container/get-image-tag.sh)"
+          echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
 
       - name: Check Previous Builds
         shell: bash
@@ -61,15 +60,13 @@ jobs:
         run: |
           # Check if we've previously already built ic-build image
           set -eExuo pipefail
-          if grep "$IMAGE_TAG" ci/container/TAG; then
+          if grep '${{ steps.cfg.outputs.image_tag }}' ci/container/TAG; then
             echo "build=false" >> "$GITHUB_OUTPUT"
             echo "Update with this image already in this PR!"
             echo "Modify ci/container/TAG with random string to trigger new build."
           else
             echo "build=true" >> "$GITHUB_OUTPUT"
           fi
-        env:
-          IMAGE_TAG: ${{ env.IMAGE_TAG }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@a530e948adbeb357dbca95a7f8845d385edf4438 # v3
@@ -84,6 +81,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Container Image
+        # this sets the output 'imageid' to the sha256 of the output image
         uses: docker/build-push-action@eb539f44b153603ccbfbd98e2ab9d4d0dcaf23a4 # v5
         if: ${{ steps.check.outputs.build == 'true' }}
         id: build
@@ -91,7 +89,7 @@ jobs:
           context: .
           file: ci/container/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/ic-build:${{ env.IMAGE_TAG }}
+          tags: ghcr.io/${{ github.repository_owner }}/ic-build:${{ steps.cfg.outputs.image_tag }}
           build-args: |
             CI_USER=1001
 
@@ -103,9 +101,9 @@ jobs:
           set -xeuo pipefail
 
           IMG_NAME=${{ github.repository_owner }}/ic-build
-          IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ env.IMAGE_SHA }}"
+          IMG_NAME_FULL="ghcr.io/${IMG_NAME}@${{ steps.build.outputs.imageid }}"
 
-          echo "$IMAGE_TAG" > ci/container/TAG
+          echo '${{ steps.cfg.outputs.image_tag }}' > ci/container/TAG
           pushd .devcontainer
           sed -i -E "s|(ghcr.io/)?$IMG_NAME(:\|@)[^\"]{5,}|$IMG_NAME_FULL|g" -- *
           popd
@@ -116,10 +114,8 @@ jobs:
           git config --global user.name "IDX GitHub Automation"
           git config --global user.email "<>"
           git add .
-          git commit -m "Updating container image to ${IMAGE_SHA}" -m "Image tag: ${IMAGE_TAG}"
+          git commit -m 'Updating container image to ${{ steps.build.outputs.imageid }}' -m 'Image tag: ${{ steps.cfg.outputs.image_tag }}'
           git push
-        env:
-          IMAGE_SHA: ${{ steps.build.outputs.imageid }}
 
       - name: Add PR Comment
         uses: actions/github-script@v7
@@ -128,7 +124,7 @@ jobs:
           script: |
             let message = 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
             message += 'New container image: `${{ steps.build.outputs.imageid }}`\n'
-            message += 'New container tag: `${{ env.IMAGE_TAG }}`'
+            message += 'New container tag: `${{ steps.cfg.outputs.image_tag }}`'
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,

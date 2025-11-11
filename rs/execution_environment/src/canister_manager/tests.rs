@@ -110,6 +110,8 @@ use wirm::wasmparser;
 use super::InstallCodeResult;
 use prometheus::IntCounter;
 
+const MIB: u64 = 1 << 20;
+const GIB: u64 = 1 << 30;
 const T: u128 = 1_000_000_000_000;
 
 const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
@@ -1875,6 +1877,86 @@ fn delete_stopped_canister_succeeds_once() {
         err.description()
             .contains(&format!("Canister {canister_id} not found"))
     );
+}
+
+/// Tests that subnet available memory is updated properly after deleting a canister
+/// with 1 GiB of stable memory and ~1 GiB of snapshot memory.
+fn delete_canister_updates_subnet_available_memory_for_memory_allocation(memory_allocation: u64) {
+    let mut test = ExecutionTestBuilder::new().build();
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+
+    let canister_id = test.universal_canister().unwrap();
+
+    // Set memory allocation to the given value.
+    let args = UpdateSettingsArgs {
+        canister_id: canister_id.get(),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(0)
+            .with_memory_allocation(memory_allocation)
+            .build(),
+        sender_canister_version: None,
+    };
+    test.subnet_message(Method::UpdateSettings, args.encode())
+        .unwrap();
+
+    // Grow stable memory to `1 << 14` WASM pages, i.e., 1 GiB.
+    test.ingress(
+        canister_id,
+        "update",
+        wasm().stable64_grow(1 << 14).reply().build(),
+    )
+    .unwrap();
+
+    // Take canister snapshot => ~1 GiB of snapshot memory.
+    let take_canister_snapshot_args = TakeCanisterSnapshotArgs::new(canister_id, None);
+    test.subnet_message(
+        Method::TakeCanisterSnapshot,
+        take_canister_snapshot_args.encode(),
+    )
+    .unwrap();
+
+    // Stop the canister so that it can be deleted.
+    let _ = test.stop_canister(canister_id);
+    test.process_stopping_canisters();
+    assert_eq!(
+        test.canister_state(canister_id).status(),
+        CanisterStatusType::Stopped
+    );
+
+    // The canister memory usage should be ~2 GiB.
+    let canister_memory_usage = test.canister_state(canister_id).memory_usage().get();
+    assert!(2 * GIB <= canister_memory_usage);
+    assert!(canister_memory_usage <= 2 * GIB + 10 * MIB);
+
+    let subnet_available_memory_before_deletion =
+        test.subnet_available_memory().get_execution_memory() as u64;
+    let canister_memory_allocated_bytes = test
+        .canister_state(canister_id)
+        .memory_allocated_bytes()
+        .get();
+
+    test.delete_canister(canister_id).unwrap();
+
+    let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
+    assert_eq!(subnet_available_memory, initial_subnet_available_memory);
+    assert!(subnet_available_memory > subnet_available_memory_before_deletion);
+    let freed_subnet_memory_usage =
+        subnet_available_memory - subnet_available_memory_before_deletion;
+    assert_eq!(freed_subnet_memory_usage, canister_memory_allocated_bytes);
+}
+
+#[test]
+fn delete_canister_updates_subnet_available_memory() {
+    const MEMORY_ALLOCATION: u64 = 6 * GIB;
+
+    // First we test with a small memory allocation, i.e., the allocated bytes
+    // correspond to the actual canister memory usage.
+    delete_canister_updates_subnet_available_memory_for_memory_allocation(0);
+
+    // Next we test with a large memory allocation, i.e., the allocated bytes
+    // correspond to that (large) memory allocation.
+    delete_canister_updates_subnet_available_memory_for_memory_allocation(MEMORY_ALLOCATION);
 }
 
 #[test]
@@ -4653,6 +4735,78 @@ fn uninstall_code_on_empty_canister() {
 }
 
 #[test]
+fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(CYCLES);
+
+    let canister_history_memory_usage = |test: &mut ExecutionTest| {
+        let canister_history_memory_usage = test
+            .canister_state(canister_id)
+            .canister_history_memory_usage()
+            .get();
+        let canister_memory_usage = test.canister_state(canister_id).memory_usage().get();
+        let canister_memory_allocated_bytes = test
+            .canister_state(canister_id)
+            .memory_allocated_bytes()
+            .get();
+        assert_eq!(canister_history_memory_usage, canister_memory_usage);
+        assert_eq!(canister_memory_usage, canister_memory_allocated_bytes);
+        canister_history_memory_usage
+    };
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+    let initial_canister_history_memory_usage = canister_history_memory_usage(&mut test);
+    assert!(initial_canister_history_memory_usage > 0);
+
+    test.uninstall_code(canister_id).unwrap();
+
+    let final_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+    assert!(final_subnet_available_memory < initial_subnet_available_memory);
+    let final_canister_history_memory_usage = canister_history_memory_usage(&mut test);
+    assert!(final_canister_history_memory_usage > initial_canister_history_memory_usage);
+
+    let extra_subnet_memory_usage = initial_subnet_available_memory - final_subnet_available_memory;
+    let extra_canister_history_memory_usage =
+        final_canister_history_memory_usage - initial_canister_history_memory_usage;
+    assert_eq!(
+        extra_subnet_memory_usage,
+        extra_canister_history_memory_usage
+    );
+}
+
+#[test]
+fn uninstall_code_on_empty_canister_updates_subnet_available_memory_for_memory_allocation() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MEMORY_ALLOCATION: u64 = 10 * GIB;
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(MEMORY_ALLOCATION)
+                .build(),
+        )
+        .unwrap();
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+
+    test.uninstall_code(canister_id).unwrap();
+
+    let final_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+    assert_eq!(
+        final_subnet_available_memory,
+        initial_subnet_available_memory
+    );
+}
+
+#[test]
 fn uninstall_code_with_wrong_controller_fails() {
     const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
 
@@ -5188,7 +5342,7 @@ fn chunk_store_methods_succeed_from_canister_itself() {
     }
 }
 
-const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(190);
+const EMPTY_CANISTER_MEMORY_USAGE: NumBytes = NumBytes::new(222);
 
 #[test]
 fn empty_canister_memory_usage() {
@@ -6215,6 +6369,7 @@ fn rename_canister(
             version: new_version,
             total_num_changes: new_num_changes,
         },
+        requested_by: sender_canister.into(),
         sender_canister_version,
     };
 
@@ -6379,6 +6534,7 @@ fn can_rename_canister() {
         new_canister_id.into(),
         new_version,
         new_num_changes,
+        canister_id1.into(),
     );
     verify_rename_happened(
         canister_id2,
@@ -6423,6 +6579,7 @@ fn can_rename_canister() {
         third_canister_id.into(),
         third_version,
         third_num_changes,
+        canister_id1.into(),
     );
     verify_rename_happened(
         new_canister_id,
@@ -6460,6 +6617,7 @@ fn cannot_rename_from_ingress() {
             version: 0,
             total_num_changes: 0,
         },
+        requested_by: PrincipalId::new_anonymous(),
         sender_canister_version: 0,
     };
 
@@ -7223,6 +7381,66 @@ fn create_canister_insufficient_cycles_for_memory_allocation() {
     result.unwrap().assert_contains_reject(
         "Cannot increase memory allocation to 1024.00 MiB due to insufficient cycles.",
     );
+}
+
+#[test]
+fn create_canister_updates_subnet_available_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+
+    let canister_id = test.create_canister(Cycles::from(10 * T));
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .memory_allocation()
+            .pre_allocated_bytes()
+            .get(),
+        0,
+    );
+
+    let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
+    assert!(subnet_available_memory < initial_subnet_available_memory);
+    let subnet_memory_usage = initial_subnet_available_memory - subnet_available_memory;
+    let canister_history_memory_usage = test
+        .canister_state(canister_id)
+        .canister_history_memory_usage()
+        .get();
+    assert!(canister_history_memory_usage > 0);
+    assert_eq!(subnet_memory_usage, canister_history_memory_usage);
+}
+
+#[test]
+fn create_canister_updates_subnet_available_memory_for_memory_allocation() {
+    const MEMORY_ALLOCATION: u64 = 10 * GIB;
+
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::from(10 * T),
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(MEMORY_ALLOCATION)
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .memory_allocation()
+            .pre_allocated_bytes()
+            .get(),
+        MEMORY_ALLOCATION,
+    );
+
+    let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
+    assert!(subnet_available_memory < initial_subnet_available_memory);
+    let subnet_memory_usage = initial_subnet_available_memory - subnet_available_memory;
+    assert_eq!(subnet_memory_usage, MEMORY_ALLOCATION);
 }
 
 #[test]
