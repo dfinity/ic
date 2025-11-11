@@ -65,7 +65,8 @@ impl RosettaRequestHandler {
             .map(|m| ConstructionPayloadsRequestMetadata::try_from(m.clone()))
             .transpose()
             .map_err(|e| {
-                let err_msg = format!("Failed to parse construction payloads request metadata: {e:?}");
+                let err_msg =
+                    format!("Failed to parse construction payloads request metadata: {e:?}");
                 debug!("{}", err_msg);
                 e
             })?;
@@ -327,9 +328,7 @@ fn handle_transfer_operation(
     ingress_expiries: &[u64],
 ) -> Result<(), ApiError> {
     let pk = pks_map.get(&from).ok_or_else(|| {
-        let err_msg = format!(
-            "Transfer - Cannot find public key for account identifier {from}"
-        );
+        let err_msg = format!("Transfer - Cannot find public key for account identifier {from}");
         debug!("{}", err_msg);
         ApiError::internal_error(err_msg)
     })?;
@@ -394,9 +393,7 @@ fn handle_neuron_info(
     // In the case of an hotkey, account will be derived from the hotkey so
     // we can use the same logic for controller or hotkey.
     let pk = pks_map.get(&account).ok_or_else(|| {
-        let err_msg = format!(
-            "NeuronInfo - Cannot find public key for account {account}"
-        );
+        let err_msg = format!("NeuronInfo - Cannot find public key for account {account}");
         debug!("{}", err_msg);
         ApiError::internal_error(err_msg)
     })?;
@@ -449,9 +446,7 @@ fn handle_list_neurons(
     // In the case of an hotkey, account will be derived from the hotkey so
     // we can use the same logic for controller or hotkey.
     let pk = pks_map.get(&account).ok_or_else(|| {
-        let err_msg = format!(
-            "ListNeurons - Cannot find public key for account {account}"
-        );
+        let err_msg = format!("ListNeurons - Cannot find public key for account {account}");
         debug!("{}", err_msg);
         ApiError::internal_error(err_msg)
     })?;
@@ -571,9 +566,7 @@ fn handle_stake(
     let account = req.account;
     let neuron_index = req.neuron_index;
     let pk = pks_map.get(&account).ok_or_else(|| {
-        let err_msg = format!(
-            "Stake - Cannot find public key for account identifier {account}"
-        );
+        let err_msg = format!("Stake - Cannot find public key for account identifier {account}");
         debug!("{}", err_msg);
         ApiError::internal_error(err_msg)
     })?;
@@ -996,9 +989,7 @@ fn add_neuron_management_payload(
     // In the case of an hotkey, account will be derived from the hotkey so
     // we can use the same logic for controller or hotkey.
     let pk = pks_map.get(&account).ok_or_else(|| {
-        let err_msg = format!(
-            "Neuron management - Cannot find public key for account {account}"
-        );
+        let err_msg = format!("Neuron management - Cannot find public key for account {account}");
         debug!("{}", err_msg);
         ApiError::internal_error(err_msg)
     })?;
@@ -1095,9 +1086,8 @@ fn neuron_subaccount(
         None => {
             // Default controller.
             let pk = pks_map.get(&account).ok_or_else(|| {
-                let err_msg = format!(
-                    "Neuron subaccount - Cannot find public key for account {account}"
-                );
+                let err_msg =
+                    format!("Neuron subaccount - Cannot find public key for account {account}");
                 debug!("{}", err_msg);
                 ApiError::internal_error(err_msg)
             })?;
