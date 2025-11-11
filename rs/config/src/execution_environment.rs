@@ -143,9 +143,6 @@ const BITCOIN_MAINNET_STAGING_CANISTER_ID: &str = "axowo-ciaaa-aaaad-acs7q-cai";
 // TODO(EXC-1298): Uninstall this canister once the bitcoin mainnet canister is live.
 const BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID: &str = "gsvzx-syaaa-aaaan-aaabq-cai";
 
-// The ID of the Dogecoin testnet canister.
-pub const DOGECOIN_TESTNET_CANISTER_ID: &str = "hd7hi-kqaaa-aaaan-aaaea-cai";
-
 // The ID of the Dogecoin mainnet canister.
 pub const DOGECOIN_MAINNET_CANISTER_ID: &str = "gordg-fyaaa-aaaan-aaadq-cai";
 
@@ -365,15 +362,13 @@ impl Default for Config {
             bitcoin_mainnet_canister_id,
             bitcoin_mainnet_staging_canister_id,
             bitcoin_mainnet_soft_launch_canister_id,
-            dogegoin_testnet_canister_id,
-            dogegoin_mainnet_canister_id,
+            dogecoin_mainnet_canister_id,
             dogecoin_mainnet_staging_canister_id,
         ] = expect_canister_id([
             BITCOIN_TESTNET_CANISTER_ID,
             BITCOIN_MAINNET_CANISTER_ID,
             BITCOIN_MAINNET_STAGING_CANISTER_ID,
             BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID,
-            DOGECOIN_TESTNET_CANISTER_ID,
             DOGECOIN_MAINNET_CANISTER_ID,
             DOGECOIN_MAINNET_STAGING_CANISTER_ID,
         ]);
@@ -420,8 +415,7 @@ impl Default for Config {
                     bitcoin_mainnet_canister_id,
                     bitcoin_mainnet_staging_canister_id,
                     bitcoin_mainnet_soft_launch_canister_id,
-                    dogegoin_testnet_canister_id,
-                    dogegoin_mainnet_canister_id,
+                    dogecoin_mainnet_canister_id,
                     dogecoin_mainnet_staging_canister_id,
                 ],
                 testnet_canister_id: Some(bitcoin_testnet_canister_id),
@@ -484,7 +478,7 @@ mod tests {
         BITCOIN_MAINNET_CANISTER_ID, BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID,
         BITCOIN_MAINNET_STAGING_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID, Config,
         DOGECOIN_MAINNET_CANISTER_ID, DOGECOIN_MAINNET_STAGING_CANISTER_ID,
-        DOGECOIN_TESTNET_CANISTER_ID, expect_canister_id,
+        expect_canister_id,
     };
     use std::collections::BTreeSet;
 
@@ -495,7 +489,6 @@ mod tests {
             BITCOIN_MAINNET_CANISTER_ID,
             BITCOIN_MAINNET_STAGING_CANISTER_ID,
             BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID,
-            DOGECOIN_TESTNET_CANISTER_ID,
             DOGECOIN_MAINNET_CANISTER_ID,
             DOGECOIN_MAINNET_STAGING_CANISTER_ID,
         ])
