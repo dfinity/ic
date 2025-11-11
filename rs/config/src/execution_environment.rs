@@ -477,8 +477,7 @@ mod tests {
     use crate::execution_environment::{
         BITCOIN_MAINNET_CANISTER_ID, BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID,
         BITCOIN_MAINNET_STAGING_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID, Config,
-        DOGECOIN_MAINNET_CANISTER_ID, DOGECOIN_MAINNET_STAGING_CANISTER_ID,
-        expect_canister_id,
+        DOGECOIN_MAINNET_CANISTER_ID, DOGECOIN_MAINNET_STAGING_CANISTER_ID, expect_canister_id,
     };
     use std::collections::BTreeSet;
 
