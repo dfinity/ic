@@ -835,14 +835,12 @@ fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Result<(), SyncError> {
 }
 
 fn process_fee_collector_block(block: &Block<Tokens>) {
-    match block.transaction.operation {
-        Operation::FeeCollector {
-            fee_collector,
-            caller: _,
-        } => {
-            mutate_state(|s| s.fee_collector_107 = Some(fee_collector));
-        }
-        _ => {}
+    if let Operation::FeeCollector {
+        fee_collector,
+        caller: _,
+    } = block.transaction.operation
+    {
+        mutate_state(|s| s.fee_collector_107 = Some(fee_collector));
     }
 }
 
@@ -1036,11 +1034,12 @@ fn get_fee_collector_107() -> Option<Option<Account>> {
 
 fn get_legacy_fee_collector() -> Option<Account> {
     let chain_length = with_blocks(|blocks| blocks.len());
+    if chain_length == 0 {
+        return None;
+    }
     let last_block_index = chain_length - 1;
-    let block = match get_decoded_block(last_block_index) {
-        Some(block) => block,
-        None => return None,
-    };
+    let block = get_decoded_block(last_block_index)
+        .expect("chain_length is positive, should have at least one block");
     if block.fee_collector.is_some() {
         block.fee_collector
     } else if let Some(fee_collector_block_index) = block.fee_collector_block_index {
