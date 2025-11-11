@@ -175,7 +175,7 @@ fn retrieve_btc_status_v2_by_account(target: Option<Account>) -> Vec<BtcRetrieva
 
 #[query]
 fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
-   ic_ckbtc_minter::queries::get_known_utxos(args)
+    ic_ckbtc_minter::queries::get_known_utxos(args)
 }
 
 #[update]
