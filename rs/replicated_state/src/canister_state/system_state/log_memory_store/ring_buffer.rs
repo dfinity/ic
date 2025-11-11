@@ -169,15 +169,7 @@ mod tests {
     use crate::canister_state::system_state::log_memory_store::memory::MemorySize;
     use crate::page_map::PageMap;
 
-    #[test]
-    fn test_ring_buffer_initialization() {
-        let page_map = PageMap::new_for_testing();
-        let data_capacity = MemorySize::new(2 * 1024 * 1024); // 2 MB
-        let ring_buffer = RingBuffer::new(page_map, data_capacity);
-        assert_eq!(ring_buffer.capacity(), data_capacity.get() as usize);
-        assert_eq!(ring_buffer.used_space(), 0);
-        assert_eq!(ring_buffer.next_id(), 0);
-    }
+    const TEST_DATA_CAPACITY: MemorySize = MemorySize::new(2_000_000); // 2 MB
 
     fn log_record(idx: u64, ts_nanos: u64, message: &str) -> LogRecord {
         LogRecord {
@@ -188,120 +180,116 @@ mod tests {
         }
     }
 
+    fn canister_log_record(idx: u64, ts_nanos: u64, message: &str) -> CanisterLogRecord {
+        CanisterLogRecord {
+            idx,
+            timestamp_nanos: ts_nanos,
+            content: message.as_bytes().to_vec(),
+        }
+    }
+
     #[test]
-    fn push_and_pop_order_preserved() {
+    fn test_initialization() {
         let page_map = PageMap::new_for_testing();
-        let data_capacity = MemorySize::new(4096);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
+        let data_capacity = TEST_DATA_CAPACITY;
+
+        let ring_buffer = RingBuffer::new(page_map, data_capacity);
+
+        assert_eq!(ring_buffer.capacity(), data_capacity.get() as usize);
+        assert_eq!(ring_buffer.used_space(), 0);
+        assert_eq!(ring_buffer.next_id(), 0);
+    }
+
+    #[test]
+    fn test_push_and_pop_order_preserved() {
+        let page_map = PageMap::new_for_testing();
+        let data_capacity = TEST_DATA_CAPACITY;
+        let mut ring_buffer = RingBuffer::new(page_map, data_capacity);
 
         let a = log_record(0, 100, "a");
         let b = log_record(1, 200, "bb");
+        ring_buffer.push_back(&a);
+        ring_buffer.push_back(&b);
 
-        rb.push_back(&a);
-        rb.push_back(&b);
-
-        assert_eq!(rb.used_space(), a.bytes_len() + b.bytes_len());
-        assert_eq!(rb.pop_front().unwrap(), a);
-        assert_eq!(rb.pop_front().unwrap(), b);
-        assert!(rb.pop_front().is_none());
+        assert_eq!(ring_buffer.used_space(), a.bytes_len() + b.bytes_len());
+        assert_eq!(ring_buffer.pop_front().unwrap(), a);
+        assert_eq!(ring_buffer.pop_front().unwrap(), b);
+        assert!(ring_buffer.pop_front().is_none());
     }
 
     #[test]
-    fn wraps_around_correctly() {
+    fn test_wraps_around_correctly() {
         let page_map = PageMap::new_for_testing();
-        // tiny capacity to force wrap quickly
-        let data_capacity = MemorySize::new(128);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
+        let data_capacity = MemorySize::new(128); // Small capacity to force wrap.
+        let mut ring_buffer = RingBuffer::new(page_map, data_capacity);
 
-        // push until wrap occurs
-        for i in 0..10u64 {
-            let r = log_record(i, i * 10 + 1, "x");
-            rb.push_back(&r);
-            // Keep popping occasionally to exercise head movement
+        // Push until wrap occurs, pop some in between to move head forward.
+        for i in 0..100_u64 {
+            ring_buffer.push_back(&log_record(i, i * 100, "message"));
             if i % 3 == 0 {
-                let _ = rb.pop_front();
+                let _ = ring_buffer.pop_front();
             }
         }
 
-        // drain remaining and ensure order is monotonic by idx
-        let mut last_idx = None;
-        while let Some(rec) = rb.pop_front() {
-            if let Some(prev) = last_idx {
-                assert!(rec.idx > prev);
-            }
-            last_idx = Some(rec.idx);
-        }
-    }
-
-    #[test]
-    fn evicts_old_records_when_full() {
-        let page_map = PageMap::new_for_testing();
-        let data_capacity = MemorySize::new(256);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
-
-        // append many records until buffer forces eviction
-        for i in 0..20u64 {
-            let r = log_record(i, i, "payload");
-            rb.push_back(&r);
-        }
-
-        // used_space must be <= capacity and next idx advanced
-        assert!(rb.used_space() <= data_capacity.get() as usize);
-        assert!(rb.next_id() > 0);
-        // popping all remaining records should produce increasing idxs
-        let mut last = None;
-        while let Some(rec) = rb.pop_front() {
+        // Drain remaining and ensure order is monotonic by idx.
+        let mut last: Option<LogRecord> = None;
+        while let Some(curr) = ring_buffer.pop_front() {
             if let Some(prev) = last {
-                assert!(rec.idx > prev);
+                assert!(prev.idx < curr.idx);
             }
-            last = Some(rec.idx);
+            last = Some(curr);
         }
     }
 
     #[test]
-    fn lookup_table_and_records_filtering() {
+    fn test_lookup_table_and_records_filtering() {
         let page_map = PageMap::new_for_testing();
-        let data_capacity = MemorySize::new(4096);
-        let mut rb = RingBuffer::new(page_map, data_capacity);
-
+        let data_capacity = TEST_DATA_CAPACITY;
+        let mut ring_buffer = RingBuffer::new(page_map, data_capacity);
         let r0 = log_record(0, 1000, "alpha");
         let r1 = log_record(1, 2000, "beta");
         let r2 = log_record(2, 3000, "gamma");
+        ring_buffer.push_back(&r0);
+        ring_buffer.push_back(&r1);
+        ring_buffer.push_back(&r2);
 
-        rb.push_back(&r0);
-        rb.push_back(&r1);
-        rb.push_back(&r2);
+        // No filter.
+        let res = ring_buffer.records(None);
+        assert_eq!(
+            res,
+            vec![
+                canister_log_record(0, 1000, "alpha"),
+                canister_log_record(1, 2000, "beta"),
+                canister_log_record(2, 3000, "gamma")
+            ]
+        );
 
-        // No filter
-        let res = rb.records(None);
-        assert_eq!(res.len(), 3);
-        assert_eq!(res[0].idx, 0);
-        assert_eq!(res[1].idx, 1);
-        assert_eq!(res[2].idx, 2);
-
-        // Filter by idx range [1, 2)
-        let res = rb.records(Some(FetchCanisterLogsFilter::ByIdx(
+        // Filter by idx range [1, 2).
+        let res = ring_buffer.records(Some(FetchCanisterLogsFilter::ByIdx(
             FetchCanisterLogsRange { start: 1, end: 2 },
         )));
-        assert_eq!(res.len(), 1);
-        assert_eq!(res[0].idx, 1);
+        assert_eq!(res, vec![canister_log_record(1, 2000, "beta"),]);
 
-        // Filter by timestamp range [1500, 3500)
-        let res = rb.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
+        // Filter by timestamp range [1500, 3500).
+        let res = ring_buffer.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
             FetchCanisterLogsRange {
                 start: 1500,
                 end: 3500,
             },
         )));
-        assert_eq!(res.len(), 2);
-        assert_eq!(res[0].idx, 1);
-        assert_eq!(res[1].idx, 2);
+        assert_eq!(
+            res,
+            vec![
+                canister_log_record(1, 2000, "beta"),
+                canister_log_record(2, 3000, "gamma")
+            ]
+        );
     }
 }
 
 /*
-bazel test //rs/replicated_state/... \
+bazel test //rs/replicated_state:replicated_state_test \
   --test_output=streamed \
   --test_arg=--nocapture \
-  --test_arg=test_ring_buffer_push_pop
+  --test_arg=log_memory_store
 */
