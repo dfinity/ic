@@ -12178,6 +12178,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",
+ "ic-http-types",
  "ic-interfaces-registry",
  "ic-management-canister-types",
  "ic-metrics-encoder",
