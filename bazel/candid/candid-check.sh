@@ -20,7 +20,7 @@ readonly did_check_rev="${DID_CHECK_REV:-HEAD}"
 readonly tmpfile="$(mktemp $TEST_TMPDIR/prev.XXXXXX)"
 readonly errlog="$(mktemp $TEST_TMPDIR/err.XXXXXX)"
 
-if ! git -C "$workspace_root" show "$did_check_rev:$DID_PATH" > "$tmpfile" 2> "$errlog"; then
+if ! git -C "$workspace_root" show "$did_check_rev:$DID_PATH" >"$tmpfile" 2>"$errlog"; then
     if grep -sq -- "exists on disk, but not in \\|does not exist in 'HEAD'" "$errlog"; then
         echo "$DID_PATH is a new file, skipping backwards compatibility check"
         exit 0
