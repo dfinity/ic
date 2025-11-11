@@ -8,6 +8,8 @@ type environment_variable = record {
 
 type CanisterStatusResponse = record {
   status : CanisterStatusType;
+  ready_for_migration : bool;
+  version : nat64;
   memory_size : nat;
   cycles : nat;
   settings : DefiniteCanisterSettings;
