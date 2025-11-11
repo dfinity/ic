@@ -145,6 +145,13 @@ where
         let (mint_index, minted_amount) = minted_status.into_iter().next().unwrap();
         assert_eq!(minted_amount, self.deposit_utxo.value);
 
+        let known_utxos = self.setup.as_ref().minter().get_known_utxos(self.account);
+        assert!(
+            known_utxos.contains(&self.deposit_utxo),
+            "BUG: missing deposit utxo {:?} in {known_utxos:?}",
+            self.deposit_utxo
+        );
+
         self.setup
             .as_ref()
             .ledger()

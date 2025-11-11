@@ -590,14 +590,11 @@ fn finalization_time_estimate<R: CanisterRuntime>(
     network: Network,
     runtime: &R,
 ) -> Duration {
-    const ONE_MINUTE: Duration = Duration::from_secs(60);
     const ONE_SECOND: Duration = Duration::from_secs(1);
 
     let block_time = runtime.block_frequency();
     let estimated_block_time = match network {
-        Network::Mainnet => block_time,
-        // make things snappier for testing purposes
-        Network::Testnet => block_time.min(ONE_MINUTE),
+        Network::Mainnet | Network::Testnet => block_time,
         Network::Regtest => block_time.min(ONE_SECOND),
     };
     min_confirmations * estimated_block_time
