@@ -1,11 +1,6 @@
 [Unit]
 Description=IC replica
 
-After=network-online.target
-Wants=network-online.target
-After=systemd-journal-gatewayd.service
-Wants=systemd-journal-gatewayd.service
-
 After=generate-ic-config.service
 Wants=generate-ic-config.service
 # Replica & orchestrator need ic-crypto-csp service running.
