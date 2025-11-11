@@ -33,11 +33,11 @@ genrule(
 
 # Self-extracting bash script containing all dependencies to reload a HostOS (and the GuestOS in it)
 # Usage:
-# ./reload_hostos --setupos-config-img=<path-to-setupos-config-image> --hostos-upgrade-img=<path-to-hostos-upgrade-image> --guestos-img=<path-to-guestos-image>
+# ./reload_hostos_cmd --setupos-config-img=<path-to-setupos-config-image> --hostos-upgrade-img=<path-to-hostos-upgrade-image> --guestos-img=<path-to-guestos-image>
 genrule(
     name = "reload_hostos",
     srcs = [":reload_hostos_tar"],
-    outs = ["reload_hostos"],
+    outs = ["reload_hostos_cmd"],
     cmd = """
 tar_in="$(execpath :reload_hostos_tar)"
 

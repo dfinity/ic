@@ -401,7 +401,7 @@ async fn get_monthly_node_provider_rewards() -> Result<MonthlyNodeProviderReward
 #[update(hidden = true)]
 async fn get_node_provider_rewards() -> Result<MonthlyNodeProviderRewards, GovernanceError> {
     debug_log("get_node_provider_rewards");
-    let rewards = governance().get_node_providers_rewards().await?;
+    let rewards = governance().get_node_providers_rewards_cached().await?;
     Ok(MonthlyNodeProviderRewards::from(rewards))
 }
 

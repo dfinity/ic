@@ -41,8 +41,3 @@ external_crates_repository(
 load("@crate_index//:defs.bzl", "crate_repositories")
 
 crate_repositories()
-
-# ormolu binary for haskell linting
-load("//pre-commit:ormolu.bzl", "ormolu")
-
-ormolu(name = "ormolu")

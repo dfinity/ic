@@ -119,5 +119,4 @@ rcgen = { workspace = true }
 reqwest = { workspace = true }
 rustls = { workspace = true }
 serde_json = { workspace = true }
-spec-compliance = { path = "../tests/research/spec_compliance" }
 walrus = { workspace = true }
