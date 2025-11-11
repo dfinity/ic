@@ -54,6 +54,8 @@ ignored_repo_components = [
     "guestos/selinux/guestos-recovery-engine/guestos-recovery-engine.te",
     "misc/serial-getty@/guestos-dev/override.conf",
     "misc/serial-getty@/guestos-prod/override.conf",
+    "misc/serial-getty@/hostos-dev/override.conf",
+    "misc/serial-getty@/hostos-prod/override.conf",
 ]
 
 check_unused_components_test(
