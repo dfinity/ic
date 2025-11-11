@@ -240,6 +240,7 @@ fn is_supported(api_type: SystemApiCallId, context: &str) -> bool {
         SystemApiCallId::CostCreateCanister => vec!["*", "s"],
         SystemApiCallId::CostSignWithEcdsa=> vec!["*", "s"],
         SystemApiCallId::CostHttpRequest=> vec!["*", "s"],
+        SystemApiCallId::CostHttpRequestV2=> vec!["*", "s"],
         SystemApiCallId::CostSignWithSchnorr=> vec!["*", "s"],
         SystemApiCallId::CostVetkdDeriveKey => vec!["*", "s"],
         SystemApiCallId::DebugPrint => vec!["*", "s"],
@@ -869,6 +870,7 @@ fn api_availability_test(
         SystemApiCallId::CostCall => {}
         SystemApiCallId::CostCreateCanister => {}
         SystemApiCallId::CostHttpRequest => {}
+        SystemApiCallId::CostHttpRequestV2 => {}
         SystemApiCallId::CostSignWithEcdsa => {}
         SystemApiCallId::CostSignWithSchnorr => {}
         SystemApiCallId::CostVetkdDeriveKey => {}

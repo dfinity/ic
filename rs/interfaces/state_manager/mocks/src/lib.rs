@@ -20,6 +20,8 @@ mock! {
 
         fn get_latest_state(&self) -> Labeled<Arc<ReplicatedState>>;
 
+        fn get_latest_certified_state(&self) -> Option<Labeled<Arc<ReplicatedState>>>;
+
         fn latest_state_height(&self) -> Height;
 
         fn latest_certified_height(&self) -> Height;

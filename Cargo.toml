@@ -476,8 +476,6 @@ members = [
     "rs/tests/nns/sns/lib",
     "rs/tests/node",
     "rs/tests/query_stats/lib",
-    "rs/tests/research",
-    "rs/tests/research/spec_compliance",
     "rs/tests/sdk",
     "rs/tests/test_canisters/http_counter",
     "rs/tests/test_canisters/kv_store",
@@ -638,7 +636,7 @@ der = { version = "0.7", default-features = false, features = ["derive"] }
 derive-new = "0.7.0"
 devicemapper = "0.34"
 dfx-core = { version = "0.1.4" }
-ed25519-dalek = { version = "2.1.1", features = [
+ed25519-dalek = { version = "2.2.0", features = [
     "std",
     "zeroize",
     "digest",
@@ -734,6 +732,7 @@ lmdb-rkv-sys = { git = "https://github.com/dfinity-lab/lmdb-rs", rev = "4d952c8f
 local-ip-address = "0.5.6"
 loopdev-3 = "0.5"
 macaddr = "1.0"
+memchr = "2.7"
 memmap2 = "0.9.5"
 minicbor = { version = "0.19.1", features = ["alloc", "derive"] }
 minicbor-derive = "0.13.0"
@@ -787,7 +786,6 @@ quinn-udp = "0.5.5"
 quote = "1.0.37"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
-raw-cpuid = "11.5"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
@@ -823,7 +821,7 @@ serde_cbor = "0.11.2"
 serde_json = { version = "^1.0.107" }
 serde_with = "1.14.0"
 serde_yaml = "0.9.33"
-sev = { version = "6.2", default-features = false, features = [
+sev = { version = "7.1", default-features = false, features = [
     "crypto_nossl",
     "snp",
 ] }

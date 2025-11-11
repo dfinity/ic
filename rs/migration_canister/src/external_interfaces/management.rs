@@ -141,12 +141,10 @@ pub struct DefiniteCanisterSettingsArgs {
 
 pub async fn canister_status(
     canister_id: Principal,
-    subnet_id: Principal,
 ) -> ProcessingResult<CanisterStatusResponse, ValidationError> {
     let args = CanisterStatusArgs { canister_id };
 
-    // We have to provide the subnet_id explicitly because `aaaaa-aa` will not always work during migration.
-    match Call::bounded_wait(subnet_id, "canister_status")
+    match Call::bounded_wait(Principal::management_canister(), "canister_status")
         .with_arg(args)
         .await
     {
@@ -154,16 +152,16 @@ pub async fn canister_status(
             Ok(canister_status) => ProcessingResult::Success(canister_status),
             Err(e) => {
                 println!(
-                    "Decoding `CanisterStatusResponse` for canister: {}, subnet: {} failed: {:?}",
-                    canister_id, subnet_id, e
+                    "Decoding `CanisterStatusResponse` for canister: {} failed: {:?}",
+                    canister_id, e
                 );
                 ProcessingResult::NoProgress
             }
         },
         Err(e) => {
             println!(
-                "Call `canister_status` for canister: {}, subnet: {} failed: {:?}",
-                canister_id, subnet_id, e
+                "Call `canister_status` for canister: {} failed: {:?}",
+                canister_id, e
             );
             match e {
                 ic_cdk::call::CallFailed::InsufficientLiquidCycleBalance(_)

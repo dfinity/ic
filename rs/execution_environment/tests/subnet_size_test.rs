@@ -534,6 +534,7 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
                         context: vec![],
                     }),
                     is_replicated: None,
+                    pricing_version: None,
                 })
                 .unwrap(),
             ),

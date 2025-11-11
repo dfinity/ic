@@ -2541,12 +2541,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codicon"
-version = "3.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12170080f3533d6f09a19f81596f836854d0fa4867dc32c8172b8474b4e9de61"
-
-[[package]]
 name = "colorchoice"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2635,6 +2629,7 @@ dependencies = [
  "fs_extra",
  "get_if_addrs",
  "ic-config",
+ "ic_sev",
  "linux_kernel_command_line",
  "macaddr",
  "network",
@@ -4189,9 +4184,9 @@ dependencies = [
 
 [[package]]
 name = "ed25519-dalek"
-version = "2.1.1"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a3daa8e81a3963a60642bcc1f90a670680bd4a77535faa384e9d1c79d620871"
+checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
@@ -5462,6 +5457,7 @@ dependencies = [
  "ic_sev",
  "linux_kernel_command_line",
  "macaddr",
+ "memchr",
  "nix 0.24.3",
  "regex",
  "systemd",
@@ -11680,6 +11676,7 @@ dependencies = [
  "canbench-rs",
  "candid",
  "candid_parser",
+ "chrono",
  "comparable",
  "criterion",
  "csv",
@@ -11706,6 +11703,7 @@ dependencies = [
  "ic-nervous-system-common-validation",
  "ic-nervous-system-governance",
  "ic-nervous-system-linear-map",
+ "ic-nervous-system-lock",
  "ic-nervous-system-long-message",
  "ic-nervous-system-proto",
  "ic-nervous-system-rate-limits",
@@ -12180,6 +12178,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",
+ "ic-http-types",
  "ic-interfaces-registry",
  "ic-management-canister-types",
  "ic-metrics-encoder",
@@ -15655,6 +15654,7 @@ dependencies = [
  "anyhow",
  "ic-recovery",
  "ic-system-test-driver",
+ "ic-types",
  "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
  "nested",
@@ -15690,7 +15690,6 @@ dependencies = [
  "p384",
  "pem 1.1.1",
  "rand 0.8.5",
- "raw-cpuid",
  "rcgen",
  "reqwest 0.12.15",
  "rsa",
@@ -19373,7 +19372,6 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "slog",
- "spec-compliance",
  "strum 0.26.3",
  "tempfile",
  "time",
@@ -20916,16 +20914,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "research-systests"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "spec-compliance",
-]
-
-[[package]]
 name = "resolv-conf"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22013,15 +22001,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-big-array"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "serde-bytes-repr"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -22268,16 +22247,14 @@ dependencies = [
 
 [[package]]
 name = "sev"
-version = "6.2.1"
+version = "7.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1750ba11a6a6bba3c220da714caa0226aa34e417dce3975d2953062240717dea"
+checksum = "c2ff74d7e7d1cc172f3a45adec74fbeee928d71df095b85aaaf66eb84e1e31e6"
 dependencies = [
  "base64 0.22.1",
- "bincode",
  "bitfield",
  "bitflags 2.9.0",
  "byteorder",
- "codicon",
  "dirs",
  "hex",
  "iocuddle",
@@ -22285,9 +22262,6 @@ dependencies = [
  "libc",
  "p384",
  "rsa",
- "serde",
- "serde-big-array",
- "serde_bytes",
  "sha2 0.10.9",
  "static_assertions",
  "uuid",
@@ -22747,20 +22721,6 @@ dependencies = [
  "percent-encoding",
  "thiserror 2.0.12",
  "tokio",
-]
-
-[[package]]
-name = "spec-compliance"
-version = "0.9.0"
-dependencies = [
- "canister_http",
- "ic-registry-routing-table",
- "ic-registry-subnet-features",
- "ic-registry-subnet-type",
- "ic-system-test-driver",
- "ic-types",
- "reqwest 0.12.15",
- "slog",
 ]
 
 [[package]]
