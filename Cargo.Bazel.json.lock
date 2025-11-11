@@ -1,5 +1,5 @@
 {
-  "checksum": "a44a9cc0d63506f67561aaf2b0896d3da1dd3cef599fd352e124eff29dbb6a04",
+  "checksum": "11db7320c103af41bd377b671fe127ed47bdd1a6dd098b709ad8053226134fe2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11418,7 +11418,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/canbench.git",
           "commitish": {
-            "Rev": "66ea29a88a62c17c3ac8c7c8538daecf931ddace"
+            "Rev": "02869879713c693f9fa75b44c1a5b1e765d086e1"
           },
           "strip_prefix": "canbench-bin"
         }
@@ -11544,7 +11544,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/canbench.git",
           "commitish": {
-            "Rev": "66ea29a88a62c17c3ac8c7c8538daecf931ddace"
+            "Rev": "02869879713c693f9fa75b44c1a5b1e765d086e1"
           },
           "strip_prefix": "canbench-rs"
         }
@@ -11611,7 +11611,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/canbench.git",
           "commitish": {
-            "Rev": "66ea29a88a62c17c3ac8c7c8538daecf931ddace"
+            "Rev": "02869879713c693f9fa75b44c1a5b1e765d086e1"
           },
           "strip_prefix": "canbench-rs-macros"
         }
@@ -25820,7 +25820,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/evm-rpc-canister.git",
           "commitish": {
-            "Rev": "d082726cd25dc97c7fc6912e82e89ac7c902e3f4"
+            "Rev": "9ef75510eea10ab9d2a919c356987ff56bea18be"
           },
           "strip_prefix": "evm_rpc_client"
         }
@@ -25907,7 +25907,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/evm-rpc-canister.git",
           "commitish": {
-            "Rev": "d082726cd25dc97c7fc6912e82e89ac7c902e3f4"
+            "Rev": "9ef75510eea10ab9d2a919c356987ff56bea18be"
           },
           "strip_prefix": "evm_rpc_types"
         }
@@ -34195,7 +34195,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/cdk-rs.git",
           "commitish": {
-            "Rev": "e1e611ea80d72f9836f910f7179b43685079ce15"
+            "Rev": "e49f7219f4dea72396c428726133fee017c34387"
           },
           "strip_prefix": "ic-cdk"
         }
@@ -34290,7 +34290,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/cdk-rs.git",
           "commitish": {
-            "Rev": "e1e611ea80d72f9836f910f7179b43685079ce15"
+            "Rev": "e49f7219f4dea72396c428726133fee017c34387"
           },
           "strip_prefix": "ic-cdk-executor"
         }
@@ -34376,7 +34376,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/cdk-rs.git",
           "commitish": {
-            "Rev": "e1e611ea80d72f9836f910f7179b43685079ce15"
+            "Rev": "e49f7219f4dea72396c428726133fee017c34387"
           },
           "strip_prefix": "ic-cdk-macros"
         }
@@ -34442,7 +34442,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/cdk-rs.git",
           "commitish": {
-            "Rev": "e1e611ea80d72f9836f910f7179b43685079ce15"
+            "Rev": "e49f7219f4dea72396c428726133fee017c34387"
           },
           "strip_prefix": "ic-cdk-timers"
         }
@@ -35328,7 +35328,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/cdk-rs.git",
           "commitish": {
-            "Rev": "e1e611ea80d72f9836f910f7179b43685079ce15"
+            "Rev": "e49f7219f4dea72396c428726133fee017c34387"
           },
           "strip_prefix": "ic-management-canister-types"
         }
@@ -36179,7 +36179,7 @@
         "Git": {
           "remote": "https://github.com/dfinity/vetkeys.git",
           "commitish": {
-            "Rev": "1d1497c86d86668fc6239e9fcc44ba9604fa1a29"
+            "Rev": "6f9d197e13b86b22add52636bf342c81217a68be"
           },
           "strip_prefix": "backend/rs/ic_vetkeys"
         }
