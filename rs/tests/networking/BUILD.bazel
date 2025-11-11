@@ -119,10 +119,7 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     tags = [
-        # TODO(NET-1710): enable on CI again when the problematic firewall rule in the IC node has been removed.
-        #"long_test",
-        #"system_test_large",
-        "manual",
+        "long_test",
     ],
     runtime_deps =
         UNIVERSAL_VM_RUNTIME_DEPS +
@@ -130,6 +127,7 @@ system_test_nns(
     deps = CANISTER_HTTP_BASE_DEPS + [
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
     ],
 )
 
@@ -271,6 +269,7 @@ system_test_nns(
     env = UNIVERSAL_CANISTER_ENV,
     tags = [
         "long_test",
+        "manual",  # temporarily disabled on CI. TODO(NET-1784): re-enable this.
     ],
     test_driver_target = ":nns_delegation_test",
     # The test will is long because we upgrade a subnet and then wait for a delegation to be refreshed

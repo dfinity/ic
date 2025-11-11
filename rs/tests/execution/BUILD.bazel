@@ -131,9 +131,7 @@ system_test(
 system_test_nns(
     name = "canister_migration_test",
     enable_mainnet_nns_variant = False,
-    env = UNIVERSAL_CANISTER_ENV | {
-        "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
-    },
+    env = UNIVERSAL_CANISTER_ENV,
     test_timeout = "eternal",
     runtime_deps = UNIVERSAL_CANISTER_RUNTIME_DEPS,
     deps = [

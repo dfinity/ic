@@ -1,13 +1,6 @@
-use crate::max_rewardable_nodes_mapping::MAX_REWARDABLE_NODES_MAPPING;
 use crate::{
-    certification::recertify_registry, mutations::node_management::common::get_key_family,
-    pb::v1::RegistryCanisterStableStorage, registry::Registry,
+    certification::recertify_registry, pb::v1::RegistryCanisterStableStorage, registry::Registry,
 };
-use ic_base_types::PrincipalId;
-use ic_protobuf::registry::node_operator::v1::NodeOperatorRecord;
-use ic_registry_keys::{NODE_OPERATOR_RECORD_KEY_PREFIX, make_node_operator_record_key};
-use ic_registry_transport::{pb::v1::RegistryMutation, update};
-use prost::Message;
 
 pub fn canister_post_upgrade(
     registry: &mut Registry,
@@ -25,7 +18,8 @@ pub fn canister_post_upgrade(
 
     // Registry data migrations should be implemented as follows:
     let mutation_batches_due_to_data_migrations = {
-        let mutations = fill_node_operators_max_rewardable_nodes(registry);
+        let mutations: Vec<_> = vec![];
+
         if mutations.is_empty() {
             0 // No mutations required for this data migration.
         } else {
@@ -61,36 +55,6 @@ pub fn canister_post_upgrade(
     }
 }
 
-fn fill_node_operators_max_rewardable_nodes(registry: &Registry) -> Vec<RegistryMutation> {
-    let mut mutations = Vec::new();
-    let max_rewardable_nodes_mapping = &MAX_REWARDABLE_NODES_MAPPING;
-
-    for (_, mut record) in
-        get_key_family::<NodeOperatorRecord>(registry, NODE_OPERATOR_RECORD_KEY_PREFIX).into_iter()
-    {
-        let node_operator_id = PrincipalId::try_from(&record.node_operator_principal_id).unwrap();
-        let rewardable_nodes = &record.rewardable_nodes;
-
-        if !rewardable_nodes.is_empty() {
-            continue;
-        }
-        if let Some(max_rewardable_nodes) =
-            max_rewardable_nodes_mapping.get(&node_operator_id).cloned()
-        {
-            record.max_rewardable_nodes = max_rewardable_nodes
-                .into_iter()
-                .map(|(node_reward_type, count)| (node_reward_type.to_string(), count))
-                .collect();
-            mutations.push(update(
-                make_node_operator_record_key(node_operator_id),
-                record.encode_to_vec(),
-            ));
-        }
-    }
-
-    mutations
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -99,10 +63,7 @@ mod test {
         registry::{EncodedVersion, Version},
         registry_lifecycle::Registry,
     };
-    use ic_base_types::PrincipalId;
-    use ic_registry_transport::insert;
-    use maplit::btreemap;
-    use std::str::FromStr;
+    use prost::Message;
 
     fn stable_storage_from_registry(
         registry: &Registry,
@@ -225,95 +186,5 @@ mod test {
             RegistryCanisterStableStorage::decode(stable_storage_bytes.as_slice())
                 .expect("Error decoding from stable.");
         canister_post_upgrade(&mut new_registry, registry_storage);
-    }
-
-    #[test]
-    fn test_fill_node_operators_max_rewardable_nodes_correctly_single_type() {
-        let mut registry = invariant_compliant_registry(0);
-        let mut node_operator_additions = Vec::new();
-
-        let no_1 = PrincipalId::from_str(
-            "5dwhe-vpbuf-zz5ml-ylu6k-7y2z2-36ywv-5e4wf-advxd-3endk-icvg4-cae",
-        )
-        .unwrap();
-
-        let record_no_1 = NodeOperatorRecord {
-            node_operator_principal_id: no_1.clone().to_vec(),
-            dc_id: "dummy_dc_id_1".to_string(),
-            ipv6: Some("dummy_ipv6_1".to_string()),
-            // Empty rewardable nodes, should be filled in by the migration
-            max_rewardable_nodes: btreemap! {},
-            ..NodeOperatorRecord::default()
-        };
-
-        node_operator_additions.push(insert(
-            make_node_operator_record_key(no_1),
-            record_no_1.encode_to_vec(),
-        ));
-
-        registry.apply_mutations_for_test(node_operator_additions);
-        let mutations = fill_node_operators_max_rewardable_nodes(&registry);
-        assert_eq!(mutations.len(), 1);
-        registry.apply_mutations_for_test(mutations);
-
-        let record = registry.get_node_operator_or_panic(no_1);
-
-        let expected_record = NodeOperatorRecord {
-            node_operator_principal_id: no_1.clone().to_vec(),
-            dc_id: "dummy_dc_id_1".to_string(),
-            ipv6: Some("dummy_ipv6_1".to_string()),
-            max_rewardable_nodes: btreemap! {"type3.1".to_string() => 10},
-            ..NodeOperatorRecord::default()
-        };
-
-        assert_eq!(
-            record, expected_record,
-            "Assertion for NodeOperator {no_1} failed"
-        );
-    }
-
-    #[test]
-    fn test_fill_node_operators_max_rewardable_nodes_correctly_multiple_types() {
-        let mut registry = invariant_compliant_registry(0);
-        let mut node_operator_additions = Vec::new();
-
-        let no_1 = PrincipalId::from_str(
-            "ukji3-ju5bx-ty5r7-qwk4p-eobil-isp26-fsomg-44kwf-j4ew7-ozkqy-wqe",
-        )
-        .unwrap();
-
-        let record_no_1 = NodeOperatorRecord {
-            node_operator_principal_id: no_1.clone().to_vec(),
-            dc_id: "dummy_dc_id_1".to_string(),
-            ipv6: Some("dummy_ipv6_1".to_string()),
-            // Empty rewardable nodes, should be filled in by the migration
-            max_rewardable_nodes: btreemap! {},
-            ..NodeOperatorRecord::default()
-        };
-
-        node_operator_additions.push(insert(
-            make_node_operator_record_key(no_1),
-            record_no_1.encode_to_vec(),
-        ));
-
-        registry.apply_mutations_for_test(node_operator_additions);
-        let mutations = fill_node_operators_max_rewardable_nodes(&registry);
-        assert_eq!(mutations.len(), 1);
-        registry.apply_mutations_for_test(mutations);
-
-        let record = registry.get_node_operator_or_panic(no_1);
-
-        let expected_record = NodeOperatorRecord {
-            node_operator_principal_id: no_1.clone().to_vec(),
-            dc_id: "dummy_dc_id_1".to_string(),
-            ipv6: Some("dummy_ipv6_1".to_string()),
-            max_rewardable_nodes: btreemap! {"type3".to_string() => 16, "type3.1".to_string() => 9},
-            ..NodeOperatorRecord::default()
-        };
-
-        assert_eq!(
-            record, expected_record,
-            "Assertion for NodeOperator {no_1} failed"
-        );
     }
 }

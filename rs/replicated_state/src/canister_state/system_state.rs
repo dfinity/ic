@@ -503,7 +503,7 @@ impl SystemState {
             ingress_induction_cycles_debit: Cycles::zero(),
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
-            memory_allocation: MemoryAllocation::BestEffort,
+            memory_allocation: MemoryAllocation::default(),
             environment_variables: Default::default(),
             wasm_memory_threshold: NumBytes::new(0),
             freeze_threshold,
@@ -1879,18 +1879,11 @@ impl SystemState {
     /// Enqueues or removes `OnLowWasmMemory` task from `task_queue`
     /// depending if the condition for `OnLowWasmMemoryHook` is satisfied:
     ///
-    /// 1. In the case of `memory_allocation`
-    ///    `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
-    /// 2. Without memory allocation
-    ///    `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+    ///   `wasm_memory_threshold > wasm_memory_limit - wasm_memory_usage`
     ///
     /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
-    pub fn update_on_low_wasm_memory_hook_status(
-        &mut self,
-        memory_usage: NumBytes,
-        wasm_memory_usage: NumBytes,
-    ) {
-        if self.is_low_wasm_memory_hook_condition_satisfied(memory_usage, wasm_memory_usage) {
+    pub fn update_on_low_wasm_memory_hook_status(&mut self, wasm_memory_usage: NumBytes) {
+        if self.is_low_wasm_memory_hook_condition_satisfied(wasm_memory_usage) {
             self.task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
         } else {
             self.task_queue.remove(ExecutionTask::OnLowWasmMemory);
@@ -1898,23 +1891,12 @@ impl SystemState {
     }
 
     /// Returns the `OnLowWasmMemory` hook status without updating the `task_queue`.
-    pub fn is_low_wasm_memory_hook_condition_satisfied(
-        &self,
-        memory_usage: NumBytes,
-        wasm_memory_usage: NumBytes,
-    ) -> bool {
-        let memory_allocation = match self.memory_allocation {
-            MemoryAllocation::Reserved(bytes) => Some(bytes),
-            MemoryAllocation::BestEffort => None,
-        };
-
+    pub fn is_low_wasm_memory_hook_condition_satisfied(&self, wasm_memory_usage: NumBytes) -> bool {
         let wasm_memory_limit = self.wasm_memory_limit;
         let wasm_memory_threshold = self.wasm_memory_threshold;
 
         is_low_wasm_memory_hook_condition_satisfied(
-            memory_usage,
             wasm_memory_usage,
-            memory_allocation,
             wasm_memory_limit,
             wasm_memory_threshold,
         )

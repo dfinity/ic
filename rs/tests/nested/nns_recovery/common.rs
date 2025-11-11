@@ -37,6 +37,7 @@ use ic_system_test_driver::{
     retry_with_msg_async,
     util::block_on,
 };
+use ic_types::ReplicaVersion;
 use nested::util::{get_host_boot_id_async, setup_ic_infrastructure};
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
@@ -76,6 +77,7 @@ pub struct TestConfig {
     pub break_dfinity_owned_node: bool,
     pub add_and_bless_upgrade_version: bool,
     pub fix_dfinity_owned_node_like_np: bool,
+    pub sequential_np_actions: bool,
 }
 
 fn get_host_vm_names(num_hosts: usize) -> Vec<String> {
@@ -431,6 +433,7 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
             let vm = vm.clone();
             let recovery_img_hash = recovery_img_hash.clone();
             let artifacts_hash = artifacts_hash.clone();
+            let upgrade_version = upgrade_version.clone();
 
             handles.spawn(async move {
                 simulate_node_provider_action(
@@ -440,19 +443,20 @@ pub fn test(env: TestEnv, cfg: TestConfig) {
                     RECOVERY_GUESTOS_IMG_VERSION,
                     &recovery_img_hash,
                     &artifacts_hash,
+                    &upgrade_version,
                 )
                 .await
             });
+
+            if cfg.sequential_np_actions {
+                handles.join_next().await;
+            }
         }
 
         handles.join_all().await;
     });
 
     info!(logger, "Ensure the subnet is healthy after the recovery");
-    let nns_subnet =
-        block_on(topology.block_for_newer_registry_version_within_duration(secs(600), secs(10)))
-            .expect("Could not obtain updated registry.")
-            .root_subnet();
     let new_msg = "subnet recovery still works!";
     assert_subnet_is_healthy(
         &nns_subnet.nodes().collect::<Vec<_>>(),
@@ -471,6 +475,7 @@ async fn simulate_node_provider_action(
     img_version: &str,
     img_version_hash: &str,
     artifacts_hash: &str,
+    upgrade_version: &ReplicaVersion,
 ) {
     let host_boot_id_pre_reboot = get_host_boot_id_async(host).await;
 
@@ -536,6 +541,41 @@ async fn simulate_node_provider_action(
     impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
         .await
         .expect("Failed to spoof GuestOS DNS");
+
+    // Wait until the node has booted the expected GuestOS version
+    retry_with_msg_async!(
+        format!(
+            "Waiting until GuestOS {} reboots on the upgrade version {}",
+            host.vm_name(),
+            upgrade_version
+        ),
+        &logger,
+        secs(600),
+        secs(10),
+        || async {
+            match host.status_async().await {
+                Ok(status) => {
+                    if let Some(version_str) = &status.impl_version
+                        && let Ok(version) = ReplicaVersion::try_from(version_str.as_str())
+                        && version == *upgrade_version
+                    {
+                        return Ok(());
+                    }
+
+                    bail!(
+                        "GuestOS is running version {:?}, expected {:?}",
+                        status.impl_version,
+                        upgrade_version
+                    )
+                }
+                Err(err) => {
+                    bail!("GuestOS is rebooting: {:?}", err)
+                }
+            }
+        }
+    )
+    .await
+    .expect("GuestOS did not reboot on the upgrade version");
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, logger: &Logger) {

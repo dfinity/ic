@@ -3,6 +3,7 @@ use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api as pb_api;
 
 use crate::pb::proposal_conversions::convert_proposal;
+use crate::pb::v1::DateUtc;
 
 #[cfg(test)]
 mod tests;
@@ -3025,6 +3026,35 @@ impl From<pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics>
     }
 }
 
+impl TryFrom<ic_node_rewards_canister_api::DateUtc> for DateUtc {
+    type Error = String;
+
+    fn try_from(value: ic_node_rewards_canister_api::DateUtc) -> Result<Self, Self::Error> {
+        let year = value.year.ok_or("Missing field: year")?;
+        let month = value.month.ok_or("Missing field: month")?;
+        let day = value.day.ok_or("Missing field: day")?;
+
+        Ok(Self { year, month, day })
+    }
+}
+impl From<pb::DateUtc> for pb_api::DateUtc {
+    fn from(item: pb::DateUtc) -> Self {
+        Self {
+            year: item.year,
+            month: item.month,
+            day: item.day,
+        }
+    }
+}
+impl From<pb_api::DateUtc> for pb::DateUtc {
+    fn from(item: pb_api::DateUtc) -> Self {
+        Self {
+            year: item.year,
+            month: item.month,
+            day: item.day,
+        }
+    }
+}
 impl From<pb::XdrConversionRate> for pb_api::XdrConversionRate {
     fn from(item: pb::XdrConversionRate) -> Self {
         Self {
@@ -3098,11 +3128,12 @@ impl From<pb_api::ListNodeProvidersResponse> for pb::ListNodeProvidersResponse {
         }
     }
 }
-
 impl From<pb::MonthlyNodeProviderRewards> for pb_api::MonthlyNodeProviderRewards {
     fn from(item: pb::MonthlyNodeProviderRewards) -> Self {
         Self {
             timestamp: item.timestamp,
+            start_date: item.start_date.map(|x| x.into()),
+            end_date: item.end_date.map(|x| x.into()),
             rewards: item.rewards.into_iter().map(|x| x.into()).collect(),
             xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
             minimum_xdr_permyriad_per_icp: item.minimum_xdr_permyriad_per_icp,
@@ -3116,6 +3147,8 @@ impl From<pb_api::MonthlyNodeProviderRewards> for pb::MonthlyNodeProviderRewards
     fn from(item: pb_api::MonthlyNodeProviderRewards) -> Self {
         Self {
             timestamp: item.timestamp,
+            start_date: item.start_date.map(|x| x.into()),
+            end_date: item.end_date.map(|x| x.into()),
             rewards: item.rewards.into_iter().map(|x| x.into()).collect(),
             xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
             minimum_xdr_permyriad_per_icp: item.minimum_xdr_permyriad_per_icp,
