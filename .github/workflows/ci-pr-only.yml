@@ -164,7 +164,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 256
+          ref: ${{ inputs.commit-sha }}
+          fetch-depth: 256 # required for file filter
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
