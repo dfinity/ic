@@ -73,6 +73,10 @@ impl RingBuffer {
         self.io.read_header().next_idx
     }
 
+    pub fn header(&self) -> HeaderV1 {
+        self.io.read_header()
+    }
+
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         let header = self.io.read_header();
         if header.is_empty() {
@@ -85,8 +89,7 @@ impl RingBuffer {
         let filter_ref = filter.as_ref();
 
         while position <= end {
-            let abs_position = header.data_offset + position;
-            let record = match self.io.read_record(abs_position) {
+            let record = match self.io.read_record(position) {
                 Some(r) => r,
                 None => break, // Stop when no more records can be read.
             };
@@ -109,7 +112,7 @@ impl RingBuffer {
         if h.is_empty() {
             return None;
         }
-        let record = self.io.read_record(h.data_offset + h.data_head)?;
+        let record = self.io.read_record(h.data_head)?;
         let removed_size = MemorySize::new(record.bytes_len() as u64);
         h.data_head = (h.data_head + removed_size) % h.data_capacity;
         h.data_size = h.data_size.saturating_sub(removed_size);
@@ -119,24 +122,10 @@ impl RingBuffer {
 
     /// Appends a new log record to the back of the ring buffer.
     pub fn push_back(&mut self, record: &LogRecord) {
-        let bytes: Vec<u8> = record.into();
-        let added_size = MemorySize::new(bytes.len() as u64);
+        let added_size = MemorySize::new(record.bytes_len() as u64);
         self.make_free_space_within_limit(added_size);
-        // writing new entry into the buffer has 2 cases:
-        // 1) there is enough space at the end of the buffer
-        // 2) we need to wrap around
         let mut h = self.io.read_header();
-        let tail = h.data_offset + h.data_tail;
-        let remaining_size = h.data_capacity - h.data_tail;
-        if added_size <= remaining_size {
-            // case 1: no wrap
-            self.io.write_bytes(tail, &bytes);
-        } else {
-            // case 2: wrap
-            let (first, second) = bytes.split_at(remaining_size.as_usize());
-            self.io.write_bytes(tail, first);
-            self.io.write_bytes(h.data_offset, second);
-        }
+        self.io.write_record(record, h.data_tail);
         let last_record_position = h.data_tail;
         h.data_tail = (h.data_tail + added_size) % h.data_capacity;
         h.data_size = h.data_size.saturating_add(added_size);
@@ -220,12 +209,12 @@ mod tests {
     #[test]
     fn test_wraps_around_correctly() {
         let page_map = PageMap::new_for_testing();
-        let data_capacity = MemorySize::new(128); // Small capacity to force wrap.
+        let data_capacity = MemorySize::new(123); // Small capacity to force wrap.
         let mut ring_buffer = RingBuffer::new(page_map, data_capacity);
 
         // Push until wrap occurs, pop some in between to move head forward.
-        for i in 0..100_u64 {
-            ring_buffer.push_back(&log_record(i, i * 100, "message"));
+        for i in 0..1_000_u64 {
+            ring_buffer.push_back(&log_record(i, i * 100, "12345"));
             if i % 3 == 0 {
                 let _ = ring_buffer.pop_front();
             }

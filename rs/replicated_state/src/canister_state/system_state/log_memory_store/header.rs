@@ -7,7 +7,7 @@ use crate::page_map::PAGE_SIZE;
 
 /// Header structure for the log memory store (version 1).
 /// This is the in-memory representation of the header.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) struct HeaderV1 {
     pub magic: [u8; 3],
     pub version: u8,
@@ -105,6 +105,10 @@ impl From<&HeaderV1Blob> for HeaderV1 {
 impl HeaderV1 {
     pub fn is_empty(&self) -> bool {
         self.data_size == MemorySize::new(0)
+    }
+
+    pub fn advance_position(&self, pos: MemoryPosition, size: MemorySize) -> MemoryPosition {
+        (pos + size) % self.data_capacity
     }
 
     pub fn validate_address(&self, addr: MemoryAddress) -> Option<()> {

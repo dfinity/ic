@@ -9,53 +9,49 @@ use crate::page_map::{Buffer, PageIndex, PageMap};
 use ic_sys::PageBytes;
 use std::convert::From;
 
-pub(crate) struct StructIO(Buffer);
+struct MemoryChunk {
+    offset: MemoryAddress,
+    capacity: MemorySize,
+}
+
+pub(crate) struct StructIO {
+    buffer: Buffer,
+}
 
 impl StructIO {
     pub fn new(page_map: PageMap) -> Self {
-        Self(Buffer::new(page_map))
+        Self {
+            buffer: Buffer::new(page_map),
+        }
     }
 
     pub fn dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
-        self.0.dirty_pages().collect()
+        self.buffer.dirty_pages().collect()
     }
 
     pub fn into_page_map(self) -> PageMap {
-        self.0.into_page_map()
+        self.buffer.into_page_map()
     }
 
-    /// Write bytes into buffer.
-    pub fn write_bytes(&mut self, addr: MemoryAddress, bytes: &[u8]) {
-        self.0.write(bytes, addr.get());
+    fn write_bytes(&mut self, addr: MemoryAddress, bytes: &[u8]) {
+        self.buffer.write(bytes, addr.get());
     }
 
-    /// Read a vector of bytes from buffer.
-    pub fn read_vec(&self, addr: MemoryAddress, len: usize) -> Vec<u8> {
+    fn read_vec(&self, addr: MemoryAddress, len: usize) -> Vec<u8> {
         let mut bytes = vec![0; len];
-        self.0.read(&mut bytes, addr.get());
+        self.buffer.read(&mut bytes, addr.get());
         bytes
     }
 
-    /// Read fixed-size data from buffer.
-    pub fn read_bytes<const N: usize>(&self, addr: MemoryAddress) -> [u8; N] {
+    fn read_bytes<const N: usize>(&self, addr: MemoryAddress) -> [u8; N] {
         let mut bytes = [0; N];
-        self.0.read(&mut bytes, addr.get());
+        self.buffer.read(&mut bytes, addr.get());
         bytes
-    }
-
-    /// Read a u32 from buffer.
-    fn read_u32(&self, addr: MemoryAddress) -> u32 {
-        u32::from_le_bytes(self.read_bytes(addr))
-    }
-
-    /// Read a u64 from buffer.
-    fn read_u64(&self, addr: MemoryAddress) -> u64 {
-        u64::from_le_bytes(self.read_bytes(addr))
     }
 
     /// Writes the header to the buffer.
     pub fn write_header(&mut self, header: &HeaderV1) {
-        self.0
+        self.buffer
             .write(HeaderV1Blob::from(header).as_bytes(), HEADER_OFFSET.get());
     }
 
@@ -77,13 +73,101 @@ impl StructIO {
         self.write_bytes(V1_LOOKUP_TABLE_OFFSET, &bytes);
     }
 
+    fn read_lookup_entry(&self, position: MemoryPosition) -> Option<LookupEntry> {
+        let h = self.read_header();
+        if h.is_empty() {
+            return None;
+        }
+        let record = self.read_record_without_content(position)?;
+        Some(LookupEntry {
+            idx: record.idx,
+            ts_nanos: record.ts_nanos,
+            position,
+        })
+    }
+
+    fn write_data_bytes(&mut self, pos: MemoryPosition, bytes: &[u8], memory: &MemoryChunk) {
+        let remaining_size = memory.capacity - pos;
+        if MemorySize::new(bytes.len() as u64) <= remaining_size {
+            self.write_bytes(memory.offset + pos, bytes);
+        } else {
+            let split = remaining_size.get() as usize;
+            self.write_bytes(memory.offset + pos, &bytes[..split]);
+            self.write_bytes(memory.offset, &bytes[split..]);
+        }
+    }
+
+    fn read_data_vec(&self, pos: MemoryPosition, len: usize, memory: &MemoryChunk) -> Vec<u8> {
+        let remaining_size = memory.capacity - pos;
+        if MemorySize::new(len as u64) <= remaining_size {
+            self.read_vec(memory.offset + pos, len)
+        } else {
+            let mut content = Vec::with_capacity(len);
+            let first_part_size = remaining_size.get() as usize;
+            content.extend_from_slice(&self.read_vec(memory.offset + pos, first_part_size));
+            let second_part_size = len - first_part_size;
+            content.extend_from_slice(&self.read_vec(memory.offset, second_part_size));
+            content
+        }
+    }
+
+    fn read_data_bytes<const N: usize>(
+        &self,
+        pos: MemoryPosition,
+        memory: &MemoryChunk,
+    ) -> [u8; N] {
+        let remaining_size = memory.capacity - pos;
+        if MemorySize::new(N as u64) <= remaining_size {
+            self.read_bytes(memory.offset + pos)
+        } else {
+            let mut bytes = [0; N];
+            let split = remaining_size.get() as usize;
+            self.buffer
+                .read(&mut bytes[..split], (memory.offset + pos).get());
+            self.buffer.read(&mut bytes[split..], memory.offset.get());
+            bytes
+        }
+    }
+
+    fn read_data_u64(&self, pos: MemoryPosition, memory: &MemoryChunk) -> u64 {
+        u64::from_le_bytes(self.read_data_bytes::<8>(pos, memory))
+    }
+
+    fn read_data_u32(&self, pos: MemoryPosition, memory: &MemoryChunk) -> u32 {
+        u32::from_le_bytes(self.read_data_bytes::<4>(pos, memory))
+    }
+
+    pub fn write_record(&mut self, record: &LogRecord, position: MemoryPosition) {
+        let bytes: Vec<u8> = record.into();
+        debug_assert_eq!(bytes.len(), record.bytes_len());
+        let h = self.read_header();
+        let memory = MemoryChunk {
+            offset: h.data_offset,
+            capacity: h.data_capacity,
+        };
+        self.write_data_bytes(position, &bytes, &memory);
+    }
+
     /// Retrieves a log record at the given address, if it exists.
-    pub fn read_record(&self, addr: MemoryAddress) -> Option<LogRecord> {
-        self.read_header().validate_address(addr)?;
-        let idx = self.read_u64(addr);
-        let ts_nanos = self.read_u64(addr + MemorySize::new(8));
-        let len = self.read_u32(addr + MemorySize::new(16));
-        let content = self.read_vec(addr + MemorySize::new(20), len as usize);
+    pub fn read_record(&self, mut pos: MemoryPosition) -> Option<LogRecord> {
+        let h = self.read_header();
+        h.validate_address(h.data_offset + pos)?;
+        let memory = MemoryChunk {
+            offset: h.data_offset,
+            capacity: h.data_capacity,
+        };
+
+        let idx = self.read_data_u64(pos, &memory);
+        pos = h.advance_position(pos, MemorySize::new(8));
+
+        let ts_nanos = self.read_data_u64(pos, &memory);
+        pos = h.advance_position(pos, MemorySize::new(8));
+
+        let len = self.read_data_u32(pos, &memory);
+        pos = h.advance_position(pos, MemorySize::new(4));
+
+        let content = self.read_data_vec(pos, len as usize, &memory);
+
         Some(LogRecord {
             idx,
             ts_nanos,
@@ -92,25 +176,24 @@ impl StructIO {
         })
     }
 
-    fn read_lookup_entry(&self, position: MemoryPosition) -> Option<LookupEntry> {
-        let h = self.read_header();
-        if h.is_empty() {
-            return None;
-        }
-        let record = self.read_record_without_content(h.data_offset + position)?;
-        Some(LookupEntry {
-            idx: record.idx,
-            ts_nanos: record.ts_nanos,
-            position,
-        })
-    }
-
     /// Reads only the header of a log record at the given offset, without its content.
-    fn read_record_without_content(&self, addr: MemoryAddress) -> Option<LogRecord> {
-        self.read_header().validate_address(addr)?;
-        let idx = self.read_u64(addr);
-        let ts_nanos = self.read_u64(addr + MemorySize::new(8));
-        let len = self.read_u32(addr + MemorySize::new(16));
+    fn read_record_without_content(&self, mut pos: MemoryPosition) -> Option<LogRecord> {
+        let h = self.read_header();
+        h.validate_address(h.data_offset + pos)?;
+        let memory = MemoryChunk {
+            offset: h.data_offset,
+            capacity: h.data_capacity,
+        };
+
+        let idx = self.read_data_u64(pos, &memory);
+        pos = h.advance_position(pos, MemorySize::new(8));
+
+        let ts_nanos = self.read_data_u64(pos, &memory);
+        pos = h.advance_position(pos, MemorySize::new(8));
+
+        let len = self.read_data_u32(pos, &memory);
+        pos = h.advance_position(pos, MemorySize::new(4));
+
         Some(LogRecord {
             idx,
             ts_nanos,
