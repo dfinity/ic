@@ -214,40 +214,6 @@ mod withdrawal {
     }
 
     #[test]
-    fn should_fail_to_withdraw_when_ledger_stopped() {
-        let setup = Setup::default();
-        let dogecoin = setup.dogecoin();
-        let fee_percentiles = array::from_fn(|i| i as u64);
-        let median_fee = fee_percentiles[50];
-        assert_eq!(median_fee, 50);
-        dogecoin.set_fee_percentiles(fee_percentiles);
-        let account = Account {
-            owner: USER_PRINCIPAL,
-            subaccount: Some([42_u8; 32]),
-        };
-        let utxo = utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE);
-
-        setup
-            .deposit_flow()
-            .minter_get_dogecoin_deposit_address(account)
-            .dogecoin_simulate_transaction(utxo.clone())
-            .minter_update_balance()
-            .expect_mint();
-
-        let withdrawal_flow = setup
-            .withdrawal_flow()
-            .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT);
-
-        setup.ledger().stop();
-
-        withdrawal_flow
-            .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
-            .expect_error_matching(|e| {
-                matches!(e, RetrieveDogeWithApprovalError::TemporarilyUnavailable(_))
-            })
-    }
-
-    #[test]
     fn should_resubmit_transaction() {
         let setup = Setup::default();
         let dogecoin = setup.dogecoin();
@@ -279,6 +245,40 @@ mod withdrawal {
                 assert_eq!(sent.len(), 2);
                 &sent[0]
             });
+    }
+
+    #[test]
+    fn should_fail_to_withdraw_when_ledger_stopped() {
+        let setup = Setup::default();
+        let dogecoin = setup.dogecoin();
+        let fee_percentiles = array::from_fn(|i| i as u64);
+        let median_fee = fee_percentiles[50];
+        assert_eq!(median_fee, 50);
+        dogecoin.set_fee_percentiles(fee_percentiles);
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+        let utxo = utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE);
+
+        setup
+            .deposit_flow()
+            .minter_get_dogecoin_deposit_address(account)
+            .dogecoin_simulate_transaction(utxo.clone())
+            .minter_update_balance()
+            .expect_mint();
+
+        let withdrawal_flow = setup
+            .withdrawal_flow()
+            .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT);
+
+        setup.ledger().stop();
+
+        withdrawal_flow
+            .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
+            .expect_error_matching(|e| {
+                matches!(e, RetrieveDogeWithApprovalError::TemporarilyUnavailable(_))
+            })
     }
 }
 

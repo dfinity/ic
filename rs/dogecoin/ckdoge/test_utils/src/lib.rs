@@ -1,12 +1,12 @@
-mod deposit;
 mod dogecoin;
 mod events;
+mod flow;
 mod ledger;
 mod minter;
 mod withdrawal;
 
-use crate::deposit::DepositFlowStart;
 use crate::dogecoin::DogecoinCanister;
+use crate::flow::{deposit::DepositFlowStart, withdrawal::WithdrawalFlowStart};
 use crate::ledger::LedgerCanister;
 pub use crate::minter::MinterCanister;
 use crate::withdrawal::WithdrawalFlowStart;

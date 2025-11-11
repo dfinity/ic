@@ -11,6 +11,16 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-11-07: Proposal 139313
+
+http://dashboard.internetcomputer.org/proposal/139313
+
+## Fixed
+
+* Previously, a lock was released only in the happy case (during minting node
+  provider rewards). Now, it is released no matter how the function returns.
+
+
 # 2025-10-24: Proposal 139086
 
 http://dashboard.internetcomputer.org/proposal/139086

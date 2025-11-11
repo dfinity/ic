@@ -83,6 +83,7 @@ mod ic0 {
         pub fn cost_call(method_name_size: u64, payload_size: u64, dst: u32) -> ();
         pub fn cost_create_canister(dst: u32) -> ();
         pub fn cost_http_request(request_size: u64, max_res_bytes: u64, dst: u32) -> ();
+        pub fn cost_http_request_v2(params_src: u32, params_size: u32, dst: u32) -> ();
         pub fn cost_sign_with_ecdsa(src: u32, size: u32, ecdsa_curve: u32, dst: u32) -> u32;
         pub fn cost_sign_with_schnorr(src: u32, size: u32, algorithm: u32, dst: u32) -> u32;
         pub fn cost_vetkd_derive_key(src: u32, size: u32, vetkd_curve: u32, dst: u32) -> u32;
@@ -473,6 +474,17 @@ pub fn cost_http_request(request_size: u64, max_res_bytes: u64) -> Vec<u8> {
     let mut bytes = vec![0u8; CYCLES_SIZE];
     unsafe {
         ic0::cost_http_request(request_size, max_res_bytes, bytes.as_mut_ptr() as u32);
+    }
+    bytes
+}
+pub fn cost_http_request_v2(data: &[u8]) -> Vec<u8> {
+    let mut bytes = vec![0u8; CYCLES_SIZE];
+    unsafe {
+        ic0::cost_http_request_v2(
+            data.as_ptr() as u32,
+            data.len() as u32,
+            bytes.as_mut_ptr() as u32,
+        );
     }
     bytes
 }
