@@ -15654,6 +15654,7 @@ dependencies = [
  "anyhow",
  "ic-recovery",
  "ic-system-test-driver",
+ "ic-types",
  "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
  "nested",
