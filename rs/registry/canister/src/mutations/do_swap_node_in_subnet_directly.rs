@@ -22,18 +22,18 @@ use crate::{
     registry::Registry,
 };
 
-const SUBNET_CAPACITY_INTERVAL: Duration = Duration::from_secs(2 * 60 * 60);
-const PROVIDER_CAPACITY_INTERVAL: Duration = Duration::from_secs(12 * 60 * 60);
+pub const NODE_SWAPS_SUBNET_CAPACITY_INTERVAL: Duration = Duration::from_secs(4 * 60 * 60);
+pub const NODE_SWAPS_OPERATOR_CAPACITY_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 
 struct SwapRateLimiter {
     subnet_limiter: InMemoryRateLimiter<SubnetId>,
-    provider_limiter: InMemoryRateLimiter<(PrincipalId, SubnetId)>,
+    operator_limiter: InMemoryRateLimiter<(PrincipalId, SubnetId)>,
 }
 
 #[derive(Debug)]
 struct SwapReservation {
     subnet_reservation: Reservation<SubnetId>,
-    provider_reservation: Reservation<(PrincipalId, SubnetId)>,
+    operator_reservation: Reservation<(PrincipalId, SubnetId)>,
 }
 
 impl SwapRateLimiter {
@@ -41,13 +41,13 @@ impl SwapRateLimiter {
         Self {
             subnet_limiter: InMemoryRateLimiter::new_in_memory(RateLimiterConfig {
                 add_capacity_amount: 1,
-                add_capacity_interval: SUBNET_CAPACITY_INTERVAL,
+                add_capacity_interval: NODE_SWAPS_SUBNET_CAPACITY_INTERVAL,
                 max_capacity: 1,
                 max_reservations: 1,
             }),
-            provider_limiter: InMemoryRateLimiter::new_in_memory(RateLimiterConfig {
+            operator_limiter: InMemoryRateLimiter::new_in_memory(RateLimiterConfig {
                 add_capacity_amount: 1,
-                add_capacity_interval: PROVIDER_CAPACITY_INTERVAL,
+                add_capacity_interval: NODE_SWAPS_OPERATOR_CAPACITY_INTERVAL,
                 max_capacity: 1,
                 max_reservations: 1,
             }),
@@ -71,7 +71,7 @@ impl SwapRateLimiter {
                 })?;
 
         let provider_reservation = self
-            .provider_limiter
+            .operator_limiter
             .try_reserve(now, (provider, subnet_id), 1)
             .map_err(|e| match e {
                 ic_nervous_system_rate_limits::RateLimiterError::NotEnoughCapacity => {
@@ -85,7 +85,7 @@ impl SwapRateLimiter {
 
         Ok(SwapReservation {
             subnet_reservation,
-            provider_reservation,
+            operator_reservation: provider_reservation,
         })
     }
 
@@ -94,8 +94,8 @@ impl SwapRateLimiter {
         self.subnet_limiter
             .commit(now, reservation.subnet_reservation)
             .unwrap();
-        self.provider_limiter
-            .commit(now, reservation.provider_reservation)
+        self.operator_limiter
+            .commit(now, reservation.operator_reservation)
             .unwrap();
     }
 }
@@ -400,8 +400,8 @@ mod tests {
         },
         mutations::{
             do_swap_node_in_subnet_directly::{
-                PROVIDER_CAPACITY_INTERVAL, SUBNET_CAPACITY_INTERVAL, SwapError,
-                SwapNodeInSubnetDirectlyPayload, SwapRateLimiter,
+                NODE_SWAPS_OPERATOR_CAPACITY_INTERVAL, NODE_SWAPS_SUBNET_CAPACITY_INTERVAL,
+                SwapError, SwapNodeInSubnetDirectlyPayload, SwapRateLimiter,
             },
             node_management::common::make_add_node_registry_mutations,
         },
@@ -703,7 +703,9 @@ mod tests {
         swap_limiter.commit(reservation, now);
 
         let before_duration_elapsed = now
-            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)))
+            .checked_add(
+                NODE_SWAPS_SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
         let expected_err = SwapError::SubnetRateLimited { subnet_id };
 
@@ -722,7 +724,9 @@ mod tests {
         // After SUBNET_CAPACITY_INTERVAL the second caller should be able to make reservation but
         // first shouldn't
         let after_duration_elapsed = now
-            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+            .checked_add(
+                NODE_SWAPS_SUBNET_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
 
         let reservation = swap_limiter
@@ -741,7 +745,9 @@ mod tests {
 
         // After PROVIDER_CAPACITY_INTERVAL the first provider should be able to perform a swap
         let after_provider_duration_elapsed = now
-            .checked_add(PROVIDER_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+            .checked_add(
+                NODE_SWAPS_OPERATOR_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
         let response =
             swap_limiter.try_reserve(caller_1, subnet_id, after_provider_duration_elapsed);
@@ -763,7 +769,9 @@ mod tests {
         }
 
         let before_subnet_duration_elapsed = now
-            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)))
+            .checked_add(
+                NODE_SWAPS_SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
         for subnet in [subnet_1, subnet_2] {
             let response = swap_limiter
@@ -806,7 +814,9 @@ mod tests {
 
         // Make an additional call which should fail because of the subnet limit
         let before_duration_elapsed = now
-            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)))
+            .checked_add(
+                NODE_SWAPS_SUBNET_CAPACITY_INTERVAL.saturating_sub(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
         let response = registry
             .swap_nodes_inner(payload.clone(), operator_id, before_duration_elapsed)
@@ -817,7 +827,9 @@ mod tests {
 
         // Make an additional call which should fail because of the provider limit
         let after_subnet_duration_elapsed = now
-            .checked_add(SUBNET_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+            .checked_add(
+                NODE_SWAPS_SUBNET_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
         let response = registry
             .swap_nodes_inner(payload.clone(), operator_id, after_subnet_duration_elapsed)
@@ -831,7 +843,9 @@ mod tests {
 
         // Make an additional call after all the rate limits have elapsed
         let after_provider_duration_elapsed = now
-            .checked_add(PROVIDER_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)))
+            .checked_add(
+                NODE_SWAPS_OPERATOR_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)),
+            )
             .unwrap();
         let response =
             registry.swap_nodes_inner(payload, operator_id, after_provider_duration_elapsed);

@@ -26,7 +26,10 @@ use prost::Message;
 use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::{
-        do_swap_node_in_subnet_directly::{SwapError, SwapNodeInSubnetDirectlyPayload},
+        do_swap_node_in_subnet_directly::{
+            NODE_SWAPS_OPERATOR_CAPACITY_INTERVAL, NODE_SWAPS_SUBNET_CAPACITY_INTERVAL, SwapError,
+            SwapNodeInSubnetDirectlyPayload,
+        },
         node_management::{
             common::make_add_node_registry_mutations, do_add_node::connection_endpoint_from_string,
         },
@@ -376,6 +379,7 @@ async fn subnet_rate_limit_passed() {
     .await;
 
     assert!(response.is_ok(), "Expected ok but got {response:?}");
+    let time_after_successful_call = pocket_ic.get_time().await;
 
     // Make a call again which should fail because of rate limiting.
     // Old and new nodes are now changed because they were swapped
@@ -399,10 +403,13 @@ async fn subnet_rate_limit_passed() {
         "Expected error {expected_err:?} but got response: {response:?}"
     );
 
-    // Advance the time for 3 hours because the subnet is rate limited
-    let current_time = pocket_ic.get_time().await;
+    // Advance the time for 1 hour more than the subnet rate limit
     pocket_ic
-        .set_time(current_time + Duration::from_secs(3 * 60 * 60))
+        .set_time(
+            time_after_successful_call
+                + NODE_SWAPS_SUBNET_CAPACITY_INTERVAL
+                + Duration::from_secs(60 * 60),
+        )
         .await;
 
     let response = swap_node_in_subnet_directly(
@@ -427,10 +434,13 @@ async fn subnet_rate_limit_passed() {
         "Expected error {expected_err:?} but got response: {response:?}"
     );
 
-    // Advance the time for another 10 hours because the same caller is making a call
-    let current_time = pocket_ic.get_time().await;
+    // Advance the time for 1 hour more than the node provider rate limit
     pocket_ic
-        .set_time(current_time + Duration::from_secs(10 * 60 * 60))
+        .set_time(
+            time_after_successful_call
+                + NODE_SWAPS_OPERATOR_CAPACITY_INTERVAL
+                + Duration::from_secs(20 * 60 * 60),
+        )
         .await;
 
     let response = swap_node_in_subnet_directly(
