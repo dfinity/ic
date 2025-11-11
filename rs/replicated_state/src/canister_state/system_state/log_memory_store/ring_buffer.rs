@@ -73,10 +73,6 @@ impl RingBuffer {
         self.io.read_header().next_idx
     }
 
-    pub fn header(&self) -> HeaderV1 {
-        self.io.read_header()
-    }
-
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         let header = self.io.read_header();
         if header.is_empty() {
@@ -109,25 +105,30 @@ impl RingBuffer {
     /// Removes the first log record and returns it, or None if the ring buffer is empty.
     pub fn pop_front(&mut self) -> Option<LogRecord> {
         let mut h = self.io.read_header();
-        if h.is_empty() {
-            return None;
-        }
         let record = self.io.read_record(h.data_head)?;
+
+        // Update header to remove the record.
         let removed_size = MemorySize::new(record.bytes_len() as u64);
-        h.data_head = (h.data_head + removed_size) % h.data_capacity;
+        h.data_head = h.advance_position(h.data_head, removed_size);
         h.data_size = h.data_size.saturating_sub(removed_size);
         self.io.write_header(&h);
+
         Some(record)
     }
 
     /// Appends a new log record to the back of the ring buffer.
     pub fn push_back(&mut self, record: &LogRecord) {
+        // Ensure there is enough free space for the new record.
         let added_size = MemorySize::new(record.bytes_len() as u64);
         self.make_free_space_within_limit(added_size);
+
+        // Write the record at the tail position.
         let mut h = self.io.read_header();
         self.io.write_record(record, h.data_tail);
+
+        // Update header with new tail position and size.
         let last_record_position = h.data_tail;
-        h.data_tail = (h.data_tail + added_size) % h.data_capacity;
+        h.data_tail = h.advance_position(h.data_tail, added_size);
         h.data_size = h.data_size.saturating_add(added_size);
         h.next_idx = record.idx + 1;
         self.io.write_header(&h);
