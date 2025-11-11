@@ -233,7 +233,7 @@ impl RegistryReplicator {
                 info!(logger, "No NNS public key is configured.");
                 None
             }
-            Some(path) => match parse_threshold_sig_key(&path) {
+            Some(path) => match parse_threshold_sig_key(path) {
                 Err(e) => {
                     info!(
                         logger,
