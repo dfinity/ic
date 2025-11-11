@@ -21,6 +21,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::ErrorCode;
 use pocket_ic::RejectCode;
 use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
+use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
@@ -260,6 +261,32 @@ pub fn utxo_with_value(value: u64) -> Utxo {
         },
         value,
     }
+}
+
+pub fn utxos_with_value(values: &[u64]) -> BTreeSet<Utxo> {
+    assert!(
+        values.len() < u16::MAX as usize,
+        "Adapt logic below to create more unique UTXOs!"
+    );
+    let utxos = values
+        .iter()
+        .enumerate()
+        .map(|(i, &value)| {
+            let mut txid = [0; 32];
+            txid[0] = (i % 256) as u8;
+            txid[1] = (i / 256) as u8;
+            Utxo {
+                height: 0,
+                outpoint: OutPoint {
+                    txid: Txid::from(txid),
+                    vout: 1,
+                },
+                value,
+            }
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(values.len(), utxos.len());
+    utxos
 }
 
 pub fn into_outpoint(

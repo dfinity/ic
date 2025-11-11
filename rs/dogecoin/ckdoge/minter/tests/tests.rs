@@ -52,7 +52,7 @@ fn should_fail_withdrawal() {
     setup
         .deposit_flow()
         .minter_get_dogecoin_deposit_address(USER_PRINCIPAL)
-        .dogecoin_simulate_transaction(utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT))
+        .dogecoin_simulate_transaction(vec![utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT)])
         .minter_update_balance()
         .expect_mint();
     let _ledger_approval_index = setup
@@ -166,9 +166,9 @@ mod deposit {
         setup
             .deposit_flow()
             .minter_get_dogecoin_deposit_address(account)
-            .dogecoin_simulate_transaction(utxo_with_value(
+            .dogecoin_simulate_transaction(vec![utxo_with_value(
                 RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE,
-            ))
+            )])
             .minter_update_balance()
             .expect_mint();
     }
@@ -200,7 +200,7 @@ mod withdrawal {
         setup
             .deposit_flow()
             .minter_get_dogecoin_deposit_address(account)
-            .dogecoin_simulate_transaction(utxo.clone())
+            .dogecoin_simulate_transaction(vec![utxo.clone()])
             .minter_update_balance()
             .expect_mint();
 
@@ -230,7 +230,7 @@ mod withdrawal {
         setup
             .deposit_flow()
             .minter_get_dogecoin_deposit_address(account)
-            .dogecoin_simulate_transaction(utxo.clone())
+            .dogecoin_simulate_transaction(vec![utxo.clone()])
             .minter_update_balance()
             .expect_mint();
 
@@ -260,7 +260,7 @@ mod withdrawal {
             setup
                 .deposit_flow()
                 .minter_get_dogecoin_deposit_address(account)
-                .dogecoin_simulate_transaction(utxo.clone())
+                .dogecoin_simulate_transaction(vec![utxo.clone()])
                 .minter_update_balance()
                 .expect_mint();
 

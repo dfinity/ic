@@ -30,6 +30,12 @@ impl DogecoinCanister {
         self.push_utxo_to_address(&PushUtxoToAddress { address, utxo })
     }
 
+    pub fn push_utxos<I: IntoIterator<Item = Utxo>>(&self, utxos: I, address: String) {
+        for utxo in utxos {
+            self.push_utxo(utxo, address.clone())
+        }
+    }
+
     pub fn set_fee_percentiles(&self, fee_percentiles: [u64; 101]) {
         self.env
             .update_call(
