@@ -351,6 +351,7 @@ type http_request_args = record {
         context : blob;
     };
     is_replicated : opt bool;
+    pricing_version: opt nat32;
 };
 
 type ecdsa_public_key_args = record {

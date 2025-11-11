@@ -4184,9 +4184,9 @@ dependencies = [
 
 [[package]]
 name = "ed25519-dalek"
-version = "2.1.1"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a3daa8e81a3963a60642bcc1f90a670680bd4a77535faa384e9d1c79d620871"
+checksum = "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
@@ -12178,6 +12178,7 @@ dependencies = [
  "ic-base-types",
  "ic-cdk",
  "ic-cdk-timers",
+ "ic-http-types",
  "ic-interfaces-registry",
  "ic-management-canister-types",
  "ic-metrics-encoder",
@@ -15653,6 +15654,7 @@ dependencies = [
  "anyhow",
  "ic-recovery",
  "ic-system-test-driver",
+ "ic-types",
  "ic_consensus_system_test_subnet_recovery",
  "ic_consensus_system_test_utils",
  "nested",

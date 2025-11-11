@@ -1,5 +1,5 @@
 {
-  "checksum": "f22191ba3ba4ab3f93945cabbeca8443056ac1d74b08b956f9400e3dd9e5368f",
+  "checksum": "61d7c33d026726168c0b093230aa9363736334b63bf888fce350f0e5a18a70cd",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -20933,7 +20933,7 @@
               "target": "dyn_clone"
             },
             {
-              "id": "ed25519-dalek 2.1.1",
+              "id": "ed25519-dalek 2.2.0",
               "target": "ed25519_dalek"
             },
             {
@@ -23346,14 +23346,14 @@
       ],
       "license_file": null
     },
-    "ed25519-dalek 2.1.1": {
+    "ed25519-dalek 2.2.0": {
       "name": "ed25519-dalek",
-      "version": "2.1.1",
+      "version": "2.2.0",
       "package_url": "https://github.com/dalek-cryptography/curve25519-dalek/tree/main/ed25519-dalek",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/ed25519-dalek/2.1.1/download",
-          "sha256": "4a3daa8e81a3963a60642bcc1f90a670680bd4a77535faa384e9d1c79d620871"
+          "url": "https://static.crates.io/crates/ed25519-dalek/2.2.0/download",
+          "sha256": "70e796c081cee67dc755e1a36a0a172b897fab85fc3f6bc48307991f64e4eca9"
         }
       },
       "targets": [
@@ -23431,7 +23431,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.1.1"
+        "version": "2.2.0"
       },
       "license": "BSD-3-Clause",
       "license_ids": [
@@ -94208,7 +94208,7 @@
     "devicemapper 0.34.4",
     "dfx-core 0.1.4",
     "dyn-clone 1.0.14",
-    "ed25519-dalek 2.1.1",
+    "ed25519-dalek 2.2.0",
     "educe 0.4.22",
     "env-file-reader 0.3.0",
     "erased-serde 0.3.28",
