@@ -52,6 +52,28 @@ impl<E> MinterEventAssert<E> {
         );
         self
     }
+
+    pub fn find_exactly_one<P>(self, predicate: P) -> E
+    where
+        P: Fn(&E) -> bool,
+        E: PartialEq + fmt::Debug,
+    {
+        let results: Vec<_> = self
+            .events
+            .iter()
+            .enumerate()
+            .filter(|(_index, event)| predicate(*event))
+            .collect();
+        assert_eq!(
+            results.len(),
+            1,
+            "BUG: Expected exactly one event, but got {results:?}. All events: {:?}",
+            self.events
+        );
+        let index = results[0].0;
+        let mut events = self.events;
+        events.swap_remove(index)
+    }
 }
 
 /// Ignore fields related to timestamps.

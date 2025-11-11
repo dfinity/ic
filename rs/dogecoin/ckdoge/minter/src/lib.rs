@@ -19,7 +19,7 @@ use ic_ckbtc_minter::{
     updates::retrieve_btc::BtcAddressCheckStatus,
 };
 pub use ic_ckbtc_minter::{
-    MIN_RESUBMISSION_DELAY, OutPoint, Page, Txid, Utxo,
+    MIN_RESUBMISSION_DELAY, OutPoint, Page, Txid, UTXOS_COUNT_THRESHOLD, Utxo,
     address::BitcoinAddress,
     logs::Priority,
     memo::{BurnMemo, MintMemo, encode as memo_encode},

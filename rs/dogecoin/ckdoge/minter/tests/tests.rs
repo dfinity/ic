@@ -175,10 +175,11 @@ mod deposit {
 }
 
 mod withdrawal {
-    use ic_ckdoge_minter::candid_api::RetrieveDogeWithApprovalError;
+    use ic_ckdoge_minter::{UTXOS_COUNT_THRESHOLD, candid_api::RetrieveDogeWithApprovalError};
+    use ic_ckdoge_minter_test_utils::flow::withdrawal::assert_uses_utxos;
     use ic_ckdoge_minter_test_utils::{
         DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-        WithdrawalFlowEnd, txid, utxo_with_value,
+        flow::withdrawal::WithdrawalFlowEnd, txid, utxo_with_value, utxos_with_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use std::array;
@@ -209,7 +210,8 @@ mod withdrawal {
             .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
             .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
             .expect_withdrawal_request_accepted()
-            .dogecoin_await_transaction(vec![utxo])
+            .dogecoin_await_transaction()
+            .ensure_each_sent_transaction(|sent| assert_uses_utxos(sent, vec![utxo.clone()]))
             .minter_await_finalized_transaction()
     }
 
@@ -269,7 +271,8 @@ mod withdrawal {
                 .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
                 .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
                 .expect_withdrawal_request_accepted()
-                .dogecoin_await_transaction(vec![utxo.clone()])
+                .dogecoin_await_transaction()
+                .ensure_each_sent_transaction(|sent| assert_uses_utxos(sent, vec![utxo.clone()]))
         }
 
         let setup = Setup::default();
@@ -301,6 +304,59 @@ mod withdrawal {
             .minter_await_resubmission()
             .minter_await_finalized_transaction_by(|sent| {
                 assert_eq!(sent.len(), 3);
+                &sent[1]
+            });
+    }
+
+    #[test]
+    fn should_resubmit_transaction_when_many_utxos() {
+        // Step 1: deposit btc
+        // Create many utxos that exceeds threshold by 2 so that after consuming
+        // one, the remaining available count is still greater than the threshold.
+        // This is to make sure utxo count optimization is triggered.
+        const COUNT: usize = UTXOS_COUNT_THRESHOLD + 2;
+
+        let setup = Setup::default();
+        let dogecoin = setup.dogecoin();
+        let fee_percentiles = array::from_fn(|i| i as u64);
+        let median_fee = fee_percentiles[50];
+        assert_eq!(median_fee, 50);
+        dogecoin.set_fee_percentiles(fee_percentiles);
+
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+        let deposit_value = RETRIEVE_DOGE_MIN_AMOUNT + 1;
+        let utxos = utxos_with_value(&[deposit_value; COUNT]);
+
+        setup
+            .deposit_flow()
+            .minter_get_dogecoin_deposit_address(account)
+            .dogecoin_simulate_transaction(utxos.clone())
+            .minter_update_balance()
+            .expect_mint();
+
+        // Step 2: request a withdrawal
+        // This withdraw_amount only needs 1 input utxo, but due to
+        // available_utxos.len() > UTXOS_COUNT_THRESHOLD, the minter will
+        // include 2 input utxos.
+        let withdrawal_amount = RETRIEVE_DOGE_MIN_AMOUNT;
+        assert!(
+            deposit_value > withdrawal_amount,
+            "ensure only 1 utxo is needed",
+        );
+
+        setup
+            .withdrawal_flow()
+            .ledger_approve_minter(account, withdrawal_amount)
+            .minter_retrieve_doge_with_approval(withdrawal_amount, DOGECOIN_ADDRESS_1)
+            .expect_withdrawal_request_accepted()
+            .dogecoin_await_transaction()
+            .minter_await_resubmission()
+            .ensure_each_sent_transaction(|sent| assert_eq!(sent.input.len(), 2))
+            .minter_await_finalized_transaction_by(|sent| {
+                assert_eq!(sent.len(), 2);
                 &sent[1]
             });
     }

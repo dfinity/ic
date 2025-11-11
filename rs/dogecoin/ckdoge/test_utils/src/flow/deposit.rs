@@ -162,6 +162,7 @@ where
         );
 
         let mut total_minted_amount = 0;
+        //TODO XC-496: use batching to speed up test
         for utxo in self.deposit_utxos {
             let (mint_index, minted_amount) = minted_status.get(&utxo).cloned().unwrap();
             assert_eq!(utxo.value, minted_amount);
