@@ -17,9 +17,10 @@ show_menu() {
     echo "3. view-logs               - View service logs (usage: view-logs <service-name>)"
     echo "4. config-json             - Show /boot/config/config.json"
     echo "5. network-config-settings - Show network settings from config"
-    echo "6. rbash-console           - Drop into restricted bash console"
-    echo "7. clear                   - Clear the console"
-    echo "8. exit                    - Exit console"
+    echo "6. manual-recovery         - Manual node recovery (use with caution)"
+    echo "7. rbash-console           - Drop into restricted bash console"
+    echo "8. clear                   - Clear the console"
+    echo "9. exit                    - Exit console"
     echo ""
 }
 
@@ -60,6 +61,19 @@ execute_command() {
                 echo "$network_settings" | jq . 2>/dev/null || echo "$network_settings"
             else
                 echo "No network settings found in config"
+            fi
+            ;;
+        "manual-recovery")
+            echo "=== Manual Node Recovery ==="
+            echo "This will perform a manual node recovery. Do not attempt this unless you are certain it is appropriate."
+            echo "Manual node recovery should only occur in the event of a critical IC failure."
+            echo "In such cases, the process will be coordinated by reputable IC community leaders"
+            echo "and actively discussed publicly with node providers.\n\n"
+            echo "Are you sure you want to proceed? (y/n)"
+            read -r confirm
+            if [ "$confirm" == "y" ]; then
+                # Launch the NNS recovery TUI tool via hostos_tool
+                /opt/ic/bin/hostos_tool manual-recovery
             fi
             ;;
         "rbash-console")
