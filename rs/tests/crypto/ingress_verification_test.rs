@@ -11,11 +11,11 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
-    UniversalCanister, block_on, expiry_time, sign_query, sign_update,
+    UniversalCanister, block_on, expiry_time, sign_query, sign_read_state, sign_update,
 };
 use ic_types::messages::{
-    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpRequestEnvelope,
-    HttpUserQuery, SignedDelegation,
+    Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
+    HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, SignedDelegation,
 };
 use ic_types::{CanisterId, PrincipalId, Time};
 use rand::{CryptoRng, Rng};
@@ -32,7 +32,8 @@ fn main() -> Result<()> {
                 .add_test(systest!(requests_with_delegations_with_targets; 2))
                 .add_test(systest!(requests_with_delegations_with_targets; 3))
                 .add_test(systest!(requests_with_delegation_loop; 2))
-                .add_test(systest!(requests_with_delegation_loop; 3)),
+                .add_test(systest!(requests_with_delegation_loop; 3))
+                .add_test(systest!(requests_with_invalid_expiry)),
         )
         .execute_from_args()?;
     Ok(())
@@ -132,6 +133,13 @@ impl GenericIdentity {
 
     fn sign_update(&self, update: &HttpCallContent) -> Vec<u8> {
         sign_update(update, self)
+            .signature
+            .clone()
+            .expect("Signature missing")
+    }
+
+    fn sign_read_state(&self, read_state: &HttpReadStateContent) -> Vec<u8> {
+        sign_read_state(read_state, self)
             .signature
             .clone()
             .expect("Signature missing")
@@ -464,6 +472,67 @@ pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
     });
 }
 
+// Tests that expired or too-future ingress_expiry values are rejected
+pub fn requests_with_invalid_expiry(env: TestEnv) {
+    let logger = env.logger();
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    block_on({
+        async move {
+            let node_url = node.get_public_url();
+            debug!(logger, "Selected replica"; "url" => format!("{}", node_url));
+
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+
+            debug!(
+                logger,
+                "Installed Universal Canister";
+                "canister_id" => format!("{:?}", canister.canister_id())
+            );
+
+            let mut test_info = TestInformation {
+                api_ver: 999, // To be set later...
+                url: node_url,
+                canister_id: canister_id_from_principal(&canister.canister_id()),
+            };
+
+            // Single identity for sender and signer, no delegations
+            let rng = &mut reproducible_rng();
+            let id_type = GenericIdentityType::random(rng);
+            let id = GenericIdentity::new(id_type, rng);
+
+            for expiry in [0_u64, u64::MAX] {
+                for api_ver in [2, 3] {
+                    test_info.api_ver = api_ver;
+                    assert_eq!(
+                        perform_query_with_expiry(&test_info, &id, &id, expiry).await,
+                        400,
+                        "query should be rejected for expiry={expiry} and api_ver={api_ver}"
+                    );
+                }
+                for api_ver in [2, 3, 4] {
+                    test_info.api_ver = api_ver;
+                    assert_eq!(
+                        perform_update_with_expiry(&test_info, &id, &id, expiry).await,
+                        400,
+                        "update should be rejected for expiry={expiry} and api_ver={api_ver}"
+                    );
+                }
+                for api_ver in [2, 3] {
+                    test_info.api_ver = api_ver;
+                    assert_eq!(
+                        perform_read_state_with_expiry(&test_info, &id, &id, expiry).await,
+                        400,
+                        "read_state should be rejected for expiry={expiry} and api_ver={api_ver}"
+                    );
+                }
+            }
+        }
+    });
+}
+
 fn create_delegations(identities: &[GenericIdentity]) -> Vec<SignedDelegation> {
     let delegation_expiry = Time::from_nanos_since_unix_epoch(expiry_time().as_nanos() as u64);
 
@@ -637,6 +706,94 @@ async fn perform_update_call_with_delegations(
         content,
         sender.public_key_der(),
         Some(delegations.to_vec()),
+        signature,
+    )
+    .await
+}
+
+async fn perform_query_with_expiry(
+    test: &TestInformation,
+    sender: &GenericIdentity,
+    signer: &GenericIdentity,
+    ingress_expiry: u64,
+) -> StatusCode {
+    let content = HttpQueryContent::Query {
+        query: HttpUserQuery {
+            canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
+            method_name: "query".to_string(),
+            arg: Blob(vec![]),
+            sender: Blob(sender.principal().as_slice().to_vec()),
+            ingress_expiry,
+            nonce: None,
+        },
+    };
+
+    let signature = signer.sign_query(&content);
+
+    send_request(
+        test,
+        "query",
+        content,
+        sender.public_key_der(),
+        None,
+        signature,
+    )
+    .await
+}
+
+async fn perform_update_with_expiry(
+    test: &TestInformation,
+    sender: &GenericIdentity,
+    signer: &GenericIdentity,
+    ingress_expiry: u64,
+) -> StatusCode {
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
+            method_name: "update".to_string(),
+            arg: Blob(vec![]),
+            sender: Blob(sender.principal().as_slice().to_vec()),
+            ingress_expiry,
+            nonce: None,
+        },
+    };
+
+    let signature = signer.sign_update(&content);
+
+    send_request(
+        test,
+        "call",
+        content,
+        sender.public_key_der(),
+        None,
+        signature,
+    )
+    .await
+}
+
+async fn perform_read_state_with_expiry(
+    test: &TestInformation,
+    sender: &GenericIdentity,
+    signer: &GenericIdentity,
+    ingress_expiry: u64,
+) -> StatusCode {
+    let content = HttpReadStateContent::ReadState {
+        read_state: HttpReadState {
+            sender: Blob(sender.principal().as_slice().to_vec()),
+            paths: vec![],
+            ingress_expiry,
+            nonce: None,
+        },
+    };
+
+    let signature = signer.sign_read_state(&content);
+
+    send_request(
+        test,
+        "read_state",
+        content,
+        sender.public_key_der(),
+        None,
         signature,
     )
     .await

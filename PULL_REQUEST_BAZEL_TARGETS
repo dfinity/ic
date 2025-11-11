@@ -44,7 +44,6 @@
 
 *.sh        //pre-commit:shfmt-check
 *.py        //pre-commit:ruff-lint
-*.hs        //pre-commit:ormolu-lint
 *.proto     //pre-commit:protobuf-format-check
             //pre-commit:buf-breaking
 
@@ -70,8 +69,9 @@ ic-os/guestos/context/docker-base.* //rs/tests/node:kill_start_long_test
 
 rs/nns/cmc/*.rs //rs/tests/nns:nns_cycles_minting_test
 
-*nns_delegation* //rs/tests/networking:nns_delegation_mainnet_nns_version_test
-                 //rs/tests/networking:nns_delegation_branch_nns_version_test
+*nns_delegation* //rs/tests/networking:nns_delegation_branch_nns_version_test
+# TODO(NET-1784): add this back
+# //rs/tests/networking:nns_delegation_mainnet_nns_version_test
 
 rs/backup/*.rs //rs/tests/consensus/backup/...
 
