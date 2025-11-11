@@ -198,7 +198,7 @@ where
         let minter = self.setup.as_ref().minter();
         let txid = minter.await_doge_transaction(self.retrieve_doge_id.block_index);
 
-        // TODO XC-496: fix fee handling
+        // TODO DEFI-2458: fix fee handling
         let change_amount = 1_000_300;
         let withdrawal_fee = WithdrawalFee {
             minter_fee: 300,
@@ -406,7 +406,7 @@ fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Tra
 
     let new_out_value = new.output.iter().map(|out| out.value.to_sat()).sum::<u64>();
     let prev_out_value = old.output.iter().map(|out| out.value.to_sat()).sum::<u64>();
-    // TODO XC-496: fix fee handling
+    // TODO DEFI-2458: fix fee handling
     let relay_cost = new.vsize() as u64 * MIN_RELAY_FEE_PER_KB / 1000;
 
     assert!(
