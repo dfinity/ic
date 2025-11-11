@@ -3,7 +3,6 @@ use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
 use gpt::GptDisk;
 use std::fs::File;
-use std::ops::Deref;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use sys_mount::{FilesystemType, Mount, MountFlags, Unmount, UnmountFlags};
@@ -159,28 +158,22 @@ impl PartitionProvider for GptPartitionProvider {
 /// Real filesystem mount using system mount with loop device
 #[cfg(target_os = "linux")]
 struct LoopDeviceMount {
-    // Field order matters: mount must be dropped before tempdir
-    // According to the Rust spec, fields are dropped in the order of declaration.
-    mount: MyUnmountDrop<Mount>,
+    // mount must be cleaned up before tempdir!
+    //
+    // We follow this in our Drop impl, but still stick to the Rust spec for
+    // drop order as well. According to the spec, fields are dropped in the
+    // order of declaration.
+    mount: Mount,
     _tempdir: TempDir,
 }
 
-struct MyUnmountDrop<T: Unmount> {
-    mount: T,
-}
-
-impl<T: Unmount> Deref for MyUnmountDrop<T> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.mount
-    }
-}
-
-impl<T: Unmount> Drop for MyUnmountDrop<T> {
+impl Drop for LoopDeviceMount {
     fn drop(&mut self) {
-        if let Err(e) = self.mount.unmount(UnmountFlags::empty()) {
+        if let Err(e) = retry_if_busy(|| self.mount.unmount(UnmountFlags::empty())) {
+            // If umount fails, we need to avoid cleaning the tmpdir, as this
+            // will purge the contents of the mounted fs, instead.
             eprintln!("Error dropping mount: {e:?}");
+            self._tempdir.disable_cleanup(true);
         }
     }
 }
@@ -217,7 +210,6 @@ impl Mounter for LoopDeviceMounter {
                         .flags(MountFlags::empty())
                         .explicit_loopback()
                         .mount(&device, mount_point)
-                        .map(|mount| MyUnmountDrop { mount })
                 })
                 .context("Failed to create mount")?,
                 _tempdir: tempdir,
@@ -374,5 +366,59 @@ pub mod testing {
 
             Ok(Arc::new(extraction_dir))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use anyhow::ensure;
+    use std::io::Write;
+    use std::process::Command;
+    use tempfile::NamedTempFile;
+
+    fn create_test_image() -> Result<NamedTempFile> {
+        let out = NamedTempFile::new()?;
+        out.as_file().set_len(16 * 1024 * 1024)?;
+        let temp_dir = TempDir::new()?;
+        write!(File::create(temp_dir.path().join("foo.txt"))?, "hello")?;
+
+        ensure!(
+            Command::new("mkfs.ext4")
+                .arg(out.path())
+                .arg("-d")
+                .arg(temp_dir.path())
+                .status()
+                .context("Could not start mkfs.ext4")?
+                .success(),
+            "mkfs.ext4 failed"
+        );
+
+        Ok(out)
+    }
+
+    #[tokio::test]
+    async fn test_loop_device_mount_drop_with_unmount_failure() {
+        let image = create_test_image().unwrap();
+
+        let mount = LoopDeviceMounter
+            .mount_range(
+                image.path().to_path_buf(),
+                0,
+                0,
+                MountOptions {
+                    file_system: FileSystem::Ext4,
+                },
+            )
+            .await
+            .unwrap();
+
+        let mount_point = mount.mount_point().to_path_buf();
+        // Force unmount to fail by keeping a file handle open
+        let _file = File::open(mount_point.join("foo.txt")).unwrap();
+
+        drop(mount);
+
+        assert!(mount_point.join("foo.txt").exists());
     }
 }

@@ -209,7 +209,7 @@ mod rlp_encoding {
 
         let signed_transaction = SignedEip1559TransactionRequest::from((transaction, signature));
         assert_eq!(
-            signed_transaction.raw_transaction_hex(),
+            signed_transaction.raw_transaction_hex_string(),
             "0x02f89883aa36a7068459682f0084598653cd82dcbf94b44b5e756a894775fc32eddf3314bb1b1944dc3487038d7ea4c68000a4b214faa51d882d15b09f8e81e29606305f5fefc5eff3e2309620a3557ecae39d62020000c001a07d097b81dc8bf5ad313f8d6656146d4723d0e6bb3fb35f1a709e6a3d4426c0f3a04f8a618d959e7d96e19156f0f5f2ed321b34e2004a0c8fdb7f02bc7d08b74441"
         );
         assert_eq!(
