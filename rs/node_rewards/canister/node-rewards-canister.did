@@ -48,7 +48,8 @@ type Type3BaseRewards = record {
 };
 
 type DailyNodeProviderRewards = record {
-  rewards_total_xdr_permyriad: opt nat64;
+  total_base_rewards_xdr_permyriad: opt nat64;
+  total_adjusted_rewards_xdr_permyriad: opt nat64;
   base_rewards: vec NodeTypeRegionBaseRewards;
   base_rewards_type3: vec Type3BaseRewards;
   daily_nodes_rewards: vec DailyNodeRewards;

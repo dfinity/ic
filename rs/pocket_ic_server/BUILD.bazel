@@ -154,7 +154,7 @@ ALIASES = {}
 EXTERNAL_CANISTER_DATA = [
     "@mainnet_canisters//:cycles_ledger.wasm.gz",
     "@mainnet_canisters//:internet_identity_test.wasm.gz",
-    "@sns_aggregator//file",
+    "@mainnet_canisters//:sns_aggregator_test.wasm.gz",
     "@mainnet_canisters//:nns_dapp_test.wasm.gz",
     "@mainnet_canisters//:bitcoin_testnet.wasm.gz",
 ]
@@ -162,7 +162,7 @@ EXTERNAL_CANISTER_DATA = [
 EXTERNAL_CANISTER_ENV = {
     "CYCLES_LEDGER_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:cycles_ledger.wasm.gz)",
     "INTERNET_IDENTITY_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:internet_identity_test.wasm.gz)",
-    "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @sns_aggregator//file)",
+    "SNS_AGGREGATOR_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:sns_aggregator_test.wasm.gz)",
     "NNS_DAPP_TEST_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:nns_dapp_test.wasm.gz)",
     "BITCOIN_TESTNET_CANISTER_WASM_PATH": "$(location @mainnet_canisters//:bitcoin_testnet.wasm.gz)",
 }
