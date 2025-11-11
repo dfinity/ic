@@ -1,4 +1,3 @@
-use crate::canister::current_time;
 use chrono::NaiveDate;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_node_rewards_canister_api::provider_rewards_calculation::{
@@ -84,11 +83,8 @@ pub struct PrometheusMetrics {
     /// Number of instruction for executing get_node_providers_rewards
     last_get_node_providers_rewards_instructions: f64,
 
-    /// Latest rewards calculation date
-    latest_rewards_calculation_date: NaiveDate,
-
     /// Rewards calculation metrics
-    latest_rewards_calculation_metrics: RewardsCalculationMetrics,
+    rewards_calculation_metrics: BTreeMap<NaiveDate, RewardsCalculationMetrics>,
 }
 
 static LAST_SYNC_START_HELP: &str = "Last time the sync of metrics started.  If this metric is present but zero, the first sync during this canister's current execution has not yet begun or taken place.";
@@ -117,9 +113,15 @@ impl PrometheusMetrics {
         self.last_get_node_providers_rewards_instructions = total as f64;
     }
 
-    pub fn record_node_providers_rewards(&mut self, date: NaiveDate, daily_results: DailyResults) {
-        self.latest_rewards_calculation_date = date;
+    pub fn rewards_dates_stored(&self) -> Vec<NaiveDate> {
+        self.rewards_calculation_metrics.keys().cloned().collect()
+    }
 
+    pub fn remove_rewards_date(&mut self, date: NaiveDate) {
+        self.rewards_calculation_metrics.remove(&date);
+    }
+
+    pub fn record_node_providers_rewards(&mut self, date: NaiveDate, daily_results: DailyResults) {
         let mut provider_metrics = BTreeMap::new();
         for (provider_id, daily_rewards) in daily_results.provider_results {
             let mut nodes_count: f64 = 0f64;
@@ -167,10 +169,13 @@ impl PrometheusMetrics {
             );
         }
 
-        self.latest_rewards_calculation_metrics = RewardsCalculationMetrics {
-            provider_metrics,
-            subnets_failure_rate: daily_results.subnets_failure_rate,
-        };
+        self.rewards_calculation_metrics.insert(
+            date,
+            RewardsCalculationMetrics {
+                provider_metrics,
+                subnets_failure_rate: daily_results.subnets_failure_rate,
+            },
+        );
     }
 
     pub fn encode_metrics(
@@ -229,29 +234,52 @@ impl PrometheusMetrics {
             LAST_SYNC_INSTRUCTIONS_HELP,
         )?;
 
-        w.gauge_vec(
-            "latest_rewards_calculation_date",
-            "Latest rewards calculation date",
-        )?
-        .value(
-            &[(
-                "date",
-                &self
-                    .latest_rewards_calculation_date
-                    .format("%Y-%m-%d")
-                    .to_string(),
-            )],
-            current_time().as_secs_since_unix_epoch() as f64,
-        )?;
+        Ok(())
+    }
 
+    pub fn encode_rewards_calculation_metrics_paginated(
+        &self,
+        page: usize,
+        limit: usize,
+    ) -> std::io::Result<Vec<u8>> {
+        let mut paginated_metrics = Vec::new();
+
+        // Compute pagination window
+        let start = page.saturating_mul(limit);
+
+        // Iterate only over the selected slice
+        for (_, (date, rewards_calculation_metrics)) in self
+            .rewards_calculation_metrics
+            .iter()
+            .enumerate()
+            .skip(start)
+            .take(limit)
+        {
+            let noon_time = date
+                .and_hms_opt(12, 0, 0)
+                .unwrap()
+                .and_utc()
+                .timestamp_millis();
+
+            let mut w = ic_metrics_encoder::MetricsEncoder::new(vec![], noon_time);
+            self.encode_rewards_calculation_metrics_single(rewards_calculation_metrics, &mut w)?;
+            paginated_metrics.extend_from_slice(w.into_inner().as_slice());
+        }
+
+        Ok(paginated_metrics)
+    }
+
+    fn encode_rewards_calculation_metrics_single(
+        &self,
+        rewards_calculation_metrics: &RewardsCalculationMetrics,
+        w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
+    ) -> std::io::Result<()> {
         {
             let mut metric = w.gauge_vec(
                 "latest_nodes_count",
                 "Node counts for a provider on latest_rewards_calculation_date",
             )?;
-            for (provider_id, provider_metrics) in
-                &self.latest_rewards_calculation_metrics.provider_metrics
-            {
+            for (provider_id, provider_metrics) in &rewards_calculation_metrics.provider_metrics {
                 metric = metric.value(
                     &[("provider_id", &provider_id.to_string())],
                     provider_metrics.nodes_count,
@@ -261,12 +289,10 @@ impl PrometheusMetrics {
 
         {
             let mut metric = w.gauge_vec(
-                "latest_total_adjusted_rewards_xdr_permyriad",
-                "Sum of adjusted rewards across all nodes for a provider on latest_rewards_calculation_date",
-            )?;
-            for (provider_id, provider_metrics) in
-                &self.latest_rewards_calculation_metrics.provider_metrics
-            {
+                    "latest_total_adjusted_rewards_xdr_permyriad",
+                    "Sum of adjusted rewards across all nodes for a provider on latest_rewards_calculation_date",
+                )?;
+            for (provider_id, provider_metrics) in &rewards_calculation_metrics.provider_metrics {
                 metric = metric.value(
                     &[("provider_id", &provider_id.to_string())],
                     provider_metrics.total_adjusted_rewards_xdr_permyriad,
@@ -276,12 +302,10 @@ impl PrometheusMetrics {
 
         {
             let mut metric = w.gauge_vec(
-                "latest_total_base_rewards_xdr_permyriad",
-                "Sum of base rewards across all nodes for a provider on latest_rewards_calculation_date",
-            )?;
-            for (provider_id, provider_metrics) in
-                &self.latest_rewards_calculation_metrics.provider_metrics
-            {
+                    "latest_total_base_rewards_xdr_permyriad",
+                    "Sum of base rewards across all nodes for a provider on latest_rewards_calculation_date",
+                )?;
+            for (provider_id, provider_metrics) in &rewards_calculation_metrics.provider_metrics {
                 metric = metric.value(
                     &[("provider_id", &provider_id.to_string())],
                     provider_metrics.total_based_rewards_xdr_permyriad,
@@ -294,9 +318,7 @@ impl PrometheusMetrics {
                 "latest_original_failure_rate",
                 "Original failure rate of one node on latest_rewards_calculation_date",
             )?;
-            for (provider_id, provider_metrics) in
-                &self.latest_rewards_calculation_metrics.provider_metrics
-            {
+            for (provider_id, provider_metrics) in &rewards_calculation_metrics.provider_metrics {
                 for ((node_id, subnet_assigned), original_failure_rate) in
                     &provider_metrics.original_failure_rate
                 {
@@ -314,12 +336,20 @@ impl PrometheusMetrics {
 
         {
             let mut metric = w.gauge_vec(
+                "subnet_failure_rate",
+                "Failure rate of one subnet on latest_rewards_calculation_date",
+            )?;
+            for (subnet_id, failure_rate) in &rewards_calculation_metrics.subnets_failure_rate {
+                metric = metric.value(&[("subnet_id", &subnet_id.to_string())], *failure_rate)?;
+            }
+        }
+
+        {
+            let mut metric = w.gauge_vec(
                 "latest_relative_failure_rate",
                 "Relative failure rate of one node on latest_rewards_calculation_date",
             )?;
-            for (provider_id, provider_metrics) in
-                &self.latest_rewards_calculation_metrics.provider_metrics
-            {
+            for (provider_id, provider_metrics) in &rewards_calculation_metrics.provider_metrics {
                 for ((node_id, subnet_assigned), relative_failure_rate) in
                     &provider_metrics.relative_failure_rate
                 {
@@ -332,18 +362,6 @@ impl PrometheusMetrics {
                         *relative_failure_rate,
                     )?;
                 }
-            }
-        }
-
-        {
-            let mut metric = w.gauge_vec(
-                "subnet_failure_rate",
-                "Failure rate of one subnet on latest_rewards_calculation_date",
-            )?;
-            for (subnet_id, failure_rate) in
-                &self.latest_rewards_calculation_metrics.subnets_failure_rate
-            {
-                metric = metric.value(&[("subnet_id", &subnet_id.to_string())], *failure_rate)?;
             }
         }
 

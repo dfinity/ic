@@ -99,7 +99,7 @@ impl GetNodeProvidersRewardsInstructionsExporter {
 impl RecurringSyncTask for GetNodeProvidersRewardsInstructionsExporter {
     fn execute(self) -> (Duration, Self) {
         // Yesterday
-        let to_day = yesterday();
+        let to_day = yesterday().pred_opt().unwrap();
         // Yesterday - 35 days
         let from_day = to_day.checked_sub_days(Days::new(35)).unwrap();
 
@@ -144,23 +144,50 @@ impl NodeProvidersRewardsExporter {
 }
 impl RecurringSyncTask for NodeProvidersRewardsExporter {
     fn execute(self) -> (Duration, Self) {
+        let rewards_dates_stored =
+            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| m.rewards_dates_stored());
+
         let yesterday = yesterday();
-        let request = GetNodeProvidersRewardsCalculationRequest {
-            day: DateUtc::from(yesterday.clone()),
-        };
-        match NodeRewardsCanister::get_node_providers_rewards_calculation(self.canister, request) {
-            Ok(rewards) => {
-                telemetry::PROMETHEUS_METRICS
-                    .with_borrow_mut(|m| m.record_node_providers_rewards(yesterday, rewards));
-            }
-            Err(e) => {
-                ic_cdk::println!("Failed to get node providers rewards calculation: {:?}", e)
+        let days_ago_35 = yesterday.checked_sub_days(Days::new(35)).unwrap();
+
+        let mut rewards_dates_missing: Vec<NaiveDate> = days_ago_35
+            .iter_days()
+            .take_while(|d| *d <= yesterday)
+            .filter(|d| !rewards_dates_stored.contains(d))
+            .collect();
+
+        if let Some(date) = rewards_dates_missing.pop() {
+            let request = GetNodeProvidersRewardsCalculationRequest {
+                day: DateUtc::from(date),
+            };
+            match NodeRewardsCanister::get_node_providers_rewards_calculation(
+                self.canister,
+                request,
+            ) {
+                Ok(rewards) => {
+                    telemetry::PROMETHEUS_METRICS
+                        .with_borrow_mut(|m| m.record_node_providers_rewards(date, rewards));
+                    telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
+                        m.remove_rewards_date(days_ago_35.pred_opt().unwrap())
+                    });
+                }
+                Err(e) => {
+                    ic_cdk::println!("Failed to get node providers rewards calculation: {:?}", e)
+                }
             }
         }
 
-        ic_cdk::println!("NodeProvidersRewardsExporter done");
-
-        (Self::default_delay(), self)
+        if let Some(next_date_to_backfill) = rewards_dates_missing.pop() {
+            let date_str = next_date_to_backfill.format("%Y-%m-%d").to_string();
+            ic_cdk::println!(
+                "GetNodeProvidersRewardsInstructionsExporter next backfill: {}",
+                date_str
+            );
+            (Duration::from_secs(1), self)
+        } else {
+            ic_cdk::println!("GetNodeProvidersRewardsInstructionsExporter done");
+            (Self::default_delay(), self)
+        }
     }
 
     fn initial_delay(&self) -> Duration {
@@ -169,7 +196,7 @@ impl RecurringSyncTask for NodeProvidersRewardsExporter {
     const NAME: &'static str = "node_provider_rewards_exporter";
 }
 
-fn yesterday() -> NaiveDate {
+pub fn yesterday() -> NaiveDate {
     DateTime::from_timestamp_nanos(current_time().as_nanos_since_unix_epoch() as i64)
         .date_naive()
         .pred_opt()
