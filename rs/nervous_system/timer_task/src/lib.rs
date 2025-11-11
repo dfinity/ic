@@ -238,7 +238,7 @@ pub trait PeriodicSyncTask: Copy + Sized + 'static {
     fn execute(self);
 
     fn schedule(self, metrics_registry: MetricsRegistryRef) -> TimerId {
-        set_timer_interval(Self::INTERVAL, async move || {
+        set_timer_interval(Self::INTERVAL, move || async move {
             let instructions_before = instruction_counter();
 
             self.execute();
@@ -259,7 +259,7 @@ pub trait PeriodicAsyncTask: Copy + Sized + 'static {
     async fn execute(self);
 
     fn schedule(self, metrics_registry: MetricsRegistryRef) -> TimerId {
-        set_timer_interval(Self::INTERVAL, async move || {
+        set_timer_interval(Self::INTERVAL, move || async move {
             spawn_in_canister_env(async move {
                 let instructions_before = call_context_instruction_counter();
                 with_async_metrics(metrics_registry, Self::NAME, |metrics| {
