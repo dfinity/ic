@@ -238,7 +238,7 @@ where
     }
 }
 
-/// Step 5: wait for enough confirmations for the transaction to be considered fiunalized by the minter.
+/// Step 5: wait for enough confirmations for the transaction to be considered finalized by the minter.
 // TODO XC-496: transaction finalization
 pub struct WithdrawalFlowEnd<S> {
     setup: S,
