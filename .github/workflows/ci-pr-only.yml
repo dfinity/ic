@@ -31,6 +31,31 @@ jobs:
         with:
           ref: ${{ inputs.commit-sha }}
 
+  # Run didc compatibility checks against the merge base
+  didc_checks:
+    name: Candid compatibility checks
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
+    runs-on: &dind-small-setup
+      labels: dind-small
+    container: *container-setup
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # ensures we checkout out the latest base, which we
+          # compare against (pull_request.base.sha)
+          fetch-depth: 0
+          ref: ${{ inputs.commit-sha }}
+      - name: Run candid compatibility checks
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            DID_CHECK_REV='${{ github.event.pull_request.base.sha }}' \
+              bazel test //... \
+                --build_tag_filters="didc" \
+                --test_tag_filters="didc"
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
   insta-tests:
     name: Quick Feedback Tests
     runs-on: &dind-small-setup
