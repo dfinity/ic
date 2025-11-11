@@ -203,9 +203,10 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
 
 # Create wrapper script to prevent bash escape in restricted shell
 # A symlink won't work because bash checks its invocation name ($0), not the symlink target
-RUN echo '#!/bin/sh' > /opt/ic/bin/bash && \
-    echo 'exec /bin/rbash "$@"' >> /opt/ic/bin/bash && \
-    chmod 0755 /opt/ic/bin/bash
+RUN mkdir -p /opt/ic/bin/rbash && \
+    echo '#!/bin/sh' > /opt/ic/bin/rbash/bash && \
+    echo 'exec /bin/rbash "$@"' >> /opt/ic/bin/rbash/bash && \
+    chmod 0755 /opt/ic/bin/rbash/bash
 
 # ------ DEV VARIANT ---------------------------------------------
 
