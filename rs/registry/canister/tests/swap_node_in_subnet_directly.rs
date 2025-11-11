@@ -422,7 +422,7 @@ async fn subnet_rate_limit_passed() {
     )
     .await;
 
-    let expected_err = SwapError::ProviderRateLimitedOnSubnet {
+    let expected_err = SwapError::OperatorRateLimitedOnSubnet {
         subnet_id,
         caller: operator_id,
     };
@@ -434,7 +434,7 @@ async fn subnet_rate_limit_passed() {
         "Expected error {expected_err:?} but got response: {response:?}"
     );
 
-    // Advance the time for 1 hour more than the node provider rate limit
+    // Advance the time for 1 hour more than the node operator rate limit
     pocket_ic
         .set_time(
             time_after_successful_call

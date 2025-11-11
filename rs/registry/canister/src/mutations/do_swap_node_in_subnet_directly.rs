@@ -56,7 +56,7 @@ impl SwapRateLimiter {
 
     fn try_reserve(
         &mut self,
-        provider: PrincipalId,
+        operator: PrincipalId,
         subnet_id: SubnetId,
         now: SystemTime,
     ) -> Result<SwapReservation, SwapError> {
@@ -70,22 +70,22 @@ impl SwapRateLimiter {
                     re => panic!("Unexpected error from subnet rate limiter: {re:?}"),
                 })?;
 
-        let provider_reservation = self
+        let operator_reservation = self
             .operator_limiter
-            .try_reserve(now, (provider, subnet_id), 1)
+            .try_reserve(now, (operator, subnet_id), 1)
             .map_err(|e| match e {
                 ic_nervous_system_rate_limits::RateLimiterError::NotEnoughCapacity => {
-                    SwapError::ProviderRateLimitedOnSubnet {
+                    SwapError::OperatorRateLimitedOnSubnet {
                         subnet_id,
-                        caller: provider,
+                        caller: operator,
                     }
                 }
-                re => panic!("Unexpected error from provider rate limiter: {re:?}"),
+                re => panic!("Unexpected error from operator rate limiter: {re:?}"),
             })?;
 
         Ok(SwapReservation {
             subnet_reservation,
-            operator_reservation: provider_reservation,
+            operator_reservation,
         })
     }
 
@@ -188,7 +188,7 @@ impl Registry {
         })?;
 
         // Ensure that the old node is a member in a subnet
-        // This is done before calling `validate_business_logic`
+        // This is done before calling `validate_node_swap`
 
         // Ensure that the new node is not a member of any subnets
         let maybe_subnet_new_node =
@@ -291,7 +291,7 @@ pub enum SwapError {
     SubnetRateLimited {
         subnet_id: SubnetId,
     },
-    ProviderRateLimitedOnSubnet {
+    OperatorRateLimitedOnSubnet {
         subnet_id: SubnetId,
         caller: PrincipalId,
     },
@@ -335,7 +335,7 @@ impl Display for SwapError {
                 SwapError::SubnetRateLimited { subnet_id } => format!(
                     "Subnet {subnet_id} had a swap performed within last two hours. Try again later."
                 ),
-                SwapError::ProviderRateLimitedOnSubnet { subnet_id, caller } => format!(
+                SwapError::OperatorRateLimitedOnSubnet { subnet_id, caller } => format!(
                     "Caller {caller} performed a swap on subnet {subnet_id} within last twelve hours. Try again later."
                 ),
                 SwapError::SubnetSizeMismatch { subnet_id } => format!(
@@ -709,13 +709,13 @@ mod tests {
             .unwrap();
         let expected_err = SwapError::SubnetRateLimited { subnet_id };
 
-        // Second call from the same provider should fail because of subnet rate limit
+        // Second call from the same operator should fail because of subnet rate limit
         let response = swap_limiter
             .try_reserve(caller_1, subnet_id, before_duration_elapsed)
             .expect_err("Should error out");
         assert_eq!(response, expected_err);
 
-        // Call from a different provider should fail as well
+        // Call from a different operator should fail as well
         let response = swap_limiter
             .try_reserve(caller_2, subnet_id, before_duration_elapsed)
             .expect_err("Should error out");
@@ -734,7 +734,7 @@ mod tests {
             .unwrap();
         drop(reservation);
 
-        let expected_err = SwapError::ProviderRateLimitedOnSubnet {
+        let expected_err = SwapError::OperatorRateLimitedOnSubnet {
             subnet_id,
             caller: caller_1,
         };
@@ -743,14 +743,14 @@ mod tests {
             .expect_err("Should error out");
         assert_eq!(response, expected_err);
 
-        // After PROVIDER_CAPACITY_INTERVAL the first provider should be able to perform a swap
-        let after_provider_duration_elapsed = now
+        // After PROVIDER_CAPACITY_INTERVAL the first operator should be able to perform a swap
+        let after_operator_duration_elapsed = now
             .checked_add(
                 NODE_SWAPS_OPERATOR_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)),
             )
             .unwrap();
         let response =
-            swap_limiter.try_reserve(caller_1, subnet_id, after_provider_duration_elapsed);
+            swap_limiter.try_reserve(caller_1, subnet_id, after_operator_duration_elapsed);
         assert!(response.is_ok());
     }
 
@@ -825,7 +825,7 @@ mod tests {
         let expected_err = SwapError::SubnetRateLimited { subnet_id };
         assert_eq!(response, expected_err);
 
-        // Make an additional call which should fail because of the provider limit
+        // Make an additional call which should fail because of the operator limit
         let after_subnet_duration_elapsed = now
             .checked_add(
                 NODE_SWAPS_SUBNET_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)),
@@ -835,20 +835,20 @@ mod tests {
             .swap_nodes_inner(payload.clone(), operator_id, after_subnet_duration_elapsed)
             .expect_err("Should error out");
 
-        let expected_err = SwapError::ProviderRateLimitedOnSubnet {
+        let expected_err = SwapError::OperatorRateLimitedOnSubnet {
             subnet_id,
             caller: operator_id,
         };
         assert_eq!(response, expected_err);
 
         // Make an additional call after all the rate limits have elapsed
-        let after_provider_duration_elapsed = now
+        let after_operator_duration_elapsed = now
             .checked_add(
                 NODE_SWAPS_OPERATOR_CAPACITY_INTERVAL.saturating_add(Duration::from_secs(5 * 60)),
             )
             .unwrap();
         let response =
-            registry.swap_nodes_inner(payload, operator_id, after_provider_duration_elapsed);
+            registry.swap_nodes_inner(payload, operator_id, after_operator_duration_elapsed);
 
         assert!(response.is_ok());
 
