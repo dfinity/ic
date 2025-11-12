@@ -292,6 +292,109 @@ jobs:
           # Clean up the output base for the next run
           sudo rm -rf /var/tmp/bazel-output
 
+  bazel-test-all-namespace:
+    name: Bazel Test All (Namespace)
+    needs: [config]
+    if: github.repository == 'dfinity/ic' # only run on public repo, not private since Namespace runners are not configured there, so these CI jobs get stuck otherwise.
+    # The 16 vCPU runners have 160 GB disks which are too small so we use 32 vCPU runners which have 288 GB disks.
+    runs-on: namespace-profile-amd64-linux-32x64
+    permissions:
+      id-token: write # needed for namespacelabs/nscloud-setup
+    container:
+      image: ghcr.io/dfinity/ic-build@sha256:3b1bdea254318bca524e9c61a441452f3585c8046888702438546a6de5be0d1a
+      options: --privileged # needed for the builds of ic-os images.
+      volumes:
+        - /var/run/nsc/:/var/run/nsc/ # Needed such that namespacelabs/nscloud-setup can authenticate with Namespace.so.
+    timeout-minutes: 150
+    steps:
+      - uses: namespacelabs/nscloud-setup@v0
+      - name: Set up Bazel cache
+        run: |
+          # Creates a bazelrc configuration fragment which tells bazel where the cache lives.
+          nsc bazel cache setup --bazelrc=/tmp/bazel-cache.bazelrc
+      - *checkout
+      - name: Run Bazel Commands (Namespace)
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Building as user: $(whoami)"
+          echo "Bazel version: $(bazel version)"
+
+          mkdir -p /tmp/zig-cache
+
+          # Determine bazel_args based on event type or branch name
+          bazel_args=(
+            --config=lint # enable lint checks
+            --config=flaky_retry # auto retry eg systests
+            --keep_going
+            )
+
+          if [[ '${{ needs.config.outputs.release-build }}' == 'true' ]]; then
+            # make sure the version is stamped in
+            bazel_args+=( --config=stamped )
+          fi
+
+          # If there are targets to test, pass them as a file to bazel to avoid bash & the OS
+          # complaining about the argument list being too long.
+          target_pattern_file=$(mktemp)
+          trap "rm $target_pattern_file" INT TERM EXIT
+          targets_args=(
+            "--exclude_tags=system_test"
+          )
+          if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
+            targets_args+=("--skip_long_tests")
+          fi
+          if [[ '${{ needs.config.outputs.skip_didc_checks }}' == 'true' ]]; then
+            targets_args+=("--exclude_tags=didc")
+          fi
+          if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
+            targets_args+=("--exclude_tags=buf")
+          fi
+          if [[ '${{ needs.config.outputs.diff_only }}' == 'true' ]]; then
+            targets_args+=(
+              '--base=${{ github.event.pull_request.base.sha }}'
+              '--head=${{ github.event.pull_request.head.sha }}'
+              )
+          fi
+
+          bazel_do() {
+            bazel_cmd="$1"
+
+            "${CI_PROJECT_DIR:-}"/ci/scripts/targets.py "$bazel_cmd" \
+                  "${targets_args[@]}" >"$target_pattern_file"
+
+            num_targets=$(wc <"$target_pattern_file" -l)
+            # if bazel targets is empty we don't need to run any tests
+            if [ "$num_targets" -eq 0 ]; then
+              echo "No bazel targets to $bazel_cmd"
+              return
+            fi
+
+            echo "${bazel_cmd}ing $num_targets targets ..."
+            # the target list can get quite big, so we wrap it in details/summary
+            {
+              echo '<details><summary>'"$bazel_cmd"' '"$num_targets"' targets</summary>';
+              echo
+              echo '```'
+              cat "$target_pattern_file"
+              echo '```'
+              echo
+              echo '</details>';
+            } >>"$GITHUB_STEP_SUMMARY"
+
+            echo "Running bazel command: $bazel_cmd"
+
+            bazel \
+              --noworkspace_rc \
+              --bazelrc=./bazel/conf/.bazelrc.build \
+              --bazelrc=/tmp/bazel-cache.bazelrc \
+              "$bazel_cmd" "${bazel_args[@]}" "--target_pattern_file=$target_pattern_file"
+          }
+
+          bazel_do build
+          bazel_do test
+
   # Build & upload the arm64-{linux,darwin} variant of the PocketIC server,
   # build the entire codebase on arm64-darwin,
   # and run tests tagged to run on all platforms.
