@@ -27,7 +27,7 @@ use ic_nns_common::{
     types::NeuronId,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::{self as api};
+use ic_nns_governance_api as api;
 use icp_ledger::Subaccount;
 use maplit::{btreemap, hashmap};
 use rand::{Rng, SeedableRng};
