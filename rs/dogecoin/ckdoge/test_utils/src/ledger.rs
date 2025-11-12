@@ -5,6 +5,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc3::transactions::{Burn, Mint, Transaction as LedgerTransaction};
 use pocket_ic::PocketIc;
+use std::ops::RangeInclusive;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -20,7 +21,17 @@ impl LedgerCanister {
     ) -> LedgerTransactionAssert<Self> {
         LedgerTransactionAssert {
             setup: self.clone(),
-            ledger_transaction: self.get_transaction(ledger_index),
+            ledger_transactions: vec![self.get_transaction(ledger_index)],
+        }
+    }
+
+    pub fn assert_that_transactions(
+        &self,
+        indexes: RangeInclusive<u64>,
+    ) -> LedgerTransactionAssert<Self> {
+        LedgerTransactionAssert {
+            setup: self.clone(),
+            ledger_transactions: self.get_transactions(indexes),
         }
     }
 
@@ -50,6 +61,34 @@ impl LedgerCanister {
             response.transactions
         );
         response.transactions.pop().unwrap()
+    }
+
+    pub fn get_transactions(&self, indexes: RangeInclusive<u64>) -> Vec<LedgerTransaction> {
+        use icrc_ledger_types::icrc3::transactions::{
+            GetTransactionsRequest, GetTransactionsResponse,
+        };
+
+        assert!(!indexes.is_empty());
+        let length = indexes.end() - indexes.start() + 1;
+
+        let request = GetTransactionsRequest {
+            start: (*indexes.start()).into(),
+            length: length.into(),
+        };
+        let result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "get_transactions",
+                Encode!(&request).unwrap(),
+            )
+            .expect("Failed to call get_transactions");
+        let response = Decode!(&result, GetTransactionsResponse).unwrap();
+
+        assert_eq!(response.transactions.len() as u64, length);
+
+        response.transactions
     }
 
     pub fn icrc2_approve(
@@ -113,27 +152,33 @@ impl LedgerCanister {
 
 pub struct LedgerTransactionAssert<T> {
     pub(crate) setup: T,
-    pub(crate) ledger_transaction: LedgerTransaction,
+    pub(crate) ledger_transactions: Vec<LedgerTransaction>,
 }
 
 impl<T> LedgerTransactionAssert<T> {
-    pub fn equals_mint_ignoring_timestamp(self, expected: Mint) -> T {
-        assert_eq!(self.ledger_transaction.kind, "mint");
-        assert_eq!(self.ledger_transaction.mint, Some(expected));
-        assert_eq!(self.ledger_transaction.burn, None);
-        assert_eq!(self.ledger_transaction.transfer, None);
-        assert_eq!(self.ledger_transaction.approve, None);
-        // we ignore timestamp
+    pub fn equals_mint_ignoring_timestamp(self, expected: &[Mint]) -> T {
+        assert_eq!(self.ledger_transactions.len(), expected.len());
+        for (tx, mint) in self.ledger_transactions.into_iter().zip(expected) {
+            assert_eq!(tx.kind, "mint");
+            assert_eq!(tx.mint, Some(mint.clone()));
+            assert_eq!(tx.burn, None);
+            assert_eq!(tx.transfer, None);
+            assert_eq!(tx.approve, None);
+            // we ignore timestamp
+        }
         self.setup
     }
 
-    pub fn equals_burn_ignoring_timestamp(self, expected: Burn) -> T {
-        assert_eq!(self.ledger_transaction.kind, "burn");
-        assert_eq!(self.ledger_transaction.mint, None);
-        assert_eq!(self.ledger_transaction.burn, Some(expected));
-        assert_eq!(self.ledger_transaction.transfer, None);
-        assert_eq!(self.ledger_transaction.approve, None);
-        // we ignore timestamp
+    pub fn equals_burn_ignoring_timestamp(self, expected: &[Burn]) -> T {
+        assert_eq!(self.ledger_transactions.len(), expected.len());
+        for (tx, burn) in self.ledger_transactions.into_iter().zip(expected) {
+            assert_eq!(tx.kind, "burn");
+            assert_eq!(tx.mint, None);
+            assert_eq!(tx.burn, Some(burn.clone()));
+            assert_eq!(tx.transfer, None);
+            assert_eq!(tx.approve, None);
+            // we ignore timestamp
+        }
         self.setup
     }
 }

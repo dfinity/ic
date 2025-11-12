@@ -148,6 +148,11 @@ where
             "BUG: unexpected UTXOs with status UtxoStatus::Minted"
         );
 
+        let total_minted_amount = minted_status
+            .iter()
+            .map(|(_utxo, (_block_index, minted_amount))| minted_amount)
+            .sum::<u64>();
+
         let known_utxos: BTreeSet<_> = self
             .setup
             .as_ref()
@@ -163,7 +168,7 @@ where
 
         let expected_events: Vec<_> = minted_status
             .iter()
-            .map(|(utxo, (mint_index, _minted_amount))| {
+            .flat_map(|(utxo, (mint_index, _minted_amount))| {
                 vec![
                     EventType::CheckedUtxoV2 {
                         utxo: utxo.clone(),
@@ -176,38 +181,45 @@ where
                     },
                 ]
             })
-            .flatten()
             .collect();
-
         self.setup
             .as_ref()
             .minter()
             .assert_that_events()
             .contains_only_once_in_order(&expected_events);
 
-        let mut total_minted_amount = 0;
-        //TODO XC-496: use batching to speed up test
-        for utxo in self.deposit_utxos {
-            let (mint_index, minted_amount) = minted_status.get(&utxo).cloned().unwrap();
-            assert_eq!(utxo.value, minted_amount);
-            total_minted_amount += minted_amount;
-
-            self.setup
-                .as_ref()
-                .ledger()
-                .assert_that_transaction(mint_index)
-                .equals_mint_ignoring_timestamp(Mint {
-                    amount: minted_amount.into(),
-                    to: self.account,
-                    memo: Some(Memo::from(memo_encode(&MintMemo::Convert {
-                        txid: Some(utxo.outpoint.txid.as_ref()),
-                        vout: Some(utxo.outpoint.vout),
-                        kyt_fee: Some(0),
-                    }))),
-                    created_at_time: None,
-                    fee: None,
-                });
-        }
+        let mint_indexes: BTreeMap<_, _> = minted_status
+            .iter()
+            .map(|(utxo, (mint_index, minted_amount))| {
+                (*mint_index, (utxo.clone(), *minted_amount))
+            })
+            .collect();
+        let first_mint_index = *mint_indexes.first_key_value().unwrap().0;
+        let last_mint_index = *mint_indexes.last_key_value().unwrap().0;
+        assert_eq!(
+            last_mint_index,
+            first_mint_index + self.deposit_utxos.len() as u64 - 1,
+            "Range of mint indexes on ledger is not continuous"
+        );
+        let expected_mints: Vec<_> = mint_indexes
+            .into_iter()
+            .map(|(_mint_index, (utxo, minted_amount))| Mint {
+                amount: minted_amount.into(),
+                to: self.account,
+                memo: Some(Memo::from(memo_encode(&MintMemo::Convert {
+                    txid: Some(utxo.outpoint.txid.as_ref()),
+                    vout: Some(utxo.outpoint.vout),
+                    kyt_fee: Some(0),
+                }))),
+                created_at_time: None,
+                fee: None,
+            })
+            .collect();
+        self.setup
+            .as_ref()
+            .ledger()
+            .assert_that_transactions(first_mint_index..=last_mint_index)
+            .equals_mint_ignoring_timestamp(&expected_mints);
 
         let balance_after = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
         assert_eq!(balance_after - self.balance_before, total_minted_amount);

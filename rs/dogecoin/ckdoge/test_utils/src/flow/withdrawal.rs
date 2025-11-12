@@ -140,7 +140,7 @@ where
         let ledger = self.setup.as_ref().ledger();
         ledger
             .assert_that_transaction(retrieve_doge_id.block_index)
-            .equals_burn_ignoring_timestamp(Burn {
+            .equals_burn_ignoring_timestamp(&[Burn {
                 amount: self.withdrawal_amount.into(),
                 from: self.account,
                 spender: Some(minter.id().into()),
@@ -151,7 +151,7 @@ where
                 }))),
                 created_at_time: None,
                 fee: None,
-            });
+            }]);
 
         let balance_after = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
 
