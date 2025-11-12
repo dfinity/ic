@@ -3072,33 +3072,6 @@ impl From<pb_api::XdrConversionRate> for pb::XdrConversionRate {
     }
 }
 
-impl From<pb::ListProposalInfo> for pb_api::ListProposalInfo {
-    fn from(item: pb::ListProposalInfo) -> Self {
-        Self {
-            limit: item.limit,
-            before_proposal: item.before_proposal,
-            exclude_topic: item.exclude_topic,
-            include_reward_status: item.include_reward_status,
-            include_status: item.include_status,
-            include_all_manage_neuron_proposals: item.include_all_manage_neuron_proposals,
-            omit_large_fields: item.omit_large_fields,
-        }
-    }
-}
-impl From<pb_api::ListProposalInfo> for pb::ListProposalInfo {
-    fn from(item: pb_api::ListProposalInfo) -> Self {
-        Self {
-            limit: item.limit,
-            before_proposal: item.before_proposal,
-            exclude_topic: item.exclude_topic,
-            include_reward_status: item.include_reward_status,
-            include_status: item.include_status,
-            include_all_manage_neuron_proposals: item.include_all_manage_neuron_proposals,
-            omit_large_fields: item.omit_large_fields,
-        }
-    }
-}
-
 impl From<pb::ListKnownNeuronsResponse> for pb_api::ListKnownNeuronsResponse {
     fn from(item: pb::ListKnownNeuronsResponse) -> Self {
         Self {
