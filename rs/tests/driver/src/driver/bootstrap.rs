@@ -41,7 +41,7 @@ use ic_registry_canister_api::IPv4Config;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::malicious_behavior::MaliciousBehavior;
-use slog::{Logger, info, warn};
+use slog::{Logger, debug, info, warn};
 use std::{
     collections::BTreeMap,
     convert::Into,
@@ -213,7 +213,7 @@ pub fn init_ic(
         ic_config.skip_unassigned_record();
     }
 
-    info!(test_env.logger(), "Initializing via {:?}", &ic_config);
+    debug!(test_env.logger(), "Initializing via {:?}", &ic_config);
 
     Ok(ic_config.initialize()?)
 }
