@@ -112,7 +112,7 @@ impl CanisterRuntime for DogeCanisterRuntime {
         .map_err(|err| CallError::from_cdk_call_error("dogecoin_send_transaction", err))
     }
 
-    fn block_frequency(&self) -> Duration {
+    fn block_time(&self) -> Duration {
         Duration::from_secs(60)
     }
 

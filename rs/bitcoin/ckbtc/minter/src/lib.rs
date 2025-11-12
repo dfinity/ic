@@ -592,7 +592,7 @@ fn finalization_time_estimate<R: CanisterRuntime>(
 ) -> Duration {
     const ONE_SECOND: Duration = Duration::from_secs(1);
 
-    let block_time = runtime.block_frequency();
+    let block_time = runtime.block_time();
     let estimated_block_time = match network {
         Network::Mainnet | Network::Testnet => block_time,
         Network::Regtest => block_time.min(ONE_SECOND),
@@ -1467,7 +1467,7 @@ pub trait CanisterRuntime {
     }
 
     /// How often a is block produced.
-    fn block_frequency(&self) -> Duration;
+    fn block_time(&self) -> Duration;
 
     fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
 
@@ -1595,7 +1595,7 @@ impl CanisterRuntime for IcCanisterRuntime {
         management::send_transaction(transaction, network).await
     }
 
-    fn block_frequency(&self) -> Duration {
+    fn block_time(&self) -> Duration {
         Duration::from_secs(600)
     }
 
