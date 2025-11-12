@@ -37,7 +37,10 @@ pub struct SubnetRecord {
     /// Max number of ingress messages per block.
     #[prost(uint64, tag = "18")]
     pub max_ingress_messages_per_block: u64,
-    /// The maximum combined size of the ingress and xnet messages that fit into a block.
+    #[prost(uint64, tag = "31")]
+    pub max_ingress_bytes_per_block: u64,
+    /// The maximum combined size of xnet messages that fit into a block.
+    /// Doesn't take ingress messages into account!
     #[prost(uint64, tag = "19")]
     pub max_block_payload_size: u64,
     /// Information on whether a feature is supported by this subnet.
