@@ -145,7 +145,7 @@ type UpdateCanisterSettingsResponse = variant {
   Err : UpdateCanisterSettingsError;
 };
 
-type CallCanisterProposal = record {
+type CallCanisterRequest = record {
   canister_id : principal;
   method_name : text;
   payload : blob;
@@ -165,5 +165,5 @@ service : () -> {
   update_canister_settings : (UpdateCanisterSettingsRequest) -> (
       UpdateCanisterSettingsResponse,
     );
-  call_canister : (CallCanisterProposal) -> ();
+  call_canister : (CallCanisterRequest) -> ();
 }
