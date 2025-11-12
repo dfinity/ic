@@ -1,4 +1,4 @@
-use crate::canister_settings::EnvironmentVariables;
+use crate::canister_settings::CanisterEnvironmentVariables;
 use ic_crypto_sha2::Sha256;
 use std::collections::BTreeMap;
 
@@ -8,20 +8,20 @@ fn test_environment_variables_hash_is_deterministic() {
         ("NODE_ENV".to_string(), "production".to_string()),
         ("LOG_LEVEL".to_string(), "info".to_string()),
     ]);
-    let env_vars_hash_1 = EnvironmentVariables::new(env_vars.clone()).hash();
+    let env_vars_hash_1 = CanisterEnvironmentVariables::new(env_vars.clone()).hash();
 
     let env_vars = BTreeMap::from([
         ("LOG_LEVEL".to_string(), "info".to_string()),
         ("NODE_ENV".to_string(), "production".to_string()),
     ]);
-    let env_vars_hash_2 = EnvironmentVariables::new(env_vars.clone()).hash();
+    let env_vars_hash_2 = CanisterEnvironmentVariables::new(env_vars.clone()).hash();
     assert_eq!(env_vars_hash_1, env_vars_hash_2);
 }
 
 #[test]
 fn test_environment_variables_hash_empty_env_vars() {
     let env_vars = BTreeMap::new();
-    let hash = EnvironmentVariables::new(env_vars).hash();
+    let hash = CanisterEnvironmentVariables::new(env_vars).hash();
     // SHA256 of empty input.
     let expected = Sha256::hash(&[]);
     assert_eq!(hash, expected);
@@ -30,7 +30,7 @@ fn test_environment_variables_hash_empty_env_vars() {
 #[test]
 fn test_environment_variables_hash_single_pair() {
     let env_vars = BTreeMap::from([("KEY".to_string(), "VALUE".to_string())]);
-    let hash = EnvironmentVariables::new(env_vars).hash();
+    let hash = CanisterEnvironmentVariables::new(env_vars).hash();
 
     let key_hash = Sha256::hash("KEY".as_bytes());
     let value_hash = Sha256::hash("VALUE".as_bytes());
@@ -47,8 +47,8 @@ fn test_environment_variables_hash_single_pair() {
 fn test_environment_variables_hash_value_change_produces_different_hash() {
     let original = BTreeMap::from([("API_KEY".to_string(), "abc123".to_string())]);
     let changed = BTreeMap::from([("API_KEY".to_string(), "xyz789".to_string())]);
-    let hash1 = EnvironmentVariables::new(original).hash();
-    let hash2 = EnvironmentVariables::new(changed).hash();
+    let hash1 = CanisterEnvironmentVariables::new(original).hash();
+    let hash2 = CanisterEnvironmentVariables::new(changed).hash();
     assert_ne!(hash1, hash2);
 }
 
@@ -83,6 +83,6 @@ fn test_environment_variables_hash_output() {
     let expected = hasher.finish();
 
     // Verify that the actual hash matches the expected hash.
-    let actual = EnvironmentVariables::new(env_vars).hash();
+    let actual = CanisterEnvironmentVariables::new(env_vars).hash();
     assert_eq!(actual, expected);
 }
