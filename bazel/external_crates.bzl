@@ -238,6 +238,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "async-recursion": crate.spec(
                 version = "^1.0.5",
             ),
+            "atty": crate.spec(
+                version = "^0.2",
+            ),
             "async-stream": crate.spec(
                 version = "^0.3.6",
             ),
@@ -439,6 +442,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "html_reports",
                     "async_tokio",
                 ],
+            ),
+            "crossterm": crate.spec(
+                version = "^0.28",
             ),
             "crossbeam": crate.spec(
                 version = "^0.8.4",
@@ -1104,6 +1110,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "ratelimit": crate.spec(
                 version = "^0.9.1",
+            ),
+            "ratatui": crate.spec(
+                version = "^0.27",
             ),
             "rayon": crate.spec(
                 version = "^1.10.0",
