@@ -19,11 +19,13 @@ use ic_ckbtc_minter::{
     updates::retrieve_btc::BtcAddressCheckStatus,
 };
 pub use ic_ckbtc_minter::{
-    MIN_RESUBMISSION_DELAY, OutPoint, Page, Txid, UTXOS_COUNT_THRESHOLD, Utxo,
+    MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RESUBMISSION_DELAY, OutPoint, Page, Txid,
+    UTXOS_COUNT_THRESHOLD, Utxo,
     address::BitcoinAddress,
     logs::Priority,
     memo::{BurnMemo, MintMemo, encode as memo_encode},
     queries::WithdrawalFee,
+    reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
     state::eventlog::{Event, EventType, GetEventsArg},
     state::{ChangeOutput, RetrieveBtcRequest},
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},

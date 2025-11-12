@@ -1,12 +1,15 @@
 use crate::BLOCK_FREQUENCY;
+use crate::MAX_TIME_IN_QUEUE;
 use crate::MIN_CONFIRMATIONS;
 use crate::{Setup, into_outpoint, parse_dogecoin_address};
+use assert_matches::assert_matches;
 use bitcoin::hashes::Hash;
 use candid::{Decode, Principal};
 use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_ckdoge_minter::{
-    BitcoinAddress, BurnMemo, ChangeOutput, EventType, MIN_RESUBMISSION_DELAY, RetrieveBtcRequest,
-    Txid, WithdrawalFee,
+    BitcoinAddress, BurnMemo, ChangeOutput, EventType, InvalidTransactionError,
+    MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RESUBMISSION_DELAY, RetrieveBtcRequest, Txid, WithdrawalFee,
+    WithdrawalReimbursementReason,
     address::DogecoinAddress,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalError,
@@ -162,6 +165,7 @@ where
             withdrawal_amount: self.withdrawal_amount,
             address,
             retrieve_doge_id,
+            account: self.account,
         }
     }
 
@@ -189,6 +193,7 @@ pub struct DogecoinWithdrawalTransactionFlow<S> {
     withdrawal_amount: u64,
     address: DogecoinAddress,
     retrieve_doge_id: RetrieveDogeOk,
+    account: Account,
 }
 
 impl<S> DogecoinWithdrawalTransactionFlow<S>
@@ -282,6 +287,79 @@ where
             minter_address,
             sent_transactions: vec![tx],
         }
+    }
+
+    pub fn minter_await_cancel(self) {
+        // TODO DEFI-2458: use correct fees. Need to estimate amount of DOGE to pay for 1B cycles.
+        // See docs in the ckBTC minter for that constant.
+        const REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS: u64 = 100 * 10;
+
+        let ledger = self.setup.as_ref().ledger();
+        let minter = self.setup.as_ref().minter();
+        let balance_after_withdrawal = ledger.icrc1_balance_of(self.account);
+        let withdrawal_id = self.retrieve_doge_id.block_index;
+
+        assert_eq!(
+            minter.retrieve_doge_status(withdrawal_id),
+            RetrieveDogeStatus::Pending
+        );
+
+        self.setup
+            .as_ref()
+            .env
+            .advance_time(MAX_TIME_IN_QUEUE + Duration::from_nanos(1));
+        let status = minter.await_doge_transaction_with_status(withdrawal_id, |tx_status| {
+            matches!(tx_status, RetrieveDogeStatus::Reimbursed(_))
+        });
+
+        let mempool = self.setup.as_ref().dogecoin().mempool();
+        assert_eq!(
+            mempool.len(),
+            0,
+            "no transaction should appear when being reimbursed"
+        );
+
+        let reimbursement_block_index = withdrawal_id + 1;
+        let reimbursement_amount =
+            self.withdrawal_amount - REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS;
+        assert_matches!(
+            status,
+            RetrieveDogeStatus::Reimbursed(reimbursement) if
+            reimbursement.account == self.account &&
+            reimbursement.amount == reimbursement_amount &&
+            reimbursement.mint_block_index == reimbursement_block_index
+        );
+
+        minter
+            .assert_that_events()
+            .none_satisy(|event| {
+                matches!(
+                    event,
+                    EventType::SentBtcTransaction { .. } | EventType::ReplacedBtcTransaction { .. }
+                )
+            })
+            .contains_only_once_in_order(&[
+                EventType::ScheduleWithdrawalReimbursement {
+                    account: self.account,
+                    amount: reimbursement_amount,
+                    reason: WithdrawalReimbursementReason::InvalidTransaction(
+                        InvalidTransactionError::TooManyInputs {
+                            num_inputs: 1800,
+                            max_num_inputs: MAX_NUM_INPUTS_IN_TRANSACTION,
+                        },
+                    ),
+                    burn_block_index: withdrawal_id,
+                },
+                EventType::ReimbursedWithdrawal {
+                    burn_block_index: withdrawal_id,
+                    mint_block_index: reimbursement_block_index,
+                },
+            ]);
+
+        assert_eq!(
+            ledger.icrc1_balance_of(self.account),
+            balance_after_withdrawal + reimbursement_amount
+        );
     }
 }
 

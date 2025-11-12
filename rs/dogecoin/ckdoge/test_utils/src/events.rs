@@ -53,6 +53,18 @@ impl<E> MinterEventAssert<E> {
         self
     }
 
+    pub fn none_satisy<P>(self, predicate: P) -> Self
+    where
+        P: Fn(&E) -> bool,
+        E: fmt::Debug,
+    {
+        let unexpected = self.events.iter().find(|event| predicate(event));
+        if let Some(unexpected) = unexpected {
+            panic!("Unexpected event: {:?}", unexpected);
+        }
+        self
+    }
+
     pub fn find_exactly_one<P>(self, predicate: P) -> E
     where
         P: Fn(&E) -> bool,

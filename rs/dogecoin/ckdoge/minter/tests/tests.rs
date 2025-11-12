@@ -360,6 +360,41 @@ mod withdrawal {
                 &sent[1]
             });
     }
+
+    #[test]
+    fn should_cancel_and_reimburse_large_withdrawal() {
+        let setup = Setup::default();
+        let dogecoin = setup.dogecoin();
+        let fee_percentiles = array::from_fn(|i| i as u64);
+        let median_fee = fee_percentiles[50];
+        assert_eq!(median_fee, 50);
+        dogecoin.set_fee_percentiles(fee_percentiles);
+
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+        // Step 1: deposit a lot of small UTXOs
+        // < 2_000 to avoid ledger spawning an archive.
+        const NUM_UXTOS: usize = 1_900;
+        let deposit_value = RETRIEVE_DOGE_MIN_AMOUNT;
+        let utxos = utxos_with_value(&[deposit_value; NUM_UXTOS]);
+        setup
+            .deposit_flow()
+            .minter_get_dogecoin_deposit_address(account)
+            .dogecoin_simulate_transaction(utxos.clone())
+            .minter_update_balance()
+            .expect_mint();
+
+        let withdrawal_amount = 1_800 * deposit_value;
+
+        setup
+            .withdrawal_flow()
+            .ledger_approve_minter(account, withdrawal_amount)
+            .minter_retrieve_doge_with_approval(withdrawal_amount, DOGECOIN_ADDRESS_1)
+            .expect_withdrawal_request_accepted()
+            .minter_await_cancel();
+    }
 }
 
 #[test]
