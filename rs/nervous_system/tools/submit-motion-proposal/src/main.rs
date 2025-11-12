@@ -149,7 +149,6 @@ fn load_proposal(proposal_file_path: &str, neuron_id: u64, verbose: bool) -> Man
     let summary = summary.to_string();
 
     ManageNeuronRequest {
-        id: None,
         neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId { id: neuron_id })),
         command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
             MakeProposalRequest {
@@ -161,6 +160,7 @@ fn load_proposal(proposal_file_path: &str, neuron_id: u64, verbose: bool) -> Man
                 })),
             },
         ))),
+        id: None,
     }
 }
 

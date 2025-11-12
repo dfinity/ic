@@ -26,8 +26,8 @@ use ic_nervous_system_proto::pb::v1::{Duration, Image, Percentage, Tokens};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_governance_api::{
-    CreateServiceNervousSystem, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, NnsFunction, MakePropoalRequest, ProposalActionRequest,
+    CreateServiceNervousSystem, MakePropoalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest,
     create_service_nervous_system::{
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
         governance_parameters::VotingRewardParameters,
@@ -488,92 +488,3 @@ pub fn two_days_from_now_in_secs() -> u64 {
         .unwrap()
         .as_secs()
 }
-<<<<<<< HEAD
-=======
-
-fn open_sns_token_swap_payload(
-    sns_swap_canister_id: PrincipalId,
-    create_service_nervous_system_proposal: CreateServiceNervousSystem,
-) -> OpenSnsTokenSwap {
-    let params = create_service_nervous_system_into_params(
-        create_service_nervous_system_proposal.clone(),
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs(),
-    )
-    .unwrap();
-
-    let community_fund_investment_e8s = create_service_nervous_system_proposal
-        .swap_parameters
-        .unwrap()
-        .neurons_fund_investment_icp
-        .unwrap()
-        .e8s
-        .unwrap();
-    OpenSnsTokenSwap {
-        target_swap_canister_id: Some(sns_swap_canister_id),
-        // Taken (mostly) from https://github.com/open-ic/open-chat/blob/master/sns_proposal.sh
-        params: Some(params),
-        community_fund_investment_e8s: Some(community_fund_investment_e8s),
-    }
-}
-
-/// Send open sns token swap proposal to governance and wait until it is executed.
-async fn open_sns_token_swap(nns_api: &'_ Runtime, payload: OpenSnsTokenSwap) {
-    // Sanity check that params is valid
-    let params = *payload.params.as_ref().unwrap();
-    let () = params
-        .validate(&Init {
-            should_auto_finalize: Some(true),
-            nns_governance_canister_id: "".to_string(),
-            sns_governance_canister_id: "".to_string(),
-            sns_ledger_canister_id: "".to_string(),
-            icp_ledger_canister_id: "".to_string(),
-            sns_root_canister_id: "".to_string(),
-            fallback_controller_principal_ids: vec![],
-            transaction_fee_e8s: Some(0),
-            neuron_minimum_stake_e8s: Some(0),
-            ..Default::default()
-        })
-        .unwrap();
-
-    let governance_canister = get_governance_canister(nns_api);
-    let neuron_id = NeuronId {
-        id: TEST_NEURON_1_ID,
-    };
-    let manage_neuron_payload = ManageNeuronRequest {
-        id: Some(neuron_id),
-        neuron_id_or_subaccount: None,
-        command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
-            Proposal {
-                title: Some("title".to_string()),
-                summary: "summary".to_string(),
-                url: "https://forum.dfinity.org/t/x/".to_string(),
-                action: Some(ProposalActionRequest::OpenSnsTokenSwap(payload)),
-            },
-        ))),
-    };
-    let proposer = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
-    let res: ManageNeuronResponse = governance_canister
-        .update_from_sender(
-            "manage_neuron",
-            candid_one,
-            manage_neuron_payload,
-            &proposer,
-        )
-        .await
-        .unwrap();
-
-    match res.command.unwrap() {
-        CommandResp::MakeProposal(resp) => {
-            vote_execute_proposal_assert_executed(
-                &governance_canister,
-                resp.proposal_id.unwrap().into(),
-            )
-            .await
-        }
-        other => panic!("Unexpected proposal response {other:?}"),
-    }
-}
->>>>>>> b7cd341d02 (Fix places where ManageNeuron is incorrectly used)
