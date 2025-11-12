@@ -44,6 +44,16 @@ impl Default for State {
     }
 }
 
+impl State {
+    fn push_utxo_to_address(&mut self, utxo: Utxo, address: Address) {
+        self.utxo_to_address.insert(utxo.clone(), address.clone());
+        self.address_to_utxos
+            .entry(address)
+            .or_default()
+            .insert(utxo);
+    }
+}
+
 pub fn mutate_state<F, R>(f: F) -> R
 where
     F: FnOnce(&mut State) -> R,
@@ -131,14 +141,11 @@ fn get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
 
 #[candid_method(update)]
 #[update]
-fn push_utxo_to_address(req: ic_bitcoin_canister_mock::PushUtxoToAddress) {
+fn push_utxos_to_address(args: Vec<ic_bitcoin_canister_mock::PushUtxoToAddress>) {
     mutate_state(|s| {
-        s.utxo_to_address
-            .insert(req.utxo.clone(), req.address.clone());
-        s.address_to_utxos
-            .entry(req.address)
-            .or_default()
-            .insert(req.utxo);
+        args.into_iter().for_each(|req| {
+            s.push_utxo_to_address(req.utxo, req.address);
+        })
     });
 }
 

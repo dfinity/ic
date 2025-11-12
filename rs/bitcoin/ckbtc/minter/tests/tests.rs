@@ -400,7 +400,7 @@ fn test_no_new_utxos() {
 
     let deposit_address = ckbtc.get_btc_address(user);
 
-    ckbtc.push_utxo(deposit_address, utxo.clone());
+    ckbtc.push_utxos(vec![utxo.clone()], deposit_address);
 
     let update_balance_args = UpdateBalanceArgs {
         owner: None,
@@ -801,15 +801,22 @@ impl CkBtcSetup {
             .expect("failed to set fee tip height");
     }
 
-    pub fn push_utxo(&self, address: String, utxo: Utxo) {
+    pub fn push_utxos<I: IntoIterator<Item = Utxo>>(&self, utxos: I, address: String) {
+        let request: Vec<_> = utxos
+            .into_iter()
+            .map(|utxo| PushUtxoToAddress {
+                utxo,
+                address: address.clone(),
+            })
+            .collect();
         assert_reply(
             self.env
                 .execute_ingress(
                     self.bitcoin_id,
-                    "push_utxo_to_address",
-                    Encode!(&PushUtxoToAddress { address, utxo }).unwrap(),
+                    "push_utxos_to_address",
+                    Encode!(&request).unwrap(),
                 )
-                .expect("failed to push a UTXO"),
+                .expect("failed to push UTXOs"),
         );
     }
 
@@ -985,9 +992,7 @@ impl CkBtcSetup {
         let account = account.into();
         let deposit_address = self.get_btc_address(account);
 
-        for utxo in utxos.iter() {
-            self.push_utxo(deposit_address.clone(), utxo.clone());
-        }
+        self.push_utxos(utxos.clone(), deposit_address.clone());
 
         let utxo_status = Decode!(
             &assert_reply(
@@ -1334,16 +1339,16 @@ impl CkBtcSetup {
         self.env
             .advance_time(MIN_CONFIRMATIONS * Duration::from_secs(600) + Duration::from_secs(1));
         let txid_bytes: [u8; 32] = tx.txid().to_vec().try_into().unwrap();
-        self.push_utxo(
-            change_address.to_string(),
-            Utxo {
+        self.push_utxos(
+            vec![Utxo {
                 value: change_utxo.value,
                 height: 0,
                 outpoint: OutPoint {
                     txid: txid_bytes.into(),
                     vout: 1,
                 },
-            },
+            }],
+            change_address.to_string(),
         );
     }
 

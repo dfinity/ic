@@ -15,25 +15,31 @@ pub struct DogecoinCanister {
 }
 
 impl DogecoinCanister {
-    fn push_utxo_to_address(&self, arg: &PushUtxoToAddress) {
+    fn push_utxos_to_address(&self, arg: &Vec<PushUtxoToAddress>) {
         self.env
             .update_call(
                 self.id,
                 Principal::anonymous(),
-                "push_utxo_to_address",
+                "push_utxos_to_address",
                 Encode!(arg).unwrap(),
             )
             .expect("failed to push a UTXO");
     }
 
     pub fn push_utxo(&self, utxo: Utxo, address: String) {
-        self.push_utxo_to_address(&PushUtxoToAddress { address, utxo })
+        self.push_utxos_to_address(&vec![PushUtxoToAddress { address, utxo }])
     }
 
     pub fn push_utxos<I: IntoIterator<Item = Utxo>>(&self, utxos: I, address: String) {
-        for utxo in utxos {
-            self.push_utxo(utxo, address.clone())
-        }
+        self.push_utxos_to_address(
+            &utxos
+                .into_iter()
+                .map(|utxo| PushUtxoToAddress {
+                    utxo,
+                    address: address.clone(),
+                })
+                .collect(),
+        );
     }
 
     pub fn set_fee_percentiles(&self, fee_percentiles: [u64; 101]) {
