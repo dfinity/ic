@@ -73,6 +73,57 @@ impl RingBuffer {
         self.io.read_header().next_idx
     }
 
+    /// Remove and return the first log record from the ring buffer, `None` if empty.
+    pub fn pop_front(&mut self) -> Option<LogRecord> {
+        let mut h = self.io.read_header();
+        let record = self.io.read_record(h.data_head)?;
+
+        // Update header to drop the record.
+        // Lookup table unaffected, since it tracks only latest per bucket.
+        let removed_size = MemorySize::new(record.bytes_len() as u64);
+        h.data_head = h.advance_position(h.data_head, removed_size);
+        h.data_size = h.data_size.saturating_sub(removed_size);
+        self.io.write_header(&h);
+
+        Some(record)
+    }
+
+    /// Appends a new log record to the back of the ring buffer.
+    pub fn push_back(&mut self, record: &LogRecord) {
+        // Ensure there is enough free space for the new record.
+        let added_size = MemorySize::new(record.bytes_len() as u64);
+        self.make_free_space_within_limit(added_size);
+
+        // Write the record at the tail position.
+        let mut h = self.io.read_header();
+        self.io.write_record(record, h.data_tail);
+
+        // Update header with new tail position, size and next idx.
+        let last_record_position = h.data_tail;
+        h.data_tail = h.advance_position(h.data_tail, added_size);
+        h.data_size = h.data_size.saturating_add(added_size);
+        h.next_idx = record.idx + 1;
+        self.io.write_header(&h);
+
+        // Update lookup table after writing the record and updating the header.
+        self.update_lookup_table_last(record, last_record_position);
+    }
+
+    /// Ensures there is enough free space for bytes_len by removing old records.
+    fn make_free_space_within_limit(&mut self, bytes_len: MemorySize) {
+        while self.used_space() + bytes_len.as_usize() > self.capacity() {
+            if self.pop_front().is_none() {
+                break; // No more records to pop, limit reached.
+            }
+        }
+    }
+
+    fn update_lookup_table_last(&mut self, record: &LogRecord, position: MemoryPosition) {
+        let mut lookup_table = self.io.read_lookup_table();
+        lookup_table.update_last(record, position);
+        self.io.write_lookup_table(&lookup_table);
+    }
+
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         let header = self.io.read_header();
         if header.is_empty() {
@@ -100,56 +151,6 @@ impl RingBuffer {
         }
 
         result
-    }
-
-    /// Removes the first log record and returns it, or None if the ring buffer is empty.
-    pub fn pop_front(&mut self) -> Option<LogRecord> {
-        let mut h = self.io.read_header();
-        let record = self.io.read_record(h.data_head)?;
-
-        // Update header to remove the record.
-        let removed_size = MemorySize::new(record.bytes_len() as u64);
-        h.data_head = h.advance_position(h.data_head, removed_size);
-        h.data_size = h.data_size.saturating_sub(removed_size);
-        self.io.write_header(&h);
-
-        Some(record)
-    }
-
-    /// Appends a new log record to the back of the ring buffer.
-    pub fn push_back(&mut self, record: &LogRecord) {
-        // Ensure there is enough free space for the new record.
-        let added_size = MemorySize::new(record.bytes_len() as u64);
-        self.make_free_space_within_limit(added_size);
-
-        // Write the record at the tail position.
-        let mut h = self.io.read_header();
-        self.io.write_record(record, h.data_tail);
-
-        // Update header with new tail position and size.
-        let last_record_position = h.data_tail;
-        h.data_tail = h.advance_position(h.data_tail, added_size);
-        h.data_size = h.data_size.saturating_add(added_size);
-        h.next_idx = record.idx + 1;
-        self.io.write_header(&h);
-
-        // Update the lookup table after writing the record and updating the header.
-        self.update_lookup_table_last(record, last_record_position);
-    }
-
-    /// Ensures there is enough free space for bytes_len by removing old records.
-    fn make_free_space_within_limit(&mut self, bytes_len: MemorySize) {
-        while self.used_space() + bytes_len.as_usize() > self.capacity() {
-            if self.pop_front().is_none() {
-                break; // No more records to pop, limit reached.
-            }
-        }
-    }
-
-    fn update_lookup_table_last(&mut self, record: &LogRecord, position: MemoryPosition) {
-        let mut lookup_table = self.io.read_lookup_table();
-        lookup_table.update_last(record, position);
-        self.io.write_lookup_table(&lookup_table);
     }
 }
 
@@ -208,27 +209,84 @@ mod tests {
     }
 
     #[test]
-    fn test_wraps_around_correctly() {
+    fn test_exact_fit_no_eviction() {
+        let record_size: usize = 25;
         let page_map = PageMap::new_for_testing();
-        let data_capacity = MemorySize::new(123); // Small capacity to force wrap.
+        let data_capacity = MemorySize::new(3 * record_size as u64);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
+
+        let r0 = log_record(0, 100, "12345");
+        assert_eq!(r0.bytes_len(), record_size);
+        let r1 = log_record(1, 200, "12345");
+        let r2 = log_record(2, 300, "12345");
+        let r3 = log_record(3, 400, "12345");
+
+        // Add and remove one record to test wrap-around.
+        rb.push_back(&r0);
+        rb.pop_front().unwrap();
+
+        // Now add three records that exactly fit the capacity.
+        rb.push_back(&r1);
+        rb.push_back(&r2);
+        rb.push_back(&r3);
+
+        assert_eq!(rb.pop_front().unwrap(), r1);
+        assert_eq!(rb.pop_front().unwrap(), r2);
+        assert_eq!(rb.pop_front().unwrap(), r3);
+    }
+
+    #[test]
+    fn test_eviction_when_adding_exceeds_capacity() {
+        let record_size: usize = 25;
+        let page_map = PageMap::new_for_testing();
+        let data_capacity = MemorySize::new(3 * record_size as u64);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
+
+        let r0 = log_record(0, 100, "12345");
+        assert_eq!(r0.bytes_len(), record_size);
+        let r1 = log_record(1, 200, "12345");
+        let r2 = log_record(2, 300, "12345");
+        let r3 = log_record(3, 400, "123456"); // 26 bytes to force eviction.
+
+        // Add and remove one record to test wrap-around.
+        rb.push_back(&r0);
+        rb.pop_front().unwrap();
+
+        // Now add three records, the last one should evict the first.
+        rb.push_back(&r1);
+        rb.push_back(&r2);
+        rb.push_back(&r3);
+
+        assert_eq!(rb.pop_front().unwrap(), r2);
+        assert_eq!(rb.pop_front().unwrap(), r3);
+        assert!(rb.pop_front().is_none());
+    }
+
+    #[test]
+    fn test_wraps_without_eviction() {
+        let page_map = PageMap::new_for_testing();
+        let data_capacity = MemorySize::new(137);
         let mut ring_buffer = RingBuffer::new(page_map, data_capacity);
 
-        // Push until wrap occurs, pop some in between to move head forward.
-        for i in 0..1_000_u64 {
-            ring_buffer.push_back(&log_record(i, i * 100, "12345"));
-            if i % 3 == 0 {
-                let _ = ring_buffer.pop_front();
+        // For each record ensure space by popping older records if needed, then push.
+        let mut pushed: Vec<LogRecord> = vec![];
+        let mut popped: Vec<LogRecord> = vec![];
+        for i in 0..1_000 {
+            let record = log_record(i, i * 100, "12345");
+            // Free space until the new record fits — popped records are collected.
+            while ring_buffer.used_space() + record.bytes_len() > ring_buffer.capacity() {
+                popped.push(ring_buffer.pop_front().expect("expected record to pop"));
             }
+            ring_buffer.push_back(&record);
+            pushed.push(record);
+        }
+        while let Some(r) = ring_buffer.pop_front() {
+            popped.push(r);
         }
 
-        // Drain remaining and ensure order is monotonic by idx.
-        let mut last: Option<LogRecord> = None;
-        while let Some(curr) = ring_buffer.pop_front() {
-            if let Some(prev) = last {
-                assert!(prev.idx < curr.idx);
-            }
-            last = Some(curr);
-        }
+        // Every pushed record was eventually popped in the same order.
+        assert_eq!(pushed.len(), popped.len(),);
+        assert_eq!(pushed, popped, "Sequence mismatch — push/pop order differs");
     }
 
     #[test]

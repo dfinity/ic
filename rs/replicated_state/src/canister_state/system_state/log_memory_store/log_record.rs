@@ -44,3 +44,44 @@ impl From<&LogRecord> for Vec<u8> {
         bytes
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn log_record(idx: u64, ts_nanos: u64, message: &str) -> LogRecord {
+        LogRecord {
+            idx,
+            ts_nanos,
+            len: message.len() as u32,
+            content: message.as_bytes().to_vec(),
+        }
+    }
+
+    #[test]
+    fn test_log_record_serialized_size() {
+        const SIZES: &[usize] = &[0, 1, 10, 100, 1_000, 10_000];
+
+        for &message_size in SIZES {
+            let message = "a".repeat(message_size);
+            let record = log_record(1, 2, &message);
+            let serialized: Vec<u8> = (&record).into();
+
+            assert_eq!(
+                serialized.len(),
+                record.bytes_len(),
+                "Serialized size does not match for message size {}: expected {}, got {}",
+                message_size,
+                serialized.len(),
+                record.bytes_len(),
+            );
+        }
+    }
+}
+
+/*
+bazel test //rs/replicated_state:replicated_state_test \
+  --test_output=streamed \
+  --test_arg=--nocapture \
+  --test_arg=test_log_record_serialized_size
+*/

@@ -89,8 +89,10 @@ impl StructIO {
     fn write_data_bytes(&mut self, pos: MemoryPosition, bytes: &[u8], memory: &MemoryChunk) {
         let remaining_size = memory.capacity - pos;
         if MemorySize::new(bytes.len() as u64) <= remaining_size {
+            // No wrap.
             self.write_bytes(memory.offset + pos, bytes);
         } else {
+            // Wrap around.
             let split = remaining_size.get() as usize;
             self.write_bytes(memory.offset + pos, &bytes[..split]);
             self.write_bytes(memory.offset, &bytes[split..]);
@@ -100,8 +102,10 @@ impl StructIO {
     fn read_data_vec(&self, pos: MemoryPosition, len: usize, memory: &MemoryChunk) -> Vec<u8> {
         let remaining_size = memory.capacity - pos;
         if MemorySize::new(len as u64) <= remaining_size {
+            // No wrap.
             self.read_vec(memory.offset + pos, len)
         } else {
+            // Wrap around.
             let mut content = Vec::with_capacity(len);
             let first_part_size = remaining_size.get() as usize;
             content.extend_from_slice(&self.read_vec(memory.offset + pos, first_part_size));
@@ -118,8 +122,10 @@ impl StructIO {
     ) -> [u8; N] {
         let remaining_size = memory.capacity - pos;
         if MemorySize::new(N as u64) <= remaining_size {
+            // No wrap.
             self.read_bytes(memory.offset + pos)
         } else {
+            // Wrap around.
             let mut bytes = [0; N];
             let split = remaining_size.get() as usize;
             self.buffer
