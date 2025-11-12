@@ -27,8 +27,8 @@ use registry_canister::{
     init::RegistryCanisterInitPayloadBuilder,
     mutations::{
         do_swap_node_in_subnet_directly::{
-            NODE_SWAPS_OPERATOR_CAPACITY_INTERVAL, NODE_SWAPS_SUBNET_CAPACITY_INTERVAL, SwapError,
-            SwapNodeInSubnetDirectlyPayload,
+            NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL, NODE_SWAPS_SUBNET_CAPACITY_INTERVAL,
+            SwapError, SwapNodeInSubnetDirectlyPayload,
         },
         node_management::{
             common::make_add_node_registry_mutations, do_add_node::connection_endpoint_from_string,
@@ -63,7 +63,7 @@ async fn ensure_feature_is_turned_off() {
 }
 struct NodeInformation {
     subnet_id: Option<SubnetId>,
-    operator: PrincipalId,
+    node_operator: PrincipalId,
 }
 
 fn get_mutations_and_node_ids(
@@ -88,7 +88,7 @@ fn get_mutations_and_node_ids(
         mutations.extend(make_add_node_registry_mutations(
             valid_keys.node_id(),
             NodeRecord {
-                node_operator_id: node.operator.to_vec(),
+                node_operator_id: node.node_operator.to_vec(),
                 xnet: Some(connection_endpoint_from_string(&format!(
                     "192.168.{ind}.1:1234"
                 ))),
@@ -141,18 +141,18 @@ async fn caller_not_whitelisted() {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
     let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-    let operator_id = PrincipalId::new_user_test_id(1);
+    let node_operator_id = PrincipalId::new_user_test_id(1);
 
     let (mutations, nodes) = get_mutations_and_node_ids(&[
         // Old node id
         NodeInformation {
             subnet_id: Some(subnet_id),
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
         // New node id
         NodeInformation {
             subnet_id: None,
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
     ]);
 
@@ -175,12 +175,12 @@ async fn caller_not_whitelisted() {
             new_node_id: Some(new_node_id.get()),
             old_node_id: Some(old_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
     let expected_err = SwapError::FeatureDisabledForCaller {
-        caller: operator_id,
+        caller: node_operator_id,
     };
     assert!(
         response
@@ -195,18 +195,18 @@ async fn subnet_not_whitelisted() {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
     let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-    let operator_id = PrincipalId::new_user_test_id(1);
+    let node_operator_id = PrincipalId::new_user_test_id(1);
 
     let (mutations, nodes) = get_mutations_and_node_ids(&[
         // Old node id
         NodeInformation {
             subnet_id: Some(subnet_id),
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
         // New node id
         NodeInformation {
             subnet_id: None,
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
     ]);
 
@@ -220,7 +220,7 @@ async fn subnet_not_whitelisted() {
     });
 
     builder.enable_swapping_feature_globally();
-    builder.whitelist_swapping_feature_caller(operator_id);
+    builder.whitelist_swapping_feature_caller(node_operator_id);
 
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
 
@@ -230,7 +230,7 @@ async fn subnet_not_whitelisted() {
             new_node_id: Some(new_node_id.get()),
             old_node_id: Some(old_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
@@ -248,19 +248,19 @@ async fn subnet_rate_limited() {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
     let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-    let operator_id = PrincipalId::new_user_test_id(1);
+    let node_operator_id = PrincipalId::new_user_test_id(1);
     let different_sender = PrincipalId::new_user_test_id(5);
 
     let (mutations, nodes) = get_mutations_and_node_ids(&[
         // Old node id
         NodeInformation {
             subnet_id: Some(subnet_id),
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
         // New node id
         NodeInformation {
             subnet_id: None,
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
     ]);
 
@@ -274,7 +274,7 @@ async fn subnet_rate_limited() {
     });
 
     builder.enable_swapping_feature_globally();
-    builder.whitelist_swapping_feature_caller(operator_id);
+    builder.whitelist_swapping_feature_caller(node_operator_id);
     builder.whitelist_swapping_feature_caller(different_sender);
     builder.enable_swapping_feature_for_subnet(subnet_id);
 
@@ -286,7 +286,7 @@ async fn subnet_rate_limited() {
             new_node_id: Some(new_node_id.get()),
             old_node_id: Some(old_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
@@ -301,7 +301,7 @@ async fn subnet_rate_limited() {
             new_node_id: Some(old_node_id.get()),
             old_node_id: Some(new_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
@@ -338,18 +338,18 @@ async fn subnet_rate_limit_passed() {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
     let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-    let operator_id = PrincipalId::new_user_test_id(1);
+    let node_operator_id = PrincipalId::new_user_test_id(1);
 
     let (mutations, nodes) = get_mutations_and_node_ids(&[
         // Old node id
         NodeInformation {
             subnet_id: Some(subnet_id),
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
         // New node id
         NodeInformation {
             subnet_id: None,
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
     ]);
 
@@ -363,7 +363,7 @@ async fn subnet_rate_limit_passed() {
     });
 
     builder.enable_swapping_feature_globally();
-    builder.whitelist_swapping_feature_caller(operator_id);
+    builder.whitelist_swapping_feature_caller(node_operator_id);
     builder.enable_swapping_feature_for_subnet(subnet_id);
 
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
@@ -374,7 +374,7 @@ async fn subnet_rate_limit_passed() {
             new_node_id: Some(new_node_id.get()),
             old_node_id: Some(old_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
@@ -390,7 +390,7 @@ async fn subnet_rate_limit_passed() {
             new_node_id: Some(old_node_id.get()),
             old_node_id: Some(new_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
@@ -418,13 +418,13 @@ async fn subnet_rate_limit_passed() {
             new_node_id: Some(old_node_id.get()),
             old_node_id: Some(new_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
     let expected_err = SwapError::OperatorRateLimitedOnSubnet {
         subnet_id,
-        caller: operator_id,
+        caller: node_operator_id,
     };
 
     assert!(
@@ -438,7 +438,7 @@ async fn subnet_rate_limit_passed() {
     pocket_ic
         .set_time(
             time_after_successful_call
-                + NODE_SWAPS_OPERATOR_CAPACITY_INTERVAL
+                + NODE_SWAPS_NODE_OPERATOR_CAPACITY_INTERVAL
                 + Duration::from_secs(20 * 60 * 60),
         )
         .await;
@@ -449,7 +449,7 @@ async fn subnet_rate_limit_passed() {
             new_node_id: Some(old_node_id.get()),
             old_node_id: Some(new_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
@@ -461,18 +461,18 @@ async fn e2e_valid_swap() {
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
     let subnet_id = SubnetId::new(PrincipalId::new_subnet_test_id(1));
-    let operator_id = PrincipalId::new_user_test_id(1);
+    let node_operator_id = PrincipalId::new_user_test_id(1);
 
     let (mutations, nodes) = get_mutations_and_node_ids(&[
         // Old node id
         NodeInformation {
             subnet_id: Some(subnet_id),
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
         // New node id
         NodeInformation {
             subnet_id: None,
-            operator: operator_id,
+            node_operator: node_operator_id,
         },
     ]);
 
@@ -486,7 +486,7 @@ async fn e2e_valid_swap() {
     });
 
     builder.enable_swapping_feature_globally();
-    builder.whitelist_swapping_feature_caller(operator_id);
+    builder.whitelist_swapping_feature_caller(node_operator_id);
     builder.enable_swapping_feature_for_subnet(subnet_id);
 
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
@@ -497,7 +497,7 @@ async fn e2e_valid_swap() {
             new_node_id: Some(new_node_id.get()),
             old_node_id: Some(old_node_id.get()),
         },
-        operator_id,
+        node_operator_id,
     )
     .await;
 
