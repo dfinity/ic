@@ -9,6 +9,7 @@ documentation.workspace = true
 [dependencies]
 async-trait = { workspace = true }
 assert_matches = { workspace = true }
+base64 = { workspace = true }
 candid = { workspace = true }
 canister-test = { path = "../../rust_canisters/canister_test" }
 cycles-minting-canister = { path = "../../nns/cmc" }
