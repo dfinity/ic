@@ -448,6 +448,12 @@ impl ExecutionEnvironment {
 
     /// Returns the scaled subnet memory reservation.
     pub fn scaled_subnet_memory_reservation(&self) -> NumBytes {
+        // This function computes the scaled subnet memory reservation per thread.
+        // We apply the scaling factor `self.scheduler_cores`
+        // consistently with the scaling factor of `SubnetAvailableMemory`
+        // in the function `self.scaled_subnet_available_memory`.
+        // and the scaling factor of `ResourceSaturation`
+        // in the function `self.subnet_memory_saturation`.
         NumBytes::from(self.config.subnet_memory_reservation.get() / self.scheduler_cores as u64)
     }
 
