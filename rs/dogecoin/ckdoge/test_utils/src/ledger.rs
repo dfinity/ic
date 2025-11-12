@@ -15,14 +15,8 @@ pub struct LedgerCanister {
 }
 
 impl LedgerCanister {
-    pub fn assert_that_transaction<T: Into<Nat>>(
-        &self,
-        ledger_index: T,
-    ) -> LedgerTransactionAssert<Self> {
-        LedgerTransactionAssert {
-            setup: self.clone(),
-            ledger_transactions: vec![self.get_transaction(ledger_index)],
-        }
+    pub fn assert_that_transaction(&self, ledger_index: u64) -> LedgerTransactionAssert<Self> {
+        self.assert_that_transactions(ledger_index..=ledger_index)
     }
 
     pub fn assert_that_transactions(
@@ -33,34 +27,6 @@ impl LedgerCanister {
             setup: self.clone(),
             ledger_transactions: self.get_transactions(indexes),
         }
-    }
-
-    pub fn get_transaction<T: Into<Nat>>(&self, ledger_index: T) -> LedgerTransaction {
-        use icrc_ledger_types::icrc3::transactions::{
-            GetTransactionsRequest, GetTransactionsResponse,
-        };
-
-        let request = GetTransactionsRequest {
-            start: ledger_index.into(),
-            length: 1_u8.into(),
-        };
-        let result = self
-            .env
-            .query_call(
-                self.id,
-                Principal::anonymous(),
-                "get_transactions",
-                Encode!(&request).unwrap(),
-            )
-            .expect("Failed to call get_transactions");
-        let mut response = Decode!(&result, GetTransactionsResponse).unwrap();
-        assert_eq!(
-            response.transactions.len(),
-            1,
-            "Expected exactly one transaction but got {:?}",
-            response.transactions
-        );
-        response.transactions.pop().unwrap()
     }
 
     pub fn get_transactions(&self, indexes: RangeInclusive<u64>) -> Vec<LedgerTransaction> {
