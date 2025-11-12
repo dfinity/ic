@@ -138,7 +138,7 @@ fn setup(env: TestEnv) {
             .with_effective_canister_id(node.effective_canister_id())
             .call_and_wait()
             .await
-            .expect("Failed to install the certified variables canister");
+            .expect("Failed to create the certified variables canister");
 
         management_canister
             .install_code(&node.effective_canister_id().0, &wasm)
