@@ -1,9 +1,3 @@
-//! Helpers for the deposit flow, converting DOGE on Dogecoin into ckDOGE on ICP.
-//!
-//! General design guidelines:
-//! * 1 public method for each user interaction.
-//! * Helper struct with only 1 or 2 public methods for auto-completion to become trivial.
-//! * Prefix in method's name (e.g. `minter_` or `dogecoin_`) indicates the involved component.
 use crate::{Setup, into_rust_dogecoin_network};
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
@@ -150,6 +144,13 @@ where
         );
         let (mint_index, minted_amount) = minted_status.into_iter().next().unwrap();
         assert_eq!(minted_amount, self.deposit_utxo.value);
+
+        let known_utxos = self.setup.as_ref().minter().get_known_utxos(self.account);
+        assert!(
+            known_utxos.contains(&self.deposit_utxo),
+            "BUG: missing deposit utxo {:?} in {known_utxos:?}",
+            self.deposit_utxo
+        );
 
         self.setup
             .as_ref()

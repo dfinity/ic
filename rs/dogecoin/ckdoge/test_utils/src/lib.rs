@@ -1,11 +1,11 @@
-mod deposit;
 mod dogecoin;
 mod events;
+mod flow;
 mod ledger;
 mod minter;
 
-use crate::deposit::DepositFlowStart;
 use crate::dogecoin::DogecoinCanister;
+use crate::flow::{deposit::DepositFlowStart, withdrawal::WithdrawalFlowStart};
 use crate::ledger::LedgerCanister;
 pub use crate::minter::MinterCanister;
 use bitcoin::TxOut;
@@ -191,6 +191,19 @@ impl Setup {
 
     pub fn deposit_flow(&self) -> DepositFlowStart<&Setup> {
         DepositFlowStart::new(self)
+    }
+
+    pub fn withdrawal_flow(&self) -> WithdrawalFlowStart<&Setup> {
+        WithdrawalFlowStart::new(self)
+    }
+
+    pub fn parse_dogecoin_address(&self, address: impl Into<String>) -> bitcoin::dogecoin::Address {
+        let address = address.into();
+        address
+            .parse::<bitcoin::dogecoin::Address<_>>()
+            .unwrap()
+            .require_network(into_rust_dogecoin_network(self.network()))
+            .unwrap()
     }
 }
 
