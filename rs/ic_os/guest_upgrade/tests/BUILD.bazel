@@ -19,6 +19,7 @@ rust_test(
         "//rs/protobuf",
         "@crate_index//:anyhow",
         "@crate_index//:futures",
+        "@crate_index//:hex",
         "@crate_index//:rustls",
         "@crate_index//:tempfile",
         "@crate_index//:tokio",
