@@ -647,7 +647,7 @@ Because the `dogecoind` process uses the real time, we set the time of the Pocke
 
 To mine blocks with rewards credited to a given Dogecoin address, you can use the Dogecoin RPC API:
 
-*Note.* You need to mine more than 60 blocks (Coinbase maturity rule) so that the reward for the first block
+*Note.* You need to mine more than 60 blocks (Coinbase maturity rule specific to Dogecoin) so that the reward for the first block
 can be transferred to a different address.
 
 ```rust
