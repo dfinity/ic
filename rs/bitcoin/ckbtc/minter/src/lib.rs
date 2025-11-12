@@ -586,7 +586,7 @@ fn finalization_time_estimate(min_confirmations: u32, network: Network) -> Durat
         min_confirmations as u64
             * match network {
                 Network::Mainnet => 10 * MIN_NANOS,
-                Network::Testnet => MIN_NANOS,
+                Network::Testnet => 10 * MIN_NANOS,
                 Network::Regtest => SEC_NANOS,
             },
     )

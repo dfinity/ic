@@ -675,10 +675,9 @@ fn test_empty_subnet_metrics() {
     let daily_result = &result.daily_results[&day];
     let provider_result = &daily_result.provider_results[&provider_id];
 
-    // Subnet failure rate should be 0 for empty subnet
-    assert_eq!(daily_result.subnets_failure_rate[&subnet_id], dec!(0.0));
+    assert!(!daily_result.subnets_failure_rate.contains_key(&subnet_id));
 
-    // Node should have no penalty since subnet FR is 0
+    // Node should have no penalty since no nodes assigned to the subnet
     let daily_nodes_rewards = &provider_result.daily_nodes_rewards[0];
     assert_eq!(daily_nodes_rewards.performance_multiplier, dec!(1.0));
     assert_eq!(daily_nodes_rewards.rewards_reduction, dec!(0.0));
@@ -715,7 +714,7 @@ fn test_empty_rewardable_nodes() {
 
     // Should have no node results
     assert!(provider_result.daily_nodes_rewards.is_empty());
-    assert_eq!(provider_result.rewards_total_xdr_permyriad, dec!(0.0));
+    assert_eq!(provider_result.total_adjusted_rewards_xdr_permyriad, 0);
 }
 
 /// **Scenario**: Nodes with zero block scenarios
