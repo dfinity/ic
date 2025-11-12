@@ -572,6 +572,16 @@ pub struct QueryExecutionInput {
 pub type QueryExecutionService =
     BoxCloneService<QueryExecutionInput, QueryExecutionResponse, Infallible>;
 
+/// The input type to a `call()` request in [`TransformExecutionService`].
+#[derive(Debug)]
+pub struct TransformExecutionInput {
+    pub query: Query,
+}
+
+/// Interface for the component to execute canister http transform.
+pub type TransformExecutionService =
+    BoxCloneService<TransformExecutionInput, QueryExecutionResponse, Infallible>;
+
 /// Errors that can be returned when reading/writing from/to ingress history.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum IngressHistoryError {
