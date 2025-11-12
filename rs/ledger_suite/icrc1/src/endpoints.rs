@@ -238,7 +238,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 fee_collector,
                 caller,
             } => {
-                tx.kind = "107feecol".to_string();
+                tx.kind = "107set_fee_collector".to_string();
                 tx.fee_collector = Some(FeeCollector {
                     fee_collector,
                     caller,

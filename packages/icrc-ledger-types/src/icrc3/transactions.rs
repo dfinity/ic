@@ -128,7 +128,7 @@ impl Transaction {
 
     pub fn fee_collector(fee_collector: FeeCollector, timestamp: u64) -> Self {
         Self {
-            kind: "107feecol".into(),
+            kind: "107set_fee_collector".into(),
             timestamp,
             mint: None,
             burn: None,

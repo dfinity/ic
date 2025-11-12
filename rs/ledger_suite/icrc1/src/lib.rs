@@ -80,7 +80,7 @@ pub enum Operation<Tokens: TokensType> {
         #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
-    #[serde(rename = "107feecol")]
+    #[serde(rename = "107set_fee_collector")]
     FeeCollector {
         #[serde(
             default,
@@ -197,7 +197,7 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
                 expires_at: value.expires_at,
                 fee: value.fee,
             },
-            "107feecol" => Operation::FeeCollector {
+            "107set_fee_collector" => Operation::FeeCollector {
                 fee_collector: value.fee_collector,
                 caller: value.caller,
             },
@@ -223,7 +223,7 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Mint { .. } => "mint",
                 Transfer { .. } => "xfer",
                 Approve { .. } => "approve",
-                FeeCollector { .. } => "107feecol",
+                FeeCollector { .. } => "107set_fee_collector",
             }
             .into(),
             from: match &t.operation {
