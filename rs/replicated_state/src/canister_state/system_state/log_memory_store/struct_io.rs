@@ -60,17 +60,26 @@ impl StructIO {
         HeaderV1::from(&HeaderV1Blob::from_bytes(self.read_bytes(HEADER_OFFSET)))
     }
 
-    pub fn read_lookup_table(&self) -> LookupTable {
-        let h = self.read_header();
-        let bytes = self.read_vec(V1_LOOKUP_TABLE_OFFSET, h.lookup_table_used_bytes());
-        let mut lookup_table = LookupTable::new(to_entries(&bytes));
-        lookup_table.set_front(self.read_lookup_entry(h.data_head));
-        lookup_table
+    pub fn write_lookup_table(&mut self, lookup_table: &LookupTable) {
+        // Serialize lookup table buckets.
+        self.write_bytes(V1_LOOKUP_TABLE_OFFSET, &lookup_table.serialized_buckets());
+        // Update header with the lookup buckets count.
+        let mut h = self.read_header();
+        h.lookup_entries_count = lookup_table.buckets_len();
+        self.write_header(&h);
     }
 
-    pub fn write_lookup_table(&mut self, lookup_table: &LookupTable) {
-        let bytes = Vec::from(lookup_table);
-        self.write_bytes(V1_LOOKUP_TABLE_OFFSET, &bytes);
+    pub fn read_lookup_table(&self) -> LookupTable {
+        let h = self.read_header();
+        let front = self.read_lookup_entry(h.data_head);
+        if h.lookup_table_used_bytes() == 0 {
+            // No lookup table stored, but front exists.
+            LookupTable::new(front, h.lookup_table_pages, h.data_capacity)
+        } else {
+            // Full lookup table stored.
+            let bytes = self.read_vec(V1_LOOKUP_TABLE_OFFSET, h.lookup_table_used_bytes());
+            LookupTable::init(front, h.lookup_table_pages, h.data_capacity, &bytes)
+        }
     }
 
     fn read_lookup_entry(&self, position: MemoryPosition) -> Option<LookupEntry> {

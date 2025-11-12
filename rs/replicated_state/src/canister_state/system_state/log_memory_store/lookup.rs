@@ -28,12 +28,32 @@ pub(crate) const LOOKUP_ENTRY_SIZE: usize = 24;
 const _: () = assert!(std::mem::size_of::<LookupEntry>() == LOOKUP_ENTRY_SIZE);
 
 impl LookupEntry {
+    const INVALID_ENTRY: u64 = u64::MAX;
+
     fn new(record: &LogRecord, position: MemoryPosition) -> Self {
         Self {
             idx: record.idx,
             ts_nanos: record.ts_nanos,
             position,
         }
+    }
+
+    fn invalid() -> Self {
+        Self {
+            idx: Self::INVALID_ENTRY,
+            ts_nanos: 0,
+            position: MemoryPosition::new(0),
+        }
+    }
+
+    fn is_valid(&self) -> bool {
+        self.idx != Self::INVALID_ENTRY
+    }
+
+    fn write(&self, writer: &mut ByteWriter) {
+        writer.write_u64(self.idx);
+        writer.write_u64(self.ts_nanos);
+        writer.write_u64(self.position.get());
     }
 
     /// Returns the bucket index for this entry's position.
@@ -66,15 +86,37 @@ pub(crate) struct LookupTable {
 }
 
 impl LookupTable {
-    pub fn new(buckets: Vec<LookupEntry>) -> Self {
-        Self {
-            front: None,
-            buckets,
-        }
+    pub fn new(
+        front: Option<LookupEntry>,
+        lookup_table_pages: u16,
+        data_capacity: MemorySize,
+    ) -> Self {
+        let max_count = (lookup_table_pages as usize * PAGE_SIZE) / BUCKET_SIZE;
+        let count = ((data_capacity.get() as usize) / BUCKET_SIZE).min(max_count);
+        let buckets = vec![LookupEntry::invalid(); count];
+        Self { front, buckets }
     }
 
-    pub fn set_front(&mut self, entry: Option<LookupEntry>) {
-        self.front = entry;
+    pub fn init(
+        front: Option<LookupEntry>,
+        lookup_table_pages: u16,
+        data_capacity: MemorySize,
+        bytes: &[u8],
+    ) -> Self {
+        let mut table = Self::new(front, lookup_table_pages, data_capacity);
+        table.buckets = to_entries(bytes);
+        table
+    }
+
+    pub fn buckets_len(&self) -> u16 {
+        self.buckets.len() as u16
+    }
+
+    pub fn serialized_buckets(&self) -> Vec<u8> {
+        let mut bytes = vec![0; self.buckets.len() * LOOKUP_ENTRY_SIZE];
+        let mut writer = ByteWriter::new(&mut bytes);
+        self.buckets.iter().for_each(|e| e.write(&mut writer));
+        bytes
     }
 
     /// Updates or appends a lookup entry for the given log record at the specified position.
@@ -82,13 +124,11 @@ impl LookupTable {
         let entry = LookupEntry::new(record, position);
         let index = entry.bucket_index();
         if index < self.buckets.len() {
-            self.buckets[index] = entry; // Update existing entry.
-        } else {
-            self.buckets.push(entry); // Append new entry.
+            self.buckets[index] = entry;
         }
     }
 
-    fn get_valid_sorted_entries(&self) -> Vec<LookupEntry> {
+    fn get_sorted_valid_entries(&self) -> Vec<LookupEntry> {
         let front = match self.front {
             None => return vec![], // No entries if front is None.
             Some(entry) => entry,
@@ -97,7 +137,7 @@ impl LookupTable {
         let mut valid_entries: Vec<LookupEntry> = self
             .buckets
             .iter()
-            .filter(|e| front.idx < e.idx)
+            .filter(|e| e.is_valid() && front.idx < e.idx)
             .cloned()
             .collect();
         valid_entries.push(front);
@@ -112,7 +152,7 @@ impl LookupTable {
     ) -> Option<(MemoryPosition, MemoryPosition)> {
         const MAX_RANGE_SIZE: MemorySize = MemorySize::new(2_000_000); // 2 MB
 
-        let entries = self.get_valid_sorted_entries();
+        let entries = self.get_sorted_valid_entries();
         if entries.is_empty() {
             return None;
         }
@@ -198,17 +238,17 @@ pub(crate) fn to_entries(bytes: &[u8]) -> Vec<LookupEntry> {
     entries
 }
 
-impl From<&LookupTable> for Vec<u8> {
-    fn from(table: &LookupTable) -> Self {
-        let mut bytes = vec![0; table.buckets.len() * LOOKUP_ENTRY_SIZE];
-        let mut writer = ByteWriter::new(&mut bytes);
+// impl From<&LookupTable> for Vec<u8> {
+//     fn from(table: &LookupTable) -> Self {
+//         let mut bytes = vec![0; table.buckets.len() * LOOKUP_ENTRY_SIZE];
+//         let mut writer = ByteWriter::new(&mut bytes);
 
-        for entry in &table.buckets {
-            writer.write_u64(entry.idx);
-            writer.write_u64(entry.ts_nanos);
-            writer.write_u64(entry.position.get());
-        }
+//         for entry in &table.buckets {
+//             writer.write_u64(entry.idx);
+//             writer.write_u64(entry.ts_nanos);
+//             writer.write_u64(entry.position.get());
+//         }
 
-        bytes
-    }
-}
+//         bytes
+//     }
+// }
