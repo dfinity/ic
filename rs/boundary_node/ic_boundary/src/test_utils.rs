@@ -292,9 +292,6 @@ pub fn setup_test_router(
         args.push("104857600");
     }
 
-    #[cfg(not(feature = "tls"))]
-    let cli = Cli::parse_from(args);
-    #[cfg(feature = "tls")]
     let cli = Cli::parse_from({
         args.extend_from_slice(&["--tls-hostname", "foobar"]);
         args

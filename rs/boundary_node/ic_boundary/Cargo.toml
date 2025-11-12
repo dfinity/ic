@@ -12,7 +12,6 @@ path = "src/main.rs"
 
 [features]
 bench = []
-tls = []
 
 [dependencies]
 anyhow = { workspace = true }
