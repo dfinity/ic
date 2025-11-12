@@ -12,7 +12,7 @@ use ic_test_utilities_metrics::{HistogramStats, fetch_histogram_vec_stats, metri
 use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64, MessageId, RequestOrResponse};
 use messaging_test::{Call, Reply};
 use messaging_test_utils::{CallConfig, arb_call};
-use proptest::prelude::{Just, ProptestConfig, Strategy};
+use proptest::prelude::*;
 
 const MAX_PAYLOAD_SIZE: usize = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES_U64 as usize;
 const SYS_UNKNOWN_U32: u32 = RejectCode::SysUnknown as u32;
@@ -31,7 +31,7 @@ fn canister_can_be_stopped_with_hanging_call_on_stalled_subnet() {
         .submit_ingress(
             canister1,
             vec![Call {
-                receiver: canister2,
+                receiver: canister2.into(),
                 timeout_secs: Some(10),
                 ..Call::default()
             }],
@@ -85,7 +85,7 @@ fn test_requests_are_timed_out_in_output_queues_but_backpressure_remains() {
             .submit_ingress(
                 canister2,
                 vec![Call {
-                    receiver: canister1,
+                    receiver: canister1.into(),
                     reply_bytes: MAX_PAYLOAD_SIZE as u32,
                     ..Call::default()
                 }],
@@ -110,7 +110,7 @@ fn test_requests_are_timed_out_in_output_queues_but_backpressure_remains() {
                 canister1,
                 vec![
                     Call {
-                        receiver: canister2,
+                        receiver: canister2.into(),
                         ..Call::default()
                     };
                     100
@@ -176,16 +176,16 @@ fn test_call_tree_metrics() {
     let calls_made_on_subnet2 = vec![
         // The left arm.
         Call {
-            receiver: canister2,
+            receiver: canister2.into(),
             downstream_calls: vec![Call {
-                receiver: canister1,
+                receiver: canister1.into(),
                 ..Call::default()
             }],
             ..Call::default()
         },
         // The right arm.
         Call {
-            receiver: canister4,
+            receiver: canister4.into(),
             ..Call::default()
         },
     ];
@@ -197,20 +197,20 @@ fn test_call_tree_metrics() {
             vec![
                 // The left arm.
                 Call {
-                    receiver: canister2,
+                    receiver: canister2.into(),
                     downstream_calls: vec![Call {
-                        receiver: canister2,
+                        receiver: canister2.into(),
                         ..Call::default()
                     }],
                     ..Call::default()
                 },
                 // The right arm.
                 Call {
-                    receiver: canister1,
+                    receiver: canister1.into(),
                     downstream_calls: vec![
                         // Calling into `subnet2`.
                         Call {
-                            receiver: canister3,
+                            receiver: canister3.into(),
                             downstream_calls: calls_made_on_subnet2,
                             ..Call::default()
                         },
@@ -290,7 +290,7 @@ fn test_memory_accounting_and_sequence_errors(
             timeout_secs_range: 300..=300,
             downstream_calls_percentage: 66,
             downstream_calls_count_range: 1..=3,
-            max_total_calls: 20,
+            call_tree_size: 10,
         }
     ), 10))]
     calls: Vec<Call>,
@@ -310,23 +310,91 @@ fn test_memory_accounting_and_sequence_errors(
 
         let state = subnet1.env.get_latest_state();
         let memory_taken = state.guaranteed_response_message_memory_taken().get();
-        assert!(
+        prop_assert!(
             memory_taken <= MEMORY_ACCOUNTING_CONFIG.guaranteed_response_message_memory_capacity,
             "computed guaranteed response message memory: {} exceeds the capacity: {}",
             memory_taken,
             MEMORY_ACCOUNTING_CONFIG.guaranteed_response_message_memory_capacity
         );
         let memory_taken = state.best_effort_message_memory_taken().get();
-        assert!(
+        prop_assert!(
             memory_taken <= MEMORY_ACCOUNTING_CONFIG.best_effort_message_memory_capacity,
             "computed best-effort message memory: {} exceeds the capacity: {}",
             memory_taken,
             MEMORY_ACCOUNTING_CONFIG.best_effort_message_memory_capacity,
         );
 
-        // Filter out completed calls, check there are no traps on the completed ones.
-        msg_ids = subnet1.await_or_check_completed(msg_ids, check_for_traps);
+        // Filter out completed calls, checking that there were no traps.
+        msg_ids = subnet1.check_and_drop_completed(msg_ids, &check_for_traps);
     }
+}
+
+/// Tests that all cyclws attached to best-effort calls are eventually refunded.
+///
+/// For this, we attach huge amounts of cycles to every call (orders of
+/// magnitude larger than the cost of making and executing the actual calls) and
+/// check that after all calls have completed, the canisters' total balance
+/// returns to the initial amount (modulo the costs of the calls themselves).
+#[test_strategy::proptest(ProptestConfig::with_cases(3))]
+fn test_guaranteed_refunds(
+    #[strategy(arb_test_subnets(MEMORY_ACCOUNTING_CONFIG.clone(), TestSubnetConfig {
+        canisters_count: 2,  // Local and remote calls.
+        max_instructions_per_round: 1_000_000,  // Build up a backlog of calls.
+        ..TestSubnetConfig::default()
+    }))]
+    setup: TestSubnetSetup,
+
+    #[strategy(proptest::collection::vec(arb_call(
+        #setup.subnet1.principal_canister(),
+        CallConfig {
+            receivers: #setup.canisters,
+            call_bytes_range: 0..=0,  // Don't care about payloads.
+            reply_bytes_range: 0..=0,
+            best_effort_percentage: 90,  // Throw in some guaranteed calls, just in case.
+            timeout_secs_range: 1..=10,  // Make sure that at least some calls time out.
+            downstream_calls_percentage: 66,
+            downstream_calls_count_range: 1..=3,
+            call_tree_size: 10,
+        }
+    ), 10))]
+    calls: Vec<Call>,
+) {
+    fn compute_total_cycles(subnet: &TestSubnet) -> u128 {
+        subnet
+            .canisters()
+            .iter()
+            .map(|canister| subnet.env.cycle_balance(*canister))
+            .sum()
+    }
+
+    let (subnet1, subnet2, _) = setup.into_parts();
+    let cycles_before = compute_total_cycles(&subnet1) + compute_total_cycles(&subnet2);
+
+    // Submit all the calls into the ingress pool.
+    let mut msg_ids: Vec<MessageId> = calls
+        .into_iter()
+        .map(|call| subnet1.submit_call_as_ingress(call).unwrap())
+        .collect();
+
+    // Execute rounds on both subnets; check memory accounting in each iteration.
+    while !msg_ids.is_empty() || subnet1.has_canister_messages() || subnet2.has_canister_messages()
+    {
+        subnet1.execute_round();
+        subnet2.execute_round();
+
+        // Filter out completed calls, checking that there were no traps.
+        msg_ids = subnet1.check_and_drop_completed(msg_ids, &check_for_traps);
+    }
+
+    let cycles_after = compute_total_cycles(&subnet1) + compute_total_cycles(&subnet2);
+    prop_assert!(
+        cycles_before >= cycles_after,
+        "Too many cycles refunded: before = {cycles_before}, after = {cycles_after}"
+    );
+    prop_assert!(
+        cycles_before - cycles_after < 1_000_000_000,
+        "More than 1B cycles lost: before = {cycles_before}, after = {cycles_after}"
+    );
 }
 
 /// Tests that all calls are concluded successfully during subnet splitting and whilst upholding
@@ -363,13 +431,13 @@ fn subnet_splitting_smoke_test(
         .prop_flat_map(|canisters| {
             let config = CallConfig {
                 receivers: canisters.clone(),
-                max_total_calls: 10,
+                call_tree_size: 10,
                 ..CallConfig::default()
             };
             (
-                proptest::collection::vec(arb_call(canisters[0], config.clone()), 6),
-                proptest::collection::vec(arb_call(canisters[1], config.clone()), 6),
-                proptest::collection::vec(arb_call(canisters[2], config.clone()), 6),
+                proptest::collection::vec(arb_call(canisters[0], config.clone()), 5),
+                proptest::collection::vec(arb_call(canisters[1], config.clone()), 5),
+                proptest::collection::vec(arb_call(canisters[2], config.clone()), 5),
             )
         })
     )]
@@ -384,7 +452,7 @@ fn subnet_splitting_smoke_test(
     let (subnet1, subnet2, _) = setup.into_parts();
     let (mut calls1, mut calls2, mut calls3) = calls;
     let [canister1, canister2] = subnet1.canisters()[..] else {
-        unreachable!();
+        unreachable!("{:?}", subnet1.canisters());
     };
     let canister3 = subnet2.principal_canister();
 
@@ -437,9 +505,9 @@ fn subnet_splitting_smoke_test(
         subnet2.execute_round();
         subnet3.execute_round();
 
-        msg_ids1 = subnet1.await_or_check_completed(msg_ids1, check_for_traps);
-        msg_ids2 = subnet3.await_or_check_completed(msg_ids2, check_for_traps);
-        msg_ids3 = subnet2.await_or_check_completed(msg_ids3, check_for_traps);
+        msg_ids1 = subnet1.check_and_drop_completed(msg_ids1, &check_for_traps);
+        msg_ids2 = subnet3.check_and_drop_completed(msg_ids2, &check_for_traps);
+        msg_ids3 = subnet2.check_and_drop_completed(msg_ids3, &check_for_traps);
     }
 
     // All calls have concluded without trapping; we should be able to stop them now.

@@ -44,7 +44,8 @@ impl TestSubnet {
                 wasm.clone(),
                 Vec::new(),
                 None,
-                Cycles::new(u128::MAX / 2),
+                // Give each subnet `u128::MAX / 10` cycles, to avoid overflows.
+                Cycles::new(u128::MAX / 10 / canisters_count as u128),
             )
             .expect("Installing messaging-test-canister failed");
         }
@@ -82,7 +83,7 @@ impl TestSubnet {
         downstream_calls: Vec<Call>,
     ) -> Result<MessageId, SubmitIngressError> {
         self.submit_call_as_ingress(Call {
-            receiver,
+            receiver: receiver.into(),
             downstream_calls,
             ..Call::default()
         })
@@ -108,7 +109,7 @@ impl TestSubnet {
         }
     }
 
-    /// Returns the subnet Id of this `TestSubnet`.
+    /// Returns the subnet ID of this `TestSubnet`.
     pub fn id(&self) -> SubnetId {
         self.env.get_subnet_id()
     }
@@ -162,10 +163,15 @@ impl TestSubnet {
         )
     }
 
-    /// Tries to fetch completed calls from the ingress history; filters out the
-    /// completed calls but first runs `for_each_breath_first`; keeps and returns
-    /// the Ids for which the call is not yet complete.
-    pub fn await_or_check_completed<F>(&self, msg_ids: Vec<MessageId>, f: F) -> Vec<MessageId>
+    /// Checks whether the subnet has any in-flight messages (in ingress queues,
+    /// canister queues, streams or refund pool).
+    pub fn has_canister_messages(&self) -> bool {
+        self.env.has_canister_messages()
+    }
+
+    /// Retains only calls that have not yet completed, according to the ingress
+    /// history; and runs `f` recursively on the reply of every completed call.
+    pub fn check_and_drop_completed<F>(&self, msg_ids: Vec<MessageId>, f: &F) -> Vec<MessageId>
     where
         F: Fn(&Reply, usize) + Clone,
     {
@@ -173,7 +179,7 @@ impl TestSubnet {
             .into_iter()
             .filter(|msg_id| {
                 self.try_get_reply(msg_id).map_or(true, |reply| {
-                    reply.for_each_depth_first(f.clone());
+                    reply.for_each_depth_first(f);
                     false
                 })
             })
@@ -188,7 +194,7 @@ impl TestSubnet {
 
 /// Checks for an async rejection in the `Reply` that indicates the canister trapped.
 ///
-/// Intended for use as `f` in `await_or_check_completed`.
+/// Intended for use as `f` in `check_and_drop_completed`.
 pub fn check_for_traps(reply: &Reply, _call_depth: usize) {
     if let Reply::AsyncReject { reject_message, .. } = reply {
         assert!(!reject_message.contains("trapped"));
@@ -273,7 +279,7 @@ impl TestSubnetSetup {
 /// A mock arbitrary generator for two `TestSubnet`.
 ///
 /// This is to allow generating two `TestSubnet` in the proptest input generator clause. This is
-/// useful because canister Ids are generated when installing canisters, hence to use the Ids in
+/// useful because canister IDs are generated when installing canisters, hence to use the IDs in
 /// random input generation, the subnets must be created first.
 pub fn arb_test_subnets(
     config1: TestSubnetConfig,
