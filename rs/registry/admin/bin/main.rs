@@ -862,7 +862,7 @@ impl ProposalTitle for ProposeToTakeSubnetOfflineForRepairsCmd {
 
 #[async_trait]
 impl ProposalPayload<SetSubnetOperationalLevelPayload> for ProposeToTakeSubnetOfflineForRepairsCmd {
-    async fn payload(&self, _agent: &Agent) -> SetSubnetOperationalLevelPayload {
+    async fn payload(&self, _agent: &IcAgent) -> SetSubnetOperationalLevelPayload {
         let ssh_node_state_write_access = self
             .ssh_node_state_write_access
             .clone()
@@ -949,7 +949,7 @@ impl ProposalTitle for ProposeToBringSubnetBackOnlineAfterRepairsCmd {
 impl ProposalPayload<SetSubnetOperationalLevelPayload>
     for ProposeToBringSubnetBackOnlineAfterRepairsCmd
 {
-    async fn payload(&self, agent: &Agent) -> SetSubnetOperationalLevelPayload {
+    async fn payload(&self, agent: &IcAgent) -> SetSubnetOperationalLevelPayload {
         let registry_canister = RegistryCanister::new_with_agent(agent.clone());
 
         let subnet_id = SubnetId::from(self.subnet);
@@ -5365,31 +5365,35 @@ async fn main() {
             propose_action_from_command(cmd, ic_agent, proposer).await;
         }
         SubCommand::ProposeToTakeSubnetOfflineForRepairs(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let (proposer, identity) = cmd.proposer_and_identity(identity);
+            let ic_agent = make_agent_from_identity(
+                reachable_nns_urls,
+                identity,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file.clone(),
+            )
+            .await;
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::SetSubnetOperationalLevel,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
+                ic_agent,
                 proposer,
             )
             .await;
         }
         SubCommand::ProposeToBringSubnetBackOnlineAfterRepairs(cmd) => {
-            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            let (proposer, identity) = cmd.proposer_and_identity(identity);
+            let ic_agent = make_agent_from_identity(
+                reachable_nns_urls,
+                identity,
+                opts.verify_nns_responses,
+                opts.nns_public_key_pem_file.clone(),
+            )
+            .await;
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::SetSubnetOperationalLevel,
-                make_canister_client(
-                    reachable_nns_urls,
-                    opts.verify_nns_responses,
-                    opts.nns_public_key_pem_file,
-                    sender,
-                ),
+                ic_agent,
                 proposer,
             )
             .await;
