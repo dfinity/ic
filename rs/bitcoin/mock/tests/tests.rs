@@ -81,8 +81,8 @@ fn test_install_bitcoin_mock_canister() {
 
     let _ = env.execute_ingress(
         mock_id,
-        "push_utxo_to_address",
-        Encode!(&PushUtxoToAddress {
+        "push_utxos_to_address",
+        Encode!(&vec![PushUtxoToAddress {
             address: btc_address0.to_string(),
             utxo: Utxo {
                 height: 0,
@@ -92,7 +92,7 @@ fn test_install_bitcoin_mock_canister() {
                 },
                 value,
             },
-        })
+        }])
         .unwrap(),
     );
 
