@@ -48,8 +48,8 @@ pub enum StepType {
     /// replica bug and not due to malicious actors, this step should not reveal any problems.
     MergeCertificationPools,
     /// In this step we will download all finalized consensus artifacts. For that we should use a
-    /// node, that is up to date with the highest finalization and CUP height because this node will
-    /// contain all required artifacts for the recovery.
+    /// node, that is up to date with the highest finalization height because this node will contain
+    /// all required artifacts for the recovery.
     DownloadConsensusPool,
     /// In this step we will download the subnet state from a node that is sufficiently up to date
     /// with the rest of the subnet, i.e. not behind by more than 1 DKG interval. To avoid
