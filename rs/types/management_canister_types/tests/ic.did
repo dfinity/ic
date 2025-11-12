@@ -356,7 +356,6 @@ type http_request_args = record {
 
 type flexible_http_request_args = record {
     url : text;
-    max_response_bytes : opt nat64;
     headers : vec http_header;
     method : variant { get; head; post };
     body : opt blob;
@@ -364,9 +363,12 @@ type flexible_http_request_args = record {
         function : func (record {response : http_response; context : blob}) -> (http_response) query;
         context : blob;
     };
-    is_replicated : opt bool;
-    pricing_version : opt nat32;
-}
+    requested_counts: opt record {
+        min_responses: nat64;
+        max_responses: nat64;
+        total_requests: nat64;
+    };
+};
 
 type ecdsa_public_key_args = record {
     canister_id : opt canister_id;

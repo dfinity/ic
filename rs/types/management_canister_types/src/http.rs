@@ -131,9 +131,11 @@ impl CanisterHttpRequestArgs {
 ///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
 ///     context : blob;
 ///   };
-///   total_requests : opt nat32;
-///   min_responses : opt nat32;
-///   max_responses : opt nat32;
+///  requested_counts: opt record {
+///     min_responses: nat32;
+///     max_responses: nat32;
+///     total_requests: nat32;
+///   };
 /// }
 /// ```s
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
@@ -144,12 +146,25 @@ pub struct FlexibleCanisterHttpRequestArgs {
     pub body: Option<Vec<u8>>,
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
-    pub total_requests: Option<u32>,
-    pub min_responses: Option<u32>,
-    pub max_responses: Option<u32>,
+    pub requested_counts: Option<RequestedCounts>,
 }
 
 impl Payload<'_> for FlexibleCanisterHttpRequestArgs {}
+
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///     min_responses: nat32;
+///     max_responses: nat32;
+///     total_requests: nat32;
+///   };
+/// ```
+#[derive(CandidType, Deserialize, Debug, Clone, Default, PartialEq)]
+pub struct RequestedCounts {
+    pub total_requests: u32,
+    pub min_responses: u32,
+    pub max_responses: u32,
+}
 
 #[test]
 fn test_http_headers_max_number() {
