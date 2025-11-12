@@ -28,7 +28,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:19aa596f49db34ece26a1a2903e6fabcd8766025b3dc543546fbef341ef910a2
+      image: ghcr.io/dfinity/ic-build@sha256:da93235247c6651bae459e4e8cc987fccb37f0d53294b30f7e1ae57c0b553557
       options: >-
          -e NODE_NAME --privileged --cgroupns host
     steps:
@@ -101,13 +101,6 @@ jobs:
           fi
 
 
-          if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}' == 'true' ]]; then
-              skip_didc_checks="true"
-          else
-              skip_didc_checks="false"
-          fi
-
-
           if [[ '${{ contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_BUF_BREAKING') }}' == 'true' ]]; then
               skip_buf_checks="true"
           else
@@ -133,10 +126,6 @@ jobs:
           echo "full_macos_build: $full_macos_build"
           echo "full_macos_build=$full_macos_build" >> "$GITHUB_OUTPUT"
           echo "| \`full_macos_build\` | \`$full_macos_build\` |" >> "$GITHUB_STEP_SUMMARY"
-
-          echo "skip_didc_checks: $skip_didc_checks"
-          echo "skip_didc_checks=$skip_didc_checks" >> "$GITHUB_OUTPUT"
-          echo "| \`skip_didc_checks\` | \`$skip_didc_checks\` |" >> "$GITHUB_STEP_SUMMARY"
 
           echo "skip_buf_checks: $skip_buf_checks"
           echo "skip_buf_checks=$skip_buf_checks" >> "$GITHUB_OUTPUT"
@@ -193,9 +182,6 @@ jobs:
             targets_args=()
             if [[ '${{ needs.config.outputs.skip_long_tests }}' == 'true' ]]; then
               targets_args+=("--skip_long_tests")
-            fi
-            if [[ '${{ needs.config.outputs.skip_didc_checks }}' == 'true' ]]; then
-              targets_args+=("--exclude_tags=didc")
             fi
             if [[ '${{ needs.config.outputs.skip_buf_checks }}' == 'true' ]]; then
               targets_args+=("--exclude_tags=buf")

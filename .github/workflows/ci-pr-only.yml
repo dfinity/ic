@@ -11,7 +11,6 @@ on:
 
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
-  MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
 
 jobs:
@@ -22,7 +21,7 @@ jobs:
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:19aa596f49db34ece26a1a2903e6fabcd8766025b3dc543546fbef341ef910a2
+      image: ghcr.io/dfinity/ic-build@sha256:da93235247c6651bae459e4e8cc987fccb37f0d53294b30f7e1ae57c0b553557
       options: >-
          -e NODE_NAME
     steps:
@@ -31,6 +30,31 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.commit-sha }}
+
+  # Run didc compatibility checks against the merge base
+  didc_checks:
+    name: Candid compatibility checks
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
+    runs-on: &dind-small-setup
+      labels: dind-small
+    container: *container-setup
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # ensures we checkout out the latest base, which we
+          # compare against (pull_request.base.sha)
+          fetch-depth: 0
+          ref: ${{ inputs.commit-sha }}
+      - name: Run candid compatibility checks
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            DID_CHECK_REV='${{ github.event.pull_request.base.sha }}' \
+              bazel test //... \
+                --build_tag_filters="didc" \
+                --test_tag_filters="didc"
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   insta-tests:
     name: Quick Feedback Tests
@@ -164,7 +188,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 256
+          ref: ${{ inputs.commit-sha }}
+          fetch-depth: 256 # required for file filter
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter

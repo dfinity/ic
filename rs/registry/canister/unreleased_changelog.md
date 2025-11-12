@@ -9,7 +9,9 @@ on the process that this file is part of, see
 
 ## Added
 
-* Added rate limiting for add_node based on IP address.
+### Node Swaps
+
+DFINITY's node operators can now swap nodes on non-system subnets; later, swapping nodes will gradually become available to all node operators.
 
 ## Changed
 
