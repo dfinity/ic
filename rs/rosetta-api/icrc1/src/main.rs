@@ -243,9 +243,10 @@ async fn main() -> Result<()> {
             Store::File { dir_path } => {
                 let mut path = dir_path.clone();
                 path.push(format!("{}.db", PrincipalId::from(token_def.ledger_id)));
-                StorageClient::new_persistent(&path).unwrap_or_else(|err| {
-                    panic!("error creating persistent storage '{path:?}': {err}")
-                })
+                StorageClient::new_persistent_with_cache(&path, config.sqlite_max_cache_kb)
+                    .unwrap_or_else(|err| {
+                        panic!("error creating persistent storage '{path:?}': {err}")
+                    })
             }
         };
 

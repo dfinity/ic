@@ -51,7 +51,7 @@ pub fn increment_counter(
 ) -> anyhow::Result<()> {
     connection
         .prepare_cached(
-            "INSERT INTO counters (name, value) VALUES (?1, ?2) 
+            "INSERT INTO counters (name, value) VALUES (?1, ?2)
              ON CONFLICT(name) DO UPDATE SET value = value + ?2",
         )?
         .execute(params![counter.name(), increment])?;
@@ -406,6 +406,13 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
             }
         }
         insert_tx.commit()?;
+
+        // Clear SQLite's prepared statement cache to release memory
+        // This is crucial for long-running syncs with many queries
+        connection.cache_flush()?;
+
+        // Force SQLite to release memory
+        connection.pragma_update(None, "shrink_memory", 1)?;
 
         // Fetch the next batch of blocks
         batch_start_idx = get_highest_block_idx_in_account_balance_table(connection)?

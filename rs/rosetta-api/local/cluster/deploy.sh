@@ -6,9 +6,12 @@ set -e
 # Options:
 #   --icp-ledger <ledger_id>         Set the ICP Ledger ID (default: xafvr-biaaa-aaaai-aql5q-cai)
 #   --icp-symbol <symbol>            Set the ICP token symbol (default: TESTICP)
-#   --icrc1-ledger <ledger_id>       Set the ICRC1 Ledger ID (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
+#   --icrc1-ledger <ledger_ids>      Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
+#   --sqlite-cache-kb <size>         SQLite cache size in KB (default: 20480)
 #   --local-icp-image-tar <path>     Path to local ICP image tar file
 #   --local-icrc1-image-tar <path>   Path to local ICRC1 image tar file
+#   --no-icp-latest                  Don't deploy ICP Rosetta latest image
+#   --no-icrc1-latest                Don't deploy ICRC1 Rosetta latest image
 #   --clean                          Clean up Minikube cluster and Helm chart before deploying
 #   --stop                           Stop the Minikube cluster
 #   --help                           Display this help message
@@ -17,8 +20,11 @@ set -e
 ICP_LEDGER="xafvr-biaaa-aaaai-aql5q-cai"
 ICP_SYMBOL="TESTICP"
 ICRC1_LEDGER="3jkp5-oyaaa-aaaaj-azwqa-cai"
+SQLITE_CACHE_KB="20480"
 LOCAL_ICP_IMAGE_TAR=""
 LOCAL_ICRC1_IMAGE_TAR=""
+DEPLOY_ICP_LATEST=true
+DEPLOY_ICRC1_LATEST=true
 CLEAN=false
 STOP=false
 MINIKUBE_PROFILE="local-rosetta"
@@ -38,6 +44,10 @@ while [[ "$#" -gt 0 ]]; do
             ICRC1_LEDGER="$2"
             shift
             ;;
+        --sqlite-cache-kb)
+            SQLITE_CACHE_KB="$2"
+            shift
+            ;;
         --local-icp-image-tar)
             LOCAL_ICP_IMAGE_TAR="$2"
             shift
@@ -46,10 +56,16 @@ while [[ "$#" -gt 0 ]]; do
             LOCAL_ICRC1_IMAGE_TAR="$2"
             shift
             ;;
+        --no-icp-latest)
+            DEPLOY_ICP_LATEST=false
+            ;;
+        --no-icrc1-latest)
+            DEPLOY_ICRC1_LATEST=false
+            ;;
         --clean) CLEAN=true ;;
         --stop) STOP=true ;;
         --help)
-            sed -n '5,14p' "$0"
+            sed -n '5,18p' "$0"
             exit 0
             ;;
         *)
@@ -208,28 +224,31 @@ helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q kube-promet
 # Function to load a local TAR if provided
 load_local_tar() {
     local tar_path=$1
-    local from_image_tag=$2
-    local to_image_tag=$3
     [[ -n "$tar_path" ]] && {
-        echo "Loading local image $to_image_tag into Minikube..."
+        echo "Loading local image into Minikube..."
         eval $(minikube -p "$MINIKUBE_PROFILE" docker-env)
         docker load -i "$tar_path"
-        docker tag "$from_image_tag" "$to_image_tag"
         eval $(minikube -p "$MINIKUBE_PROFILE" docker-env -u)
     }
     return 0
 }
 
 # Load local ICP and ICRC1 images if provided
-load_local_tar "$LOCAL_ICP_IMAGE_TAR" rosetta:image icp-rosetta:local
-load_local_tar "$LOCAL_ICRC1_IMAGE_TAR" icrc-rosetta:image icrc-rosetta:local
+# Note: The tar files already contain the correct image tags (e.g., icrc-rosetta:local)
+load_local_tar "$LOCAL_ICP_IMAGE_TAR"
+load_local_tar "$LOCAL_ICRC1_IMAGE_TAR"
 
 echo "Deploying Helm chart..."
 # Deploy or upgrade the Helm chart
+# Escape commas in ICRC1_LEDGER for Helm (commas are interpreted as value separators)
+ESCAPED_ICRC1_LEDGER="${ICRC1_LEDGER//,/\\,}"
 helm upgrade --install local-rosetta . \
     --set icpConfig.canisterId="$ICP_LEDGER" \
     --set icpConfig.tokenSymbol="$ICP_SYMBOL" \
-    --set icrcConfig.ledgerId="$ICRC1_LEDGER" \
+    --set icpConfig.deployLatest="$DEPLOY_ICP_LATEST" \
+    --set-string icrcConfig.ledgerId="$ESCAPED_ICRC1_LEDGER" \
+    --set icrcConfig.sqliteCacheKb="$SQLITE_CACHE_KB" \
+    --set icrcConfig.deployLatest="$DEPLOY_ICRC1_LATEST" \
     --set icpConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICP_IMAGE_TAR" ]] && echo "true" || echo "false") \
     --set icrcConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]] && echo "true" || echo "false") \
     --kube-context="$MINIKUBE_PROFILE"
