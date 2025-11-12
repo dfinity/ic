@@ -130,7 +130,11 @@ impl RingBuffer {
             return Vec::new();
         }
 
-        let (start, end) = self.io.read_lookup_table().get_range(&filter);
+        let range = self.io.read_lookup_table().get_range(&filter);
+        if range.is_none() {
+            return Vec::new();
+        }
+        let (start, end) = range.unwrap();
         let mut result = Vec::new();
         let mut position = start;
         let filter_ref = filter.as_ref();
@@ -268,12 +272,12 @@ mod tests {
         let data_capacity = MemorySize::new(137);
         let mut ring_buffer = RingBuffer::new(page_map, data_capacity);
 
-        // For each record ensure space by popping older records if needed, then push.
+        // Push many records to cause wrap-around without eviction.
         let mut pushed: Vec<LogRecord> = vec![];
         let mut popped: Vec<LogRecord> = vec![];
         for i in 0..1_000 {
             let record = log_record(i, i * 100, "12345");
-            // Free space until the new record fits — popped records are collected.
+            // Free space until the new record fits, popped records are collected.
             while ring_buffer.used_space() + record.bytes_len() > ring_buffer.capacity() {
                 popped.push(ring_buffer.pop_front().expect("expected record to pop"));
             }

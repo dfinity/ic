@@ -11,28 +11,65 @@ use std::convert::From;
 const BUCKET_SIZE: usize = PAGE_SIZE;
 const _: () = assert!(BUCKET_SIZE >= PAGE_SIZE); // Should not be lower than 4 KiB OS page size.
 
-/// A compact index mapping fixed-size buckets of the data region
-/// to their latest known log record within each bucket.
+/// Represents a single entry in the ring buffer's lookup table.
 ///
-/// Each bucket covers `BUCKET_SIZE` bytes. When a new record is written, the
-/// corresponding bucket entry is updated with its latest log record lookup entry.
+/// Each entry maps a fixed-size bucket in the data region
+/// to the most recent log record within that bucket.
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub(crate) struct LookupEntry {
+    /// Index of the log record.
+    pub idx: u64,
+    /// Timestamp of the log record.
+    pub ts_nanos: u64,
+    /// Position of the log record in the ring buffer's data region.
+    pub position: MemoryPosition,
+}
+pub(crate) const LOOKUP_ENTRY_SIZE: usize = 24;
+const _: () = assert!(std::mem::size_of::<LookupEntry>() == LOOKUP_ENTRY_SIZE);
+
+impl LookupEntry {
+    fn new(record: &LogRecord, position: MemoryPosition) -> Self {
+        Self {
+            idx: record.idx,
+            ts_nanos: record.ts_nanos,
+            position,
+        }
+    }
+
+    /// Returns the bucket index for this entry's position.
+    fn bucket_index(&self) -> usize {
+        (self.position.get() as usize) / BUCKET_SIZE
+    }
+}
+
+/// A lookup table for efficiently locating log records in the ring buffer.
 ///
-/// The table also stores `front` — the oldest available record in the ring
-/// buffer — to define the lower bound of the valid record range.
+/// The table divides the ring buffer's data region into fixed-size buckets.
+/// Each bucket stores the latest log record that was written within its range.
+/// The table also tracks the oldest available log record to define the valid range.
+///
+/// This allows fast determination of positions for reading logs matching a filter,
+/// without scanning the entire data region.
 #[derive(Debug, PartialEq)]
 pub(crate) struct LookupTable {
-    /// One entry per bucket — holds the latest log record lookup entry.
-    entries: Vec<LookupEntry>,
-
-    /// The oldest available record (front) in the ring buffer.
+    /// The oldest available log record in the ring buffer.
+    ///
+    /// Used to determine which buckets are currently valid.
     front: Option<LookupEntry>,
+
+    /// Array of buckets, each storing the latest known log record for that data segment.
+    ///
+    /// The bucket index is calculated from the log record's position in the data region.
+    /// Updating this table happens when a new record is written, replacing or appending
+    /// entries for the corresponding bucket.
+    buckets: Vec<LookupEntry>,
 }
 
 impl LookupTable {
-    pub fn new(entries: Vec<LookupEntry>) -> Self {
+    pub fn new(buckets: Vec<LookupEntry>) -> Self {
         Self {
-            entries,
             front: None,
+            buckets,
         }
     }
 
@@ -42,31 +79,23 @@ impl LookupTable {
 
     /// Updates or appends a lookup entry for the given log record at the specified position.
     pub fn update_last(&mut self, record: &LogRecord, position: MemoryPosition) {
-        let entry = LookupEntry {
-            idx: record.idx,
-            ts_nanos: record.ts_nanos,
-            position,
-        };
-        let index = self.bucket_index_of(position);
-        if index < self.entries.len() {
-            self.entries[index] = entry;
+        let entry = LookupEntry::new(record, position);
+        let index = entry.bucket_index();
+        if index < self.buckets.len() {
+            self.buckets[index] = entry; // Update existing entry.
         } else {
-            self.entries.push(entry);
+            self.buckets.push(entry); // Append new entry.
         }
     }
 
-    /// Calculates bucket index for a given memory position.
-    fn bucket_index_of(&self, position: MemoryPosition) -> usize {
-        (position.get() as usize) / BUCKET_SIZE
-    }
-
-    fn get_valid_entries(&self) -> Vec<LookupEntry> {
+    fn get_valid_sorted_entries(&self) -> Vec<LookupEntry> {
         let front = match self.front {
+            None => return vec![], // No entries if front is None.
             Some(entry) => entry,
-            None => return vec![],
         };
+        // Collect entries with idx after front.idx, those are valid buckets.
         let mut valid_entries: Vec<LookupEntry> = self
-            .entries
+            .buckets
             .iter()
             .filter(|e| front.idx < e.idx)
             .cloned()
@@ -76,23 +105,23 @@ impl LookupTable {
         valid_entries
     }
 
-    // Function returns a range [start, end) of memory positions.
+    /// Function returns a range [start, end) of positions in the data region.
     pub fn get_range(
         &self,
         filter: &Option<FetchCanisterLogsFilter>,
-    ) -> (MemoryPosition, MemoryPosition) {
-        const MAX_RANGE_BYTES: MemorySize = MemorySize::new(2_000_000); // 2 MB
+    ) -> Option<(MemoryPosition, MemoryPosition)> {
+        const MAX_RANGE_SIZE: MemorySize = MemorySize::new(2_000_000); // 2 MB
 
-        let entries = self.get_valid_entries();
+        let entries = self.get_valid_sorted_entries();
         if entries.is_empty() {
-            return (MemoryPosition::new(0), MemoryPosition::new(0));
+            return None;
         }
 
         // Left fallback for start: exact match or previous entry.
         let find_start_by_key = |key: u64, key_fn: fn(&LookupEntry) -> u64| -> MemoryPosition {
             match entries.binary_search_by_key(&key, key_fn) {
                 Ok(idx) => entries[idx].position,      // Exact match.
-                Err(0) => entries[0].position,         // Outside range, return first.
+                Err(0) => entries[0].position,         // Below range, return first.
                 Err(idx) => entries[idx - 1].position, // Left fallback.
             }
         };
@@ -102,14 +131,14 @@ impl LookupTable {
             match entries.binary_search_by_key(&key, key_fn) {
                 Ok(idx) => entries[idx].position, // Exact match.
                 Err(idx) if idx < entries.len() => entries[idx].position, // Right fallback.
-                _ => entries.last().unwrap().position, // Outside range, return last.
+                _ => entries.last().unwrap().position, // Above range, return last.
             }
         };
 
-        // Clamp `end` so (end - start) <= MAX_RANGE_BYTES.
+        // Clamp `end` so `end - start <= MAX_RANGE_SIZE`.
         let clamp_to_max_range = |start: MemoryPosition, end: MemoryPosition| -> MemoryPosition {
-            let max_allowed_end = start + MAX_RANGE_BYTES;
-            if end > max_allowed_end {
+            let max_allowed_end = start + MAX_RANGE_SIZE;
+            if max_allowed_end < end {
                 find_end_by_key(max_allowed_end.get(), |e| e.position.get())
             } else {
                 end
@@ -121,7 +150,7 @@ impl LookupTable {
                 // Return latest range limited by MAX_RANGE_BYTES.
                 // Use left fallback for start to avoid dropping earlier valid data.
                 let end = entries.last().unwrap().position;
-                let min_allowed_start = end.saturating_sub(MAX_RANGE_BYTES);
+                let min_allowed_start = end.saturating_sub(MAX_RANGE_SIZE);
                 let start = find_start_by_key(min_allowed_start.get(), |e| e.position.get());
                 (start, end)
             }
@@ -140,9 +169,9 @@ impl LookupTable {
         // so we need to adjust end to the next bucket.
         if start == end {
             // TODO: handle case when buffer is full and they are pointing to the same bucket.
-            return (start, end + MemorySize::new(BUCKET_SIZE as u64));
+            return Some((start, end + MemorySize::new(BUCKET_SIZE as u64)));
         }
-        (start, end)
+        Some((start, end))
     }
 }
 
@@ -171,10 +200,10 @@ pub(crate) fn to_entries(bytes: &[u8]) -> Vec<LookupEntry> {
 
 impl From<&LookupTable> for Vec<u8> {
     fn from(table: &LookupTable) -> Self {
-        let mut bytes = vec![0; table.entries.len() * LOOKUP_ENTRY_SIZE];
+        let mut bytes = vec![0; table.buckets.len() * LOOKUP_ENTRY_SIZE];
         let mut writer = ByteWriter::new(&mut bytes);
 
-        for entry in &table.entries {
+        for entry in &table.buckets {
             writer.write_u64(entry.idx);
             writer.write_u64(entry.ts_nanos);
             writer.write_u64(entry.position.get());
@@ -183,12 +212,3 @@ impl From<&LookupTable> for Vec<u8> {
         bytes
     }
 }
-
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub(crate) struct LookupEntry {
-    pub idx: u64,
-    pub ts_nanos: u64,
-    pub position: MemoryPosition,
-}
-pub(crate) const LOOKUP_ENTRY_SIZE: usize = 24;
-const _: () = assert!(std::mem::size_of::<LookupEntry>() == LOOKUP_ENTRY_SIZE);
