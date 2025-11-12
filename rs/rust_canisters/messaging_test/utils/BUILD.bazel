@@ -11,6 +11,7 @@ rust_library(
         # Keep sorted
         "//rs/rust_canisters/messaging_test",
         "//rs/types/types",
+        "@crate_index//:candid",
         "@crate_index//:proptest",
     ],
 )

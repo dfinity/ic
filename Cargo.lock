@@ -17495,7 +17495,6 @@ dependencies = [
  "candid",
  "canister-test",
  "futures",
- "ic-base-types",
  "ic-cdk",
  "ic-state-machine-tests",
  "ic-types",
@@ -17511,6 +17510,7 @@ dependencies = [
 name = "messaging-test-utils"
 version = "0.9.0"
 dependencies = [
+ "candid",
  "ic-types",
  "messaging-test",
  "proptest",

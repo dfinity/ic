@@ -1,16 +1,17 @@
-use candid::{CandidType, Decode, Encode};
-use ic_base_types::CanisterId;
+use candid::{CandidType, Decode, Encode, Principal};
 use serde::{Deserialize, Serialize};
 
 /// Includes all the information for a call to this canister.
-#[derive(Serialize, Deserialize, Clone, Debug, Eq, PartialEq, CandidType)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, CandidType)]
 pub struct Call {
     /// The receiver canister of this call.
-    pub receiver: CanisterId,
+    pub receiver: Principal,
     /// The number of bytes the payload of the message sent to the `receiver` should have.
     pub call_bytes: u32,
     /// The number of bytes the payload received in the reply from the `receiver` should have.
     pub reply_bytes: u32,
+    /// The amount of cycles to send with the call.
+    pub cycles: u128,
     /// The timeout used for a best effort call; `Some(_)`: best effort call, `None`: guaranteed response call.
     pub timeout_secs: Option<u32>,
     /// A list of downstream calls `receiver` should attempt.
@@ -19,14 +20,30 @@ pub struct Call {
 
 impl Default for Call {
     fn default() -> Self {
-        // Default with a dummy canister Id and no padding or downstream calls.
+        // Default with a dummy canister ID and no padding or downstream calls.
         Self {
-            receiver: CanisterId::from_u64(42),
+            receiver: Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap(),
             call_bytes: 0,
             reply_bytes: 0,
+            cycles: 0,
             timeout_secs: None,
             downstream_calls: vec![],
         }
+    }
+}
+
+/// Override `Debug` to pretty-print receivers. `Principal` implements `Display`
+/// but derives `Debug`.
+impl std::fmt::Debug for Call {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Call")
+            .field("receiver", &self.receiver.to_text())
+            .field("call_bytes", &self.call_bytes)
+            .field("reply_bytes", &self.reply_bytes)
+            .field("cycles", &self.cycles)
+            .field("timeout_secs", &self.timeout_secs)
+            .field("downstream_calls_count", &self.downstream_calls.len())
+            .finish()
     }
 }
 
@@ -46,7 +63,7 @@ pub struct CallMessage {
 pub enum Reply {
     /// The call to `respondent` was successful.
     Success {
-        respondent: CanisterId,
+        respondent: Principal,
         bytes_received_on_call: u32,
         bytes_sent_on_reply: u32,
         downstream_replies: Vec<Reply>,
@@ -64,7 +81,7 @@ pub enum Reply {
 impl Reply {
     /// Traverses the `Reply` and its downstream replies recursively,
     /// depth first and calls `f` on each `Reply` and call depth.
-    pub fn for_each_depth_first<F>(&self, f: F)
+    pub fn for_each_depth_first<F>(&self, f: &F)
     where
         F: Fn(&Self, usize),
     {
