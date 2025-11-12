@@ -4710,7 +4710,7 @@ async fn main() {
             );
         }
         SubCommand::UpdateRegistryLocalStore(cmd) => {
-            update_registry_local_store(reachable_nns_urls, cmd).await;
+            update_registry_local_store(&registry_canister, cmd).await;
         }
         SubCommand::ProposeToUpdateNodeOperatorConfig(cmd) => {
             let (proposer, identity) = cmd.proposer_and_identity(identity.clone());
@@ -6305,7 +6305,10 @@ fn get_root_subnet_pub_key(
 
 /// Fetch registry records from the given `nns_urls`, and update the local
 /// registry store with the new records.
-async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLocalStoreCmd) {
+async fn update_registry_local_store(
+    registry: &RegistryCanister,
+    cmd: UpdateRegistryLocalStoreCmd,
+) {
     eprintln!("RegistryLocalStore path: {:?}", cmd.local_store_path);
     let local_store = Arc::new(LocalStoreImpl::new(cmd.local_store_path));
     let local_client = Arc::new(RegistryClientImpl::new(local_store.clone(), None));
@@ -6331,8 +6334,7 @@ async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLoca
             }
         }
     };
-    let remote_canister = RegistryCanister::new(nns_urls);
-    let response = remote_canister
+    let response = registry
         .get_certified_changes_since(latest_version.get(), &nns_pub_key)
         .await;
     let records = match response {
@@ -6340,7 +6342,7 @@ async fn update_registry_local_store(nns_urls: Vec<Url>, cmd: UpdateRegistryLoca
         Err(err) => {
             let throw_err = |err| panic!("Error retrieving registry records: {err:?}");
             if cmd.disable_certificate_validation {
-                remote_canister
+                registry
                     .get_changes_since_as_registry_records(latest_version.get())
                     .await
                     .unwrap_or_else(throw_err)
