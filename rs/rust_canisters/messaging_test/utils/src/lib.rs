@@ -21,7 +21,7 @@ pub struct CallConfig {
     pub timeout_secs_range: RangeInclusive<usize>,
     pub downstream_calls_percentage: usize,
     pub downstream_calls_count_range: RangeInclusive<usize>,
-    pub max_total_calls: usize,
+    pub call_tree_size: usize,
 }
 
 impl Default for CallConfig {
@@ -34,7 +34,7 @@ impl Default for CallConfig {
             timeout_secs_range: 1..=300,
             downstream_calls_percentage: 33,
             downstream_calls_count_range: 1..=3,
-            max_total_calls: 10,
+            call_tree_size: 10,
         }
     }
 }
@@ -55,7 +55,7 @@ pub fn arb_call(receiver: CanisterId, config: CallConfig) -> impl Strategy<Value
             config.downstream_calls_percentage,
             config.downstream_calls_count_range.clone(),
         ),
-        config.max_total_calls,
+        config.call_tree_size,
     )
     .prop_flat_map(move |counts| {
         (
@@ -63,7 +63,7 @@ pub fn arb_call(receiver: CanisterId, config: CallConfig) -> impl Strategy<Value
                 receivers: vec![receiver],
                 ..config.clone()
             }),
-            proptest::collection::vec(arb_simple_call(config.clone()), config.max_total_calls),
+            proptest::collection::vec(arb_simple_call(config.clone()), config.call_tree_size),
             Just(counts),
         )
     })
@@ -93,17 +93,21 @@ fn arb_simple_call(config: CallConfig) -> impl Strategy<Value = Call> {
         proptest::sample::select(config.receivers),
         config.call_bytes_range,
         config.reply_bytes_range,
+        0..=u64::MAX,
         0..100_usize,
         config.timeout_secs_range,
     )
         .prop_map(
-            move |(receiver, call_bytes, reply_bytes, best_effort_probe, timeout_secs)| Call {
-                receiver,
-                call_bytes: call_bytes as u32,
-                reply_bytes: reply_bytes as u32,
-                timeout_secs: (best_effort_probe < config.best_effort_percentage)
-                    .then_some(timeout_secs as u32),
-                downstream_calls: Vec::new(),
+            move |(receiver, call_bytes, reply_bytes, cycles, best_effort_probe, timeout_secs)| {
+                Call {
+                    receiver: receiver.into(),
+                    call_bytes: call_bytes as u32,
+                    reply_bytes: reply_bytes as u32,
+                    cycles: cycles as u128,
+                    timeout_secs: (best_effort_probe < config.best_effort_percentage)
+                        .then_some(timeout_secs as u32),
+                    downstream_calls: Vec::new(),
+                }
             },
         )
 }
@@ -140,16 +144,21 @@ pub fn to_encoded_ingress(call: Call) -> (CanisterId, Vec<u8>) {
         },
         call.call_bytes as usize,
     );
-    (call.receiver, payload)
+    (into_canister_id(call.receiver), payload)
 }
 
 /// Decodes a blob into a `Response`.
 pub fn from_blob(respondent: CanisterId, blob: Vec<u8>) -> Reply {
     let (reply, bytes_sent_on_reply, _) = decode::<ReplyMessage>(blob);
     Reply::Success {
-        respondent,
+        respondent: respondent.into(),
         bytes_received_on_call: reply.bytes_received_on_call,
         bytes_sent_on_reply,
         downstream_replies: reply.downstream_replies,
     }
+}
+
+/// Wraps the given principal within a `CanisterId`.
+pub fn into_canister_id(principal: candid::Principal) -> CanisterId {
+    CanisterId::unchecked_from_principal(principal.into())
 }

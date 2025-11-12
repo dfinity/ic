@@ -69,19 +69,22 @@ fn smoke_test() {
     // A call to be sent to `canister1` as an ingress that then calls `canister3`
     // as a XNet inter canister call; that then makes a call to self.
     let (receiver, payload) = to_encoded_ingress(Call {
-        receiver: canister1,
+        receiver: canister1.into(),
         call_bytes: 456,
         reply_bytes: 789,
+        cycles: 1_000_000_000_000,
         timeout_secs: None,
         downstream_calls: vec![Call {
-            receiver: canister3,
+            receiver: canister3.into(),
             call_bytes: 654,
             reply_bytes: 987,
+            cycles: 1_000_000_000,
             timeout_secs: Some(10),
             downstream_calls: vec![Call {
-                receiver: canister3,
+                receiver: canister3.into(),
                 call_bytes: 123_456,
                 reply_bytes: 654_321,
+                cycles: 0,
                 timeout_secs: None,
                 downstream_calls: vec![],
             }],
@@ -99,14 +102,16 @@ fn smoke_test() {
     // A call to be sent to `canister2` as an ingress that then calls `canister1`
     // on the same subnet.
     let (receiver, payload) = to_encoded_ingress(Call {
-        receiver: canister2,
+        receiver: canister2.into(),
         call_bytes: 312,
         reply_bytes: 546,
+        cycles: 500_000_000,
         timeout_secs: Some(20),
         downstream_calls: vec![Call {
-            receiver: canister1,
+            receiver: canister1.into(),
             call_bytes: 385_212,
             reply_bytes: 2,
+            cycles: 0,
             timeout_secs: None,
             downstream_calls: vec![],
         }],
@@ -136,7 +141,7 @@ fn smoke_test() {
             ..
         } => {
             from_blob(CanisterId::unchecked_from_principal(receiver), blob).for_each_depth_first(
-                |reply, _| {
+                &|reply, _| {
                     assert_matches!(reply, Reply::Success { .. });
                 },
             );
@@ -152,7 +157,7 @@ fn smoke_test() {
             ..
         } => {
             from_blob(CanisterId::unchecked_from_principal(receiver), blob).for_each_depth_first(
-                |reply, _| {
+                &|reply, _| {
                     assert_matches!(reply, Reply::Success { .. });
                 },
             );

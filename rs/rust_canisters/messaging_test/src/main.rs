@@ -1,4 +1,4 @@
-use ic_base_types::{CanisterId, PrincipalId};
+use candid::Principal;
 use messaging_test::{CallMessage, Reply, ReplyMessage, decode, encode};
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
@@ -8,7 +8,7 @@ thread_local! {
     static CALL_INDEX: Cell<u32> = Cell::default();
     /// A map of incoming call indices; this is updated with each call received for each
     /// originator; used to detect sequence errors.
-    static INCOMING_CALL_INDICES: RefCell<BTreeMap<CanisterId, u32>> = RefCell::default();
+    static INCOMING_CALL_INDICES: RefCell<BTreeMap<Principal, u32>> = RefCell::default();
 }
 
 /// No-op encoder used to prevent encoding with candid by default
@@ -19,8 +19,13 @@ fn no_op(bytes: Vec<u8>) -> Vec<u8> {
 
 #[ic_cdk::update(decode_with = "decode", encode_with = "no_op")]
 async fn handle_call((msg, bytes_received_on_call, _): (CallMessage, u32, u32)) -> Vec<u8> {
+    // Canister principals have an (undocumented) tag byte of 1. This is good enough
+    // for test code.
+    const CANISTER_TAG: u8 = 1;
+
     // Check for sequence errors if this is an inter canister call.
-    if let Ok(caller) = CanisterId::try_from_principal_id(PrincipalId(ic_cdk::api::msg_caller())) {
+    let caller = ic_cdk::api::msg_caller();
+    if caller.as_slice().last() == Some(&CANISTER_TAG) {
         INCOMING_CALL_INDICES.with_borrow_mut(|incoming_call_indices| {
             let last_observed_call_index = incoming_call_indices.entry(caller).or_default();
             if *last_observed_call_index > 0 {
@@ -48,12 +53,11 @@ async fn handle_call((msg, bytes_received_on_call, _): (CallMessage, u32, u32)) 
             call.call_bytes as usize,
         );
         match call.timeout_secs {
-            Some(timeout_secs) => {
-                ic_cdk::call::Call::bounded_wait(call.receiver.into(), "handle_call")
-                    .change_timeout(timeout_secs)
-            }
-            None => ic_cdk::call::Call::unbounded_wait(call.receiver.into(), "handle_call"),
+            Some(timeout_secs) => ic_cdk::call::Call::bounded_wait(call.receiver, "handle_call")
+                .change_timeout(timeout_secs),
+            None => ic_cdk::call::Call::unbounded_wait(call.receiver, "handle_call"),
         }
+        .with_cycles(call.cycles)
         .take_raw_args(payload)
         .into_future()
     });

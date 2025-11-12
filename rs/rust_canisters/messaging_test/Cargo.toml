@@ -10,9 +10,7 @@ path = "src/main.rs"
 [dependencies]
 candid = { workspace = true }
 futures = { workspace = true }
-ic-base-types = { path = "../../types/base_types" }
 ic-cdk = { workspace = true }
-ic-types = { path = "../../types/types" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 
@@ -20,7 +18,7 @@ serde_bytes = { workspace = true }
 assert_matches = { workspace = true }
 canister-test = { path = "../canister_test" }
 ic-state-machine-tests = { path = "../../state_machine_tests" }
-ic-types = {path = "../../types/types" }
+ic-types = { path = "../../types/types" }
 ic-types-test-utils = { path = "../../types/types_test_utils" }
 messaging-test-utils = { path = "./utils" }
 proptest = { workspace = true }
