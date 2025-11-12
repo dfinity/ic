@@ -161,6 +161,30 @@ where
             self.deposit_utxos
         );
 
+        let expected_events: Vec<_> = minted_status
+            .iter()
+            .map(|(utxo, (mint_index, _minted_amount))| {
+                vec![
+                    EventType::CheckedUtxoV2 {
+                        utxo: utxo.clone(),
+                        account: self.account,
+                    },
+                    EventType::ReceivedUtxos {
+                        mint_txid: Some(*mint_index),
+                        to_account: self.account,
+                        utxos: vec![utxo.clone()],
+                    },
+                ]
+            })
+            .flatten()
+            .collect();
+
+        self.setup
+            .as_ref()
+            .minter()
+            .assert_that_events()
+            .contains_only_once_in_order(&expected_events);
+
         let mut total_minted_amount = 0;
         //TODO XC-496: use batching to speed up test
         for utxo in self.deposit_utxos {
@@ -183,22 +207,6 @@ where
                     created_at_time: None,
                     fee: None,
                 });
-
-            self.setup
-                .as_ref()
-                .minter()
-                .assert_that_events()
-                .contains_only_once_in_order(&[
-                    EventType::CheckedUtxoV2 {
-                        utxo: utxo.clone(),
-                        account: self.account,
-                    },
-                    EventType::ReceivedUtxos {
-                        mint_txid: Some(mint_index),
-                        to_account: self.account,
-                        utxos: vec![utxo],
-                    },
-                ]);
         }
 
         let balance_after = self.setup.as_ref().ledger().icrc1_balance_of(self.account);
