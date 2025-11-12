@@ -393,7 +393,7 @@ mod withdrawal {
             .ledger_approve_minter(account, withdrawal_amount)
             .minter_retrieve_doge_with_approval(withdrawal_amount, DOGECOIN_ADDRESS_1)
             .expect_withdrawal_request_accepted()
-            .minter_await_cancel();
+            .minter_await_withdrawal_reimbursed();
     }
 }
 

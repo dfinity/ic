@@ -289,7 +289,7 @@ where
         }
     }
 
-    pub fn minter_await_cancel(self) {
+    pub fn minter_await_withdrawal_reimbursed(self) {
         // TODO DEFI-2458: use correct fees. Need to estimate amount of DOGE to pay for 1B cycles.
         // See docs in the ckBTC minter for that constant.
         const REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS: u64 = 100 * 10;
