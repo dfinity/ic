@@ -136,11 +136,11 @@ impl RingBuffer {
         }
         let (start, end) = range.unwrap();
         let mut result = Vec::new();
-        let mut position = start;
+        let mut current = start;
         let filter_ref = filter.as_ref();
 
-        while position <= end {
-            let record = match self.io.read_record(position) {
+        while current <= end {
+            let record = match self.io.read_record(current) {
                 Some(r) => r,
                 None => break, // Stop when no more records can be read.
             };
@@ -151,7 +151,7 @@ impl RingBuffer {
             if record_size.get() == 0 {
                 break; // Prevent infinite loop on corrupted record.
             }
-            position = (position + record_size) % header.data_capacity;
+            current = header.advance_position(current, record_size);
         }
 
         result
