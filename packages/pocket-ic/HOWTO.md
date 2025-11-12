@@ -601,7 +601,7 @@ we refer to the basic Bitcoin example canister in DFINITY's [examples](https://g
 
 ## Dogecoin Integration
 
-In this section, we show how to test your dapp integrating with the Dogecoin (testnet) canister.
+In this section, we show how to test your dapp integrating with the Dogecoin (mainnet) canister configured for the regtest network.
 
 First, we start a `dogecoind` process (the `dogecoind` binary can be downloaded from [here](https://github.com/dogecoin/dogecoin/releases);
 the following tutorial has been tested with `dogecoind` v1.14.9):
