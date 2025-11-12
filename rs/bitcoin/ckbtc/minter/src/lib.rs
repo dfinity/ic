@@ -222,14 +222,7 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
     )
     .await
     {
-        Ok(response) => {
-            log!(
-                Priority::Info,
-                "[fetch_main_utxos]: UTXOs for {main_address}: {:?}",
-                response.utxos
-            );
-            response.utxos
-        }
+        Ok(response) => response.utxos,
         Err(e) => {
             log!(
                 Priority::Info,
@@ -669,31 +662,12 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         state::read_state(|s| {
             let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network, runtime);
 
-            log!(
-                Priority::Info,
-                "[finalize_requests]: now {now}, wait_time {}",
-                wait_time.as_secs()
-            );
             s.submitted_transactions
                 .iter()
-                .inspect(|req| {
-                    log!(
-                        Priority::Info,
-                        "[finalize_requests]: submitted_transactions at {:?}, threshold: {}, now {now}",
-                        req.submitted_at,
-                        req.submitted_at + (wait_time.as_nanos() as u64)
-                    );
-                })
                 .filter(|&req| req.submitted_at + (wait_time.as_nanos() as u64) < now)
                 .map(|req| (req.txid, req.clone()))
                 .collect()
         });
-
-    log!(
-        Priority::Info,
-        "[finalize_requests]: maybe_finalized_transactions {}",
-        maybe_finalized_transactions.len()
-    );
 
     if maybe_finalized_transactions.is_empty() {
         return;
@@ -711,10 +685,6 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         )
     });
     let new_utxos = fetch_main_utxos(&main_account, &main_address_str, runtime).await;
-    log!(
-        Priority::Info,
-        "[finalize_requests]: main_address {main_address:?} new_utxos: {new_utxos:?}",
-    );
 
     state::mutate_state(|state| {
         process_maybe_finalized_transactions(
