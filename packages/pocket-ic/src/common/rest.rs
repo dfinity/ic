@@ -611,10 +611,10 @@ pub struct IcpFeatures {
     /// and the ICP features `cycles_minting`, `icp_token`, `nns_governance`, `sns`, `ii` must all be enabled.
     /// Subnets: NNS.
     pub nns_ui: Option<IcpFeaturesConfig>,
-    /// Deploys the bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
+    /// Deploys the Bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
     /// Subnets: Bitcoin.
     pub bitcoin: Option<IcpFeaturesConfig>,
-    /// Deploys the dogecoin canister under the testnet canister ID `hd7hi-kqaaa-aaaan-aaaea-cai` and configured for the regtest network.
+    /// Deploys the Dogecoin canister under the mainnet canister ID `gordg-fyaaa-aaaan-aaadq-cai` and configured for the regtest network.
     /// Subnets: Bitcoin.
     pub dogecoin: Option<IcpFeaturesConfig>,
     /// Deploys the canister migration orchestrator canister.
