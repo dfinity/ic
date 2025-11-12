@@ -7,9 +7,8 @@ use bitcoin::hashes::Hash;
 use candid::{Decode, Principal};
 use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_ckdoge_minter::{
-    BitcoinAddress, BurnMemo, ChangeOutput, EventType, InvalidTransactionError,
-    MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RESUBMISSION_DELAY, RetrieveBtcRequest, Txid, WithdrawalFee,
-    WithdrawalReimbursementReason,
+    BitcoinAddress, BurnMemo, EventType, InvalidTransactionError, MAX_NUM_INPUTS_IN_TRANSACTION,
+    MIN_RESUBMISSION_DELAY, RetrieveBtcRequest, Txid, WithdrawalReimbursementReason,
     address::DogecoinAddress,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalError,
@@ -207,29 +206,34 @@ where
         let tx = mempool
             .remove(&txid)
             .expect("the mempool does not contain the withdrawal transaction");
-        let sent_tx_event: SentTransactionEvent = minter
-            .assert_that_events()
-            .find_exactly_one(
-                |event| matches!(event, EventType::SentBtcTransaction {txid: sent_txid, ..} if sent_txid == &txid),
-            )
-            .try_into()
-            .unwrap();
-        assert!(
-            sent_tx_event
-                .request_block_indices
-                .contains(&self.retrieve_doge_id.block_index)
-        );
+
+        let (request_block_indices, change_amount, withdrawal_fee, used_utxos) = {
+            let sent_tx_event = minter
+                .assert_that_events()
+                .find_exactly_one(
+                    |event| matches!(event, EventType::SentBtcTransaction {txid: sent_txid, ..} if sent_txid == &txid),
+                );
+            match sent_tx_event {
+                EventType::SentBtcTransaction {
+                    request_block_indices,
+                    txid: _,
+                    utxos,
+                    change_output,
+                    submitted_at: _,
+                    fee_per_vbyte: _,
+                    withdrawal_fee,
+                } => (
+                    request_block_indices,
+                    change_output.expect("BUG: missing change output").value,
+                    withdrawal_fee.expect("BUG: missing withdrawal fee"),
+                    utxos,
+                ),
+                _ => unreachable!(),
+            }
+        };
+        assert!(request_block_indices.contains(&self.retrieve_doge_id.block_index));
 
         // TODO DEFI-2458: fix fee handling
-        let change_amount = sent_tx_event
-            .change_output
-            .expect("BUG: missing change output")
-            .value;
-        let withdrawal_fee = sent_tx_event
-            .withdrawal_fee
-            .expect("BUG: missing withdrawal fee");
-        let used_utxos = sent_tx_event.utxos;
-
         assert_uses_utxos(&tx, used_utxos.clone());
         let total_inputs: u64 = used_utxos.iter().map(|input| input.value).sum();
 
@@ -497,45 +501,6 @@ fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Tra
         new_out_value + relay_cost <= prev_out_value,
         "the transaction fees should have increased by at least {relay_cost}. prev out value: {prev_out_value}, new out value: {new_out_value}"
     );
-}
-
-/// Wrapper for the content of [`EventType::SentBtcTransaction`].
-#[derive(Clone, Debug)]
-pub struct SentTransactionEvent {
-    pub request_block_indices: Vec<u64>,
-    pub txid: Txid,
-    pub utxos: Vec<Utxo>,
-    pub change_output: Option<ChangeOutput>,
-    pub submitted_at: u64,
-    pub fee_per_vbyte: Option<u64>,
-    pub withdrawal_fee: Option<WithdrawalFee>,
-}
-
-impl TryFrom<EventType> for SentTransactionEvent {
-    type Error = String;
-
-    fn try_from(event: EventType) -> Result<Self, Self::Error> {
-        match event {
-            EventType::SentBtcTransaction {
-                request_block_indices,
-                txid,
-                utxos,
-                change_output,
-                submitted_at,
-                fee_per_vbyte,
-                withdrawal_fee,
-            } => Ok(SentTransactionEvent {
-                request_block_indices,
-                txid,
-                utxos,
-                change_output,
-                submitted_at,
-                fee_per_vbyte,
-                withdrawal_fee,
-            }),
-            _ => Err(format!("Event is not SentBtcTransaction: {event:?}")),
-        }
-    }
 }
 
 pub fn assert_uses_utxos<I: IntoIterator<Item = Utxo>>(tx: &bitcoin::Transaction, utxos: I) {

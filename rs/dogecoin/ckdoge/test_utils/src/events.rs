@@ -68,7 +68,7 @@ impl<E> MinterEventAssert<E> {
     pub fn find_exactly_one<P>(self, predicate: P) -> E
     where
         P: Fn(&E) -> bool,
-        E: PartialEq + fmt::Debug,
+        E: fmt::Debug,
     {
         let results: Vec<_> = self
             .events
