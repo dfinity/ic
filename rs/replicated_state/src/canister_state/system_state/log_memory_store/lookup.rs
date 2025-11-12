@@ -5,7 +5,6 @@ use crate::canister_state::system_state::log_memory_store::{
 };
 use crate::page_map::PAGE_SIZE;
 use ic_management_canister_types_private::FetchCanisterLogsFilter;
-use std::convert::From;
 
 /// Size of each bucket in the lookup table.
 const BUCKET_SIZE: usize = PAGE_SIZE;
@@ -30,7 +29,7 @@ const _: () = assert!(std::mem::size_of::<LookupEntry>() == LOOKUP_ENTRY_SIZE);
 impl LookupEntry {
     const INVALID_ENTRY: u64 = u64::MAX;
 
-    fn new(record: &LogRecord, position: MemoryPosition) -> Self {
+    pub fn new(record: &LogRecord, position: MemoryPosition) -> Self {
         Self {
             idx: record.idx,
             ts_nanos: record.ts_nanos,
@@ -90,22 +89,16 @@ impl LookupTable {
         front: Option<LookupEntry>,
         lookup_table_pages: u16,
         data_capacity: MemorySize,
+        bytes: &[u8],
     ) -> Self {
         let max_count = (lookup_table_pages as usize * PAGE_SIZE) / BUCKET_SIZE;
         let count = ((data_capacity.get() as usize) / BUCKET_SIZE).min(max_count);
-        let buckets = vec![LookupEntry::invalid(); count];
+        let buckets = if bytes.is_empty() {
+            vec![LookupEntry::invalid(); count]
+        } else {
+            to_entries(bytes)
+        };
         Self { front, buckets }
-    }
-
-    pub fn init(
-        front: Option<LookupEntry>,
-        lookup_table_pages: u16,
-        data_capacity: MemorySize,
-        bytes: &[u8],
-    ) -> Self {
-        let mut table = Self::new(front, lookup_table_pages, data_capacity);
-        table.buckets = to_entries(bytes);
-        table
     }
 
     pub fn buckets_len(&self) -> u16 {
@@ -237,18 +230,3 @@ pub(crate) fn to_entries(bytes: &[u8]) -> Vec<LookupEntry> {
 
     entries
 }
-
-// impl From<&LookupTable> for Vec<u8> {
-//     fn from(table: &LookupTable) -> Self {
-//         let mut bytes = vec![0; table.buckets.len() * LOOKUP_ENTRY_SIZE];
-//         let mut writer = ByteWriter::new(&mut bytes);
-
-//         for entry in &table.buckets {
-//             writer.write_u64(entry.idx);
-//             writer.write_u64(entry.ts_nanos);
-//             writer.write_u64(entry.position.get());
-//         }
-
-//         bytes
-//     }
-// }

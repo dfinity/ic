@@ -73,26 +73,16 @@ impl StructIO {
         let h = self.read_header();
         let front = self.read_lookup_entry(h.data_head);
         if h.lookup_table_used_bytes() == 0 {
-            // No lookup table stored, but front exists.
-            LookupTable::new(front, h.lookup_table_pages, h.data_capacity)
+            LookupTable::new(front, h.lookup_table_pages, h.data_capacity, &[])
         } else {
-            // Full lookup table stored.
             let bytes = self.read_vec(V1_LOOKUP_TABLE_OFFSET, h.lookup_table_used_bytes());
-            LookupTable::init(front, h.lookup_table_pages, h.data_capacity, &bytes)
+            LookupTable::new(front, h.lookup_table_pages, h.data_capacity, &bytes)
         }
     }
 
     fn read_lookup_entry(&self, position: MemoryPosition) -> Option<LookupEntry> {
-        let h = self.read_header();
-        if h.is_empty() {
-            return None;
-        }
         let record = self.read_record_without_content(position)?;
-        Some(LookupEntry {
-            idx: record.idx,
-            ts_nanos: record.ts_nanos,
-            position,
-        })
+        Some(LookupEntry::new(&record, position))
     }
 
     fn write_data_bytes(&mut self, pos: MemoryPosition, bytes: &[u8], memory: &MemoryChunk) {
