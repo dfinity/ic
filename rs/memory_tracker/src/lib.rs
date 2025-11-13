@@ -4,7 +4,7 @@ use ic_sys::PageBytes;
 use ic_types::NumBytes;
 use nix::errno::Errno;
 use std::{sync::Arc, time::Duration};
-use userfaultfd::{Uffd, ReadWrite};
+use userfaultfd::{ReadWrite, Uffd};
 
 use crate::prefetching::PrefetchingMemoryTracker;
 
