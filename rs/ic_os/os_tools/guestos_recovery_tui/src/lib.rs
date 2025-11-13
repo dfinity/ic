@@ -21,13 +21,17 @@ use std::process::{Command, Stdio};
 
 // Check if we're likely in a web console by checking TERM
 // Web consoles often use basic terminal types that don't support alternate screen well
+// Note: "linux" is commonly used by VGA consoles which DO support TUI, so we don't exclude it
 fn is_likely_web_console() -> bool {
     // Check TERM environment variable
     if let Ok(term) = std::env::var("TERM") {
-        // Web consoles often use basic terminal types that don't handle alternate screen well
-        if term == "linux" || term == "vt100" || term == "dumb" {
+        // "dumb" is a non-interactive terminal that definitely won't work
+        // "vt100" might work but is often used by web consoles
+        // "linux" is used by VGA consoles which support TUI, so we allow it
+        if term == "dumb" {
             return true;
         }
+        // For other basic terminals, we'll let the TUI setup try and fail gracefully
     }
     false
 }
