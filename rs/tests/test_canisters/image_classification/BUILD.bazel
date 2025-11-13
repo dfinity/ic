@@ -1,0 +1,7 @@
+package(default_visibility = ["//visibility:public"])
+
+# https://github.com/dfinity/examples/tree/master/rust/image-classification
+filegroup(
+    name = "image-classification",
+    srcs = ["image-classification.wasm.gz"],
+)
