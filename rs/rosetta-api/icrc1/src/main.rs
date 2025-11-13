@@ -41,6 +41,10 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{Layer, Registry};
 
+#[cfg(target_os = "linux")]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 /// Domains that are considered mainnet
 const MAINNET_DOMAINS: &[&str] = &["ic0.app", "icp0.io"];
 const MAXIMUM_BLOCKS_PER_REQUEST: u64 = 2000;

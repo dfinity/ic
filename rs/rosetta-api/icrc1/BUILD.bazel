@@ -48,6 +48,7 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:strum",
     "@crate_index//:tempfile",
+    "@crate_index//:tikv-jemallocator",
     "@crate_index//:tokio",
     "@crate_index//:tower-http",
     "@crate_index//:tower-request-id",

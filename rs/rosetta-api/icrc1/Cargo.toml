@@ -57,6 +57,9 @@ tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+tikv-jemallocator = { workspace = true }
+
 [lib]
 path = "src/lib.rs"
 
