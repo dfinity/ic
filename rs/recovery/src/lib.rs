@@ -309,6 +309,14 @@ impl Recovery {
         ssh_user: SshUser,
         key_file: Option<PathBuf>,
     ) -> RecoveryResult<impl Step + use<>> {
+        let ssh_helper = SshHelper::new(
+            self.logger.clone(),
+            ssh_user,
+            node_ip,
+            self.ssh_confirmation,
+            key_file.clone(),
+        );
+
         let consensus_pool_path = PathBuf::from(IC_CONSENSUS_POOL_PATH);
         let mut includes = vec![
             consensus_pool_path.join("replica_version"),
@@ -324,14 +332,6 @@ impl Recovery {
         {
             includes.push(consensus_pool_path.join("certification"));
         }
-
-        let ssh_helper = SshHelper::new(
-            self.logger.clone(),
-            ssh_user,
-            node_ip,
-            self.ssh_confirmation,
-            key_file.clone(),
-        );
 
         self.get_download_data_step(
             ssh_helper, /*keep_downloaded_data=*/ false, includes,
@@ -377,8 +377,6 @@ impl Recovery {
         key_file: Option<PathBuf>,
         keep_downloaded_state: bool,
     ) -> RecoveryResult<impl Step + use<>> {
-        let includes = Self::get_ic_state_includes(Some(&ssh_helper))?;
-
         let ssh_helper = SshHelper::new(
             self.logger.clone(),
             ssh_user,
@@ -386,6 +384,8 @@ impl Recovery {
             self.ssh_confirmation,
             key_file,
         );
+
+        let includes = Self::get_ic_state_includes(Some(&ssh_helper))?;
 
         self.get_download_data_step(
             ssh_helper,
