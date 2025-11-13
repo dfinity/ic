@@ -609,7 +609,7 @@ where
                 fee: fee.map(Into::into),
             },
             Op::FeeCollector { .. } => {
-                panic!("not implemented")
+                panic!("FeeCollector107 not implemented")
             }
         }
     }

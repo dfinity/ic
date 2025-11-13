@@ -581,7 +581,7 @@ impl TransactionsAndBalances {
                 self.debit(from, fee);
             }
             Operation::FeeCollector { .. } => {
-                panic!("not implemented")
+                panic!("FeeCollector107 not implemented")
             }
         };
         self.transactions.push(tx);
@@ -611,7 +611,7 @@ impl TransactionsAndBalances {
                 self.check_and_update_account_validity(*from, default_fee);
             }
             Operation::FeeCollector { .. } => {
-                panic!("not implemented")
+                panic!("FeeCollector107 not implemented")
             }
         }
     }

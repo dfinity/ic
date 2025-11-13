@@ -545,7 +545,7 @@ mod tests {
                             ic_icrc1::Operation::Mint { .. } => CanisterMethodName::Icrc1Transfer,
                             ic_icrc1::Operation::Burn { .. } => CanisterMethodName::Icrc1Transfer,
                             ic_icrc1::Operation::FeeCollector { .. } => {
-                                panic!("not implemented")
+                                panic!("FeeCollector107 not implemented")
                             }
                         };
                         let args = match arg_with_caller.arg {

@@ -468,7 +468,7 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                 }
             }
             Operation::FeeCollector { .. } => {
-                panic!("not implemented")
+                panic!("FeeCollector107 not implemented")
             }
         }
         Ok(())
@@ -599,7 +599,7 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
             Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
             Operation::FeeCollector { .. } => {
-                panic!("not implemented")
+                panic!("FeeCollector107 not implemented")
             }
             _ => None,
         };

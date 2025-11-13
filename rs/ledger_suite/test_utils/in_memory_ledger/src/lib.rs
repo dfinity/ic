@@ -539,7 +539,7 @@ where
                     TimeStamp::from_nanos_since_unix_epoch(block.timestamp),
                 ),
                 Operation::FeeCollector { .. } => {
-                    panic!("not implemented")
+                    panic!("FeeCollector107 not implemented")
                 }
             }
         }
