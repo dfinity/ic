@@ -294,10 +294,7 @@ impl<Tokens: TokensType> ApproveBuilder<Tokens> {
         let mut tx_fields = BTreeMap::new();
         tx_fields.insert("from".to_string(), account_to_icrc3_value(&self.from));
         tx_fields.insert("spender".to_string(), account_to_icrc3_value(&self.spender));
-        tx_fields.insert(
-            "allowance".to_string(),
-            ICRC3Value::Nat(self.allowance.into()),
-        );
+        tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.allowance.into()));
 
         if let Some(expected_allowance) = self.expected_allowance {
             tx_fields.insert(
@@ -326,7 +323,7 @@ pub struct FeeCollectorBuilder<Tokens: TokensType> {
 }
 
 impl<Tokens: TokensType> FeeCollectorBuilder<Tokens> {
-    /// Build the mint block
+    /// Build the fee collector block
     pub fn build(self) -> ICRC3Value {
         let mut tx_fields = BTreeMap::new();
         if let Some(fee_collector) = &self.fee_collector {

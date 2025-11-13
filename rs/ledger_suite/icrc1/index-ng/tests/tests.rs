@@ -1280,12 +1280,31 @@ fn test_fee_collector_107() {
             Some(fc_id) => mint.with_fee_collector_block(fc_id),
             None => mint,
         };
-        let mint = mint.mint(regular_account, Tokens::from(1u64)).build();
+        let mint = mint.mint(regular_account, Tokens::from(1000u64)).build();
 
         assert_eq!(
             Nat::from(block_id),
             add_block(env, ledger_id, &mint)
                 .expect("error adding mint block to ICRC-3 test ledger")
+        );
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+        block_id + 1
+    };
+
+    let add_approve_block = |block_id: u64, fc: Option<Account>| {
+        let approve = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
+        let approve = match fc {
+            Some(fc) => approve.with_fee_collector(fc),
+            None => approve,
+        };
+        let approve = approve
+            .approve(regular_account, fee_collector_2, Tokens::from(1u64))
+            .build();
+
+        assert_eq!(
+            Nat::from(block_id),
+            add_block(env, ledger_id, &approve)
+                .expect("error adding approve block to ICRC-3 test ledger")
         );
         wait_until_sync_is_completed(env, index_id, ledger_id);
         block_id + 1
@@ -1300,7 +1319,7 @@ fn test_fee_collector_107() {
         assert_eq!(
             Nat::from(block_id),
             add_block(env, ledger_id, &fee_collector)
-                .expect("error adding mint block to ICRC-3 test ledger")
+                .expect("error adding fee collector block to ICRC-3 test ledger")
         );
         wait_until_sync_is_completed(env, index_id, ledger_id);
         block_id + 1
@@ -1310,6 +1329,10 @@ fn test_fee_collector_107() {
     block_id = add_mint_block(block_id, Some(fee_collector_1), None);
     assert_eq!(1, icrc1_balance_of(env, index_id, fee_collector_1));
     block_id = add_mint_block(block_id, None, Some(0));
+    assert_eq!(2, icrc1_balance_of(env, index_id, fee_collector_1));
+
+    // Legacy fee collector does not collect approve fees
+    block_id = add_approve_block(block_id, Some(fee_collector_1));
     assert_eq!(2, icrc1_balance_of(env, index_id, fee_collector_1));
 
     // Set 107 fee collector to burn
@@ -1340,13 +1363,18 @@ fn test_fee_collector_107() {
     assert_eq!(2, icrc1_balance_of(env, index_id, fee_collector_1));
     assert_eq!(3, icrc1_balance_of(env, index_id, fee_collector_2));
 
+    // 107 fee collector is credited the approve fee
+    block_id = add_approve_block(block_id, None);
+    assert_eq!(2, icrc1_balance_of(env, index_id, fee_collector_1));
+    assert_eq!(4, icrc1_balance_of(env, index_id, fee_collector_2));
+
     // Set 107 fee collector to burn
     block_id = add_fee_collector_107_block(block_id, None);
 
     // No fees collected
     add_mint_block(block_id, None, None);
     assert_eq!(2, icrc1_balance_of(env, index_id, fee_collector_1));
-    assert_eq!(3, icrc1_balance_of(env, index_id, fee_collector_2));
+    assert_eq!(4, icrc1_balance_of(env, index_id, fee_collector_2));
 }
 
 #[test]
