@@ -382,6 +382,7 @@ impl MemoryTracker for PrefetchingMemoryTracker {
                     max_prefetch_range,
                 );
                 accessed_bitmap.mark_range(&prefetch_range);
+                self.add_accessed_pages(&prefetch_range);
                 prefetch_range
             }
             (ReadWrite::Read, DirtyPageTracking::Track) => {
@@ -401,6 +402,7 @@ impl MemoryTracker for PrefetchingMemoryTracker {
                     max_prefetch_range,
                 );
                 accessed_bitmap.mark_range(&prefetch_range);
+                self.add_accessed_pages(&prefetch_range);
                 prefetch_range
             }
             (ReadWrite::Write, DirtyPageTracking::Track) => {
@@ -420,8 +422,7 @@ impl MemoryTracker for PrefetchingMemoryTracker {
                     //     "[memory tracker] Handling write access to already accessed page: {:?}",
                     //     faulting_page
                     // );
-                    self
-                        .metrics
+                    self.metrics
                         .read_before_write_count
                         .fetch_add(1, Ordering::Relaxed);
                     // Ensure that all pages in the range have already been accessed because we are
@@ -435,10 +436,7 @@ impl MemoryTracker for PrefetchingMemoryTracker {
                     //     "[memory tracker] Prefetching range for dirty bitmap: {:?}",
                     //     prefetch_range
                     // );
-                    self
-                        .metrics
-                        .mprotect_count
-                        .fetch_add(1, Ordering::Relaxed);
+                    self.metrics.mprotect_count.fetch_add(1, Ordering::Relaxed);
                     dirty_bitmap.mark_range(&prefetch_range);
                     self.add_dirty_pages(faulting_page, prefetch_range.clone());
                     prefetch_range
@@ -447,8 +445,7 @@ impl MemoryTracker for PrefetchingMemoryTracker {
                     //     "[memory tracker] Handling write access to a page that was missing: {:?}",
                     //     faulting_page
                     // );
-                    self
-                        .metrics
+                    self.metrics
                         .direct_write_count
                         .fetch_add(1, Ordering::Relaxed);
                     // The first access to the page is a write access. This is a good case because
@@ -473,6 +470,7 @@ impl MemoryTracker for PrefetchingMemoryTracker {
                     //     prefetch_range
                     // );
                     accessed_bitmap.mark_range(&prefetch_range);
+                    self.add_accessed_pages(&prefetch_range);
                     dirty_bitmap.mark_range(&prefetch_range);
                     self.add_dirty_pages(faulting_page, prefetch_range.clone());
                     prefetch_range
