@@ -14,22 +14,6 @@ env:
   ORG: ${{ github.repository_owner }}
 
 jobs:
-  # This job is not run, but just used to set anchor references for other jobs
-  anchor-setup:
-    if: false
-    name: Anchor Setup
-    runs-on: &dind-large-setup
-      labels: dind-large
-    container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:da93235247c6651bae459e4e8cc987fccb37f0d53294b30f7e1ae57c0b553557
-      options: >-
-         -e NODE_NAME
-    steps:
-      - &checkout
-        name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.commit-sha }}
 
   # Run didc compatibility checks against the merge base
   didc_checks:
@@ -37,7 +21,10 @@ jobs:
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
     runs-on: &dind-small-setup
       labels: dind-small
-    container: *container-setup
+    container: &container-setup
+      image: ghcr.io/dfinity/ic-build@sha256:da93235247c6651bae459e4e8cc987fccb37f0d53294b30f7e1ae57c0b553557
+      options: >-
+         -e NODE_NAME
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,12 +45,15 @@ jobs:
 
   insta-tests:
     name: Quick Feedback Tests
-    runs-on: &dind-small-setup
-      labels: dind-small
+    runs-on: *dind-small-setup
     container: *container-setup
     timeout-minutes: 30
     steps:
-      - *checkout
+      - &checkout
+        name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit-sha }}
       - name: Run insta-tests
         uses: ./.github/actions/bazel
         with:
@@ -72,7 +62,8 @@ jobs:
 
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
-    runs-on: *dind-large-setup
+    runs-on: &dind-large-setup
+      labels: dind-large
     container: *container-setup
     timeout-minutes: 90
     steps:
