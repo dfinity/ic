@@ -329,13 +329,12 @@ impl<Tokens: TokensType> FeeCollectorBuilder<Tokens> {
     /// Build the mint block
     pub fn build(self) -> ICRC3Value {
         let mut tx_fields = BTreeMap::new();
-        match &self.fee_collector {
-            Some(fee_collector) => tx_fields.insert(
+        if let Some(fee_collector) = &self.fee_collector {
+            tx_fields.insert(
                 "fee_collector".to_string(),
                 account_to_icrc3_value(fee_collector),
-            ),
-            None => tx_fields.insert("fee_collector".to_string(), ICRC3Value::Array(vec![])),
-        };
+            );
+        }
         if let Some(caller) = &self.caller {
             tx_fields.insert("caller".to_string(), ICRC3Value::from(Value::from(*caller)));
         }
