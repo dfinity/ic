@@ -526,8 +526,7 @@ pub fn apply_switch_over_to_last_changelog_entry_impl(
 #[cfg(test)]
 mod test {
     use super::*;
-    use ic_certification_test_utils::CertificateBuilder;
-    use ic_certification_test_utils::CertificateData::*;
+    use ic_certification_test_utils::{CertificateBuilder, CertificateData::*};
     use ic_crypto_tree_hash::Digest;
     use ic_protobuf::registry::crypto::v1::PublicKey as PbPublicKey;
     use ic_registry_client_fake::FakeRegistryClient;
@@ -536,15 +535,12 @@ mod test {
         ROOT_SUBNET_ID_KEY, make_canister_ranges_key, make_crypto_threshold_signing_pubkey_key,
         make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
     };
-    use ic_registry_local_store::LocalStoreImpl;
-    use ic_registry_local_store::LocalStoreWriter;
+    use ic_registry_local_store::{LocalStoreImpl, LocalStoreWriter};
     use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::{CanisterId, SubnetId};
-    use ic_types_test_utils::ids::SUBNET_2;
-    use ic_types_test_utils::ids::SUBNET_3;
-    use ic_types_test_utils::ids::{NODE_1, SUBNET_1};
+    use ic_types_test_utils::ids::{NODE_1, SUBNET_1, SUBNET_2, SUBNET_3};
     use std::collections::BTreeMap;
     use std::convert::TryFrom;
     use std::sync::Arc;
