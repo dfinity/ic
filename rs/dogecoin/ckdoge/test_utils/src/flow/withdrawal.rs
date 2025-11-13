@@ -388,7 +388,7 @@ where
         self
     }
 
-    pub fn minter_await_finalized_transaction(self) {
+    pub fn minter_await_finalized_single_transaction(self) {
         assert_eq!(
             self.sent_transactions.len(),
             1,

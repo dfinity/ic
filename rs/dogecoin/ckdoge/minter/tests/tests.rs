@@ -212,7 +212,7 @@ mod withdrawal {
             .expect_withdrawal_request_accepted()
             .dogecoin_await_transaction()
             .ensure_each_sent_transaction(|sent| assert_uses_utxos(sent, vec![utxo.clone()]))
-            .minter_await_finalized_transaction()
+            .minter_await_finalized_single_transaction()
     }
 
     #[test]
