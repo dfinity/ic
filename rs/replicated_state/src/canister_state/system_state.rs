@@ -793,12 +793,13 @@ impl SystemState {
         &mut self,
         call_origin: CallOrigin,
         cycles: Cycles,
+        refund_id: Option<u64>,
         time: Time,
         metadata: RequestMetadata,
     ) -> Result<CallContextId, StateError> {
         Ok(call_context_manager_mut(&mut self.status)
             .ok_or(StateError::CanisterStopped(self.canister_id))?
-            .new_call_context(call_origin, cycles, time, metadata))
+            .new_call_context(call_origin, cycles, refund_id, time, metadata))
     }
 
     /// Withdraws cycles from the call context with the given ID.
@@ -975,6 +976,9 @@ impl SystemState {
                 respondent,
                 originator_reply_callback: callback_id,
                 refund: Cycles::zero(),
+                // We are not refunding any cycles at this time, a potential refund notification
+                // will be delivered separately.
+                refund_id: None,
                 response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
                     RejectCode::SysUnknown,
                     message,
@@ -2138,6 +2142,7 @@ pub mod testing {
             let call_context_id = call_context_manager.new_call_context(
                 CallOrigin::SystemTask,
                 Cycles::zero(),
+                None,
                 time,
                 RequestMetadata::new(0, time),
             );

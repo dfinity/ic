@@ -1145,6 +1145,7 @@ impl CanisterQueues {
             respondent: request.receiver,
             originator_reply_callback: request.sender_reply_callback,
             refund: request.payment,
+            refund_id: request.refund_id,
             response_payload: Payload::Reject(reject_context),
             deadline: request.deadline,
         }));
@@ -1602,7 +1603,7 @@ impl CanisterQueues {
 
         match msg {
             RequestOrResponse::Request(request) => {
-                let response = generate_timeout_response(&request);
+                let response = generate_reject_response(&request, timeout_reject_context());
 
                 // Update stats for the generated response.
                 self.queue_stats
@@ -1761,20 +1762,26 @@ fn get_or_insert_queues<'a>(
     (input_queue, output_queue)
 }
 
-/// Generates a timeout reject response from a request, refunding its payment.
-fn generate_timeout_response(request: &Request) -> Response {
+/// Generates a reject response from a request, with the given reject context,
+/// refunding its payment.
+fn generate_reject_response(request: &Request, reject_context: RejectContext) -> Response {
     Response {
         originator: request.sender,
         respondent: request.receiver,
         originator_reply_callback: request.sender_reply_callback,
         refund: request.payment,
-        response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
-            RejectCode::SysTransient,
-            "Request timed out.",
-            MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
-        )),
+        refund_id: request.refund_id,
+        response_payload: Payload::Reject(reject_context),
         deadline: request.deadline,
     }
+}
+
+fn timeout_reject_context() -> RejectContext {
+    RejectContext::new_with_message_length_limit(
+        RejectCode::SysTransient,
+        "Request timed out.",
+        MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
+    )
 }
 
 /// Returns a function that determines the input queue type (local or remote)

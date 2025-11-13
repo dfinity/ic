@@ -62,3 +62,17 @@ fn roundtrip_encoding_anonymous_refund() {
         );
     }
 }
+
+#[test]
+fn roundtrip_encoding_refund_notification() {
+    for certification_version in
+        all_supported_versions().filter(|v| v >= &CertificationVersion::V23)
+    {
+        let refund = refund_notification(certification_version);
+
+        assert_eq!(
+            refund,
+            decode_message(&encode_message(&refund, certification_version)).unwrap()
+        );
+    }
+}

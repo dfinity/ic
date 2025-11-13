@@ -1208,6 +1208,7 @@ fn generate_reject_response(
         respondent: request.receiver,
         originator_reply_callback: request.sender_reply_callback,
         refund: request.payment,
+        refund_id: request.refund_id,
         response_payload: Payload::Reject(RejectContext::new_with_message_length_limit(
             reject_code,
             message,

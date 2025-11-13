@@ -3,9 +3,9 @@ use ic_canonical_state::{
     CertificationVersion, MAX_SUPPORTED_CERTIFICATION_VERSION, MIN_SUPPORTED_CERTIFICATION_VERSION,
     encoding::{
         CborProxyDecoder, CborProxyEncoder,
-        old_types::{RequestOrResponseV21, StreamHeaderV19},
+        old_types::{RequestOrResponseV21, StreamHeaderV19, StreamMessageV22},
         types::{
-            StreamHeader as StreamHeaderV21, StreamMessage as StreamMessageV22,
+            StreamHeader as StreamHeaderV21, StreamMessage as StreamMessageV23,
             SubnetMetrics as SubnetMetricsV21, SystemMetadata as SystemMetadataV21,
         },
     },
@@ -224,12 +224,16 @@ pub(crate) fn arb_valid_versioned_message()
 -> impl Strategy<Value = (StreamMessage, RangeInclusive<CertificationVersion>)> {
     prop_oneof![
         (
-            arbitrary::stream_message_with_config(false),
-            Just(CertificationVersion::V19..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+            arbitrary::stream_message_with_config(false, false),
+            Just(MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
         (
-            arbitrary::stream_message_with_config(true),
-            Just(CertificationVersion::V22..=CertificationVersion::V22)
+            arbitrary::stream_message_with_config(true, false),
+            Just(CertificationVersion::V22..=MAX_SUPPORTED_CERTIFICATION_VERSION)
+        ),
+        (
+            arbitrary::stream_message_with_config(true, true),
+            Just(CertificationVersion::V23..=MAX_SUPPORTED_CERTIFICATION_VERSION)
         ),
     ]
 }
@@ -246,10 +250,16 @@ lazy_static! {
             |v| RequestOrResponseV21::proxy_decode(v),
         ),
         VersionedEncoding::new(
-            MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
-            "StreamMessage",
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=CertificationVersion::V22,
+            "StreamMessageV22",
             |v| StreamMessageV22::proxy_encode(v),
             |v| StreamMessageV22::proxy_decode(v),
+        ),
+        VersionedEncoding::new(
+            MIN_SUPPORTED_CERTIFICATION_VERSION..=MAX_SUPPORTED_CERTIFICATION_VERSION,
+            "StreamMessageV23",
+            |v| StreamMessageV23::proxy_encode(v),
+            |v| StreamMessageV23::proxy_decode(v),
         ),
     ];
 }

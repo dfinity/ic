@@ -123,11 +123,25 @@ prop_compose! {
 }
 
 prop_compose! {
+    /// Returns an arbitrary `refund_id` that is `None` half the time.
+    pub fn refund_id() (
+      refund_id in any::<u64>(),
+    ) -> Option<u64> {
+        if refund_id % 2 == 1 {
+            None
+        } else {
+            Some(refund_id)
+        }
+    }
+}
+
+prop_compose! {
     /// Generates an arbitrary [`Request`], with or without a populated `deadline` field.
-    pub fn request_with_config(populate_deadline: bool)(
+    pub fn request_with_config(with_refund_notifications: bool)(
         receiver in canister_id(),
         sender in canister_id(),
         cycles_payment in any::<u64>(),
+        refund_id in refund_id(),
         method_name in "[a-zA-Z]{1,6}",
         callback in any::<u64>(),
         method_payload in prop::collection::vec(any::<u8>(), 0..16),
@@ -139,10 +153,15 @@ prop_compose! {
             sender,
             sender_reply_callback: CallbackId::from(callback),
             payment: Cycles::from(cycles_payment),
+            refund_id: if with_refund_notifications {
+                refund_id
+            } else {
+                None
+            },
             method_name,
             method_payload,
             metadata,
-            deadline: if populate_deadline { deadline } else { NO_DEADLINE },
+            deadline,
         }
     }
 }
@@ -179,12 +198,13 @@ pub fn response_payload() -> impl Strategy<Value = Payload> {
 }
 
 prop_compose! {
-    /// Returns an arbitrary [`Response`], with or without a populated `deadline` field.
-    pub fn response_with_config(populate_deadline: bool)(
+    /// Returns an arbitrary [`Response`], with or without a populated `refund_id` field.
+    pub fn response_with_config(with_refund_notifications: bool)(
         originator in canister_id(),
         respondent in canister_id(),
         callback in any::<u64>(),
         cycles_refund in any::<u64>(),
+        refund_id in refund_id(),
         response_payload in response_payload(),
         deadline in deadline(),
     ) -> Response {
@@ -193,8 +213,13 @@ prop_compose! {
             respondent,
             originator_reply_callback: CallbackId::from(callback),
             refund: Cycles::from(cycles_refund),
+            refund_id: if with_refund_notifications {
+                refund_id
+            } else {
+                None
+            },
             response_payload,
-            deadline: if populate_deadline { deadline } else { NO_DEADLINE },
+            deadline,
         }
     }
 }
@@ -213,23 +238,30 @@ prop_compose! {
 }
 
 prop_compose! {
-    /// Returns an arbitrary [`Refund`].
-    pub fn refund() (
+    /// Returns an arbitrary [`Refund`], populating or not its `refund_id` field.
+    pub fn refund(with_refund_notifications: bool) (
         recipient in canister_id(),
         cycles in 1u64..,
+        refund_id in refund_id(),
     ) -> Refund {
-        Refund::anonymous(recipient, Cycles::from(cycles))
+        if let Some(refund_id) = refund_id && with_refund_notifications {
+            Refund::notification(recipient, refund_id, Cycles::from(cycles))
+        } else {
+            Refund::anonymous(recipient, Cycles::from(cycles))
+        }
     }
 }
 
-/// Produces an arbitrary [`StreamMessage`], including or not anonymous `Refunds`.
+/// Produces an arbitrary [`StreamMessage`]; including or not `Refund` messages;
+/// and populating or not the `refund_id` field (across all message types).
 pub fn stream_message_with_config(
-    including_anonymous_refund: bool,
+    with_refund_messages: bool,
+    with_refund_notifications: bool,
 ) -> impl Strategy<Value = StreamMessage> {
     prop_oneof![
-        1 => request_with_config(true).prop_flat_map(|req| Just(StreamMessage::from(req))),
-        1 => response_with_config(true).prop_flat_map(|rep| Just(StreamMessage::from(rep))),
-        including_anonymous_refund as u32 => refund().prop_flat_map(|refund| Just(StreamMessage::from(refund))),
+        1 => request_with_config(with_refund_notifications).prop_flat_map(|req| Just(StreamMessage::from(req))),
+        1 => response_with_config(with_refund_notifications).prop_flat_map(|rep| Just(StreamMessage::from(rep))),
+        with_refund_messages as u32 => refund(with_refund_notifications).prop_flat_map(|refund| Just(StreamMessage::from(refund))),
     ]
 }
 

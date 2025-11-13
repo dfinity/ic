@@ -8,29 +8,25 @@
 //! (and ideally forwards) compatibility with one or more preceding
 //! protocol versions.
 
-use crate::{CertificationVersion, all_supported_versions, encoding::*};
+use crate::encoding::*;
+use crate::{CertificationVersion, all_supported_versions};
 use assert_matches::assert_matches;
 use ic_error_types::RejectCode;
 use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId,
 };
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    canister_state::system_state::CyclesUseCase,
-    metadata_state::{SubnetMetrics, SystemMetadata},
-};
+use ic_replicated_state::canister_state::system_state::CyclesUseCase;
+use ic_replicated_state::metadata_state::{SubnetMetrics, SystemMetadata};
 use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id};
-use ic_types::{
-    CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time,
-    crypto::CryptoHash,
-    messages::{
-        CallbackId, NO_DEADLINE, Payload, Refund, RejectContext, Request, RequestMetadata,
-        Response, StreamMessage,
-    },
-    nominal_cycles::NominalCycles,
-    time::CoarseTime,
-    xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndex},
+use ic_types::messages::{
+    CallbackId, NO_DEADLINE, Payload, Refund, RejectContext, Request, RequestMetadata, Response,
+    StreamMessage,
 };
+use ic_types::nominal_cycles::NominalCycles;
+use ic_types::time::CoarseTime;
+use ic_types::xnet::{RejectReason, RejectSignal, StreamFlags, StreamIndex};
+use ic_types::{CryptoHashOfPartialState, Cycles, Funds, NumBytes, Time, crypto::CryptoHash};
 use serde_cbor::value::Value;
 use std::collections::{BTreeMap, VecDeque};
 
@@ -255,7 +251,8 @@ fn canonical_encoding_subnet_metrics() {
 ///         receiver: canister_test_id(1),
 ///         sender: canister_test_id(2),
 ///         sender_reply_callback: CallbackId::from(3),
-///         payment: Cycles::new(3),
+///         payment: Cycles::new(4),
+///         refund_id: None,
 ///         method_name: "test".to_string(),
 ///         method_payload: vec![6],
 ///         metadata: Some(RequestMetadata {
@@ -309,6 +306,7 @@ fn canonical_encoding_minimal_request() {
             sender: canister_test_id(2),
             sender_reply_callback: CallbackId::from(3),
             payment: Cycles::new(4),
+            refund_id: None,
             method_name: "test".to_string(),
             method_payload: vec![6],
             metadata: RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(101)),
@@ -331,7 +329,8 @@ fn canonical_encoding_minimal_request() {
 ///         receiver: canister_test_id(1),
 ///         sender: canister_test_id(2),
 ///         sender_reply_callback: CallbackId::from(3),
-///         payment: Cycles::new(3),
+///         payment: Cycles::new(4),
+///         refund_id: None,
 ///         method_name: "test".to_string(),
 ///         method_payload: vec![6],
 ///         metadata: Some(RequestMetadata {
@@ -376,7 +375,7 @@ fn canonical_encoding_minimal_request() {
 ///          01                   # field_index(RequestMetadata::call_tree_start_time)
 ///          18 65                # unsigned(101)
 ///       08                      # field_index(Request::deadline)
-///       08                      # unsigned(8)
+///          08                   # unsigned(8)
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
@@ -387,6 +386,7 @@ fn canonical_encoding_request() {
             sender: canister_test_id(2),
             sender_reply_callback: CallbackId::from(3),
             payment: Cycles::new(4),
+            refund_id: None,
             method_name: "test".to_string(),
             method_payload: vec![6],
             metadata: RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(101)),
@@ -409,7 +409,92 @@ fn canonical_encoding_request() {
 ///         receiver: canister_test_id(1),
 ///         sender: canister_test_id(2),
 ///         sender_reply_callback: CallbackId::from(3),
+///         payment: Cycles::new(4),
+///         refund_id: Some(5),
+///         method_name: "test".to_string(),
+///         method_payload: vec![6],
+///         metadata: Some(RequestMetadata {
+///             call_tree_depth: 13,
+///             call_tree_start_time: Time::as_nanos_since_unix_epoch(101),
+///         }),
+///         deadline: CoarseTime(8),
+///     }
+/// )
+/// ```
+///
+/// Expected:
+///
+/// ```text
+/// A1                            # map(1)
+///    00                         # field_index(StreamMessage::request)
+///    A9                         # map(9)
+///       00                      # field_index(Request::receiver)
+///       4A                      # bytes(10)
+///          00000000000000010101 # "\x00\x00\x00\x00\x00\x00\x00\x01\x01\x01"
+///       01                      # field_index(Request::sender)
+///       4A                      # bytes(10)
+///          00000000000000020101 # "\x00\x00\x00\x00\x00\x00\x00\x02\x01\x01"
+///       02                      # field_index(Request::sender_reply_callback)
+///       03                      # unsigned(3)
+///       03                      # field_index(Request::payment)
+///       A1                      # map(1)
+///          00                   # field_index(Funds::cycles)
+///          A1                   # map(1)
+///             00                # field_index(Cycles::low)
+///             04                # unsigned(4)
+///       04                      # field_index(Request::method_name)
+///       64                      # text(4)
+///          74657374             # "test"
+///       05                      # field_index(Request::method_payload)
+///       41                      # bytes(1)
+///          06                   # "\x06"
+///       07                      # field_index(Request::metadata)
+///       A2                      # map(2)
+///          00                   # field_index(RequestMetadata::call_tree_depth)
+///          0D                   # unsigned(13)
+///          01                   # field_index(RequestMetadata::call_tree_start_time)
+///          18 65                # unsigned(101)
+///       08                      # field_index(Request::deadline)
+///          08                   # unsigned(8)
+///       09                      # field_index(Request::refund_id)
+///          05                   # unsigned(5)
+/// ```
+/// Used http://cbor.me/ for printing the human friendly output.
+#[test]
+fn canonical_encoding_request_with_refund_notification() {
+    for certification_version in
+        all_supported_versions().filter(|v| *v >= CertificationVersion::V23)
+    {
+        let request: StreamMessage = Request {
+            receiver: canister_test_id(1),
+            sender: canister_test_id(2),
+            sender_reply_callback: CallbackId::from(3),
+            payment: Cycles::new(4),
+            refund_id: Some(5),
+            method_name: "test".to_string(),
+            method_payload: vec![6],
+            metadata: RequestMetadata::new(13, Time::from_nanos_since_unix_epoch(101)),
+            deadline: CoarseTime::from_secs_since_unix_epoch(8),
+        }
+        .into();
+
+        assert_eq!(
+            "A1 00 A9 00 4A 00 00 00 00 00 00 00 01 01 01 01 4A 00 00 00 00 00 00 00 02 01 01 02 03 03 A1 00 A1 00 04 04 64 74 65 73 74 05 41 06 07 A2 00 0D 01 18 65 08 08 09 05",
+            as_hex(&encode_message(&request, certification_version))
+        );
+    }
+}
+
+/// Canonical CBOR encoding of:
+///
+/// ```no_run
+/// StreamMessage::Request(
+///     Request {
+///         receiver: canister_test_id(1),
+///         sender: canister_test_id(2),
+///         sender_reply_callback: CallbackId::from(3),
 ///         payment: Funds::new(Cycles::new(123456789012345678901234567890)),
+///         refund_id: None,
 ///         method_name: "test".to_string(),
 ///         method_payload: vec![6],
 ///         metadata: Default::default(),
@@ -462,6 +547,7 @@ fn canonical_encoding_request_with_u128_cycles() {
             sender: canister_test_id(2),
             sender_reply_callback: CallbackId::from(3),
             payment: Cycles::new(123456789012345678901234567890),
+            refund_id: None,
             method_name: "test".to_string(),
             method_payload: vec![6],
             metadata: Default::default(),
@@ -485,6 +571,7 @@ fn canonical_encoding_request_with_u128_cycles() {
 ///         respondent: canister_test_id(4),
 ///         originator_reply_callback: CallbackId::from(3),
 ///         refund: Cycles::new(2),
+///         refund_id: None,
 ///         response_payload: Payload::Data(vec![1]),
 ///         deadline: NO_DEADLINE,
 ///     }
@@ -519,13 +606,14 @@ fn canonical_encoding_request_with_u128_cycles() {
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
-fn canonical_encoding_response_no_deadline() {
+fn canonical_encoding_minimal_response() {
     for certification_version in all_supported_versions() {
         let response: StreamMessage = Response {
             originator: canister_test_id(5),
             respondent: canister_test_id(4),
             originator_reply_callback: CallbackId::from(3),
             refund: Cycles::new(2),
+            refund_id: None,
             response_payload: Payload::Data(vec![1]),
             deadline: NO_DEADLINE,
         }
@@ -547,6 +635,7 @@ fn canonical_encoding_response_no_deadline() {
 ///         respondent: canister_test_id(4),
 ///         originator_reply_callback: CallbackId::from(3),
 ///         refund: Cycles::new(2),
+///         refund_id: None,
 ///         response_payload: Payload::Data(vec![1]),
 ///         deadline: CoarseTime(6),
 ///     }
@@ -579,7 +668,7 @@ fn canonical_encoding_response_no_deadline() {
 ///          41                   # bytes(1)
 ///             01                # "\x01"
 ///       06                      # field_index(Response::deadline)
-///       06                      # unsigned(6)
+///          06                   # unsigned(6)
 /// ```
 /// Used http://cbor.me/ for printing the human friendly output.
 #[test]
@@ -590,6 +679,7 @@ fn canonical_encoding_response() {
             respondent: canister_test_id(4),
             originator_reply_callback: CallbackId::from(3),
             refund: Cycles::new(2),
+            refund_id: None,
             response_payload: Payload::Data(vec![1]),
             deadline: CoarseTime::from_secs_since_unix_epoch(6),
         }
@@ -597,6 +687,76 @@ fn canonical_encoding_response() {
 
         assert_eq!(
             "A1 01 A6 00 4A 00 00 00 00 00 00 00 05 01 01 01 4A 00 00 00 00 00 00 00 04 01 01 02 03 03 A1 00 A1 00 02 04 A1 00 41 01 06 06",
+            as_hex(&encode_message(&response, certification_version))
+        );
+    }
+}
+
+/// Canonical CBOR encoding of:
+///
+/// ```no_run
+/// StreamMessage::Response(
+///     Response {
+///         originator: canister_test_id(5),
+///         respondent: canister_test_id(4),
+///         originator_reply_callback: CallbackId::from(3),
+///         refund: Cycles::new(2),
+///         refund_id: Some(7),
+///         response_payload: Payload::Data(vec![1]),
+///         deadline: CoarseTime(6),
+///     }
+/// )
+/// ```
+///
+/// Expected:
+///
+/// ```text
+/// A1                            # map(1)
+///    01                         # field_index(StreamMessage::response)
+///    A7                         # map(7)
+///       00                      # field_index(Response::originator)
+///       4A                      # bytes(10)
+///          00000000000000050101 # "\x00\x00\x00\x00\x00\x00\x00\x06\x01\x01"
+///       01                      # field_index(Response::respondent)
+///       4A                      # bytes(10)
+///          00000000000000040101 # "\x00\x00\x00\x00\x00\x00\x00\x05\x01\x01"
+///       02                      # field_index(Response::originator_reply_callback)
+///       03                      # unsigned(3)
+///       03                      # field_index(Response::refund)
+///       A1                      # map(1)
+///          00                   # field_index(Funds::cycles)
+///          A1                   # map(1)
+///             00                # field_index(Cycles::low)
+///             02                # unsigned(2)
+///       04                      # field_index(Response::response_payload)
+///       A1                      # map(1)
+///          00                   # field_index(Payload::data)
+///          41                   # bytes(1)
+///             01                # "\x01"
+///       06                      # field_index(Response::deadline)
+///          06                   # unsigned(6)
+///       07                      # field_index(Response::refund_id)
+///          07                   # unsigned(7)
+/// ```
+/// Used http://cbor.me/ for printing the human friendly output.
+#[test]
+fn canonical_encoding_response_with_refund_notification() {
+    for certification_version in
+        all_supported_versions().filter(|v| *v >= CertificationVersion::V23)
+    {
+        let response: StreamMessage = Response {
+            originator: canister_test_id(5),
+            respondent: canister_test_id(4),
+            originator_reply_callback: CallbackId::from(3),
+            refund: Cycles::new(2),
+            refund_id: Some(7),
+            response_payload: Payload::Data(vec![1]),
+            deadline: CoarseTime::from_secs_since_unix_epoch(6),
+        }
+        .into();
+
+        assert_eq!(
+            "A1 01 A7 00 4A 00 00 00 00 00 00 00 05 01 01 01 4A 00 00 00 00 00 00 00 04 01 01 02 03 03 A1 00 A1 00 02 04 A1 00 41 01 06 06 07 07",
             as_hex(&encode_message(&response, certification_version))
         );
     }
@@ -612,6 +772,7 @@ fn canonical_encoding_response() {
 ///         respondent: canister_test_id(4),
 ///         originator_reply_callback: CallbackId::from(3),
 ///         refund: Funds::new(Cycles::new(123456789012345678901234567890)),
+///         refund_id: None,
 ///         response_payload: Payload::Data(vec![1]),
 ///         deadline: NO_DEADLINE,
 ///     }
@@ -655,6 +816,7 @@ fn canonical_encoding_response_with_u128_cycles() {
             respondent: canister_test_id(4),
             originator_reply_callback: CallbackId::from(3),
             refund: Cycles::new(123456789012345678901234567890),
+            refund_id: None,
             response_payload: Payload::Data(vec![1]),
             deadline: NO_DEADLINE,
         }
@@ -676,6 +838,7 @@ fn canonical_encoding_response_with_u128_cycles() {
 ///         respondent: canister_test_id(5),
 ///         originator_reply_callback: CallbackId::from(4),
 ///         refund: Cycles::new(3),
+///         refund_id: None,
 ///         response_payload: Payload::Reject(RejectContext {
 ///             code: RejectCode::SysFatal,
 ///             message: "Oops".into(),
@@ -724,6 +887,7 @@ fn canonical_encoding_reject_response() {
             respondent: canister_test_id(5),
             originator_reply_callback: CallbackId::from(4),
             refund: Cycles::new(3),
+            refund_id: None,
             response_payload: Payload::Reject(reject_context()),
             deadline: NO_DEADLINE,
         }
@@ -742,6 +906,7 @@ fn canonical_encoding_reject_response() {
 /// Refund {
 ///     recipient: canister_test_id(7),
 ///     amount: Cycles::new(8),
+///     refund_id: None,
 /// }
 /// ```
 ///
@@ -769,6 +934,48 @@ fn canonical_encoding_anonymous_refund() {
 
         assert_eq!(
             "A1 02 A2 00 4A 00 00 00 00 00 00 00 07 01 01 01 A1 00 08",
+            as_hex(&encode_message(&refund, certification_version))
+        );
+    }
+}
+
+/// Canonical CBOR encoding of:
+///
+/// ```no_run
+/// Refund {
+///     recipient: canister_test_id(7),
+///     amount: Cycles::new(9),
+///     refund_id: Some(8),
+/// }
+/// ```
+///
+/// Expected:
+///
+/// ```text
+/// A1                            # map(1)
+///    02                         # field_index(StreamMessage::refund)
+///    A3                         # map(3)
+///       00                      # field_index(Refund::recipient)
+///       4A                      # bytes(10)
+///          00000000000000070101 # "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0007\u0001\u0001"
+///       01                      # field_index(Refund::amount)
+///       A1                      # map(1)
+///          00                   # field_index(Cycles::low)
+///          09                   # unsigned(9)
+///       02                      # field_index(Refund::refund_id)
+///          08                   # unsigned(8)
+/// ```
+/// Used http://cbor.me/ for printing the human friendly output.
+#[test]
+fn canonical_encoding_refund_notification() {
+    for certification_version in
+        all_supported_versions().filter(|v| *v >= CertificationVersion::V23)
+    {
+        let refund: StreamMessage =
+            Refund::notification(canister_test_id(7), 8, Cycles::new(9)).into();
+
+        assert_eq!(
+            "A1 02 A3 00 4A 00 00 00 00 00 00 00 07 01 01 01 A1 00 09 02 08",
             as_hex(&encode_message(&refund, certification_version))
         );
     }
@@ -943,7 +1150,7 @@ fn invalid_request_extra_field() {
         assert_matches!(
             res,
             Err(ProxyDecodeError::CborDecodeError(err))
-                if err.to_string().contains("expected field index 0 <= i < 9")
+                if err.to_string().contains("expected field index 0 <= i < 10")
         );
     }
 }
@@ -1059,7 +1266,7 @@ fn invalid_response_extra_field() {
         assert_matches!(
             res,
             Err(ProxyDecodeError::CborDecodeError(err))
-                if err.to_string().contains("expected field index 0 <= i < 7")
+                if err.to_string().contains("expected field index 0 <= i < 8")
         );
     }
 }
@@ -1143,7 +1350,19 @@ fn valid_anonymous_refund() {
     for certification_version in
         all_supported_versions().filter(|v| *v >= CertificationVersion::V22)
     {
-        let refund = anonymous_refund(certification_version);
+        let refund = anonymous_refund();
+        let bytes = types::Refund::proxy_encode((&refund, certification_version)).unwrap();
+
+        assert_eq!(refund, types::Refund::proxy_decode(&bytes).unwrap());
+    }
+}
+
+#[test]
+fn valid_refund_notification() {
+    for certification_version in
+        all_supported_versions().filter(|v| *v >= CertificationVersion::V23)
+    {
+        let refund = refund_notification();
         let bytes = types::Refund::proxy_encode((&refund, certification_version)).unwrap();
 
         assert_eq!(refund, types::Refund::proxy_decode(&bytes).unwrap());
@@ -1155,17 +1374,15 @@ fn invalid_refund_extra_field() {
     for certification_version in
         all_supported_versions().filter(|v| *v >= CertificationVersion::V22)
     {
-        let bytes = types::Refund::encode_with_extra_field((
-            &anonymous_refund(certification_version),
-            certification_version,
-        ))
-        .unwrap();
+        let bytes =
+            types::Refund::encode_with_extra_field((&anonymous_refund(), certification_version))
+                .unwrap();
 
         let res: Result<Refund, ProxyDecodeError> = types::Refund::proxy_decode(&bytes);
         assert_matches!(
             res,
             Err(ProxyDecodeError::CborDecodeError(err))
-                if err.to_string().contains("expected field index 0 <= i < 2")
+                if err.to_string().contains("expected field index 0 <= i < 3")
         );
     }
 }
@@ -1176,14 +1393,9 @@ fn invalid_refund_missing_recipient() {
     for certification_version in
         all_supported_versions().filter(|v| *v >= CertificationVersion::V22)
     {
-        let bytes = types::Refund::encode_without_field(
-            (
-                &anonymous_refund(certification_version),
-                certification_version,
-            ),
-            0,
-        )
-        .unwrap();
+        let bytes =
+            types::Refund::encode_without_field((&anonymous_refund(), certification_version), 0)
+                .unwrap();
 
         let _: Refund = types::Refund::proxy_decode(&bytes).unwrap();
     }
@@ -1195,14 +1407,9 @@ fn invalid_refund_missing_amount() {
     for certification_version in
         all_supported_versions().filter(|v| *v >= CertificationVersion::V22)
     {
-        let bytes = types::Refund::encode_without_field(
-            (
-                &anonymous_refund(certification_version),
-                certification_version,
-            ),
-            1,
-        )
-        .unwrap();
+        let bytes =
+            types::Refund::encode_without_field((&anonymous_refund(), certification_version), 1)
+                .unwrap();
 
         let _: Refund = types::Refund::proxy_decode(&bytes).unwrap();
     }
@@ -1463,12 +1670,13 @@ fn request_message(certification_version: CertificationVersion) -> StreamMessage
     request(certification_version).into()
 }
 
-fn request(_certification_version: CertificationVersion) -> Request {
+fn request(certification_version: CertificationVersion) -> Request {
     Request {
         receiver: canister_test_id(1),
         sender: canister_test_id(2),
         sender_reply_callback: CallbackId::from(3),
         payment: cycles(),
+        refund_id: refund_id(certification_version),
         method_name: "test".to_string(),
         method_payload: vec![6],
         metadata: request_metadata(),
@@ -1476,19 +1684,24 @@ fn request(_certification_version: CertificationVersion) -> Request {
     }
 }
 
-fn response(_certification_version: CertificationVersion) -> Response {
+fn response(certification_version: CertificationVersion) -> Response {
     Response {
         originator: canister_test_id(6),
         respondent: canister_test_id(5),
         originator_reply_callback: CallbackId::from(4),
         refund: cycles(),
+        refund_id: refund_id(certification_version),
         response_payload: data_payload(),
-        deadline: CoarseTime::from_secs_since_unix_epoch(8),
+        deadline: CoarseTime::from_secs_since_unix_epoch(1),
     }
 }
 
-fn anonymous_refund(_certification_version: CertificationVersion) -> Refund {
+fn anonymous_refund() -> Refund {
     Refund::anonymous(canister_test_id(7), cycles())
+}
+
+fn refund_notification() -> Refund {
+    Refund::notification(canister_test_id(7), 8, Cycles::new(9))
 }
 
 fn funds() -> Funds {
@@ -1497,6 +1710,14 @@ fn funds() -> Funds {
 
 fn cycles() -> Cycles {
     Cycles::new(3)
+}
+
+fn refund_id(certification_version: CertificationVersion) -> Option<u64> {
+    if certification_version >= CertificationVersion::V23 {
+        Some(8)
+    } else {
+        None
+    }
 }
 
 fn data_payload() -> Payload {

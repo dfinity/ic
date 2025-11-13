@@ -218,6 +218,22 @@ fn roundtrip_conversion_anonymous_refund() {
 }
 
 #[test]
+fn roundtrip_conversion_refund_notification() {
+    for certification_version in
+        all_supported_versions().filter(|v| v >= &CertificationVersion::V23)
+    {
+        let refund = refund_notification(certification_version);
+
+        assert_eq!(
+            refund,
+            types::StreamMessage::from((&refund, certification_version))
+                .try_into()
+                .unwrap()
+        );
+    }
+}
+
+#[test]
 fn try_from_empty_stream_message() {
     let message = types::StreamMessage {
         request: None,

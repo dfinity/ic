@@ -45,6 +45,10 @@ pub struct CallContext {
     /// Cycles that were sent in the request that created the `CallContext`.
     available_cycles: Cycles,
 
+    /// The refund ID associated with the call, if a refund notification was
+    /// requested.
+    refund_id: Option<u64>,
+
     /// Point in time at which the `CallContext` was created.
     time: Time,
 
@@ -62,6 +66,7 @@ impl CallContext {
         responded: bool,
         deleted: bool,
         available_cycles: Cycles,
+        refund_id: Option<u64>,
         time: Time,
         metadata: RequestMetadata,
     ) -> Self {
@@ -70,6 +75,7 @@ impl CallContext {
             responded,
             deleted,
             available_cycles,
+            refund_id,
             time,
             metadata,
             instructions_executed: NumInstructions::default(),
@@ -79,6 +85,11 @@ impl CallContext {
     /// Returns the available amount of cycles in this call context.
     pub fn available_cycles(&self) -> Cycles {
         self.available_cycles
+    }
+
+    /// Returns the refund ID associated with the call context, if any.
+    pub fn refund_id(&self) -> Option<u64> {
+        self.refund_id
     }
 
     /// Updates the available cycles in the `CallContext` based on how much
@@ -449,6 +460,7 @@ impl CallContextManager {
         &mut self,
         call_origin: CallOrigin,
         cycles: Cycles,
+        refund_id: Option<u64>,
         time: Time,
         metadata: RequestMetadata,
     ) -> CallContextId {
@@ -463,6 +475,7 @@ impl CallContextManager {
                 responded: false,
                 deleted: false,
                 available_cycles: cycles,
+                refund_id,
                 time,
                 metadata,
                 instructions_executed: NumInstructions::default(),

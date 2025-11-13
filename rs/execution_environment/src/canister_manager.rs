@@ -3186,6 +3186,7 @@ pub fn uninstall_canister(
                     respondent: canister_id,
                     originator_reply_callback: *callback_id,
                     refund: call_context.available_cycles(),
+                    refund_id: call_context.refund_id(),
                     response_payload: Payload::Reject(RejectContext::new(
                         RejectCode::CanisterReject,
                         "Canister has been uninstalled.",

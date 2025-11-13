@@ -15,6 +15,7 @@ fn call_context_origin() {
     let cc_id = ccm.new_call_context(
         CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE, String::from("")),
         Cycles::new(10),
+        None,
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
@@ -39,6 +40,7 @@ fn call_context_handling() {
             String::from(""),
         ),
         Cycles::zero(),
+        None,
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
@@ -50,6 +52,7 @@ fn call_context_handling() {
             String::from(""),
         ),
         Cycles::zero(),
+        Some(1),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
@@ -62,6 +65,7 @@ fn call_context_handling() {
             String::from(""),
         ),
         Cycles::zero(),
+        None,
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
@@ -257,6 +261,7 @@ fn withdraw_cycles_fails_when_not_enough_available_cycles() {
     let cc_id = ccm.new_call_context(
         CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE, String::from("")),
         Cycles::new(30),
+        None,
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
@@ -275,6 +280,7 @@ fn withdraw_cycles_succeeds_when_enough_available_cycles() {
     let cc_id = ccm.new_call_context(
         CallOrigin::CanisterUpdate(id, cb_id, NO_DEADLINE, String::from("")),
         Cycles::new(30),
+        Some(31),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
@@ -295,6 +301,7 @@ fn test_call_context_instructions_executed_is_updated() {
             String::from(""),
         ),
         Cycles::zero(),
+        None,
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );
@@ -357,6 +364,7 @@ fn call_context_roundtrip_encoding() {
         false,
         false,
         Cycles::zero(),
+        None,
         UNIX_EPOCH,
         Default::default(),
     );
@@ -365,6 +373,7 @@ fn call_context_roundtrip_encoding() {
         true,
         false,
         Cycles::new(3),
+        Some(6),
         Time::from_nanos_since_unix_epoch(4),
         RequestMetadata::new(5, Time::from_nanos_since_unix_epoch(6)),
     );
@@ -584,6 +593,7 @@ fn call_context_stats() {
         ccm.new_call_context(
             origin,
             Cycles::zero(),
+            None,
             Time::from_nanos_since_unix_epoch(1),
             RequestMetadata::new(2, UNIX_EPOCH),
         )
@@ -764,6 +774,7 @@ fn roundtrip_encode() {
     let call_context_id = ccm.new_call_context(
         CallOrigin::CanisterUpdate(other, CallbackId::new(13), NO_DEADLINE, String::from("")),
         Cycles::new(30),
+        Some(31),
         Time::from_nanos_since_unix_epoch(0),
         Default::default(),
     );

@@ -19,6 +19,7 @@ impl Default for ResponseBuilder {
                 respondent: canister_test_id(1),
                 originator_reply_callback: CallbackId::from(0),
                 refund: Cycles::zero(),
+                refund_id: None,
                 response_payload: rpb.build(),
                 deadline: NO_DEADLINE,
             },
@@ -53,6 +54,12 @@ impl ResponseBuilder {
     /// Sets the `refund` field.
     pub fn refund(mut self, refund: Cycles) -> Self {
         self.response.refund = refund;
+        self
+    }
+
+    /// Sets the `refund_id` field.
+    pub fn refund_id(mut self, refund_id: Option<u64>) -> Self {
+        self.response.refund_id = refund_id;
         self
     }
 
