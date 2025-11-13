@@ -744,31 +744,52 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     let mut error_messages = Vec::new();
     let mut success_message = None;
 
-    // Parse stderr for errors
+    // Parse stderr - this is where errors typically go
     let stderr_lines: Vec<String> = String::from_utf8_lossy(&output.stderr)
         .lines()
         .map(|s| s.to_string())
+        .filter(|s| !s.trim().is_empty()) // Filter out empty lines
         .collect();
 
-    for line in &stderr_lines {
-        if line.contains("ERROR:") {
-            error_messages.push(line.clone());
-        }
-    }
-
-    // Parse stdout for errors and success messages
+    // Parse stdout for success messages and any errors
     let stdout_lines: Vec<String> = String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(|s| s.to_string())
+        .filter(|s| !s.trim().is_empty()) // Filter out empty lines
         .collect();
 
+    // Check for success message in stdout
     for line in &stdout_lines {
-        if line.contains("ERROR:") {
-            error_messages.push(line.clone());
-        }
         if line.contains("Recovery Upgrader completed successfully") {
             success_message = Some("Recovery Upgrader completed successfully".to_string());
         }
+    }
+
+    // Collect error information: prefer stderr, fall back to stdout if stderr is empty
+    if !stderr_lines.is_empty() {
+        // Show all stderr output (errors typically go here)
+        error_messages = stderr_lines;
+    } else if !stdout_lines.is_empty() && !output.status.success() {
+        // If no stderr but command failed, show stdout (might contain error info)
+        error_messages = stdout_lines;
+    }
+
+    // Also look for explicit ERROR: markers in both streams
+    let mut explicit_errors = Vec::new();
+    for line in String::from_utf8_lossy(&output.stderr).lines() {
+        if line.contains("ERROR:") || line.contains("error:") || line.contains("Error:") {
+            explicit_errors.push(line.to_string());
+        }
+    }
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        if line.contains("ERROR:") || line.contains("error:") || line.contains("Error:") {
+            explicit_errors.push(line.to_string());
+        }
+    }
+
+    // If we found explicit error markers, use those instead (they're more specific)
+    if !explicit_errors.is_empty() {
+        error_messages = explicit_errors;
     }
 
     // Show completion message
@@ -810,10 +831,30 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         // Add error messages if any
         if !error_messages.is_empty() {
             text.push(Line::from(""));
-            text.push(Line::from("Errors:"));
-            for error in &error_messages {
-                text.push(Line::from(format!("  {}", error)));
+            text.push(Line::from("Error output:"));
+            // Limit to last 20 lines to avoid overwhelming the display, but show the most recent errors
+            let lines_to_show: Vec<_> = error_messages.iter().rev().take(20).rev().collect();
+            for error in lines_to_show {
+                // Truncate very long lines to prevent display issues
+                let display_line = if error.len() > 200 {
+                    format!("{}...", &error[..200])
+                } else {
+                    error.clone()
+                };
+                text.push(Line::from(format!("  {}", display_line)));
             }
+            if error_messages.len() > 20 {
+                text.push(Line::from(format!(
+                    "  ... (showing last 20 of {} error lines)",
+                    error_messages.len()
+                )));
+            }
+        } else {
+            // If no error messages captured, at least indicate where to look
+            text.push(Line::from(""));
+            text.push(Line::from(
+                "No error output captured. Check system logs for details.",
+            ));
         }
 
         // Ensure we always have at least one line
@@ -841,9 +882,25 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
 
     if !output.status.success() {
         let error_summary = if !error_messages.is_empty() {
-            format!("\nErrors encountered:\n{}", error_messages.join("\n"))
+            // Show all error messages, not just the last 20
+            format!("\n\nError output:\n{}", error_messages.join("\n"))
         } else {
-            String::new()
+            // If we didn't capture any error messages, show raw stderr/stdout
+            let stderr_str = String::from_utf8_lossy(&output.stderr);
+            let stdout_str = String::from_utf8_lossy(&output.stdout);
+            let mut raw_output = String::new();
+            if !stderr_str.trim().is_empty() {
+                raw_output.push_str(&format!("\n\nStderr:\n{}", stderr_str));
+            }
+            if !stdout_str.trim().is_empty() {
+                raw_output.push_str(&format!("\n\nStdout:\n{}", stdout_str));
+            }
+            if raw_output.is_empty() {
+                "\n\nNo output captured from recovery upgrader. Check system logs for details."
+                    .to_string()
+            } else {
+                raw_output
+            }
         };
         anyhow::bail!(
             "Recovery upgrader failed with exit code: {:?}{}",
