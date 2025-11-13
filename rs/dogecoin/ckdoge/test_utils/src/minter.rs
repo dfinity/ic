@@ -142,7 +142,7 @@ impl MinterCanister {
             .expect("BUG: minter self-check failed")
     }
 
-    pub fn await_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
+    pub fn await_submitted_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
         self.env
             .advance_time(MAX_TIME_IN_QUEUE + Duration::from_nanos(1));
         let status = self.await_doge_transaction_with_status(ledger_burn_index, |tx_status| {

@@ -201,7 +201,7 @@ where
 {
     pub fn dogecoin_await_transaction(self) -> WithdrawalFlowEnd<S> {
         let minter = self.setup.as_ref().minter();
-        let txid = minter.await_doge_transaction(self.retrieve_doge_id.block_index);
+        let txid = minter.await_submitted_doge_transaction(self.retrieve_doge_id.block_index);
         let mut mempool = self.setup.as_ref().dogecoin().mempool();
         let tx = mempool
             .remove(&txid)
@@ -457,7 +457,7 @@ where
 
         let old_transaction = self.sent_transactions.last().unwrap();
         let old_txid = Txid::from(old_transaction.compute_txid().to_byte_array());
-        let new_txid = minter.await_doge_transaction(self.retrieve_doge_id.block_index);
+        let new_txid = minter.await_submitted_doge_transaction(self.retrieve_doge_id.block_index);
         let _replaced_tx_event = minter
             .assert_that_events()
             .find_exactly_one(
