@@ -391,6 +391,7 @@ mod tests {
     use ic_types::{NodeId, PrincipalId, SubnetId};
     use itertools::Itertools;
 
+    use crate::flags::{is_node_swapping_enabled_for_caller, is_node_swapping_enabled_on_subnet};
     use crate::{
         common::test_helpers::{
             get_invariant_compliant_subnet_record, invariant_compliant_registry,
@@ -1074,5 +1075,117 @@ mod tests {
 
         assert!(members.contains(&new_node_id));
         assert!(!members.contains(&old_node_id));
+    }
+
+    #[test]
+    fn feature_flag_subnet_test() {
+        // Ensure that swapping is disabled
+        let _temp = temporarily_disable_node_swapping();
+
+        let subnet_1 = SubnetId::new(PrincipalId::new_subnet_test_id(1));
+
+        // Ensure that no subnets are whitelisted
+        test_set_swapping_enabled_subnets(vec![]);
+
+        assert!(
+            !is_node_swapping_enabled_on_subnet(subnet_1),
+            "The feature is disabled on the network and the outcome should have \\
+            been `false`, but was `true`"
+        );
+
+        // Now add the subnet to the whitelisted ones
+        test_set_swapping_enabled_subnets(vec![subnet_1]);
+        assert!(
+            !is_node_swapping_enabled_on_subnet(subnet_1),
+            "Even if the subnet is whitelisted, the whole feature is disabled so \\
+            the outcome should have been `false`, but was `true`"
+        );
+
+        // Now enable the feature on the network
+        let _temp = temporarily_enable_node_swapping();
+
+        assert!(
+            is_node_swapping_enabled_on_subnet(subnet_1),
+            "The feature is enabled on the network and the subnet is whitelisted, \\
+            the outcome should have been `true` but was `false`"
+        );
+
+        // Now make the whitelisted list empty, making
+        // all of the subnet appear as whitelisted
+        test_set_swapping_enabled_subnets(vec![]);
+
+        assert!(
+            is_node_swapping_enabled_on_subnet(subnet_1),
+            "The feature is enabled on the network and the whitelisted subnet list \\
+            is empty, which means all subnets are whitelisted and the outcome should \\
+            have been `true`, but was `false`"
+        );
+
+        // Now put a different subnet in the whitelisted
+        // subnet list
+        test_set_swapping_enabled_subnets(vec![SubnetId::new(PrincipalId::new_subnet_test_id(
+            999,
+        ))]);
+
+        assert!(
+            !is_node_swapping_enabled_on_subnet(subnet_1),
+            "The feature is enabled on the network and the whitelisted subnet contains \\
+            a different subnet, which means that the outcome should have been `false` but was `true`"
+        );
+    }
+
+    #[test]
+    fn feature_flag_node_operator_test() {
+        // Ensure that swapping is disabled
+        let _temp = temporarily_disable_node_swapping();
+
+        let node_operator_1 = PrincipalId::new_user_test_id(1);
+
+        // Ensure that no callers are whitelisted
+        test_set_swapping_whitelisted_callers(vec![]);
+
+        assert!(
+            !is_node_swapping_enabled_for_caller(node_operator_1),
+            "The feature is disabled on the network and the outcome should have \\
+            been `false`, but was `true`"
+        );
+
+        // Now add the node operator to the whitelisted ones
+        test_set_swapping_whitelisted_callers(vec![node_operator_1]);
+        assert!(
+            !is_node_swapping_enabled_for_caller(node_operator_1),
+            "Even if the node operator is whitelisted, the whole feature is \\
+            disabled so the outcome should have been `false`, but was `true`"
+        );
+
+        // Now enable the feature on the network
+        let _temp = temporarily_enable_node_swapping();
+
+        assert!(
+            is_node_swapping_enabled_for_caller(node_operator_1),
+            "The feature is enabled on the network and the node operator is \\
+            whitelisted, the outcome should have been `true` but was `false`"
+        );
+
+        // Now make the whitelisted list empty, making
+        // all of the node operators appear as whitelisted
+        test_set_swapping_whitelisted_callers(vec![]);
+
+        assert!(
+            is_node_swapping_enabled_for_caller(node_operator_1),
+            "The feature is enabled on the network and the whitelisted node operator list \\
+            is empty, which means all node operators are whitelisted and the outcome should \\
+            have been `true`, but was `false`"
+        );
+
+        // Now put a different node operator in the whitelisted
+        // subnet list
+        test_set_swapping_whitelisted_callers(vec![PrincipalId::new_user_test_id(999)]);
+
+        assert!(
+            !is_node_swapping_enabled_for_caller(node_operator_1),
+            "The feature is enabled on the network and the whitelisted node operator list contains \\
+            a different node operator, which means that the outcome should have been `false` but was `true`"
+        );
     }
 }

@@ -151,11 +151,47 @@ pub mod temporary_overrides {
 }
 
 pub(crate) fn is_node_swapping_enabled_on_subnet(subnet_id: SubnetId) -> bool {
-    NODE_SWAPPING_ENABLED_SUBNETS
-        .with_borrow(|enabled_subnets| enabled_subnets.contains(&subnet_id))
+    let swapping_enabled = IS_NODE_SWAPPING_ENABLED.get();
+
+    NODE_SWAPPING_ENABLED_SUBNETS.with_borrow(|whitelisted_subnets| {
+        if swapping_enabled {
+            // If swapping is enabled and there are no whitelisted
+            // subnets, consider all subnets as whitelisted.
+            //
+            // This is here to remove the need for explicitly stating
+            // all of the subnet ids in the `NODE_SWAPPING_ENABLED_SUBNETS`
+            // which makes this file less readable and doesn't bring value
+            // yet still can be used to whitelist just some subnets
+            if whitelisted_subnets.is_empty() {
+                return true;
+            }
+
+            return whitelisted_subnets.contains(&subnet_id);
+        }
+
+        false
+    })
 }
 
 pub(crate) fn is_node_swapping_enabled_for_caller(caller: PrincipalId) -> bool {
-    NODE_SWAPPING_WHITELISTED_CALLERS
-        .with_borrow(|enabled_callers| enabled_callers.contains(&caller))
+    let swapping_enabled = IS_NODE_SWAPPING_ENABLED.get();
+
+    NODE_SWAPPING_WHITELISTED_CALLERS.with_borrow(|enabled_callers| {
+        if swapping_enabled {
+            // If swapping is enabled and there are no whitelisted
+            // callers, consider all callers as whitelisted.
+            //
+            // This is here to remove the need for explicitly stating
+            // all of the node operator ids in the `NODE_SWAPPING_WHITELISTED_CALLERS`
+            // which makes this file less readable and doesn't bring value
+            // yet still can be used to whitelist just some callers
+            if enabled_callers.is_empty() {
+                return true;
+            }
+
+            return enabled_callers.contains(&caller);
+        }
+
+        false
+    })
 }
