@@ -7,8 +7,8 @@ use bitcoin::hashes::Hash;
 use candid::{Decode, Principal};
 use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_ckdoge_minter::{
-    BitcoinAddress, BurnMemo, EventType, InvalidTransactionError, MAX_NUM_INPUTS_IN_TRANSACTION,
-    MIN_RESUBMISSION_DELAY, RetrieveBtcRequest, Txid, WithdrawalReimbursementReason,
+    BitcoinAddress, BurnMemo, EventType, MIN_RESUBMISSION_DELAY, RetrieveBtcRequest, Txid,
+    WithdrawalReimbursementReason,
     address::DogecoinAddress,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeWithApprovalError,
@@ -293,7 +293,7 @@ where
         }
     }
 
-    pub fn minter_await_withdrawal_reimbursed(self) {
+    pub fn minter_await_withdrawal_reimbursed(self, reason: WithdrawalReimbursementReason) {
         // TODO DEFI-2458: use correct fees. Need to estimate amount of DOGE to pay for 1B cycles.
         // See docs in the ckBTC minter for that constant.
         const REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS: u64 = 100 * 10;
@@ -346,12 +346,7 @@ where
                 EventType::ScheduleWithdrawalReimbursement {
                     account: self.account,
                     amount: reimbursement_amount,
-                    reason: WithdrawalReimbursementReason::InvalidTransaction(
-                        InvalidTransactionError::TooManyInputs {
-                            num_inputs: 1800,
-                            max_num_inputs: MAX_NUM_INPUTS_IN_TRANSACTION,
-                        },
-                    ),
+                    reason,
                     burn_block_index: withdrawal_id,
                 },
                 EventType::ReimbursedWithdrawal {

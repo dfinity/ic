@@ -175,7 +175,10 @@ mod deposit {
 }
 
 mod withdrawal {
-    use ic_ckdoge_minter::{UTXOS_COUNT_THRESHOLD, candid_api::RetrieveDogeWithApprovalError};
+    use ic_ckdoge_minter::{
+        InvalidTransactionError, MAX_NUM_INPUTS_IN_TRANSACTION, UTXOS_COUNT_THRESHOLD,
+        WithdrawalReimbursementReason, candid_api::RetrieveDogeWithApprovalError,
+    };
     use ic_ckdoge_minter_test_utils::flow::withdrawal::assert_uses_utxos;
     use ic_ckdoge_minter_test_utils::{
         DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
@@ -386,14 +389,20 @@ mod withdrawal {
             .minter_update_balance()
             .expect_mint();
 
-        let withdrawal_amount = 1_800 * deposit_value;
+        let too_large_num_inputs = 1_800;
+        let withdrawal_amount = too_large_num_inputs * deposit_value;
 
         setup
             .withdrawal_flow()
             .ledger_approve_minter(account, withdrawal_amount)
             .minter_retrieve_doge_with_approval(withdrawal_amount, DOGECOIN_ADDRESS_1)
             .expect_withdrawal_request_accepted()
-            .minter_await_withdrawal_reimbursed();
+            .minter_await_withdrawal_reimbursed(WithdrawalReimbursementReason::InvalidTransaction(
+                InvalidTransactionError::TooManyInputs {
+                    num_inputs: too_large_num_inputs as usize,
+                    max_num_inputs: MAX_NUM_INPUTS_IN_TRANSACTION,
+                },
+            ));
     }
 }
 
