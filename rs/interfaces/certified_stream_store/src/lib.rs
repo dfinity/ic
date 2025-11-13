@@ -1,7 +1,7 @@
 //! The certified stream store public interface.
 use ic_types::{
-    xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     RegistryVersion, SubnetId,
+    xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
 };
 use std::fmt;
 
@@ -23,23 +23,21 @@ pub enum EncodeStreamError {
 impl fmt::Display for EncodeStreamError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NoStreamForSubnet(subnet_id) => write!(f, "No stream for subnet {}", subnet_id),
+            Self::NoStreamForSubnet(subnet_id) => write!(f, "No stream for subnet {subnet_id}"),
             Self::InvalidSliceBegin {
                 slice_begin,
                 stream_begin,
                 stream_end,
             } => write!(
                 f,
-                "Requested slice begin {} is outside of stream message bounds [{}, {})",
-                slice_begin, stream_begin, stream_end
+                "Requested slice begin {slice_begin} is outside of stream message bounds [{stream_begin}, {stream_end})"
             ),
             Self::InvalidSliceIndices {
                 witness_begin,
                 msg_begin,
             } => write!(
                 f,
-                "Invalid requested slice indices: witness_begin: {:?}, msg_begin: {:?}",
-                witness_begin, msg_begin
+                "Invalid requested slice indices: witness_begin: {witness_begin:?}, msg_begin: {msg_begin:?}"
             ),
         }
     }
@@ -63,15 +61,13 @@ impl fmt::Display for DecodeStreamError {
         match self {
             Self::InvalidSignature(subnet_id) => write!(
                 f,
-                "cannot validate signature of stream from subnet {}",
-                subnet_id
+                "cannot validate signature of stream from subnet {subnet_id}"
             ),
             Self::InvalidDestination { sender, receiver } => write!(
                 f,
-                "stream from subnet {} is addressed at {}. Expected own subnet as destination.",
-                sender, receiver
+                "stream from subnet {sender} is addressed at {receiver}. Expected own subnet as destination."
             ),
-            Self::SerializationError(msg) => write!(f, "failed to deserialize content: {}", msg),
+            Self::SerializationError(msg) => write!(f, "failed to deserialize content: {msg}"),
         }
     }
 }

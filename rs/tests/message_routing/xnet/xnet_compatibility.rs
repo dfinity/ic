@@ -35,14 +35,14 @@ use ic_system_test_driver::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{
-    get_guestos_img_version, get_guestos_launch_measurements, get_guestos_update_img_sha256,
-    get_guestos_update_img_url, get_guestos_update_img_version, HasPublicApiUrl,
-    HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, get_guestos_img_version,
+    get_guestos_launch_measurements, get_guestos_update_img_sha256, get_guestos_update_img_url,
+    get_guestos_update_img_version,
 };
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, runtime_from_url, MetricsFetcher};
+use ic_system_test_driver::util::{MetricsFetcher, block_on, runtime_from_url};
 use ic_types::ReplicaVersion;
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
@@ -168,7 +168,7 @@ pub async fn test_async(env: TestEnv) {
     // NOTE: For these tests, it is intended they run _from_ the mainnet
     // version, _to_ the branch version, and back.
     //
-    // The test definition should specify `uses_guestos_nns_mainnet_img` to choose
+    // The test definition should specify `uses_guestos_mainnet_nns_img` to choose
     // the mainnet image as the initial image, and `uses_guestos_update` to
     // choose the branch image as the upgrade target.
     let mainnet_version = get_guestos_img_version();
@@ -186,7 +186,7 @@ pub async fn test_async(env: TestEnv) {
         &branch_version,
         &logger,
         sha256,
-        guest_launch_measurements,
+        Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     )
     .await;
@@ -293,8 +293,7 @@ async fn assert_no_critical_errors(env: &TestEnv, log: &slog::Logger) {
                     .collect::<BTreeMap<_, _>>();
                 assert!(
                     filtered_results.is_empty(),
-                    "Critical error detected: {:?}",
-                    filtered_results
+                    "Critical error detected: {filtered_results:?}"
                 );
                 return;
             }

@@ -3,9 +3,9 @@
 //!
 //! NOTE: `FlatMap` isn't a general-purpose map container.
 
+use serde::Serialize;
 use serde::de::{Deserialize, Deserializer, MapAccess, Visitor};
 use serde::ser::Serializer;
-use serde::Serialize;
 use std::fmt;
 use std::iter::{DoubleEndedIterator, Iterator};
 
@@ -26,9 +26,9 @@ mod tests;
 /// ```
 #[macro_export]
 macro_rules! flatmap {
-    ( $($key:expr => $value:expr,)+ ) => (flatmap!($($key => $value),+));
+    ( $($key:expr_2021 => $value:expr_2021,)+ ) => (flatmap!($($key => $value),+));
 
-    ( $($key:expr => $value:expr),* ) => {
+    ( $($key:expr_2021 => $value:expr_2021),* ) => {
             $crate::flat_map::FlatMap::from_key_values(vec![$(($key, $value)),*])
     };
 }

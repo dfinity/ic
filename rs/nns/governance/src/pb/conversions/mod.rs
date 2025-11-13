@@ -3,6 +3,7 @@ use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api as pb_api;
 
 use crate::pb::proposal_conversions::convert_proposal;
+use crate::pb::v1::DateUtc;
 
 #[cfg(test)]
 mod tests;
@@ -47,6 +48,18 @@ impl From<pb_api::UpdateNodeProvider> for pb::UpdateNodeProvider {
         Self {
             reward_account: item.reward_account,
         }
+    }
+}
+
+impl From<pb_api::DeregisterKnownNeuron> for pb::DeregisterKnownNeuron {
+    fn from(item: pb_api::DeregisterKnownNeuron) -> Self {
+        Self { id: item.id }
+    }
+}
+
+impl From<pb::DeregisterKnownNeuron> for pb_api::DeregisterKnownNeuron {
+    fn from(item: pb::DeregisterKnownNeuron) -> Self {
+        Self { id: item.id }
     }
 }
 
@@ -417,6 +430,9 @@ impl From<pb_api::proposal::Action> for pb::proposal::Action {
             pb_api::proposal::Action::RegisterKnownNeuron(v) => {
                 pb::proposal::Action::RegisterKnownNeuron(v.into())
             }
+            pb_api::proposal::Action::DeregisterKnownNeuron(v) => {
+                pb::proposal::Action::DeregisterKnownNeuron(v.into())
+            }
             pb_api::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v) => {
                 pb::proposal::Action::SetSnsTokenSwapOpenTimeWindow(v.into())
             }
@@ -466,6 +482,9 @@ impl From<pb_api::ProposalActionRequest> for pb::proposal::Action {
             }
             pb_api::ProposalActionRequest::RegisterKnownNeuron(v) => {
                 pb::proposal::Action::RegisterKnownNeuron(v.into())
+            }
+            pb_api::ProposalActionRequest::DeregisterKnownNeuron(v) => {
+                pb::proposal::Action::DeregisterKnownNeuron(v.into())
             }
             pb_api::ProposalActionRequest::CreateServiceNervousSystem(v) => {
                 pb::proposal::Action::CreateServiceNervousSystem(v.into())
@@ -789,6 +808,7 @@ impl From<pb::manage_neuron::Split> for pb_api::manage_neuron::Split {
     fn from(item: pb::manage_neuron::Split) -> Self {
         Self {
             amount_e8s: item.amount_e8s,
+            memo: item.memo,
         }
     }
 }
@@ -796,6 +816,7 @@ impl From<pb_api::manage_neuron::Split> for pb::manage_neuron::Split {
     fn from(item: pb_api::manage_neuron::Split) -> Self {
         Self {
             amount_e8s: item.amount_e8s,
+            memo: item.memo,
         }
     }
 }
@@ -2048,19 +2069,107 @@ impl From<pb_api::KnownNeuron> for pb::KnownNeuron {
     }
 }
 
-impl From<pb::KnownNeuronData> for pb_api::KnownNeuronData {
-    fn from(item: pb::KnownNeuronData) -> Self {
-        Self {
-            name: item.name,
-            description: item.description,
+impl From<pb::Topic> for pb_api::TopicToFollow {
+    fn from(topic: pb::Topic) -> Self {
+        match topic {
+            pb::Topic::Unspecified => pb_api::TopicToFollow::CatchAll,
+            pb::Topic::NeuronManagement => pb_api::TopicToFollow::NeuronManagement,
+            pb::Topic::ExchangeRate => pb_api::TopicToFollow::ExchangeRate,
+            pb::Topic::NetworkEconomics => pb_api::TopicToFollow::NetworkEconomics,
+            pb::Topic::Governance => pb_api::TopicToFollow::Governance,
+            pb::Topic::NodeAdmin => pb_api::TopicToFollow::NodeAdmin,
+            pb::Topic::ParticipantManagement => pb_api::TopicToFollow::ParticipantManagement,
+            pb::Topic::SubnetManagement => pb_api::TopicToFollow::SubnetManagement,
+            pb::Topic::ApplicationCanisterManagement => {
+                pb_api::TopicToFollow::ApplicationCanisterManagement
+            }
+            pb::Topic::Kyc => pb_api::TopicToFollow::Kyc,
+            pb::Topic::NodeProviderRewards => pb_api::TopicToFollow::NodeProviderRewards,
+            pb::Topic::IcOsVersionDeployment => pb_api::TopicToFollow::IcOsVersionDeployment,
+            pb::Topic::IcOsVersionElection => pb_api::TopicToFollow::IcOsVersionElection,
+            pb::Topic::SnsAndCommunityFund => pb_api::TopicToFollow::SnsAndCommunityFund,
+            pb::Topic::ApiBoundaryNodeManagement => {
+                pb_api::TopicToFollow::ApiBoundaryNodeManagement
+            }
+            pb::Topic::SubnetRental => pb_api::TopicToFollow::SubnetRental,
+            pb::Topic::ProtocolCanisterManagement => {
+                pb_api::TopicToFollow::ProtocolCanisterManagement
+            }
+            pb::Topic::ServiceNervousSystemManagement => {
+                pb_api::TopicToFollow::ServiceNervousSystemManagement
+            }
         }
     }
 }
-impl From<pb_api::KnownNeuronData> for pb::KnownNeuronData {
-    fn from(item: pb_api::KnownNeuronData) -> Self {
+
+impl From<pb_api::TopicToFollow> for pb::Topic {
+    fn from(topic: pb_api::TopicToFollow) -> Self {
+        match topic {
+            pb_api::TopicToFollow::CatchAll => pb::Topic::Unspecified,
+            pb_api::TopicToFollow::NeuronManagement => pb::Topic::NeuronManagement,
+            pb_api::TopicToFollow::ExchangeRate => pb::Topic::ExchangeRate,
+            pb_api::TopicToFollow::NetworkEconomics => pb::Topic::NetworkEconomics,
+            pb_api::TopicToFollow::Governance => pb::Topic::Governance,
+            pb_api::TopicToFollow::NodeAdmin => pb::Topic::NodeAdmin,
+            pb_api::TopicToFollow::ParticipantManagement => pb::Topic::ParticipantManagement,
+            pb_api::TopicToFollow::SubnetManagement => pb::Topic::SubnetManagement,
+            pb_api::TopicToFollow::Kyc => pb::Topic::Kyc,
+            pb_api::TopicToFollow::NodeProviderRewards => pb::Topic::NodeProviderRewards,
+            pb_api::TopicToFollow::IcOsVersionDeployment => pb::Topic::IcOsVersionDeployment,
+            pb_api::TopicToFollow::IcOsVersionElection => pb::Topic::IcOsVersionElection,
+            pb_api::TopicToFollow::SnsAndCommunityFund => pb::Topic::SnsAndCommunityFund,
+            pb_api::TopicToFollow::ApiBoundaryNodeManagement => {
+                pb::Topic::ApiBoundaryNodeManagement
+            }
+            pb_api::TopicToFollow::SubnetRental => pb::Topic::SubnetRental,
+            pb_api::TopicToFollow::ApplicationCanisterManagement => {
+                pb::Topic::ApplicationCanisterManagement
+            }
+            pb_api::TopicToFollow::ProtocolCanisterManagement => {
+                pb::Topic::ProtocolCanisterManagement
+            }
+            pb_api::TopicToFollow::ServiceNervousSystemManagement => {
+                pb::Topic::ServiceNervousSystemManagement
+            }
+        }
+    }
+}
+
+impl From<pb::KnownNeuronData> for pb_api::KnownNeuronData {
+    fn from(item: pb::KnownNeuronData) -> Self {
+        let committed_topics = Some(
+            item.committed_topics
+                .iter()
+                .map(|&topic_i32| {
+                    let topic = pb::Topic::try_from(topic_i32).ok();
+                    topic.map(pb_api::TopicToFollow::from)
+                })
+                .collect(),
+        );
+
         Self {
             name: item.name,
             description: item.description,
+            links: Some(item.links),
+            committed_topics,
+        }
+    }
+}
+
+impl From<pb_api::KnownNeuronData> for pb::KnownNeuronData {
+    fn from(item: pb_api::KnownNeuronData) -> Self {
+        let committed_topics = item
+            .committed_topics
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|topic| topic.map(|topic| pb::Topic::from(topic) as i32))
+            .collect();
+
+        Self {
+            name: item.name,
+            description: item.description,
+            committed_topics,
+            links: item.links.unwrap_or_default(),
         }
     }
 }
@@ -2917,16 +3026,35 @@ impl From<pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics>
     }
 }
 
-impl From<pb_api::governance::MakingSnsProposal> for pb::governance::MakingSnsProposal {
-    fn from(item: pb_api::governance::MakingSnsProposal) -> Self {
+impl TryFrom<ic_node_rewards_canister_api::DateUtc> for DateUtc {
+    type Error = String;
+
+    fn try_from(value: ic_node_rewards_canister_api::DateUtc) -> Result<Self, Self::Error> {
+        let year = value.year.ok_or("Missing field: year")?;
+        let month = value.month.ok_or("Missing field: month")?;
+        let day = value.day.ok_or("Missing field: day")?;
+
+        Ok(Self { year, month, day })
+    }
+}
+impl From<pb::DateUtc> for pb_api::DateUtc {
+    fn from(item: pb::DateUtc) -> Self {
         Self {
-            proposer_id: item.proposer_id,
-            caller: item.caller,
-            proposal: item.proposal.map(|x| x.into()),
+            year: item.year,
+            month: item.month,
+            day: item.day,
         }
     }
 }
-
+impl From<pb_api::DateUtc> for pb::DateUtc {
+    fn from(item: pb_api::DateUtc) -> Self {
+        Self {
+            year: item.year,
+            month: item.month,
+            day: item.day,
+        }
+    }
+}
 impl From<pb::XdrConversionRate> for pb_api::XdrConversionRate {
     fn from(item: pb::XdrConversionRate) -> Self {
         Self {
@@ -3000,11 +3128,12 @@ impl From<pb_api::ListNodeProvidersResponse> for pb::ListNodeProvidersResponse {
         }
     }
 }
-
 impl From<pb::MonthlyNodeProviderRewards> for pb_api::MonthlyNodeProviderRewards {
     fn from(item: pb::MonthlyNodeProviderRewards) -> Self {
         Self {
             timestamp: item.timestamp,
+            start_date: item.start_date.map(|x| x.into()),
+            end_date: item.end_date.map(|x| x.into()),
             rewards: item.rewards.into_iter().map(|x| x.into()).collect(),
             xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
             minimum_xdr_permyriad_per_icp: item.minimum_xdr_permyriad_per_icp,
@@ -3018,6 +3147,8 @@ impl From<pb_api::MonthlyNodeProviderRewards> for pb::MonthlyNodeProviderRewards
     fn from(item: pb_api::MonthlyNodeProviderRewards) -> Self {
         Self {
             timestamp: item.timestamp,
+            start_date: item.start_date.map(|x| x.into()),
+            end_date: item.end_date.map(|x| x.into()),
             rewards: item.rewards.into_iter().map(|x| x.into()).collect(),
             xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
             minimum_xdr_permyriad_per_icp: item.minimum_xdr_permyriad_per_icp,
@@ -3622,59 +3753,6 @@ impl From<pb_api::Account> for pb::Account {
     }
 }
 
-impl From<pb::Topic> for pb_api::Topic {
-    fn from(item: pb::Topic) -> Self {
-        match item {
-            pb::Topic::Unspecified => pb_api::Topic::Unspecified,
-            pb::Topic::NeuronManagement => pb_api::Topic::NeuronManagement,
-            pb::Topic::ExchangeRate => pb_api::Topic::ExchangeRate,
-            pb::Topic::NetworkEconomics => pb_api::Topic::NetworkEconomics,
-            pb::Topic::Governance => pb_api::Topic::Governance,
-            pb::Topic::NodeAdmin => pb_api::Topic::NodeAdmin,
-            pb::Topic::ParticipantManagement => pb_api::Topic::ParticipantManagement,
-            pb::Topic::SubnetManagement => pb_api::Topic::SubnetManagement,
-            pb::Topic::NetworkCanisterManagement => pb_api::Topic::NetworkCanisterManagement,
-            pb::Topic::Kyc => pb_api::Topic::Kyc,
-            pb::Topic::NodeProviderRewards => pb_api::Topic::NodeProviderRewards,
-            pb::Topic::IcOsVersionDeployment => pb_api::Topic::IcOsVersionDeployment,
-            pb::Topic::IcOsVersionElection => pb_api::Topic::IcOsVersionElection,
-            pb::Topic::SnsAndCommunityFund => pb_api::Topic::SnsAndCommunityFund,
-            pb::Topic::ApiBoundaryNodeManagement => pb_api::Topic::ApiBoundaryNodeManagement,
-            pb::Topic::SubnetRental => pb_api::Topic::SubnetRental,
-            pb::Topic::ProtocolCanisterManagement => pb_api::Topic::ProtocolCanisterManagement,
-            pb::Topic::ServiceNervousSystemManagement => {
-                pb_api::Topic::ServiceNervousSystemManagement
-            }
-        }
-    }
-}
-impl From<pb_api::Topic> for pb::Topic {
-    fn from(item: pb_api::Topic) -> Self {
-        match item {
-            pb_api::Topic::Unspecified => pb::Topic::Unspecified,
-            pb_api::Topic::NeuronManagement => pb::Topic::NeuronManagement,
-            pb_api::Topic::ExchangeRate => pb::Topic::ExchangeRate,
-            pb_api::Topic::NetworkEconomics => pb::Topic::NetworkEconomics,
-            pb_api::Topic::Governance => pb::Topic::Governance,
-            pb_api::Topic::NodeAdmin => pb::Topic::NodeAdmin,
-            pb_api::Topic::ParticipantManagement => pb::Topic::ParticipantManagement,
-            pb_api::Topic::SubnetManagement => pb::Topic::SubnetManagement,
-            pb_api::Topic::NetworkCanisterManagement => pb::Topic::NetworkCanisterManagement,
-            pb_api::Topic::Kyc => pb::Topic::Kyc,
-            pb_api::Topic::NodeProviderRewards => pb::Topic::NodeProviderRewards,
-            pb_api::Topic::IcOsVersionDeployment => pb::Topic::IcOsVersionDeployment,
-            pb_api::Topic::IcOsVersionElection => pb::Topic::IcOsVersionElection,
-            pb_api::Topic::SnsAndCommunityFund => pb::Topic::SnsAndCommunityFund,
-            pb_api::Topic::ApiBoundaryNodeManagement => pb::Topic::ApiBoundaryNodeManagement,
-            pb_api::Topic::SubnetRental => pb::Topic::SubnetRental,
-            pb_api::Topic::ProtocolCanisterManagement => pb::Topic::ProtocolCanisterManagement,
-            pb_api::Topic::ServiceNervousSystemManagement => {
-                pb::Topic::ServiceNervousSystemManagement
-            }
-        }
-    }
-}
-
 impl From<pb::NeuronState> for pb_api::NeuronState {
     fn from(item: pb::NeuronState) -> Self {
         match item {
@@ -3833,6 +3911,15 @@ impl From<pb::NnsFunction> for pb_api::NnsFunction {
                 pb_api::NnsFunction::DeployHostosToSomeNodes
             }
             pb::NnsFunction::SubnetRentalRequest => pb_api::NnsFunction::SubnetRentalRequest,
+            pb::NnsFunction::PauseCanisterMigrations => {
+                pb_api::NnsFunction::PauseCanisterMigrations
+            }
+            pb::NnsFunction::UnpauseCanisterMigrations => {
+                pb_api::NnsFunction::UnpauseCanisterMigrations
+            }
+            pb::NnsFunction::SetSubnetOperationalLevel => {
+                pb_api::NnsFunction::SetSubnetOperationalLevel
+            }
         }
     }
 }
@@ -3933,6 +4020,15 @@ impl From<pb_api::NnsFunction> for pb::NnsFunction {
                 pb::NnsFunction::DeployHostosToSomeNodes
             }
             pb_api::NnsFunction::SubnetRentalRequest => pb::NnsFunction::SubnetRentalRequest,
+            pb_api::NnsFunction::PauseCanisterMigrations => {
+                pb::NnsFunction::PauseCanisterMigrations
+            }
+            pb_api::NnsFunction::UnpauseCanisterMigrations => {
+                pb::NnsFunction::UnpauseCanisterMigrations
+            }
+            pb_api::NnsFunction::SetSubnetOperationalLevel => {
+                pb::NnsFunction::SetSubnetOperationalLevel
+            }
         }
     }
 }

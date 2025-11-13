@@ -7,17 +7,17 @@
 
 use hex_literal::hex;
 use k256::{
-    elliptic_curve::{
-        generic_array::{typenum::Unsigned, GenericArray},
-        Curve,
-    },
     AffinePoint, Scalar, Secp256k1,
+    elliptic_curve::{
+        Curve,
+        generic_array::{GenericArray, typenum::Unsigned},
+    },
 };
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use std::sync::LazyLock;
 use zeroize::ZeroizeOnDrop;
 
-pub use candid::Principal as CanisterId;
+pub use ic_principal::Principal as CanisterId;
 
 /// An error indicating that decoding a key failed
 #[derive(Clone, Debug)]
@@ -42,7 +42,7 @@ pub enum InvalidTaprootHash {
 
 impl std::fmt::Display for KeyDecodingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -143,10 +143,10 @@ impl DerivationPath {
         pt: AffinePoint,
         chain_code: &[u8; 32],
     ) -> ([u8; 32], Scalar, AffinePoint) {
-        use k256::elliptic_curve::{
-            group::prime::PrimeCurveAffine, group::GroupEncoding, ops::MulByGenerator,
-        };
         use k256::ProjectivePoint;
+        use k256::elliptic_curve::{
+            group::GroupEncoding, group::prime::PrimeCurveAffine, ops::MulByGenerator,
+        };
 
         let mut ckd_input = pt.to_bytes();
 
@@ -250,15 +250,14 @@ fn der_decode_rfc5915_privatekey(der: &[u8]) -> Result<Vec<u8>, KeyDecodingError
     use simple_asn1::*;
 
     let der = simple_asn1::from_der(der)
-        .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
+        .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
 
     let seq = match der.len() {
         1 => der.first(),
         x => {
             return Err(KeyDecodingError::InvalidKeyEncoding(format!(
-                "Unexpected number of elements {}",
-                x
-            )))
+                "Unexpected number of elements {x}"
+            )));
         }
     };
 
@@ -269,7 +268,7 @@ fn der_decode_rfc5915_privatekey(der: &[u8]) -> Result<Vec<u8>, KeyDecodingError
             _ => {
                 return Err(KeyDecodingError::InvalidKeyEncoding(
                     "Version field was not an integer".to_string(),
-                ))
+                ));
             }
         };
 
@@ -279,7 +278,7 @@ fn der_decode_rfc5915_privatekey(der: &[u8]) -> Result<Vec<u8>, KeyDecodingError
             _ => {
                 return Err(KeyDecodingError::InvalidKeyEncoding(
                     "Not an octet string".to_string(),
-                ))
+                ));
             }
         };
 
@@ -445,7 +444,7 @@ impl PrivateKey {
             })?;
 
         let key = k256::SecretKey::from_bytes(&GenericArray::from(byte_array))
-            .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
+            .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
         Ok(Self { key })
     }
 
@@ -453,14 +452,14 @@ impl PrivateKey {
     pub fn deserialize_pkcs8_der(der: &[u8]) -> Result<Self, KeyDecodingError> {
         use k256::pkcs8::DecodePrivateKey;
         let key = k256::SecretKey::from_pkcs8_der(der)
-            .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
+            .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
         Ok(Self { key })
     }
 
     /// Deserialize a private key encoded in PKCS8 format with PEM encoding
     pub fn deserialize_pkcs8_pem(pem: &str) -> Result<Self, KeyDecodingError> {
-        let der = pem::parse(pem)
-            .map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{:?}", e)))?;
+        let der =
+            pem::parse(pem).map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
         if der.tag != PEM_HEADER_PKCS8 {
             return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
         }
@@ -476,8 +475,8 @@ impl PrivateKey {
 
     /// Deserialize a private key encoded in RFC 5915 format with PEM encoding
     pub fn deserialize_rfc5915_pem(pem: &str) -> Result<Self, KeyDecodingError> {
-        let der = pem::parse(pem)
-            .map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{:?}", e)))?;
+        let der =
+            pem::parse(pem).map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
         if der.tag != PEM_HEADER_RFC5915 {
             return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
         }
@@ -520,7 +519,7 @@ impl PrivateKey {
     /// The message is hashed with SHA-256 and the signature is
     /// normalized (using the minimum-s approach of BitCoin)
     pub fn sign_message_with_ecdsa(&self, message: &[u8]) -> [u8; 64] {
-        use k256::ecdsa::{signature::Signer, Signature};
+        use k256::ecdsa::{Signature, signature::Signer};
 
         let ecdsa = k256::ecdsa::SigningKey::from(&self.key);
         let sig: Signature = ecdsa.sign(message);
@@ -540,7 +539,7 @@ impl PrivateKey {
             return self.sign_digest_with_ecdsa(&zdigest);
         }
 
-        use k256::ecdsa::{signature::hazmat::PrehashSigner, Signature};
+        use k256::ecdsa::{Signature, signature::hazmat::PrehashSigner};
         let ecdsa = k256::ecdsa::SigningKey::from(&self.key);
         let sig: Signature = ecdsa.sign_prehash(digest).expect("Failed to sign digest");
         sig.to_bytes().into()
@@ -571,7 +570,7 @@ impl PrivateKey {
              * situation where k or s of zero is generated. If this occurs, simply retry
              * with a new aux_rand
              */
-            let aux_rand = rng.gen::<[u8; 32]>();
+            let aux_rand = rng.r#gen::<[u8; 32]>();
             if let Some(sig) = self.sign_bip340_with_aux_rand(message, &aux_rand) {
                 return sig;
             }
@@ -715,6 +714,29 @@ pub enum MasterPublicKeyId {
     SchnorrTestKey1,
 }
 
+/// An identifier for the mainnet production key
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum PocketIcMasterPublicKeyId {
+    /// The PocketIC hardcoded key for ECDSA "key_1"
+    EcdsaKey1,
+    /// The PocketIC hardcoded key for ECDSA "test_key_1"
+    EcdsaTestKey1,
+    /// The PocketIC hardcoded key for Schnorr "key_1"
+    ///
+    /// Note this is the same as the ECDSA key
+    SchnorrKey1,
+    /// The PocketIC hardcoded key for Schnorr "test_key_1"
+    ///
+    /// Note this is the same as the ECDSA key
+    SchnorrTestKey1,
+    /// Another test key
+    EcdsaDfxTestKey,
+    /// Another test key
+    ///
+    /// Note this is the same as the ECDSA key
+    SchnorrDfxTestKey,
+}
+
 /// A secp256k1 public key, suitable for verifying ECDSA or BIP340 signatures
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct PublicKey {
@@ -744,6 +766,44 @@ impl PublicKey {
         }
     }
 
+    /// Return the public master keys used by PocketIC
+    ///
+    /// Note that the secret keys for these public keys are known, and these keys are
+    /// should only be used for offline testing with PocketIC
+    pub fn pocketic_key(key_id: PocketIcMasterPublicKeyId) -> Self {
+        match key_id {
+            PocketIcMasterPublicKeyId::EcdsaKey1 | PocketIcMasterPublicKeyId::SchnorrKey1 => {
+                // PocketIC uses the same key for ECDSA secp256k1 and BIP340 Schnorr
+                // Secret key is 6f65b33c736ceaf3d89e6b913a508e0612a2f43d872128606d59ab855b80d288
+
+                Self::deserialize_sec1(&hex!(
+                    "036ad6e838b46811ad79c37b2f4b854b7a05f406715b2935edc5d3251e7666977b"
+                ))
+                .expect("Hardcoded master key was rejected")
+            }
+            PocketIcMasterPublicKeyId::EcdsaTestKey1
+            | PocketIcMasterPublicKeyId::SchnorrTestKey1 => {
+                // PocketIC uses the same key for ECDSA secp256k1 and BIP340 Schnorr
+                // Secret key is cb1eb3d67ff91be823715ee2f2af9c2b88252dacbf67f8d09c167c10e7deca7a
+
+                Self::deserialize_sec1(&hex!(
+                    "03cc365e15cb552589c7175717b2ac63d1050b9bb2e5aed35432b1b1be55d3abcf"
+                ))
+                .expect("Hardcoded master key was rejected")
+            }
+            PocketIcMasterPublicKeyId::EcdsaDfxTestKey
+            | PocketIcMasterPublicKeyId::SchnorrDfxTestKey => {
+                // PocketIC uses the same key for ECDSA secp256k1 and BIP340 Schnorr
+                // Secret key is 2aff2be7e3e57007909036d08767bcc5e192717b59eeae19ead8eff9ee874a48
+
+                Self::deserialize_sec1(&hex!(
+                    "03e6f78b1a90e361c5cc9903f73bb8acbe3bc17ad01e82554d25cf0ecd70c67484"
+                ))
+                .expect("Hardcoded master key was rejected")
+            }
+        }
+    }
+
     /// Derive a public key from the mainnet parameters
     ///
     /// This is an offline equivalent to the `ecdsa_public_key` or
@@ -760,6 +820,22 @@ impl PublicKey {
         ))
     }
 
+    /// Derive a public key as is done on PocketIC
+    ///
+    /// This is an offline equivalent to the `ecdsa_public_key` or
+    /// `schnorr_public_key` management canister call when running on PocketIC
+    pub fn derive_pocketic_key(
+        key_id: PocketIcMasterPublicKeyId,
+        canister_id: &CanisterId,
+        derivation_path: &[Vec<u8>],
+    ) -> (Self, [u8; 32]) {
+        let mk = PublicKey::pocketic_key(key_id);
+        mk.derive_subkey(&DerivationPath::from_canister_id_and_path(
+            canister_id.as_slice(),
+            derivation_path,
+        ))
+    }
+
     /// Deserialize a public key stored in SEC1 format
     ///
     /// This is just the encoding of the point. Both compressed and uncompressed
@@ -768,7 +844,7 @@ impl PublicKey {
     /// See SEC1 <https://www.secg.org/sec1-v2.pdf> section 2.3.3 for details of the format
     pub fn deserialize_sec1(bytes: &[u8]) -> Result<Self, KeyDecodingError> {
         let key = k256::PublicKey::from_sec1_bytes(bytes)
-            .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
+            .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
         Ok(Self { key })
     }
 
@@ -798,14 +874,14 @@ impl PublicKey {
     pub fn deserialize_der(bytes: &[u8]) -> Result<Self, KeyDecodingError> {
         use k256::pkcs8::DecodePublicKey;
         let key = k256::PublicKey::from_public_key_der(bytes)
-            .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{:?}", e)))?;
+            .map_err(|e| KeyDecodingError::InvalidKeyEncoding(format!("{e:?}")))?;
         Ok(Self { key })
     }
 
     /// Deserialize a public key stored in PEM SubjectPublicKeyInfo format
     pub fn deserialize_pem(pem: &str) -> Result<Self, KeyDecodingError> {
-        let der = pem::parse(pem)
-            .map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{:?}", e)))?;
+        let der =
+            pem::parse(pem).map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
         if der.tag != "PUBLIC KEY" {
             return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
         }
@@ -991,10 +1067,9 @@ impl PublicKey {
         let pt = self.serialize_sec1(true);
 
         // from_bytes takes just the x coordinate encoding:
-        if let Ok(bip340) = k256::schnorr::VerifyingKey::from_bytes(&pt[1..]) {
-            bip340.verify_prehash(message, &signature).is_ok()
-        } else {
-            false
+        match k256::schnorr::VerifyingKey::from_bytes(&pt[1..]) {
+            Ok(bip340) => bip340.verify_prehash(message, &signature).is_ok(),
+            _ => false,
         }
     }
 

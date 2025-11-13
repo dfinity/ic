@@ -1,14 +1,12 @@
 use crate::{
-    default_approve_args, init_args, send_approval, setup, transfer, InitArgs,
-    ARCHIVE_TRIGGER_THRESHOLD, DECIMAL_PLACES, MINTER, NUM_BLOCKS_TO_ARCHIVE,
+    ARCHIVE_TRIGGER_THRESHOLD, DECIMAL_PLACES, InitArgs, MINTER, NUM_BLOCKS_TO_ARCHIVE,
+    default_approve_args, init_args, send_approval, setup, transfer,
 };
-use candid::{CandidType, Decode, Encode, Principal};
+use candid::{CandidType, Encode, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_http_types::{HttpRequest, HttpResponse};
+use ic_ledger_suite_state_machine_helpers::{parse_metric, retrieve_metrics};
 use ic_state_machine_tests::StateMachine;
-use ic_types::ingress::WasmResult;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
-use std::str::FromStr;
 
 pub enum LedgerSuiteType {
     ICP,
@@ -178,7 +176,7 @@ pub fn should_compute_and_export_total_volume_metric<T>(
     let env = StateMachine::new();
 
     let transfer_fee = 10f64.powf(DECIMAL_PLACES as f64 - 1f64) as u64;
-    println!("transfer_fee: {}", transfer_fee);
+    println!("transfer_fee: {transfer_fee}");
     let args = InitArgs {
         transfer_fee: transfer_fee.into(),
         ..init_args(initial_balances)
@@ -191,7 +189,7 @@ pub fn should_compute_and_export_total_volume_metric<T>(
     let mut increase_expected_total_volume_and_assert = |amount: u64| {
         expected_total += amount as f64 / denominator;
         assert_eq!(
-            format!("{:.0}", expected_total),
+            format!("{expected_total:.0}"),
             format!(
                 "{:.0}",
                 parse_metric(&env, canister_id, TOTAL_VOLUME_METRIC)
@@ -205,7 +203,7 @@ pub fn should_compute_and_export_total_volume_metric<T>(
     // Perform a bunch of small transfers to verify that the computation of decimals is correct,
     // and so that the total fee exceeds 1.0.
     let num_operations = denominator as u64 / transfer_fee;
-    println!("performing {} transfers", num_operations);
+    println!("performing {num_operations} transfers");
     for _ in 0..num_operations {
         transfer(
             &env,
@@ -287,58 +285,6 @@ fn assert_existence_of_metric(env: &StateMachine, canister_id: CanisterId, metri
     let metrics = retrieve_metrics(env, canister_id);
     assert!(
         metrics.iter().any(|line| line.contains(metric)),
-        "Expected metric not found: {} in:\n{:?}",
-        metric,
-        metrics
+        "Expected metric not found: {metric} in:\n{metrics:?}"
     );
-}
-
-pub fn parse_metric(env: &StateMachine, canister_id: CanisterId, metric: &str) -> u64 {
-    let metrics = retrieve_metrics(env, canister_id);
-    for line in &metrics {
-        let tokens: Vec<&str> = line.split(' ').collect();
-        let name = *tokens
-            .first()
-            .unwrap_or_else(|| panic!("metric line '{}' should have at least one token", line));
-        if name != metric {
-            continue;
-        }
-        let value_str = *tokens
-            .get(1)
-            .unwrap_or_else(|| panic!("metric line '{}' should have at least two tokens", line));
-        let u64_value = f64::from_str(value_str)
-            .unwrap_or_else(|err| panic!("metric value is not an number: {} ({})", line, err))
-            .round() as u64;
-        return u64_value;
-    }
-    panic!("metric '{}' not found in metrics: {:?}", metric, metrics);
-}
-
-pub fn retrieve_metrics(env: &StateMachine, canister_id: CanisterId) -> Vec<String> {
-    let request = HttpRequest {
-        method: "GET".to_string(),
-        url: "/metrics".to_string(),
-        headers: Default::default(),
-        body: Default::default(),
-    };
-    let result = env
-        .query(
-            canister_id,
-            "http_request",
-            Encode!(&request).expect("failed to encode HTTP request"),
-        )
-        .expect("should successfully query canister for metrics");
-    let reply = match result {
-        WasmResult::Reply(bytes) => bytes,
-        WasmResult::Reject(reject) => {
-            panic!("expected a successful reply, got a reject: {}", reject)
-        }
-    };
-    let response = Decode!(&reply, HttpResponse).expect("should successfully decode HttpResponse");
-    assert_eq!(response.status_code, 200_u16);
-    String::from_utf8_lossy(response.body.as_slice())
-        .trim()
-        .split('\n')
-        .map(|line| line.to_string())
-        .collect::<Vec<_>>()
 }

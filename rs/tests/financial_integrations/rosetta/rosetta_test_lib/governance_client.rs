@@ -4,9 +4,9 @@ use canister_test::PrincipalId;
 use ic_agent::Agent;
 use ic_nns_common::{pb::v1::ProposalId, types::NeuronId};
 use ic_nns_governance_api::{
-    manage_neuron_response, manage_neuron_response::MakeProposalResponse,
-    proposal_submission_helpers::create_make_proposal_payload, MakeProposalRequest,
-    ManageNeuronResponse, ProposalInfo,
+    MakeProposalRequest, ManageNeuronResponse, ProposalInfo, manage_neuron_response,
+    manage_neuron_response::MakeProposalResponse,
+    proposal_submission_helpers::create_make_proposal_payload,
 };
 use ic_system_test_driver::{
     driver::{
@@ -15,7 +15,7 @@ use ic_system_test_driver::{
     },
     util::{assert_create_agent, block_on},
 };
-use slog::{debug, Logger};
+use slog::{Logger, debug};
 
 pub struct GovernanceClient {
     agent: Agent,
@@ -104,10 +104,7 @@ impl GovernanceClient {
             );
             proposal_id.unwrap()
         } else {
-            panic!(
-                "Making Proposal was unsuccessful --> Response : {:?}",
-                manage_neuron_res
-            )
+            panic!("Making Proposal was unsuccessful --> Response : {manage_neuron_res:?}")
         }
     }
 }

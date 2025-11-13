@@ -97,7 +97,7 @@ If you deploy from a dev env,
 [source,shell]
 ----
 git checkout ca8847547d327ce8a3bd81d25a590e01da1a3af5
-./gitlab-ci/container/build-ic.sh -c
+./ci/container/build-ic.sh -c
 ----
 
 Modify the `transfer_fee` so that it roughly matches 0.004 USD.

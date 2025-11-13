@@ -68,6 +68,7 @@ ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-canonical-state = { path = "../../canonical_state" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
 ic-crypto-temp-crypto = { path = "../../crypto/temp_crypto" }
+ic-crypto-test-utils-crypto-returning-ok = { path = "../../crypto/test_utils/crypto_returning_ok" }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-http-endpoints-test-agent = { path = "../test_agent" }
 ic-interfaces-mocks = { path = "../../interfaces/mocks" }
@@ -78,7 +79,7 @@ ic-protobuf = { path = "../../protobuf" }
 ic-read-state-response-parser = { path = "../../canister_client/read_state_response_parser" }
 ic-registry-keys = { path = "../../registry/keys" }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
-ic-test-utilities = { path = "../../test_utilities" }
+ic-test-utilities-consensus = { path = "../../test_utilities/consensus" }
 ic-test-utilities-state = { path = "../../test_utilities/state" }
 ic-test-utilities-time = { path = "../../test_utilities/time" }
 ic-test-utilities-types = { path = "../../test_utilities/types" }

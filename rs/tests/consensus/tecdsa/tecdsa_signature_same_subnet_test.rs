@@ -14,7 +14,7 @@ use ic_system_test_driver::{
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     systest,
-    util::{block_on, runtime_from_url, MessageCanister},
+    util::{MessageCanister, block_on, runtime_from_url},
 };
 
 fn test(env: TestEnv) {

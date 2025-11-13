@@ -13,12 +13,12 @@ fn get_metric_broken_out_by_dissolve_delay(
             assert_eq!(sample.labels.len(), 2);
             let lower_bound = sample.labels.get("dissolve_delay_ge_months").unwrap();
             let upper_bound = sample.labels.get("dissolve_delay_lt_months").unwrap();
-            let range = format!("[{}, {})", lower_bound, upper_bound);
+            let range = format!("[{lower_bound}, {upper_bound})");
             let value = match &sample.value {
                 prometheus_parse::Value::Gauge(value)
                 | prometheus_parse::Value::Counter(value)
                 | prometheus_parse::Value::Untyped(value) => *value,
-                _ => panic!("Unable to determine sample value: {:#?}", sample),
+                _ => panic!("Unable to determine sample value: {sample:#?}"),
             };
 
             (range, value)

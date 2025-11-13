@@ -13,8 +13,8 @@ Success:: The subnet is unstuck as we can write a message to it.
 
 end::catalog[] */
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use ic_consensus_system_test_utils::upgrade::{
     bless_replica_version, deploy_guestos_to_all_subnet_nodes, get_assigned_replica_version,
 };
@@ -78,7 +78,7 @@ fn test(test_env: TestEnv) {
         &target_version,
         &logger,
         sha256,
-        guest_launch_measurements,
+        Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     ));
 

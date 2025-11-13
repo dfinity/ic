@@ -9,7 +9,7 @@ Usage:
 
   Generate the canister http adapter config.
 
-  -o outfile: output ic-btc-adapter.json5 file
+  -o outfile: output ic-https-outcalls-adapter.json5 file
 EOF
 }
 

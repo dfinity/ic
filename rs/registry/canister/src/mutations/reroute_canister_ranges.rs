@@ -2,7 +2,7 @@ use crate::registry::Registry;
 use candid::CandidType;
 use ic_base_types::SubnetId;
 use ic_registry_keys::make_subnet_record_key;
-use ic_registry_routing_table::{is_subset_of, CanisterIdRange, CanisterIdRanges};
+use ic_registry_routing_table::{CanisterIdRange, CanisterIdRanges, is_subset_of};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
@@ -17,7 +17,7 @@ impl Registry {
         let reassigned_canister_ranges = payload.reassigned_canister_ranges.clone();
         // Check if the canister ID ranges are well formed.
         let reassigned_canister_ranges = CanisterIdRanges::try_from(reassigned_canister_ranges)
-            .map_err(|e| format!("canister ID ranges are not well formed: {:?}", e))?;
+            .map_err(|e| format!("canister ID ranges are not well formed: {e:?}"))?;
 
         let source = payload.source_subnet;
         let destination = payload.destination_subnet;
@@ -25,9 +25,9 @@ impl Registry {
         let version = self.latest_version();
 
         self.get(&make_subnet_record_key(source).into_bytes(), version)
-            .ok_or_else(|| format!("source {} is not a known subnet", source))?;
+            .ok_or_else(|| format!("source {source} is not a known subnet"))?;
         self.get(&make_subnet_record_key(destination).into_bytes(), version)
-            .ok_or_else(|| format!("destination {} is not a known subnet", destination))?;
+            .ok_or_else(|| format!("destination {destination} is not a known subnet"))?;
 
         // Check if all the canister ID ranges to be rerouted are from the source subnet.
         // To be clear, the source subnet here always means the subnet
@@ -40,16 +40,14 @@ impl Registry {
             source_subnet_ranges.iter(),
         ) {
             return Err(format!(
-                "not all canisters to be migrated are hosted by the provided source subnet {}",
-                source
+                "not all canisters to be migrated are hosted by the provided source subnet {source}"
             ));
         }
 
         // Check that routing table mutation is covered by an existing canister migration.
         let canister_migrations = self.get_canister_migrations(version).ok_or_else(|| {
             format!(
-                "the ranges to be migrated {:?} are not covered by any existing canister migrations.",
-                reassigned_canister_ranges
+                "the ranges to be migrated {reassigned_canister_ranges:?} are not covered by any existing canister migrations."
             )
         })?;
 
@@ -68,8 +66,7 @@ impl Registry {
             // If the rerouting is neither valid normal migration nor valid rollback,
             // the rerouting cannot proceed and an error is returned.
             return Err(format!(
-                "the ranges to be migrated {:?} are not covered by any existing canister migrations.",
-                reassigned_canister_ranges
+                "the ranges to be migrated {reassigned_canister_ranges:?} are not covered by any existing canister migrations."
             ));
         }
 

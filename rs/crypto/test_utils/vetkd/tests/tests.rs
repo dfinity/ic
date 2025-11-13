@@ -7,20 +7,20 @@ use rand_chacha::rand_core::SeedableRng;
 fn should_generate_valid_bls_signature() {
     let mut rng = rand_chacha::ChaCha20Rng::seed_from_u64(42);
 
-    let pk = PrivateKey::generate(&rng.gen::<[u8; 32]>());
+    let pk = PrivateKey::generate(&rng.r#gen::<[u8; 32]>());
 
-    let canister_id = rng.gen::<[u8; 32]>();
-    let context = rng.gen::<[u8; 32]>();
-    let input = rng.gen::<[u8; 32]>();
+    let canister_id = rng.r#gen::<[u8; 32]>();
+    let context = rng.r#gen::<[u8; 32]>();
+    let input = rng.r#gen::<[u8; 32]>();
 
-    let tsk = TransportSecretKey::from_seed(rng.gen::<[u8; 32]>().to_vec()).unwrap();
+    let tsk = TransportSecretKey::from_seed(rng.r#gen::<[u8; 32]>().to_vec()).unwrap();
 
     let ek_bytes = pk.vetkd_protocol(
         &canister_id,
         &context,
         &input,
         &tsk.public_key(),
-        &rng.gen::<[u8; 32]>(),
+        &rng.r#gen::<[u8; 32]>(),
     );
 
     let ek = EncryptedVetKey::deserialize(&ek_bytes).unwrap();

@@ -21,7 +21,7 @@ use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_state_manager::{
     PermanentStateHashError::*, StateHashError, StateManager, TransientStateHashError::*,
 };
-use ic_logger::{debug, error, trace, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, trace};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     consensus::{
@@ -33,7 +33,7 @@ use ic_types::{
 use std::sync::Arc;
 
 /// CatchUpPackage maker is responsible for creating beacon shares
-pub struct CatchUpPackageMaker {
+pub(crate) struct CatchUpPackageMaker {
     replica_config: ReplicaConfig,
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -190,22 +190,22 @@ impl CatchUpPackageMaker {
                 None
             }
             Err(StateHashError::Transient(HashNotComputedYet(_))) => {
-                debug!(self.log, "Cannot make CUP at height {} because state hash is not computed yet. Will retry", height);
+                debug!(
+                    self.log,
+                    "Cannot make CUP at height {} because state hash is not computed yet. Will retry",
+                    height
+                );
                 None
             }
             Err(StateHashError::Permanent(StateRemoved(_))) => {
                 // This should never happen as we don't want to remove the state
                 // for CUP before the hash is fetched.
                 panic!(
-                    "State at height {} had disappeared before we had a chance to make a CUP. This should not happen.",
-                    height,
+                    "State at height {height} had disappeared before we had a chance to make a CUP. This should not happen.",
                 );
             }
             Err(StateHashError::Permanent(StateNotFullyCertified(_))) => {
-                panic!(
-                    "Height {} is not a fully certified height. This should not happen.",
-                    height,
-                );
+                panic!("Height {height} is not a fully certified height. This should not happen.",);
             }
             Ok(state_hash) => {
                 let summary = start_block.payload.as_ref().as_summary();
@@ -268,8 +268,8 @@ mod tests {
     //! CatchUpPackageMaker unit tests
     use super::*;
     use ic_consensus_mocks::{
-        dependencies_with_subnet_params, dependencies_with_subnet_records_with_raw_state_manager,
-        Dependencies,
+        Dependencies, dependencies_with_subnet_params,
+        dependencies_with_subnet_records_with_raw_state_manager,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::message_routing::FakeMessageRouting;
@@ -280,10 +280,10 @@ mod tests {
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
     use ic_types::{
-        consensus::{idkg::PreSigId, BlockPayload, Payload, SummaryPayload},
+        CryptoHashOfState, Height, RegistryVersion,
+        consensus::{BlockPayload, Payload, SummaryPayload, idkg::PreSigId},
         crypto::CryptoHash,
         messages::CallbackId,
-        CryptoHashOfState, Height, RegistryVersion,
     };
     use std::sync::{Arc, RwLock};
 

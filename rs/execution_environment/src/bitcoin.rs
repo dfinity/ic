@@ -4,12 +4,12 @@ use ic_management_canister_types_private::{
     Payload,
 };
 use ic_replicated_state::{
+    ReplicatedState,
     metadata_state::subnet_call_context_manager::{
         BitcoinGetSuccessorsContext, BitcoinSendTransactionInternalContext, SubnetCallContext,
     },
-    ReplicatedState,
 };
-use ic_types::{messages::Request, CanisterId};
+use ic_types::{CanisterId, messages::Request};
 
 /// Handles a `bitcoin_get_successors` request.
 /// Returns Ok if the request has been accepted, and an error otherwise.
@@ -112,7 +112,7 @@ pub fn send_transaction_internal(
 #[cfg(test)]
 mod tests {
     use ic_management_canister_types_private::{
-        BitcoinGetSuccessorsArgs, Method, Payload as Ic00Payload, IC_00,
+        BitcoinGetSuccessorsArgs, IC_00, Method, Payload as Ic00Payload,
     };
     use ic_test_utilities::universal_canister::{call_args, wasm};
     use ic_test_utilities_execution_environment::ExecutionTestBuilder;

@@ -12,18 +12,18 @@ use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{
+    RegistryVersion, SubnetId,
     consensus::{CatchUpContentProtobufBytes, CatchUpPackage},
     crypto::{
-        threshold_sig::ni_dkg::NiDkgTargetSubnet, CombinedThresholdSig, CombinedThresholdSigOf,
+        CombinedThresholdSig, CombinedThresholdSigOf, threshold_sig::ni_dkg::NiDkgTargetSubnet,
     },
-    RegistryVersion, SubnetId,
 };
 use prost::Message;
 use tokio::{fs, runtime::Handle, task};
 use url::Url;
 
 use crate::{
-    registry::{get_nodes, RegistryCanisterClient},
+    registry::{RegistryCanisterClient, get_nodes},
     util::{http_url, make_logger},
 };
 
@@ -37,7 +37,7 @@ pub async fn get_catchup_content(url: &Url) -> Result<Option<pb::CatchUpContent>
         Some(cup) => {
             // TODO(roman): verify signatures?
             let content = pb::CatchUpContent::decode(&cup.content[..])
-                .map_err(|e| format!("failed to deserialize cup: {}", e))?;
+                .map_err(|e| format!("failed to deserialize cup: {e}"))?;
             Ok(Some(content))
         }
         None => Ok(None),
@@ -50,7 +50,7 @@ async fn get_cup(url: &Url) -> Result<Option<pb::CatchUpPackage>, String> {
     agent
         .query_cup_endpoint(None)
         .await
-        .map_err(|e| format!("failed to get catch up package: {}", e))
+        .map_err(|e| format!("failed to get catch up package: {e}"))
 }
 
 /// Returns the subnet id for the given CUP.
@@ -76,7 +76,7 @@ fn get_subnet_id(cup: &CatchUpPackage) -> Result<SubnetId, String> {
 pub async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBuf>) {
     let registry_canister = Arc::new(RegistryCanister::new(vec![registry_url]));
 
-    println!("Fetching the list of nodes on subnet {}...", subnet_id);
+    println!("Fetching the list of nodes on subnet {subnet_id}...");
 
     let node_records = get_nodes(&registry_canister, subnet_id).await;
     println!("Found {} node(s)", node_records.len());
@@ -97,10 +97,10 @@ pub async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBu
         let (node_id, content) = t.await.unwrap();
         match content {
             Err(err) => {
-                println!(" ✘ [{}]: {}", node_id, err);
+                println!(" ✘ [{node_id}]: {err}");
             }
             Ok(None) => {
-                println!(" ? [{}]: no cup yet", node_id);
+                println!(" ? [{node_id}]: no cup yet");
             }
             Ok(Some(cup)) => {
                 let content = pb::CatchUpContent::decode(&cup.content[..]).unwrap();
@@ -109,10 +109,7 @@ pub async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBu
                 let hash = hex::encode(&content.state_hash[..]);
                 let time = block.time;
 
-                println!(
-                    " ✔ [{}]: time = {}, height = {}, state_hash: {}",
-                    node_id, time, height, hash
-                );
+                println!(" ✔ [{node_id}]: time = {time}, height = {height}, state_hash: {hash}");
                 if height > latest_height {
                     latest_height = height;
                     latest = Some((node_id, cup));
@@ -135,7 +132,7 @@ pub async fn explore(registry_url: Url, subnet_id: SubnetId, path: Option<PathBu
 
         if let Some(path) = path {
             let bytes = cup.encode_to_vec();
-            println!("Writing cup to {:?}", path);
+            println!("Writing cup to {path:?}");
             fs::write(path, bytes).await.expect("Failed to write bytes");
         }
     }
@@ -161,10 +158,7 @@ pub fn verify(
 ) -> SubnetStatus {
     let client = Arc::new(RegistryCanisterClient::new(nns_url, nns_pem));
     let latest_version = client.get_latest_version();
-    println!(
-        "Registry client created. Latest registry version: {}",
-        latest_version,
-    );
+    println!("Registry client created. Latest registry version: {latest_version}",);
 
     println!("\nCreating crypto component...");
     let (crypto_config, _tmp) = CryptoConfig::new_in_temp_dir();
@@ -179,7 +173,7 @@ pub fn verify(
         None,
     ));
 
-    println!("\nReading CUP file at {:?}", cup_path);
+    println!("\nReading CUP file at {cup_path:?}");
     let bytes = std::fs::read(cup_path).expect("Failed to read file");
     let proto_cup = pb::CatchUpPackage::decode(bytes.as_slice()).expect("Failed to decode bytes");
     let cup = CatchUpPackage::try_from(&proto_cup).expect("Failed to deserialize CUP content");
@@ -194,7 +188,7 @@ pub fn verify(
     }
 
     let subnet_id = get_subnet_id(&cup).unwrap();
-    println!("\nChecking CUP signature for subnet {}...", subnet_id);
+    println!("\nChecking CUP signature for subnet {subnet_id}...");
 
     let block = cup.content.block.get_value();
     crypto
@@ -204,12 +198,7 @@ pub fn verify(
             subnet_id,
             block.context.registry_version,
         )
-        .map_err(|e| {
-            format!(
-                "Failed to verify CUP signature at: {:?} with: {:?}",
-                cup_path, e
-            )
-        })
+        .map_err(|e| format!("Failed to verify CUP signature at: {cup_path:?} with: {e:?}"))
         .unwrap();
     println!("CUP signature verification successful!");
 
@@ -243,8 +232,12 @@ pub fn verify(
         "\nConfirmed that subnet {} was halted on this CUP as of {}.",
         subnet_id, block.context.time
     );
-    println!("This means that the CUP represents the latest state of the subnet while the subnet remains halted.");
-    println!("The subnet may ONLY be restarted via a recovery proposal using the same state hash as listed above.");
+    println!(
+        "This means that the CUP represents the latest state of the subnet while the subnet remains halted."
+    );
+    println!(
+        "The subnet may ONLY be restarted via a recovery proposal using the same state hash as listed above."
+    );
 
     println!("\nSearching for a recovery proposal...");
     for version in dkg_version.get() + 1..=latest_version.get() {
@@ -253,7 +246,7 @@ pub fn verify(
             Ok(contents) => {
                 if contents.value.is_some() && contents.version == version {
                     let cup_contents = contents.value.unwrap();
-                    println!("Found Recovery proposal at version {}:", version);
+                    println!("Found Recovery proposal at version {version}:");
                     println!("{:>20}: {}", "TIME", cup_contents.time);
                     println!("{:>20}: {}", "HEIGHT", cup_contents.height);
                     println!(
@@ -278,20 +271,21 @@ pub fn verify(
                     );
                     return SubnetStatus::Recovered;
                 } else {
-                    println!("No Recovery proposal found at version {}", version);
+                    println!("No Recovery proposal found at version {version}");
                 }
             }
             Err(err) => {
-                println!(
-                    "Failed to fetch CUP contents at version {}: {}",
-                    version, err
-                )
+                println!("Failed to fetch CUP contents at version {version}: {err}")
             }
         }
     }
 
     println!("The subnet has not been recovered yet.");
-    println!("A recovery proposal should specify a time and height that is greater than the time and height of the CUP above.");
-    println!("Additionally, the proposed state hash should be equal to the one in the provided CUP, to ensure there were no modifications to the state.");
+    println!(
+        "A recovery proposal should specify a time and height that is greater than the time and height of the CUP above."
+    );
+    println!(
+        "Additionally, the proposed state hash should be equal to the one in the provided CUP, to ensure there were no modifications to the state."
+    );
     SubnetStatus::Halted
 }

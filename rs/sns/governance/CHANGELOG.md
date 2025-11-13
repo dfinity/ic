@@ -11,6 +11,34 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-11-07: Proposal 139316
+
+https://dashboard.internetcomputer.org/proposal/139316
+
+Just a "maintenance" release, i.e. no behavior changes, just making sure that we
+do not become too behind, and avoid too many changes piling up in for the next
+"real" upgrade.
+
+
+# 2025-09-19: Proposal 138584
+
+https://dashboard.internetcomputer.org/proposal/138584
+
+## Added
+
+* The feature flag `SNS_EXTENSIONS_ENABLED` is turned on. Enabling it allows for deployment of SNS extensions.
+
+# 2025-09-05: Proposal 138373
+
+http://dashboard.internetcomputer.org/proposal/138373
+
+## Added
+
+* Added extension_operations to list_topics, which exposes the operations of each registered extension underneath the
+  topic which allows voters to correctly understand the impact of following on particular topics. Extensions are
+  canisters that add additional functionality to an SNS through a privileged integration.
+
+
 # 2025-08-11: Proposal 137819
 
 http://dashboard.internetcomputer.org/proposal/137819

@@ -1,20 +1,20 @@
-use super::hash::{chunk_hasher, file_hasher, ManifestHash};
-use super::{validate_manifest_internal_consistency, write_chunk_hash, ManifestValidationError};
+use super::hash::{ManifestHash, chunk_hasher, file_hasher};
+use super::{ManifestValidationError, validate_manifest_internal_consistency, write_chunk_hash};
 use crate::state_sync::types::{
-    ChunkInfo, FileInfo, Manifest, ManifestData, DEFAULT_CHUNK_SIZE,
-    MAX_SUPPORTED_STATE_SYNC_VERSION,
+    ChunkInfo, DEFAULT_CHUNK_SIZE, FileInfo, MAX_SUPPORTED_STATE_SYNC_VERSION, Manifest,
+    ManifestData,
 };
-use ic_base_types::{subnet_id_into_protobuf, SubnetId};
+use ic_base_types::{SubnetId, subnet_id_into_protobuf};
 use ic_protobuf::state::system_metadata::v1 as pb_metadata;
 use ic_registry_routing_table::RoutingTable;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::SystemMetadata;
 use ic_state_layout::{
-    canister_id_from_path, INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, STATS_FILE, SUBNET_QUEUES_FILE,
-    SYSTEM_METADATA_FILE,
+    INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, STATS_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
+    canister_id_from_path,
 };
-use ic_types::state_sync::StateSyncVersion;
 use ic_types::Time;
+use ic_types::state_sync::StateSyncVersion;
 use prost::Message;
 use std::path::PathBuf;
 
@@ -92,8 +92,7 @@ pub fn split_manifest(
             } else {
                 return Err(ManifestValidationError::InconsistentManifest {
                     reason: format!(
-                        "canister {} is mapped to neither subnet A' ({}) nor subnet B ({})",
-                        canister_id, subnet_a, subnet_b
+                        "canister {canister_id} is mapped to neither subnet A' ({subnet_a}) nor subnet B ({subnet_b})"
                     ),
                 });
             }
@@ -107,7 +106,7 @@ pub fn split_manifest(
                 Some(SPLIT_MARKER_FILE) => {
                     return Err(ManifestValidationError::InconsistentManifest {
                         reason: "state is already undergoing a split".into(),
-                    })
+                    });
                 }
                 Some(SUBNET_QUEUES_FILE) => {
                     // Preserve on subnet A'.
@@ -135,7 +134,7 @@ pub fn split_manifest(
                 _ => {
                     return Err(ManifestValidationError::InconsistentManifest {
                         reason: format!("unknown file in manifest: {}", path.display()),
-                    })
+                    });
                 }
             }
         }

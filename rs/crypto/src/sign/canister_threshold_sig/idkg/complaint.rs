@@ -1,9 +1,9 @@
 use super::*;
 use crate::sign::canister_threshold_sig::idkg::utils::{
-    index_and_dealing_of_dealer, retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
+    MegaKeyFromRegistryError, index_and_dealing_of_dealer, retrieve_mega_public_key_from_registry,
 };
-use ic_crypto_internal_threshold_sig_canister_threshold_sig::verify_complaint as idkg_verify_complaint;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::IDkgComplaintInternal;
+use ic_crypto_internal_threshold_sig_canister_threshold_sig::verify_complaint as idkg_verify_complaint;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::NodeIndex;
 use std::convert::TryFrom;
@@ -28,7 +28,7 @@ pub fn verify_complaint(
     let complainer_index = index_of_complainer(complainer_id, transcript)?;
     let internal_complaint = IDkgComplaintInternal::try_from(complaint).map_err(|e| {
         IDkgVerifyComplaintError::SerializationError {
-            internal_error: format!("failed to deserialize complaint: {:?}", e),
+            internal_error: format!("failed to deserialize complaint: {e:?}"),
         }
     })?;
     let (dealer_index, internal_dealing) =

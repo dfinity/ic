@@ -40,7 +40,7 @@ message StreamFlags {
 
 message Stream {
   uint64 messages_begin = 1;
-  repeated RequestOrResponse messages = 2;
+  repeated StreamMessage messages = 2;
   uint64 signals_end = 5;
   repeated RejectSignal reject_signals = 8;
   StreamFlags reverse_stream_flags = 7;
@@ -104,6 +104,23 @@ message RequestOrResponse {
   oneof r {
     Request request = 1;
     Response response = 2;
+  }
+}
+
+message Refund {
+  types.v1.CanisterId recipient = 1;
+  Cycles amount = 2;
+}
+
+message Refunds {
+  repeated Refund refunds = 1;
+}
+
+message StreamMessage {
+  oneof message {
+    Request request = 1;
+    Response response = 2;
+    Refund refund = 3;
   }
 }
 

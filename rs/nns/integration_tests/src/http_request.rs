@@ -36,7 +36,7 @@ fn test_http_request_decoding_quota_for_canister(
         .unwrap()
     {
         WasmResult::Reply(bytes) => Decode!(&bytes, HttpResponse).unwrap(),
-        WasmResult::Reject(reason) => panic!("Unexpected reject: {}", reason),
+        WasmResult::Reject(reason) => panic!("Unexpected reject: {reason}"),
     };
     assert_eq!(response.status_code, 200);
 

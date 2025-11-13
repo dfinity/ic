@@ -9,9 +9,11 @@ documentation.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 candid = { workspace = true }
+canister-test = { path = "../../rust_canisters/canister_test" }
 futures = { workspace = true }
 ic-agent = { workspace = true }
 ic-btc-adapter-test-utils = { path = "../../bitcoin/adapter/test_utils" }
+ic_consensus_system_test_utils = { path = "../consensus/utils" }
 ic-management-canister-types-private = { path = "../../types/management_canister_types" }
 ic-registry-subnet-type = { path = "../../registry/subnet_type" }
 ic-registry-nns-data-provider = { path = "../../registry/nns_data_provider" }
@@ -33,9 +35,11 @@ ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-nns-governance-api = { path = "../../nns/governance/api" }
 lazy_static = { workspace = true }
+serde = { workspace = true }
 serde_cbor = { workspace = true }
 ic-crypto-sha2 = { path = "../../crypto/sha2" }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 wat = { workspace = true }
 assert_matches = { workspace = true }
 ic-registry-routing-table = { path = "../../registry/routing_table" }
@@ -81,3 +85,7 @@ path = "btc_get_balance_test.rs"
 [[bin]]
 name = "cycles_cost_schedule_test"
 path = "cycles_cost_schedule_test.rs"
+
+[[bin]]
+name = "canister_migration_test"
+path = "canister_migration_test.rs"

@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:defs.bzl", "rust_ic_test")
 load("ledger_canisters.bzl", "LEDGER_CANISTER_DATA", "LEDGER_CANISTER_RUSTC_ENV", "rust_ledger_canister")
@@ -84,11 +85,6 @@ rust_ledger_canister(
 )
 
 rust_ledger_canister(
-    name = "ledger-canister-wasm-notify-method",
-    crate_features = ["notify-method"],
-)
-
-rust_ledger_canister(
     name = "ledger-canister-wasm-next-version",
     extra_deps = [":ledger_next_version"],
 )
@@ -112,24 +108,22 @@ rust_test(
 
 rust_ic_test(
     name = "ledger_canister_test",
-    timeout = "long",
+    timeout = "eternal",
     srcs = ["tests/tests.rs"],
     data = [
         ":ledger-canister-wasm",
         ":ledger-canister-wasm-allowance-getter",
         ":ledger-canister-wasm-next-version",
-        ":ledger-canister-wasm-notify-method",
         ":ledger-canister-wasm-prev-version",
-        "@mainnet_icp_ledger_canister//file",
+        "@mainnet_canisters//:ledger.wasm.gz",
     ],
     env = {
         "RUST_TEST_THREADS": "4",
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp/ledger",
-        "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
+        "ICP_LEDGER_DEPLOYED_VERSION_WASM_PATH": "$(rootpath @mainnet_canisters//:ledger.wasm.gz)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath :ledger-canister-wasm)",
         "LEDGER_CANISTER_ALLOWANCE_GETTER_WASM_PATH": "$(rootpath :ledger-canister-wasm-allowance-getter)",
         "LEDGER_CANISTER_NEXT_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-next-version)",
-        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath :ledger-canister-wasm-notify-method)",
         "LEDGER_CANISTER_PREV_VERSION_WASM_PATH": "$(rootpath :ledger-canister-wasm-prev-version)",
     },
     tags = ["cpu:4"],
@@ -142,7 +136,9 @@ rust_ic_test(
         "//rs/ledger_suite/icp:icp_ledger",
         "//rs/ledger_suite/icrc1",
         "//rs/ledger_suite/icrc1/test_utils",
+        "//rs/ledger_suite/test_utils/state_machine_helpers:ic-ledger-suite-state-machine-helpers",
         "//rs/ledger_suite/tests/sm-tests:ic-ledger-suite-state-machine-tests",
+        "//rs/ledger_suite/tests/sm-tests/constants:ic-ledger-suite-state-machine-tests-constants",
         "//rs/rust_canisters/dfn_protobuf",
         "//rs/rust_canisters/on_wire",
         "//rs/state_machine_tests",

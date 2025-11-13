@@ -19,7 +19,7 @@ pub type RPCResult<T> = Result<T, Error>;
 
 impl From<Error> for std::io::Error {
     fn from(err: Error) -> Self {
-        std::io::Error::other(format!("IPC error: {:?}", err))
+        std::io::Error::other(format!("IPC error: {err:?}"))
     }
 }
 

@@ -4,7 +4,7 @@ use crate::numeric::LedgerBurnIndex;
 use crate::state::{transactions, transactions::EthWithdrawalRequest};
 use crate::tx::{SignedEip1559TransactionRequest, TransactionPrice};
 use candid::{CandidType, Deserialize, Nat, Principal};
-use evm_rpc_client::BlockTag;
+use evm_rpc_types::BlockTag;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use minicbor::{Decode, Encode};
 use std::fmt::{Display, Formatter};
@@ -186,7 +186,7 @@ impl Display for RetrieveEthStatus {
             RetrieveEthStatus::TxFinalized(tx_status) => match tx_status {
                 TxFinalizedStatus::Success {
                     transaction_hash, ..
-                } => write!(f, "Confirmed({})", transaction_hash),
+                } => write!(f, "Confirmed({transaction_hash})"),
                 TxFinalizedStatus::PendingReimbursement(tx) => {
                     write!(f, "PendingReimbursement({})", tx.transaction_hash)
                 }
@@ -196,8 +196,7 @@ impl Display for RetrieveEthStatus {
                     reimbursed_amount,
                 } => write!(
                     f,
-                    "Failure({}, reimbursed: {} Wei in block: {})",
-                    transaction_hash, reimbursed_amount, reimbursed_in_block
+                    "Failure({transaction_hash}, reimbursed: {reimbursed_amount} Wei in block: {reimbursed_in_block})"
                 ),
             },
         }
@@ -237,7 +236,9 @@ impl From<LedgerBurnError> for WithdrawalError {
                 failed_burn_amount,
                 ledger,
             } => {
-                panic!("BUG: withdrawal amount {failed_burn_amount} on the ckETH ledger {ledger:?} should always be higher than the ledger transaction fee {minimum_burn_amount}")
+                panic!(
+                    "BUG: withdrawal amount {failed_burn_amount} on the ckETH ledger {ledger:?} should always be higher than the ledger transaction fee {minimum_burn_amount}"
+                )
             }
         }
     }

@@ -1,7 +1,7 @@
-use anyhow::{bail, Context, Error};
+use anyhow::{Context, Error, bail};
 use candid::Principal;
 use clap::Parser;
-use ic_agent::{identity::Secp256k1Identity, Agent};
+use ic_agent::{Agent, identity::Secp256k1Identity};
 use k256::elliptic_curve::SecretKey;
 use rate_limiting_canister_client::{check_config, submit_config};
 use std::{path::PathBuf, str};
@@ -54,7 +54,9 @@ async fn main() -> Result<(), Error> {
         info!("Config file is correctly formatted");
     } else {
         if cli.identity_key.is_none() || cli.canister_id.is_none() {
-            bail!("Canister ID and identity key are required to submit the configuration to the canister!");
+            bail!(
+                "Canister ID and identity key are required to submit the configuration to the canister!"
+            );
         }
         let identity_key = cli.identity_key.unwrap();
         let canister_id = cli.canister_id.unwrap();

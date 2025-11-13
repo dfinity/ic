@@ -97,29 +97,25 @@ impl CallCanisters for Agent {
             .map_err(AgentCallError::Agent)?;
 
         let cbor: Value = serde_cbor::from_slice(&controllers_blob).map_err(|err| {
-            Self::Error::CanisterControllers(format!("Failed decoding CBOR data: {:?}", err))
+            Self::Error::CanisterControllers(format!("Failed decoding CBOR data: {err:?}"))
         })?;
 
         let Value::Array(controllers) = cbor else {
             return Err(Self::Error::CanisterControllers(format!(
-                "Expected controllers to be an array, but got {:?}",
-                cbor
+                "Expected controllers to be an array, but got {cbor:?}"
             )));
         };
 
         let (controllers, errors): (Vec<_>, Vec<_>) =
             controllers.into_iter().partition_map(|value| {
                 let Value::Bytes(bytes) = value else {
-                    let err = format!(
-                        "Expected canister controller to be of type bytes, got {:?}",
-                        value
-                    );
+                    let err =
+                        format!("Expected canister controller to be of type bytes, got {value:?}");
                     return Either::Right(err);
                 };
                 match Principal::try_from(&bytes) {
                     Err(err) => {
-                        let err =
-                            format!("Cannot interpret canister controller principal: {}", err);
+                        let err = format!("Cannot interpret canister controller principal: {err}");
                         Either::Right(err)
                     }
                     Ok(principal) => Either::Left(principal),
@@ -176,7 +172,7 @@ impl CallCanistersWithStoppedCanisterError for Agent {
 impl ProgressNetwork for Agent {
     async fn progress(&self, duration: Duration) {
         if duration > Duration::from_secs(5) {
-            eprintln!("Warning: waiting for {:?}, this may take a while", duration);
+            eprintln!("Warning: waiting for {duration:?}, this may take a while");
             eprintln!("Consider using shorter duration in 'progress' method calls");
         }
         tokio::time::sleep(duration).await;

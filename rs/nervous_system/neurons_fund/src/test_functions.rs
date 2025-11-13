@@ -11,8 +11,7 @@ impl DeserializableFunction for SimpleLinearFunction {
             Ok(Box::from(Self {}))
         } else {
             Err(format!(
-                "Cannot deserialize `{}` as SimpleLinearFunction",
-                repr
+                "Cannot deserialize `{repr}` as SimpleLinearFunction"
             ))
         }
     }
@@ -61,14 +60,12 @@ impl MatchingFunction for LinearFunction {
         let x = u64_to_dec(x_icp_e8s)?;
         let Some(x_times_slope) = x.checked_mul(self.slope) else {
             return Err(format!(
-                "Cannot apply linear function over {} due to multiplication overflow.",
-                x
+                "Cannot apply linear function over {x} due to multiplication overflow."
             ));
         };
         let Some(y) = x_times_slope.checked_add(self.intercept) else {
             return Err(format!(
-                "Cannot apply linear function over {} due to addition overflow.",
-                x
+                "Cannot apply linear function over {x} due to addition overflow."
             ));
         };
         Ok(y)

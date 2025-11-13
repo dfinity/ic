@@ -1,4 +1,4 @@
-use on_wire::{witness, FromWire, IntoWire, NewType};
+use on_wire::{FromWire, IntoWire, NewType, witness};
 use prost::Message;
 
 pub struct ProtoBuf<A>(pub A);

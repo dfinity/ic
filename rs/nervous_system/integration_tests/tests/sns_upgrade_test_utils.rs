@@ -2,15 +2,15 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_agent::helpers::await_with_timeout;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nervous_system_integration_tests::{
+    SectionTimer,
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
     pocket_ic_helpers::{
         self, hash_sns_wasms, nns, sns,
         sns::governance::{
-            set_automatically_advance_target_version_flag, EXPECTED_UPGRADE_DURATION_MAX_SECONDS,
-            EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
+            EXPECTED_UPGRADE_DURATION_MAX_SECONDS, EXPECTED_UPGRADE_STEPS_REFRESH_MAX_SECONDS,
+            set_automatically_advance_target_version_flag,
         },
     },
-    SectionTimer,
 };
 use ic_sns_governance::governance::UPGRADE_STEPS_INTERVAL_REFRESH_BACKOFF_SECONDS;
 use ic_sns_governance_api::pb::v1::upgrade_journal_entry;
@@ -86,8 +86,7 @@ pub async fn test_sns_upgrade(
 
     {
         eprintln!(
-            "Set automatically_advance_target_version to {}",
-            automatically_advance_target_version
+            "Set automatically_advance_target_version to {automatically_advance_target_version}"
         );
         set_automatically_advance_target_version_flag(
             &pocket_ic,
@@ -101,13 +100,13 @@ pub async fn test_sns_upgrade(
     let mut latest_sns_version = initial_sns_version;
 
     for upgrade_pass in 0..2 {
-        let _timer = SectionTimer::new(format!("Upgrade pass {}", upgrade_pass));
+        let _timer = SectionTimer::new(format!("Upgrade pass {upgrade_pass}"));
 
         let mut expected_upgrade_steps = vec![];
         {
             let _timer = SectionTimer::new("Adding all WASMs");
             for canister_type in &sns_canisters_to_upgrade {
-                eprintln!("modify_and_add_master_wasm for {:?}", canister_type);
+                eprintln!("modify_and_add_master_wasm for {canister_type:?}");
                 latest_sns_version = nns::sns_wasm::modify_and_add_master_wasm(
                     &pocket_ic,
                     latest_sns_version,

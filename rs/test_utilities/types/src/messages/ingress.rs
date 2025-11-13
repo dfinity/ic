@@ -1,13 +1,13 @@
 use crate::ids::{canister_test_id, user_test_id};
-use ic_canister_client_sender::{ed25519_public_key_to_der, Sender};
+use ic_canister_client_sender::{Sender, ed25519_public_key_to_der};
 use ic_types::{
+    CanisterId, PrincipalId, Time, UserId,
     crypto::DOMAIN_IC_REQUEST,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, Ingress, MessageId,
         SignedIngress,
     },
     time::expiry_time_from_now,
-    CanisterId, PrincipalId, Time, UserId,
 };
 use rand::thread_rng;
 use std::convert::TryFrom;
@@ -165,7 +165,7 @@ impl SignedIngressBuilder {
         let message_id = self.update.id();
         self.sender_sig = sender
             .sign_message_id(&message_id)
-            .map_err(|e| format!("failed to sign submit message: {}", e))
+            .map_err(|e| format!("failed to sign submit message: {e}"))
             .unwrap();
 
         self

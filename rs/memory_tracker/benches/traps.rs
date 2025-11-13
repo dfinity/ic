@@ -1,17 +1,19 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use ic_types::NumBytes;
-use memory_tracker::*;
+use memory_tracker::prefetching::{PrefetchingMemoryTracker, basic_signal_handler};
+use memory_tracker::{DirtyPageTracking, MemoryTracker};
 
 use libc::{self, c_void};
-use nix::sys::mman::{mmap, MapFlags, ProtFlags};
+use nix::sys::mman::{MapFlags, ProtFlags, mmap};
 use std::ptr;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use lazy_static::lazy_static;
 
 use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::PageMap;
 use ic_sys::PAGE_SIZE;
+use userfaultfd::UffdBuilder;
 
 lazy_static! {
     static ref ZEROED_PAGE: Vec<u8> = vec![0; PAGE_SIZE];
@@ -19,7 +21,7 @@ lazy_static! {
 
 struct BenchData {
     ptr: *mut c_void,
-    tracker: SigsegvMemoryTracker,
+    tracker: PrefetchingMemoryTracker,
     page_map: PageMap,
 }
 
@@ -41,6 +43,15 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
         .unwrap()
     };
 
+    let uffd = Arc::new(
+        UffdBuilder::new()
+            .close_on_exec(true)
+            .non_blocking(true)
+            .user_mode_only(true)
+            .create()
+            .expect("Failed to create userfaultfd"),
+    );
+
     group.bench_function("fault handler sim read", |bench| {
         bench.iter_with_setup(
             // Setup input data for measurement
@@ -48,12 +59,13 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
                 let page_map = PageMap::new_for_testing();
                 BenchData {
                     ptr,
-                    tracker: SigsegvMemoryTracker::new(
+                    tracker: PrefetchingMemoryTracker::new(
                         ptr,
                         NumBytes::new(PAGE_SIZE as u64),
                         no_op_logger(),
                         DirtyPageTracking::Track,
                         page_map.clone(),
+                        uffd.clone(),
                     )
                     .unwrap(),
                     page_map,
@@ -61,7 +73,7 @@ fn criterion_fault_handler_sim_read(criterion: &mut Criterion) {
             },
             // Do the actual measurement
             |data| {
-                sigsegv_fault_handler_old(
+                basic_signal_handler(
                     black_box(&data.tracker),
                     &data.page_map,
                     black_box(data.ptr),
@@ -89,6 +101,15 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
         .unwrap()
     };
 
+    let uffd = Arc::new(
+        UffdBuilder::new()
+            .close_on_exec(true)
+            .non_blocking(true)
+            .user_mode_only(true)
+            .create()
+            .expect("Failed to create userfaultfd"),
+    );
+
     group.bench_function("fault handler sim write", |bench| {
         bench.iter_with_setup(
             // Setup input data for measurement
@@ -96,24 +117,25 @@ fn criterion_fault_handler_sim_write(criterion: &mut Criterion) {
                 let page_map = PageMap::new_for_testing();
                 let data = BenchData {
                     ptr,
-                    tracker: SigsegvMemoryTracker::new(
+                    tracker: PrefetchingMemoryTracker::new(
                         ptr,
                         NumBytes::new(PAGE_SIZE as u64),
                         no_op_logger(),
                         DirtyPageTracking::Track,
                         page_map.clone(),
+                        uffd.clone(),
                     )
                     .unwrap(),
                     page_map,
                 };
 
-                sigsegv_fault_handler_old(&data.tracker, &data.page_map, data.ptr);
+                basic_signal_handler(&data.tracker, &data.page_map, data.ptr);
 
                 data
             },
             // Do the actual measurement
             |data| {
-                sigsegv_fault_handler_old(
+                basic_signal_handler(
                     black_box(&data.tracker),
                     &data.page_map,
                     black_box(data.ptr),

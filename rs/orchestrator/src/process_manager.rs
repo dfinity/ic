@@ -1,4 +1,4 @@
-use ic_logger::{debug, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info, warn};
 use nix::{
     sys::signal::{self, Signal},
     unistd::Pid,
@@ -123,15 +123,16 @@ impl<P: Process> ProcessManager<P> {
 
     pub(crate) fn start(&mut self, process: P) -> Result<()> {
         // Do nothing if we're already running a process with the requested version
-        if let Some(current_version) = self.process.as_ref().map(|p| p.get_version()) {
-            if self.get_pid().is_some() && process.get_version() == current_version {
-                debug!(
-                    self.log,
-                    "{} process already running with correct version",
-                    P::NAME
-                );
-                return Ok(());
-            }
+        if let Some(current_version) = self.process.as_ref().map(|p| p.get_version())
+            && self.get_pid().is_some()
+            && process.get_version() == current_version
+        {
+            debug!(
+                self.log,
+                "{} process already running with correct version",
+                P::NAME
+            );
+            return Ok(());
         }
 
         debug!(

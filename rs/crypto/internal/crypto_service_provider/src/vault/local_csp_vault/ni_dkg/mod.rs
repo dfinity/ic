@@ -1,3 +1,4 @@
+use crate::KeyId;
 use crate::key_id::KeyIdInstantiationError;
 use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
@@ -7,7 +8,6 @@ use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
 use crate::types::{CspPublicCoefficients, CspSecretKey};
 use crate::vault::api::NiDkgCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
-use crate::KeyId;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -15,16 +15,16 @@ use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
     CspDkgCreateFsKeyError, CspDkgLoadPrivateKeyError, InternalError,
 };
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381 as ni_dkg_clib;
-use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::FsEncryptionKeySetWithPop;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::SecretKey;
+use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::FsEncryptionKeySetWithPop;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
+use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspNiDkgDealing, CspNiDkgTranscript, Epoch,
 };
-use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_node_key_validation::ValidDkgDealingEncryptionPublicKey;
 use ic_logger::debug;
 use ic_protobuf::registry::crypto::v1::PublicKey;
@@ -157,7 +157,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             //       these functions are called from consensus
             self.sks_write_lock()
                 .retain(filter, NIDKG_THRESHOLD_SCOPE)
-                .unwrap_or_else(|e| panic!("error retaining threshold keys: {}", e));
+                .unwrap_or_else(|e| panic!("error retaining threshold keys: {e}"));
         }
         self.metrics.observe_duration_seconds(
             MetricsDomain::NiDkgAlgorithm,
@@ -199,21 +199,18 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             .map_err(|e| match e {
                 SecretKeyStoreInsertionError::DuplicateKeyId(key_id) => {
                     CspDkgCreateFsKeyError::DuplicateKeyId(format!(
-                        "duplicate ni-dkg dealing encryption secret key id: {}",
-                        key_id
+                        "duplicate ni-dkg dealing encryption secret key id: {key_id}"
                     ))
                 }
                 SecretKeyStoreInsertionError::TransientError(io_error) => {
                     CspDkgCreateFsKeyError::TransientInternalError(format!(
-                        "error persisting ni-dkg dealing encryption secret key: {}",
-                        io_error
+                        "error persisting ni-dkg dealing encryption secret key: {io_error}"
                     ))
                 }
                 SecretKeyStoreInsertionError::SerializationError(serialization_error) => {
                     CspDkgCreateFsKeyError::InternalError(InternalError {
                         internal_error: format!(
-                            "error persisting ni-dkg dealing encryption secret key: {}",
-                            serialization_error
+                            "error persisting ni-dkg dealing encryption secret key: {serialization_error}"
                         ),
                     })
                 }
@@ -230,8 +227,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         }
                         PublicKeySetOnceError::Io(io_error) => {
                             CspDkgCreateFsKeyError::TransientInternalError(format!(
-                                "error persisting ni-dkg dealing encryption public key: {}",
-                                io_error
+                                "error persisting ni-dkg dealing encryption public key: {io_error}"
                             ))
                         }
                     })
@@ -289,18 +285,18 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             let maybe_reread_key_set = sks_write_lock.get(&key_id);
             let (_reread_key_set, reread_secret_key) =
                 specialize_key_set_and_deserialize_secret_key(key_id, maybe_reread_key_set)?;
-            if let Some(reread_epoch_in_sks) = reread_secret_key.current_epoch() {
-                if epoch_to_update_to > reread_epoch_in_sks {
-                    // Epoch to update to is still newer than the one of the key in the SKS
-                    // => update the key in the SKS
-                    sks_write_lock
-                        .insert_or_replace(
-                            key_id,
-                            CspSecretKey::FsEncryption(key_set),
-                            Some(NIDKG_FS_SCOPE),
-                        )
-                        .unwrap_or_else(|e| panic!("Error updating forward secure epoch: {}", e));
-                }
+            if let Some(reread_epoch_in_sks) = reread_secret_key.current_epoch()
+                && epoch_to_update_to > reread_epoch_in_sks
+            {
+                // Epoch to update to is still newer than the one of the key in the SKS
+                // => update the key in the SKS
+                sks_write_lock
+                    .insert_or_replace(
+                        key_id,
+                        CspSecretKey::FsEncryption(key_set),
+                        Some(NIDKG_FS_SCOPE),
+                    )
+                    .unwrap_or_else(|e| panic!("Error updating forward secure epoch: {e}"));
             }
         }
         Ok(())
@@ -323,8 +319,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                     ni_dkg_errors::CspDkgCreateReshareDealingError::ReshareKeyNotInSecretKeyStoreError(
                         ni_dkg_errors::KeyNotFoundError {
                             internal_error: format!(
-                                "Cannot find threshold key to be reshared:\n  key id: {}\n  Epoch:  {}",
-                                key_id, epoch
+                                "Cannot find threshold key to be reshared:\n  key id: {key_id}\n  Epoch:  {epoch}"
                             ),
                             key_id: key_id.to_string(),
                         },
@@ -335,7 +330,8 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             None => None,
         };
         // Specialisation to this scheme:
-        let result = match algorithm_id {
+
+        match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
                 let maybe_resharing_secret_key_bytes = match maybe_resharing_secret_key {
                     Some(secret_key) => {
@@ -380,8 +376,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
             other => {
                 Err(ni_dkg_errors::CspDkgCreateReshareDealingError::UnsupportedAlgorithmId(other))
             }
-        };
-        result
+        }
     }
 
     fn load_threshold_signing_key_internal(
@@ -392,7 +387,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         fs_key_id: KeyId,
         receiver_index: NodeIndex,
     ) -> Result<(), ni_dkg_errors::CspDkgLoadPrivateKeyError> {
-        let result = match algorithm_id {
+        match algorithm_id {
             AlgorithmId::NiDkg_Groth20_Bls12_381 => {
                 let threshold_key_id =
                     KeyId::try_from(&CspPublicCoefficients::from(&csp_transcript)).map_err(
@@ -458,23 +453,24 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 match result {
                     Ok(()) => Ok(()),
                     Err(SecretKeyStoreInsertionError::DuplicateKeyId(_key_id)) => Ok(()),
-                    Err(SecretKeyStoreInsertionError::TransientError(e)) => Err(CspDkgLoadPrivateKeyError::TransientInternalError(InternalError {
-                        internal_error: format!(
-                            "error persisting secret key store while loading threshold signing key: {}",
-                            e
-                        )
-                    })),
-                    Err(SecretKeyStoreInsertionError::SerializationError(e)) => Err(CspDkgLoadPrivateKeyError::InternalError(InternalError {
-                        internal_error: format!(
-                            "error serializing secret key store while loading threshold signing key: {}",
-                            e
-                        )
-                    }))
+                    Err(SecretKeyStoreInsertionError::TransientError(e)) => Err(
+                        CspDkgLoadPrivateKeyError::TransientInternalError(InternalError {
+                            internal_error: format!(
+                                "error persisting secret key store while loading threshold signing key: {e}"
+                            ),
+                        }),
+                    ),
+                    Err(SecretKeyStoreInsertionError::SerializationError(e)) => {
+                        Err(CspDkgLoadPrivateKeyError::InternalError(InternalError {
+                            internal_error: format!(
+                                "error serializing secret key store while loading threshold signing key: {e}"
+                            ),
+                        }))
+                    }
                 }
             }
             other => Err(ni_dkg_errors::CspDkgLoadPrivateKeyError::UnsupportedAlgorithmId(other)),
-        };
-        result
+        }
     }
 }
 
@@ -523,8 +519,7 @@ fn validate_dealing_encryption_public_key(
     ValidDkgDealingEncryptionPublicKey::try_from((public_key_proto, node_id)).map_err(|error| {
         CspDkgCreateFsKeyError::InternalError(InternalError {
             internal_error: format!(
-                "NI-DKG dealing encryption public key validation error: {}",
-                error
+                "NI-DKG dealing encryption public key validation error: {error}"
             ),
         })
     })

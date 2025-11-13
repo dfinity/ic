@@ -4,78 +4,51 @@ load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
-DEPENDENCIES = [
-    # Keep sorted.
-    "//rs/config",
-    "//rs/cycles_account_manager",
-    "//rs/embedders",
-    "//rs/interfaces",
-    "//rs/interfaces/state_manager",
-    "//rs/limits",
-    "//rs/memory_tracker",
-    "//rs/monitoring/logger",
-    "//rs/monitoring/metrics",
-    "//rs/registry/subnet_type",
-    "//rs/replicated_state",
-    "//rs/sys",
-    "//rs/types/base_types",
-    "//rs/types/management_canister_types",
-    "//rs/types/types",
-    "//rs/types/wasm_types",
-    "//rs/utils",
-    "@crate_index//:bincode",
-    "@crate_index//:bytes",
-    "@crate_index//:lazy_static",
-    "@crate_index//:libc",
-    "@crate_index//:libflate",
-    "@crate_index//:nix",
-    "@crate_index//:num-traits",
-    "@crate_index//:once_cell",
-    "@crate_index//:prometheus",
-    "@crate_index//:rayon",
-    "@crate_index//:regex",
-    "@crate_index//:serde",
-    "@crate_index//:serde_bytes",
-    "@crate_index//:serde_json",
-    "@crate_index//:slog",
-    "@crate_index//:threadpool",
-    "@crate_index//:which",
-]
-
-DEV_DEPENDENCIES = [
-    # Keep sorted.
-    "//packages/ic-error-types",
-    "//rs/registry/routing_table",
-    "//rs/test_utilities",
-    "//rs/test_utilities/execution_environment",
-    "//rs/test_utilities/metrics",
-    "//rs/test_utilities/types",
-    "@crate_index//:mockall",
-    "@crate_index//:rand",
-    "@crate_index//:rstest",
-    "@crate_index//:slog-async",
-    "@crate_index//:slog-term",
-    "@crate_index//:tempfile",
-    "@crate_index//:wat",
-]
-
-MACRO_DEPENDENCIES = []
-
-ALIASES = {}
-
 rust_library(
     name = "backend_lib",
     srcs = glob(["src/**/*.rs"]),
-    aliases = ALIASES,
+    crate_features = select({
+        "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_canister_sandbox_backend_lib",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
-    deps = DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//rs/config",
+        "//rs/embedders",
+        "//rs/interfaces",
+        "//rs/interfaces/state_manager",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/replicated_state",
+        "//rs/types/management_canister_types",
+        "//rs/types/types",
+        "//rs/types/wasm_types",
+        "@crate_index//:bincode",
+        "@crate_index//:bytes",
+        "@crate_index//:lazy_static",
+        "@crate_index//:libc",
+        "@crate_index//:nix",
+        "@crate_index//:num-traits",
+        "@crate_index//:once_cell",
+        "@crate_index//:prometheus",
+        "@crate_index//:rayon",
+        "@crate_index//:regex",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
+        "@crate_index//:slog",
+        "@crate_index//:threadpool",
+        "@crate_index//:which",
+    ] + select({
+        "//bazel:fuzzing_code_enabled": ["@crate_index//:object"],
+        "//conditions:default": [],
+    }),
 )
 
 rust_ic_test(
     name = "backend_lib_test",
-    aliases = ALIASES,
     crate = ":backend_lib",
     data = [
         "//rs/universal_canister/impl:universal_canister.module",
@@ -85,8 +58,26 @@ rust_ic_test(
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
         "UNIVERSAL_CANISTER_SERIALIZED_MODULE_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.module)",
     },
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+    deps = [
+        # Keep sorted.
+        "//packages/ic-error-types",
+        "//rs/cycles_account_manager",
+        "//rs/limits",
+        "//rs/registry/subnet_type",
+        "//rs/test_utilities",
+        "//rs/test_utilities/execution_environment",
+        "//rs/test_utilities/metrics",
+        "//rs/test_utilities/types",
+        "//rs/types/base_types",
+        "//rs/types/wasm_types",
+        "@crate_index//:mockall",
+        "@crate_index//:rand",
+        "@crate_index//:rstest",
+        "@crate_index//:slog-async",
+        "@crate_index//:slog-term",
+        "@crate_index//:tempfile",
+        "@crate_index//:wat",
+    ],
 )
 
 cargo_build_script(
@@ -99,9 +90,7 @@ cargo_build_script(
 rust_binary(
     name = "canister_sandbox",
     srcs = ["bin/canister_sandbox.rs"],
-    aliases = ALIASES,
     crate_name = "canister_sandbox",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.9.0",
     deps = [
         # Keep sorted.
@@ -121,9 +110,8 @@ rust_binary(
 rust_binary(
     name = "test_controller",
     srcs = ["bin/test_controller.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
+    deps = [
+        # Keep sorted.
         ":backend_lib",
         "@crate_index//:tempfile",
     ],
@@ -132,12 +120,7 @@ rust_binary(
 rust_binary(
     name = "test_sandbox",
     srcs = ["bin/test_sandbox.rs"],
-    aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + [
-        ":backend_lib",
-        "@crate_index//:tempfile",
-    ],
+    deps = [":backend_lib"],
 )
 
 rust_binary(

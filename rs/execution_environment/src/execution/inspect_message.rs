@@ -1,12 +1,12 @@
 use crate::Hypervisor;
 use crate::{
-    execution_environment::{as_round_instructions, RoundLimits},
+    execution_environment::{RoundLimits, as_round_instructions},
     metrics::{CallTreeMetricsNoOp, IngressFilterMetrics},
 };
 use ic_embedders::wasmtime_embedder::system_api::{ApiType, ExecutionParameters};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_logger::{fatal, ReplicaLogger};
+use ic_logger::{ReplicaLogger, fatal};
 use ic_replicated_state::{CanisterState, NetworkTopology};
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::SignedIngressContent;

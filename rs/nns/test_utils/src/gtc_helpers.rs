@@ -2,10 +2,10 @@ use ic_crypto_sha2::Sha256;
 use ic_nervous_system_common::ONE_MONTH_SECONDS;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GENESIS_TOKEN_CANISTER_ID;
-use ic_nns_governance_api::{neuron::DissolveState, Neuron};
+use ic_nns_governance_api::{Neuron, neuron::DissolveState};
 use ic_nns_gtc::pb::v1::{AccountState, Gtc};
 use icp_ledger::Tokens;
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use rand::{RngCore, SeedableRng, rngs::StdRng};
 use std::{collections::HashMap, time::SystemTime};
 
 // The age that GTC neurons will be created with

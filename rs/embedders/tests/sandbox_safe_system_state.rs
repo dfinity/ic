@@ -1,20 +1,20 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, SubnetId};
 use ic_config::execution_environment::SUBNET_CALLBACK_SOFT_LIMIT;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::SandboxSafeSystemState;
 use ic_embedders::wasmtime_embedder::system_api::SystemApiImpl;
-use ic_interfaces::execution_environment::{HypervisorResult, SystemApi};
+use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::SandboxSafeSystemState;
+use ic_interfaces::execution_environment::{HypervisorResult, MessageMemoryUsage, SystemApi};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_logger::replica_logger::no_op_logger;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00,
+    CanisterIdRecord, CanisterSettingsArgs, IC_00, Payload, UpdateSettingsArgs,
 };
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
-use ic_replicated_state::{MessageMemoryUsage, NetworkTopology, SystemState};
+use ic_replicated_state::{NetworkTopology, SystemState};
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_state::SystemStateBuilder;
 use ic_test_utilities_types::{
@@ -24,9 +24,9 @@ use ic_test_utilities_types::{
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
+    ComputeAllocation, Cycles, NumInstructions,
     messages::{CanisterMessage, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     time::UNIX_EPOCH,
-    ComputeAllocation, Cycles, NumInstructions,
 };
 use prometheus::IntCounter;
 use std::collections::BTreeSet;
@@ -295,6 +295,7 @@ fn correct_charging_source_canister_for_a_request() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -302,7 +303,7 @@ fn correct_charging_source_canister_for_a_request() {
     let refund_cycles = cycles_account_manager.refund_for_response_transmission(
         &no_op_logger(),
         &no_op_counter,
-        &response,
+        &response.response_payload,
         prepayment_for_response_transmission,
         SMALL_APP_SUBNET_MAX_SIZE,
         cost_schedule,
@@ -511,6 +512,7 @@ fn call_increases_cycles_consumed_metric() {
             &mut system_state,
             &default_network_topology(),
             subnet_test_id(1),
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -601,6 +603,7 @@ fn test_inter_canister_call(
             &mut system_state,
             topo,
             subnet_id,
+            false,
             &no_op_logger(),
         )
         .unwrap();
@@ -820,7 +823,14 @@ fn wrong_sender_canister_version_update_settings_ic00() {
         settings,
         sender_canister_version: Some(666),
     };
-    failing_mgmt_canister_call_ic00("update_settings", arg.encode(), format!("IC0504: Management canister call payload includes sender canister version {:?} that does not match the actual sender canister version {}.", 666, 0));
+    failing_mgmt_canister_call_ic00(
+        "update_settings",
+        arg.encode(),
+        format!(
+            "IC0504: Management canister call payload includes sender canister version {:?} that does not match the actual sender canister version {}.",
+            666, 0
+        ),
+    );
 }
 
 #[test]
@@ -831,7 +841,14 @@ fn wrong_sender_canister_version_update_settings_subnet_message() {
         settings,
         sender_canister_version: Some(666),
     };
-    failing_mgmt_canister_call_subnet_message("update_settings", arg.encode(), format!("IC0504: Management canister call payload includes sender canister version {:?} that does not match the actual sender canister version {}.", 666, 0));
+    failing_mgmt_canister_call_subnet_message(
+        "update_settings",
+        arg.encode(),
+        format!(
+            "IC0504: Management canister call payload includes sender canister version {:?} that does not match the actual sender canister version {}.",
+            666, 0
+        ),
+    );
 }
 
 #[test]

@@ -4,6 +4,7 @@ use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_dkg::get_dkg_summary_from_cup_contents;
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
+use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_interfaces::{
     consensus_pool::{
         ChangeAction, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool, ConsensusPoolCache,
@@ -19,7 +20,6 @@ use ic_interfaces_state_manager::StateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_test_utilities::crypto::CryptoReturningOk;
 use ic_test_utilities_consensus::fake::*;
 use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 use ic_types::{artifact::ConsensusMessageId, batch::ValidationContext};
@@ -162,7 +162,7 @@ fn dkg_payload_builder_fn(
             no_op_logger(),
             10, // at most dealings per block
         )
-        .unwrap_or_else(|err| panic!("Couldn't create the payload: {:?}", err))
+        .unwrap_or_else(|err| panic!("Couldn't create the payload: {err:?}"))
     })
 }
 
@@ -248,11 +248,11 @@ impl TestConsensusPool {
     }
 
     pub fn make_next_block_with_rank(&self, rank: Rank) -> BlockProposal {
-        if let Some(parent) = self.latest_notarized_blocks().next() {
-            self.make_next_block_from_parent(&parent, rank)
-        } else {
-            panic!("Pool contains a valid notarization on a block that is not in the pool");
-        }
+        let parent = self
+            .latest_notarized_blocks()
+            .next()
+            .expect("Pool contains a valid notarization on a block that is not in the pool");
+        self.make_next_block_from_parent(&parent, rank)
     }
 
     pub fn make_next_block_from_parent(&self, parent: &Block, rank: Rank) -> BlockProposal {
@@ -325,7 +325,7 @@ impl TestConsensusPool {
             .finalization()
             .get_by_height(height)
             .next()
-            .unwrap_or_else(|| panic!("Finalization does not exist at height {}", height));
+            .unwrap_or_else(|| panic!("Finalization does not exist at height {height}"));
         let catchup_height = self
             .pool
             .validated()
@@ -341,7 +341,7 @@ impl TestConsensusPool {
             .get_by_height(height)
             .find(|proposal| proposal.content.get_hash() == &finalization.content.block)
             .map(|proposal| proposal.into())
-            .unwrap_or_else(|| panic!("Finalized block not found at height {}", height));
+            .unwrap_or_else(|| panic!("Finalized block not found at height {height}"));
         if !block.payload.as_ref().is_summary() {
             panic!("Attempt to make catch up package from block that is not a dkg summary");
         }
@@ -514,7 +514,7 @@ impl TestConsensusPool {
 
     /// Returns a round, which can be granularly configured before it's
     /// executed.
-    pub fn prepare_round(&mut self) -> Round {
+    pub fn prepare_round(&mut self) -> Round<'_> {
         Round::new(self)
     }
 

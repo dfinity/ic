@@ -5,19 +5,19 @@ use std::{
 };
 
 use axum::http::Request;
-use axum::{routing::any, Router};
+use axum::{Router, routing::any};
 use bytes::Bytes;
 use criterion::{
-    criterion_group, criterion_main, measurement::WallTime, BatchSize, BenchmarkGroup, Criterion,
-    Throughput,
+    BatchSize, BenchmarkGroup, Criterion, Throughput, criterion_group, criterion_main,
+    measurement::WallTime,
 };
 use ic_base_types::NodeId;
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p_test_utils::{
-    create_registry_handle, temp_crypto_component_with_tls_keys, RegistryConsensusHandle,
+    RegistryConsensusHandle, create_registry_handle, temp_crypto_component_with_tls_keys,
 };
-use ic_quic_transport::{create_udp_socket, QuicTransport, SubnetTopology, Transport};
+use ic_quic_transport::{QuicTransport, SubnetTopology, Transport, create_udp_socket};
 use ic_types_test_utils::ids::node_test_id;
 use tokio::{
     runtime::{Handle, Runtime},

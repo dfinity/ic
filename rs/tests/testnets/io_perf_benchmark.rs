@@ -4,20 +4,23 @@
 // Alternatively, you can specify the number of hosts via the NUM_PERF_HOSTS environment variable.
 //
 // Set up a testnet containing:
-//   one System subnet with the hosts specified in the PERF_HOSTS environment variable,
+//   one System subnet,
+//   one Application subnet with the hosts specified in the PERF_HOSTS environment variable or selected automatically,
 //   a single API boundary node, single ic-gateway/s and a p8s (with grafana) VM.
 // All replica nodes use the following resources: 64 vCPUs, 480GiB of RAM, and 10 TiB disk.
 //
 // You can setup this testnet with a lifetime of 180 mins by executing the following commands:
 //
 //   $ ./ci/container/container-run.sh
-//   $ ict testnet create io_perf_benchmark --verbose --lifetime-mins=1440 --output-dir=./io_perf_benchmark -- --test_tmpdir=./io_perf_benchmark --test_env=SSH_AUTH_SOCK --test_env NUM_PERF_HOSTS=1
+//   $ ict testnet create io_perf_benchmark --verbose --lifetime-mins=1440 --output-dir=./test_tmpdir -- --test_tmpdir=./test_tmpdir --test_env=SSH_AUTH_SOCK --test_env NUM_PERF_HOSTS=1
 //
-// The --output-dir=./io_perf_benchmark will store the debug output of the test driver in the specified directory.
-// The --test_tmpdir=./io_perf_benchmark will store the remaining test output in the specified directory.
+// Note: The `./test_tmpdir` directory is included in `.gitignore`.
+//
+// The --output-dir=./test_tmpdir will store the debug output of the test driver in the specified directory.
+// The --test_tmpdir=./test_tmpdir will store the remaining test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
 //
-//   $ ssh -i io_perf_benchmark/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@$ipv6
+//   $ ssh -i test_tmpdir/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@$ipv6
 //
 // Note that you can get the $ipv6 address of the IC node from the ict console output:
 //
@@ -61,7 +64,7 @@ use ic_system_test_driver::driver::{
     test_env_api::{HasTopologySnapshot, IcNodeContainer},
 };
 use nns_dapp::{nns_dapp_customizations, set_authorized_subnets};
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 
@@ -186,7 +189,7 @@ fn switch_to_ssd(log: &Logger, hostname: &str) {
 
     let ssh_status = ssh.wait().unwrap();
     if !ssh_status.success() {
-        panic!("SSH to {} failed with: {}", hostname, ssh_status);
+        panic!("SSH to {hostname} failed with: {ssh_status}");
     }
 }
 
@@ -214,20 +217,17 @@ pub fn setup(env: TestEnv, config: Config) {
         .start(&env)
         .expect("Failed to start prometheus VM");
 
-    // set up IC overriding the default resources to be more powerful
-    let vm_resources = VmResources {
-        vcpus: Some(NrOfVCPUs::new(64)),
-        // NOTE: This is less than production (490 GiB), but as much as the host is able to provide.
-        memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
-        ..Default::default()
-    };
     let mut ic = InternetComputer::new()
         .with_api_boundary_nodes(1)
-        .with_default_vm_resources(vm_resources)
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1));
 
-    // `HostFeature::IoPerformance` is required for the system subnet to use the performance hosts even if hosts are specified.
+    // `HostFeature::IoPerformance` is required for the application subnet to use the performance hosts even if hosts are specified.
     let mut subnet = Subnet::new(SubnetType::Application)
+        .with_default_vm_resources(VmResources {
+            vcpus: Some(NrOfVCPUs::new(64)),
+            memory_kibibytes: Some(AmountOfMemoryKiB::new(512_142_680)),
+            ..VmResources::default()
+        })
         .with_required_host_features(vec![HostFeature::IoPerformance]);
 
     let logger = env.logger();
@@ -247,7 +247,7 @@ pub fn setup(env: TestEnv, config: Config) {
         let num_hosts = config.num_hosts.unwrap_or(DEFAULT_NUM_HOSTS);
         info!(
             logger,
-            "Farm is automatically selecting {} avaliable hosts", num_hosts
+            "Farm is automatically selecting {} available hosts", num_hosts
         );
         subnet = subnet.add_nodes(num_hosts as usize);
     }
@@ -297,7 +297,7 @@ pub fn setup(env: TestEnv, config: Config) {
 
     // deploys the ic-gateway/s
     for i in 0..NUM_IC_GATEWAYS {
-        let ic_gateway_name = format!("ic-gateway-{}", i);
+        let ic_gateway_name = format!("ic-gateway-{i}");
         IcGatewayVm::new(&ic_gateway_name)
             .with_required_host_features(vec![HostFeature::Performance])
             .start(&env)

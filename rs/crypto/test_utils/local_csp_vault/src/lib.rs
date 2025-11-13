@@ -14,6 +14,7 @@ use ic_crypto_internal_csp::vault::api::IDkgCreateDealingVaultError;
 use ic_crypto_internal_csp::vault::api::IDkgDealingInternalBytes;
 use ic_crypto_internal_csp::vault::api::IDkgProtocolCspVault;
 use ic_crypto_internal_csp::vault::api::IDkgTranscriptInternalBytes;
+use ic_crypto_internal_csp::vault::api::IDkgTranscriptOperationInternalBytes;
 use ic_crypto_internal_csp::vault::api::MultiSignatureCspVault;
 use ic_crypto_internal_csp::vault::api::NiDkgCspVault;
 use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
@@ -45,16 +46,14 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaCreateSigShareError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgTranscriptOperation,
-};
+use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::crypto::vetkd::VetKdDerivationContext;
 use ic_types::crypto::vetkd::VetKdEncryptedKeyShareContent;
-use ic_types::crypto::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, Randomness};
 use mockall::mock;
@@ -142,7 +141,7 @@ mock! {
             dealer_index: NodeIndex,
             reconstruction_threshold: NumberOfNodes,
             receiver_keys: Vec<PublicKey>,
-            transcript_operation: IDkgTranscriptOperation,
+            transcript_operation: IDkgTranscriptOperationInternalBytes,
         ) -> Result<IDkgDealingInternalBytes, IDkgCreateDealingVaultError>;
 
         fn idkg_verify_dealing_private(
@@ -158,7 +157,7 @@ mock! {
         fn idkg_load_transcript(
             &self,
             algorithm_id: AlgorithmId,
-            dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+            dealings: BTreeMap<NodeIndex, IDkgDealingInternalBytes>,
             context_data: Vec<u8>,
             receiver_index: NodeIndex,
             key_id: KeyId,

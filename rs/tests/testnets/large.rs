@@ -103,7 +103,7 @@ pub fn setup(env: TestEnv) {
 
     // deploys the ic-gateway/s
     for i in 0..NUM_IC_GATEWAYS {
-        let ic_gatway_name = format!("ic-gateway-{}", i);
+        let ic_gatway_name = format!("ic-gateway-{i}");
         IcGatewayVm::new(&ic_gatway_name)
             .start(&env)
             .expect("failed to setup ic-gateway");

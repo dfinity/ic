@@ -19,13 +19,13 @@ Runbook::
 
 end::catalog[] */
 
-use crate::ADDRESS_LENGTH;
+use crate::{ADDRESS_LENGTH, IcRpcClientType};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat};
 use canister_test::Canister;
 use ic_btc_adapter_test_utils::{
     bitcoin::{Address, Amount, Txid},
-    rpc_client::{Auth, RpcApi, RpcClient},
+    rpc_client::{Auth, RpcClient, RpcClientType},
 };
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
@@ -44,7 +44,7 @@ use icrc_ledger_types::{
     icrc1::transfer::BlockIndex,
     icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse},
 };
-use slog::{debug, info, Logger};
+use slog::{Logger, debug, info};
 use std::time::{Duration, Instant};
 
 pub const UNIVERSAL_VM_NAME: &str = "btc-node";
@@ -74,14 +74,18 @@ pub async fn start_canister(canister: &Canister<'_>) {
 }
 
 /// Mint some blocks to the given address.
-pub fn generate_blocks(btc_client: &RpcClient, logger: &Logger, nb_blocks: u64, address: &Address) {
-    let generated_blocks = btc_client.generate_to_address(nb_blocks, address).unwrap();
+pub fn generate_blocks<T: RpcClientType>(
+    rpc_client: &RpcClient<T>,
+    logger: &Logger,
+    nb_blocks: u64,
+    address: &T::Address,
+) {
+    let generated_blocks = rpc_client.generate_to_address(nb_blocks, address).unwrap();
     info!(&logger, "Generated {} btc blocks.", generated_blocks.len());
     assert_eq!(
         generated_blocks.len() as u64,
         nb_blocks,
-        "Expected {} blocks.",
-        nb_blocks
+        "Expected {nb_blocks} blocks."
     );
 }
 
@@ -136,7 +140,10 @@ pub async fn wait_for_ledger_balance(
 
 /// Wait until we have a tx in btc mempool
 /// Timeout after SHORT_TIMEOUT if the minter doesn't successfully find a new tx in the timeframe.
-pub async fn wait_for_mempool_change(btc_rpc: &RpcClient, logger: &Logger) -> Vec<Txid> {
+pub async fn wait_for_mempool_change<T: RpcClientType>(
+    btc_rpc: &RpcClient<T>,
+    logger: &Logger,
+) -> Vec<Txid> {
     let start = Instant::now();
     loop {
         if start.elapsed() >= SHORT_TIMEOUT {
@@ -200,7 +207,7 @@ pub async fn wait_for_signed_tx(
                 info!(&logger, "[retrieve_btc_status] : Tx building (1/3)")
             }
             RetrieveBtcStatus::AmountTooLow => {
-                panic!("The minter rejected retrieve request {}", block_index);
+                panic!("The minter rejected retrieve request {block_index}");
             }
             RetrieveBtcStatus::Signing => {
                 info!(&logger, "[retrieve_btc_status] : Tx signing (2/3)")
@@ -235,20 +242,17 @@ pub async fn wait_for_signed_tx(
 /// This function panics if:
 /// * The transfer didn't finalize after `LONG_TIMEOUT`.
 /// * The minter rejected the retrieval because the amount was too low to cover the fees.
-pub async fn wait_for_finalization(
-    btc_client: &RpcClient,
+pub async fn wait_for_finalization<T: RpcClientType>(
+    rpc_client: &RpcClient<T>,
     ckbtc_minter_agent: &CkBtcMinterAgent,
     logger: &Logger,
     block_index: u64,
-    default_btc_address: &Address,
+    default_btc_address: &T::Address,
 ) -> ic_btc_interface::Txid {
     let start = Instant::now();
     loop {
         if start.elapsed() >= LONG_TIMEOUT {
-            panic!(
-                "Retrieve btc request {} did not finalize in {:?}",
-                block_index, LONG_TIMEOUT
-            );
+            panic!("Retrieve btc request {block_index} did not finalize in {LONG_TIMEOUT:?}");
         };
         self_check(ckbtc_minter_agent)
             .await
@@ -266,7 +270,7 @@ pub async fn wait_for_finalization(
                 return txid;
             }
             RetrieveBtcStatus::AmountTooLow => {
-                panic!("The minter rejected retrieve request {}", block_index);
+                panic!("The minter rejected retrieve request {block_index}");
             }
             status => {
                 info!(
@@ -279,7 +283,7 @@ pub async fn wait_for_finalization(
         tokio::time::sleep(Duration::from_secs(5)).await;
 
         // We continue to generate blocks if the status is yet updated
-        generate_blocks(btc_client, logger, 1, default_btc_address);
+        generate_blocks::<T>(rpc_client, logger, 1, default_btc_address);
     }
 }
 
@@ -290,10 +294,7 @@ pub async fn wait_for_finalization_no_new_blocks(
     let start = Instant::now();
     loop {
         if start.elapsed() >= LONG_TIMEOUT {
-            panic!(
-                "Retrieve btc request {} did not finalize in {:?}",
-                block_index, LONG_TIMEOUT
-            );
+            panic!("Retrieve btc request {block_index} did not finalize in {LONG_TIMEOUT:?}");
         };
         self_check(ckbtc_minter_agent)
             .await
@@ -307,7 +308,7 @@ pub async fn wait_for_finalization_no_new_blocks(
                 return txid;
             }
             RetrieveBtcStatus::AmountTooLow => {
-                panic!("The minter rejected retrieve request {}", block_index);
+                panic!("The minter rejected retrieve request {block_index}");
             }
             _ => {}
         }
@@ -387,7 +388,12 @@ pub async fn get_btc_address(
     address.parse::<Address<_>>().unwrap().assume_checked()
 }
 
-pub async fn send_to_btc_address(btc_rpc: &RpcClient, logger: &Logger, dst: &Address, amount: u64) {
+pub async fn send_to_btc_address<T: RpcClientType>(
+    btc_rpc: &RpcClient<T>,
+    logger: &Logger,
+    dst: &T::Address,
+    amount: u64,
+) {
     match btc_rpc.send_to(
         dst,
         Amount::from_sat(amount),
@@ -397,20 +403,20 @@ pub async fn send_to_btc_address(btc_rpc: &RpcClient, logger: &Logger, dst: &Add
             debug!(&logger, "txid: {:?}", txid);
         }
         Err(e) => {
-            panic!("bug: could not send btc to btc client : {:?}", e);
+            panic!("bug: could not send btc to btc client : {e:?}");
         }
     }
 }
 
-/// Create a client for bitcoind.
-pub fn get_btc_client(env: &TestEnv) -> RpcClient {
+/// Create a client for bitcoind or dogecoind.
+pub fn get_rpc_client<T: IcRpcClientType>(env: &TestEnv) -> RpcClient<T> {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     RpcClient::new(
-        bitcoin::Network::Regtest,
+        T::REGTEST,
         &format!(
             "http://[{}]:{}",
             deployed_universal_vm.get_vm().unwrap().ipv6,
-            crate::BITCOIND_RPC_PORT
+            T::RPC_PORT
         ),
         Auth::UserPass(
             crate::BITCOIND_RPC_USER.to_string(),
@@ -490,7 +496,7 @@ pub async fn retrieve_btc(
                         "retrieve_btc endpoint is unavailable ({}), retrying ...", msg
                     );
                 }
-                Err(err) => panic!("[retrieve_btc] unexpected error : {:?}", err),
+                Err(err) => panic!("[retrieve_btc] unexpected error : {err:?}"),
             },
             Err(_) => info!(
                 &logger,
@@ -528,12 +534,11 @@ pub async fn assert_mint_transaction(
         .mint
         .as_ref()
         .expect("Expecting mint transaction");
-    assert_eq!(to, &mint.to, "Expecting mint to account {}", to);
+    assert_eq!(to, &mint.to, "Expecting mint to account {to}");
     assert_eq!(
         Nat::from(amount),
         mint.amount,
-        "Expecting {} satoshis",
-        amount
+        "Expecting {amount} satoshis"
     );
 }
 
@@ -565,12 +570,11 @@ pub async fn assert_burn_transaction(
         .burn
         .as_ref()
         .expect("Expecting burn transaction");
-    assert_eq!(from, &burn.from, "Expecting burn from account {}", from);
+    assert_eq!(from, &burn.from, "Expecting burn from account {from}");
     assert_eq!(
         Nat::from(amount),
         burn.amount,
-        "Expecting {} satoshis",
-        amount
+        "Expecting {amount} satoshis"
     );
 }
 
@@ -588,8 +592,7 @@ pub async fn assert_no_transaction(agent: &Icrc1Agent, logger: &Logger) {
     assert_eq!(
         Nat::from(0_u8),
         res.log_length,
-        "Ledger expected to not have transactions, got {:?}",
-        res
+        "Ledger expected to not have transactions, got {res:?}"
     )
 }
 

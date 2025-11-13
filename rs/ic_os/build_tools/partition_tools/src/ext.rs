@@ -1,18 +1,18 @@
-use anyhow::{anyhow, bail, ensure, Context, Result};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use async_trait::async_trait;
 use itertools::Itertools;
 use pcre2::bytes::Regex;
 use std::path::{Path, PathBuf};
 use std::process::{Output, Stdio};
-use tempfile::{tempdir, NamedTempFile, TempDir};
+use tempfile::{NamedTempFile, TempDir, tempdir};
 use tokio::fs;
 use tokio::fs::File;
 use tokio::io::{self, AsyncSeekExt, AsyncWriteExt, SeekFrom};
 use tokio::process::Command;
 
+use crate::Partition;
 use crate::exes::{debugfs, faketime};
 use crate::gpt;
-use crate::Partition;
 
 const STORE_NAME: &str = "backing_store";
 
@@ -29,8 +29,8 @@ impl Partition for ExtPartition {
         let _ = debugfs().context("debugfs is needed to open ext4 partitions")?;
 
         if let Some(index) = index {
-            let offset = gpt::get_partition_offset(&image, index).await?;
-            let length = gpt::get_partition_length(&image, index).await?;
+            let offset = gpt::get_partition_offset(&image, index)?;
+            let length = gpt::get_partition_length(&image, index)?;
             Self::open_range(image, offset, length).await
         } else {
             // open_range is several times slower than fs::copy, therefore we use fs::copy
@@ -54,20 +54,25 @@ impl Partition for ExtPartition {
         let output_path = backing_dir.path().join(STORE_NAME);
 
         // Use dd command to copy the specific range, with sparse file support
-        ensure!(Command::new("dd")
-            .args([
-                &format!("if={}", image.display()),
-                &format!("of={}", output_path.display()),
-                "bs=4M",
-                &format!("skip={}", offset_bytes),
-                &format!("count={}", length_bytes),
-                "conv=sparse",
-                "iflag=skip_bytes,count_bytes"
-            ])
-            .status()
-            .await
-            .context("failed to run dd command")?
-            .success());
+        ensure!(
+            Command::new("dd")
+                .args([
+                    &format!("if={}", image.display()),
+                    &format!("of={}", output_path.display()),
+                    "bs=4M",
+                    &format!("skip={offset_bytes}"),
+                    &format!("count={length_bytes}"),
+                    "conv=sparse",
+                    "iflag=skip_bytes,count_bytes"
+                ])
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .await
+                .context("failed to run dd command")?
+                .success()
+        );
 
         Ok(ExtPartition {
             offset_bytes: Some(offset_bytes), // No partition index when using explicit range
@@ -537,12 +542,14 @@ mod test {
         assert_eq!(read, contents2);
 
         // Reading non-existing files should fail.
-        assert!(partition
-            .read_file(Path::new("/does/not/exist.txt"))
-            .await
-            .expect_err("Expected reading non-existing file to fail")
-            .to_string()
-            .contains("File not found"));
+        assert!(
+            partition
+                .read_file(Path::new("/does/not/exist.txt"))
+                .await
+                .expect_err("Expected reading non-existing file to fail")
+                .to_string()
+                .contains("File not found")
+        );
     }
 
     #[tokio::test]

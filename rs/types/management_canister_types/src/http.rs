@@ -3,11 +3,13 @@ use candid::{CandidType, Deserialize};
 use ic_base_types::PrincipalId;
 use serde::Serialize;
 
-/// Enum used for encoding/decoding:
-/// `record {
-///     response : http_response;
-///     context : blob;
-/// }`
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///   response : http_response;
+///   context : blob;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct TransformArgs {
     pub response: CanisterHttpResponsePayload,
@@ -20,11 +22,13 @@ impl Payload<'_> for TransformArgs {}
 // Encapsulating the corresponding candid `func` type.
 candid::define_function!(pub TransformFunc : (TransformArgs) -> (CanisterHttpResponsePayload) query);
 
-/// Enum used for encoding/decoding:
-/// `record {
-//       function : func (record {response : http_response; context : blob}) -> (http_response) query;
-//       context : blob;
-//   }`
+/// Struct used for encoding/decoding
+/// ```text
+/// record {
+///   function : func (record {response : http_response; context : blob}) -> (http_response) query;
+///   context : blob;
+/// }
+/// ```
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct TransformContext {
     /// Reference function with signature: `func (record {response : http_response; context : blob}) -> (http_response) query;`.
@@ -51,6 +55,22 @@ const HTTP_HEADERS_TOTAL_MAX_SIZE: usize = 48 * KIB;
 /// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
 const HTTP_HEADERS_ELEMENT_MAX_SIZE: usize = 16 * KIB; // name + value = 8KiB + 8KiB
 
+/// The numeric representation for the Legacy pricing version.
+pub const PRICING_VERSION_LEGACY: u32 = 1;
+/// The numeric representation for the Pay-As-You-Go pricing version.
+pub const PRICING_VERSION_PAY_AS_YOU_GO: u32 = 2;
+
+/// The default pricing version for HTTP outcalls.
+///
+/// If the field is missing, this is the version that will be assumed by the replica.
+/// Described in <https://internetcomputer.org/docs/current/references/ic-interface-spec/#ic-http_request>.
+pub const DEFAULT_HTTP_OUTCALLS_PRICING_VERSION: u32 = PRICING_VERSION_LEGACY;
+
+/// A set of all allowed pricing versions for HTTP outcalls.
+///
+/// If the pricing version provided in the request is not in this set, the request will use the default pricing version.
+pub const ALLOWED_HTTP_OUTCALLS_PRICING_VERSIONS: &[u32] = &[PRICING_VERSION_LEGACY];
+
 /// HTTP headers bounded by total size.
 pub type BoundedHttpHeaders = BoundedVec<
     HTTP_HEADERS_MAX_NUMBER,
@@ -60,18 +80,21 @@ pub type BoundedHttpHeaders = BoundedVec<
 >;
 
 /// Struct used for encoding/decoding
-/// `(http_request : (record {
-//     url : text;
-//     max_response_bytes: opt nat64;
-//     headers : vec http_header;
-//     method : variant { get; head; post };
-//     body : opt blob;
-//     transform : opt record {
-//       function : func (record {response : http_response; context : blob}) -> (http_response) query;
-//       context : blob;
-//     };
-//     is_replicated: opt bool;
-//   })`
+/// ```text
+/// record {
+///   url : text;
+///   max_response_bytes : opt nat64;
+///   headers : vec http_header;
+///   method : variant { get; head; post };
+///   body : opt blob;
+///   transform : opt record {
+///     function : func (record {response : http_response; context : blob}) -> (http_response) query;
+///     context : blob;
+///   };
+///   is_replicated : opt bool;
+///   pricing_version : opt nat32;
+/// }
+/// ```
 #[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
 pub struct CanisterHttpRequestArgs {
     pub url: String,
@@ -82,6 +105,7 @@ pub struct CanisterHttpRequestArgs {
     pub method: HttpMethod,
     pub transform: Option<TransformContext>,
     pub is_replicated: Option<bool>,
+    pub pricing_version: Option<u32>,
 }
 
 impl Payload<'_> for CanisterHttpRequestArgs {}
@@ -117,6 +141,7 @@ fn test_http_headers_max_number() {
             method: HttpMethod::GET,
             transform: None,
             is_replicated: None,
+            pricing_version: None,
         };
 
         // Act.
@@ -134,8 +159,7 @@ fn test_http_headers_max_number() {
             assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 error.description().contains(&format!(
-                    "Deserialize error: The number of elements exceeds maximum allowed {}",
-                    THRESHOLD
+                    "Deserialize error: The number of elements exceeds maximum allowed {THRESHOLD}"
                 )),
                 "Actual: {}",
                 error.description()
@@ -171,6 +195,7 @@ fn test_http_headers_max_total_size() {
             method: HttpMethod::GET,
             transform: None,
             is_replicated: None,
+            pricing_version: None,
         };
 
         // Act.
@@ -188,8 +213,7 @@ fn test_http_headers_max_total_size() {
             assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 error.description().contains(&format!(
-                    "Deserialize error: The total data size exceeds maximum allowed {}",
-                    THRESHOLD
+                    "Deserialize error: The total data size exceeds maximum allowed {THRESHOLD}"
                 )),
                 "Actual: {}",
                 error.description()
@@ -219,6 +243,7 @@ fn test_http_headers_max_element_size() {
             method: HttpMethod::GET,
             transform: None,
             is_replicated: None,
+            pricing_version: None,
         };
 
         // Act.
@@ -236,8 +261,7 @@ fn test_http_headers_max_element_size() {
             assert_eq!(error.code(), ErrorCode::InvalidManagementPayload);
             assert!(
                 error.description().contains(&format!(
-                    "Deserialize error: The single element data size exceeds maximum allowed {}",
-                    THRESHOLD
+                    "Deserialize error: The single element data size exceeds maximum allowed {THRESHOLD}"
                 )),
                 "Actual: {}",
                 error.description()
@@ -247,10 +271,12 @@ fn test_http_headers_max_element_size() {
 }
 
 /// Struct used for encoding/decoding
-/// `(record {
-/// name: text;
-/// value: text;
-/// })`;
+/// ```text
+/// record {
+///   name : text;
+///   value : text;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct HttpHeader {
     pub name: String,
@@ -299,11 +325,13 @@ pub enum HttpMethod {
 
 /// Represents the response for a canister http request.
 /// Struct used for encoding/decoding
-/// `(record {
-///     status: nat;
-///     headers: vec http_header;
-///     body: blob;
-/// })`;
+/// ```text
+/// record {
+///   status : nat;
+///   headers : vec http_header;
+///   body : blob;
+/// }
+/// ```
 #[derive(Clone, Eq, PartialEq, Hash, Debug, CandidType, Deserialize, Serialize)]
 pub struct CanisterHttpResponsePayload {
     pub status: u128,

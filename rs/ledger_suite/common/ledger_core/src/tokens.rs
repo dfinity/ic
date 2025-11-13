@@ -1,8 +1,8 @@
 use candid::{CandidType, Nat};
-use ic_stable_structures::{storable::Bound, Storable};
+use ic_stable_structures::{Storable, storable::Bound};
 use minicbor::{Decode, Encode};
 use num_traits::{Bounded, ToPrimitive};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::Debug;
@@ -152,8 +152,7 @@ impl Tokens {
             .ok_or_else(|| CONSTRUCTION_FAILED.to_string())?;
         if e8s >= TOKEN_SUBDIVIDABLE_BY {
             return Err(format!(
-                "You've added too many E8s, make sure there are less than {}",
-                TOKEN_SUBDIVIDABLE_BY
+                "You've added too many E8s, make sure there are less than {TOKEN_SUBDIVIDABLE_BY}"
             ));
         }
         let e8s = token_part
@@ -292,10 +291,7 @@ impl TryFrom<Nat> for Tokens {
     fn try_from(value: Nat) -> Result<Self, Self::Error> {
         match value.0.to_u64() {
             Some(e8s) => Ok(Self { e8s }),
-            None => Err(format!(
-                "value {} is bigger than Tokens::max_value()",
-                value
-            )),
+            None => Err(format!("value {value} is bigger than Tokens::max_value()")),
         }
     }
 }
@@ -313,7 +309,7 @@ impl From<Tokens> for Nat {
 }
 
 impl Storable for Tokens {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         Cow::Owned(self.e8s.to_le_bytes().to_vec())
     }
 

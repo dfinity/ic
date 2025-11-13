@@ -1,8 +1,8 @@
 use ic_cdk::api::time;
+use rand_chacha::ChaCha20Rng;
 #[cfg(target_family = "wasm")]
 use rand_chacha::rand_core::RngCore;
 use rand_chacha::rand_core::SeedableRng;
-use rand_chacha::ChaCha20Rng;
 use std::cell::RefCell;
 
 thread_local! {

@@ -9,8 +9,8 @@ use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResult};
 
 #[cfg(feature = "tla")]
 use ic_nns_governance::governance::tla::{
-    self as tla, account_to_tla, opt_subaccount_to_tla, Destination, ToTla,
-    TLA_INSTRUMENTATION_STATE,
+    self as tla, Destination, TLA_INSTRUMENTATION_STATE, ToTla, account_to_tla,
+    opt_subaccount_to_tla,
 };
 
 #[cfg(feature = "tla")]
@@ -121,6 +121,7 @@ impl<Rt: Runtime + Send + Sync> IcpLedger for LoggingIcpLedgerCanister<Rt> {
         _expires_at: Option<u64>,
         _fee: u64,
         _from_subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount>,
+        _expected_allowance: Option<u64>,
     ) -> Result<candid::Nat, NervousSystemError> {
         Err(NervousSystemError {
             error_message: "Not Implemented".to_string(),

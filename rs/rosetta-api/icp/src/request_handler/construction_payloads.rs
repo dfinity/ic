@@ -1,8 +1,8 @@
 use candid::Encode;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_types::{
-    messages::{Blob, HttpCanisterUpdate, MessageId},
     PrincipalId,
+    messages::{Blob, HttpCanisterUpdate, MessageId},
 };
 use icp_ledger::{Memo, Operation, SendArgs, Tokens};
 use rand::Rng;
@@ -20,7 +20,7 @@ use crate::{
         UnsignedTransaction,
     },
     request::Request,
-    request_handler::{make_sig_data, verify_network_id, RosettaRequestHandler},
+    request_handler::{RosettaRequestHandler, make_sig_data, verify_network_id},
     request_types::{
         AddHotKey, ChangeAutoStakeMaturity, Disburse, DisburseMaturity, Follow, ListNeurons,
         NeuronInfo, PublicKeyOrPrincipal, RefreshVotingPower, RegisterVote, RemoveHotKey,
@@ -29,8 +29,8 @@ use crate::{
     },
 };
 use ic_nns_governance_api::{
-    manage_neuron::{self, configure, Command, NeuronIdOrSubaccount},
     ClaimOrRefreshNeuronFromAccount, ManageNeuron,
+    manage_neuron::{self, Command, NeuronIdOrSubaccount, configure},
 };
 use rosetta_core::convert::principal_id_from_public_key;
 
@@ -86,7 +86,7 @@ impl RosettaRequestHandler {
             .as_ref()
             .and_then(|meta| meta.memo)
             .map(Memo)
-            .unwrap_or_else(|| Memo(rand::thread_rng().gen()));
+            .unwrap_or_else(|| Memo(rand::thread_rng().r#gen()));
 
         let mut ingress_expiries = vec![];
         let mut now = ingress_start;
@@ -314,8 +314,7 @@ fn handle_transfer_operation(
 ) -> Result<(), ApiError> {
     let pk = pks_map.get(&from).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "Cannot find public key for account identifier {}",
-            from,
+            "Cannot find public key for account identifier {from}",
         ))
     })?;
 
@@ -373,8 +372,7 @@ fn handle_neuron_info(
     // we can use the same logic for controller or hotkey.
     let pk = pks_map.get(&account).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "NeuronInfo - Cannot find public key for account {}",
-            account,
+            "NeuronInfo - Cannot find public key for account {account}",
         ))
     })?;
     let sender = principal_id_from_public_key(pk)
@@ -421,8 +419,7 @@ fn handle_list_neurons(
     // we can use the same logic for controller or hotkey.
     let pk = pks_map.get(&account).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "NeuronInfo - Cannot find public key for account {}",
-            account,
+            "NeuronInfo - Cannot find public key for account {account}",
         ))
     })?;
     let sender = principal_id_from_public_key(pk)
@@ -536,8 +533,7 @@ fn handle_stake(
     let neuron_index = req.neuron_index;
     let pk = pks_map.get(&account).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "Cannot find public key for account identifier {}",
-            account,
+            "Cannot find public key for account identifier {account}",
         ))
     })?;
 
@@ -941,8 +937,7 @@ fn add_neuron_management_payload(
     // we can use the same logic for controller or hotkey.
     let pk = pks_map.get(&account).ok_or_else(|| {
         ApiError::internal_error(format!(
-            "Neuron management - Cannot find public key for account {}",
-            account,
+            "Neuron management - Cannot find public key for account {account}",
         ))
     })?;
 
@@ -1031,8 +1026,7 @@ fn neuron_subaccount(
                 .get(&account)
                 .ok_or_else(|| {
                     ApiError::internal_error(format!(
-                        "Cannot find public key for account {}",
-                        account,
+                        "Cannot find public key for account {account}",
                     ))
                 })
                 .unwrap();

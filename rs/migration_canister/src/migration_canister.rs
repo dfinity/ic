@@ -2,29 +2,57 @@
 //!
 //!
 
+use std::fmt::Display;
+
 use candid::{CandidType, Principal};
-use ic_cdk::{api::msg_caller, init, post_upgrade, println, update};
+use ic_cdk::{api::msg_caller, init, post_upgrade, println, query, update};
 use serde::Deserialize;
+use strum::Display;
 
 use crate::{
-    canister_state::{migrations_disabled, requests::insert_request},
-    rate_limited, start_timers, validate_request, RequestState, ValidationError,
+    RequestState, ValidationError,
+    canister_state::{
+        ValidationGuard, caller_allowed,
+        events::find_event,
+        migrations_disabled,
+        requests::{find_request, insert_request},
+        set_allowlist,
+    },
+    rate_limited, start_timers,
+    validation::validate_request,
 };
 
+#[derive(CandidType, Deserialize)]
+pub(crate) struct MigrationCanisterInitArgs {
+    allowlist: Option<Vec<Principal>>,
+}
+
 #[init]
-fn init() {
+fn init(args: MigrationCanisterInitArgs) {
     start_timers();
+    set_allowlist(args.allowlist);
 }
 
 #[post_upgrade]
-fn post_upgrade() {
+fn post_upgrade(args: MigrationCanisterInitArgs) {
     start_timers();
+    set_allowlist(args.allowlist);
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct MigrateCanisterArgs {
+#[derive(Clone, CandidType, Deserialize)]
+pub struct MigrateCanisterArgs {
     pub source: Principal,
     pub target: Principal,
+}
+
+impl Display for MigrateCanisterArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "MigrateCanisterArgs {{ source: {}, target: {} }}",
+            self.source, self.target
+        )
+    }
 }
 
 #[update]
@@ -32,37 +60,85 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
     if migrations_disabled() {
         return Err(ValidationError::MigrationsDisabled);
     }
+    // Prevent too many interleaved validations.
+    let Ok(_guard) = ValidationGuard::new() else {
+        return Err(ValidationError::RateLimited);
+    };
     if rate_limited() {
         return Err(ValidationError::RateLimited);
     }
     let caller = msg_caller();
+    // For soft rollout purposes
+    if !caller_allowed(&caller) {
+        return Err(ValidationError::MigrationsDisabled);
+    }
     match validate_request(args.source, args.target, caller).await {
         Err(e) => {
-            println!("Failed to validate request {:?}: {:?}", args, e);
+            println!("Failed to validate request {}: {}", args, e);
             return Err(e);
         }
         Ok(request) => {
-            println!("Accepted request {:?}", request);
+            // Need to check the rate limit again
+            if rate_limited() {
+                return Err(ValidationError::RateLimited);
+            }
+            println!("Accepted request {}", request);
             insert_request(RequestState::Accepted { request });
         }
     }
     Ok(())
 }
 
-#[derive(Clone, Debug, CandidType, Deserialize)]
-enum MigrationStatus {
-    Unknown,
+#[derive(Clone, Display, CandidType, Deserialize)]
+pub enum MigrationStatus {
+    #[strum(to_string = "MigrationStatus::InProgress {{ status: {status} }}")]
     InProgress { status: String },
-    Failed { reason: String },
-    Succeeded,
+    #[strum(to_string = "MigrationStatus::Failed {{ reason: {reason}, time: {time} }}")]
+    Failed { reason: String, time: u64 },
+    #[strum(to_string = "MigrationStatus::Succeeded {{ time: {time} }}")]
+    Succeeded { time: u64 },
 }
 
-// TODO: if a request is repeated, we don't know which one is meant... because the MigrateCanisterArgs
-// will be identical even though the actual `Request` will be different. So should we use IDs after all?
-#[update]
-fn migration_status(_args: MigrateCanisterArgs) -> MigrationStatus {
-    // TODO
-    MigrationStatus::Unknown
+#[query]
+/// The same (source, target) pair might be present in the `HISTORY`, and valid to process again, so
+/// we return a vector.
+fn migration_status(args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
+    let mut active: Vec<MigrationStatus> = find_request(args.source, args.target)
+        .into_iter()
+        .map(|r| MigrationStatus::InProgress {
+            status: r.name().to_string(),
+        })
+        .collect();
+    let events: Vec<MigrationStatus> = find_event(args.source, args.target)
+        .into_iter()
+        .map(|event| match event.event {
+            crate::EventType::Succeeded { .. } => MigrationStatus::Succeeded { time: event.time },
+            crate::EventType::Failed { reason, .. } => MigrationStatus::Failed {
+                reason,
+                time: event.time,
+            },
+        })
+        .collect();
+    active.extend(events);
+    active
 }
 
-// TODO: history endpoint
+#[derive(Clone, CandidType, Deserialize)]
+pub(crate) struct ListEventsArgs {
+    page_index: u64,
+    page_size: u64,
+}
+
+#[query]
+fn list_events(args: ListEventsArgs) -> Vec<MigrationStatus> {
+    crate::canister_state::events::list_events(args.page_index, args.page_size)
+        .into_iter()
+        .map(|e| match e.event {
+            crate::EventType::Succeeded { .. } => MigrationStatus::Succeeded { time: e.time },
+            crate::EventType::Failed { reason, .. } => MigrationStatus::Failed {
+                reason,
+                time: e.time,
+            },
+        })
+        .collect()
+}

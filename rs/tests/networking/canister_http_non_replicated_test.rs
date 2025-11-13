@@ -19,8 +19,8 @@ Success::
 end::catalog[] */
 #![allow(deprecated)]
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use canister_http::*;
 use canister_test::Canister;
 use dfn_candid::candid_one;
@@ -35,7 +35,7 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::block_on;
 use proxy_canister::UnvalidatedCanisterHttpRequestArgs;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
-use slog::{info, Logger};
+use slog::{Logger, info};
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -55,7 +55,7 @@ pub fn test(env: TestEnv) {
     let webserver_ipv6 = get_universal_vm_address(&env);
 
     block_on(async {
-        let url = format!("https://[{webserver_ipv6}]:20443/random");
+        let url = format!("https://[{webserver_ipv6}]/random");
         test_non_replicated_random_endpoint_works(&proxy_canister, url.clone(), &logger).await;
 
         test_fully_replicated_random_endpoint_fails(&proxy_canister, url, &logger).await;
@@ -103,6 +103,7 @@ async fn make_request(
                     method: HttpMethod::GET,
                     max_response_bytes: None,
                     is_replicated: Some(is_replicated),
+                    pricing_version: None,
                 },
                 cycles: 500_000_000_000,
             },

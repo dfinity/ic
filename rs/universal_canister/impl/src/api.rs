@@ -8,7 +8,7 @@ static ALLOC: wee_alloc::WeeAlloc<'_> = wee_alloc::WeeAlloc::INIT;
 #[allow(clippy::unused_unit)]
 mod ic0 {
     #[link(wasm_import_module = "ic0")]
-    extern "C" {
+    unsafe extern "C" {
         pub fn accept_message() -> ();
         pub fn canister_self_copy(dst: u32, offset: u32, size: u32) -> ();
         pub fn canister_self_size() -> u32;
@@ -83,6 +83,7 @@ mod ic0 {
         pub fn cost_call(method_name_size: u64, payload_size: u64, dst: u32) -> ();
         pub fn cost_create_canister(dst: u32) -> ();
         pub fn cost_http_request(request_size: u64, max_res_bytes: u64, dst: u32) -> ();
+        pub fn cost_http_request_v2(params_src: u32, params_size: u32, dst: u32) -> ();
         pub fn cost_sign_with_ecdsa(src: u32, size: u32, ecdsa_curve: u32, dst: u32) -> u32;
         pub fn cost_sign_with_schnorr(src: u32, size: u32, algorithm: u32, dst: u32) -> u32;
         pub fn cost_vetkd_derive_key(src: u32, size: u32, vetkd_curve: u32, dst: u32) -> u32;
@@ -476,6 +477,17 @@ pub fn cost_http_request(request_size: u64, max_res_bytes: u64) -> Vec<u8> {
     }
     bytes
 }
+pub fn cost_http_request_v2(data: &[u8]) -> Vec<u8> {
+    let mut bytes = vec![0u8; CYCLES_SIZE];
+    unsafe {
+        ic0::cost_http_request_v2(
+            data.as_ptr() as u32,
+            data.len() as u32,
+            bytes.as_mut_ptr() as u32,
+        );
+    }
+    bytes
+}
 pub fn cost_sign_with_ecdsa(data: &[u8], ecdsa_curve: u32) -> Result<Vec<u8>, u32> {
     let mut bytes = vec![0u8; CYCLES_SIZE];
     let result = unsafe {
@@ -486,11 +498,7 @@ pub fn cost_sign_with_ecdsa(data: &[u8], ecdsa_curve: u32) -> Result<Vec<u8>, u3
             bytes.as_mut_ptr() as u32,
         )
     };
-    if result == 0 {
-        Ok(bytes)
-    } else {
-        Err(result)
-    }
+    if result == 0 { Ok(bytes) } else { Err(result) }
 }
 pub fn cost_sign_with_schnorr(data: &[u8], algorithm: u32) -> Result<Vec<u8>, u32> {
     let mut bytes = vec![0u8; CYCLES_SIZE];
@@ -502,11 +510,7 @@ pub fn cost_sign_with_schnorr(data: &[u8], algorithm: u32) -> Result<Vec<u8>, u3
             bytes.as_mut_ptr() as u32,
         )
     };
-    if result == 0 {
-        Ok(bytes)
-    } else {
-        Err(result)
-    }
+    if result == 0 { Ok(bytes) } else { Err(result) }
 }
 pub fn cost_vetkd_derive_key(data: &[u8], vetkd_curve: u32) -> Result<Vec<u8>, u32> {
     let mut bytes = vec![0u8; CYCLES_SIZE];
@@ -518,11 +522,7 @@ pub fn cost_vetkd_derive_key(data: &[u8], vetkd_curve: u32) -> Result<Vec<u8>, u
             bytes.as_mut_ptr() as u32,
         )
     };
-    if result == 0 {
-        Ok(bytes)
-    } else {
-        Err(result)
-    }
+    if result == 0 { Ok(bytes) } else { Err(result) }
 }
 
 use std::panic;

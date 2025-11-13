@@ -70,7 +70,7 @@ pub trait IDkgPoolSection: Send + Sync {
 
     /// Iterator for dealing support objects.
     fn dealing_support(&self)
-        -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_>;
+    -> Box<dyn Iterator<Item = (IDkgMessageId, IDkgDealingSupport)> + '_>;
 
     /// Iterator for dealing support objects matching the prefix.
     fn dealing_support_by_prefix(

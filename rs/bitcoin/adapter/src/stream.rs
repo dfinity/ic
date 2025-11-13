@@ -1,25 +1,25 @@
 use bitcoin::io as bitcoin_io;
 use bitcoin::{
-    consensus::{serialize, Decodable, Encodable},
-    p2p::message::RawNetworkMessage,
+    consensus::{Decodable, Encodable, serialize},
     p2p::Magic,
+    p2p::message::RawNetworkMessage,
     {consensus::encode, p2p::message::NetworkMessage},
 };
 use futures::TryFutureExt;
 use http::Uri;
-use ic_logger::{debug, error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, error, info};
 use std::{io, net::SocketAddr, time::Duration};
 use thiserror::Error;
 use tokio::{
     io::AsyncWriteExt,
     net::{
-        tcp::{OwnedReadHalf, OwnedWriteHalf},
         TcpStream,
+        tcp::{OwnedReadHalf, OwnedWriteHalf},
     },
     sync::mpsc::{Sender, UnboundedReceiver},
     time::{sleep, timeout},
 };
-use tokio_socks::{tcp::Socks5Stream, Error as SocksError};
+use tokio_socks::{Error as SocksError, tcp::Socks5Stream};
 
 /// This provides a default amount of time to wait before a timeout occurs while
 /// attempting to connect to a BTC node.
@@ -64,7 +64,7 @@ pub enum StreamError {
 pub type StreamResult<T> = Result<T, StreamError>;
 
 /// This struct represents the configuration options for a Stream struct.
-pub struct StreamConfig<Block> {
+pub struct StreamConfig<Header, Block> {
     /// This field represents the target address that the stream will connect to.
     pub address: SocketAddr,
     /// This field is used to provide an instance of the logger.
@@ -74,13 +74,13 @@ pub struct StreamConfig<Block> {
     pub magic: Magic,
     /// This field is used to receive network messages to send out to the connected
     /// BTC node.
-    pub network_message_receiver: UnboundedReceiver<NetworkMessage<Block>>,
+    pub network_message_receiver: UnboundedReceiver<NetworkMessage<Header, Block>>,
     /// This field represents the address that the stream may use to proxy
     /// requests to the address field.
     pub socks_proxy: Option<String>,
     /// This field is used to send events from the stream back to the network and connection structs.
     pub stream_event_sender: Sender<StreamEvent>,
-    pub network_message_sender: Sender<(SocketAddr, NetworkMessage<Block>)>,
+    pub network_message_sender: Sender<(SocketAddr, NetworkMessage<Header, Block>)>,
 }
 
 /// This struct is used to represent an event that has occurred within the Stream
@@ -109,7 +109,7 @@ pub enum StreamEventKind {
 /// This struct is used to provide an interface with the raw socket that will
 /// be connecting to the BTC node.
 #[derive(Debug)]
-pub struct Stream<Block> {
+pub struct Stream<Header, Block> {
     /// This field is used to identity the node that the stream is connected to.
     address: SocketAddr,
     /// This field is used as the buffer for reading messages.
@@ -122,19 +122,21 @@ pub struct Stream<Block> {
     magic: Magic,
     /// This field contains the receiver used to intake messages that are to be
     /// sent to the connected node.
-    network_message_receiver: UnboundedReceiver<NetworkMessage<Block>>,
-    network_message_sender: Sender<(SocketAddr, NetworkMessage<Block>)>,
+    network_message_receiver: UnboundedReceiver<NetworkMessage<Header, Block>>,
+    network_message_sender: Sender<(SocketAddr, NetworkMessage<Header, Block>)>,
     /// This field is used as a buffer to contain unparsed message parts.
     unparsed: Vec<u8>,
 }
 
-impl<Block: Decodable + Encodable + Clone> Stream<Block> {
+impl<Header: Decodable + Encodable + Clone, Block: Decodable + Encodable + Clone>
+    Stream<Header, Block>
+{
     /// Creates new SOCKS client. In case of missing proxy address we fall back to the direct TCP
     /// stream.
     pub async fn connect(
-        config: StreamConfig<Block>,
+        config: StreamConfig<Header, Block>,
         logger: &ReplicaLogger,
-    ) -> StreamResult<Stream<Block>> {
+    ) -> StreamResult<Stream<Header, Block>> {
         let StreamConfig {
             address,
             socks_proxy,
@@ -215,7 +217,7 @@ impl<Block: Decodable + Encodable + Clone> Stream<Block> {
     }
 
     /// This function reads a message from the inner TcpStream.
-    pub fn read_message(&mut self) -> StreamResult<RawNetworkMessage<Block>> {
+    pub fn read_message(&mut self) -> StreamResult<RawNetworkMessage<Header, Block>> {
         loop {
             // This means that in the previous iteration we failed to decode a `RawNetworkMessage`
             // and it was larger than `MAX_RAW_MESSAGE_SIZE`. In that case we return an error and
@@ -225,7 +227,7 @@ impl<Block: Decodable + Encodable + Clone> Stream<Block> {
             }
             // The stream may only a message partial from the Bitcoin node.
             // Due to this, the stream must attempt to deserialize partial messages.
-            match encode::deserialize_partial::<RawNetworkMessage<Block>>(&self.unparsed) {
+            match encode::deserialize_partial::<RawNetworkMessage<Header, Block>>(&self.unparsed) {
                 // If there was an I/O error found in the unparsed message and it was an unexpected
                 // end-of-file, then the stream should try to read again. If the read fails, the stream
                 // exits the read message with the error. The stream later looks at this error, if the
@@ -271,7 +273,10 @@ impl<Block: Decodable + Encodable + Clone> Stream<Block> {
 
     /// This function is used to write a network message to the connected Bitcoin
     /// node.
-    async fn write_message(&mut self, network_message: NetworkMessage<Block>) -> StreamResult<()> {
+    async fn write_message(
+        &mut self,
+        network_message: NetworkMessage<Header, Block>,
+    ) -> StreamResult<()> {
         let raw_network_message = RawNetworkMessage::new(self.magic, network_message);
         let bytes = serialize(&raw_network_message);
         self.write_half
@@ -306,8 +311,11 @@ impl<Block: Decodable + Encodable + Clone> Stream<Block> {
 
 /// This function is used to kick off a new stream that will be connected to a
 /// the Network struct and related connection struct via a set of channels.
-pub fn handle_stream<Block: Encodable + Decodable + Send + Clone + 'static>(
-    config: StreamConfig<Block>,
+pub fn handle_stream<
+    Header: Encodable + Decodable + Send + Clone + 'static,
+    Block: Encodable + Decodable + Send + Clone + 'static,
+>(
+    config: StreamConfig<Header, Block>,
 ) -> tokio::task::JoinHandle<()> {
     tokio::task::spawn(async move {
         let address = config.address;
@@ -380,11 +388,11 @@ pub mod test {
     use crate::common::DEFAULT_CHANNEL_BUFFER_SIZE;
 
     use super::*;
-    use bitcoin::{consensus::Encodable, Network};
+    use bitcoin::{Network, consensus::Encodable};
     use ic_logger::replica_logger::no_op_logger;
 
-    type StreamConfig = super::StreamConfig<bitcoin::Block>;
-    type NetworkMessage = super::NetworkMessage<bitcoin::Block>;
+    type StreamConfig = super::StreamConfig<bitcoin::block::Header, bitcoin::Block>;
+    type NetworkMessage = super::NetworkMessage<bitcoin::block::Header, bitcoin::Block>;
 
     /// Test that large messages get rejected and we disconnect as a consequence.
     #[allow(clippy::disallowed_methods)]

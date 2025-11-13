@@ -22,9 +22,9 @@
 use crate::{
     governance::Governance,
     pb::v1::{
-        governance::{neuron_in_flight_command::Command, NeuronInFlightCommand},
-        governance_error::ErrorType,
         GovernanceError,
+        governance::{NeuronInFlightCommand, neuron_in_flight_command::Command},
+        governance_error::ErrorType,
     },
 };
 

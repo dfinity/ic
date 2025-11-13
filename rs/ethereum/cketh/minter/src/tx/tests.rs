@@ -3,9 +3,9 @@ use proptest::strategy::Strategy;
 
 mod estimate_transaction_price {
     use crate::numeric::WeiPerGas;
-    use crate::tx::{estimate_transaction_fee, GasFeeEstimate, TransactionFeeEstimationError};
+    use crate::tx::{GasFeeEstimate, TransactionFeeEstimationError, estimate_transaction_fee};
     use assert_matches::assert_matches;
-    use evm_rpc_client::{FeeHistory, Nat256};
+    use evm_rpc_types::{FeeHistory, Nat256};
     use proptest::collection::vec;
     use proptest::prelude::any;
     use proptest::{prop_assert_eq, proptest};
@@ -85,8 +85,8 @@ mod estimate_transaction_price {
 
 mod resubmit_transaction_price {
     use crate::numeric::WeiPerGas;
-    use crate::tx::tests::{arb_gas_fee_estimate, arb_transaction_price};
     use crate::tx::GasFeeEstimate;
+    use crate::tx::tests::{arb_gas_fee_estimate, arb_transaction_price};
     use proptest::{prop_assert, prop_assert_eq, proptest};
 
     proptest! {

@@ -1,7 +1,7 @@
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::{VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError};
-use crate::{key_id::KeyId, LocalCspVault};
+use crate::{LocalCspVault, key_id::KeyId};
 use assert_matches::assert_matches;
 use ic_crypto_internal_bls12_381_vetkd::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
@@ -138,7 +138,7 @@ impl CreateVetKdKeyShareTestSetup {
             context: b"context-123".to_vec(),
         };
         let input = b"some-input".to_vec();
-        let rng = ChaCha20Rng::from_seed(rng.gen());
+        let rng = ChaCha20Rng::from_seed(rng.r#gen());
 
         Self {
             master_secret_key,

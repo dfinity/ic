@@ -1,7 +1,7 @@
 //! This module contains definitions for communicating with an Ethereum API using the [JSON RPC](https://ethereum.org/en/developers/docs/apis/json-rpc/)
 //! interface.
 
-use evm_rpc_client::{Hex32, HttpOutcallError, LegacyRejectionCode};
+use evm_rpc_types::{Hex32, HttpOutcallError, LegacyRejectionCode};
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
@@ -19,13 +19,13 @@ pub struct Hash(
 
 impl Debug for Hash {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:x}", self)
+        write!(f, "{self:x}")
     }
 }
 
 impl Display for Hash {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:x}", self)
+        write!(f, "{self:x}")
     }
 }
 
@@ -50,8 +50,14 @@ impl std::str::FromStr for Hash {
         }
         let mut bytes = [0u8; 32];
         hex::decode_to_slice(&s[2..], &mut bytes)
-            .map_err(|e| format!("failed to decode hash from hex: {}", e))?;
+            .map_err(|e| format!("failed to decode hash from hex: {e}"))?;
         Ok(Self(bytes))
+    }
+}
+
+impl From<Hash> for evm_rpc_types::Hex32 {
+    fn from(hash: Hash) -> Self {
+        evm_rpc_types::Hex32::from(hash.0)
     }
 }
 

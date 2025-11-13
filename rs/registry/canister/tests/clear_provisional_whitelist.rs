@@ -13,7 +13,7 @@ use ic_nns_test_utils::{
 use ic_protobuf::registry::provisional_whitelist::v1::ProvisionalWhitelist;
 use ic_registry_keys::make_provisional_whitelist_record_key;
 use ic_registry_transport::pb::v1::{
-    registry_mutation::Type, RegistryAtomicMutateRequest, RegistryMutation,
+    RegistryAtomicMutateRequest, RegistryMutation, registry_mutation::Type,
 };
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;

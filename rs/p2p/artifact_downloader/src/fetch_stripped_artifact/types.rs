@@ -1,4 +1,4 @@
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
 use ic_types::crypto::CryptoHash;
 use ic_types::messages::SignedIngress;

@@ -1,0 +1,139 @@
+policy_module(manageboot, 1.0.0)
+
+type ic_manageboot_t;
+type ic_manageboot_exec_t;
+
+# Mark it as permissive for now, until policy development is
+# completed.
+permissive ic_manageboot_t;
+
+domain_type(ic_manageboot_t)
+files_type(ic_manageboot_exec_t)
+
+# Allow entry to this domain from system roles
+role system_r types ic_manageboot_t;
+
+application_domain(ic_manageboot_t, ic_manageboot_exec_t)
+
+### privilege management of the script
+
+# The script re-executes itself under sudo in order to perform
+# several privileged operations (change bootloader configuration,
+# write upgrades into partition). Allow entering sudo, and return
+# to the original domain when sudo re-executes the script (so
+# it is now running same domain, but with root privileges).
+sudo_role_template(ic_manageboot, ic_manageboot_t, ic_manageboot_exec_t, system_r)
+domtrans_pattern(ic_manageboot_sudo_t, ic_manageboot_exec_t, ic_manageboot_t)
+# Under certain circumstances, sudo signals its children.
+allow ic_manageboot_sudo_t ic_manageboot_t : process { signal };
+# allow self-signal
+allow ic_manageboot_t ic_manageboot_t : process { signal };
+# Use inherited file descriptor (/dev/null for stdin). Maybe actually
+# replica should explicitly set this to /dev/null.
+allow ic_manageboot_sudo_t init_t : fd { use };
+allow ic_manageboot_t init_t : fd { use };
+# It is not clear why it wants the pgid of init process. Allow it for now.
+allow ic_manageboot_sudo_t init_t : process { getpgid };
+
+### writing upgrades
+
+# For writing updates, it needs capability to write to EFI system
+# partition (maybe we should have a specific label for that). The
+# EFI system partition in turn is mounted below /boot.
+require { type boot_t; }
+search_dirs_pattern(ic_manageboot_t, boot_t, boot_t)
+fs_manage_dos_files(ic_manageboot_t)
+
+# This script executes several core commands to manage the
+# bootloader. Allow it.
+corecmd_search_bin(ic_manageboot_t)
+corecmd_exec_bin(ic_manageboot_t)
+corecmd_exec_shell(ic_manageboot_t)
+
+# Allow writing disk images to raw disk devices.
+storage_raw_write_fixed_disk(ic_manageboot_t)
+
+# Allow using /tmp to unpack the upgrade image into temporary files.
+files_manage_generic_tmp_dirs(ic_manageboot_t)
+files_manage_generic_tmp_files(ic_manageboot_t)
+
+fs_getattr_tmpfs(ic_manageboot_t)
+# Files are unpacked into directory created via mktemp, this
+# needs random number generator
+dev_read_urand(ic_manageboot_t)
+
+# tar extraction is done as root, but the path to the file has not been
+# made accessible to the root user account explicitly. It needs privileges
+# to perform DAC override in order to read the input file.
+allow ic_manageboot_t self : capability { dac_read_search };
+
+### triggering reboot
+
+# The "reboot" command wants to read /sys/kernel/kexec_loaded
+dev_read_sysfs(ic_manageboot_t)
+
+# The reboot command needs to connect to the systemd socket
+# and send a message to systemd to trigger reboot. This
+# requires traversing the fs paths down to the socket
+# and connecting to it.
+require { type init_t, init_var_run_t, initrc_var_run_t; }
+allow ic_manageboot_t init_t : dir { search };
+allow ic_manageboot_t init_t : file { read };
+allow ic_manageboot_t init_t : lnk_file { read };
+allow ic_manageboot_t init_t : unix_stream_socket { connectto };
+allow ic_manageboot_t init_var_run_t : dir { getattr search };
+allow ic_manageboot_t init_var_run_t : sock_file { write };
+allow ic_manageboot_t initrc_var_run_t : file { lock open read };
+
+# systemd then does access control internally, it needs to allow
+# the caller to set power status in order to trigger reboot.
+require { type power_unit_t; class service { start status }; }
+allow ic_manageboot_t power_unit_t : service { start status };
+
+# reboot command also wants to read efi vars
+require { type efivarfs_t; }
+read_files_pattern(ic_manageboot_t, efivarfs_t, efivarfs_t)
+
+# reboot command also wants sys_resource capability
+allow ic_manageboot_t self : capability { sys_resource };
+
+# Reboot wants to read information from /proc/1/environ, /proc/cmdline
+# and /proc/sys/kernel/...
+require { type init_t, proc_t, sysctl_t, sysctl_kernel_t; }
+read_files_pattern(ic_manageboot_t, proc_t, init_t)
+read_files_pattern(ic_manageboot_t, proc_t, proc_t)
+read_files_pattern(ic_manageboot_t, sysctl_t, sysctl_kernel_t)
+
+# Allow systemd-logind to send D-Bus messages to ic_manageboot_t.
+# This is needed when ic_manageboot_t calls reboot and systemd-logind
+# tries to send a method_return message. Without this, there's a 25 second
+# timeout delay during reboot operations.
+require {
+    type systemd_logind_t;
+    class dbus send_msg;
+}
+allow systemd_logind_t ic_manageboot_t : dbus send_msg;
+
+### Miscellaneous operational requirements
+
+# Allow using locales.
+miscfiles_read_localization(ic_manageboot_t)
+
+# Read generic configuration files (wants to read nsswitch.conf and some
+# other standard system configuration files).
+files_read_etc_files(ic_manageboot_t)
+
+# Some tools want to change their rlimits. That's fine.
+allow ic_manageboot_t ic_manageboot_t : process { setrlimit };
+
+# Allow IPC (internally used by tools run from the script).
+allow ic_manageboot_t ic_manageboot_t : fifo_file { getattr read write ioctl };
+allow ic_manageboot_t ic_manageboot_t : unix_stream_socket { connect create getattr getopt read setopt write };
+
+# Allow searching runtime process directories (/var/run which is symlinked to /run).
+# It is not perfectly clear what/why it is doing that, but it is harmless
+# enough. May to to forbid it and see if it still works.
+files_search_runtime(ic_manageboot_t)
+
+# Allow reading /opt/ic/share/version.txt
+read_files_pattern(ic_manageboot_t, usr_t, usr_t)

@@ -9,15 +9,21 @@ use ic_interfaces::{
     },
     idkg::{IDkgPoolSection, IDkgPoolSectionOp, IDkgPoolSectionOps, MutableIDkgPoolSection},
 };
-use ic_logger::{error, info, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, info};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use ic_types::consensus::dkg::DkgSummary;
 use ic_types::{
+    Height, Time,
     artifact::{CertificationMessageId, ConsensusMessageId, IDkgMessageId},
     batch::BatchPayload,
     consensus::{
+        BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
+        ConsensusMessageHash, ConsensusMessageHashable, DataPayload, EquivocationProof,
+        Finalization, FinalizationShare, HasHash, HasHeight, Notarization, NotarizationShare,
+        Payload, PayloadType, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
+        SummaryPayload,
         certification::{
             Certification, CertificationMessage, CertificationMessageHash, CertificationShare,
         },
@@ -28,17 +34,11 @@ use ic_types::{
             SigShareIdData, SigShareIdDataOf, SignedIDkgComplaint, SignedIDkgOpening,
             VetKdKeyShare,
         },
-        BlockPayload, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage,
-        ConsensusMessageHash, ConsensusMessageHashable, DataPayload, EquivocationProof,
-        Finalization, FinalizationShare, HasHash, HasHeight, Notarization, NotarizationShare,
-        Payload, PayloadType, RandomBeacon, RandomBeaconShare, RandomTape, RandomTapeShare,
-        SummaryPayload,
     },
     crypto::canister_threshold_sig::idkg::{
         IDkgDealingSupport, IDkgTranscriptId, SignedIDkgDealing,
     },
     crypto::{CryptoHash, CryptoHashOf, CryptoHashable},
-    Height, Time,
 };
 use lmdb::{
     Cursor, Database, DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction,
@@ -193,7 +193,7 @@ impl TryFrom<u8> for TypeKey {
     type Error = String;
 
     fn try_from(byte: u8) -> Result<Self, Self::Error> {
-        Self::from_repr(byte).ok_or(format!("Failed to convert byte {:#x} to TypeKey", byte))
+        Self::from_repr(byte).ok_or(format!("Failed to convert byte {byte:#x} to TypeKey"))
     }
 }
 
@@ -399,10 +399,7 @@ fn create_db_env(path: &Path, read_only: bool, max_dbs: c_uint) -> Environment {
     let db_env = builder
         .open_with_permissions(path, permission)
         .unwrap_or_else(|err| {
-            panic!(
-                "Error opening LMDB environment with permissions at {:?}: {:?}",
-                path, err
-            )
+            panic!("Error opening LMDB environment with permissions at {path:?}: {err:?}")
         });
 
     unsafe {
@@ -434,20 +431,20 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         let meta = if read_only {
             db_env
                 .open_db(Some("META"))
-                .unwrap_or_else(|err| panic!("Error opening db for metadata: {:?}", err))
+                .unwrap_or_else(|err| panic!("Error opening db for metadata: {err:?}"))
         } else {
             db_env
                 .create_db(Some("META"), DatabaseFlags::empty())
-                .unwrap_or_else(|err| panic!("Error creating db for metadata: {:?}", err))
+                .unwrap_or_else(|err| panic!("Error creating db for metadata: {err:?}"))
         };
         let artifacts = if read_only {
             db_env
                 .open_db(Some("ARTS"))
-                .unwrap_or_else(|err| panic!("Error opening db for artifacts: {:?}", err))
+                .unwrap_or_else(|err| panic!("Error opening db for artifacts: {err:?}"))
         } else {
             db_env
                 .create_db(Some("ARTS"), DatabaseFlags::empty())
-                .unwrap_or_else(|err| panic!("Error creating db for artifacts: {:?}", err))
+                .unwrap_or_else(|err| panic!("Error creating db for artifacts: {err:?}"))
         };
         let indices = {
             Artifact::TYPE_KEYS
@@ -514,7 +511,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         self.indices
             .iter()
             .find(|(key, _)| type_key == key)
-            .unwrap_or_else(|| panic!("Error in get_index_db: {:?} does not exist", type_key))
+            .unwrap_or_else(|| panic!("Error in get_index_db: {type_key:?} does not exist"))
             .1
     }
 
@@ -978,13 +975,12 @@ impl TryFrom<ArtifactKey> for ConsensusMessageId {
             TypeKey::CatchUpPackageShare => ConsensusMessageHash::CatchUpPackageShare(h.into()),
             TypeKey::EquivocationProof => ConsensusMessageHash::EquivocationProof(h.into()),
             TypeKey::BlockPayload => {
-                return Err("Block payloads do not have a ConsensusMessageId".into())
+                return Err("Block payloads do not have a ConsensusMessageId".into());
             }
             other => {
                 return Err(format!(
-                    "{:?} is not a valid ConsensusMessage TypeKey.",
-                    other
-                ))
+                    "{other:?} is not a valid ConsensusMessage TypeKey."
+                ));
             }
         };
         Ok(ConsensusMessageId {
@@ -1368,24 +1364,19 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
             self.log.clone(),
         )
         .next()
-        .unwrap_or_else(|| {
-            panic!(
-                "This should be impossible since we found a max height at {:?}",
-                h
-            )
-        })
+        .unwrap_or_else(|| panic!("This should be impossible since we found a max height at {h:?}"))
     }
 
     /// Number of artifacts in the DB.
     fn size(&self) -> u64 {
-        if let Some(tx) = log_err!(self.db_env.begin_ro_txn(), &self.log, "begin_ro_txn") {
-            if let Some(mut cursor) = log_err!(
+        if let Some(tx) = log_err!(self.db_env.begin_ro_txn(), &self.log, "begin_ro_txn")
+            && let Some(mut cursor) = log_err!(
                 tx.open_ro_cursor(self.artifacts),
                 &self.log,
                 "open_ro_cursor"
-            ) {
-                return cursor.iter().count() as u64;
-            }
+            )
+        {
+            return cursor.iter().count() as u64;
         }
         0
     }
@@ -1416,9 +1407,8 @@ impl TryFrom<ArtifactKey> for CertificationMessageId {
             TypeKey::CertificationShare => CertificationMessageHash::CertificationShare(h.into()),
             other => {
                 return Err(format!(
-                    "{:?} is not a valid CertificationMessage TypeKey.",
-                    other
-                ))
+                    "{other:?} is not a valid CertificationMessage TypeKey."
+                ));
             }
         };
         Ok(CertificationMessageId {
@@ -1941,7 +1931,7 @@ impl PersistentIDkgPoolSection {
         let mut path = config.persistent_pool_validated_persistent_db_path;
         path.push("idkg");
         if let Err(err) = std::fs::create_dir_all(path.as_path()) {
-            panic!("Error creating IDKG dir {:?}: {:?}", path, err)
+            panic!("Error creating IDKG dir {path:?}: {err:?}")
         }
         let db_env = Arc::new(create_db_env(
             path.as_path(),
@@ -2222,12 +2212,12 @@ mod tests {
     use crate::{
         consensus_pool::MutablePoolSection,
         test_utils::{
-            block_proposal_ops, fake_block_proposal_with_rank, fake_random_beacon,
-            finalization_share_ops, notarization_share_ops, random_beacon_ops, PoolTestHelper,
+            PoolTestHelper, block_proposal_ops, fake_block_proposal_with_rank, fake_random_beacon,
+            finalization_share_ops, notarization_share_ops, random_beacon_ops,
         },
     };
     use ic_test_utilities_logger::with_test_replica_logger;
-    use ic_types::{consensus::Rank, PrincipalId, SubnetId};
+    use ic_types::{PrincipalId, SubnetId, consensus::Rank};
     use std::{panic, path::PathBuf};
 
     #[test]
@@ -2295,7 +2285,7 @@ mod tests {
                                 hash: hash.clone(),
                             }),
                         ),
-                        _ => panic!("Unexpected type: {:?}", message_type),
+                        _ => panic!("Unexpected type: {message_type:?}"),
                     };
                     let id_key = IDkgIdKey::from(id.clone());
                     let deser_id = deser_idkg_message_id(*message_type, id_key).unwrap();

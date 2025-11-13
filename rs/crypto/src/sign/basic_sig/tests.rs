@@ -304,9 +304,11 @@ mod verify_sig_batch {
         let sig_batch = crypto.combine_basic_sig(signatures, REG_V2);
         assert!(sig_batch.is_ok());
 
-        assert!(crypto
-            .verify_basic_sig_batch(&sig_batch.unwrap(), &msg, REG_V2)
-            .is_ok());
+        assert!(
+            crypto
+                .verify_basic_sig_batch(&sig_batch.unwrap(), &msg, REG_V2)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -385,12 +387,16 @@ mod verify_sig_batch {
         let sig_node2_on_other_msg = crypto_2.sign_basic(&other_msg, NODE_2, REG_V2).unwrap();
 
         let mut signatures = BTreeMap::new();
-        assert!(crypto_1
-            .verify_basic_sig(&sig_node1_on_msg, &msg, NODE_1, REG_V2)
-            .is_ok());
-        assert!(crypto_1
-            .verify_basic_sig(&sig_node2_on_other_msg, &msg, NODE_2, REG_V2)
-            .is_err());
+        assert!(
+            crypto_1
+                .verify_basic_sig(&sig_node1_on_msg, &msg, NODE_1, REG_V2)
+                .is_ok()
+        );
+        assert!(
+            crypto_1
+                .verify_basic_sig(&sig_node2_on_other_msg, &msg, NODE_2, REG_V2)
+                .is_err()
+        );
 
         signatures.insert(NODE_1, &sig_node1_on_msg);
         signatures.insert(NODE_2, &sig_node2_on_other_msg);
@@ -441,12 +447,16 @@ mod verify_sig_batch {
         };
 
         let mut signatures = BTreeMap::new();
-        assert!(crypto_1
-            .verify_basic_sig(&sig_node1, &msg, NODE_1, REG_V2)
-            .is_ok());
-        assert!(crypto_1
-            .verify_basic_sig(&sig_node2_corrupted, &msg, NODE_2, REG_V2)
-            .is_err());
+        assert!(
+            crypto_1
+                .verify_basic_sig(&sig_node1, &msg, NODE_1, REG_V2)
+                .is_ok()
+        );
+        assert!(
+            crypto_1
+                .verify_basic_sig(&sig_node2_corrupted, &msg, NODE_2, REG_V2)
+                .is_err()
+        );
 
         signatures.insert(NODE_1, &sig_node1);
         signatures.insert(NODE_2, &sig_node2_corrupted);

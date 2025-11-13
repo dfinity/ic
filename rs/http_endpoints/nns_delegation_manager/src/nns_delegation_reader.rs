@@ -1,14 +1,14 @@
 use ic_crypto_tree_hash::{
-    lookup_lower_bound, sparse_labeled_tree_from_paths, FilterBuilder, LabeledTree,
-    LookupLowerBoundStatus, Path,
+    FilterBuilder, LabeledTree, LookupLowerBoundStatus, Path, lookup_lower_bound,
+    sparse_labeled_tree_from_paths,
 };
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_types::{
+    CanisterId, SubnetId,
     messages::{
         Blob, Certificate, CertificateDelegation, CertificateDelegationFormat,
         CertificateDelegationMetadata,
     },
-    CanisterId, SubnetId,
 };
 use serde::ser::Serialize;
 use tokio::sync::watch;

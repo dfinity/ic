@@ -8,11 +8,6 @@ def _did_git_test_impl(ctx):
 
 set -xeuo pipefail
 
-if [[ ${{OVERRIDE_DIDC_CHECK:-}} == "true" ]]; then
-    echo "Override didc check requested. Skipping didc_check."
-    exit 0
-fi
-
 # Note that MERGE_BASE_SHA is only set on Pull Requests.
 # On other events we set the merge_base to HEAD which means we compare the
 # did interface file against itself.
@@ -53,7 +48,7 @@ fi
 
     return [
         DefaultInfo(runfiles = runfiles),
-        RunEnvironmentInfo(inherited_environment = ["MERGE_BASE_SHA", "OVERRIDE_DIDC_CHECK"]),
+        RunEnvironmentInfo(inherited_environment = ["MERGE_BASE_SHA"]),
     ]
 
 CHECK_DID = attr.label(
@@ -83,5 +78,9 @@ def did_git_test(name, did, **kwargs):
       **kwargs: additional keyword arguments to pass to the test rule.
             enable_also_reverse (bool, optional): whether the test should also run candid checks in reverse order
     """
-    kwargs.setdefault("tags", ["local", "no-sandbox", "smoke"])
-    _did_git_test(name = name, did = did, **kwargs)
+    tags = kwargs.pop("tags", [])
+    for tag in ["local", "no-sandbox", "smoke", "didc"]:
+        if not tag in tags:
+            tags.append(tag)
+
+    _did_git_test(name = name, did = did, tags = tags, **kwargs)

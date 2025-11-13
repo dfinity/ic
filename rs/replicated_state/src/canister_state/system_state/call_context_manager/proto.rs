@@ -1,5 +1,5 @@
 use super::*;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::state::canister_state_bits::v1 as pb;
 use ic_protobuf::types::v1 as pb_types;
 
@@ -44,23 +44,31 @@ impl TryFrom<pb::CallContext> for CallContext {
 impl From<&CallOrigin> for pb::call_context::CallOrigin {
     fn from(item: &CallOrigin) -> Self {
         match item {
-            CallOrigin::Ingress(user_id, message_id) => Self::Ingress(pb::call_context::Ingress {
-                user_id: Some(user_id_into_protobuf(*user_id)),
-                message_id: message_id.as_bytes().to_vec(),
-            }),
-            CallOrigin::CanisterUpdate(canister_id, callback_id, deadline) => {
+            CallOrigin::Ingress(user_id, message_id, method_name) => {
+                Self::Ingress(pb::call_context::Ingress {
+                    user_id: Some(user_id_into_protobuf(*user_id)),
+                    message_id: message_id.as_bytes().to_vec(),
+                    method_name: method_name.clone(),
+                })
+            }
+            CallOrigin::CanisterUpdate(canister_id, callback_id, deadline, method_name) => {
                 Self::CanisterUpdate(pb::call_context::CanisterUpdateOrQuery {
                     canister_id: Some(pb_types::CanisterId::from(*canister_id)),
                     callback_id: callback_id.get(),
                     deadline_seconds: deadline.as_secs_since_unix_epoch(),
+                    method_name: method_name.clone(),
                 })
             }
-            CallOrigin::Query(user_id) => Self::Query(user_id_into_protobuf(*user_id)),
-            CallOrigin::CanisterQuery(canister_id, callback_id) => {
+            CallOrigin::Query(user_id, method_name) => Self::UserQuery(pb::call_context::Query {
+                user_id: Some(user_id_into_protobuf(*user_id)),
+                method_name: method_name.clone(),
+            }),
+            CallOrigin::CanisterQuery(canister_id, callback_id, method_name) => {
                 Self::CanisterQuery(pb::call_context::CanisterUpdateOrQuery {
                     canister_id: Some(pb_types::CanisterId::from(*canister_id)),
                     callback_id: callback_id.get(),
                     deadline_seconds: NO_DEADLINE.as_secs_since_unix_epoch(),
+                    method_name: method_name.clone(),
                 })
             }
             CallOrigin::SystemTask => Self::SystemTask(pb::call_context::SystemTask {}),
@@ -75,36 +83,49 @@ impl TryFrom<pb::call_context::CallOrigin> for CallOrigin {
             pb::call_context::CallOrigin::Ingress(pb::call_context::Ingress {
                 user_id,
                 message_id,
+                method_name,
             }) => Self::Ingress(
                 user_id_try_from_protobuf(try_from_option_field(
                     user_id,
                     "CallOrigin::Ingress::user_id",
                 )?)?,
                 message_id.as_slice().try_into()?,
+                method_name,
             ),
             pb::call_context::CallOrigin::CanisterUpdate(
                 pb::call_context::CanisterUpdateOrQuery {
                     canister_id,
                     callback_id,
                     deadline_seconds,
+                    method_name,
                 },
             ) => Self::CanisterUpdate(
                 try_from_option_field(canister_id, "CallOrigin::CanisterUpdate::canister_id")?,
                 callback_id.into(),
                 CoarseTime::from_secs_since_unix_epoch(deadline_seconds),
+                method_name,
             ),
-            pb::call_context::CallOrigin::Query(user_id) => {
-                Self::Query(user_id_try_from_protobuf(user_id)?)
-            }
             pb::call_context::CallOrigin::CanisterQuery(
                 pb::call_context::CanisterUpdateOrQuery {
                     canister_id,
                     callback_id,
                     deadline_seconds: _,
+                    method_name,
                 },
             ) => Self::CanisterQuery(
                 try_from_option_field(canister_id, "CallOrigin::CanisterQuery::canister_id")?,
                 callback_id.into(),
+                method_name,
+            ),
+            pb::call_context::CallOrigin::UserQuery(pb::call_context::Query {
+                user_id,
+                method_name,
+            }) => Self::Query(
+                user_id_try_from_protobuf(try_from_option_field(
+                    user_id,
+                    "CallOrigin::UserQuery::user_id",
+                )?)?,
+                method_name,
             ),
             pb::call_context::CallOrigin::SystemTask { .. } => Self::SystemTask,
         };
@@ -177,10 +198,7 @@ impl TryFrom<pb::CallContextManager> for CallContextManager {
             .map(CallbackId::from)
             .map(|callback_id| {
                 let callback = callbacks.get(&callback_id).ok_or_else(|| {
-                    ProxyDecodeError::Other(format!(
-                        "Unexpired callback not found: {}",
-                        callback_id
-                    ))
+                    ProxyDecodeError::Other(format!("Unexpired callback not found: {callback_id}"))
                 })?;
                 Ok(((callback.deadline, callback_id), ()))
             })

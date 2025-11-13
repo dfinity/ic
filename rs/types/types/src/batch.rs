@@ -15,22 +15,22 @@ pub use self::{
         QueryStatsPayload, RawQueryStats, TotalQueryStats,
     },
     ingress::{IngressPayload, IngressPayloadError},
-    self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES},
+    self_validating::{MAX_BITCOIN_PAYLOAD_IN_BYTES, SelfValidatingPayload},
     vetkd::{
-        bytes_to_vetkd_payload, vetkd_payload_to_bytes, VetKdAgreement, VetKdErrorCode,
-        VetKdPayload,
+        VetKdAgreement, VetKdErrorCode, VetKdPayload, bytes_to_vetkd_payload,
+        vetkd_payload_to_bytes,
     },
     xnet::XNetPayload,
 };
 use crate::{
-    consensus::idkg::{common::PreSignature, IDkgMasterPublicKeyId, PreSigId},
+    Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
+    consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
     crypto::{
-        canister_threshold_sig::{idkg::IDkgTranscript, MasterPublicKey},
+        canister_threshold_sig::{MasterPublicKey, idkg::IDkgTranscript},
         threshold_sig::ni_dkg::{NiDkgId, NiDkgMasterPublicKeyId},
     },
     messages::{CallbackId, Payload, SignedIngress},
     xnet::CertifiedStreamSlice,
-    Height, Randomness, RegistryVersion, ReplicaVersion, SubnetId, Time,
 };
 use ic_base_types::{NodeId, NumBytes};
 use ic_btc_replica_types::BitcoinAdapterResponse;
@@ -38,7 +38,7 @@ use ic_btc_replica_types::BitcoinAdapterResponse;
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
-use prost::{bytes::BufMut, DecodeError, Message};
+use prost::{DecodeError, Message, bytes::BufMut};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, convert::TryInto, hash::Hash};
 

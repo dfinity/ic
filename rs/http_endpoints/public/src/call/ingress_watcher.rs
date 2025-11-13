@@ -1,18 +1,19 @@
 use crate::metrics::HttpHandlerMetrics;
 use ic_http_endpoints_async_utils::JoinMap;
-use ic_logger::{info, ReplicaLogger};
-use ic_types::{messages::MessageId, Height};
+use ic_logger::{ReplicaLogger, info};
+use ic_types::{Height, messages::MessageId};
 use std::{
     cmp::max,
-    collections::{btree_map, hash_map::Entry, BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet, btree_map, hash_map::Entry},
     sync::Arc,
 };
 use tokio::{
     runtime::Handle,
     select,
     sync::{
-        mpsc::{channel, Receiver, Sender},
-        oneshot, watch, Notify,
+        Notify,
+        mpsc::{Receiver, Sender, channel},
+        oneshot, watch,
     },
     task::JoinHandle,
 };
@@ -225,18 +226,12 @@ impl IngressWatcher {
             }
 
             select! {
-                // A new ingress message that needs to be tracked.
-                Some(ingress_subscription) = ingress_message_rx.recv() => {
-                    self.metrics.ingress_watcher_subscriptions_total.inc();
-                    self.handle_ingress_message(ingress_subscription);
-                }
-                // Ingress message completed execution at `height`.
-                Some((message_id, height)) = completed_execution_messages_rx.recv() => {
-                    self.handle_message_completed_execution(message_id, height);
-                }
-                // Certified height has changed.
-                Ok(_) = certified_height.changed() => {
-                    self.handle_certification(*certified_height.borrow_and_update());
+                _ = self.cancellation_token.cancelled() => {
+                    info!(
+                        self.log,
+                        "Ingress watcher event loop cancelled.",
+                    );
+                    break;
                 }
                 // Cancel the tracking of an ingress message.
                 Some(cancellation_handle) = self.cancellations.join_next() => {
@@ -251,13 +246,18 @@ impl IngressWatcher {
                         }
                     }
                 }
-
-                _ = self.cancellation_token.cancelled() => {
-                    info!(
-                        self.log,
-                        "Ingress watcher event loop cancelled.",
-                    );
-                    break;
+                // A new ingress message that needs to be tracked.
+                Some(ingress_subscription) = ingress_message_rx.recv() => {
+                    self.metrics.ingress_watcher_subscriptions_total.inc();
+                    self.handle_ingress_message(ingress_subscription);
+                }
+                // Ingress message completed execution at `height`.
+                Some((message_id, height)) = completed_execution_messages_rx.recv() => {
+                    self.handle_message_completed_execution(message_id, height);
+                }
+                // Certified height has changed.
+                Ok(_) = certified_height.changed() => {
+                    self.handle_certification(*certified_height.borrow_and_update());
                 }
             }
 
@@ -383,7 +383,9 @@ impl IngressWatcher {
                     }
                     // Invalid invariants.
                     Some((MessageExecutionStatus::InProgress, _)) => {
-                        panic!("Invalid variant. Execution status must be `Completed` if it is in `completed_execution_heights`.");
+                        panic!(
+                            "Invalid variant. Execution status must be `Completed` if it is in `completed_execution_heights`."
+                        );
                     }
                     None => {
                         panic!("Message should be in `self.notifiers`.");

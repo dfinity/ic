@@ -292,8 +292,9 @@ fn should_correctly_format_config_display_message() {
 
     let display_text = format!("{}", config.unwrap());
 
-    assert_eq!(display_text,
-               "NiDkgConfig { \
+    assert_eq!(
+        display_text,
+        "NiDkgConfig { \
                     dkg_id: NiDkgId { \
                         start_block_height: 1, \
                         dealer_subnet: yndj2-3ybaa-aaaaa-aaaap-yai, \

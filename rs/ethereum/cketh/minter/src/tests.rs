@@ -18,12 +18,12 @@ fn test_evm_rpc_id_staging_value() {
 }
 
 mod eth_get_logs {
-    use evm_rpc_client::{Hex, Hex20, Hex32};
+    use evm_rpc_types::{Hex, Hex20, Hex32};
     use std::str::FromStr;
 
     #[test]
     fn deserialize_get_logs() {
-        use evm_rpc_client::LogEntry;
+        use evm_rpc_types::LogEntry;
 
         let logs: Vec<LogEntry> = serde_json::from_str(r#"[
  {
@@ -96,9 +96,9 @@ mod rlp_encoding {
     fn test_rlp_encoding() {
         use crate::tx::{AccessList, Eip1559TransactionRequest};
         use ethers_core::abi::ethereum_types::H160;
+        use ethers_core::types::Signature as EthersCoreSignature;
         use ethers_core::types::transaction::eip1559::Eip1559TransactionRequest as EthersCoreEip1559TransactionRequest;
         use ethers_core::types::transaction::eip2930::AccessList as EthersCoreAccessList;
-        use ethers_core::types::Signature as EthersCoreSignature;
         use ethers_core::types::{Bytes, U256};
         use ethnum::u256;
 
@@ -208,7 +208,10 @@ mod rlp_encoding {
         );
 
         let signed_transaction = SignedEip1559TransactionRequest::from((transaction, signature));
-        assert_eq!(signed_transaction.raw_transaction_hex(), "0x02f89883aa36a7068459682f0084598653cd82dcbf94b44b5e756a894775fc32eddf3314bb1b1944dc3487038d7ea4c68000a4b214faa51d882d15b09f8e81e29606305f5fefc5eff3e2309620a3557ecae39d62020000c001a07d097b81dc8bf5ad313f8d6656146d4723d0e6bb3fb35f1a709e6a3d4426c0f3a04f8a618d959e7d96e19156f0f5f2ed321b34e2004a0c8fdb7f02bc7d08b74441");
+        assert_eq!(
+            signed_transaction.raw_transaction_hex_string(),
+            "0x02f89883aa36a7068459682f0084598653cd82dcbf94b44b5e756a894775fc32eddf3314bb1b1944dc3487038d7ea4c68000a4b214faa51d882d15b09f8e81e29606305f5fefc5eff3e2309620a3557ecae39d62020000c001a07d097b81dc8bf5ad313f8d6656146d4723d0e6bb3fb35f1a709e6a3d4426c0f3a04f8a618d959e7d96e19156f0f5f2ed321b34e2004a0c8fdb7f02bc7d08b74441"
+        );
         assert_eq!(
             signed_transaction.hash().to_string(),
             "0x66a9a218ea720ac6d2c9e56f7e44836c1541c186b7627bda220857ce34e2df7f"

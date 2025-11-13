@@ -15,7 +15,7 @@ fn test_round_trip() {
             amount: Tokens,
         }
 
-        let yaml = format!("amount: {}", original_amount_str);
+        let yaml = format!("amount: {original_amount_str}");
         let t: T = serde_yaml::from_str(&yaml).unwrap();
 
         assert_eq!(
@@ -25,13 +25,12 @@ fn test_round_trip() {
                     e8s: Some(expected_e8s)
                 }
             },
-            "original_amount_str = {:?}",
-            original_amount_str,
+            "original_amount_str = {original_amount_str:?}",
         );
 
         assert_eq!(
             serde_yaml::to_string(&t).unwrap(),
-            format!("amount: {}\n", expected_formatted_str),
+            format!("amount: {expected_formatted_str}\n"),
             "original_amount_str = {:?}",
             original_amount_str,
         );

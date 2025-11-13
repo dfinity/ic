@@ -1,0 +1,24 @@
+[Unit]
+Description=Bootstrap the IC node
+# boostrap-ic-node.service does not actually need init-config.service but many of its dependents do. For simplicity,
+# we use bootstrap-ic-node as the barrier for initializing the node.
+After=upgrade-shared-data-store.service init-config.service
+Wants=init-config.service
+RequiresMountsFor=/boot/config /var/lib/ic/data /var/lib/ic/crypto
+Before=setup-ssh-user-keys.service
+
+[Install]
+WantedBy=multi-user.target
+RequiredBy=setup-ssh-user-keys.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/opt/ic/bin/config bootstrap-ic-node
+Restart=on-failure
+RestartSec=10
+
+# All guestos services that networking depends on log their outputs to the
+# console to be piped to the host terminal if the verbose flag is enabled.
+StandardOutput=journal+console
+StandardError=journal+console

@@ -42,9 +42,7 @@ fn test_clamp_string_corner_cases() {
         assert_eq!(
             clamp_string_len(s, max_len),
             expected.to_string(),
-            "clamp_string_len({}, {}) returned an unexpected value.",
-            s,
-            max_len,
+            "clamp_string_len({s}, {max_len}) returned an unexpected value.",
         );
     }
 }

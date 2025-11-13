@@ -3,18 +3,12 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-mod node_gen;
-use node_gen::get_node_gen_metric;
-
-mod prometheus_metric;
-use prometheus_metric::write_single_metric;
-
 mod generate_network_config;
 use generate_network_config::{generate_networkd_config, validate_and_construct_ipv4_address_info};
 
 use config::deserialize_config;
 use config_types::GuestOSConfig;
-use network::systemd::{restart_systemd_networkd, DEFAULT_SYSTEMD_NETWORK_DIR};
+use network::systemd::{DEFAULT_SYSTEMD_NETWORK_DIR, restart_systemd_networkd};
 
 #[derive(Subcommand)]
 pub enum Commands {
@@ -50,16 +44,6 @@ pub enum Commands {
         /// IPv4 gateway
         ipv4_gateway: Option<String>,
     },
-    SetHardwareGenMetric {
-        #[arg(
-            short = 'o',
-            long = "output",
-            default_value = "/run/node_exporter/collector_textfile/node_gen.prom"
-        )]
-        /// Filename to write the prometheus metric for node generation.
-        /// Fails if directory doesn't exist.
-        output_path: String,
-    },
 }
 
 #[derive(Parser)]
@@ -78,9 +62,6 @@ pub fn main() -> Result<()> {
     let opts = GuestOSArgs::parse();
 
     match opts.command {
-        Some(Commands::SetHardwareGenMetric { output_path }) => {
-            write_single_metric(&get_node_gen_metric(), Path::new(&output_path))
-        }
         Some(Commands::GenerateNetworkConfig {
             systemd_network_dir,
             config_object,

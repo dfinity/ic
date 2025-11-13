@@ -1,6 +1,6 @@
 use ic_management_canister_types_private::{Method, Payload, UpdateSettingsArgs};
 use ic_test_utilities_execution_environment::ExecutionTestBuilder;
-use libfuzzer_sys::{fuzz_target, Corpus};
+use libfuzzer_sys::{Corpus, fuzz_target};
 
 // This fuzz tries to execute the UpdateSettings management canister method
 //
@@ -37,7 +37,7 @@ fuzz_target!(|args: UpdateSettingsArgs| -> Corpus {
                 .canister_state(canister_id)
                 .system_state
                 .memory_allocation
-                .bytes()
+                .pre_allocated_bytes()
                 .get();
             let freezing_threshold = test
                 .canister_state(canister_id)

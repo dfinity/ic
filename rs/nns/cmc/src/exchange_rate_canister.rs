@@ -1,7 +1,7 @@
 #![allow(deprecated)]
 use crate::{
-    do_set_icp_xdr_conversion_rate, environment::Environment, mutate_state, read_state, State,
-    ONE_MINUTE_SECONDS,
+    ONE_MINUTE_SECONDS, State, do_set_icp_xdr_conversion_rate, environment::Environment,
+    mutate_state, read_state,
 };
 use async_trait::async_trait;
 use candid::CandidType;
@@ -156,12 +156,12 @@ impl UpdateExchangeRateGuard {
             return Err(UpdateExchangeRateError::UpdateAlreadyInProgress);
         }
 
-        if let UpdateExchangeRateState::GetRateAt(next_attempt_seconds) = current_call_state {
-            if current_minute_in_seconds < next_attempt_seconds {
-                return Err(UpdateExchangeRateError::NotReadyToGetRate(
-                    next_attempt_seconds,
-                ));
-            }
+        if let UpdateExchangeRateState::GetRateAt(next_attempt_seconds) = current_call_state
+            && current_minute_in_seconds < next_attempt_seconds
+        {
+            return Err(UpdateExchangeRateError::NotReadyToGetRate(
+                next_attempt_seconds,
+            ));
         }
 
         mutate_state(safe_state, |state| {
@@ -268,7 +268,10 @@ impl std::fmt::Display for GetExchangeRateError {
                         write!(f, "The XRC could not find enough stablecoin rates")
                     }
                     ExchangeRateError::StablecoinRateZeroRate => {
-                        write!(f, "The XRC's stablecoin rate is zero and it cannot determine a valid rate")
+                        write!(
+                            f,
+                            "The XRC's stablecoin rate is zero and it cannot determine a valid rate"
+                        )
                     }
                     ExchangeRateError::ForexInvalidTimestamp => {
                         write!(f, "The request's timestamp could not be found in the XRC")
@@ -301,7 +304,7 @@ impl std::fmt::Display for GetExchangeRateError {
                 }
             }
             GetExchangeRateError::Call { code, message } => {
-                write!(f, "Code: {} Message: {}", code, message)
+                write!(f, "Code: {code} Message: {message}")
             }
         }
     }
@@ -326,15 +329,13 @@ impl std::fmt::Display for UpdateExchangeRateError {
             UpdateExchangeRateError::FailedToRetrieveRate(message) => {
                 write!(
                     f,
-                    "Failed to retrieve rate from exchange rate canister: {}",
-                    message
+                    "Failed to retrieve rate from exchange rate canister: {message}"
                 )
             }
             UpdateExchangeRateError::FailedToSetRate(message) => {
                 write!(
                     f,
-                    "Failed to set conversion rate from exchange rate canister: {}",
-                    message
+                    "Failed to set conversion rate from exchange rate canister: {message}"
                 )
             }
             UpdateExchangeRateError::Disabled => write!(
@@ -344,15 +345,13 @@ impl std::fmt::Display for UpdateExchangeRateError {
             UpdateExchangeRateError::InvalidRate(message) => {
                 write!(
                     f,
-                    "Rate from exchange rate canister failed to validate: {}",
-                    message
+                    "Rate from exchange rate canister failed to validate: {message}"
                 )
             }
             UpdateExchangeRateError::NotReadyToGetRate(timestamp) => {
                 write!(
                     f,
-                    "Waiting to reattempt calling the exchange rate canister again at {}",
-                    timestamp
+                    "Waiting to reattempt calling the exchange rate canister again at {timestamp}"
                 )
             }
         }
@@ -423,7 +422,7 @@ pub fn set_update_exchange_rate_state(
     maybe_reason: &Option<UpdateIcpXdrConversionRatePayloadReason>,
     rate_timestamp_seconds: u64,
 ) {
-    if let Some(ref reason) = maybe_reason {
+    if let Some(reason) = maybe_reason {
         mutate_state(safe_state, |state| {
             let current_update_exchange_rate_state = state
                 .update_exchange_rate_canister_state
@@ -467,8 +466,14 @@ enum ValidateExchangeRateError {
 impl std::fmt::Display for ValidateExchangeRateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ValidateExchangeRateError::NotEnoughIcpSources { received, queried } => write!(f, "Not enough exchange sources for rate's ICP base asset. Expected: {} Received: {} Queried: {}", MINIMUM_ICP_SOURCES, received, queried),
-            ValidateExchangeRateError::NotEnoughCxdrSources { received, queried } => write!(f, "Not enough forex sources for rate's CXDR quote asset. Expected: {} Received: {} Queried: {}", MINIMUM_CXDR_SOURCES, received, queried),
+            ValidateExchangeRateError::NotEnoughIcpSources { received, queried } => write!(
+                f,
+                "Not enough exchange sources for rate's ICP base asset. Expected: {MINIMUM_ICP_SOURCES} Received: {received} Queried: {queried}"
+            ),
+            ValidateExchangeRateError::NotEnoughCxdrSources { received, queried } => write!(
+                f,
+                "Not enough forex sources for rate's CXDR quote asset. Expected: {MINIMUM_CXDR_SOURCES} Received: {received} Queried: {queried}"
+            ),
         }
     }
 }
@@ -899,8 +904,8 @@ mod test {
     }
 
     #[test]
-    fn test_periodic_calls_the_xrc_and_rejects_the_rates_timestamp_then_sets_the_next_attempt_a_minute_in_future(
-    ) {
+    fn test_periodic_calls_the_xrc_and_rejects_the_rates_timestamp_then_sets_the_next_attempt_a_minute_in_future()
+     {
         thread_local! {
             static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
         }
@@ -977,16 +982,14 @@ mod test {
             .now_or_never()
             .unwrap();
 
-        assert!(result.is_ok(), "{:?}", result);
+        assert!(result.is_ok(), "{result:?}");
         assert!(xrc_client.calls.lock().unwrap().is_empty());
         let icp_xdr_conversion_rate =
             read_state(&STATE, |state| state.icp_xdr_conversion_rate.clone());
         let expected_rate_timestamp = (now_timestamp_seconds / 60) * 60;
         assert!(
             matches!(icp_xdr_conversion_rate, Some(ref rate) if rate.xdr_permyriad_per_icp == 200_000 && rate.timestamp_seconds == expected_rate_timestamp),
-            "rate: {:#?} expected timestamp: {}",
-            icp_xdr_conversion_rate,
-            expected_rate_timestamp
+            "rate: {icp_xdr_conversion_rate:#?} expected timestamp: {expected_rate_timestamp}"
         );
         // Ensure the certified data has been set.
         assert!(!env.certified_data.borrow().is_empty());
@@ -1003,8 +1006,7 @@ mod test {
 
         assert!(
             matches!(average_icp_xdr_conversion_rate, Some(ref rate) if rate.xdr_permyriad_per_icp == 200_000),
-            "rate: {:#?}",
-            icp_xdr_conversion_rate
+            "rate: {icp_xdr_conversion_rate:#?}"
         );
     }
 

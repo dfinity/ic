@@ -1,12 +1,12 @@
+use crate::KeyId;
+use crate::LocalCspVault;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::vault::local_csp_vault::{
+    CspSecretKey, ThresholdSchnorrCreateSigShareVaultError,
     tschnorr::{
         IDkgTranscriptInternalBytes, ThresholdSchnorrSigShareBytes, ThresholdSchnorrSignerCspVault,
     },
-    CspSecretKey, ThresholdSchnorrCreateSigShareVaultError,
 };
-use crate::KeyId;
-use crate::LocalCspVault;
 use assert_matches::assert_matches;
 use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
     CombinedCommitment, CommitmentOpeningBytes, EccCurveType, EccPoint, EccScalar, EccScalarBytes,
@@ -14,11 +14,11 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
 };
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use ic_types::{
-    crypto::{AlgorithmId, ExtendedDerivationPath},
     Randomness,
+    crypto::{AlgorithmId, ExtendedDerivationPath},
 };
 use proptest::{
-    prelude::{any, Strategy},
+    prelude::{Strategy, any},
     proptest,
 };
 use rand::{CryptoRng, Rng};
@@ -166,8 +166,8 @@ mod create_schnorr_sig_share {
                         parameters_with_wrong_algorithm_id.create_schnorr_sig_share(&vault);
 
                     let expected_error_message = format!(
-                    "invalid algorithm id for threshold Schnorr signature: {wrong_algorithm_id}"
-                );
+                        "invalid algorithm id for threshold Schnorr signature: {wrong_algorithm_id}"
+                    );
                     assert_matches!(
                         result,
                         Err(ThresholdSchnorrCreateSigShareVaultError::InvalidArguments(s))

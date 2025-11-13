@@ -6,32 +6,31 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, bail, Context, Error};
+use anyhow::{Context, Error, anyhow, bail};
 use arc_swap::ArcSwapOption;
 use axum::{
+    Router,
     extract::Request,
     middleware,
     response::IntoResponse,
     routing::method_routing::{any, get, post},
-    Router,
 };
 use axum_extra::middleware::option_layer;
 use candid::{DecoderConfig, Principal};
-use ic_agent::{agent::EnvelopeContent, identity::AnonymousIdentity, Agent, Identity, Signature};
+use ic_agent::{Agent, Identity, Signature, agent::EnvelopeContent, identity::AnonymousIdentity};
 use ic_bn_lib::{
     http::{
         self as bnhttp,
         shed::{
+            ShedResponse,
             sharded::{ShardedLittleLoadShedderLayer, ShardedOptions, TypeExtractor},
             system::{SystemInfo, SystemLoadShedderLayer},
-            ShedResponse,
         },
     },
     prometheus::Registry,
     pubsub::BrokerBuilder,
     tasks::TaskManager,
     tls::verify::NoopServerCertVerifier,
-    types::RequestType,
 };
 use ic_config::crypto::CryptoConfig;
 use ic_crypto::CryptoComponent;
@@ -46,15 +45,15 @@ use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry}
 use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::messages::MessageId;
-use nix::unistd::{getpgid, setpgid, Pid};
+use nix::unistd::{Pid, getpgid, setpgid};
 use rustls::client::danger::ServerCertVerifier;
 use tokio::{
     select,
     signal::unix::SignalKind,
-    sync::{watch, Mutex},
+    sync::{Mutex, watch},
 };
-use tower::{limit::ConcurrencyLimitLayer, util::MapResponseLayer, ServiceBuilder};
-use tower_http::{compression::CompressionLayer, request_id::MakeRequestUuid, ServiceBuilderExt};
+use tower::{ServiceBuilder, limit::ConcurrencyLimitLayer, util::MapResponseLayer};
+use tower_http::{ServiceBuilderExt, compression::CompressionLayer, request_id::MakeRequestUuid};
 use tracing::warn;
 
 use crate::{
@@ -65,17 +64,18 @@ use crate::{
     errors::ErrorCause,
     firewall::{FirewallGenerator, SystemdReloader},
     http::{
-        handlers::{self, logs_canister, LogsState},
+        PATH_CALL_V2, PATH_CALL_V3, PATH_CALL_V4, PATH_HEALTH, PATH_QUERY_V2, PATH_QUERY_V3,
+        PATH_READ_STATE_V2, PATH_READ_STATE_V3, PATH_STATUS, PATH_SUBNET_READ_STATE_V2,
+        PATH_SUBNET_READ_STATE_V3, RequestType,
+        handlers::{self, LogsState, logs_canister},
         middleware::{
-            cache::{cache_middleware, CacheState},
+            cache::{CacheState, cache_middleware},
             cors::{self},
             geoip::{self},
             process::{self},
-            retry::{retry_request, RetryParams},
+            retry::{RetryParams, retry_request},
             validate::{self, UUID_REGEX},
         },
-        PATH_CALL, PATH_CALL_V3, PATH_HEALTH, PATH_QUERY, PATH_READ_STATE, PATH_STATUS,
-        PATH_SUBNET_READ_STATE,
     },
     metrics::{
         self, HttpMetricParams, HttpMetricParamsStatus, MetricParamsCheck, MetricParamsPersist,
@@ -83,12 +83,12 @@ use crate::{
         WithMetricsSnapshot,
     },
     persist::{Persist, Persister},
-    rate_limiting::{generic, RateLimit},
+    rate_limiting::{RateLimit, generic},
     routes::{self, Health, Lookup, Proxy, ProxyRouter, RootKey},
     salt_fetcher::AnonymizationSaltFetcher,
     snapshot::{
-        generate_stub_snapshot, generate_stub_subnet, RegistryReplicatorRunner, RegistrySnapshot,
-        SnapshotPersister, Snapshotter,
+        RegistryReplicatorRunner, RegistrySnapshot, SnapshotPersister, Snapshotter,
+        generate_stub_snapshot, generate_stub_subnet,
     },
     tls_verify::TlsVerifier,
 };
@@ -130,7 +130,9 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     if !(cli.registry.registry_local_store_path.is_none()
         ^ cli.registry.registry_stub_replica.is_empty())
     {
-        bail!("Local store path and Stub Replica are mutually exclusive and at least one of them must be specified");
+        bail!(
+            "Local store path and Stub Replica are mutually exclusive and at least one of them must be specified"
+        );
     }
 
     #[cfg(feature = "tls")]
@@ -626,10 +628,9 @@ async fn create_agent(
     registry_client: Option<Arc<RegistryClientImpl>>,
     port: u16,
 ) -> Result<Agent, Error> {
-    let identity = if let (Some(v), Some(r)) = (crypto_config, registry_client) {
-        create_identity(v, r).await?
-    } else {
-        Box::new(AnonymousIdentity)
+    let identity = match (crypto_config, registry_client) {
+        (Some(v), Some(r)) => create_identity(v, r).await?,
+        _ => Box::new(AnonymousIdentity),
     };
 
     let agent = Agent::builder()
@@ -885,18 +886,18 @@ pub fn setup_router(
         proxy_router.clone() as Arc<dyn Health>,
     );
 
-    let query_route = Router::new().route(PATH_QUERY, {
-        post(handlers::handle_canister).with_state(proxy.clone())
-    });
+    let canister_handler = post(handlers::handle_canister).with_state(proxy.clone());
+    let subnet_handler = post(handlers::handle_subnet).with_state(proxy.clone());
+
+    let query_route = Router::new()
+        .route(PATH_QUERY_V2, canister_handler.clone())
+        .route(PATH_QUERY_V3, canister_handler.clone());
 
     let call_route = {
         let mut route = Router::new()
-            .route(PATH_CALL, {
-                post(handlers::handle_canister).with_state(proxy.clone())
-            })
-            .route(PATH_CALL_V3, {
-                post(handlers::handle_canister).with_state(proxy.clone())
-            });
+            .route(PATH_CALL_V2, canister_handler.clone())
+            .route(PATH_CALL_V3, canister_handler.clone())
+            .route(PATH_CALL_V4, canister_handler.clone());
 
         // will panic if ip_rate_limit is Some(0)
         if let Some(rl) = cli.rate_limiting.rate_limit_per_second_per_ip {
@@ -1064,9 +1065,9 @@ pub fn setup_router(
         .layer(middleware_generic_limiter)
         .layer(middleware_retry);
 
-    let canister_read_state_route = Router::new().route(PATH_READ_STATE, {
-        post(handlers::handle_canister).with_state(proxy.clone())
-    });
+    let canister_read_state_route = Router::new()
+        .route(PATH_READ_STATE_V2, canister_handler.clone())
+        .route(PATH_READ_STATE_V3, canister_handler.clone());
 
     let canister_read_call_query_routes = query_route
         .merge(call_route)
@@ -1074,9 +1075,8 @@ pub fn setup_router(
         .layer(service_canister_read_call_query);
 
     let subnet_read_state_route = Router::new()
-        .route(PATH_SUBNET_READ_STATE, {
-            post(handlers::handle_subnet).with_state(proxy.clone())
-        })
+        .route(PATH_SUBNET_READ_STATE_V2, subnet_handler.clone())
+        .route(PATH_SUBNET_READ_STATE_V3, subnet_handler.clone())
         .layer(service_subnet_read);
 
     let mut router = canister_read_call_query_routes

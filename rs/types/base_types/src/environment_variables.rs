@@ -1,4 +1,4 @@
-use crate::{hash_of_map, HASH_LENGTH};
+use crate::{HASH_LENGTH, hash_of_map};
 use ic_crypto_sha2::Sha256;
 use std::collections::BTreeMap;
 

@@ -7,7 +7,6 @@ system_test_nns(
     name = "node_assign_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
@@ -32,7 +31,6 @@ system_test_nns(
     name = "node_reassignment_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,
@@ -50,9 +48,6 @@ system_test_nns(
 
 system_test_nns(
     name = "node_registration_test",
-    tags = [
-        "k8s",
-    ],
     runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
@@ -91,7 +86,6 @@ system_test(
 system_test_nns(
     name = "ssh_access_to_nodes_test",
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     deps = [
@@ -100,6 +94,7 @@ system_test_nns(
         "//rs/registry/subnet_type",
         "//rs/tests/consensus/utils",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/types",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],
@@ -110,7 +105,6 @@ system_test_nns(
     env = MESSAGE_CANISTER_ENV,
     flaky = True,  # flakiness rate of over 2.1% over the month from 2025-02-11 till 2025-03-11.
     tags = [
-        "k8s",
         "long_test",
     ],
     uses_guestos_test_update = True,
@@ -130,7 +124,6 @@ system_test_nns(
     name = "rotate_ecdsa_idkg_key_test",
     env = MESSAGE_CANISTER_ENV,
     tags = [
-        "k8s",
         "long_test",  # since it takes longer than 5 minutes.
     ],
     runtime_deps = MESSAGE_CANISTER_RUNTIME_DEPS,

@@ -12,7 +12,7 @@ use ic_nns_governance_api::{GovernanceError, Neuron, NeuronInfo};
 use ic_nns_gtc::{
     pb::v1::AccountState,
     test_constants::{
-        TestIdentity, TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4,
+        TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4, TestIdentity,
     },
 };
 use ic_nns_test_utils::{
@@ -25,7 +25,7 @@ use ic_nns_test_utils::{
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, BinaryAccountBalanceArgs, DEFAULT_TRANSFER_FEE, Subaccount, Tokens,
 };
 use std::{collections::HashSet, convert::TryFrom, sync::Arc, time::SystemTime};
 
@@ -579,7 +579,7 @@ fn get_gtc_account(
         .unwrap();
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to get_account failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to get_account failed: {s:#?}"),
     };
 
     Decode!(&result, Result<AccountState, String>).unwrap()
@@ -599,10 +599,9 @@ fn forward_whitelisted_unclaimed_accounts(
         .unwrap();
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!(
-            "Call to forward_whitelisted_unclaimed_accounts failed: {:#?}",
-            s
-        ),
+        WasmResult::Reject(s) => {
+            panic!("Call to forward_whitelisted_unclaimed_accounts failed: {s:#?}")
+        }
     };
 
     Decode!(&result, Result<(), String>).unwrap()
@@ -623,7 +622,7 @@ fn donate_accounts(
         .unwrap();
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to donate_account failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to donate_account failed: {s:#?}"),
     };
 
     Decode!(&result,Result<(), String>).unwrap()
@@ -644,7 +643,7 @@ fn claim_neurons(
         .unwrap();
     let result = match result {
         WasmResult::Reply(result) => result,
-        WasmResult::Reject(s) => panic!("Call to claim_neurons failed: {:#?}", s),
+        WasmResult::Reject(s) => panic!("Call to claim_neurons failed: {s:#?}"),
     };
 
     Decode!(&result, Result<Vec<NeuronId>, String>).unwrap()

@@ -38,7 +38,7 @@ pub fn parse_tokens(s: &str) -> Result<nervous_system_pb::Tokens, String> {
     } else if let Some(s) = s.strip_suffix("e8s").map(|s| s.trim()) {
         u64::from_str(&s.replace('_', "")).map_err(|err| err.to_string())?
     } else {
-        return Err(format!("Invalid tokens input string: {}", s));
+        return Err(format!("Invalid tokens input string: {s}"));
     };
     let e8s = Some(e8s);
 
@@ -70,7 +70,7 @@ pub fn parse_duration(s: &str) -> Result<nervous_system_pb::Duration, String> {
 pub fn parse_percentage(s: &str) -> Result<nervous_system_pb::Percentage, String> {
     let number = s
         .strip_suffix('%')
-        .ok_or_else(|| format!("Input string must end with a percent sign: {}", s))?;
+        .ok_or_else(|| format!("Input string must end with a percent sign: {s}"))?;
 
     let basis_points = Some(parse_fixed_point_decimal(
         number, /* decimal_places = */ 2,
@@ -148,7 +148,7 @@ fn parse_fixed_point_decimal(s: &str, decimal_places: usize) -> Result<u64, Stri
 
     let found = REGEX
         .captures(s)
-        .ok_or_else(|| format!("Not a number: {}", s))?;
+        .ok_or_else(|| format!("Not a number: {s}"))?;
 
     let whole = u64::from_str(
         &found
@@ -169,7 +169,7 @@ fn parse_fixed_point_decimal(s: &str, decimal_places: usize) -> Result<u64, Stri
             .replace('_', ""),
     );
     if fractional.len() > decimal_places {
-        return Err(format!("Too many digits after the decimal place: {}", s));
+        return Err(format!("Too many digits after the decimal place: {s}"));
     }
     let fractional = u64::from_str(&fractional).map_err(|err| err.to_string())?;
 
@@ -184,14 +184,14 @@ where
     I: Display + Copy,
 {
     let count = u32::try_from(count)
-        .map_err(|err| format!("Unable to convert {} to u32. Reason: {}", count, err))?;
+        .map_err(|err| format!("Unable to convert {count} to u32. Reason: {err}"))?;
 
     let boost = 10_u64
         .checked_pow(count)
-        .ok_or_else(|| format!("Too large of an exponent: {}", count))?;
+        .ok_or_else(|| format!("Too large of an exponent: {count}"))?;
 
     n.checked_mul(boost)
-        .ok_or_else(|| format!("Too large of a decimal shift: {} >> {}", n, count))
+        .ok_or_else(|| format!("Too large of a decimal shift: {n} >> {count}"))
 }
 
 /// The inverse of [`parse_tokens`].
@@ -217,7 +217,7 @@ pub fn format_tokens(tokens: &nervous_system_pb::Tokens) -> String {
         "".to_string()
     } else {
         // TODO: Group.
-        format!(".{:08}", fractional).trim_matches('0').to_string()
+        format!(".{fractional:08}").trim_matches('0').to_string()
     };
 
     let units = if e8s == E8 { "token" } else { "tokens" };
@@ -252,7 +252,7 @@ pub fn format_percentage(percentage: &nervous_system_pb::Percentage) -> String {
     let fractional = if fractional == 0 {
         "".to_string()
     } else {
-        format!(".{:02}", fractional).trim_matches('0').to_string()
+        format!(".{fractional:02}").trim_matches('0').to_string()
     };
 
     format!("{}{}%", group_digits(whole), fractional)
@@ -281,9 +281,9 @@ pub(crate) fn group_digits(n: u64) -> String {
         left_todo /= 1000;
 
         let group = if left_todo == 0 {
-            format!("{}", group)
+            format!("{group}")
         } else {
-            format!("{:03}", group)
+            format!("{group:03}")
         };
 
         groups.push_front(group);

@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:candid.bzl", "did_git_test")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
 
 # This library is private to the replica and other guestOS processes.
@@ -18,6 +19,7 @@ permanent_whitelist = [
     "//rs/interfaces:__subpackages__",
     "//rs/messaging:__subpackages__",
     "//rs/management_canister_types/fuzz:__subpackages__",
+    "//rs/migration_canister:__subpackages__",
     "//rs/orchestrator:__subpackages__",
     "//rs/pocket_ic_server:__subpackages__",
     "//rs/prep:__subpackages__",
@@ -39,7 +41,6 @@ permanent_whitelist = [
 temporary_whitelist = [
     "//rs/bitcoin:__subpackages__",
     "//rs/determinism_test:__subpackages__",
-    "//rs/drun:__subpackages__",
     "//rs/ethereum:__subpackages__",
     "//rs/ledger_suite:__subpackages__",
     "//rs/nervous_system:__subpackages__",
@@ -96,6 +97,11 @@ rust_library(
 rust_test(
     name = "management_canister_types_test",
     crate = ":management_canister_types",
+)
+
+did_git_test(
+    name = "management_canister_did_git_test",
+    did = ":tests/ic.did",
 )
 
 rust_test(

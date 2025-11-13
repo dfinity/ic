@@ -24,31 +24,34 @@ end::catalog[] */
 use anyhow::Result;
 use canister_http::get_universal_vm_address;
 use ic_agent::Agent;
+use ic_consensus_system_test_subnet_recovery::utils::{
+    assert_subnet_is_broken, break_nodes, node_with_highest_certification_share_height,
+};
 use ic_consensus_system_test_utils::{
     rw_message::{
-        can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries,
-        install_nns_and_check_progress, store_message,
+        cert_state_makes_progress_with_retries, install_nns_and_check_progress, store_message,
     },
     set_sandbox_env_vars,
+    subnet::assert_subnet_is_healthy,
 };
 use ic_recovery::nns_recovery_failover_nodes::{
     NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs, StepType,
 };
-use ic_recovery::{get_node_metrics, util::DataLocation, RecoveryArgs};
+use ic_recovery::{RecoveryArgs, util::DataLocation};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::constants::SSH_USERNAME;
 use ic_system_test_driver::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::universal_vm::{
-    insert_file_to_config, UniversalVm, UniversalVms,
+    UniversalVm, UniversalVms, insert_file_to_config,
 };
 use ic_system_test_driver::driver::{test_env::TestEnv, test_env_api::*};
 use ic_system_test_driver::systest;
-use ic_system_test_driver::util::{block_on, MessageCanister};
+use ic_system_test_driver::util::{MessageCanister, block_on};
 use ic_types::Height;
 use slog::info;
-use std::{cmp, fs};
+use std::fs;
 use url::Url;
 
 const DKG_INTERVAL: u64 = 9;
@@ -104,7 +107,8 @@ pub fn test(env: TestEnv) {
     );
 
     // choose a node from the nns subnet
-    let mut orig_nns_nodes = topo_broken_ic.root_subnet().nodes();
+    let orig_nns_subnet = topo_broken_ic.root_subnet();
+    let mut orig_nns_nodes = orig_nns_subnet.nodes();
     let nns_node = orig_nns_nodes.next().expect("there is no NNS node");
 
     info!(
@@ -112,14 +116,6 @@ pub fn test(env: TestEnv) {
         "Selected NNS node: {} ({:?})",
         nns_node.node_id,
         nns_node.get_ip_addr()
-    );
-
-    let download_node = orig_nns_nodes.next().expect("there is no 2. NNS node");
-    info!(
-        logger,
-        "Node for download: {} ({:?})",
-        download_node.node_id,
-        download_node.get_ip_addr()
     );
 
     let mut parent_nns_nodes = topo_restore_ic.root_subnet().nodes();
@@ -151,19 +147,38 @@ pub fn test(env: TestEnv) {
     }
 
     info!(logger, "Ensure NNS subnet is functional");
-    let msg = "subnet recovery works!";
+    let init_msg = "subnet recovery works!";
     let app_can_id = store_message(
-        &download_node.get_public_url(),
-        download_node.effective_canister_id(),
+        &nns_node.get_public_url(),
+        nns_node.effective_canister_id(),
+        init_msg,
+        &logger,
+    );
+    let msg = "subnet recovery works again!";
+    assert_subnet_is_healthy(
+        &orig_nns_subnet.nodes().collect::<Vec<_>>(),
+        &ic_version,
+        app_can_id,
+        init_msg,
         msg,
         &logger,
     );
-    assert!(can_read_msg(
-        &logger,
-        &download_node.get_public_url(),
-        app_can_id,
-        msg
-    ));
+
+    // Break f+1 nodes
+    let f = (SUBNET_SIZE - 1) / 3;
+    break_nodes(&orig_nns_nodes.take(f + 1).collect::<Vec<_>>(), &logger);
+
+    assert_subnet_is_broken(&nns_node.get_public_url(), app_can_id, msg, true, &logger);
+
+    let (download_node, highest_cert_share) =
+        node_with_highest_certification_share_height(&orig_nns_subnet, &logger);
+    info!(
+        logger,
+        "Selected download node {} ({:?}) with highest certification share height {}",
+        download_node.node_id,
+        download_node.get_ip_addr(),
+        highest_cert_share,
+    );
 
     let recovery_dir = get_dependency_path("rs/tests");
     set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
@@ -172,7 +187,7 @@ pub fn test(env: TestEnv) {
         dir: recovery_dir,
         nns_url: parent_nns_node.get_public_url(),
         replica_version: Some(ic_version.clone()),
-        key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
+        admin_key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
         skip_prompts: true,
         use_local_binaries: false,
@@ -180,7 +195,7 @@ pub fn test(env: TestEnv) {
     let subnet_args = NNSRecoveryFailoverNodesArgs {
         subnet_id: topo_broken_ic.root_subnet_id(),
         replica_version: Some(ic_version),
-        replay_until_height: None, // We will set this after breaking the subnet, see below
+        replay_until_height: Some(highest_cert_share),
         aux_ip: None,
         aux_user: None,
         registry_url: None,
@@ -200,63 +215,6 @@ pub fn test(env: TestEnv) {
         subnet_args,
     );
 
-    // let's take f+1 nodes and break them.
-    let f = (SUBNET_SIZE - 1) / 3;
-    info!(
-        logger,
-        "Breaking the NNS subnet by breaking the replica binary on f+1={} nodes",
-        f + 1
-    );
-
-    let faulty_nodes = orig_nns_nodes.take(f + 1).collect::<Vec<_>>();
-    for node in faulty_nodes {
-        subnet_recovery
-        .get_recovery_api()
-        .execute_ssh_command(
-            "admin",
-            node.get_ip_addr(),
-            "sudo mount --bind /bin/false /opt/ic/bin/replica && sudo systemctl restart ic-replica",
-        )
-        .expect("couldn't run ssh command");
-    }
-
-    info!(logger, "Ensure the subnet works in read mode");
-    assert!(can_read_msg(
-        &logger,
-        &download_node.get_public_url(),
-        app_can_id,
-        msg
-    ));
-    info!(
-        logger,
-        "Ensure the subnet doesn't work in write mode anymore"
-    );
-    assert!(cannot_store_msg(
-        logger.clone(),
-        &download_node.get_public_url(),
-        app_can_id,
-        msg
-    ));
-
-    info!(logger, "Check if download node is behind...");
-    let ot_node_metrics = block_on(get_node_metrics(&logger, &nns_node.get_ip_addr()))
-        .expect("Missing metrics for upload node");
-    let dn_node_metrics = block_on(get_node_metrics(&logger, &download_node.get_ip_addr()))
-        .expect("Missing metrics for download node");
-    if dn_node_metrics.certification_height < ot_node_metrics.certification_height {
-        info!(logger, "Use the other node for download.");
-        subnet_recovery.params.download_node = Some(nns_node.get_ip_addr());
-        subnet_recovery.params.validate_nns_url = download_node.get_public_url();
-    }
-
-    subnet_recovery.params.replay_until_height = Some(
-        cmp::max(
-            dn_node_metrics.certification_height,
-            ot_node_metrics.certification_height,
-        )
-        .get(),
-    );
-
     info!(
         logger,
         "Starting recovery of the NNS subnet {}",
@@ -269,17 +227,14 @@ pub fn test(env: TestEnv) {
         info!(logger, "{}", step.descr());
 
         step.exec()
-            .unwrap_or_else(|e| panic!("Execution of step {:?} failed: {}", step_type, e));
+            .unwrap_or_else(|e| panic!("Execution of step {step_type:?} failed: {e}"));
 
         if matches!(step_type, StepType::CreateRegistryTar) {
             // and also upload it...
             let tar = subnet_recovery.get_local_store_tar();
             let url_to_file = setup_file_server(&env, &tar);
             let url = Url::parse(&url_to_file).unwrap_or_else(|err| {
-                panic!(
-                    "Couldn't parse url {} to registry tar: {:?}",
-                    url_to_file, err
-                )
+                panic!("Couldn't parse url {url_to_file} to registry tar: {err:?}")
             });
             info!(logger, "URL: {}", url);
             subnet_recovery.params.registry_url = Some(url);

@@ -1,6 +1,6 @@
-use crate::protocol::{parse_response, Request, Response};
+use crate::protocol::{Request, Response, parse_response};
 use std::io::{Read, Write};
-use vsock::{VsockStream, VMADDR_CID_HOST};
+use vsock::{VMADDR_CID_HOST, VsockStream};
 
 pub fn send_request_to_host_and_parse_response(request: &Request, port: &u32) -> Response {
     let response_str = send_request_to_host(request, port)?;

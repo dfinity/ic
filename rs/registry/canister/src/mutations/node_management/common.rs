@@ -3,14 +3,15 @@ use std::{default::Default, str::FromStr};
 use crate::{common::LOG_PREFIX, registry::Registry, storage::with_chunks};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::{
     node::v1::NodeRecord, node_operator::v1::NodeOperatorRecord, subnet::v1::SubnetListRecord,
 };
 use ic_registry_canister_chunkify::decode_high_capacity_registry_value;
 use ic_registry_keys::{
-    make_crypto_node_key, make_crypto_tls_cert_key, make_firewall_rules_record_key,
-    make_node_operator_record_key, make_node_record_key, make_subnet_list_record_key,
-    FirewallRulesScope, NODE_RECORD_KEY_PREFIX,
+    FirewallRulesScope, NODE_RECORD_KEY_PREFIX, make_crypto_node_key, make_crypto_tls_cert_key,
+    make_firewall_rules_record_key, make_node_operator_record_key, make_node_record_key,
+    make_subnet_list_record_key,
 };
 use ic_registry_transport::{
     delete, insert,
@@ -49,8 +50,7 @@ pub fn get_subnet_list_record(registry: &Registry) -> SubnetListRecord {
             registry.latest_version(),
         )
         .ok_or(format!(
-            "{}do_remove_nodes: Subnet List not found in the registry, aborting node removal.",
-            LOG_PREFIX
+            "{LOG_PREFIX}do_remove_nodes: Subnet List not found in the registry, aborting node removal."
         ))
         .unwrap();
 
@@ -65,7 +65,7 @@ pub fn get_node_operator_id_for_node(
     registry
         .get(node_key.as_bytes(), registry.latest_version())
         .map_or(
-            Err(format!("Node Id {:} not found in the registry", node_id)),
+            Err(format!("Node Id {node_id:} not found in the registry")),
             |result| {
                 PrincipalId::try_from(
                     NodeRecord::decode(result.value.as_slice())
@@ -73,13 +73,24 @@ pub fn get_node_operator_id_for_node(
                         .node_operator_id,
                 )
                 .map_err(|_| {
-                    format!(
-                        "Could not decode node_record's node_operator_id for Node Id {}",
-                        node_id
-                    )
+                    format!("Could not decode node_record's node_operator_id for Node Id {node_id}")
                 })
             },
         )
+}
+
+pub fn get_node_reward_type_for_node(
+    registry: &Registry,
+    node_id: NodeId,
+) -> Result<NodeRewardType, String> {
+    let node_key = make_node_record_key(node_id);
+    let value = registry
+        .get(node_key.as_bytes(), registry.latest_version())
+        .ok_or(format!("Node Id {node_id:} not found in the registry"))?;
+
+    NodeRecord::decode(value.value.as_slice())
+        .map_err(|_| format!("Could not decode node_record for Node Id {node_id}"))
+        .map(|node_record| node_record.node_reward_type())
 }
 
 pub fn get_node_provider_id_for_operator_id(
@@ -91,24 +102,21 @@ pub fn get_node_provider_id_for_operator_id(
         .get(node_operator_key.as_bytes(), registry.latest_version())
         .map_or(
             Err(format!(
-                "Node Operator Id {:} not found in the registry.",
-                node_operator_key
+                "Node Operator Id {node_operator_key:} not found in the registry."
             )),
             |result| {
                 PrincipalId::try_from(
                     NodeOperatorRecord::decode(result.value.as_slice())
                         .map_err(|_| {
                             format!(
-                                "Could not decode node_operator_record for Node Operator Id {}",
-                                node_operator_id
+                                "Could not decode node_operator_record for Node Operator Id {node_operator_id}"
                             )
                         })?
                         .node_provider_principal_id,
                 )
                 .map_err(|_| {
                     format!(
-                        "Could not decode node_provider_id from the Node Operator Record for the Id {}",
-                        node_operator_id
+                        "Could not decode node_provider_id from the Node Operator Record for the Id {node_operator_id}"
                     )
                 })
             },
@@ -124,8 +132,7 @@ pub fn get_node_operator_record(
         .get(node_operator_key.as_bytes(), registry.latest_version())
         .map_or(
             Err(format!(
-                "Node Operator Id {:} not found in the registry.",
-                node_operator_key
+                "Node Operator Id {node_operator_key:} not found in the registry."
             )),
             |result| {
                 let decoded = NodeOperatorRecord::decode(result.value.as_slice()).unwrap();
@@ -214,7 +221,8 @@ pub fn make_remove_node_registry_mutations(
     ];
 
     let latest_version = registry.latest_version();
-    let mutations = keys_to_maybe_remove
+
+    keys_to_maybe_remove
         .iter()
         .flat_map(|key| {
             // It is possible, for example, that IDkgMEGaEncryption key is not present
@@ -225,9 +233,7 @@ pub fn make_remove_node_registry_mutations(
                 .get(key.as_bytes(), latest_version)
                 .map(|_| delete(key))
         })
-        .collect::<Vec<_>>();
-
-    mutations
+        .collect::<Vec<_>>()
 }
 
 /// Scan through the registry, returning a list of any nodes with the given IP.
@@ -239,6 +245,23 @@ pub fn scan_for_nodes_by_ip(registry: &Registry, ip_addr: &str) -> Vec<NodeId> {
                 (v.ip_addr == ip_addr).then(|| NodeId::from(PrincipalId::from_str(&k).unwrap()))
             })
         })
+        .collect()
+}
+
+/// Scan through the registry, returning a list of node records for the given node operator.
+pub fn get_node_operator_nodes(
+    registry: &Registry,
+    query_node_operator_id: PrincipalId,
+) -> Vec<NodeRecord> {
+    get_key_family::<NodeRecord>(registry, NODE_RECORD_KEY_PREFIX)
+        .into_iter()
+        .filter(|(_, node_record)| {
+            let record_node_operator_id: PrincipalId =
+                PrincipalId::try_from(&node_record.node_operator_id).unwrap();
+
+            record_node_operator_id == query_node_operator_id
+        })
+        .map(|(_, node_record)| node_record)
         .collect()
 }
 

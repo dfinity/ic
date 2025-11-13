@@ -49,10 +49,10 @@ use ic_system_test_driver::{
     util::{self, block_on},
 };
 use registry_canister::mutations::firewall::{
-    compute_firewall_ruleset_hash, AddFirewallRulesPayload, RemoveFirewallRulesPayload,
-    UpdateFirewallRulesPayload,
+    AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
+    compute_firewall_ruleset_hash,
 };
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::time::Duration;
 use url::Url;
 const INITIAL_WAIT: Duration = Duration::from_secs(10);

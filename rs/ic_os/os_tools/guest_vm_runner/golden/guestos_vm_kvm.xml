@@ -6,8 +6,8 @@
       <libosinfo:os id="http://ubuntu.com/ubuntu/24.04"/>
     </libosinfo:libosinfo>
   </metadata>
-  <memory unit='GiB'>490</memory>
-  <currentMemory unit='GiB'>490</currentMemory>
+  <memory unit='GiB'>12</memory>
+  <currentMemory unit='GiB'>12</currentMemory>
   <vcpu placement='static'>56</vcpu>
   <cpu mode='host-passthrough' migratable='off'>
     <cache mode='passthrough'/>
@@ -144,7 +144,7 @@
         <model name='isa-serial'/>
       </target>
       <alias name='serial0'/>
-      <log file='/var/log/libvirt/qemu/guestos-serial.log' append='off'/>
+      <log file='/var/serial/console.txt' append='off'/>
     </serial>
     <console type='pty' tty='/dev/pts/3'>
       <source path='/dev/pts/3'/>

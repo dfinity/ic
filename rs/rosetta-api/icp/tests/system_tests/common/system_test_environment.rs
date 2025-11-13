@@ -11,31 +11,26 @@ use ic_agent::{Agent, Identity};
 use ic_icp_rosetta_client::RosettaClient;
 use ic_icp_rosetta_client::RosettaTransferArgs;
 use ic_icp_rosetta_runner::RosettaOptions;
-use ic_icp_rosetta_runner::{start_rosetta, RosettaContext, RosettaOptionsBuilder};
-use ic_icrc1_test_utils::minter_identity;
+use ic_icp_rosetta_runner::{RosettaContext, RosettaOptionsBuilder, start_rosetta};
 use ic_icrc1_test_utils::ArgWithCaller;
 use ic_icrc1_test_utils::LedgerEndpointArg;
+use ic_icrc1_test_utils::minter_identity;
 use ic_icrc1_tokens_u256::U256;
-use ic_ledger_test_utils::pocket_ic_helpers::ledger::LEDGER_CANISTER_ID;
 use ic_management_canister_types::CanisterSettings;
 use ic_nns_common::init::LifelineCanisterInitPayloadBuilder;
-use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_constants::LIFELINE_CANISTER_ID;
-use ic_nns_constants::REGISTRY_CANISTER_ID;
-use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_constants::{
+    GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
+    ROOT_CANISTER_ID,
+};
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
-use ic_nns_test_utils::common::build_governance_wasm;
-use ic_nns_test_utils::common::build_lifeline_wasm;
-use ic_nns_test_utils::common::build_registry_wasm;
-use ic_nns_test_utils::common::build_root_wasm;
 use ic_rosetta_test_utils::path_from_env;
 use ic_types::PrincipalId;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
 use num_traits::cast::ToPrimitive;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use rosetta_core::identifiers::NetworkIdentifier;
 use std::collections::HashMap;
@@ -255,9 +250,8 @@ impl RosettaTestingEnvironmentBuilder {
             }))
             .build()
             .unwrap();
-        let ledger_wasm_bytes =
-            std::fs::read(std::env::var("LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH").unwrap())
-                .expect("Could not read ledger wasm");
+        let ledger_wasm_bytes = std::fs::read(std::env::var("LEDGER_CANISTER_WASM_PATH").unwrap())
+            .expect("Could not read ledger wasm");
         pocket_ic
             .install_canister(
                 canister_id,
@@ -269,8 +263,7 @@ impl RosettaTestingEnvironmentBuilder {
 
         assert_eq!(
             ledger_canister_id, canister_id,
-            "Canister IDs do not match: expected {}, got {}",
-            ledger_canister_id, canister_id
+            "Canister IDs do not match: expected {ledger_canister_id}, got {canister_id}"
         );
 
         pocket_ic
@@ -289,7 +282,9 @@ impl RosettaTestingEnvironmentBuilder {
             );
         }
         if self.governance_canister {
-            let nns_root_canister_wasm = build_root_wasm();
+            let nns_root_canister_wasm_bytes =
+                std::fs::read(std::env::var("ROOT_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read root canister wasm");
             let nns_root_canister_id = Principal::from(ROOT_CANISTER_ID);
             let nns_root_canister_controller = LIFELINE_CANISTER_ID.get().0;
             let nns_root_canister = pocket_ic
@@ -307,7 +302,7 @@ impl RosettaTestingEnvironmentBuilder {
             pocket_ic
                 .install_canister(
                     nns_root_canister,
-                    nns_root_canister_wasm.bytes().to_vec(),
+                    nns_root_canister_wasm_bytes,
                     Encode!(&RootCanisterInitPayloadBuilder::new().build()).unwrap(),
                     Some(nns_root_canister_controller),
                 )
@@ -315,7 +310,9 @@ impl RosettaTestingEnvironmentBuilder {
             pocket_ic
                 .add_cycles(nns_root_canister_id, STARTING_CYCLES_PER_CANISTER)
                 .await;
-            let governance_canister_wasm = build_governance_wasm();
+            let governance_canister_wasm_bytes =
+                std::fs::read(std::env::var("GOVERNANCE_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read governance canister wasm");
             let governance_canister_id = Principal::from(GOVERNANCE_CANISTER_ID);
             let governance_canister_controller = ROOT_CANISTER_ID.get().0;
             let governance_canister = pocket_ic
@@ -346,7 +343,7 @@ impl RosettaTestingEnvironmentBuilder {
             pocket_ic
                 .install_canister(
                     governance_canister,
-                    governance_canister_wasm.bytes().to_vec(),
+                    governance_canister_wasm_bytes,
                     Encode!(&install_arg).unwrap(),
                     Some(governance_canister_controller),
                 )
@@ -363,7 +360,9 @@ impl RosettaTestingEnvironmentBuilder {
                 .await;
             pocket_ic.tick().await;
 
-            let nns_lifeline_canister_wasm = build_lifeline_wasm();
+            let nns_lifeline_canister_wasm_bytes =
+                std::fs::read(std::env::var("LIFELINE_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read lifeline canister wasm");
             let nns_lifeline_canister_id = Principal::from(LIFELINE_CANISTER_ID);
             let nns_lifeline_canister_controller = ROOT_CANISTER_ID.get().0;
             let nns_lifeline_canister = pocket_ic
@@ -381,7 +380,7 @@ impl RosettaTestingEnvironmentBuilder {
             pocket_ic
                 .install_canister(
                     nns_lifeline_canister,
-                    nns_lifeline_canister_wasm.bytes().to_vec(),
+                    nns_lifeline_canister_wasm_bytes,
                     Encode!(&LifelineCanisterInitPayloadBuilder::new().build()).unwrap(),
                     Some(nns_lifeline_canister_controller),
                 )
@@ -390,7 +389,9 @@ impl RosettaTestingEnvironmentBuilder {
                 .add_cycles(nns_lifeline_canister_id, STARTING_CYCLES_PER_CANISTER)
                 .await;
 
-            let nns_registry_canister_wasm = build_registry_wasm();
+            let nns_registry_canister_wasm_bytes =
+                std::fs::read(std::env::var("REGISTRY_CANISTER_WASM_PATH").unwrap())
+                    .expect("Could not read registry canister wasm");
             let nns_registry_canister_id = Principal::from(REGISTRY_CANISTER_ID);
             let nns_registry_canister_controller = ROOT_CANISTER_ID.get().0;
             let nns_registry_canister = pocket_ic
@@ -408,7 +409,7 @@ impl RosettaTestingEnvironmentBuilder {
             pocket_ic
                 .install_canister(
                     nns_registry_canister,
-                    nns_registry_canister_wasm.bytes().to_vec(),
+                    nns_registry_canister_wasm_bytes,
                     Encode!(&RegistryCanisterInitPayloadBuilder::new().build()).unwrap(),
                     Some(nns_registry_canister_controller),
                 )

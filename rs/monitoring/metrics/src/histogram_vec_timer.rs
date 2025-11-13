@@ -68,7 +68,7 @@ impl<'a, const LABEL_COUNT: usize> HistogramVecTimer<'a, LABEL_COUNT> {
                 return;
             }
         }
-        panic!("No such label: {}", k);
+        panic!("No such label: {k}");
     }
 }
 
@@ -85,7 +85,7 @@ mod tests {
     use prometheus::core::Metric;
 
     use super::*;
-    use crate::{buckets::decimal_buckets, MetricsRegistry};
+    use crate::{MetricsRegistry, buckets::decimal_buckets};
 
     pub const LABEL_DETAIL: &str = "detail";
     pub const LABEL_OTHER: &str = "other";

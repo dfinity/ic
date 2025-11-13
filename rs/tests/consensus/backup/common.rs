@@ -31,8 +31,8 @@ use ic_consensus_system_test_utils::upgrade::bless_replica_version;
 use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
     ssh_access::{
-        generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
-        wait_until_authentication_is_granted, AuthMean,
+        AuthMean, generate_key_strings, get_updatesubnetpayload_with_keys, update_subnet_record,
+        wait_until_authentication_is_granted,
     },
     upgrade::{
         assert_assigned_replica_version, deploy_guestos_to_all_subnet_nodes,
@@ -50,10 +50,10 @@ use ic_system_test_driver::{
         test_env::{HasIcPrepDir, TestEnv},
         test_env_api::*,
     },
-    util::{block_on, get_nns_node, MessageCanister},
+    util::{MessageCanister, block_on, get_nns_node},
 };
 use ic_types::Height;
-use slog::{debug, error, info, Logger};
+use slog::{Logger, debug, error, info};
 use std::{
     ffi::OsStr,
     fs,
@@ -115,7 +115,7 @@ pub fn test(env: TestEnv) {
         &target_version,
         &log,
         sha256,
-        guest_launch_measurements,
+        Some(guest_launch_measurements),
         vec![upgrade_url.to_string()],
     ));
     info!(log, "TARGET_VERSION: {}", target_version);
@@ -223,7 +223,7 @@ pub fn test(env: TestEnv) {
     let payload = get_updatesubnetpayload_with_keys(subnet_id, None, Some(vec![backup_public_key]));
     block_on(update_subnet_record(nns_node.get_public_url(), payload));
     let backup_mean = AuthMean::PrivateKey(backup_private_key);
-    wait_until_authentication_is_granted(&node_ip, "backup", &backup_mean);
+    wait_until_authentication_is_granted(&log, &node_ip, "backup", &backup_mean);
 
     info!(log, "Fetch NNS public key");
     let nns_public_key = env
@@ -267,7 +267,7 @@ pub fn test(env: TestEnv) {
     info!(log, "Config: {}", config_str);
     let config_file = config_dir.join("config.json5");
     let mut f = File::create(&config_file).expect("Should be able to create the config file");
-    write!(f, "{}", config_str).expect("Should be able to write the config file");
+    write!(f, "{config_str}").expect("Should be able to write the config file");
 
     info!(log, "Start the backup process in a separate thread");
     let ic_backup_path =
@@ -441,7 +441,7 @@ fn some_checkpoint_dir(backup_dir: &Path, subnet_id: &SubnetId) -> Option<PathBu
     if lcp == 0 {
         return None;
     }
-    Some(dir.join(format!("checkpoints/{:016x}", lcp)))
+    Some(dir.join(format!("checkpoints/{lcp:016x}")))
 }
 
 fn cold_storage_exists(log: &Logger, cold_storage_dir: PathBuf) -> bool {

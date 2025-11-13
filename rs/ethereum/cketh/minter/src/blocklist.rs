@@ -7,7 +7,7 @@ mod tests;
 use ic_ethereum_types::Address;
 
 macro_rules! ethereum_address {
-    ($address:expr) => {
+    ($address:expr_2021) => {
         Address::new(hex_literal::hex!($address))
     };
 }

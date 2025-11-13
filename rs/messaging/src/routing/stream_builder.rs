@@ -1,28 +1,28 @@
 use crate::message_routing::{
-    LatencyMetrics, MessageRoutingMetrics, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+    CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, LatencyMetrics, MessageRoutingMetrics,
 };
 use ic_error_types::RejectCode;
 use ic_limits::SYSTEM_SUBNET_STREAM_MSG_LIMIT;
-use ic_logger::{error, warn, ReplicaLogger};
-use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use ic_logger::{ReplicaLogger, error, warn};
+use ic_metrics::{MetricsRegistry, buckets::decimal_buckets};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    replicated_state::{
-        PeekableOutputIterator, ReplicatedStateMessageRouting, MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN,
-    },
     ReplicatedState, Stream,
+    replicated_state::{
+        MR_SYNTHETIC_REJECT_MESSAGE_MAX_LEN, PeekableOutputIterator, ReplicatedStateMessageRouting,
+    },
 };
 use ic_types::{
-    messages::{
-        Payload, RejectContext, Request, RequestOrResponse, Response,
-        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES,
-    },
     CountBytes, SubnetId,
+    messages::{
+        MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, MAX_REJECT_MESSAGE_LEN_BYTES, Payload, RejectContext,
+        Request, RequestOrResponse, Response,
+    },
 };
 #[cfg(test)]
 use mockall::automock;
 use prometheus::{Histogram, IntCounter, IntCounterVec, IntGaugeVec};
-use std::collections::{btree_map, BTreeMap};
+use std::collections::{BTreeMap, btree_map};
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -234,6 +234,7 @@ impl StreamBuilderImpl {
                     response
                 );
                 self.metrics.critical_error_induct_response_failed.inc();
+                state.observe_lost_cycles_due_to_dropped_messages(req.payment);
             });
     }
 
@@ -408,24 +409,32 @@ impl StreamBuilderImpl {
                                         RejectCode::CanisterError,
                                         format!(
                                             "Canister {} violated contract: attempted to send a message of size {} exceeding the limit {}",
-                                            rep.respondent, rep.payload_size_bytes(), MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
+                                            rep.respondent,
+                                            rep.payload_size_bytes(),
+                                            MAX_INTER_CANISTER_PAYLOAD_IN_BYTES
                                         ),
                                     ))
                                 }
                                 // Truncate error messages of oversized reject payloads.
                                 &mut Payload::Reject(ref mut context @ RejectContext { .. }) => {
-                                    rep.response_payload = Payload::Reject(RejectContext::new_with_message_length_limit(context.code(), context.message(), MAX_REJECT_MESSAGE_LEN_BYTES));
+                                    rep.response_payload = Payload::Reject(
+                                        RejectContext::new_with_message_length_limit(
+                                            context.code(),
+                                            context.message(),
+                                            MAX_REJECT_MESSAGE_LEN_BYTES,
+                                        ),
+                                    );
                                 }
                             }
 
-                            dst_stream_entry.or_default().push(msg);
+                            dst_stream_entry.or_default().push(msg.into());
                         }
 
                         _ => {
                             // Route the message into the stream.
                             self.observe_message_status(&msg, LABEL_VALUE_STATUS_SUCCESS);
                             self.observe_payload_size(&msg);
-                            dst_stream_entry.or_default().push(msg);
+                            dst_stream_entry.or_default().push(msg.into());
                         }
                     };
                 }
@@ -463,7 +472,7 @@ impl StreamBuilderImpl {
                 &mut state,
                 &req,
                 RejectCode::DestinationInvalid,
-                format!("No route to canister {}", dst_canister_id),
+                format!("No route to canister {dst_canister_id}"),
             );
         }
 

@@ -2,18 +2,18 @@ use ic_error_types::ErrorCode;
 use ic_logger::replica_logger::LogEntryLogger;
 use ic_management_canister_types_private::{CanisterUpgradeOptions, EmptyBlob, Payload};
 use ic_replicated_state::{
-    canister_state::execution_state::WasmExecutionMode, canister_state::NextExecution,
-    CanisterState,
+    CanisterState, canister_state::NextExecution,
+    canister_state::execution_state::WasmExecutionMode,
 };
 use ic_state_machine_tests::WasmResult;
 use ic_test_utilities_execution_environment::{
-    check_ingress_status, ExecutionTest, ExecutionTestBuilder,
+    ExecutionTest, ExecutionTestBuilder, check_ingress_status,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
 use ic_test_utilities_types::ids::user_test_id;
+use ic_types::Cycles;
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::IngressState;
-use ic_types::Cycles;
 use ic_types::{ComputeAllocation, MemoryAllocation};
 use maplit::btreeset;
 
@@ -242,7 +242,7 @@ fn upgrade_fails_on_not_enough_cycles() {
 
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         canister_memory_usage,
         canister_message_memory_usage,
         ComputeAllocation::zero(),

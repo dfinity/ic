@@ -3,6 +3,11 @@ type BlockIndex = nat64;
 type log_visibility = variant {
   controllers;
   public;
+  allowed_viewers : vec principal;
+};
+type environment_variable = record { 
+  name: text; 
+  value: text;
 };
 type CanisterSettings = record {
   controllers : opt vec principal;
@@ -13,6 +18,8 @@ type CanisterSettings = record {
   log_visibility : opt log_visibility;
   wasm_memory_limit : opt nat;
   wasm_memory_threshold : opt nat;
+  environment_variables : opt vec environment_variable;
+  log_memory_limit : opt nat;
 };
 type Subaccount = opt blob;
 type Memo = opt blob;

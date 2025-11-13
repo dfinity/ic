@@ -2,14 +2,14 @@ use ic_icrc1::blocks::{
     encoded_block_to_generic_block, generic_block_to_encoded_block,
     generic_transaction_from_generic_block,
 };
-use ic_icrc1::{hash, Block, Transaction};
+use ic_icrc1::{Block, Transaction, hash};
 use ic_icrc1_test_utils::{arb_amount, arb_block, arb_small_amount, blocks_strategy};
-use ic_icrc1_tokens_u256::U256;
 use ic_icrc1_tokens_u64::U64;
+use ic_icrc1_tokens_u256::U256;
 use ic_ledger_canister_core::ledger::LedgerTransaction;
+use ic_ledger_core::Tokens;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::TokensType;
-use ic_ledger_core::Tokens;
 use ic_ledger_hash_of::HashOf;
 use proptest::prelude::*;
 

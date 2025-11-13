@@ -1,14 +1,21 @@
 //! Wrapper to read the consensus pool
 
-use crate::registry_version_at_height;
+use crate::{range_len, registry_version_at_height};
 use ic_interfaces::batch_payload::PastPayload;
 use ic_interfaces::consensus_pool::*;
 use ic_types::{
-    consensus::catchup::*, consensus::*, crypto::CryptoHashOf, Height, RegistryVersion, Time,
+    Height, RegistryVersion, Time, consensus::catchup::*, consensus::*, crypto::CryptoHashOf,
 };
 use std::cmp::Ordering;
 use std::time::Instant;
 
+/// An error to be returned if the number of payloads found in the pool
+/// doesn't match the expected amount.
+#[derive(Debug)]
+pub struct UnexpectedChainLength {
+    pub expected: usize,
+    pub returned: usize,
+}
 /// A struct and corresponding impl with helper methods to obtain particular
 /// artifacts/messages from the artifact pool.
 ///
@@ -84,11 +91,23 @@ impl<'a> PoolReader<'a> {
         &self,
         start: Height,
         target: Block,
-    ) -> Vec<(Height, Time, Payload)> {
-        self.chain_iterator(target)
+    ) -> Result<Vec<(Height, Time, Payload)>, UnexpectedChainLength> {
+        let expected_len = range_len(start, target.height);
+        let payloads = self
+            .chain_iterator(target)
             .take_while(|block| block.height >= start)
             .map(|block| (block.height, block.context.time, block.payload))
-            .collect()
+            .collect::<Vec<_>>();
+        let payloads_len = payloads.len();
+
+        if payloads_len != expected_len {
+            return Err(UnexpectedChainLength {
+                expected: expected_len,
+                returned: payloads_len,
+            });
+        }
+
+        Ok(payloads)
     }
 
     /// Returns the parent of the given block if there exists one.
@@ -99,7 +118,7 @@ impl<'a> PoolReader<'a> {
             {
                 Ok(block) => Some(block),
                 Err(OnlyError::NoneAvailable) => None,
-                Err(OnlyError::MultipleValues) => panic!("Multiple parents found for {:?}", child),
+                Err(OnlyError::MultipleValues) => panic!("Multiple parents found for {child:?}"),
             },
             _ => None,
         }
@@ -191,8 +210,7 @@ impl<'a> PoolReader<'a> {
                 let mut iterator = self.get_notarized_blocks(h);
                 match (iterator.next(), iterator.next()) {
                     (None, None) => panic!(
-                        "No notarized blocks at height {:?} found, which is below the finalization tip",
-                        h
+                        "No notarized blocks at height {h:?} found, which is below the finalization tip"
                     ),
                     // If we have exactly one notarized block, return it. This
                     // always works, because we know that we have validated
@@ -209,17 +227,21 @@ impl<'a> PoolReader<'a> {
                         let height_range = HeightRange::new(
                             h,
                             self.pool
-                            .validated()
-                            .finalization()
-                            .max_height()
-                            .unwrap_or(h),
+                                .validated()
+                                .finalization()
+                                .max_height()
+                                .unwrap_or(h),
                         );
                         self.pool
                             .validated()
                             .finalization()
                             .get_by_height_range(height_range)
                             .next()
-                            .and_then(|f| self.get_block(&f.content.block, f.content.height).ok().map(|block| block.into_inner()))
+                            .and_then(|f| {
+                                self.get_block(&f.content.block, f.content.height)
+                                    .ok()
+                                    .map(|block| block.into_inner())
+                            })
                             .and_then(|block| self.follow_to_height(block, h))
                     }
                 }
@@ -343,7 +365,7 @@ impl<'a> PoolReader<'a> {
     pub fn get_random_beacon_tip(&self) -> RandomBeacon {
         let height = self.get_random_beacon_height();
         self.get_random_beacon(height)
-            .unwrap_or_else(|| panic!("Can't find latest random beacon at height {}", height))
+            .unwrap_or_else(|| panic!("Can't find latest random beacon at height {height}"))
     }
 
     /// Get the round start time of a given height, which is the max timestamp
@@ -585,9 +607,9 @@ where
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{Dependencies, dependencies, dependencies_with_subnet_params};
     use ic_interfaces_registry::RegistryClient;
-    use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_test_utilities_registry::{SubnetRecordBuilder, add_subnet_record};
     use ic_test_utilities_types::ids::{node_test_id, subnet_test_id};
 
     #[test]
@@ -836,9 +858,11 @@ pub mod test {
 
             // However the height outside of the next interval, is not going to
             // work.
-            assert!(pool_reader
-                .registry_version(Height::from(2 * total_length + 1))
-                .is_none());
+            assert!(
+                pool_reader
+                    .registry_version(Height::from(2 * total_length + 1))
+                    .is_none()
+            );
 
             // Let's advance the pool for one round, update the registry,
             // and advance the pool till the next DKG start.
@@ -885,9 +909,11 @@ pub mod test {
             }
 
             // For the height from the 4th round there is no version.
-            assert!(pool_reader
-                .registry_version(Height::from(4 * total_length + 1))
-                .is_none());
+            assert!(
+                pool_reader
+                    .registry_version(Height::from(4 * total_length + 1))
+                    .is_none()
+            );
 
             // However, all old versions are not available as they are below the latest CUP.
             for h in 0..(2 * total_length) {

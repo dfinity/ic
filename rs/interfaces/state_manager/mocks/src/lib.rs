@@ -1,11 +1,11 @@
-use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
+use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
 use ic_interfaces_state_manager::{
     CertificationScope, CertifiedStateSnapshot, Labeled, StateHashError, StateManager, StateReader,
 };
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    batch::BatchSummary, consensus::certification::Certification,
-    state_manager::StateManagerResult, CryptoHashOfPartialState, CryptoHashOfState, Height,
+    CryptoHashOfPartialState, CryptoHashOfState, Height, batch::BatchSummary,
+    consensus::certification::Certification, state_manager::StateManagerResult,
 };
 use mockall::*;
 use std::sync::Arc;
@@ -20,13 +20,21 @@ mock! {
 
         fn get_latest_state(&self) -> Labeled<Arc<ReplicatedState>>;
 
+        fn get_latest_certified_state(&self) -> Option<Labeled<Arc<ReplicatedState>>>;
+
         fn latest_state_height(&self) -> Height;
 
         fn latest_certified_height(&self) -> Height;
 
         fn read_certified_state(
             &self,
-            _paths: &LabeledTree<()>
+            _paths: &LabeledTree<()>,
+        ) -> Option<(Arc<ReplicatedState>, MixedHashTree, Certification)>;
+
+        fn read_certified_state_with_exclusion<'a>(
+            &self,
+            _paths: &'a LabeledTree<()>,
+            _exclusion: Option<&'a MatchPatternPath>,
         ) -> Option<(Arc<ReplicatedState>, MixedHashTree, Certification)>;
 
         fn get_certified_state_snapshot(&self) -> Option<Box<dyn CertifiedStateSnapshot<State = <MockStateManager as StateReader>::State> + 'static>>;

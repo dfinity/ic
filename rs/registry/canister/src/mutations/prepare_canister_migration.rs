@@ -3,7 +3,7 @@ use candid::CandidType;
 use ic_base_types::SubnetId;
 use ic_protobuf::registry::subnet::v1::{SubnetRecord, SubnetType};
 use ic_registry_routing_table::{
-    are_disjoint, is_subset_of, CanisterIdRange, CanisterIdRanges, WellFormedError,
+    CanisterIdRange, CanisterIdRanges, WellFormedError, are_disjoint, is_subset_of,
 };
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
@@ -188,32 +188,28 @@ impl fmt::Display for PrepareCanisterMigrationError {
             PrepareCanisterMigrationError::DisallowedSubnetType(subnet_id, subnet_type) => {
                 write!(
                     f,
-                    "The type ({:?}) of the subnet with ID {} \
-                    is not allowed for subnet splitting. Allowlist: {:?}",
-                    subnet_type, subnet_id, SUPPORTED_SUBNET_TYPES
+                    "The type ({subnet_type:?}) of the subnet with ID {subnet_id} \
+                    is not allowed for subnet splitting. Allowlist: {SUPPORTED_SUBNET_TYPES:?}"
                 )
             }
             PrepareCanisterMigrationError::SubnetIsSigningSubnet(subnet_id) => {
                 write!(
                     f,
-                    "Subnet with id {} should not be a signing subnet",
-                    subnet_id
+                    "Subnet with id {subnet_id} should not be a signing subnet"
                 )
             }
             PrepareCanisterMigrationError::SubnetSizesMismatch(source_size, destination_size) => {
                 write!(
                     f,
                     "Subnet sizes do not match. \
-                    Source subnet's size: {}, destination subnet's size: {}",
-                    source_size, destination_size
+                    Source subnet's size: {source_size}, destination subnet's size: {destination_size}"
                 )
             }
             PrepareCanisterMigrationError::SubnetTypesMismatch(source_type, destination_type) => {
                 write!(
                     f,
                     "Subnet types do not match. \
-                    Source subnet's type: {:?}, destination subnet's type: {:?}",
-                    source_type, destination_type
+                    Source subnet's type: {source_type:?}, destination subnet's type: {destination_type:?}"
                 )
             }
             PrepareCanisterMigrationError::UnhostedCanisterIds => {
@@ -225,15 +221,14 @@ impl fmt::Display for PrepareCanisterMigrationError {
             PrepareCanisterMigrationError::CanisterIdsAlreadyBeingMigrated(ranges_to_migrate) => {
                 write!(
                     f,
-                    "some of the canister in the given ranges {:?} are already being migrated",
-                    ranges_to_migrate
+                    "some of the canister in the given ranges {ranges_to_migrate:?} are already being migrated"
                 )
             }
             PrepareCanisterMigrationError::SubnetRecordError(err) => {
-                write!(f, "Failed to get subnet record: {}", err)
+                write!(f, "Failed to get subnet record: {err}")
             }
             PrepareCanisterMigrationError::CanisterIdsNotWellFormed(err) => {
-                write!(f, "canister ID ranges are not well formed: {:?}", err)
+                write!(f, "canister ID ranges are not well formed: {err:?}")
             }
         }
     }
