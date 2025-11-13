@@ -1271,7 +1271,7 @@ fn test_fee_collector_107() {
     let mut block_id = 0;
 
     let add_mint_block = |block_id: u64, fc: Option<Account>, fc_id: Option<u64>| {
-        let mint = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1));
+        let mint = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1u64));
         let mint = match fc {
             Some(fc) => mint.with_fee_collector(fc),
             None => mint,
@@ -1280,7 +1280,7 @@ fn test_fee_collector_107() {
             Some(fc_id) => mint.with_fee_collector_block(fc_id),
             None => mint,
         };
-        let mint = mint.mint(regular_account, Tokens::from(1)).build();
+        let mint = mint.mint(regular_account, Tokens::from(1u64)).build();
 
         assert_eq!(
             Nat::from(block_id),
