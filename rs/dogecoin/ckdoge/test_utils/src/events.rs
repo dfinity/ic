@@ -65,7 +65,7 @@ impl<E> MinterEventAssert<E> {
         self
     }
 
-    pub fn find_exactly_one<P>(self, predicate: P) -> E
+    pub fn extract_exactly_one<P>(self, predicate: P) -> E
     where
         P: Fn(&E) -> bool,
         E: fmt::Debug,

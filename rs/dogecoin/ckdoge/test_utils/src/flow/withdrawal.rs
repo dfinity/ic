@@ -210,7 +210,7 @@ where
         let (request_block_indices, change_amount, withdrawal_fee, used_utxos) = {
             let sent_tx_event = minter
                 .assert_that_events()
-                .find_exactly_one(
+                .extract_exactly_one(
                     |event| matches!(event, EventType::SentBtcTransaction {txid: sent_txid, ..} if sent_txid == &txid),
                 );
             match sent_tx_event {
@@ -460,7 +460,7 @@ where
         let new_txid = minter.await_submitted_doge_transaction(self.retrieve_doge_id.block_index);
         let _replaced_tx_event = minter
             .assert_that_events()
-            .find_exactly_one(
+            .extract_exactly_one(
                 |event| matches!(event,
                     EventType::ReplacedBtcTransaction {old_txid: event_old_txid, new_txid: event_new_txid, ..}
                     if event_old_txid == &old_txid && event_new_txid == &new_txid),
