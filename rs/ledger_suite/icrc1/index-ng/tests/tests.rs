@@ -1260,6 +1260,96 @@ fn test_fee_collector() {
 }
 
 #[test]
+fn test_fee_collector_107() {
+    let env = &StateMachine::new();
+    let ledger_id = install_icrc3_test_ledger(env);
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+    let fee_collector_1 = account(101, 0);
+    let fee_collector_2 = account(102, 0);
+    let regular_account = account(1, 0);
+
+    let mut block_id = 0;
+
+    let add_mint_block = |block_id: u64, fc: Option<Account>, fc_id: Option<u64>| {
+        let mint = BlockBuilder::new(block_id, block_id).with_fee(Tokens::from(1));
+        let mint = match fc {
+            Some(fc) => mint.with_fee_collector(fc),
+            None => mint,
+        };
+        let mint = match fc_id {
+            Some(fc_id) => mint.with_fee_collector_block(fc_id),
+            None => mint,
+        };
+        let mint = mint.mint(regular_account, Tokens::from(1)).build();
+
+        assert_eq!(
+            Nat::from(block_id),
+            add_block(&env, ledger_id, &mint)
+                .expect("error adding mint block to ICRC-3 test ledger")
+        );
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+        block_id + 1
+    };
+
+    let add_fee_collector_107_block = |block_id: u64, fc: Option<Account>| {
+        let fee_collector = BlockBuilder::<Tokens>::new(block_id, block_id)
+            .with_btype("107feecol".to_string())
+            .fee_collector(fc, None, None)
+            .build();
+
+        assert_eq!(
+            Nat::from(block_id),
+            add_block(&env, ledger_id, &fee_collector)
+                .expect("error adding mint block to ICRC-3 test ledger")
+        );
+        wait_until_sync_is_completed(env, index_id, ledger_id);
+        block_id + 1
+    };
+
+    // Legacy fee collector collects the fees
+    block_id = add_mint_block(block_id, Some(fee_collector_1), None);
+    assert_eq!(1, icrc1_balance_of(env, index_id, fee_collector_1));
+    block_id = add_mint_block(block_id, None, Some(0));
+    assert_eq!(2, icrc1_balance_of(env, index_id, fee_collector_1));
+
+    // Set 107 fee collector to burn
+    block_id = add_fee_collector_107_block(block_id, None);
+
+    // No fees collected
+    block_id = add_mint_block(block_id, None, None);
+    assert_eq!(2, icrc1_balance_of(env, index_id, fee_collector_1));
+    assert_eq!(0, icrc1_balance_of(env, index_id, fee_collector_2));
+
+    // No fees collected with the legacy fee collector
+    block_id = add_mint_block(block_id, Some(fee_collector_1), None);
+    block_id = add_mint_block(block_id, None, Some(block_id - 1));
+    assert_eq!(2, icrc1_balance_of(env, index_id, fee_collector_1));
+    assert_eq!(0, icrc1_balance_of(env, index_id, fee_collector_2));
+
+    // Set 107 fee collector to fee_collector_2
+    block_id = add_fee_collector_107_block(block_id, Some(fee_collector_2));
+
+    // New fee collector receives the fees
+    block_id = add_mint_block(block_id, None, None);
+    assert_eq!(2, icrc1_balance_of(env, index_id, fee_collector_1));
+    assert_eq!(1, icrc1_balance_of(env, index_id, fee_collector_2));
+
+    // Legacy fee collector has no effect, new fee collector receives the fees
+    block_id = add_mint_block(block_id, Some(fee_collector_1), None);
+    block_id = add_mint_block(block_id, None, Some(block_id - 1));
+    assert_eq!(2, icrc1_balance_of(env, index_id, fee_collector_1));
+    assert_eq!(3, icrc1_balance_of(env, index_id, fee_collector_2));
+
+    // Set 107 fee collector to burn
+    block_id = add_fee_collector_107_block(block_id, None);
+
+    // No fees collected
+    add_mint_block(block_id, None, None);
+    assert_eq!(2, icrc1_balance_of(env, index_id, fee_collector_1));
+    assert_eq!(3, icrc1_balance_of(env, index_id, fee_collector_2));
+}
+
+#[test]
 fn test_index_ledger_coherence() {
     let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
     let now = SystemTime::now();
