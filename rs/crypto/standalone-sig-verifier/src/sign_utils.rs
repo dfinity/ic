@@ -7,6 +7,8 @@ use ic_crypto_internal_basic_sig_ed25519 as ed25519;
 use ic_crypto_internal_basic_sig_iccsa as iccsa;
 use ic_crypto_internal_basic_sig_rsa_pkcs1 as rsa;
 use ic_types::crypto::{AlgorithmId, BasicSig, CryptoError, CryptoResult, UserPublicKey};
+use ic_crypto_internal_basic_sig_der_utils::PkixAlgorithmIdentifier;
+use simple_asn1::oid;
 
 /// Indicates the content type of serialised key bytes passed for parsing.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -28,6 +30,50 @@ fn cose_key_bytes_content_type(alg_id: AlgorithmId) -> Option<KeyBytesContentTyp
     }
 }
 
+/// The object identifier for Ed25519 public keys
+///
+/// See [RFC 8410](https://tools.ietf.org/html/rfc8410).
+pub fn ed25519_algorithm_identifier() -> PkixAlgorithmIdentifier {
+    PkixAlgorithmIdentifier::new_with_empty_param(simple_asn1::oid!(1, 3, 101, 112))
+}
+
+/// Return the algorithm identifier associated with COSE encoded keys
+fn cose_algorithm_identifier() -> PkixAlgorithmIdentifier {
+    PkixAlgorithmIdentifier::new_with_empty_param(oid!(1, 3, 6, 1, 4, 1, 56387, 1, 1))
+}
+
+/// Return the algorithm identifier associated with ECDSA secp256k1
+pub fn ecdsa_secp256k1_algorithm_identifier() -> PkixAlgorithmIdentifier {
+    PkixAlgorithmIdentifier::new_with_oid_param(
+        oid!(1, 2, 840, 10045, 2, 1),
+        oid!(1, 3, 132, 0, 10),
+    )
+}
+
+/// Return the algorithm identifier associated with ECDSA P-256
+pub fn ecdsa_secp256r1_algorithm_identifier() -> PkixAlgorithmIdentifier {
+    PkixAlgorithmIdentifier::new_with_oid_param(
+        oid!(1, 2, 840, 10045, 2, 1),
+        oid!(1, 2, 840, 10045, 3, 1, 7),
+    )
+}
+
+/// The object identifier for RSA public keys
+///
+/// See [RFC 8017](https://tools.ietf.org/html/rfc8017).
+pub fn rsa_algorithm_identifier() -> der_utils::PkixAlgorithmIdentifier {
+    der_utils::PkixAlgorithmIdentifier::new_with_null_param(simple_asn1::oid!(
+        1, 2, 840, 113549, 1, 1, 1
+    ))
+}
+
+/// The object identifier for ICCSA public keys
+pub fn iccsa_algorithm_identifier() -> der_utils::PkixAlgorithmIdentifier {
+    der_utils::PkixAlgorithmIdentifier::new_with_empty_param(simple_asn1::oid!(
+        1, 3, 6, 1, 4, 1, 56387, 1, 2
+    ))
+}
+
 /// Parses the given `bytes` as a DER-encoded public key, and returns, if the
 /// parsing is successful, the key as `UserPublicKey`-struct and an enum that
 /// indicates the content type of the passed `bytes`.  If parsing fails, returns
@@ -42,26 +88,26 @@ pub fn user_public_key_from_bytes(
             internal_error: e.internal_error,
         })?;
 
-    let (key, algorithm_id, content_type) = if pkix_algo_id == ed25519::api::algorithm_identifier()
+    let (key, algorithm_id, content_type) = if pkix_algo_id == ed25519_algorithm_identifier()
     {
         (
             ed25519::api::public_key_from_der(bytes)?.0.to_vec(),
             AlgorithmId::Ed25519,
             KeyBytesContentType::Ed25519PublicKeyDer,
         )
-    } else if pkix_algo_id == ecdsa_secp256k1::algorithm_identifier() {
+    } else if pkix_algo_id == ecdsa_secp256k1_algorithm_identifier() {
         (
             ecdsa_secp256k1::api::public_key_from_der(bytes)?.0,
             AlgorithmId::EcdsaSecp256k1,
             KeyBytesContentType::EcdsaSecp256k1PublicKeyDer,
         )
-    } else if pkix_algo_id == ecdsa_secp256r1::algorithm_identifier() {
+    } else if pkix_algo_id == ecdsa_secp256r1_algorithm_identifier() {
         (
             ecdsa_secp256r1::public_key_from_der(bytes)?.0,
             AlgorithmId::EcdsaP256,
             KeyBytesContentType::EcdsaP256PublicKeyDer,
         )
-    } else if pkix_algo_id == cose::algorithm_identifier() {
+    } else if pkix_algo_id == cose_algorithm_identifier() {
         let (alg_id, bytes) = cose::parse_cose_public_key(&pk_bytes)?;
         let key_bytes = user_public_key_from_bytes(&bytes)?;
         let key_contents_type = cose_key_bytes_content_type(alg_id).ok_or_else(|| {
@@ -72,13 +118,13 @@ pub fn user_public_key_from_bytes(
             }
         })?;
         (key_bytes.0.key, alg_id, key_contents_type)
-    } else if pkix_algo_id == iccsa::algorithm_identifier() {
+    } else if pkix_algo_id == iccsa_algorithm_identifier() {
         (
             iccsa::public_key_bytes_from_der(bytes)?.0,
             AlgorithmId::IcCanisterSignature,
             KeyBytesContentType::IcCanisterSignatureAlgPublicKeyDer,
         )
-    } else if pkix_algo_id == rsa::algorithm_identifier() {
+    } else if pkix_algo_id == rsa_algorithm_identifier() {
         (
             rsa::RsaPublicKey::from_der_spki(bytes)?.as_der().to_vec(),
             AlgorithmId::RsaSha256,

@@ -22,10 +22,3 @@ impl fmt::Debug for PublicKeyBytes {
         write!(f, "PublicKeyBytes({:?})", base64::encode(&self.0[..]))
     }
 }
-
-impl PartialEq for SignatureBytes {
-    fn eq(&self, other: &Self) -> bool {
-        self.0[..] == other.0[..]
-    }
-}
-impl Eq for SignatureBytes {}
