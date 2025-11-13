@@ -1574,9 +1574,17 @@ impl LogStream {
     where
         P: Fn(&IcNodeSnapshot, &str) -> bool,
     {
+        self.find(predicate).await.map(|_| ())
+    }
+
+    /// Find and return the first log line that satisfies the given predicate
+    pub async fn find<P>(&mut self, predicate: P) -> std::io::Result<(IcNodeSnapshot, String)>
+    where
+        P: Fn(&IcNodeSnapshot, &str) -> bool,
+    {
         while let Some((node, line)) = self.read().await? {
             if predicate(&node, &line) {
-                return Ok(());
+                return Ok((node, line));
             }
         }
 
