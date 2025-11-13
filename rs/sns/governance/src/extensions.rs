@@ -1,10 +1,11 @@
 use crate::{
     governance::{Governance, TREASURY_SUBACCOUNT_NONCE},
-    logs::INFO,
+    logs::{ERROR, INFO},
     pb::{
         sns_root_types::{
-            CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse,
-            RegisterExtensionRequest, RegisterExtensionResponse, register_extension_response,
+            CanisterCallError, DeregisterExtensionRequest, DeregisterExtensionResponse,
+            ListSnsCanistersRequest, ListSnsCanistersResponse, RegisterExtensionRequest,
+            RegisterExtensionResponse, deregister_extension_response, register_extension_response,
         },
         v1 as pb,
         v1::{
@@ -16,11 +17,14 @@ use crate::{
     storage::{cache_registered_extension, get_registered_extension_from_cache},
     types::{Environment, Wasm},
 };
-use candid::{CandidType, Decode, Deserialize, Encode, Nat};
+use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
 use candid_utils::printing;
 use futures::future::BoxFuture;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_canister_log::log;
+use ic_cdk::management_canister::{
+    DeleteCanisterArgs, StopCanisterArgs, delete_canister, stop_canister,
+};
 use ic_ledger_core::Tokens;
 use ic_management_canister_types_private::{
     CanisterInfoRequest, CanisterInfoResponse, CanisterInstallMode,
@@ -450,65 +454,126 @@ pub struct ValidatedRegisterExtension {
 
 impl ValidatedRegisterExtension {
     pub async fn execute(self, governance: &Governance) -> Result<(), GovernanceError> {
-        let context = governance.treasury_manager_deposit_context().await?;
+        let main = async || {
+            let context = governance.treasury_manager_deposit_context().await?;
 
-        let ValidatedRegisterExtension {
-            spec,
-            init,
-            extension_canister_id,
-            wasm,
-        } = self;
-
-        governance
-            .register_extension_with_root(extension_canister_id)
-            .await?;
-
-        // Before granting any SNS capabilities to the extension, we must ensure that old code
-        // could not have snuck in between proposal (re-)validation and the SNS assuming control.
-        governance
-            .ensure_no_code_is_installed(extension_canister_id)
-            .await?;
-
-        // This needs to happen before the canister code is installed.
-        let init_blob = match init {
-            ValidatedExtensionInit::TreasuryManager(ValidatedDepositOperationArg {
-                treasury_allocation_sns_e8s,
-                treasury_allocation_icp_e8s,
-                original,
-            }) => {
-                let init_blob = construct_treasury_manager_init_payload(context.clone(), original)
-                    .map_err(|err| {
-                        GovernanceError::new_with_message(
-                            ErrorType::InvalidProposal,
-                            format!("Error constructing TreasuryManagerInit payload: {err}"),
-                        )
-                    })?;
-
-                governance
-                    .approve_treasury_manager(
-                        extension_canister_id,
-                        treasury_allocation_sns_e8s,
-                        treasury_allocation_icp_e8s,
-                    )
-                    .await?;
-
-                init_blob
-            }
-        };
-
-        governance
-            .upgrade_non_root_canister(
+            let ValidatedRegisterExtension {
+                spec,
+                init,
                 extension_canister_id,
                 wasm,
-                init_blob,
-                CanisterInstallMode::Install,
-            )
-            .await?;
+            } = self;
 
-        cache_registered_extension(extension_canister_id, spec);
+            governance
+                .register_extension_with_root(extension_canister_id)
+                .await?;
 
-        Ok(())
+            // Before granting any SNS capabilities to the extension, we must ensure that old code
+            // could not have snuck in between proposal (re-)validation and the SNS assuming control.
+            governance
+                .ensure_no_code_is_installed(extension_canister_id)
+                .await?;
+
+            // This needs to happen before the canister code is installed.
+            let init_blob = match init {
+                ValidatedExtensionInit::TreasuryManager(ValidatedDepositOperationArg {
+                    treasury_allocation_sns_e8s,
+                    treasury_allocation_icp_e8s,
+                    original,
+                }) => {
+                    let init_blob =
+                        construct_treasury_manager_init_payload(context.clone(), original)
+                            .map_err(|err| {
+                                GovernanceError::new_with_message(
+                                    ErrorType::InvalidProposal,
+                                    format!(
+                                        "Error constructing TreasuryManagerInit payload: {err}"
+                                    ),
+                                )
+                            })?;
+
+                    governance
+                        .approve_treasury_manager(
+                            extension_canister_id,
+                            treasury_allocation_sns_e8s,
+                            treasury_allocation_icp_e8s,
+                        )
+                        .await?;
+
+                    init_blob
+                }
+            };
+
+            governance
+                .upgrade_non_root_canister(
+                    extension_canister_id,
+                    wasm,
+                    init_blob,
+                    CanisterInstallMode::Install,
+                )
+                .await?;
+
+            cache_registered_extension(extension_canister_id, spec);
+
+            Ok(())
+        };
+
+        let main_result = main().await;
+
+        // Try to clean up if main_result is Err. Cleaning up consists of
+        // calling the Root canister's deregister_extension method.
+        if main_result.is_err() {
+            clean_up_failed_register_extension(governance, self.extension_canister_id).await;
+        }
+
+        main_result
     }
+}
+
+async fn clean_up_failed_register_extension(governance: &Governance, canister_id: CanisterId) {
+    log!(
+        ERROR,
+        "Cleaning up after failing to a execute RegisterExtension proposal on {canister_id}.",
+    );
+
+    // Tell the Root canister to forget about the extension canister.
+    let deregister_result: Result<(), _> =
+        governance.deregister_extension_with_root(canister_id).await;
+    // If that doesn't work, log and return early.
+    if let Err(err) = deregister_result {
+        log!(
+            ERROR,
+            "Tried to recover from a failed RegisterExtension proposal execution \
+             (by calling Root.deregister_extension), but that also failed: {err:?}",
+        );
+        return;
+    }
+
+    // Stop the extension canister. This is to prepare for the next step,
+    // which is to delete the canister entirely.
+    let stop_result: Result<(), _> = stop_canister(&StopCanisterArgs {
+        canister_id: Principal::from(canister_id.get()),
+    })
+    .await;
+    if let Err(err) = stop_result {
+        log!(ERROR, "DO NOT MERGE: {err:?}",);
+        return;
+    }
+
+    // Delete the extension canister.
+    let delete_result: Result<(), _> = delete_canister(&DeleteCanisterArgs {
+        canister_id: Principal::from(canister_id.get()),
+    })
+    .await;
+    if let Err(err) = delete_result {
+        log!(ERROR, "DO NOT MERGE: {err:?}",);
+        return;
+    }
+
+    log!(
+        INFO,
+        "Successfully cleaned up from a failed RegisterExtension proposal execution.",
+    );
 }
 
 #[derive(Debug)]
@@ -623,6 +688,72 @@ impl Governance {
         log!(
             INFO,
             "Root.register_extension succeeded for canister {}",
+            extension_canister_id.get()
+        );
+
+        Ok(())
+    }
+
+    async fn deregister_extension_with_root(
+        &self,
+        extension_canister_id: CanisterId,
+    ) -> Result<(), GovernanceError> {
+        // Prepare to call deregister_extension method of the SNS Root canister.
+        let payload = Encode!(&DeregisterExtensionRequest {
+            canister_id: Some(extension_canister_id.get()),
+        })
+        .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidPrincipal,
+                format!("Could not encode DeregisterExtensionRequest: {err:?}"),
+            )
+        })?;
+
+        // Call deregister_extension method of the SNS Root canister.
+        let reply = self
+            .env
+            .call_canister(
+                self.proto.root_canister_id_or_panic(),
+                "deregister_extension",
+                payload,
+            )
+            .await
+            .map_err(|err| {
+                GovernanceError::new_with_message(
+                    ErrorType::External,
+                    format!("Canister method call failed: {err:?}"),
+                )
+            })?;
+
+        // Handle errors (if any) during the call to Root.deregister_extension.
+        let DeregisterExtensionResponse { result } = Decode!(&reply, DeregisterExtensionResponse)
+            .map_err(|err| {
+            GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Could not decode DeregisterExtensionResponse: {err:?}"),
+            )
+        })?;
+        if let Some(deregister_extension_response::Result::Err(CanisterCallError {
+            code,
+            description,
+        })) = result
+        {
+            let code = if let Some(code) = code {
+                code.to_string()
+            } else {
+                "<no code>".to_string()
+            };
+            return Err(GovernanceError::new_with_message(
+                ErrorType::External,
+                format!("Root.deregister_extension failed with code {code}: {description}"),
+            ));
+        }
+
+        // Success!
+
+        log!(
+            INFO,
+            "Root.deregister_extension succeeded for canister {}",
             extension_canister_id.get()
         );
 

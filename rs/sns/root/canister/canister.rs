@@ -21,16 +21,16 @@ use ic_nervous_system_proto::pb::v1::{
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterRequest;
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
-use ic_sns_root::pb::v1::{RegisterExtensionRequest, RegisterExtensionResponse};
 use ic_sns_root::{
     GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, LedgerCanisterClient,
     logs::{ERROR, INFO},
     pb::v1::{
-        CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse,
-        ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
-        RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
-        RegisterDappCanistersResponse, SetDappControllersRequest, SetDappControllersResponse,
-        SnsRootCanister,
+        CanisterCallError, DeregisterExtensionRequest, DeregisterExtensionResponse,
+        ListSnsCanistersRequest, ListSnsCanistersResponse, ManageDappCanisterSettingsRequest,
+        ManageDappCanisterSettingsResponse, RegisterDappCanisterRequest,
+        RegisterDappCanisterResponse, RegisterDappCanistersRequest, RegisterDappCanistersResponse,
+        RegisterExtensionRequest, RegisterExtensionResponse, SetDappControllersRequest,
+        SetDappControllersResponse, SnsRootCanister,
     },
     types::Environment,
 };
@@ -276,6 +276,25 @@ async fn register_extension(request: RegisterExtensionRequest) -> RegisterExtens
 
     log!(INFO, "register_extension done");
     RegisterExtensionResponse::from(result)
+}
+
+#[candid_method(update)]
+#[update]
+async fn deregister_extension(request: DeregisterExtensionRequest) -> DeregisterExtensionResponse {
+    log!(INFO, "deregister_extension");
+    assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
+
+    let canister_id = match PrincipalId::try_from(request) {
+        Ok(canister_id) => canister_id,
+        Err(err) => {
+            return DeregisterExtensionResponse::from(Err(err));
+        }
+    };
+
+    let result = SnsRootCanister::deregister_extension(&STATE, canister_id).await;
+
+    log!(INFO, "deregister_extension done");
+    DeregisterExtensionResponse::from(result)
 }
 
 /// This function is deprecated, and `register_dapp_canisters` should be used

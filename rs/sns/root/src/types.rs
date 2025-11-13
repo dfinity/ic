@@ -5,7 +5,8 @@ use ic_base_types::{CanisterId, PrincipalId};
 use serde::{Deserialize, Serialize};
 
 use crate::pb::v1::{
-    CanisterCallError, Extensions, RegisterExtensionRequest, RegisterExtensionResponse,
+    CanisterCallError, DeregisterExtensionRequest, DeregisterExtensionResponse, Extensions,
+    RegisterExtensionRequest, RegisterExtensionResponse, deregister_extension_response,
     register_extension_response,
 };
 
@@ -88,6 +89,25 @@ impl TryFrom<RegisterExtensionRequest> for PrincipalId {
     }
 }
 
+impl TryFrom<DeregisterExtensionRequest> for PrincipalId {
+    type Error = CanisterCallError;
+
+    fn try_from(value: DeregisterExtensionRequest) -> Result<Self, Self::Error> {
+        let DeregisterExtensionRequest { canister_id } = value;
+
+        let Some(canister_id) = canister_id else {
+            let code = Some(RejectCode::DestinationInvalid as i32);
+            let description = "DeregisterExtensionRequest.canister_id must be set.".to_string();
+
+            let err = CanisterCallError { code, description };
+
+            return Err(err);
+        };
+
+        Ok(canister_id)
+    }
+}
+
 impl From<Result<(), CanisterCallError>> for RegisterExtensionResponse {
     fn from(result: Result<(), CanisterCallError>) -> Self {
         use register_extension_response::{Ok, Result};
@@ -96,6 +116,20 @@ impl From<Result<(), CanisterCallError>> for RegisterExtensionResponse {
                 result: Some(Result::Ok(Ok {})),
             },
             Err(err) => RegisterExtensionResponse {
+                result: Some(Result::Err(err)),
+            },
+        }
+    }
+}
+
+impl From<Result<(), CanisterCallError>> for DeregisterExtensionResponse {
+    fn from(result: Result<(), CanisterCallError>) -> Self {
+        use deregister_extension_response::{Ok, Result};
+        match result {
+            Ok(_) => DeregisterExtensionResponse {
+                result: Some(Result::Ok(Ok {})),
+            },
+            Err(err) => DeregisterExtensionResponse {
                 result: Some(Result::Err(err)),
             },
         }
