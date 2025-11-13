@@ -1,4 +1,4 @@
-use crate::BLOCK_FREQUENCY;
+use crate::BLOCK_TIME;
 use crate::MAX_TIME_IN_QUEUE;
 use crate::MIN_CONFIRMATIONS;
 use crate::{Setup, into_outpoint, parse_dogecoin_address};
@@ -414,7 +414,7 @@ where
         self.setup
             .as_ref()
             .env
-            .advance_time(MIN_CONFIRMATIONS * BLOCK_FREQUENCY + Duration::from_secs(1));
+            .advance_time(MIN_CONFIRMATIONS * BLOCK_TIME + Duration::from_secs(1));
         let txid_bytes: [u8; 32] = txid.to_byte_array();
         self.setup.as_ref().dogecoin().push_utxo(
             Utxo {
