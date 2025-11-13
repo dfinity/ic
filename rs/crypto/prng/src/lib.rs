@@ -57,7 +57,7 @@ impl Csprng {
     /// Creates a CSPRNG seed from the given crypto hashable.
     fn seed_from_crypto_hashable<T: CryptoHashable>(crypto_hashable: &T) -> Randomness {
         let mut hasher =
-            Sha256::new_with_context(&DomainSeparationContext::new(crypto_hashable.domain()));
+            Sha256::new_with_context(&DomainSeparationContext::new(T::domain()));
         crypto_hashable.hash(&mut hasher);
         Randomness::from(hasher.finish())
     }
