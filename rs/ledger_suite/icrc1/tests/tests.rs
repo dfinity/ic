@@ -174,7 +174,10 @@ fn arb_token_u256() -> impl Strategy<Value = U256> {
     (any::<u128>(), any::<u128>()).prop_map(|(hi, lo)| U256::from_words(hi, lo))
 }
 
-pub fn arb_fee_collector_block() -> impl Strategy<Value = ICRC3Value> {
+pub fn arb_fee_collector_block<Tokens>() -> impl Strategy<Value = ICRC3Value>
+where
+    Tokens: TokensType,
+{
     (
         any::<u64>(),
         any::<u64>(),
@@ -189,7 +192,7 @@ pub fn arb_fee_collector_block() -> impl Strategy<Value = ICRC3Value> {
                     c.push(0x00);
                     Principal::try_from_slice(&c[..]).unwrap()
                 });
-                let builder = BlockBuilder::<U64>::new(block_id, block_ts)
+                let builder = BlockBuilder::<Tokens>::new(block_id, block_ts)
                     .with_btype("107feecol".to_string());
                 let builder = match parent_hash {
                     Some(parent_hash) => builder.with_parent_hash(parent_hash.to_vec()),
@@ -201,13 +204,25 @@ pub fn arb_fee_collector_block() -> impl Strategy<Value = ICRC3Value> {
 }
 
 #[test_strategy::proptest]
-fn test_encoding_decoding_fee_collector_block(
-    #[strategy(arb_fee_collector_block())] original_block: ICRC3Value,
+fn test_encoding_decoding_fee_collector_block_u64(
+    #[strategy(arb_fee_collector_block::<U64>())] original_block: ICRC3Value,
 ) {
     let encoded_block = generic_block_to_encoded_block(original_block.clone().into())
         .expect("failed to decode generic block");
     let decoded_block =
         Block::<U64>::decode(encoded_block.clone()).expect("failed to decode encoded block");
+    let decoded_value = encoded_block_to_generic_block(&decoded_block.clone().encode());
+    prop_assert_eq!(original_block.clone().hash(), decoded_value.hash());
+}
+
+#[test_strategy::proptest]
+fn test_encoding_decoding_fee_collector_block_u256(
+    #[strategy(arb_fee_collector_block::<U256>())] original_block: ICRC3Value,
+) {
+    let encoded_block = generic_block_to_encoded_block(original_block.clone().into())
+        .expect("failed to decode generic block");
+    let decoded_block =
+        Block::<U256>::decode(encoded_block.clone()).expect("failed to decode encoded block");
     let decoded_value = encoded_block_to_generic_block(&decoded_block.clone().encode());
     prop_assert_eq!(original_block.clone().hash(), decoded_value.hash());
 }
