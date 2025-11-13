@@ -62,7 +62,7 @@ pub struct Approve {
 pub struct FeeCollector {
     pub fee_collector: Option<Account>,
     pub caller: Option<Principal>,
-    pub created_at_time: Option<u64>,
+    pub ts: Option<u64>,
 }
 
 // Representation of a Transaction which supports the Icrc1 Standard functionalities

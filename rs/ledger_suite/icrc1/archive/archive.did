@@ -25,7 +25,7 @@ type Approve = record {
 type FeeCollector = record {
   caller : opt principal;
   fee_collector : opt Account;
-  created_at_time : opt nat64
+  ts : opt nat64
 };
 
 type Burn = record {

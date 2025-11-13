@@ -242,7 +242,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                 tx.fee_collector = Some(FeeCollector {
                     fee_collector,
                     caller,
-                    created_at_time,
+                    ts: created_at_time,
                 });
             }
         }
