@@ -230,7 +230,7 @@ type Transaction = record {
 };
 
 type FeeCollector = record {
-  caller : opt Account;
+  caller : opt principal;
   fee_collector : opt Account;
   created_at_time : opt nat64
 };
