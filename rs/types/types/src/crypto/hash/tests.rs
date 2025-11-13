@@ -28,8 +28,9 @@ mod crypto_hash_tests {
     fn crypto_hash_dependent_on_domain_and_bytes_from_hash_trait() {
         let struct_to_hash = CryptoHashableTestDummy(vec![1, 2, 3]);
         let hash_trait_bytes = bytes_fed_to_hasher_when_hashing_with_hash_trait(&struct_to_hash);
-        let mut hash =
-            Sha256::new_with_context(&DomainSeparationContext::new(CryptoHashableTestDummy::domain()));
+        let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(
+            CryptoHashableTestDummy::domain(),
+        ));
         hash.write(&hash_trait_bytes);
         let expected_hash_incl_domain_and_bytes_from_hash_trait =
             CryptoHash(hash.finish().to_vec());
