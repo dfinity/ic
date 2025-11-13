@@ -583,9 +583,10 @@ fn finalization_time_estimate<R: CanisterRuntime>(
 ) -> Duration {
     const ONE_SECOND: Duration = Duration::from_secs(1);
 
-    let block_time = runtime.block_time();
+    let block_time = runtime.block_time(network);
     let estimated_block_time = match network {
         Network::Mainnet | Network::Testnet => block_time,
+        // make things snappier for local testing
         Network::Regtest => block_time.min(ONE_SECOND),
     };
     min_confirmations * estimated_block_time
@@ -1435,7 +1436,7 @@ pub trait CanisterRuntime {
     }
 
     /// How often is a block produced.
-    fn block_time(&self) -> Duration;
+    fn block_time(&self, network: Network) -> Duration;
 
     fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
 
@@ -1563,8 +1564,21 @@ impl CanisterRuntime for IcCanisterRuntime {
         management::send_transaction(transaction, network).await
     }
 
-    fn block_time(&self) -> Duration {
-        Duration::from_secs(600)
+    fn block_time(&self, network: Network) -> Duration {
+        match network {
+            Network::Mainnet => {
+                // https://github.com/bitcoin/bitcoin/blob/dfde31f2ec1f90976f3ba6b06f2b38a1307c01ab/src/kernel/chainparams.cpp#L102
+                Duration::from_secs(600)
+            }
+            Network::Testnet => {
+                // https://github.com/bitcoin/bitcoin/blob/dfde31f2ec1f90976f3ba6b06f2b38a1307c01ab/src/kernel/chainparams.cpp#L329
+                Duration::from_secs(600)
+            }
+            Network::Regtest => {
+                //https://github.com/bitcoin/bitcoin/blob/dfde31f2ec1f90976f3ba6b06f2b38a1307c01ab/src/kernel/chainparams.cpp#L558C9-L558C46
+                Duration::from_secs(600)
+            }
+        }
     }
 
     fn parse_address(

@@ -112,8 +112,21 @@ impl CanisterRuntime for DogeCanisterRuntime {
         .map_err(|err| CallError::from_cdk_call_error("dogecoin_send_transaction", err))
     }
 
-    fn block_time(&self) -> Duration {
-        Duration::from_secs(60)
+    fn block_time(&self, network: ic_ckbtc_minter::Network) -> Duration {
+        match network {
+            ic_ckbtc_minter::Network::Mainnet => {
+                //https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/chainparams.cpp#L90
+                Duration::from_secs(60)
+            }
+            ic_ckbtc_minter::Network::Testnet => {
+                //https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/chainparams.cpp#L250
+                Duration::from_secs(60)
+            }
+            ic_ckbtc_minter::Network::Regtest => {
+                //https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/chainparams.cpp#L394
+                Duration::from_secs(1)
+            }
+        }
     }
 
     fn validate_config(&self, state: &CkBtcMinterState) {
