@@ -26,7 +26,7 @@ use ic_nervous_system_proto::pb::v1::{Duration, Image, Percentage, Tokens};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_governance_api::{
-    CreateServiceNervousSystem, MakePropoalRequest, ManageNeuronCommandRequest,
+    CreateServiceNervousSystem, MakeProposalRequest, ManageNeuronCommandRequest,
     ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest,
     create_service_nervous_system::{
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
@@ -420,7 +420,7 @@ async fn deploy_new_sns_via_proposal(
         id: Some(neuron_id),
         neuron_id_or_subaccount: None,
         command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
-            MakePropoalRequest {
+            MakeProposalRequest {
                 title: Some("title".to_string()),
                 summary: "summary".to_string(),
                 url: "https://forum.dfinity.org/t/x/".to_string(),
