@@ -235,6 +235,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
                         timestamp,
                         fee_collector,
                         fee_collector_block_index: None,
+                        btype: None,
                     }
                     .encode(),
                 )),
@@ -243,6 +244,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 timestamp,
                 fee_collector,
                 fee_collector_block_index: None,
+                btype: None,
             }
         })
 }
@@ -1499,6 +1501,7 @@ where
                 timestamp: ts,
                 fee_collector: fee_col,
                 fee_collector_block_index: fee_col_block,
+                btype: None,
             },
         )
 }

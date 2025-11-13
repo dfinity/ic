@@ -1,8 +1,10 @@
+use ic_base_types::PrincipalId;
 use ic_icrc1::blocks::{
     encoded_block_to_generic_block, generic_block_to_encoded_block,
     generic_transaction_from_generic_block,
 };
 use ic_icrc1::{Block, Transaction, hash};
+use ic_icrc1_test_utils::icrc3::BlockBuilder;
 use ic_icrc1_test_utils::{arb_amount, arb_block, arb_small_amount, blocks_strategy};
 use ic_icrc1_tokens_u64::U64;
 use ic_icrc1_tokens_u256::U256;
@@ -11,6 +13,7 @@ use ic_ledger_core::Tokens;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::tokens::TokensType;
 use ic_ledger_hash_of::HashOf;
+use icrc_ledger_types::icrc1::account::Account;
 use proptest::prelude::*;
 
 fn arb_u256() -> impl Strategy<Value = U256> {
@@ -169,4 +172,32 @@ fn test_encoding_decoding_block_u256(
 
 fn arb_token_u256() -> impl Strategy<Value = U256> {
     (any::<u128>(), any::<u128>()).prop_map(|(hi, lo)| U256::from_words(hi, lo))
+}
+
+#[test]
+fn test_fee_collector_block() {
+    const TEST_USER: PrincipalId = PrincipalId::new_user_test_id(1);
+    const TEST_ACCOUNT: Account = Account {
+        owner: TEST_USER.0,
+        subaccount: Some([1u8; 32]),
+    };
+
+    let original_block = BlockBuilder::<U64>::new(1, 111)
+        .with_btype("107feecol".to_string())
+        .with_parent_hash(vec![1u8; 32])
+        .fee_collector(Some(TEST_ACCOUNT), None, Some(123))
+        .build();
+
+    let block = generic_block_to_encoded_block(original_block.clone().into())
+        .expect("failed to decode generic block");
+
+    let decoded_block =
+        Block::<U64>::decode(block.clone()).expect("failed to decode encoded block");
+
+    let decoded_value = encoded_block_to_generic_block(&decoded_block.clone().encode());
+
+    println!("original: {}", original_block);
+    println!("decoded:  {}", decoded_value);
+
+    assert_eq!(original_block.clone().hash(), decoded_value.hash());
 }
