@@ -60,14 +60,47 @@ bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
 
 bazel_dep(name = "rules_rust", version = "0.66.0")
 
+archive_override(
+    module_name = "rules_rust",
+    patch_strip = 1,
+    patches = ["//bazel:rules_rust_strip_level.patch"],
+    integrity = "sha256-5Kgp+5cZcrJoTOUq9CF6KJdNsB2zNzvYM9UnYMoY5lc=",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.66.0/rules_rust-0.66.0.tar.gz"],
+)
+
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    # strip_level = {"x86_64-unknown-linux-gnu": {
-    #     "dbg": "none",
-    #     "fastbuild": "none",
-    #     "opt": "none",
-    # }},
+    target_settings = [ "@rules_rust//rust/platform:x86_64-unknown-linux-gnu" ],
+    strip_level = {
+        "dbg": "none",
+        "fastbuild": "none",
+        "opt": "none",
+    },
+    versions = ["1.90.0"],
+)
+
+rust.toolchain(
+    edition = "2024",
+    target_settings = [ "@rules_rust//rust/platform:x86_64-apple-darwin" ],
+    versions = ["1.90.0"],
+)
+
+rust.toolchain(
+    edition = "2024",
+    target_settings = [ "@rules_rust//rust/platform:aarch64-apple-darwin" ],
+    versions = ["1.90.0"],
+)
+
+rust.toolchain(
+    edition = "2024",
+    target_settings = [ "@rules_rust//rust/platform:aarch64-unknown-linux-gnu" ],
+    versions = ["1.90.0"],
+)
+
+rust.toolchain(
+    edition = "2024",
+    target_settings = [ "@rules_rust//rust/platform:wasm32-unknown-unknown" ],
     versions = ["1.90.0"],
 )
 
@@ -1943,6 +1976,44 @@ crate.spec(
 )
 
 # Crate annotations
+
+
+# These are rustc flags that can be used with the Rust nightly toolchain to build fuzz tests for libfuzzer.
+DEFAULT_RUSTC_FLAGS = [
+    "-Cpasses=sancov-module",
+    "-Cllvm-args=-sanitizer-coverage-level=4",
+    "-Cllvm-args=-sanitizer-coverage-inline-8bit-counters",
+    "-Cllvm-args=-sanitizer-coverage-pc-table",
+    "-Cllvm-args=-sanitizer-coverage-trace-compares",
+    "-Cllvm-args=-sanitizer-coverage-stack-depth",
+    "-Cllvm-args=-sanitizer-coverage-prune-blocks=0",
+    "-Ctarget-cpu=native",
+    "-Coverflow_checks",
+    "-Copt-level=3",
+    "-Clink-dead-code",
+    "-Cdebug-assertions",
+    "-Ccodegen-units=1",
+    "-Zextra-const-ub-checks",
+    "-Zstrict-init-checks",
+    # TODO(PSEC): Add configuration to enable only during profiling
+    # "-Cinstrument-coverage",
+]
+
+DEFAULT_SANITIZERS = [
+    "-Zsanitizer=address",
+    # zig doesn't like how rustc pushes the sanitizers, so do it ourselves.
+    "-Zexternal-clangrt",
+    "-Clink-arg=bazel-out/k8-opt/bin/external/rust_linux_x86_64__x86_64-unknown-linux-gnu__stable_tools/rust_toolchain/lib/rustlib/x86_64-unknown-linux-gnu/lib/librustc-stable_rt.asan.a",
+]
+
+
+DEFAULT_RUSTC_FLAGS_FOR_FUZZING = DEFAULT_RUSTC_FLAGS + DEFAULT_SANITIZERS
+
+crate.annotation_select(
+    triples = [ "@@//bazel:fuzzing_code_enabled" ],
+    crate = "bincode",
+    rustc_flags = DEFAULT_RUSTC_FLAGS_FOR_FUZZING,
+)
 
 crate.annotation(
     build_script_data = [
