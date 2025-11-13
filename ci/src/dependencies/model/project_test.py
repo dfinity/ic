@@ -106,7 +106,10 @@ def test_owner_deduplication(mock_finding):
         name="a",
         path="b",
         owner=Team.CONSENSUS_TEAM,
-        owner_by_path={"/prefix/a": [Team.TRUST_TEAM, Team.CONSENSUS_TEAM], "/prefix/b": [Team.OISY_TEAM, Team.TRUST_TEAM]},
+        owner_by_path={
+            "/prefix/a": [Team.TRUST_TEAM, Team.CONSENSUS_TEAM],
+            "/prefix/b": [Team.OISY_TEAM, Team.TRUST_TEAM],
+        },
     )
     mock_finding.projects.append("/not/matching/prefix")
     mock_finding.projects.append("/prefix/a/b")
