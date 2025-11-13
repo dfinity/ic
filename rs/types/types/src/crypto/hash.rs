@@ -48,7 +48,7 @@ pub const DOMAIN_IC_REQUEST: &[u8; 11] = b"\x0Aic-request";
 /// separation.
 pub trait CryptoHashDomain: private::CryptoHashDomainSeal {
     /// Returns the domain separator used in cryptographic hashes.
-    fn domain(&self) -> String;
+    fn domain() -> String;
 }
 mod private {
     use super::*;
@@ -137,109 +137,109 @@ mod private {
 }
 
 impl CryptoHashDomain for CanisterHttpResponse {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::CanisterHttpResponse.to_string()
     }
 }
 
 impl CryptoHashDomain for CanisterHttpResponseMetadata {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::CryptoHashOfCanisterHttpResponseMetadata.to_string()
     }
 }
 
 impl CryptoHashDomain for CanisterHttpResponseShare {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::CanisterHttpResponseShare.to_string()
     }
 }
 
 impl CryptoHashDomain for NotarizationContent {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::NotarizationContent.to_string()
     }
 }
 
 impl CryptoHashDomain for Signed<NotarizationContent, MultiSignature<NotarizationContent>> {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::Notarization.to_string()
     }
 }
 
 impl CryptoHashDomain for Signed<NotarizationContent, MultiSignatureShare<NotarizationContent>> {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::NotarizationShare.to_string()
     }
 }
 
 impl CryptoHashDomain for FinalizationContent {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::FinalizationContent.to_string()
     }
 }
 
 impl CryptoHashDomain for Signed<FinalizationContent, MultiSignature<FinalizationContent>> {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::Finalization.to_string()
     }
 }
 
 impl CryptoHashDomain for Signed<FinalizationContent, MultiSignatureShare<FinalizationContent>> {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::FinalizationShare.to_string()
     }
 }
 
 impl CryptoHashDomain for CertificationContent {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::CertificationContent.to_string()
     }
 }
 
 impl CryptoHashDomain for Certification {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::Certification.to_string()
     }
 }
 
 impl CryptoHashDomain for CertificationShare {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::CertificationShare.to_string()
     }
 }
 
 impl CryptoHashDomain for Block {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::Block.to_string()
     }
 }
 
 impl CryptoHashDomain for Signed<HashedBlock, BasicSignature<BlockMetadata>> {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::BlockMetadataProposal.to_string()
     }
 }
 
 impl CryptoHashDomain for EquivocationProof {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::EquivocationProof.to_string()
     }
 }
 
 impl CryptoHashDomain for BlockPayload {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::InmemoryPayload.to_string()
     }
 }
 
 impl CryptoHashDomain for RandomBeaconContent {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::RandomBeaconContent.to_string()
     }
 }
 
 impl CryptoHashDomain for Signed<RandomBeaconContent, ThresholdSignature<RandomBeaconContent>> {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::RandomBeacon.to_string()
     }
 }
@@ -247,175 +247,175 @@ impl CryptoHashDomain for Signed<RandomBeaconContent, ThresholdSignature<RandomB
 impl CryptoHashDomain
     for Signed<RandomBeaconContent, ThresholdSignatureShare<RandomBeaconContent>>
 {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::RandomBeaconShare.to_string()
     }
 }
 
 impl CryptoHashDomain for consensus_dkg::DealingContent {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::DealingContent.to_string()
     }
 }
 
 impl CryptoHashDomain for consensus_dkg::Message {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::DkgMessage.to_string()
     }
 }
 
 impl CryptoHashDomain for HttpCanisterUpdate {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::HttpCanisterUpdate.to_string()
     }
 }
 
 impl CryptoHashDomain for SignedRequestBytes {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::SignedRequestBytes.to_string()
     }
 }
 
 impl CryptoHashDomain for MessageId {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::MessageId.to_string()
     }
 }
 
 impl CryptoHashDomain for RandomTapeContent {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::RandomTapeContent.to_string()
     }
 }
 
 impl CryptoHashDomain for Signed<RandomTapeContent, ThresholdSignature<RandomTapeContent>> {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::RandomTape.to_string()
     }
 }
 
 impl CryptoHashDomain for Signed<RandomTapeContent, ThresholdSignatureShare<RandomTapeContent>> {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::RandomTapeShare.to_string()
     }
 }
 
 impl CryptoHashDomain for CatchUpContent {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::CatchUpContent.to_string()
     }
 }
 
 impl CryptoHashDomain for CatchUpContentProtobufBytes {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::CatchUpContentProto.to_string()
     }
 }
 
 impl CryptoHashDomain for CatchUpShareContent {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::CatchUpShareContent.to_string()
     }
 }
 
 impl CryptoHashDomain for Signed<CatchUpContent, ThresholdSignature<CatchUpContent>> {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::CatchUpPackage.to_string()
     }
 }
 
 impl CryptoHashDomain for Signed<CatchUpShareContent, ThresholdSignatureShare<CatchUpContent>> {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::CatchUpPackageShare.to_string()
     }
 }
 
 impl CryptoHashDomain for ConsensusMessage {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::ConsensusMessage.to_string()
     }
 }
 
 impl CryptoHashDomain for CertificationMessage {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::CertificationMessage.to_string()
     }
 }
 
 impl CryptoHashDomain for IDkgMessage {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::IDkgMessage.to_string()
     }
 }
 
 impl CryptoHashDomain for IDkgDealing {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::IdkgDealing.to_string()
     }
 }
 
 impl CryptoHashDomain for SignedIDkgDealing {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::SignedIdkgDealing.to_string()
     }
 }
 
 impl CryptoHashDomain for IDkgDealingSupport {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::IdkgDealingSupport.to_string()
     }
 }
 
 impl CryptoHashDomain for IDkgTranscript {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::IDkgTranscript.to_string()
     }
 }
 
 impl CryptoHashDomain for EcdsaSigShare {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::EcdsaSigShare.to_string()
     }
 }
 
 impl CryptoHashDomain for SchnorrSigShare {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::SchnorrSigShare.to_string()
     }
 }
 
 impl CryptoHashDomain for VetKdKeyShare {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::VetKdKeyShare.to_string()
     }
 }
 
 impl CryptoHashDomain for IDkgComplaintContent {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::IDkgComplaintContent.to_string()
     }
 }
 
 impl CryptoHashDomain for Signed<IDkgComplaintContent, BasicSignature<IDkgComplaintContent>> {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::SignedIDkgComplaint.to_string()
     }
 }
 
 impl CryptoHashDomain for IDkgOpeningContent {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::IDkgOpeningContent.to_string()
     }
 }
 
 impl CryptoHashDomain for Signed<IDkgOpeningContent, BasicSignature<IDkgOpeningContent>> {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         DomainSeparator::SignedIDkgOpening.to_string()
     }
 }
 
 impl CryptoHashDomain for CryptoHashableTestDummy {
-    fn domain(&self) -> String {
+    fn domain() -> String {
         "test_struct_domain".to_string()
     }
 }
@@ -450,7 +450,7 @@ impl<T> CryptoHashable for T where T: CryptoHashDomain + Hash {}
 /// versions. Use `Sha256` instead if the algorithm used for producing
 /// the hash must not change across registry/protocol versions.
 pub fn crypto_hash<T: CryptoHashable>(data: &T) -> CryptoHashOf<T> {
-    let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(data.domain()));
+    let mut hash = Sha256::new_with_context(&DomainSeparationContext::new(T::domain()));
     data.hash(&mut hash);
     CryptoHashOf::new(CryptoHash(hash.finish().to_vec()))
 }
