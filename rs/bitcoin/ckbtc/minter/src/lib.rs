@@ -1436,7 +1436,7 @@ pub trait CanisterRuntime {
         state.validate_config()
     }
 
-    /// How often a is block produced.
+    /// How often is a block produced.
     fn block_time(&self) -> Duration;
 
     fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
