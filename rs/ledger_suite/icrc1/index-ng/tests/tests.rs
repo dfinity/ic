@@ -1284,7 +1284,7 @@ fn test_fee_collector_107() {
 
         assert_eq!(
             Nat::from(block_id),
-            add_block(&env, ledger_id, &mint)
+            add_block(env, ledger_id, &mint)
                 .expect("error adding mint block to ICRC-3 test ledger")
         );
         wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -1299,7 +1299,7 @@ fn test_fee_collector_107() {
 
         assert_eq!(
             Nat::from(block_id),
-            add_block(&env, ledger_id, &fee_collector)
+            add_block(env, ledger_id, &fee_collector)
                 .expect("error adding mint block to ICRC-3 test ledger")
         );
         wait_until_sync_is_completed(env, index_id, ledger_id);
