@@ -168,7 +168,8 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
 # The "limited-console" account for restricted console access
 RUN adduser --system --disabled-password --home /var/lib/limited-console --shell /sbin/nologin limited-console && \
     chown limited-console:nogroup /var/lib/limited-console && \
-    adduser limited-console systemd-journal
+    adduser limited-console systemd-journal && \
+    adduser limited-console tty
 
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.

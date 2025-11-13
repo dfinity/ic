@@ -131,8 +131,9 @@ impl Drop for TerminalGuard {
 }
 
 fn build_upgrader_command(params: &RecoveryParams) -> Command {
-    let mut cmd = Command::new("bash");
-    cmd.arg("/opt/ic/bin/guestos-recovery-upgrader.sh")
+    let mut cmd = Command::new("sudo");
+    cmd.arg("-n") // Non-interactive (no password prompt)
+        .arg("/opt/ic/bin/guestos-recovery-upgrader.sh")
         .arg(format!("version={}", params.version))
         .arg(format!("version-hash={}", params.version_hash))
         .arg(format!("recovery-hash={}", params.recovery_hash));
