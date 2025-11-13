@@ -733,8 +733,14 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         f.render_widget(para, size);
     })?;
 
+    // Get timestamp before running command to read journalctl logs as fallback
+    let start_time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
     // Run the upgrader script with command line parameters
-    // Capture output to parse for errors and success messages
+    // The script now writes to stdout (via log_message), so we can capture it directly
     let output = build_upgrader_command(params)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -745,15 +751,15 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     let mut error_messages = Vec::new();
     let mut success_message = None;
 
-    // Parse stderr - this is where errors typically go
-    let stderr_lines: Vec<String> = String::from_utf8_lossy(&output.stderr)
+    // Parse stdout - the script now writes all log messages here via log_message()
+    let stdout_lines: Vec<String> = String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(|s| s.to_string())
         .filter(|s| !s.trim().is_empty()) // Filter out empty lines
         .collect();
 
-    // Parse stdout for success messages and any errors
-    let stdout_lines: Vec<String> = String::from_utf8_lossy(&output.stdout)
+    // Parse stderr - errors might also go here
+    let stderr_lines: Vec<String> = String::from_utf8_lossy(&output.stderr)
         .lines()
         .map(|s| s.to_string())
         .filter(|s| !s.trim().is_empty()) // Filter out empty lines
@@ -766,31 +772,72 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         }
     }
 
-    // Collect error information: prefer stderr, fall back to stdout if stderr is empty
-    if !stderr_lines.is_empty() {
-        // Show all stderr output (errors typically go here)
-        error_messages = stderr_lines;
-    } else if !stdout_lines.is_empty() && !output.status.success() {
-        // If no stderr but command failed, show stdout (might contain error info)
-        error_messages = stdout_lines;
-    }
-
-    // Also look for explicit ERROR: markers in both streams
+    // Collect error information: prefer stdout (where script logs), then stderr
+    // Look for explicit ERROR: markers first
     let mut explicit_errors = Vec::new();
-    for line in String::from_utf8_lossy(&output.stderr).lines() {
+    for line in &stdout_lines {
         if line.contains("ERROR:") || line.contains("error:") || line.contains("Error:") {
-            explicit_errors.push(line.to_string());
+            explicit_errors.push(line.clone());
         }
     }
-    for line in String::from_utf8_lossy(&output.stdout).lines() {
+    for line in &stderr_lines {
         if line.contains("ERROR:") || line.contains("error:") || line.contains("Error:") {
-            explicit_errors.push(line.to_string());
+            explicit_errors.push(line.clone());
         }
     }
 
-    // If we found explicit error markers, use those instead (they're more specific)
     if !explicit_errors.is_empty() {
         error_messages = explicit_errors;
+    } else if !output.status.success() {
+        // If command failed but no explicit ERROR markers, show recent output
+        // Prefer stderr if available, otherwise stdout
+        if !stderr_lines.is_empty() {
+            // Show last 30 lines of stderr
+            let start = stderr_lines.len().saturating_sub(30);
+            error_messages = stderr_lines[start..].to_vec();
+        } else if !stdout_lines.is_empty() {
+            // Show last 30 lines of stdout
+            let start = stdout_lines.len().saturating_sub(30);
+            error_messages = stdout_lines[start..].to_vec();
+        }
+    }
+
+    // Fallback: if we still have no error messages and command failed, try journalctl
+    if error_messages.is_empty() && !output.status.success() {
+        let journalctl_output = Command::new("journalctl")
+            .arg("-t")
+            .arg("guestos-recovery-upgrader")
+            .arg("--since")
+            .arg(format!("@{}", start_time))
+            .arg("--no-pager")
+            .arg("-o")
+            .arg("cat") // Output format: just the message without metadata
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output();
+
+        if let Ok(journal_output) = journalctl_output {
+            let journalctl_lines: Vec<String> = String::from_utf8_lossy(&journal_output.stdout)
+                .lines()
+                .map(|s| s.to_string())
+                .filter(|s| !s.trim().is_empty())
+                .collect();
+
+            // Look for ERROR messages in journalctl
+            let mut explicit_errors = Vec::new();
+            for line in &journalctl_lines {
+                if line.contains("ERROR:") || line.contains("error:") || line.contains("Error:") {
+                    explicit_errors.push(line.clone());
+                }
+            }
+            if !explicit_errors.is_empty() {
+                error_messages = explicit_errors;
+            } else if !journalctl_lines.is_empty() {
+                // Show last 30 lines of journalctl logs
+                let start = journalctl_lines.len().saturating_sub(30);
+                error_messages = journalctl_lines[start..].to_vec();
+            }
+        }
     }
 
     // Show completion message
@@ -890,14 +937,14 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
             let stderr_str = String::from_utf8_lossy(&output.stderr);
             let stdout_str = String::from_utf8_lossy(&output.stdout);
             let mut raw_output = String::new();
-            if !stderr_str.trim().is_empty() {
-                raw_output.push_str(&format!("\n\nStderr:\n{}", stderr_str));
-            }
             if !stdout_str.trim().is_empty() {
                 raw_output.push_str(&format!("\n\nStdout:\n{}", stdout_str));
             }
+            if !stderr_str.trim().is_empty() {
+                raw_output.push_str(&format!("\n\nStderr:\n{}", stderr_str));
+            }
             if raw_output.is_empty() {
-                "\n\nNo output captured from recovery upgrader. Check system logs for details."
+                "\n\nNo output captured from recovery upgrader. Check system logs with: journalctl -t guestos-recovery-upgrader"
                     .to_string()
             } else {
                 raw_output

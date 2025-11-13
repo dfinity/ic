@@ -42,13 +42,18 @@ parse_args() {
     done
 }
 
-# Helper function to log messages to console, serial, and logger
+# Helper function to log messages to console, serial, logger, and stdout/stderr
+# stdout/stderr are captured by the TUI, while tty1/ttyS0/logger go to system logs
 log_message() {
     local message="$1"
 
+    # Write to console and serial (for system visibility)
     echo "$message" >/dev/tty1 2>/dev/null || true
     echo "$message" >/dev/ttyS0 2>/dev/null || true
+    # Write to system logger
     logger -t guestos-recovery-upgrader "$message" 2>/dev/null || true
+    # Also write to stdout so the TUI can capture it
+    echo "$message"
 }
 
 verify_hash() {
