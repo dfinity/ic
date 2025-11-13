@@ -25,10 +25,21 @@ BASE_URLS=(
 
 source /opt/ic/bin/grub.sh
 
-# Helper function to extract a value from /proc/cmdline
-get_cmdline_var() {
-    local var="$1"
-    grep -oP "${var}=[^ ]*" /proc/cmdline | head -n1 | cut -d= -f2-
+# Parse command line arguments in the format key=value
+parse_args() {
+    for arg in "$@"; do
+        case "$arg" in
+            version=*)
+                VERSION="${arg#*=}"
+                ;;
+            version-hash=*)
+                VERSION_HASH="${arg#*=}"
+                ;;
+            recovery-hash=*)
+                RECOVERY_HASH="${arg#*=}"
+                ;;
+        esac
+    done
 }
 
 # Helper function to log messages to console, serial, and logger
@@ -261,9 +272,11 @@ guestos_upgrade_cleanup() {
 main() {
     log_message "Starting GuestOS Recovery Upgrader"
 
-    VERSION="$(get_cmdline_var version)"
-    VERSION_HASH="$(get_cmdline_var version-hash)"
-    RECOVERY_HASH="$(get_cmdline_var recovery-hash)"
+    # Parse command line arguments
+    VERSION=""
+    VERSION_HASH=""
+    RECOVERY_HASH=""
+    parse_args "$@"
 
     if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ]; then
         log_message "ERROR: version and version-hash parameters are required"
