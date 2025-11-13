@@ -185,7 +185,7 @@ fn test_fee_collector_block() {
     let original_block = BlockBuilder::<U64>::new(1, 111)
         .with_btype("107feecol".to_string())
         .with_parent_hash(vec![1u8; 32])
-        .fee_collector(Some(TEST_ACCOUNT), None, Some(123))
+        .fee_collector(Some(TEST_ACCOUNT), Some(TEST_USER.0), Some(123))
         .build();
 
     let block = generic_block_to_encoded_block(original_block.clone().into())

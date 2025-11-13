@@ -1,4 +1,4 @@
-use candid::{CandidType, Deserialize, Nat};
+use candid::{CandidType, Deserialize, Nat, Principal};
 use serde::Serialize;
 
 use crate::{
@@ -61,7 +61,7 @@ pub struct Approve {
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct FeeCollector {
     pub fee_collector: Option<Account>,
-    pub caller: Option<Account>,
+    pub caller: Option<Principal>,
     pub created_at_time: Option<u64>,
 }
 

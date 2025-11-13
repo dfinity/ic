@@ -4,6 +4,7 @@ pub mod endpoints;
 pub mod hash;
 pub(crate) mod known_tags;
 
+use candid::Principal;
 use ciborium::tag::Required;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
@@ -88,12 +89,8 @@ pub enum Operation<Tokens: TokensType> {
             with = "compact_account::opt"
         )]
         fee_collector: Option<Account>,
-        #[serde(
-            default,
-            skip_serializing_if = "Option::is_none",
-            with = "compact_account::opt"
-        )]
-        caller: Option<Account>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        caller: Option<Principal>,
     },
 }
 
@@ -156,8 +153,7 @@ struct FlattenedTransaction<Tokens: TokensType> {
 
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(with = "compact_account::opt")]
-    caller: Option<Account>,
+    caller: Option<Principal>,
 }
 
 impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
