@@ -8,7 +8,6 @@ use crate::{
     error::{GracefulExpect, RecoveryError},
     recovery_iterator::RecoveryIterator,
     registry_helper::RegistryPollingStrategy,
-    ssh_helper::SshHelper,
     util::SshUser,
 };
 use clap::Parser;
@@ -394,18 +393,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     } else {
                         (SshUser::Admin, self.recovery.admin_key_file.clone())
                     };
-                    let ssh_helper = SshHelper::new(
-                        self.recovery.logger.clone(),
-                        ssh_user,
-                        node_ip,
-                        self.recovery.ssh_confirmation,
-                        key_file,
-                    );
-                    let includes = self.recovery.get_consensus_pool_includes();
 
-                    Ok(Box::new(self.recovery.get_download_data_step(
-                        ssh_helper, /*keep_downloaded_data=*/ false, includes,
-                        /*include_config=*/ false,
+                    Ok(Box::new(self.recovery.get_download_consensus_pool_step(
+                        node_ip, ssh_user, key_file,
                     )?))
                 } else {
                     Err(RecoveryError::StepSkipped)
@@ -422,20 +412,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                     } else {
                         (SshUser::Admin, self.recovery.admin_key_file.clone())
                     };
-                    let ssh_helper = SshHelper::new(
-                        self.recovery.logger.clone(),
-                        ssh_user,
-                        node_ip,
-                        self.recovery.ssh_confirmation,
-                        key_file,
-                    );
-                    let includes = Recovery::get_ic_state_includes(Some(&ssh_helper))?;
 
-                    Ok(Box::new(self.recovery.get_download_data_step(
-                        ssh_helper,
+                    Ok(Box::new(self.recovery.get_download_state_step(
+                        node_ip,
+                        ssh_user,
+                        key_file,
                         self.params.keep_downloaded_state == Some(true),
-                        includes,
-                        /*include_config=*/ true,
                     )?))
                 }
                 None => Err(RecoveryError::StepSkipped),

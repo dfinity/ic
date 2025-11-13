@@ -301,10 +301,14 @@ impl Recovery {
         }
     }
 
-    /// Return the list of paths to include when downloading the consensus pool with rsync.
-    /// Certifications are only included if they do not already exist in the
-    /// work directory.
-    pub fn get_consensus_pool_includes(&self) -> Vec<PathBuf> {
+    /// Return a [DownloadIcDataStep] downloading the consensus pool of the given node.
+    /// Certifications are only included if they do not already exist in the work directory.
+    pub fn get_download_consensus_pool_step(
+        &self,
+        node_ip: IpAddr,
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
+    ) -> RecoveryResult<impl Step + use<>> {
         let consensus_pool_path = PathBuf::from(IC_CONSENSUS_POOL_PATH);
         let mut includes = vec![
             consensus_pool_path.join("replica_version"),
@@ -321,7 +325,18 @@ impl Recovery {
             includes.push(consensus_pool_path.join("certification"));
         }
 
-        includes
+        let ssh_helper = SshHelper::new(
+            self.logger.clone(),
+            ssh_user,
+            node_ip,
+            self.ssh_confirmation,
+            key_file.clone(),
+        );
+
+        self.get_download_data_step(
+            ssh_helper, /*keep_downloaded_data=*/ false, includes,
+            /*include_config=*/ false,
+        )
     }
 
     /// Return the list of paths to include when downloading a node's "production" state with
@@ -352,6 +367,32 @@ impl Recovery {
             PathBuf::from(STATES_METADATA),
             PathBuf::from(CHECKPOINTS).join(checkpoint_name),
         ]
+    }
+
+    /// Return a [DownloadIcDataStep] downloading the ic_state of the given node.
+    pub fn get_download_state_step(
+        &self,
+        node_ip: IpAddr,
+        ssh_user: SshUser,
+        key_file: Option<PathBuf>,
+        keep_downloaded_state: bool,
+    ) -> RecoveryResult<impl Step + use<>> {
+        let includes = Self::get_ic_state_includes(Some(&ssh_helper))?;
+
+        let ssh_helper = SshHelper::new(
+            self.logger.clone(),
+            ssh_user,
+            node_ip,
+            self.ssh_confirmation,
+            key_file,
+        );
+
+        self.get_download_data_step(
+            ssh_helper,
+            keep_downloaded_state,
+            includes,
+            /*include_config=*/ true,
+        )
     }
 
     /// Return a [DownloadIcDataStep] downloading some data of the given
