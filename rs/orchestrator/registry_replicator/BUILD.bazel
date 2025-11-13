@@ -53,6 +53,22 @@ rust_binary(
 rust_test(
     name = "registry_replicator_test",
     crate = ":registry_replicator",
+    deps = [
+        # Keep sorted.
+        "//rs/certification/test-utils",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "//rs/crypto/tree_hash",
+        "//rs/registry/fake",
+        "//rs/registry/proto_data_provider",
+        "//rs/test_utilities/logger",
+        "//rs/types/types_test_utils",
+        "@crate_index//:rand",
+    ],
+)
+
+rust_test(
+    name = "registry_replicator_integration",
+    srcs = glob(["tests/**/*.rs"]),
     data = [
         # Keep sorted.
         "//rs/pocket_ic_server:pocket-ic-server",
@@ -65,19 +81,24 @@ rust_test(
     },
     deps = [
         # Keep sorted.
+        ":registry_replicator",
         "//packages/pocket-ic",
-        "//rs/certification/test-utils",
         "//rs/crypto/test_utils/reproducible_rng",
-        "//rs/crypto/tree_hash",
+        "//rs/crypto/utils/threshold_sig_der",
+        "//rs/interfaces/registry",
         "//rs/nervous_system/integration_tests:nervous_system_integration_tests",
         "//rs/nns/constants",
         "//rs/nns/test_utils",
-        "//rs/registry/fake",
-        "//rs/registry/proto_data_provider",
+        "//rs/registry/local_store",
+        "//rs/registry/nns_data_provider",
         "//rs/registry/transport",
         "//rs/test_utilities/logger",
-        "//rs/types/types_test_utils",
+        "//rs/types/types",
         "@crate_index//:candid",
         "@crate_index//:rand",
+        "@crate_index//:tempfile",
+        "@crate_index//:tokio",
+        "@crate_index//:tokio-util",
+        "@crate_index//:url",
     ],
 )
