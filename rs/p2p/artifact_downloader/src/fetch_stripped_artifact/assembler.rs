@@ -25,7 +25,7 @@ use ic_types::{
     batch::IngressPayload,
     consensus::{
         BlockProposal, ConsensusMessage,
-        idkg::{IDkgArtifactId, IDkgMessage, IDkgObject},
+        idkg::{IDkgArtifactId, IDkgMessage},
     },
     crypto::{
         BasicSigOf, Signed,

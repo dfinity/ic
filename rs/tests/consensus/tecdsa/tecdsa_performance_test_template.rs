@@ -66,7 +66,6 @@ use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::canister_agent::HasCanisterAgentCapability;
 use ic_system_test_driver::canister_requests;
 use ic_system_test_driver::driver::group::SystemTestGroup;
-use ic_system_test_driver::driver::simulate_network::ProductionSubnetTopology;
 use ic_system_test_driver::driver::test_env_api::HasPublicApiUrl;
 use ic_system_test_driver::driver::{
     farm::HostFeature,
@@ -207,7 +206,7 @@ pub fn setup(env: TestEnv) {
                         .collect(),
                     signature_request_timeout_ns: None,
                     idkg_key_rotation_period_ms: None,
-                    max_parallel_pre_signature_transcripts_in_creation: Some(20),
+                    max_parallel_pre_signature_transcripts_in_creation: Some(18),
                 })
                 .add_nodes(NODES_COUNT),
         )

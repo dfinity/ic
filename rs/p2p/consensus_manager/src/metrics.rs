@@ -41,6 +41,7 @@ pub(crate) struct ConsensusManagerMetrics {
     pub send_view_send_to_peer_delivered_total: IntCounter,
     pub send_view_send_to_peer_cancelled_total: IntCounter,
     pub send_view_resend_reconnect_total: IntCounter,
+    pub send_view_transmitted_bytes: Histogram,
 
     // Available slot set
     pub slot_set_in_use_slots: IntGauge,
@@ -236,6 +237,15 @@ impl ConsensusManagerMetrics {
                     "ic_consensus_manager_send_view_resend_reconnect_total",
                     "Artifact was sent again due to reconnection.",
                     const_labels.clone(),
+                ))
+                .unwrap(),
+            ),
+            send_view_transmitted_bytes: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "ic_consensus_manager_send_view_transmitted_bytes",
+                    "Size of transmitted artifact payloads in bytes.",
+                    decimal_buckets(2, 8),
+                    const_labels_string.clone(),
                 ))
                 .unwrap(),
             ),

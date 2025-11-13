@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
     artifact::IdentifiableArtifact,
