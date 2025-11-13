@@ -68,7 +68,7 @@ go_deps.bzl               @dfinity/idx
 
 # [IC-OS]
 /ic-os/                                                                 @dfinity/node
-/ic-os/components/ic/share/ic-boundary.env                              @dfinity/boundary-node @dfinity/node
+/ic-os/components/ic/share/ic-boundary.env                              @dfinity/node
 /toolchains/                                                            @dfinity/node
 
 # [metrics-proxy]
@@ -111,7 +111,7 @@ go_deps.bzl               @dfinity/idx
 /rs/bitcoin/service/                                    @dfinity/consensus
 /rs/bitcoin/replica_types/                              @dfinity/team-dsm
 /rs/bitcoin/validation                                  @dfinity/consensus @dfinity/team-dsm
-/rs/boundary_node/                                      @dfinity/boundary-node
+/rs/boundary_node/                                      @dfinity/node
 /rs/canister_client/                                    @dfinity/consensus
 /rs/canister_sandbox/                                   @dfinity/team-dsm
 /rs/canonical_state/                                    @dfinity/team-dsm
@@ -254,7 +254,7 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/testnets/                                     @dfinity/idx
 /rs/tests/testnets/nns_recovery.rs                      @dfinity/consensus
 /rs/tests/driver/src/driver/simulate_network.rs         @dfinity/consensus @dfinity/idx
-/rs/tests/boundary_nodes/                               @dfinity/boundary-node
+/rs/tests/boundary_nodes/                               @dfinity/node
 /rs/tests/ckbtc/                                        @dfinity/cross-chain-team
 /rs/tests/consensus/                                    @dfinity/consensus
 /rs/tests/cross_chain/                                  @dfinity/cross-chain-team
