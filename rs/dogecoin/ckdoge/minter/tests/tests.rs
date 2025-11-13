@@ -1,7 +1,8 @@
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::{RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError};
 use ic_ckdoge_minter_test_utils::{
-    DOGECOIN_ADDRESS_1, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, assert_trap,
+    DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
+    assert_trap, utxo_with_value,
 };
 use std::array;
 use std::time::Duration;
@@ -46,10 +47,31 @@ fn should_fail_withdrawal() {
             },
         ),
         Err(RetrieveDogeWithApprovalError::InsufficientAllowance { allowance: 0 })
-    )
+    );
 
-    // TODO XC-495: create sufficient allowance (which requires funds to pay for the ledger fee)
-    // and test failure when insufficient funds
+    setup
+        .deposit_flow()
+        .minter_get_dogecoin_deposit_address(USER_PRINCIPAL)
+        .dogecoin_simulate_transaction(utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT))
+        .minter_update_balance()
+        .expect_mint();
+    let _ledger_approval_index = setup
+        .ledger()
+        .icrc2_approve(USER_PRINCIPAL, RETRIEVE_DOGE_MIN_AMOUNT, minter.id())
+        .unwrap();
+
+    assert_eq!(
+        minter.retrieve_doge_with_approval(
+            USER_PRINCIPAL,
+            &RetrieveDogeWithApprovalArgs {
+                amount: RETRIEVE_DOGE_MIN_AMOUNT,
+                ..correct_withdrawal_args.clone()
+            },
+        ),
+        Err(RetrieveDogeWithApprovalError::InsufficientFunds {
+            balance: RETRIEVE_DOGE_MIN_AMOUNT - LEDGER_TRANSFER_FEE
+        })
+    );
 }
 
 mod get_doge_address {
@@ -128,88 +150,101 @@ mod get_doge_address {
 }
 
 mod deposit {
-    use candid::Principal;
-    use ic_ckdoge_minter::{
-        EventType, MintMemo, OutPoint, UpdateBalanceArgs, Utxo, UtxoStatus,
-        candid_api::GetDogeAddressArgs, memo_encode,
+    use ic_ckdoge_minter_test_utils::{
+        LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL, utxo_with_value,
     };
-    use ic_ckdoge_minter_test_utils::{Setup, USER_PRINCIPAL, txid};
     use icrc_ledger_types::icrc1::account::Account;
-    use icrc_ledger_types::icrc1::transfer::Memo;
-    use icrc_ledger_types::icrc3::transactions::Mint;
 
     #[test]
     fn should_mint_ckdoge() {
         let setup = Setup::default();
-        let minter = setup.minter();
-        let ledger = setup.ledger();
-        let dogecoin = setup.dogecoin();
         let account = Account {
             owner: USER_PRINCIPAL,
             subaccount: Some([42_u8; 32]),
         };
 
-        let deposit_address = minter.get_doge_address(
-            Principal::anonymous(),
-            &GetDogeAddressArgs {
-                owner: Some(account.owner),
-                subaccount: account.subaccount,
-            },
-        );
+        setup
+            .deposit_flow()
+            .minter_get_dogecoin_deposit_address(account)
+            .dogecoin_simulate_transaction(utxo_with_value(
+                RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE,
+            ))
+            .minter_update_balance()
+            .expect_mint();
+    }
+}
 
-        let utxo = Utxo {
-            height: 0,
-            outpoint: OutPoint {
-                txid: txid(),
-                vout: 1,
-            },
-            value: 1_000_000_000,
+mod withdrawal {
+    use ic_ckdoge_minter::candid_api::RetrieveDogeWithApprovalError;
+    use ic_ckdoge_minter_test_utils::{
+        DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
+        utxo_with_value,
+    };
+    use icrc_ledger_types::icrc1::account::Account;
+    use std::array;
+
+    #[test]
+    fn should_withdraw_doge() {
+        let setup = Setup::default();
+        let dogecoin = setup.dogecoin();
+        let fee_percentiles = array::from_fn(|i| i as u64);
+        let median_fee = fee_percentiles[50];
+        assert_eq!(median_fee, 50);
+        dogecoin.set_fee_percentiles(fee_percentiles);
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
         };
-        dogecoin.simulate_transaction(utxo.clone(), deposit_address);
+        let utxo = utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE);
 
-        let utxo_status = minter
-            .update_balance(
-                account.owner,
-                &UpdateBalanceArgs {
-                    owner: Some(account.owner),
-                    subaccount: account.subaccount,
-                },
-            )
-            .unwrap();
-        assert_eq!(
-            utxo_status,
-            vec![UtxoStatus::Minted {
-                block_index: 0,
-                minted_amount: utxo.value,
-                utxo: utxo.clone(),
-            }]
-        );
+        setup
+            .deposit_flow()
+            .minter_get_dogecoin_deposit_address(account)
+            .dogecoin_simulate_transaction(utxo.clone())
+            .minter_update_balance()
+            .expect_mint();
 
-        ledger
-            .assert_that_transaction(0_u64)
-            .equals_mint_ignoring_timestamp(Mint {
-                amount: utxo.value.into(),
-                to: account,
-                memo: Some(Memo::from(memo_encode(&MintMemo::Convert {
-                    txid: Some(utxo.outpoint.txid.as_ref()),
-                    vout: Some(utxo.outpoint.vout),
-                    kyt_fee: Some(0),
-                }))),
-                created_at_time: None,
-                fee: None,
-            });
+        setup
+            .withdrawal_flow()
+            .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT)
+            .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
+            .expect_withdrawal_request_accepted()
+            .dogecoin_await_transaction(vec![utxo])
+            .verify_withdrawal_transaction()
+    }
 
-        minter.assert_that_events().contains_only_once_in_order(&[
-            EventType::CheckedUtxoV2 {
-                utxo: utxo.clone(),
-                account,
-            },
-            EventType::ReceivedUtxos {
-                mint_txid: Some(0),
-                to_account: account,
-                utxos: vec![utxo],
-            },
-        ]);
+    #[test]
+    fn should_fail_to_withdraw_when_ledger_stopped() {
+        let setup = Setup::default();
+        let dogecoin = setup.dogecoin();
+        let fee_percentiles = array::from_fn(|i| i as u64);
+        let median_fee = fee_percentiles[50];
+        assert_eq!(median_fee, 50);
+        dogecoin.set_fee_percentiles(fee_percentiles);
+        let account = Account {
+            owner: USER_PRINCIPAL,
+            subaccount: Some([42_u8; 32]),
+        };
+        let utxo = utxo_with_value(RETRIEVE_DOGE_MIN_AMOUNT + LEDGER_TRANSFER_FEE);
+
+        setup
+            .deposit_flow()
+            .minter_get_dogecoin_deposit_address(account)
+            .dogecoin_simulate_transaction(utxo.clone())
+            .minter_update_balance()
+            .expect_mint();
+
+        let withdrawal_flow = setup
+            .withdrawal_flow()
+            .ledger_approve_minter(account, RETRIEVE_DOGE_MIN_AMOUNT);
+
+        setup.ledger().stop();
+
+        withdrawal_flow
+            .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
+            .expect_error_matching(|e| {
+                matches!(e, RetrieveDogeWithApprovalError::TemporarilyUnavailable(_))
+            })
     }
 }
 

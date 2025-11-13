@@ -1,6 +1,6 @@
 use crate::external_canister_types::{
-    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, GoogleOpenIdConfig,
-    InternetIdentityInit, NnsDappCanisterArguments, RateLimitConfig, SnsAggregatorConfig,
+    CaptchaConfig, CaptchaTrigger, CyclesLedgerArgs, CyclesLedgerConfig, InternetIdentityInit,
+    NnsDappCanisterArguments, OpenIdConfig, RateLimitConfig, SnsAggregatorConfig,
     StaticCaptchaTrigger,
 };
 use crate::state_api::routes::into_api_response;
@@ -428,7 +428,6 @@ pub(crate) struct CanisterHttp {
 pub(crate) struct Subnet {
     pub state_machine: Arc<StateMachine>,
     pub canister_http: Arc<Mutex<CanisterHttp>>,
-    delegation_from_nns: watch::Sender<Option<NNSDelegationBuilder>>,
     _canister_http_adapter_parts: CanisterHttpAdapterParts,
 }
 
@@ -446,15 +445,13 @@ impl Subnet {
             https_outcalls_uds_path: Some(uds_path),
             ..Default::default()
         };
-        let (nns_delegation_tx, nns_delegation_rx) = watch::channel(None);
         let client = setup_canister_http_client(
             state_machine.runtime.handle().clone(),
             &state_machine.metrics_registry,
             adapter_config,
-            state_machine.query_handler.lock().unwrap().clone(),
+            state_machine.transform_handler.lock().unwrap().clone(),
             MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             state_machine.replica_logger.clone(),
-            NNSDelegationReader::new(nns_delegation_rx, state_machine.replica_logger.clone()),
         );
         let canister_http = Arc::new(Mutex::new(CanisterHttp {
             client: Arc::new(Mutex::new(client)),
@@ -463,23 +460,12 @@ impl Subnet {
         Self {
             state_machine,
             canister_http,
-            delegation_from_nns: nns_delegation_tx,
             _canister_http_adapter_parts: canister_http_adapter_parts,
         }
     }
 
     fn get_subnet_id(&self) -> SubnetId {
         self.state_machine.get_subnet_id()
-    }
-
-    fn set_delegation_from_nns(&self, delegation_from_nns: CertificateDelegation) {
-        let builder = NNSDelegationBuilder::try_new(
-            delegation_from_nns.certificate,
-            self.get_subnet_id(),
-            &self.state_machine.replica_logger,
-        )
-        .unwrap();
-        self.delegation_from_nns.send(Some(builder)).unwrap();
     }
 }
 
@@ -933,16 +919,6 @@ impl PocketIcSubnets {
         for subnet in self.subnets.get_all() {
             subnet.state_machine.set_time(time);
             subnet.state_machine.execute_round();
-        }
-
-        // Fetch the NNS delegation for the newly created subnet.
-        // This can only be done after updating the registry and executing
-        // a round on the NNS subnet (above).
-        let nns_subnet = self.get_nns().unwrap();
-        if subnet_id != nns_subnet.get_subnet_id() {
-            let delegation = nns_subnet.get_delegation_for_subnet(subnet_id).unwrap();
-            let subnet = self.subnets.get_subnet(subnet_id).unwrap();
-            subnet.set_delegation_from_nns(delegation);
         }
 
         let subnet_config = SubnetConfigInternal {
@@ -1911,9 +1887,6 @@ impl PocketIcSubnets {
             // `dfx canister call rdmx6-jaaaa-aaaaa-aaadq-cai config --ic`:
             //     record {
             //       fetch_root_key = null;
-            //       openid_google = opt opt record {
-            //         client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
-            //       };
             //       is_production = opt true;
             //       enable_dapps_explorer = opt false;
             //       assigned_user_number_range = opt record {
@@ -1924,7 +1897,7 @@ impl PocketIcSubnets {
             //       archive_config = opt record {
             //         polling_interval_ns = 15_000_000_000 : nat64;
             //         entries_buffer_limit = 10_000 : nat64;
-            //         module_hash = blob "\4e\84\31\f2\c0\1c\32\ac\ed\21\43\9e\8a\97\ea\0a\be\22\4a\f8\18\89\58\a4\77\ea\df\ad\46\e6\90\fb";
+            //         module_hash = blob "\f5\59\00\84\1f\c3\d6\3d\58\01\c1\b6\65\c3\34\6b\c4\8c\58\24\ba\84\3f\55\6a\26\22\6b\60\2f\79\5e";
             //         entries_fetch_limit = 1_000 : nat16;
             //       };
             //       canister_creation_cycles_cost = opt (0 : nat64);
@@ -1936,15 +1909,44 @@ impl PocketIcSubnets {
             //           api_host = null;
             //         }
             //       };
-            //       feature_flag_enable_generic_open_id_fe = null;
             //       related_origins = opt vec {
             //         "https://id.ai";
             //         "https://identity.ic0.app";
             //         "https://identity.internetcomputer.org";
             //         "https://identity.icp0.io";
             //       };
-            //       feature_flag_continue_from_another_device = opt true;
-            //       openid_configs = null;
+            //       openid_configs = opt vec {
+            //         record {
+            //           auth_uri = "https://accounts.google.com/o/oauth2/v2/auth";
+            //           jwks_uri = "https://www.googleapis.com/oauth2/v3/certs";
+            //           logo = "<svg viewBox=\"0 0 24 24\"><path d=\"M12.19 2.83A9.15 9.15 0 0 0 4 16.11c1.5 3 4.6 5.06 8.18 5.06 2.47 0 4.55-.82 6.07-2.22a8.95 8.95 0 0 0 2.73-6.74c0-.65-.06-1.28-.17-1.88h-8.63v3.55h4.93a4.23 4.23 0 0 1-1.84 2.76c-3.03 2-7.12.55-8.22-2.9h-.01a5.5 5.5 0 0 1 5.14-7.26 5 5 0 0 1 3.5 1.37l2.63-2.63a8.8 8.8 0 0 0-6.13-2.39z\" style=\"fill: currentColor;\"></path></svg>";
+            //           name = "Google";
+            //           fedcm_uri = opt "";
+            //           issuer = "https://accounts.google.com";
+            //           auth_scope = vec { "openid"; "profile"; "email" };
+            //           client_id = "775077467414-rgoesk3egruq26c61s6ta8bpjetjqvgo.apps.googleusercontent.com";
+            //         };
+            //         record {
+            //           auth_uri = "https://appleid.apple.com/auth/authorize";
+            //           jwks_uri = "https://appleid.apple.com/auth/keys";
+            //           logo = "<svg viewBox=\"0 0 24 24\"><path d=\"M14.8 3.2c1-1.2 1.2-2.7 1-3.2-1 0-2.2.7-2.9 1.5-.9 1.2-1.1 2.6-.9 3 .6.2 2-.3 2.8-1.3ZM9.2 20c1.2 0 1.6-.8 3.2-.8 1.5 0 1.8.8 3.1.8s2.3-1.2 3-2.5c1-1.4 1.3-2.8 1.4-2.8 0 0-2.6-1.2-2.6-4.1 0-2.5 2-3.7 2.1-3.8a4.5 4.5 0 0 0-3.9-2c-1.4 0-2.6.8-3.4.8-.8 0-1.9-.8-3.2-.8-2.3 0-4.8 2-4.8 6 0 2.3 1 4.8 2 6.5 1 1.5 1.9 2.7 3 2.7Z\" style=\"fill: currentColor;\"></path></svg>";
+            //           name = "Apple";
+            //           fedcm_uri = opt "";
+            //           issuer = "https://appleid.apple.com";
+            //           auth_scope = vec { "openid" };
+            //           client_id = "ai.id.auth";
+            //         };
+            //         record {
+            //           auth_uri = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
+            //           jwks_uri = "https://login.microsoftonline.com/common/discovery/v2.0/keys";
+            //           logo = "<svg viewBox=\"0 0 24 24\"><path d=\"M2.5 2.5h9v9h-9zm10 0h9v9h-9zm-10 10h9v9h-9zm10 0h9v9h-9z\" style=\"fill: currentColor;\"></path></svg>";
+            //           name = "Microsoft";
+            //           fedcm_uri = opt "";
+            //           issuer = "https://login.microsoftonline.com/{tid}/v2.0";
+            //           auth_scope = vec { "openid"; "profile"; "email" };
+            //           client_id = "80d5203e-9ba2-4acf-97a1-88d926a0bbbf";
+            //         };
+            //       };
             //       captcha_config = opt record {
             //         max_unsolved_captchas = 500 : nat64;
             //         captcha_trigger = variant { Static = variant { CaptchaDisabled } };
@@ -1962,11 +1964,16 @@ impl PocketIcSubnets {
             let openid_google = if self.auto_progress_enabled {
                 // We use a different id than in production:
                 // https://github.com/dfinity/internet-identity/blob/22d1d7659f0832d010aba7c84948c42bc771af0d/dfx.json#L8
-                Some(Some(GoogleOpenIdConfig {
-                    client_id:
-                        "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com"
-                            .to_string(),
-                }))
+                Some(vec![OpenIdConfig {
+                  name: "Google".to_string(),
+                  logo: "<svg viewBox=\"0 0 24 24\"><path d=\"M12.19 2.83A9.15 9.15 0 0 0 4 16.11c1.5 3 4.6 5.06 8.18 5.06 2.47 0 4.55-.82 6.07-2.22a8.95 8.95 0 0 0 2.73-6.74c0-.65-.06-1.28-.17-1.88h-8.63v3.55h4.93a4.23 4.23 0 0 1-1.84 2.76c-3.03 2-7.12.55-8.22-2.9h-.01a5.5 5.5 0 0 1 5.14-7.26 5 5 0 0 1 3.5 1.37l2.63-2.63a8.8 8.8 0 0 0-6.13-2.39z\" style=\"fill: currentColor;\"></path></svg>".to_string(),
+                  issuer: "https://accounts.google.com".to_string(),
+                  client_id: "775077467414-q1ajffledt8bjj82p2rl5a09co8cf4rf.apps.googleusercontent.com".to_string(),
+                  jwks_uri: "https://www.googleapis.com/oauth2/v3/certs".to_string(),
+                  auth_uri: "https://accounts.google.com/o/oauth2/v2/auth".to_string(),
+                  auth_scope: vec!["openid".to_string(), "profile".to_string(), "email".to_string()],
+                  fedcm_uri: Some("".to_string()),
+                }])
             } else {
                 None
             };
@@ -1982,12 +1989,11 @@ impl PocketIcSubnets {
                     max_unsolved_captchas: 500,
                     captcha_trigger: CaptchaTrigger::Static(StaticCaptchaTrigger::CaptchaDisabled),
                 }),
-                related_origins: None,  // DIFFERENT FROM ICP MAINNET
-                new_flow_origins: None, // DIFFERENT FROM ICP MAINNET
-                openid_google,          // DIFFERENT FROM ICP MAINNET
-                openid_configs: None,
-                analytics_config: None,     // DIFFERENT FROM ICP MAINNET
-                fetch_root_key: Some(true), // DIFFERENT FROM ICP MAINNET
+                related_origins: None,         // DIFFERENT FROM ICP MAINNET
+                new_flow_origins: None,        // DIFFERENT FROM ICP MAINNET
+                openid_configs: openid_google, // DIFFERENT FROM ICP MAINNET
+                analytics_config: None,        // DIFFERENT FROM ICP MAINNET
+                fetch_root_key: Some(true),    // DIFFERENT FROM ICP MAINNET
                 enable_dapps_explorer: Some(false),
                 is_production: Some(false), // DIFFERENT FROM ICP MAINNET
                 dummy_auth: Some(None),
@@ -3249,14 +3255,6 @@ fn process_mock_canister_https_response(
     };
     let timeout = context.time + Duration::from_secs(5 * 60);
     let canister_id = context.request.sender;
-    let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
-    let builder = delegation.map(|delegation| {
-        NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &subnet.replica_logger)
-            .unwrap()
-    });
-    let (_, delegation_rx) = watch::channel(builder);
-    let nns_delegation_reader =
-        NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone());
 
     let response_to_content = |response: &CanisterHttpResponse| match response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
@@ -3277,10 +3275,9 @@ fn process_mock_canister_https_response(
             let mut client = CanisterHttpAdapterClientImpl::new(
                 pic.runtime.handle().clone(),
                 grpc_channel,
-                subnet.query_handler.lock().unwrap().clone(),
+                subnet.transform_handler.lock().unwrap().clone(),
                 1,
                 MetricsRegistry::new(),
-                nns_delegation_reader.clone(),
                 subnet.replica_logger.clone(),
             );
             client

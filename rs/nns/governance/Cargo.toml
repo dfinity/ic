@@ -27,6 +27,7 @@ build-info = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 candid = { workspace = true }
+chrono = { workspace = true }
 cycles-minting-canister = { path = "../cmc" }
 dyn-clone = "1.0.14"
 futures = { workspace = true }
@@ -47,6 +48,7 @@ ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/
 ic-nervous-system-common-validation = { path = "../../nervous_system/common/validation" }
 ic-nervous-system-governance = { path = "../../nervous_system/governance" }
 ic-nervous-system-linear-map = { path = "../../nervous_system/linear_map" }
+ic-nervous-system-lock = { path = "../../nervous_system/lock" }
 ic-nervous-system-long-message = { path = "../../nervous_system/long_message" }
 ic-nervous-system-timer-task = { path = "../../nervous_system/timer_task" }
 ic-nervous-system-rate-limits = { path = "../../nervous_system/rate_limits" }

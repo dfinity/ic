@@ -187,6 +187,7 @@ use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use itertools::Itertools;
 use prost::Message;
+use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, debug, info, warn};
 use ssh2::Session;
@@ -1477,13 +1478,18 @@ pub trait SshSession: HasTestEnv {
             .context("Failed to get SSH session")
     }
 
-    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    /// Convenience wrapper for `block_on_ssh_session_with_timeout` with a default timeout.
     fn block_on_ssh_session(&self) -> Result<Session> {
+        self.block_on_ssh_session_with_timeout(SSH_RETRY_TIMEOUT)
+    }
+
+    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    fn block_on_ssh_session_with_timeout(&self, timeout: Duration) -> Result<Session> {
         let ip = self.get_host_ip()?;
         retry_with_msg!(
             format!("get_ssh_session to {ip}"),
             self.test_env().logger(),
-            SSH_RETRY_TIMEOUT,
+            timeout,
             RETRY_BACKOFF,
             || { self.get_ssh_session() }
         )
@@ -1825,6 +1831,7 @@ pub struct NnsCustomizations {
     pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
     pub neurons: Option<Vec<Neuron>>,
     pub install_at_ids: bool,
+    pub registry_canister_init_payload: RegistryCanisterInitPayload,
 }
 
 impl NnsCustomizations {
@@ -2322,6 +2329,7 @@ pub async fn install_nns_canisters(
         install_at_ids,
         ledger_balances,
         neurons,
+        mut registry_canister_init_payload,
     } = nns_installation_builder.customizations.clone();
 
     let mut init_payloads = NnsInitPayloadsBuilder::new();
@@ -2373,7 +2381,40 @@ pub async fn install_nns_canisters(
 
     let registry_local_store = ic_prep_state_dir.registry_local_store_path();
     let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
-    init_payloads.with_initial_mutations(initial_mutations);
+    if !registry_canister_init_payload.mutations.is_empty() {
+        panic!(
+            "Provided registry canister init payload via NnsCustomizations weren't empty! These will be overriden by local store registry mutations"
+        );
+    }
+    registry_canister_init_payload.mutations = initial_mutations;
+    init_payloads.registry = {
+        let mut builder = RegistryCanisterInitPayloadBuilder::new();
+
+        for mutation in registry_canister_init_payload.mutations {
+            builder.push_init_mutate_request(mutation);
+        }
+
+        if registry_canister_init_payload
+            .is_swapping_feature_enabled
+            .unwrap_or_default()
+        {
+            builder.enable_swapping_feature_globally();
+        }
+        for caller in registry_canister_init_payload
+            .swapping_whitelisted_callers
+            .unwrap_or_default()
+        {
+            builder.whitelist_swapping_feature_caller(caller);
+        }
+        for subnet in registry_canister_init_payload
+            .swapping_enabled_subnets
+            .unwrap_or_default()
+        {
+            builder.enable_swapping_feature_for_subnet(subnet);
+        }
+
+        builder
+    };
 
     let agent = InternalAgent::new(
         url,
