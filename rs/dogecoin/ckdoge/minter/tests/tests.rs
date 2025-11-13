@@ -285,28 +285,28 @@ mod withdrawal {
         assert_eq!(median_fee, 50);
         dogecoin.set_fee_percentiles(fee_percentiles);
 
-        // Finalize oldest transaction
         deposit_and_withdraw(&setup, 42)
             .minter_await_resubmission()
             .minter_await_finalized_transaction_by(|sent| {
                 assert_eq!(sent.len(), 2);
+                // Finalize the oldest transaction, the first one that was sent.
                 &sent[0]
             });
 
-        // Finalize newest transaction
         deposit_and_withdraw(&setup, 43)
             .minter_await_resubmission()
             .minter_await_finalized_transaction_by(|sent| {
                 assert_eq!(sent.len(), 2);
+                // Finalize the newest transaction, the last one that was sent.
                 &sent[1]
             });
 
-        // Finalize middle transaction
         deposit_and_withdraw(&setup, 44)
             .minter_await_resubmission()
             .minter_await_resubmission()
             .minter_await_finalized_transaction_by(|sent| {
                 assert_eq!(sent.len(), 3);
+                // Finalize the middle transaction, the second one (out-of-3) that was sent.
                 &sent[1]
             });
     }
