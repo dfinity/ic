@@ -205,7 +205,7 @@ impl LookupTable {
                     return None;
                 }
 
-                // Find the earliest entry whose distance to the last entry is >= MAX_RANGE_SIZE
+                // Find the earliest entry whose distance to the last entry is >= MAX_RANGE_SIZE.
                 let idx = lower_bound_by_min_distance(&entries, self.data_capacity, MAX_RANGE_SIZE);
                 let start = if idx < entries.len() {
                     entries[idx].position
