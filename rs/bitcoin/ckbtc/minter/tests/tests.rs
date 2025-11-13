@@ -147,14 +147,23 @@ fn assert_reply(result: WasmResult) -> Vec<u8> {
     }
 }
 
-fn input_utxos(tx: &bitcoin::Transaction) -> Vec<bitcoin::OutPoint> {
-    tx.input.iter().map(|txin| txin.previous_output).collect()
-}
-
 fn assert_replacement_transaction(old: &bitcoin::Transaction, new: &bitcoin::Transaction) {
+    fn input_utxos(tx: &bitcoin::Transaction) -> Vec<bitcoin::OutPoint> {
+        tx.input.iter().map(|txin| txin.previous_output).collect()
+    }
+
+    fn output_script_pubkey(
+        tx: &bitcoin::Transaction,
+    ) -> BTreeSet<&bitcoin::blockdata::script::Script> {
+        tx.output
+            .iter()
+            .map(|output| &output.script_pubkey)
+            .collect()
+    }
+
     assert_ne!(old.txid(), new.txid());
     assert_eq!(input_utxos(old), input_utxos(new));
-    //TODO Also check output scripts?
+    assert_eq!(output_script_pubkey(old), output_script_pubkey(new));
 
     let new_out_value = new.output.iter().map(|out| out.value).sum::<u64>();
     let prev_out_value = old.output.iter().map(|out| out.value).sum::<u64>();
