@@ -259,6 +259,7 @@ where
             .map(|output| (parse_dogecoin_address(network, output), output))
             .collect();
         assert_eq!(outputs.len(), tx.output.len());
+        assert!(outputs.len() >= 2);
 
         let beneficiary_output = outputs
             .get(
@@ -269,7 +270,11 @@ where
             )
             .expect("BUG: missing output to beneficiary");
         assert_eq!(
-            outputs.get(&minter_address).unwrap().value.to_sat(),
+            outputs
+                .get(&minter_address)
+                .expect("BUG: missing change output")
+                .value
+                .to_sat(),
             change_amount
         );
 
