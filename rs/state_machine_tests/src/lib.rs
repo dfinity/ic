@@ -108,7 +108,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
     canister_state::{
-        NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
+        NextExecution, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
         system_state::{CanisterHistory, CyclesUseCase},
     },
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
@@ -2617,7 +2617,7 @@ impl StateMachine {
     /// `max_ticks` iterations.
     pub fn run_until_completion(&self, max_ticks: usize) {
         for _tick in 0..max_ticks {
-            if !self.has_canister_messages() {
+            if !self.has_inflight_messages() {
                 return;
             }
             self.tick();
@@ -2625,15 +2625,18 @@ impl StateMachine {
         panic!("The state machine did not reach completion after {max_ticks} ticks");
     }
 
-    /// Checks whether the state maching has any in-flight messages (in ingress
-    /// queues, canister queues, streams or refund pool).
-    pub fn has_canister_messages(&self) -> bool {
+    /// Checks whether the state machine has any in-flight messages (paused, in
+    /// ingress queues, canister queues, streams or refund pool).
+    pub fn has_inflight_messages(&self) -> bool {
         let state = self.state_manager.get_latest_state().take();
-        state
-            .canisters_iter()
-            .any(|canister| canister.has_input() || canister.has_output())
-            || state.subnet_queues().has_input()
+        state.canisters_iter().any(|canister| {
+            canister.has_input()
+                || canister.has_output()
+                // We're assuming no heartbeat.
+                || canister.next_execution() != NextExecution::None
+        }) || state.subnet_queues().has_input()
             || state.subnet_queues().has_output()
+            // Should also look at the `SubnetCallContextManager`, but that's likely overkill.
             || !state.refunds().is_empty()
             || state
                 .streams()

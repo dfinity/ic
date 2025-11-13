@@ -42,7 +42,7 @@ impl std::fmt::Debug for Call {
             .field("reply_bytes", &self.reply_bytes)
             .field("cycles", &self.cycles)
             .field("timeout_secs", &self.timeout_secs)
-            .field("downstream_calls_count", &self.downstream_calls.len())
+            .field("downstream_calls", &self.downstream_calls)
             .finish()
     }
 }

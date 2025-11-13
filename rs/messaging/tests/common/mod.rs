@@ -165,8 +165,8 @@ impl TestSubnet {
 
     /// Checks whether the subnet has any in-flight messages (in ingress queues,
     /// canister queues, streams or refund pool).
-    pub fn has_canister_messages(&self) -> bool {
-        self.env.has_canister_messages()
+    pub fn has_inflight_messages(&self) -> bool {
+        self.env.has_inflight_messages()
     }
 
     /// Retains only calls that have not yet completed, according to the ingress

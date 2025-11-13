@@ -335,11 +335,11 @@ fn test_memory_accounting_and_sequence_errors(
 /// magnitude larger than the cost of making and executing the actual calls) and
 /// check that after all calls have completed, the canisters' total balance
 /// returns to the initial amount (modulo the costs of the calls themselves).
-#[test_strategy::proptest(ProptestConfig::with_cases(3))]
+#[test_strategy::proptest(ProptestConfig::with_cases(3), max_shrink_iters = 0)]
 fn test_guaranteed_refunds(
     #[strategy(arb_test_subnets(MEMORY_ACCOUNTING_CONFIG.clone(), TestSubnetConfig {
         canisters_count: 2,  // Local and remote calls.
-        max_instructions_per_round: 1_000_000,  // Build up a backlog of calls.
+        max_instructions_per_round: 10_000,  // Build up a backlog of calls.
         ..TestSubnetConfig::default()
     }))]
     setup: TestSubnetSetup,
@@ -351,8 +351,8 @@ fn test_guaranteed_refunds(
             call_bytes_range: 0..=0,  // Don't care about payloads.
             reply_bytes_range: 0..=0,
             best_effort_percentage: 90,  // Throw in some guaranteed calls, just in case.
-            timeout_secs_range: 1..=10,  // Make sure that at least some calls time out.
-            downstream_calls_percentage: 66,
+            timeout_secs_range: 1..=50,  // Make sure that at least some calls time out.
+            downstream_calls_percentage: 50,
             downstream_calls_count_range: 1..=3,
             call_tree_size: 10,
         }
@@ -377,7 +377,7 @@ fn test_guaranteed_refunds(
         .collect();
 
     // Execute rounds on both subnets; check memory accounting in each iteration.
-    while !msg_ids.is_empty() || subnet1.has_canister_messages() || subnet2.has_canister_messages()
+    while !msg_ids.is_empty() || subnet1.has_inflight_messages() || subnet2.has_inflight_messages()
     {
         subnet1.execute_round();
         subnet2.execute_round();
