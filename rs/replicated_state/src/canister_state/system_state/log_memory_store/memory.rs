@@ -129,8 +129,26 @@ impl Add<MemorySize> for MemoryPosition {
     }
 }
 
+// size + pos = pos
+impl Add<MemoryPosition> for MemorySize {
+    type Output = MemoryPosition;
+
+    fn add(self, rhs: MemoryPosition) -> MemoryPosition {
+        MemoryPosition(self.0 + rhs.0)
+    }
+}
+
 // size - pos = size
 impl Sub<MemoryPosition> for MemorySize {
+    type Output = MemorySize;
+
+    fn sub(self, rhs: MemoryPosition) -> MemorySize {
+        MemorySize(self.0 - rhs.0)
+    }
+}
+
+// pos - pos = size
+impl Sub<MemoryPosition> for MemoryPosition {
     type Output = MemorySize;
 
     fn sub(self, rhs: MemoryPosition) -> MemorySize {

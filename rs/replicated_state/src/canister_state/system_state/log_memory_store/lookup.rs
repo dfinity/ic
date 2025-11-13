@@ -82,6 +82,8 @@ pub(crate) struct LookupTable {
     /// Updating this table happens when a new record is written, replacing or appending
     /// entries for the corresponding bucket.
     buckets: Vec<LookupEntry>,
+
+    data_capacity: MemorySize,
 }
 
 impl LookupTable {
@@ -91,14 +93,21 @@ impl LookupTable {
         data_capacity: MemorySize,
         bytes: &[u8],
     ) -> Self {
-        let max_count = (lookup_table_pages as usize * PAGE_SIZE) / BUCKET_SIZE;
+        let available_size = lookup_table_pages as usize * PAGE_SIZE;
+        let max_count = available_size / BUCKET_SIZE;
         let count = ((data_capacity.get() as usize) / BUCKET_SIZE).min(max_count);
+        let actual_size = count * LOOKUP_ENTRY_SIZE;
+        debug_assert!(actual_size <= available_size);
         let buckets = if bytes.is_empty() {
             vec![LookupEntry::invalid(); count]
         } else {
             to_entries(bytes)
         };
-        Self { front, buckets }
+        Self {
+            front,
+            buckets,
+            data_capacity,
+        }
     }
 
     pub fn buckets_len(&self) -> u16 {
@@ -121,7 +130,8 @@ impl LookupTable {
         }
     }
 
-    fn get_sorted_valid_entries(&self) -> Vec<LookupEntry> {
+    /// Returns all valid lookup entries since the front entry (included), sorted by index.
+    fn valid_entries_since_front(&self) -> Vec<LookupEntry> {
         let front = match self.front {
             None => return vec![], // No entries if front is None.
             Some(entry) => entry,
@@ -145,7 +155,7 @@ impl LookupTable {
     ) -> Option<(MemoryPosition, MemoryPosition)> {
         const MAX_RANGE_SIZE: MemorySize = MemorySize::new(2_000_000); // 2 MB
 
-        let entries = self.get_sorted_valid_entries();
+        let entries = self.valid_entries_since_front();
         if entries.is_empty() {
             return None;
         }
@@ -179,14 +189,6 @@ impl LookupTable {
         };
 
         let (start, end) = match filter {
-            None => {
-                // Return latest range limited by MAX_RANGE_BYTES.
-                // Use left fallback for start to avoid dropping earlier valid data.
-                let end = entries.last().unwrap().position;
-                let min_allowed_start = end.saturating_sub(MAX_RANGE_SIZE);
-                let start = find_start_by_key(min_allowed_start.get(), |e| e.position.get());
-                (start, end)
-            }
             Some(FetchCanisterLogsFilter::ByIdx(range)) => {
                 let start = find_start_by_key(range.start, |e| e.idx);
                 let end = find_end_by_key(range.end, |e| e.idx);
@@ -196,6 +198,24 @@ impl LookupTable {
                 let start = find_start_by_key(range.start, |e| e.ts_nanos);
                 let end = find_end_by_key(range.end, |e| e.ts_nanos);
                 (start, clamp_to_max_range(start, end))
+            }
+            None => {
+                // Return latest range limited by MAX_RANGE_BYTES.
+                if entries.is_empty() {
+                    return None;
+                }
+
+                // Find the earliest entry whose distance to the last entry is >= MAX_RANGE_SIZE
+                let idx = lower_bound_by_min_distance(&entries, self.data_capacity, MAX_RANGE_SIZE);
+                let start = if idx < entries.len() {
+                    entries[idx].position
+                } else {
+                    // No entry satisfies the distance — fall back to the earliest entry
+                    entries[0].position
+                };
+
+                let end = entries.last().unwrap().position;
+                (start, end)
             }
         };
         // If start == end they point to the same bucket which can have records,
@@ -229,4 +249,42 @@ pub(crate) fn to_entries(bytes: &[u8]) -> Vec<LookupEntry> {
     }
 
     entries
+}
+
+/// Find the smallest index `i` such that the forward distance from `entries[i].position`
+/// to `end` is **at least** `min_distance` — i.e., the first `i` where
+/// `dist_to_end(entries[i].position) >= min_distance`.
+///
+/// Returns `entries.len()` if no such index exists.
+pub(crate) fn lower_bound_by_min_distance(
+    entries: &[LookupEntry],
+    data_capacity: MemorySize,
+    min_distance: MemorySize,
+) -> usize {
+    if entries.is_empty() {
+        return 0;
+    }
+    let end = entries.last().unwrap().position;
+
+    // forward distance from `pos` to `end`, accounting for wrap-around
+    let dist_to_end = |pos: MemoryPosition| -> MemorySize {
+        if end >= pos {
+            end - pos // no wrap-around
+        } else {
+            (data_capacity + end) - pos // wrap-around
+        }
+    };
+
+    // classic lower_bound: find smallest i such that dist_to_end(entries[i].position) >= min_distance
+    let mut lo = 0;
+    let mut hi = entries.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        if dist_to_end(entries[mid].position) >= min_distance {
+            hi = mid;
+        } else {
+            lo = mid + 1;
+        }
+    }
+    lo
 }
