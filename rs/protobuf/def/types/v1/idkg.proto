@@ -298,15 +298,9 @@ message IDkgDealingSupport {
   types.v1.BasicSignature sig_share = 4;
 }
 
-message StrippedDealings {
-  registry.subnet.v1.IDkgTranscriptId transcript_id = 1;
-  repeated StrippedDealing dealing = 2;
-}
-
 message StrippedDealing {
   uint32 dealer_index = 1;
   PrefixPairIDkg dealing_id = 2;
-  repeated registry.subnet.v1.SignatureTuple support_tuples = 3;
 }
 
 message IDkgPrefix {

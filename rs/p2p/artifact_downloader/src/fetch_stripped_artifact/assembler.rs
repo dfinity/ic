@@ -12,15 +12,12 @@ use ic_logger::{ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{
     proxy::ProxyDecodeError,
-    registry::subnet::v1::{
-        IDkgDealing as IDkgDealingProto, IDkgSignedDealingTuple, SignatureTuple,
-        VerifiedIDkgDealing,
-    },
+    registry::subnet::v1::{IDkgDealing as IDkgDealingProto, IDkgSignedDealingTuple},
 };
 use ic_protobuf::{proxy::try_from_option_field, types::v1 as pb};
 use ic_quic_transport::Transport;
 use ic_types::{
-    CountBytes, NodeId, NodeIndex,
+    CountBytes, NodeId,
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
     batch::IngressPayload,
     consensus::{
@@ -28,14 +25,11 @@ use ic_types::{
         idkg::{IDkgArtifactId, IDkgMessage},
     },
     crypto::{
-        BasicSigOf, Signed,
-        canister_threshold_sig::idkg::{
-            BatchSignedIDkgDealing, IDkgDealing, IDkgTranscriptId, SignedIDkgDealing,
-        },
+        Signed,
+        canister_threshold_sig::idkg::{IDkgDealing, IDkgTranscriptId, SignedIDkgDealing},
     },
     messages::SignedIngress,
     node_id_into_protobuf,
-    signature::{BasicSignature, BasicSignatureBatch},
 };
 
 use crate::{FetchArtifact, fetch_stripped_artifact::download::download_stripped_message};
@@ -389,21 +383,7 @@ pub(crate) enum AssemblyError {
 struct BlockProposalAssembler {
     stripped_block_proposal: StrippedBlockProposal,
     ingress_messages: Vec<(SignedIngressId, Option<SignedIngress>)>,
-    signed_dealings: BTreeMap<
-        IDkgTranscriptId,
-        BTreeMap<
-            u32,
-            Signed<
-                DealingOrId,
-                BasicSignatureBatch<Signed<IDkgDealing, BasicSignature<IDkgDealing>>>,
-            >,
-        >,
-    >,
-}
-
-enum DealingOrId {
-    Dealing(SignedIDkgDealing),
-    ID(IDkgArtifactId),
+    signed_dealings: Vec<((u32, IDkgArtifactId), Option<SignedIDkgDealing>)>,
 }
 
 impl BlockProposalAssembler {
@@ -419,21 +399,7 @@ impl BlockProposalAssembler {
                 .stripped_dealings
                 .stripped_dealings
                 .iter()
-                .map(|(transcript_id, dealings)| {
-                    let dealings = dealings
-                        .iter()
-                        .map(|(index, dealing)| {
-                            (
-                                *index,
-                                Signed {
-                                    content: DealingOrId::ID(dealing.content.clone()),
-                                    signature: dealing.signature.clone(),
-                                },
-                            )
-                        })
-                        .collect();
-                    (transcript_id.clone(), dealings)
-                })
+                .map(|(index, dealing_id)| ((*index, dealing_id.clone()), None))
                 .collect(),
             stripped_block_proposal,
         }
@@ -455,11 +421,11 @@ impl BlockProposalAssembler {
         let dealings = self
             .signed_dealings
             .iter()
-            .flat_map(|(_, dealings)| dealings.values())
-            .filter_map(|dealing| match &dealing.content {
-                DealingOrId::Dealing(_) => None,
-                DealingOrId::ID(idkg_artifact_id) => {
-                    Some(StrippedMessageId::Dealing(idkg_artifact_id.clone()))
+            .filter_map(|((_, id), maybe_dealing)| {
+                if maybe_dealing.is_none() {
+                    Some(StrippedMessageId::Dealing(id.clone()))
+                } else {
+                    None
                 }
             });
 
@@ -495,38 +461,22 @@ impl BlockProposalAssembler {
         signed_dealing_id: IDkgArtifactId,
         signed_dealing: SignedIDkgDealing,
     ) -> Result<(), InsertionError> {
-        let IDkgArtifactId::Dealing(prefix, data) = &signed_dealing_id else {
+        let IDkgArtifactId::Dealing(_, _) = &signed_dealing_id else {
             return Err(InsertionError::NotNeeded);
         };
 
-        let transcript_id = IDkgTranscriptId::new(
-            data.get_ref().subnet_id,
-            prefix.get_ref().group_tag(),
-            data.get_ref().height,
-        );
-
-        // We can have at most 1000 elements in the vector, so it should be reasonably fast to do a
-        // linear scan here.
-        let dealings = self
+        let (_, dealing) = self
             .signed_dealings
-            .get_mut(&transcript_id)
+            .iter_mut()
+            .find(|((_, id), _maybe_dealing)| *id == signed_dealing_id)
             .ok_or(InsertionError::NotNeeded)?;
 
-        let dealing = dealings
-            .values_mut()
-            .find(|dealing| {
-                if let DealingOrId::ID(id) = &dealing.content
-                    && *id == signed_dealing_id
-                {
-                    true
-                } else {
-                    false
-                }
-            })
-            .ok_or(InsertionError::NotNeeded)?;
-
-        dealing.content = DealingOrId::Dealing(signed_dealing);
-        Ok(())
+        if dealing.is_some() {
+            Err(InsertionError::AlreadyInserted)
+        } else {
+            *dealing = Some(signed_dealing);
+            Ok(())
+        }
     }
 
     /// Tries to reassemble a block.
@@ -553,39 +503,32 @@ impl BlockProposalAssembler {
         let reconstructed_ingress_payload_proto =
             pb::IngressPayload::from(&reconstructed_ingress_payload);
 
-        let mut dealings = signed_dealings
-            .into_iter()
-            .map(|(transcript_id, dealings)| {
-                let dealings = dealings
-                    .into_iter()
-                    .map(|(index, dealing_batch)| {
-                        let dealing = match dealing_batch.content {
-                            DealingOrId::Dealing(dealing) => dealing,
-                            DealingOrId::ID(id) => return Err(AssemblyError::MissingDealing(id)),
-                        };
-                        Ok(verified_idkg_dealing_proto(
-                            index,
-                            Signed {
-                                content: dealing,
-                                signature: dealing_batch.signature.clone(),
-                            },
-                        ))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok((transcript_id.clone(), dealings))
-            })
-            .collect::<Result<BTreeMap<IDkgTranscriptId, Vec<_>>, _>>()?;
+        let mut dealings: BTreeMap<u64, BTreeMap<u32, SignedIDkgDealing>> = BTreeMap::new();
+        for ((dealer_index, dealing_id), signed_dealing) in signed_dealings {
+            let signed_dealing =
+                signed_dealing.ok_or_else(|| AssemblyError::MissingDealing(dealing_id.clone()))?;
+            let transcript_id = dealing_id.prefix().group_tag();
+            dealings
+                .entry(transcript_id)
+                .or_default()
+                .insert(dealer_index, signed_dealing);
+        }
 
         if let Some(block) = reconstructed_block_proposal_proto.value.as_mut() {
             block.ingress_payload = Some(reconstructed_ingress_payload_proto);
             if let Some(idkg) = block.idkg_payload.as_mut() {
                 for transcript in &mut idkg.idkg_transcripts {
-                    let transcript_id =
+                    let transcript_id: IDkgTranscriptId =
                         try_from_option_field(transcript.transcript_id.as_ref(), "transcript_id")
                             .unwrap();
-                    transcript.verified_dealings = dealings
-                        .remove(&transcript_id)
-                        .ok_or_else(|| AssemblyError::MissingTranscript(transcript_id))?
+                    for dealing in &mut transcript.verified_dealings {
+                        let found_dealing = dealings
+                            .get_mut(&transcript_id.id())
+                            .ok_or_else(|| AssemblyError::MissingTranscript(transcript_id))?
+                            .remove(&dealing.dealer_index)
+                            .ok_or_else(|| AssemblyError::MissingTranscript(transcript_id))?;
+                        dealing.signed_dealing_tuple = Some(idkg_dealing_proto(found_dealing));
+                    }
                 }
             }
         }
@@ -596,14 +539,7 @@ impl BlockProposalAssembler {
     }
 }
 
-fn verified_idkg_dealing_proto(
-    dealer_index: NodeIndex,
-    signed_dealing: BatchSignedIDkgDealing,
-) -> VerifiedIDkgDealing {
-    let Signed {
-        content: signed_dealing,
-        signature: batch_signature,
-    } = signed_dealing;
+fn idkg_dealing_proto(signed_dealing: SignedIDkgDealing) -> IDkgSignedDealingTuple {
     let Signed {
         content:
             IDkgDealing {
@@ -616,28 +552,10 @@ fn verified_idkg_dealing_proto(
         transcript_id: Some((&transcript_id).into()),
         raw_dealing: internal_dealing_raw,
     };
-    VerifiedIDkgDealing {
-        dealer_index,
-        signed_dealing_tuple: Some(IDkgSignedDealingTuple {
-            dealer: Some(node_id_into_protobuf(dealing_signature.signer)),
-            dealing: Some(dealing_proto),
-            signature: dealing_signature.signature.get().0,
-        }),
-        support_tuples: batch_signature
-            .signatures_map
-            .into_iter()
-            .map(|(signer, signature)| signature_tuple_proto(signer, signature))
-            .collect(),
-    }
-}
-
-fn signature_tuple_proto(
-    signer: NodeId,
-    signature: BasicSigOf<SignedIDkgDealing>,
-) -> SignatureTuple {
-    SignatureTuple {
-        signer: Some(node_id_into_protobuf(signer)),
-        signature: signature.get().0,
+    IDkgSignedDealingTuple {
+        dealer: Some(node_id_into_protobuf(dealing_signature.signer)),
+        dealing: Some(dealing_proto),
+        signature: dealing_signature.signature.get().0,
     }
 }
 

@@ -1,26 +1,13 @@
-use std::collections::BTreeMap;
-
 use ic_protobuf::{
     proxy::{ProxyDecodeError, try_from_option_field},
-    registry::subnet::v1::SignatureTuple,
     types::v1 as pb,
 };
 use ic_types::{
-    NodeId,
     artifact::{ConsensusMessageId, IdentifiableArtifact, PbArtifact},
     consensus::{
         ConsensusMessage,
         idkg::{IDkgArtifactId, IDkgArtifactIdDataOf, IDkgPrefixOf},
     },
-    crypto::{
-        BasicSig, BasicSigOf, Signed,
-        canister_threshold_sig::{
-            error::InitialIDkgDealingsValidationError,
-            idkg::{IDkgDealing, IDkgTranscriptId, SignedIDkgDealing},
-        },
-    },
-    node_id_into_protobuf, node_id_try_from_option,
-    signature::{BasicSignature, BasicSignatureBatch},
 };
 
 use super::SignedIngressId;
@@ -34,16 +21,7 @@ pub(crate) struct StrippedIngressPayload {
 /// Stripped version of the [`Dealings`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct StrippedIDkgDealings {
-    pub(crate) stripped_dealings: Vec<(
-        IDkgTranscriptId,
-        Vec<(
-            u32,
-            Signed<
-                IDkgArtifactId,
-                BasicSignatureBatch<Signed<IDkgDealing, BasicSignature<IDkgDealing>>>,
-            >,
-        )>,
-    )>,
+    pub(crate) stripped_dealings: Vec<(u32, IDkgArtifactId)>,
 }
 
 /// Stripped version of the [`BlockProposal`].
@@ -121,60 +99,26 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
                 stripped_dealings: value
                     .stripped_dealings
                     .into_iter()
-                    .map(|ds| {
-                        let transcript_id: IDkgTranscriptId =
-                            try_from_option_field(ds.transcript_id.as_ref(), "transcript_id")?;
-                        let dealings = ds
-                            .dealing
-                            .into_iter()
-                            .map(|d| {
-                                let did = d
-                                    .dealing_id
-                                    .ok_or(ProxyDecodeError::Other("missing".to_string()))?;
-                                let dealing_id: IDkgArtifactId = IDkgArtifactId::Dealing(
-                                    IDkgPrefixOf::new(try_from_option_field(
-                                        did.prefix.as_ref(),
-                                        "Dealing::prefix",
-                                    )?),
-                                    IDkgArtifactIdDataOf::new(try_from_option_field(
-                                        did.id_data,
-                                        "Dealing::id_data",
-                                    )?),
-                                );
-                                Ok((
-                                    d.dealer_index,
-                                    Signed {
-                                        content: dealing_id,
-                                        signature: basic_signature_batch_struct(&d.support_tuples)?,
-                                    },
-                                ))
-                            })
-                            .collect::<Result<Vec<_>, ProxyDecodeError>>()?;
-                        Ok((transcript_id, dealings))
+                    .map(|d| {
+                        let did = d
+                            .dealing_id
+                            .ok_or(ProxyDecodeError::Other("missing".to_string()))?;
+                        let dealing_id: IDkgArtifactId = IDkgArtifactId::Dealing(
+                            IDkgPrefixOf::new(try_from_option_field(
+                                did.prefix.as_ref(),
+                                "Dealing::prefix",
+                            )?),
+                            IDkgArtifactIdDataOf::new(try_from_option_field(
+                                did.id_data,
+                                "Dealing::id_data",
+                            )?),
+                        );
+                        Ok((d.dealer_index, dealing_id))
                     })
                     .collect::<Result<Vec<_>, ProxyDecodeError>>()?,
             },
         })
     }
-}
-
-fn basic_signature_batch_struct(
-    signature_batch: &[SignatureTuple],
-) -> Result<BasicSignatureBatch<SignedIDkgDealing>, ProxyDecodeError> {
-    let mut signatures_map = BTreeMap::new();
-    for tuple in signature_batch {
-        let signer = node_id_try_from_option(tuple.signer.clone())?;
-        let signature = BasicSigOf::new(BasicSig(tuple.signature.clone()));
-        if signatures_map.insert(signer, signature).is_some() {
-            return Err(
-                InitialIDkgDealingsValidationError::MultipleSupportSharesFromSameReceiver {
-                    node_id: signer,
-                }
-                .into(),
-            );
-        };
-    }
-    Ok(BasicSignatureBatch { signatures_map })
 }
 
 impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
@@ -197,45 +141,20 @@ impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
                 .stripped_dealings
                 .stripped_dealings
                 .into_iter()
-                .map(|(transcript_id, dealings)| pb::StrippedDealings {
-                    transcript_id: Some((&transcript_id).into()),
-                    dealing: dealings
-                        .into_iter()
-                        .map(|(dealer_index, dealing)| {
-                            let IDkgArtifactId::Dealing(id_prefix, id_data) = dealing.content
-                            else {
-                                panic!("done now");
-                            };
-                            pb::StrippedDealing {
-                                dealer_index,
-                                dealing_id: Some(pb::PrefixPairIDkg {
-                                    prefix: Some((&id_prefix.get()).into()),
-                                    id_data: Some(pb::IDkgArtifactIdData::from(id_data.get())),
-                                }),
-                                support_tuples: dealing
-                                    .signature
-                                    .signatures_map
-                                    .iter()
-                                    .map(|(signer, signature)| {
-                                        signature_tuple_proto(*signer, signature.clone())
-                                    })
-                                    .collect(),
-                            }
-                        })
-                        .collect(),
+                .map(|(dealer_index, dealing_id)| {
+                    let IDkgArtifactId::Dealing(id_prefix, id_data) = dealing_id else {
+                        panic!("done now");
+                    };
+                    pb::StrippedDealing {
+                        dealer_index,
+                        dealing_id: Some(pb::PrefixPairIDkg {
+                            prefix: Some((&id_prefix.get()).into()),
+                            id_data: Some(pb::IDkgArtifactIdData::from(id_data.get())),
+                        }),
+                    }
                 })
                 .collect(),
         }
-    }
-}
-
-fn signature_tuple_proto(
-    signer: NodeId,
-    signature: BasicSigOf<SignedIDkgDealing>,
-) -> SignatureTuple {
-    SignatureTuple {
-        signer: Some(node_id_into_protobuf(signer)),
-        signature: signature.get().0,
     }
 }
 

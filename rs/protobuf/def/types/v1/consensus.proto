@@ -255,7 +255,7 @@ message StrippedBlockProposal {
   BlockProposal block_proposal_without_ingress_payload = 1;
   repeated StrippedIngressMessage ingress_messages = 2;
   ConsensusMessageId unstripped_consensus_message_id = 3;
-  repeated StrippedDealings stripped_dealings = 4;
+  repeated StrippedDealing stripped_dealings = 4;
 }
 
 message StrippedIngressMessage {

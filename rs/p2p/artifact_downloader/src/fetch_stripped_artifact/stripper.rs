@@ -3,7 +3,6 @@ use ic_types::{
     artifact::IdentifiableArtifact,
     batch::IngressPayload,
     consensus::{ConsensusMessage, idkg::IDkgObject},
-    crypto::Signed,
 };
 
 use crate::fetch_stripped_artifact::types::stripped::StrippedIDkgDealings;
@@ -42,13 +41,14 @@ impl Strippable for ConsensusMessage {
                     block.ingress_payload = None;
                     if let Some(idkg) = block.idkg_payload.as_mut() {
                         for t in &mut idkg.idkg_transcripts {
-                            t.verified_dealings = vec![];
+                            for d in &mut t.verified_dealings {
+                                d.signed_dealing_tuple = None;
+                            }
                         }
                     }
                 }
 
                 let data_payload = block_proposal.content.as_ref().payload.as_ref().as_data();
-                let stripped_ingress_payload = data_payload.batch.ingress.clone().strip();
 
                 let transcripts = data_payload
                     .idkg
@@ -57,22 +57,18 @@ impl Strippable for ConsensusMessage {
                     .unwrap_or_default();
                 let stripped_dealings = transcripts
                     .into_iter()
-                    .map(|(id, transcript)| {
-                        let dealings = transcript
+                    .flat_map(|(_id, transcript)| {
+                        transcript
                             .verified_dealings
                             .iter()
                             .map(|(dealer_index, signed_dealing)| {
-                                let dealing_id = signed_dealing.content.message_id();
-                                let signed_dealing_hash = Signed {
-                                    content: dealing_id,
-                                    signature: signed_dealing.signature.clone(),
-                                };
-                                (*dealer_index, signed_dealing_hash)
+                                (dealer_index.clone(), signed_dealing.content.message_id())
                             })
-                            .collect::<Vec<_>>();
-                        (id, dealings)
+                            .collect::<Vec<_>>()
                     })
                     .collect::<Vec<_>>();
+
+                let stripped_ingress_payload = data_payload.batch.ingress.strip();
 
                 MaybeStrippedConsensusMessage::StrippedBlockProposal(StrippedBlockProposal {
                     block_proposal_without_ingresses_proto: proto,
