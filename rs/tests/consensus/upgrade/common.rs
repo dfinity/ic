@@ -335,9 +335,12 @@ async fn fetch_local_cup_hash_from_logs_until_graceful_exit(mut log_stream: LogS
         // Entry matches local CUP regex
         local_cup_log_entry = Some(entry);
     }
+    // If `local_cup_log_entry` is still `None`, then there was a log entry with the shutdown
+    // message but none matching the local CUP regex.
+    let local_cup_log_entry = local_cup_log_entry.expect("Log displaying local CUP info not found");
 
     local_cup_regex
-        .captures(&local_cup_log_entry.expect("Log displaying local CUP info not found"))
+        .captures(&local_cup_log_entry)
         .and_then(|caps| caps.get(1))
         .map(|m| m.as_str().to_string())
         .expect("Failed to extract state hash from log entry")
