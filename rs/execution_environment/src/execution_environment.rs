@@ -260,6 +260,9 @@ pub struct RoundLimits {
     // TODO would be nice to change that to available, but this requires
     // a lot of changes since available allocation sits in CanisterManager config
     pub compute_allocation_used: u64,
+
+    /// Keeps track of the memory reserved for executing response handlers.
+    pub subnet_memory_reservation: NumBytes,
 }
 
 impl RoundLimits {
@@ -441,6 +444,17 @@ impl ExecutionEnvironment {
                 - memory_taken.wasm_custom_sections().get() as i64,
             scaling_factor,
         )
+    }
+
+    /// Returns the scaled subnet memory reservation.
+    pub fn scaled_subnet_memory_reservation(&self) -> NumBytes {
+        // This function computes the scaled subnet memory reservation per thread.
+        // We apply the scaling factor `self.scheduler_cores`
+        // consistently with the scaling factor of `SubnetAvailableMemory`
+        // in the function `self.scaled_subnet_available_memory`.
+        // and the scaling factor of `ResourceSaturation`
+        // in the function `self.subnet_memory_saturation`.
+        NumBytes::from(self.config.subnet_memory_reservation.get() / self.scheduler_cores as u64)
     }
 
     /// Computes the current amount of guaranteed response message memory available
@@ -2912,17 +2926,6 @@ impl ExecutionEnvironment {
             time,
             cost_schedule,
         };
-        // This function is called on an execution thread with a scaled
-        // available memory. We also need to scale the subnet reservation in
-        // order to be consistent with the scaling of the available memory.
-        // We apply the scaling factor `self.scheduler_cores`
-        // consistently with the scaling factor of `SubnetAvailableMemory`
-        // in the function `self.scaled_subnet_available_memory`.
-        // and the scaling factor of `ResourceSaturation`
-        // in the function `self.subnet_memory_saturation`.
-        let scaling_factor = self.scheduler_cores as u64;
-        let scaled_subnet_memory_reservation =
-            NumBytes::new(self.config.subnet_memory_reservation.get() / scaling_factor);
         execute_response(
             canister,
             response,
@@ -2931,7 +2934,6 @@ impl ExecutionEnvironment {
             round,
             round_limits,
             subnet_size,
-            scaled_subnet_memory_reservation,
             &self.call_tree_metrics,
             self.config.dirty_page_logging,
             self.deallocator_thread.sender(),

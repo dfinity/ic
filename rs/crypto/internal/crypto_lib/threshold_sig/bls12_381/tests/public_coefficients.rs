@@ -1,10 +1,11 @@
 //! Verify that public_coefficients does indeed fix the public keys of
 //! participants.
 
-use super::super::Polynomial;
-use super::PublicCoefficients;
-use crate::types::{PublicKey, ThresholdError};
+use ic_crypto_internal_bls12_381_type::Polynomial;
 use ic_crypto_internal_bls12_381_type::{G2Affine, G2Projective, NodeIndex, Scalar};
+use ic_crypto_internal_threshold_sig_bls12381::types::{
+    PublicCoefficients, PublicKey, ThresholdError,
+};
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::Rng;
 use std::ops::MulAssign;
