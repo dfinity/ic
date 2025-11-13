@@ -602,6 +602,26 @@ impl SnsRootCanister {
         Ok(())
     }
 
+    pub async fn deregister_extension(
+        self_ref: &'static LocalKey<RefCell<Self>>,
+        canister_id: PrincipalId,
+    ) -> Result<(), CanisterCallError> {
+        // Remove canister_id from self.extensions.
+        self_ref.with_borrow_mut(|state| {
+            let Some(extensions) = state.extensions.as_mut() else {
+                return;
+            };
+
+            // This might result in no change. In that case, everything else
+            // behaves the same. In particular, Ok is (still) returned.
+            extensions
+                .extension_canister_ids
+                .retain(|prior_extension_canister_id| prior_extension_canister_id != &canister_id);
+        });
+
+        Ok(())
+    }
+
     /// Register a single canister.
     async fn register_dapp_canister(
         self_ref: &'static LocalKey<RefCell<SnsRootCanister>>,
