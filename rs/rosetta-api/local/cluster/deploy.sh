@@ -8,6 +8,7 @@ set -e
 #   --icp-symbol <symbol>            Set the ICP token symbol (default: TESTICP)
 #   --icrc1-ledger <ledger_ids>      Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
 #   --sqlite-cache-kb <size>         SQLite cache size in KB (default: 20480)
+#   --balance-sync-batch-size <size> Balance sync batch size in blocks (default: 25000)
 #   --local-icp-image-tar <path>     Path to local ICP image tar file
 #   --local-icrc1-image-tar <path>   Path to local ICRC1 image tar file
 #   --no-icp-latest                  Don't deploy ICP Rosetta latest image
@@ -21,6 +22,7 @@ ICP_LEDGER="xafvr-biaaa-aaaai-aql5q-cai"
 ICP_SYMBOL="TESTICP"
 ICRC1_LEDGER="3jkp5-oyaaa-aaaaj-azwqa-cai"
 SQLITE_CACHE_KB="20480"
+BALANCE_SYNC_BATCH_SIZE="10000"
 LOCAL_ICP_IMAGE_TAR=""
 LOCAL_ICRC1_IMAGE_TAR=""
 DEPLOY_ICP_LATEST=true
@@ -48,6 +50,10 @@ while [[ "$#" -gt 0 ]]; do
             SQLITE_CACHE_KB="$2"
             shift
             ;;
+        --balance-sync-batch-size)
+            BALANCE_SYNC_BATCH_SIZE="$2"
+            shift
+            ;;
         --local-icp-image-tar)
             LOCAL_ICP_IMAGE_TAR="$2"
             shift
@@ -65,7 +71,7 @@ while [[ "$#" -gt 0 ]]; do
         --clean) CLEAN=true ;;
         --stop) STOP=true ;;
         --help)
-            sed -n '5,18p' "$0"
+            sed -n '5,19p' "$0"
             exit 0
             ;;
         *)
@@ -248,6 +254,7 @@ helm upgrade --install local-rosetta . \
     --set icpConfig.deployLatest="$DEPLOY_ICP_LATEST" \
     --set-string icrcConfig.ledgerId="$ESCAPED_ICRC1_LEDGER" \
     --set icrcConfig.sqliteCacheKb="$SQLITE_CACHE_KB" \
+    --set icrcConfig.balanceSyncBatchSize="$BALANCE_SYNC_BATCH_SIZE" \
     --set icrcConfig.deployLatest="$DEPLOY_ICRC1_LATEST" \
     --set icpConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICP_IMAGE_TAR" ]] && echo "true" || echo "false") \
     --set icrcConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]] && echo "true" || echo "false") \

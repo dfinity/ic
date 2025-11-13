@@ -17,6 +17,11 @@ icrcConfig:
   # With 512Mi limit and 2 ledgers: 512MB * 0.15 / 2 = ~38MB per DB
   # Conservative default set to 20MB (20480 KB) per database
   sqliteCacheKb: 20480
+  # Balance synchronization batch size - how many blocks to load into memory at once
+  # when updating account balances. Lower values reduce memory spikes but slow down sync.
+  # For memory-constrained environments with multiple ledgers, use 10000-25000.
+  # Default: 25000 blocks per batch (reduced from 100000 to prevent OOM)
+  balanceSyncBatchSize: 10000
   # Deploy the latest ICRC Rosetta image from Docker Hub
   deployLatest: true
 

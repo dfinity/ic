@@ -8,6 +8,7 @@ use url::Url;
 
 const MAINNET_DEFAULT_URL: &str = "https://ic0.app";
 const TESTNET_DEFAULT_URL: &str = "https://exchanges.testnet.dfinity.network";
+const BATCH_SIZE_DEFAULT: &str = "100000";
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum NetworkType {
@@ -177,6 +178,13 @@ pub struct Args {
     /// Default is -2000 (2MB per database).
     #[arg(long = "sqlite-max-cache-kb", default_value = "2000")]
     pub sqlite_max_cache_kb: i64,
+
+    /// Batch size for account balance synchronization. This controls how many blocks
+    /// are loaded into memory at once when updating account balances.
+    /// Lower values reduce memory usage but may slow down sync.
+    /// Default is 100000 blocks per batch.
+    #[arg(long = "balance-sync-batch-size", default_value = BATCH_SIZE_DEFAULT)]
+    pub balance_sync_batch_size: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -192,6 +200,7 @@ pub struct ParsedConfig {
     pub log_file: PathBuf,
     pub watchdog_timeout_seconds: u64,
     pub sqlite_max_cache_kb: i64,
+    pub balance_sync_batch_size: u64,
 }
 
 impl ParsedConfig {
@@ -237,6 +246,7 @@ impl ParsedConfig {
             log_file: args.log_file,
             watchdog_timeout_seconds: args.watchdog_timeout_seconds,
             sqlite_max_cache_kb: args.sqlite_max_cache_kb,
+            balance_sync_batch_size: args.balance_sync_batch_size,
         })
     }
 
@@ -315,6 +325,7 @@ mod tests {
             log_file: PathBuf::from("/test/log"),
             watchdog_timeout_seconds: 60,
             sqlite_max_cache_kb: 2000,
+            balance_sync_batch_size: 100000,
         }
     }
 

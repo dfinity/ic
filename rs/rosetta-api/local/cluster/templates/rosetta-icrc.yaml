@@ -54,6 +54,8 @@ spec:
             - {{ $.Values.icrcConfig.storeFile | quote }}
             - "--sqlite-max-cache-kb"
             - {{ $.Values.icrcConfig.sqliteCacheKb | quote }}
+            - "--balance-sync-batch-size"
+            - {{ $.Values.icrcConfig.balanceSyncBatchSize | quote }}
           ports:
             - containerPort: {{ .containerPort }}
           volumeMounts:

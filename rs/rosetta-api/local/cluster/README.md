@@ -69,6 +69,9 @@ You can make the rosetta nodes point to other ledgers by using these flags:
   `3jkp5-oyaaa-aaaaj-azwqa-cai`). Example: `--icrc1-ledger 'ledger1-id,ledger2-id,ledger3-id'`.
 - `--sqlite-cache-kb <size>`: Set the SQLite cache size in KB (default: `20480` = 20MB). Lower values reduce memory
   usage but may impact performance. Adjust based on the number of ledgers and available pod memory.
+- `--balance-sync-batch-size <size>`: Set the balance synchronization batch size in blocks (default: `25000`). This
+  controls how many blocks are loaded into memory at once when updating account balances. Lower values (10000-15000)
+  prevent OOM spikes but slow down sync. Higher values (50000-100000) sync faster but use more memory.
 - `--no-icp-latest`: Skip deploying the ICP Rosetta latest image from Docker Hub (useful when you only want to deploy
   your local build).
 - `--no-icrc1-latest`: Skip deploying the ICRC1 Rosetta latest image from Docker Hub (useful when you only want to

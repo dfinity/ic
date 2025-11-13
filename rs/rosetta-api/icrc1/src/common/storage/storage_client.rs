@@ -11,6 +11,8 @@ use std::cmp::Ordering;
 use std::{path::Path, sync::Mutex};
 use tracing::warn;
 
+pub(crate) const BALANCE_SYNC_BATCH_SIZE_DEFAULT: u64 = 100_000;
+
 #[derive(Debug, Clone)]
 pub struct TokenInfo {
     pub symbol: String,
@@ -55,6 +57,7 @@ impl TokenInfo {
 pub struct StorageClient {
     storage_connection: Mutex<Connection>,
     token_info: Option<TokenInfo>,
+    balance_sync_batch_size: u64,
 }
 
 impl StorageClient {
@@ -62,23 +65,24 @@ impl StorageClient {
     pub fn new_persistent(db_file_path: &Path) -> anyhow::Result<Self> {
         std::fs::create_dir_all(db_file_path.parent().unwrap())?;
         let connection = rusqlite::Connection::open(db_file_path)?;
-        Self::new(connection, None)
+        Self::new(connection, None, BALANCE_SYNC_BATCH_SIZE_DEFAULT)
     }
 
-    /// Constructs a new SQLite in-persistent store with custom cache size.
-    pub fn new_persistent_with_cache(
+    /// Constructs a new SQLite in-persistent store with custom cache size and batch size.
+    pub fn new_persistent_with_cache_and_batch_size(
         db_file_path: &Path,
         cache_size_kb: i64,
+        balance_sync_batch_size: u64,
     ) -> anyhow::Result<Self> {
         std::fs::create_dir_all(db_file_path.parent().unwrap())?;
         let connection = rusqlite::Connection::open(db_file_path)?;
-        Self::new(connection, Some(cache_size_kb))
+        Self::new(connection, Some(cache_size_kb), balance_sync_batch_size)
     }
 
     /// Constructs a new SQLite in-memory store.
     pub fn new_in_memory() -> anyhow::Result<Self> {
         let connection = rusqlite::Connection::open_in_memory()?;
-        Self::new(connection, None)
+        Self::new(connection, None, BALANCE_SYNC_BATCH_SIZE_DEFAULT)
     }
 
     /// Constructs a new SQLite in-memory store with a named DB that can be shared across instances.
@@ -87,14 +91,14 @@ impl StorageClient {
             format!("'file:{name}?mode=memory&cache=shared', uri=True"),
             OpenFlags::default(),
         )?;
-        Self::new(connection, None)
+        Self::new(connection, None, BALANCE_SYNC_BATCH_SIZE_DEFAULT)
     }
 
     pub fn get_token_display_name(&self) -> String {
         if let Some(token_info) = &self.token_info {
             token_info.display_name()
         } else {
-            "unkown".to_string()
+            "unknown".to_string()
         }
     }
 
@@ -106,10 +110,15 @@ impl StorageClient {
         }
     }
 
-    fn new(connection: rusqlite::Connection, cache_size_kb: Option<i64>) -> anyhow::Result<Self> {
+    fn new(
+        connection: rusqlite::Connection,
+        cache_size_kb: Option<i64>,
+        balance_sync_batch_size: u64,
+    ) -> anyhow::Result<Self> {
         let storage_client = Self {
             storage_connection: Mutex::new(connection),
             token_info: None,
+            balance_sync_batch_size,
         };
         let conn = storage_client.storage_connection.lock().unwrap();
 
@@ -293,7 +302,10 @@ impl StorageClient {
             bail!("Tried to update account balances but there exist gaps in the database.",);
         }
         let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::update_account_balances(&mut open_connection)
+        storage_operations::update_account_balances(
+            &mut open_connection,
+            self.balance_sync_batch_size,
+        )
     }
 
     /// Retrieves the highest block index in the account balance table.
@@ -351,7 +363,10 @@ impl StorageClient {
     /// Returns `Ok(())` if the repair was successful, or an error if the repair failed.
     pub fn repair_fee_collector_balances(&self) -> anyhow::Result<()> {
         let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::repair_fee_collector_balances(&mut open_connection)
+        storage_operations::repair_fee_collector_balances(
+            &mut open_connection,
+            self.balance_sync_batch_size,
+        )
     }
 }
 
