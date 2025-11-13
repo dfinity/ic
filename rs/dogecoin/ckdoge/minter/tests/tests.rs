@@ -254,6 +254,13 @@ mod withdrawal {
 
     #[test]
     fn should_resubmit_transaction() {
+        // Do a deposit and withdrawal flow, up to the point where
+        // a first transaction was sent to the network, but is not yet confirmed.
+        //
+        // To avoid recreating a fresh setup for each call, which is an expensive operation,
+        // we reuse the same setup. The independence of the flows is ensured by the `id` parameter,
+        // which is assumed to be unique across all calls to that method.
+        // This `id` is used to target a unique ledged account and uniquely identifies the used UTXOs.
         fn deposit_and_withdraw(setup: &Setup, id: u8) -> WithdrawalFlowEnd<&Setup> {
             let account = Account {
                 owner: USER_PRINCIPAL,
