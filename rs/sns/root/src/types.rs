@@ -5,9 +5,9 @@ use ic_base_types::{CanisterId, PrincipalId};
 use serde::{Deserialize, Serialize};
 
 use crate::pb::v1::{
-    CanisterCallError, DeregisterExtensionRequest, DeregisterExtensionResponse, Extensions,
-    RegisterExtensionRequest, RegisterExtensionResponse, deregister_extension_response,
-    register_extension_response,
+    CanisterCallError, CleanUpFailedRegisterExtensionResponse, Extensions,
+    RegisterExtensionRequest, RegisterExtensionResponse,
+    clean_up_failed_register_extension_response, register_extension_response,
 };
 
 /// A general trait for the environment in which governance is running.
@@ -89,25 +89,6 @@ impl TryFrom<RegisterExtensionRequest> for PrincipalId {
     }
 }
 
-impl TryFrom<DeregisterExtensionRequest> for PrincipalId {
-    type Error = CanisterCallError;
-
-    fn try_from(value: DeregisterExtensionRequest) -> Result<Self, Self::Error> {
-        let DeregisterExtensionRequest { canister_id } = value;
-
-        let Some(canister_id) = canister_id else {
-            let code = Some(RejectCode::DestinationInvalid as i32);
-            let description = "DeregisterExtensionRequest.canister_id must be set.".to_string();
-
-            let err = CanisterCallError { code, description };
-
-            return Err(err);
-        };
-
-        Ok(canister_id)
-    }
-}
-
 impl From<Result<(), CanisterCallError>> for RegisterExtensionResponse {
     fn from(result: Result<(), CanisterCallError>) -> Self {
         use register_extension_response::{Ok, Result};
@@ -122,14 +103,14 @@ impl From<Result<(), CanisterCallError>> for RegisterExtensionResponse {
     }
 }
 
-impl From<Result<(), CanisterCallError>> for DeregisterExtensionResponse {
+impl From<Result<(), CanisterCallError>> for CleanUpFailedRegisterExtensionResponse {
     fn from(result: Result<(), CanisterCallError>) -> Self {
-        use deregister_extension_response::{Ok, Result};
+        use clean_up_failed_register_extension_response::{Ok, Result};
         match result {
-            Ok(_) => DeregisterExtensionResponse {
+            Ok(_) => CleanUpFailedRegisterExtensionResponse {
                 result: Some(Result::Ok(Ok {})),
             },
-            Err(err) => DeregisterExtensionResponse {
+            Err(err) => CleanUpFailedRegisterExtensionResponse {
                 result: Some(Result::Err(err)),
             },
         }

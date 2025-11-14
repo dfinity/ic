@@ -68,11 +68,11 @@ message RegisterExtensionResponse {
   }
 }
 
-message DeregisterExtensionRequest {
+message CleanUpFailedRegisterExtensionRequest {
   ic_base_types.pb.v1.PrincipalId canister_id = 1;
 }
 
-message DeregisterExtensionResponse {
+message CleanUpFailedRegisterExtensionResponse {
   message Ok {}
 
   oneof result {

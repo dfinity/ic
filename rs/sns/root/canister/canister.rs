@@ -25,12 +25,12 @@ use ic_sns_root::{
     GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, LedgerCanisterClient,
     logs::{ERROR, INFO},
     pb::v1::{
-        CanisterCallError, DeregisterExtensionRequest, DeregisterExtensionResponse,
-        ListSnsCanistersRequest, ListSnsCanistersResponse, ManageDappCanisterSettingsRequest,
-        ManageDappCanisterSettingsResponse, RegisterDappCanisterRequest,
-        RegisterDappCanisterResponse, RegisterDappCanistersRequest, RegisterDappCanistersResponse,
-        RegisterExtensionRequest, RegisterExtensionResponse, SetDappControllersRequest,
-        SetDappControllersResponse, SnsRootCanister,
+        CanisterCallError, CleanUpFailedRegisterExtensionRequest,
+        CleanUpFailedRegisterExtensionResponse, ListSnsCanistersRequest, ListSnsCanistersResponse,
+        ManageDappCanisterSettingsRequest, ManageDappCanisterSettingsResponse,
+        RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
+        RegisterDappCanistersResponse, RegisterExtensionRequest, RegisterExtensionResponse,
+        SetDappControllersRequest, SetDappControllersResponse, SnsRootCanister,
     },
     types::Environment,
 };
@@ -278,23 +278,29 @@ async fn register_extension(request: RegisterExtensionRequest) -> RegisterExtens
     RegisterExtensionResponse::from(result)
 }
 
+/// Does at least a couple of things:
+///
+///     1. "Forgets" the extension canister. This requires that we already know
+///        about the extension canister.
+///
+///     2. Deletes the extension canister.
 #[candid_method(update)]
 #[update]
-async fn deregister_extension(request: DeregisterExtensionRequest) -> DeregisterExtensionResponse {
-    log!(INFO, "deregister_extension");
+async fn clean_up_failed_register_extension(
+    request: CleanUpFailedRegisterExtensionRequest,
+) -> CleanUpFailedRegisterExtensionResponse {
+    log!(INFO, "clean_up_failed_register_extension");
     assert_eq_governance_canister_id(PrincipalId(ic_cdk::api::caller()));
 
-    let canister_id = match PrincipalId::try_from(request) {
-        Ok(canister_id) => canister_id,
-        Err(err) => {
-            return DeregisterExtensionResponse::from(Err(err));
-        }
-    };
+    let result = SnsRootCanister::clean_up_failed_register_extension(
+        &STATE,
+        &ManagementCanisterClientImpl::<CanisterRuntime>::new(None),
+        request,
+    )
+    .await;
 
-    let result = SnsRootCanister::deregister_extension(&STATE, canister_id).await;
-
-    log!(INFO, "deregister_extension done");
-    DeregisterExtensionResponse::from(result)
+    log!(INFO, "clean_up_failed_register_extension done");
+    result
 }
 
 /// This function is deprecated, and `register_dapp_canisters` should be used
