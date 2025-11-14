@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:candid.bzl", "did_git_test")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
+load("//bazel/candid:defs.bzl", "did_git_test")
 
 # This library is private to the replica and other guestOS processes.
 # These crates are considered direct users of the management
@@ -19,6 +19,7 @@ permanent_whitelist = [
     "//rs/interfaces:__subpackages__",
     "//rs/messaging:__subpackages__",
     "//rs/management_canister_types/fuzz:__subpackages__",
+    "//rs/migration_canister:__subpackages__",
     "//rs/orchestrator:__subpackages__",
     "//rs/pocket_ic_server:__subpackages__",
     "//rs/prep:__subpackages__",

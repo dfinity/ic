@@ -14,7 +14,7 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_consensus::consensus::payload_builder::PayloadBuilderImpl;
-use ic_consensus_cup_utils::{make_registry_cup, make_registry_cup_from_cup_contents};
+use ic_consensus_cup_utils::make_registry_cup_from_cup_contents;
 use ic_consensus_utils::crypto::SignVerify;
 use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_test_utils_ni_dkg::{
@@ -36,6 +36,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusTime,
     execution_environment::{
         IngressFilterService, IngressHistoryReader, QueryExecutionInput, QueryExecutionService,
+        TransformExecutionService,
     },
     ingress_pool::{
         IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
@@ -146,7 +147,6 @@ use ic_types::{
     },
     canister_http::{CanisterHttpResponse, CanisterHttpResponseContent},
     consensus::{
-        CatchUpPackage,
         block_maker::SubnetRecords,
         certification::{Certification, CertificationContent},
     },
@@ -514,6 +514,28 @@ fn add_subnet_local_registry_records(
         subnet_id,
         public_key,
     );
+}
+
+fn make_fresh_registry_cup(
+    registry_client: Arc<FakeRegistryClient>,
+    subnet_id: SubnetId,
+    replica_logger: &ReplicaLogger,
+) -> pb::CatchUpPackage {
+    let registry_version = registry_client.get_latest_version();
+    let cup_contents = registry_client
+        .get_cup_contents(subnet_id, registry_version)
+        .unwrap()
+        .value
+        .unwrap();
+    let cup = make_registry_cup_from_cup_contents(
+        registry_client.as_ref(),
+        subnet_id,
+        cup_contents,
+        registry_version,
+        replica_logger,
+    )
+    .unwrap();
+    cup.into()
 }
 
 /// Convert an object into CBOR binary.
@@ -899,6 +921,7 @@ pub struct StateMachine {
     pub metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_handler: Arc<Mutex<QueryExecutionService>>,
+    pub transform_handler: Arc<Mutex<TransformExecutionService>>,
     pub runtime: Arc<Runtime>,
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
@@ -1625,22 +1648,11 @@ impl StateMachine {
         // Since the latest registry version could have changed,
         // we update the CUP in `FakeConsensusPoolCache` to refer
         // to the latest registry version.
-        let registry_version = self.registry_client.get_latest_version();
-        let cup_contents = self
-            .registry_client
-            .get_cup_contents(self.subnet_id, registry_version)
-            .unwrap()
-            .value
-            .unwrap();
-        let cup = make_registry_cup_from_cup_contents(
-            self.registry_client.as_ref(),
+        let cup_proto = make_fresh_registry_cup(
+            self.registry_client.clone(),
             self.subnet_id,
-            cup_contents,
-            registry_version,
             &self.replica_logger,
-        )
-        .unwrap();
-        let cup_proto: pb::CatchUpPackage = cup.into();
+        );
         self.consensus_pool_cache.update_cup(cup_proto);
     }
 
@@ -1758,18 +1770,14 @@ impl StateMachine {
 
         let registry_client = FakeRegistryClient::new(Arc::clone(&registry_data_provider) as _);
         registry_client.update_to_latest_version();
-
-        // get the CUP from the registry
-        let cup: CatchUpPackage =
-            make_registry_cup(&registry_client, subnet_id, &replica_logger).unwrap();
-        let cup_proto: pb::CatchUpPackage = cup.into();
-        // now we can wrap the registry client into an Arc
         let registry_client = Arc::new(registry_client);
 
         let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
             metrics_registry.clone(),
             replica_logger.clone(),
         )));
+        let cup_proto =
+            make_fresh_registry_cup(registry_client.clone(), subnet_id, &replica_logger);
         let consensus_pool_cache = Arc::new(FakeConsensusPoolCache::new(cup_proto));
         let crypto = CryptoReturningOk::default();
         let canister_http_payload_builder = Arc::new(CanisterHttpPayloadBuilderImpl::new(
@@ -2029,6 +2037,7 @@ impl StateMachine {
             message_routing,
             metrics_registry: metrics_registry.clone(),
             query_handler: Arc::new(Mutex::new(execution_services.query_execution_service)),
+            transform_handler: Arc::new(Mutex::new(execution_services.transform_execution_service)),
             ingress_watcher_handle,
             _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
             certified_height_tx,

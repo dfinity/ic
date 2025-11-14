@@ -34,6 +34,7 @@ def image_deps(mode, _malicious = False):
             "//rs/ic_os/release:guest_vm_runner": "/opt/ic/bin/guest_vm_runner:0755",
             "//rs/ic_os/release:metrics-proxy": "/opt/ic/bin/metrics-proxy:0755",
             "//rs/ic_os/release:config": "/opt/ic/bin/config:0755",
+            "//cpp:infogetty": "/opt/ic/bin/infogetty:0755",
 
             # additional libraries to install
             "//rs/ic_os/release:nss_icos": "/usr/lib/x86_64-linux-gnu/libnss_icos.so.2:0644",
@@ -41,7 +42,7 @@ def image_deps(mode, _malicious = False):
 
         # Set various configuration values
         "container_context_files": Label("//ic-os/hostos/context:context-files"),
-        "component_files": component_files,
+        "component_files": dict(component_files),  # Make a copy because we might update it later
         "partition_table": Label("//ic-os/hostos:partitions.csv"),
         "volume_table": Label("//ic-os/hostos:volumes.csv"),
         "rootfs_size": "3G",
@@ -81,6 +82,21 @@ def image_deps(mode, _malicious = False):
 
         deps["rootfs"].pop("//rs/ic_os/release:guest_vm_runner", None)
         deps["rootfs"].update({"//rs/ic_os/release:guest_vm_runner_dev": "/opt/ic/bin/guest_vm_runner:0755"})
+
+        # Allow root console access on dev
+        console_override_label = Label("//ic-os/components:misc/console-getty@/hostos-dev/override.conf")
+    else:
+        # Allow limited-console access on prod
+        console_override_label = Label("//ic-os/components:misc/console-getty@/hostos-prod/override.conf")
+
+    # Note: We install the same override file to both serial-getty@ and getty@ service directories
+    # because HostOS needs infogetty for both serial consoles (ttyS0, etc.) and VGA consoles (tty1, etc.)
+    deps["component_files"].update({
+        console_override_label: "/etc/systemd/system/serial-getty@.service.d/override.conf",
+    })
+    deps["component_files"].update({
+        console_override_label: "/etc/systemd/system/getty@.service.d/override.conf",
+    })
 
     return deps
 

@@ -34,6 +34,9 @@ system_test(
     env = {
         "NODE_ROOT_TESTS_UVM_CONFIG_PATH": "$(rootpath :root_tests_config_image)",
     },
+    proc_macro_deps = [
+        "@crate_index//:indoc",
+    ],
     tags = [
         "long_test",  # The P90 duration of this test was over 6 minutes for the week starting on 2025-08-21.
     ],
@@ -49,6 +52,7 @@ uvm_config_image(
     name = "root_tests_config_image",
     testonly = True,
     srcs = [
+        "//rs/ic_os/device:device_test",
         "//rs/ic_os/os_tools/guest_disk:guest_disk_test",
         "//rs/ic_os/os_tools/guest_vm_runner:upgrade_device_mapper_test",
         "//rs/tests:ubuntu_test_runtime.tar",
@@ -110,6 +114,7 @@ rust_binary(
         # Keep sorted.
         "//rs/registry/subnet_type",
         "//rs/tests/driver:ic-system-test-driver",
+        "//rs/tests/nested",
         "@crate_index//:anyhow",
         "@crate_index//:slog",
     ],

@@ -86,6 +86,7 @@ type change_details = variant {
             version : nat64;
             total_num_changes : nat64;
         };
+        requested_by : principal;
     };
 };
 
@@ -350,6 +351,7 @@ type http_request_args = record {
         context : blob;
     };
     is_replicated : opt bool;
+    pricing_version: opt nat32;
 };
 
 type ecdsa_public_key_args = record {
@@ -628,6 +630,7 @@ type rename_canister_args = record {
      version : nat64;
      total_num_changes : nat64;
    };
+   requested_by : principal;
    sender_canister_version : nat64;
 };
 

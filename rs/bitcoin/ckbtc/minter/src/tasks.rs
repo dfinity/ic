@@ -101,7 +101,7 @@ impl TaskQueue {
 /// Schedules a task for execution after the given delay.
 pub fn schedule_after<R: CanisterRuntime>(delay: Duration, work: TaskType, runtime: &R) {
     let now_nanos = runtime.time();
-    let execute_at_ns = now_nanos.saturating_add(delay.as_secs().saturating_mul(crate::SEC_NANOS));
+    let execute_at_ns = now_nanos.saturating_add(delay.as_nanos() as u64);
 
     let execution_time = TASKS.with(|t| t.borrow_mut().schedule_at(execute_at_ns, work));
     set_global_timer(execution_time, runtime);
