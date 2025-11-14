@@ -1020,7 +1020,7 @@ fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
 }
 
 fn get_fee_collector() -> Option<Account> {
-    get_fee_collector_107().unwrap_or_else(|| get_legacy_fee_collector())
+    get_fee_collector_107().unwrap_or_else(get_legacy_fee_collector)
 }
 
 fn get_fee_collector_107() -> Option<Option<Account>> {
