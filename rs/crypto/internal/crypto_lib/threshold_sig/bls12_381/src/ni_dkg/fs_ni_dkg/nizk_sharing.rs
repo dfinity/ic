@@ -317,7 +317,7 @@ pub fn verify_sharing(
         let lhs = cc_mul_xi * &x_challenge + &nizk.yy;
 
         let pk_mul_xi = G1Projective::muln_affine_vartime(&instance.public_keys, &xpow);
-        let rhs = G1Projective::mul2(
+        let rhs = G1Projective::mul2_vartime(
             &pk_mul_xi,
             &nizk.z_r,
             &G1Projective::from(&instance.g1_gen),
