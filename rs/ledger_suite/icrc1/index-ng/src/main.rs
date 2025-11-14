@@ -141,6 +141,10 @@ struct State {
     /// cycle burn for the index, ledger and archive(s).
     retrieve_blocks_from_ledger_interval: Option<Duration>,
 
+    /// The ICRC-107 fee collector. Example values:
+    /// - `None` - legacy fee collector is used.
+    /// - `Some(None)` - 107 fee collecor is enabled but fees are burned.
+    /// - `Some(Some(account1))` - 107 fee collecor is enabled, `account1` collects the fees.
     fee_collector_107: Option<Option<Account>>,
 }
 
