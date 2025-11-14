@@ -507,11 +507,6 @@ pub enum PocketIcMasterPublicKeyId {
 #[derive(Copy, Clone, Eq, PartialEq, Debug)]
 pub struct PublicKey {
     pk: VerifyingKey,
-    // TODO(CRP-2412) This struct member can be removed once
-    // https://github.com/dalek-cryptography/curve25519-dalek/issues/624
-    // makes it into a release and replaced with calls to to_edwards
-    // where required
-    edwards: EdwardsPoint,
 }
 
 /// An error that occurs when verifying signatures or batches of signatures
@@ -544,9 +539,7 @@ impl PublicKey {
     /// subgroup, or that the public key is canonical. To check these
     /// properties, use is_torsion_free and is_canonical
     fn new(pk: VerifyingKey) -> Self {
-        let edwards = CompressedEdwardsY(pk.to_bytes()).decompress().unwrap();
-
-        Self { pk, edwards }
+        Self { pk }
     }
 
     /// Return true if and only if the key is contained within the prime
@@ -555,12 +548,12 @@ impl PublicKey {
         // We don't need to call is_weak here since that is subsumed by the
         // test that the point is torsion free - is_weak just checks if the
         // point is within the size-8 cofactor group.
-        self.edwards.is_torsion_free()
+        self.pk.to_edwards().is_torsion_free()
     }
 
     /// Return true if and only if the public key uses a canonical encoding
     pub fn is_canonical(&self) -> bool {
-        self.pk.to_bytes() == self.edwards.compress().0
+        self.pk.to_bytes() == self.pk.to_edwards().compress().0
     }
 
     /// Convert a raw Ed25519 public key (32 bytes) to the DER encoding
@@ -706,7 +699,7 @@ impl PublicKey {
         let signature = Signature::from_slice(signature)?;
 
         let k = Self::compute_challenge(&signature, self, msg);
-        let minus_a = -self.edwards;
+        let minus_a = -self.pk.to_edwards();
         let recomputed_r =
             EdwardsPoint::vartime_double_scalar_mul_basepoint(&k, &minus_a, signature.s());
 
@@ -770,7 +763,7 @@ impl PublicKey {
         let zhrams = hrams.iter().zip(zs.iter()).map(|(hram, z)| hram * z);
 
         let r = signatures.iter().map(|sig| *sig.r());
-        let pk = keys.iter().map(|pk| pk.edwards);
+        let pk = keys.iter().map(|pk| pk.pk.to_edwards());
 
         let id = EdwardsPoint::vartime_multiscalar_mul(
             once(-b_coefficient).chain(zs.iter().cloned()).chain(zhrams),
