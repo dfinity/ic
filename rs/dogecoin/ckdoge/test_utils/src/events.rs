@@ -54,7 +54,7 @@ impl<E> MinterEventAssert<E> {
         self
     }
 
-    pub fn none_satisy<P>(self, predicate: P) -> Self
+    pub fn none_satisfy<P>(self, predicate: P) -> Self
     where
         P: Fn(&E) -> bool,
         E: fmt::Debug,

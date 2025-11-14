@@ -341,7 +341,7 @@ where
 
         minter
             .assert_that_events()
-            .none_satisy(|event| {
+            .none_satisfy(|event| {
                 matches!(
                     event,
                     EventType::SentBtcTransaction { .. } | EventType::ReplacedBtcTransaction { .. }
