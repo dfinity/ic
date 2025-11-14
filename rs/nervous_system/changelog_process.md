@@ -22,11 +22,11 @@ The next section describes how these files are maintained.
 3. After the proposal is executed, move the entries from
    `unreleased_changelog.md` to its sibling `CHANGELOG.md` file. This can be
    done by running
-   
+
    ```bash
    PROPOSAL_ID=???
 
-   ./testnet/tools/nns-tools/add-release-to-changelog.sh $PROPOSAL_ID
+   ./rs/nervous_system/tools/helpers/add-release-to-changelog.sh $PROPOSAL_ID
    ```
 
 If your new code is not active in release builds (because it is behind a feature
