@@ -17470,6 +17470,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "messaging-test"
+version = "0.9.0"
+dependencies = [
+ "assert_matches",
+ "candid",
+ "canister-test",
+ "futures",
+ "ic-cdk",
+ "ic-state-machine-tests",
+ "ic-types",
+ "ic-types-test-utils",
+ "messaging-test-utils",
+ "proptest",
+ "serde",
+ "serde_bytes",
+ "test-strategy 0.4.0",
+]
+
+[[package]]
+name = "messaging-test-utils"
+version = "0.9.0"
+dependencies = [
+ "candid",
+ "ic-types",
+ "messaging-test",
+ "proptest",
+]
+
+[[package]]
 name = "mime"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"

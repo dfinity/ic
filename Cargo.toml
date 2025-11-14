@@ -392,6 +392,7 @@ members = [
     "rs/rust_canisters/ecdsa",
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
+    "rs/rust_canisters/messaging_test",
     "rs/rust_canisters/on_wire",
     "rs/rust_canisters/proxy_canister",
     "rs/rust_canisters/random_traffic_test",
