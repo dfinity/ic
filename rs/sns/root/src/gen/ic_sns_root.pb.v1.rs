@@ -111,7 +111,7 @@ pub mod register_extension_response {
     PartialEq,
     ::prost::Message,
 )]
-pub struct DeregisterExtensionRequest {
+pub struct CleanUpFailedRegisterExtensionRequest {
     #[prost(message, optional, tag = "1")]
     pub canister_id: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
@@ -123,12 +123,15 @@ pub struct DeregisterExtensionRequest {
     PartialEq,
     ::prost::Message,
 )]
-pub struct DeregisterExtensionResponse {
-    #[prost(oneof = "deregister_extension_response::Result", tags = "1, 2")]
-    pub result: ::core::option::Option<deregister_extension_response::Result>,
+pub struct CleanUpFailedRegisterExtensionResponse {
+    #[prost(
+        oneof = "clean_up_failed_register_extension_response::Result",
+        tags = "1, 2"
+    )]
+    pub result: ::core::option::Option<clean_up_failed_register_extension_response::Result>,
 }
-/// Nested message and enum types in `DeregisterExtensionResponse`.
-pub mod deregister_extension_response {
+/// Nested message and enum types in `CleanUpFailedRegisterExtensionResponse`.
+pub mod clean_up_failed_register_extension_response {
     #[derive(
         candid::CandidType,
         candid::Deserialize,
