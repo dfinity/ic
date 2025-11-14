@@ -269,7 +269,9 @@ impl PrivateKey {
         let der = pem::parse(pem)
             .map_err(|e| PrivateKeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
         if der.tag() != "PRIVATE KEY" {
-            return Err(PrivateKeyDecodingError::UnexpectedPemLabel(der.tag().to_string()));
+            return Err(PrivateKeyDecodingError::UnexpectedPemLabel(
+                der.tag().to_string(),
+            ));
         }
 
         Self::deserialize_pkcs8(der.contents())
@@ -676,7 +678,9 @@ impl PublicKey {
         let der = pem::parse(pem)
             .map_err(|e| PublicKeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
         if der.tag() != "PUBLIC KEY" {
-            return Err(PublicKeyDecodingError::UnexpectedPemLabel(der.tag().to_string()));
+            return Err(PublicKeyDecodingError::UnexpectedPemLabel(
+                der.tag().to_string(),
+            ));
         }
 
         Self::deserialize_rfc8410_der(der.contents())
