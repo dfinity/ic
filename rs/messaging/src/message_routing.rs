@@ -64,6 +64,7 @@ mod tests;
 
 // How many batches we allow in the execution queue before we start rejecting
 // incoming batches.
+// Rebuild
 const BATCH_QUEUE_BUFFER_SIZE: usize = 16;
 
 const METRIC_DELIVER_BATCH_COUNT: &str = "mr_deliver_batch_count";

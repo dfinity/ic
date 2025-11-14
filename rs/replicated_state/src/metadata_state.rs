@@ -50,6 +50,7 @@ use std::{
 };
 
 /// `BTreeMap` of streams by destination `SubnetId`.
+/// Rebuild
 pub type StreamMap = BTreeMap<SubnetId, Stream>;
 
 /// Replicated system metadata.  Used primarily for inter-canister messaging and
