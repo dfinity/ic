@@ -58,51 +58,24 @@ bazel_dep(name = "pigz", version = "2.8")  # (parallel) gzip
 
 # Rust dependencies
 
-bazel_dep(name = "rules_rust", version = "0.66.0")
+bazel_dep(name = "rules_rust", version = "0.67.0")
 
 archive_override(
     module_name = "rules_rust",
     patch_strip = 1,
-    patches = ["//bazel:rules_rust_strip_level.patch"],
-    integrity = "sha256-5Kgp+5cZcrJoTOUq9CF6KJdNsB2zNzvYM9UnYMoY5lc=",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.66.0/rules_rust-0.66.0.tar.gz"],
+    patches = [
+        "//bazel:rules_rust_strip_level.patch",
+    ],
+    integrity = "sha256-3Ch+PsqAsp1cyV4mHK4nPu3xr0oAqWrpN+I0U02tskw=",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.67.0/rules_rust-0.67.0.tar.gz"],
 )
 
 rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
 rust.toolchain(
     edition = "2024",
-    target_settings = [ "@rules_rust//rust/platform:x86_64-unknown-linux-gnu" ],
-    strip_level = {
-        "dbg": "none",
-        "fastbuild": "none",
-        "opt": "none",
-    },
     versions = ["1.90.0"],
 )
 
-rust.toolchain(
-    edition = "2024",
-    target_settings = [ "@rules_rust//rust/platform:x86_64-apple-darwin" ],
-    versions = ["1.90.0"],
-)
-
-rust.toolchain(
-    edition = "2024",
-    target_settings = [ "@rules_rust//rust/platform:aarch64-apple-darwin" ],
-    versions = ["1.90.0"],
-)
-
-rust.toolchain(
-    edition = "2024",
-    target_settings = [ "@rules_rust//rust/platform:aarch64-unknown-linux-gnu" ],
-    versions = ["1.90.0"],
-)
-
-rust.toolchain(
-    edition = "2024",
-    target_settings = [ "@rules_rust//rust/platform:wasm32-unknown-unknown" ],
-    versions = ["1.90.0"],
-)
 
 # Repin with `CARGO_BAZEL_REPIN=true bazel build @crate_index//...`
 

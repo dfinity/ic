@@ -1,22 +1,16 @@
 diff --git a/rust/extensions.bzl b/rust/extensions.bzl
-index 99868b0df..1098d65d9 100644
+index 99868b0df..5932b0760 100644
 --- a/rust/extensions.bzl
 +++ b/rust/extensions.bzl
-@@ -115,6 +115,7 @@ def _rust_impl(module_ctx):
-                 rust_analyzer_version = toolchain.rust_analyzer_version,
-                 sha256s = toolchain.sha256s,
-                 extra_target_triples = toolchain.extra_target_triples,
-+                strip_level = toolchain.strip_level,
-                 urls = toolchain.urls,
-                 versions = toolchain.versions,
-                 register_toolchains = False,
-@@ -219,6 +220,9 @@ _RUST_TOOLCHAIN_TAG = tag_class(
-         "rust_analyzer_version": attr.string(
-             doc = "The version of Rustc to pair with rust-analyzer.",
-         ),
-+        "strip_level": attr.string_dict(
-+            doc = "Rustc strip levels. For more details see the documentation for `rust_toolchain.strip_level`.",
-+        ),
-         "target_settings": attr.label_list(
-             doc = "A list of `config_settings` that must be satisfied by the target configuration in order for this toolchain to be selected during toolchain resolution.",
-         ),
+@@ -122,6 +122,11 @@ def _rust_impl(module_ctx):
+                 toolchain_triples = toolchain_triples,
+                 target_settings = [str(v) for v in toolchain.target_settings],
+                 extra_toolchain_infos = extra_toolchain_infos,
++                strip_level = {"x86_64-unknown-linux-gnu": {
++                    "dbg": "none",
++                    "fastbuild": "none",
++                    "opt": "none",
++                }},
+             )
+     metadata_kwargs = {}
+     if bazel_features.external_deps.extension_metadata_has_reproducible:
