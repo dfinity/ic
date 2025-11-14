@@ -257,10 +257,7 @@ impl PrivateKey {
     pub fn serialize_pkcs8_pem(&self, format: PrivateKeyFormat) -> String {
         let pkcs8 = self.serialize_pkcs8(format);
 
-        pem::encode(&pem::Pem {
-            tag: "PRIVATE KEY".to_string(),
-            contents: pkcs8,
-        })
+        pem::encode(&pem::Pem::new("PRIVATE KEY", pkcs8))
     }
 
     /// Deserialize an Ed25519 private key from PKCS8 PEM format
@@ -271,11 +268,11 @@ impl PrivateKey {
     pub fn deserialize_pkcs8_pem(pem: &str) -> Result<Self, PrivateKeyDecodingError> {
         let der = pem::parse(pem)
             .map_err(|e| PrivateKeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
-        if der.tag != "PRIVATE KEY" {
-            return Err(PrivateKeyDecodingError::UnexpectedPemLabel(der.tag));
+        if der.tag() != "PRIVATE KEY" {
+            return Err(PrivateKeyDecodingError::UnexpectedPemLabel(der.tag().to_string()));
         }
 
-        Self::deserialize_pkcs8(&der.contents)
+        Self::deserialize_pkcs8(der.contents())
     }
 
     /// Derive a private key from this private key using a derivation path
@@ -642,12 +639,11 @@ impl PublicKey {
     /// Serialize this public key as a PEM encoded structure
     ///
     /// See RFC 8410 for details on the format
+    ///
+    /// This returns a Vec<u8> instead of a String for accidental/historical reasons
     pub fn serialize_rfc8410_pem(&self) -> Vec<u8> {
-        pem::encode(&pem::Pem {
-            tag: "PUBLIC KEY".to_string(),
-            contents: self.serialize_rfc8410_der(),
-        })
-        .into()
+        let der = self.serialize_rfc8410_der();
+        pem::encode(&pem::Pem::new("PUBLIC KEY", der)).into()
     }
 
     /// Deserialize the DER encoded public key
@@ -679,11 +675,11 @@ impl PublicKey {
     pub fn deserialize_rfc8410_pem(pem: &str) -> Result<Self, PublicKeyDecodingError> {
         let der = pem::parse(pem)
             .map_err(|e| PublicKeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
-        if der.tag != "PUBLIC KEY" {
-            return Err(PublicKeyDecodingError::UnexpectedPemLabel(der.tag));
+        if der.tag() != "PUBLIC KEY" {
+            return Err(PublicKeyDecodingError::UnexpectedPemLabel(der.tag().to_string()));
         }
 
-        Self::deserialize_rfc8410_der(&der.contents)
+        Self::deserialize_rfc8410_der(der.contents())
     }
 
     /// Helper function for computing H(R || A || M)

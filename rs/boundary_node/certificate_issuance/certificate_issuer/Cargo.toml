@@ -28,7 +28,7 @@ idna = { workspace = true }
 instant-acme = "0.7.2"
 leb128 = "0.2.5"
 mockall = { workspace = true }
-pem = "1.1.0"
+pem = { workspace = true }
 prometheus = { workspace = true }
 rcgen = { workspace = true }
 reqwest = { workspace = true }
