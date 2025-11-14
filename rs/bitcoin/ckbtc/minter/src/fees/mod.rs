@@ -1,12 +1,17 @@
 use crate::Network;
 use crate::state::CkBtcMinterState;
 use ic_btc_interface::{MillisatoshiPerByte, Satoshi};
+use std::cmp::max;
 
 pub trait FeeEstimator {
     fn estimate_median_fee(
         &self,
         fee_percentiles: &[MillisatoshiPerByte],
     ) -> Option<MillisatoshiPerByte>;
+
+    /// Evaluate the fee necessary to cover the minter's cycles consumption.
+    fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> Satoshi;
+
     fn minimum_withrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi;
 }
 
@@ -28,7 +33,7 @@ impl BitcoinFeeEstimator {
     /// An estimated fee per vbyte of 142 millistatoshis per vbyte was selected around 2025.06.21 01:09:50 UTC
     /// for Bitcoin Mainnet, whereas the median fee around that time should have been 2_000.
     /// Until we know the root cause, we ensure that the estimated fee has a meaningful minimum value.
-    pub const fn minimum_fee_per_vbyte(&self) -> MillisatoshiPerByte {
+    const fn minimum_fee_per_vbyte(&self) -> MillisatoshiPerByte {
         match &self.network {
             Network::Mainnet => 1_500,
             Network::Testnet => 1_000,
@@ -55,6 +60,20 @@ impl FeeEstimator for BitcoinFeeEstimator {
             Network::Regtest => Some(DEFAULT_REGTEST_FEE),
         };
         median_fee.map(|f| f.max(self.minimum_fee_per_vbyte()))
+    }
+
+    fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> u64 {
+        const MINTER_FEE_PER_INPUT: u64 = 146;
+        const MINTER_FEE_PER_OUTPUT: u64 = 4;
+        const MINTER_FEE_CONSTANT: u64 = 26;
+        const MINTER_ADDRESS_DUST_LIMIT: Satoshi = 300;
+
+        max(
+            MINTER_FEE_PER_INPUT * num_inputs
+                + MINTER_FEE_PER_OUTPUT * num_outputs
+                + MINTER_FEE_CONSTANT,
+            MINTER_ADDRESS_DUST_LIMIT,
+        )
     }
 
     /// Returns the minimum withdrawal amount based on the current median fee rate (in millisatoshi per byte).
