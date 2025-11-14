@@ -1,10 +1,12 @@
 use crate::{
     governance::{Governance, TREASURY_SUBACCOUNT_NONCE},
-    logs::INFO,
+    logs::{ERROR, INFO},
     pb::{
         sns_root_types::{
-            CanisterCallError, ListSnsCanistersRequest, ListSnsCanistersResponse,
-            RegisterExtensionRequest, RegisterExtensionResponse, register_extension_response,
+            CanisterCallError, CleanUpFailedRegisterExtensionRequest,
+            CleanUpFailedRegisterExtensionResponse, ListSnsCanistersRequest,
+            ListSnsCanistersResponse, RegisterExtensionRequest, RegisterExtensionResponse,
+            clean_up_failed_register_extension_response, register_extension_response,
         },
         v1 as pb,
         v1::{
@@ -450,64 +452,81 @@ pub struct ValidatedRegisterExtension {
 
 impl ValidatedRegisterExtension {
     pub async fn execute(self, governance: &Governance) -> Result<(), GovernanceError> {
-        let context = governance.treasury_manager_deposit_context().await?;
+        let main = async || {
+            let context = governance.treasury_manager_deposit_context().await?;
 
-        let ValidatedRegisterExtension {
-            spec,
-            init,
-            extension_canister_id,
-            wasm,
-        } = self;
-
-        governance
-            .register_extension_with_root(extension_canister_id)
-            .await?;
-
-        // Before granting any SNS capabilities to the extension, we must ensure that old code
-        // could not have snuck in between proposal (re-)validation and the SNS assuming control.
-        governance
-            .ensure_no_code_is_installed(extension_canister_id)
-            .await?;
-
-        // This needs to happen before the canister code is installed.
-        let init_blob = match init {
-            ValidatedExtensionInit::TreasuryManager(ValidatedDepositOperationArg {
-                treasury_allocation_sns_e8s,
-                treasury_allocation_icp_e8s,
-                original,
-            }) => {
-                let init_blob = construct_treasury_manager_init_payload(context.clone(), original)
-                    .map_err(|err| {
-                        GovernanceError::new_with_message(
-                            ErrorType::InvalidProposal,
-                            format!("Error constructing TreasuryManagerInit payload: {err}"),
-                        )
-                    })?;
-
-                governance
-                    .approve_treasury_manager(
-                        extension_canister_id,
-                        treasury_allocation_sns_e8s,
-                        treasury_allocation_icp_e8s,
-                    )
-                    .await?;
-
-                init_blob
-            }
-        };
-
-        governance
-            .upgrade_non_root_canister(
+            let ValidatedRegisterExtension {
+                spec,
+                init,
                 extension_canister_id,
                 wasm,
-                init_blob,
-                CanisterInstallMode::Install,
-            )
-            .await?;
+            } = self;
 
-        cache_registered_extension(extension_canister_id, spec);
+            governance
+                .register_extension_with_root(extension_canister_id)
+                .await?;
 
-        Ok(())
+            // Before granting any SNS capabilities to the extension, we must ensure that old code
+            // could not have snuck in between proposal (re-)validation and the SNS assuming control.
+            governance
+                .ensure_no_code_is_installed(extension_canister_id)
+                .await?;
+
+            // This needs to happen before the canister code is installed.
+            let init_blob = match init {
+                ValidatedExtensionInit::TreasuryManager(ValidatedDepositOperationArg {
+                    treasury_allocation_sns_e8s,
+                    treasury_allocation_icp_e8s,
+                    original,
+                }) => {
+                    let init_blob =
+                        construct_treasury_manager_init_payload(context.clone(), original)
+                            .map_err(|err| {
+                                GovernanceError::new_with_message(
+                                    ErrorType::InvalidProposal,
+                                    format!(
+                                        "Error constructing TreasuryManagerInit payload: {err}"
+                                    ),
+                                )
+                            })?;
+
+                    governance
+                        .approve_treasury_manager(
+                            extension_canister_id,
+                            treasury_allocation_sns_e8s,
+                            treasury_allocation_icp_e8s,
+                        )
+                        .await?;
+
+                    init_blob
+                }
+            };
+
+            governance
+                .upgrade_non_root_canister(
+                    extension_canister_id,
+                    wasm,
+                    init_blob,
+                    CanisterInstallMode::Install,
+                )
+                .await?;
+
+            cache_registered_extension(extension_canister_id, spec);
+
+            Ok(())
+        };
+
+        let main_result = main().await;
+
+        // Try to clean up if main_result is Err. Cleaning up consists of
+        // calling the Root canister's clean_up_failed_register_extension method.
+        if main_result.is_err() {
+            governance
+                .clean_up_failed_register_extension(self.extension_canister_id)
+                .await;
+        }
+
+        main_result
     }
 }
 
@@ -627,6 +646,68 @@ impl Governance {
         );
 
         Ok(())
+    }
+
+    // Currently, this just consists of calling Root's
+    // clean_up_failed_register_extension method, but maybe, in the future, this
+    // would do more (locally, in this SNS Governance canister).
+    async fn clean_up_failed_register_extension(&self, extension_canister_id: CanisterId) {
+        let main = async || -> Result<(), String> {
+            let request = Encode!(&CleanUpFailedRegisterExtensionRequest {
+                canister_id: Some(extension_canister_id.get()),
+            })
+            .map_err(|err| {
+                format!("Could not encode Root.clean_up_failed_register_extension request: {err:?}")
+            })?;
+
+            // Call clean_up_failed_register_extension method of the SNS Root canister.
+            let reply = self
+                .env
+                .call_canister(
+                    self.proto.root_canister_id_or_panic(),
+                    "clean_up_failed_register_extension",
+                    request,
+                )
+                .await
+                .map_err(|err| {
+                    format!("Failed to call Root.clean_up_failed_register_extension: {err:?}")
+                })?;
+
+            // Make sure reply does not indicate any problems.
+            let CleanUpFailedRegisterExtensionResponse { result } =
+                Decode!(&reply, CleanUpFailedRegisterExtensionResponse).map_err(|err| {
+                    format!(
+                        "Failed to decode Root.clean_up_failed_register_extension response: {err:?}"
+                    )
+                })?;
+            if let Some(clean_up_failed_register_extension_response::Result::Err(
+                CanisterCallError { code, description },
+            )) = result
+            {
+                let code = if let Some(code) = code {
+                    code.to_string()
+                } else {
+                    "<no code>".to_string()
+                };
+
+                return Err(format!(
+                    "Root.clean_up_failed_register_extension failed with code {code}: {description}"
+                ));
+            }
+
+            Ok(())
+        };
+
+        if let Err(err) = main().await {
+            log!(ERROR, "{err}");
+            return;
+        }
+
+        log!(
+            INFO,
+            "Root.clean_up_failed_register_extension succeeded for canister {}",
+            extension_canister_id.get()
+        );
     }
 
     async fn approve_treasury_manager(

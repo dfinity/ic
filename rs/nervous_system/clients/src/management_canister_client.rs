@@ -2,6 +2,8 @@ use crate::{
     canister_id_record::CanisterIdRecord,
     canister_metadata::canister_metadata,
     canister_status::{CanisterStatusResultFromManagementCanister, canister_status},
+    delete_canister::delete_canister,
+    stop_canister::stop_canister,
     update_settings::{UpdateSettings, update_settings},
 };
 use async_trait::async_trait;
@@ -42,6 +44,16 @@ pub trait ManagementCanisterClient {
     ) -> Result<Vec<u8>, (i32, String)>;
 
     fn canister_version(&self) -> Option<u64>;
+
+    async fn stop_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)>;
+
+    async fn delete_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)>;
 }
 
 /// An example implementation of the ManagementCanisterClient trait.
@@ -122,6 +134,42 @@ impl<Rt: Runtime + Sync> ManagementCanisterClient for ManagementCanisterClientIm
 
     fn canister_version(&self) -> Option<u64> {
         Some(Rt::canister_version())
+    }
+
+    async fn stop_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)> {
+        let _tracker = self.proxied_canister_calls_tracker.map(|tracker| {
+            let args = Encode!(&canister_id_record).unwrap_or_default();
+            ProxiedCanisterCallsTracker::start_tracking(
+                tracker,
+                dfn_core::api::caller(),
+                IC_00,
+                "stop_canister",
+                &args,
+            )
+        });
+
+        stop_canister::<Rt>(canister_id_record).await
+    }
+
+    async fn delete_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)> {
+        let _tracker = self.proxied_canister_calls_tracker.map(|tracker| {
+            let args = Encode!(&canister_id_record).unwrap_or_default();
+            ProxiedCanisterCallsTracker::start_tracking(
+                tracker,
+                dfn_core::api::caller(),
+                IC_00,
+                "delete_canister",
+                &args,
+            )
+        });
+
+        delete_canister::<Rt>(canister_id_record).await
     }
 }
 
@@ -224,6 +272,22 @@ where
         //   3. No need for this method to be async.
         self.inner.canister_version()
     }
+
+    async fn stop_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)> {
+        let _loan = self.try_borrow_slot()?;
+        self.inner.stop_canister(canister_id_record).await
+    }
+
+    async fn delete_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)> {
+        let _loan = self.try_borrow_slot()?;
+        self.inner.delete_canister(canister_id_record).await
+    }
 }
 
 /// Increments available_slot_count by used_slot_count when dropped.
@@ -275,6 +339,8 @@ pub enum MockManagementCanisterClientCall {
     CanisterStatus(CanisterIdRecord),
     UpdateSettings(UpdateSettings),
     CanisterMetadata(PrincipalId, String),
+    StopCanister(CanisterIdRecord),
+    DeleteCanister(CanisterIdRecord),
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -283,6 +349,8 @@ pub enum MockManagementCanisterClientReply {
     CanisterStatus(Result<CanisterStatusResultFromManagementCanister, (i32, String)>),
     UpdateSettings(Result<(), (i32, String)>),
     CanisterMetadata(Result<Vec<u8>, (i32, String)>),
+    StopCanister(Result<(), (i32, String)>),
+    DeleteCanister(Result<(), (i32, String)>),
 }
 
 #[async_trait]
@@ -368,6 +436,62 @@ impl ManagementCanisterClient for MockManagementCanisterClient {
 
     fn canister_version(&self) -> Option<u64> {
         None
+    }
+
+    async fn stop_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push_back(MockManagementCanisterClientCall::StopCanister(
+                canister_id_record,
+            ));
+
+        let reply = self
+            .replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("Expected a MockManagementCanisterClientCall to be on the queue.");
+
+        match reply {
+            MockManagementCanisterClientReply::StopCanister(result) => result,
+            err => panic!(
+                "Expected MockManagementCanisterClientReply::StopCanister to be at \
+                the front of the queue. Had {:?}",
+                err
+            ),
+        }
+    }
+
+    async fn delete_canister(
+        &self,
+        canister_id_record: CanisterIdRecord,
+    ) -> Result<(), (i32, String)> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push_back(MockManagementCanisterClientCall::DeleteCanister(
+                canister_id_record,
+            ));
+
+        let reply = self
+            .replies
+            .lock()
+            .unwrap()
+            .pop_front()
+            .expect("Expected a MockManagementCanisterClientCall to be on the queue.");
+
+        match reply {
+            MockManagementCanisterClientReply::DeleteCanister(result) => result,
+            err => panic!(
+                "Expected MockManagementCanisterClientReply::StopCanister to be at \
+                the front of the queue. Had {:?}",
+                err
+            ),
+        }
     }
 }
 

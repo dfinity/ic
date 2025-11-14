@@ -68,6 +68,19 @@ message RegisterExtensionResponse {
   }
 }
 
+message CleanUpFailedRegisterExtensionRequest {
+  ic_base_types.pb.v1.PrincipalId canister_id = 1;
+}
+
+message CleanUpFailedRegisterExtensionResponse {
+  message Ok {}
+
+  oneof result {
+    Ok ok = 1;
+    CanisterCallError err = 2;
+  }
+}
+
 message RegisterDappCanisterRequest {
   ic_base_types.pb.v1.PrincipalId canister_id = 1;
 }
