@@ -252,7 +252,7 @@ async fn main() -> Result<(), Error> {
     let cipher = Arc::new({
         let f = std::fs::read(cli.key_path).context("failed to open key file")?;
         let p = pem::parse(f).context("failed to parse pem file")?;
-        XChaCha20Poly1305::new_from_slice(&p.contents).context("failed to init symmetric key")?
+        XChaCha20Poly1305::new_from_slice(p.contents()).context("failed to init symmetric key")?
     });
 
     let encoder = Encoder::new(cipher.clone());

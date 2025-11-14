@@ -16,7 +16,7 @@ documentation.workspace = true
 hmac = "0.12"
 num-bigint = { workspace = true }
 p256 = { workspace = true }
-pem = "1.1.0"
+pem = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 sha2 = { workspace = true }
