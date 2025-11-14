@@ -365,6 +365,7 @@ mod withdrawal {
             .minter_retrieve_doge_with_approval(withdrawal_amount, DOGECOIN_ADDRESS_1)
             .expect_withdrawal_request_accepted()
             .dogecoin_await_transaction()
+            //also ensures the resubmission transaction uses 2 inputs.
             .minter_await_resubmission()
             .assert_sent_transactions(|sent| {
                 assert_eq!(sent.len(), 2);
