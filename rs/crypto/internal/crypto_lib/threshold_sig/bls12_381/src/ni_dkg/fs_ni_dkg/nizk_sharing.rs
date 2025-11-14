@@ -284,7 +284,8 @@ pub fn verify_sharing(
         // Verify: product [A_k ^ sum [i^k * x^i | i <- [1..n]] | k <- [0..t-1]]^x' * A
         // == g_2^z_alpha
 
-        let mut ik = vec![Scalar::one(); instance.public_keys.len()];
+        // We initialize ik with x_challenge (A) to avoid the point/scalar multiplication later
+        let mut ik = vec![x_challenge.clone(); instance.public_keys.len()];
 
         let mut scalars = Vec::with_capacity(instance.public_coefficients.len());
         for _pc in &instance.public_coefficients {
@@ -297,7 +298,6 @@ pub fn verify_sharing(
         }
         let lhs =
             G2Projective::muln_affine_vartime(&instance.public_coefficients[..], &scalars[..])
-                * &x_challenge
                 + &nizk.aa;
 
         let rhs = &instance.g2_gen * &nizk.z_alpha;
@@ -313,16 +313,29 @@ pub fn verify_sharing(
         // LHS = product [C_i ^ x^i | i <- [1..n]]^x' * Y
         // RHS = product [y_i ^ x^i | i <- 1..n]^z_r * g_1^z_alpha
 
-        let cc_mul_xi = G1Projective::muln_affine_vartime(&instance.combined_ciphertexts, &xpow);
-        let lhs = cc_mul_xi * &x_challenge + &nizk.yy;
+        // The two expressions are re-arranged so that it becomes possible to compute
+        // everything with a single multi scalar multiplication.
 
-        let pk_mul_xi = G1Projective::muln_affine_vartime(&instance.public_keys, &xpow);
-        let rhs = G1Projective::mul2(
-            &pk_mul_xi,
-            &nizk.z_r,
-            &G1Projective::from(&instance.g1_gen),
-            &nizk.z_alpha,
-        );
+        let instance_inputs = instance
+            .combined_ciphertexts
+            .iter()
+            .chain(&instance.public_keys)
+            .cloned()
+            .collect::<Vec<G1Affine>>();
+        let challenges = {
+            let mut c = Vec::with_capacity(xpow.len() * 2);
+            for xp in &xpow {
+                c.push(xp * &x_challenge);
+            }
+            let z_r_neg = nizk.z_r.neg();
+            for xp in &xpow {
+                c.push(xp * &z_r_neg);
+            }
+            c
+        };
+
+        let lhs = G1Projective::muln_affine_vartime(&instance_inputs, &challenges);
+        let rhs = &instance.g1_gen * &nizk.z_alpha + &nizk.yy.neg();
 
         if lhs != rhs {
             return Err(ZkProofSharingError::InvalidProof);
