@@ -115,7 +115,7 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
         }
     }
 
-    /// Create an approve operation
+    /// Create a fee collector block
     pub fn fee_collector(
         self,
         fee_collector: Option<Account>,
