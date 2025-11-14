@@ -442,7 +442,7 @@ pub fn verify_chunking(
         let acc = Scalar::muln_vartime(&nizk.z_s, &xpowers);
 
         let rhs = G1Projective::muln_affine_vartime(&instance.public_keys, &nizk.z_r)
-            + G1Projective::mul2(
+            + G1Projective::mul2_vartime(
                 &G1Projective::from(&nizk.y0),
                 &nizk.z_beta,
                 &G1Projective::from(g1),
