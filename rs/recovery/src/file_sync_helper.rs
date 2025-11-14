@@ -200,10 +200,9 @@ where
         .arg("--partial")
         .arg("--progress")
         .arg("--no-g");
-    rsync.args(
-        srcs.into_iter()
-            .map(|s| s.as_ref().as_os_str().to_os_string()),
-    );
+    for src in srcs {
+        rsync.arg(src.as_ref());
+    }
     rsync.arg(target.as_ref());
     rsync.arg("-e").arg(ssh_helper::get_rsync_ssh_arg(key_file));
 
