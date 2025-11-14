@@ -7,10 +7,10 @@
 
 use super::*;
 use crate::api::threshold_sign_error::ClibThresholdSignError;
+use ic_crypto_internal_bls12_381_type::G2Affine;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::{
     PublicKeyBytes, ThresholdSigPublicKeyBytesConversionError,
 };
-use ic_crypto_internal_bls12_381_type::G2Affine;
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use std::convert::TryFrom;
 

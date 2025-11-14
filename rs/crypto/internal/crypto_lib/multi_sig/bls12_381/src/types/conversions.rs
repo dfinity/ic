@@ -1,8 +1,8 @@
 //! Type conversions for BLS12-381 multisignatures.
 use super::*;
+use ic_crypto_internal_bls12_381_type::G2Affine;
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use std::convert::TryFrom;
-use ic_crypto_internal_bls12_381_type::G2Affine;
 
 pub mod protobuf;
 
@@ -27,14 +27,13 @@ impl TryFrom<&PublicKeyBytes> for PublicKey {
     type Error = CryptoError;
 
     fn try_from(public_key_bytes: &PublicKeyBytes) -> Result<Self, Self::Error> {
-        G2Affine::deserialize_public_key(&public_key_bytes.0).map_err(|_| {
-            CryptoError::MalformedPublicKey {
+        G2Affine::deserialize_public_key(&public_key_bytes.0)
+            .map_err(|_| CryptoError::MalformedPublicKey {
                 algorithm: AlgorithmId::MultiBls12_381,
                 key_bytes: Some(public_key_bytes.0.to_vec()),
                 internal_error: "Point decoding failed".to_string(),
-            }
-        })
-        .map(|pt| pt.into())
+            })
+            .map(|pt| pt.into())
     }
 }
 impl From<&PublicKey> for PublicKeyBytes {
