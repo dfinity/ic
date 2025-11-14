@@ -333,16 +333,16 @@ fn build_streams_local_canisters() {
 }
 
 #[test]
-fn build_streams_impl_at_message_limit_leaves_state_untouched() {
-    build_streams_impl_at_limit_leaves_state_untouched_impl(0, usize::MAX);
+fn build_streams_at_message_limit_leaves_state_untouched() {
+    build_streams_at_limit_leaves_state_untouched_impl(0, usize::MAX);
 }
 
 #[test]
-fn build_streams_impl_at_memory_limit_leaves_state_untouched() {
-    build_streams_impl_at_limit_leaves_state_untouched_impl(usize::MAX, 0);
+fn build_streams_at_memory_limit_leaves_state_untouched() {
+    build_streams_at_limit_leaves_state_untouched_impl(usize::MAX, 0);
 }
 
-fn build_streams_impl_at_limit_leaves_state_untouched_impl(
+fn build_streams_at_limit_leaves_state_untouched_impl(
     max_stream_messages: usize,
     target_stream_size_bytes: usize,
 ) {
@@ -410,15 +410,15 @@ fn build_streams_impl_at_limit_leaves_state_untouched_impl(
     });
 }
 
-/// Helper for testing `build_streams_impl()` with various message or byte size
+/// Helper for testing `build_streams()` with various message or byte size
 /// limits.
 ///
-/// `max_stream_messages` is passed to `build_streams_impl()` as the parameter
+/// `max_stream_messages` is passed to `build_streams()` as the parameter
 /// of the same name. `max_stream_messages_by_byte_size` is multiplied by the
 /// generated message size and passed as the `target_stream_size_bytes`
 /// parameter. `expected_messages` is the number of messages expected to have
 /// been routed.
-fn build_streams_impl_respects_limits(
+fn build_streams_respects_limits(
     max_stream_messages: usize,
     max_stream_messages_by_byte_size: usize,
     expected_messages: u64,
@@ -524,13 +524,13 @@ fn build_streams_impl_respects_limits(
 }
 
 #[test]
-fn build_streams_impl_respects_byte_size_limit() {
-    build_streams_impl_respects_limits(1_000_000, 4, 4);
+fn build_streams_respects_byte_size_limit() {
+    build_streams_respects_limits(1_000_000, 4, 4);
 }
 
 #[test]
-fn build_streams_impl_respects_message_limit() {
-    build_streams_impl_respects_limits(4, 1_000_000, 4);
+fn build_streams_respects_message_limit() {
+    build_streams_respects_limits(4, 1_000_000, 4);
 }
 
 // Tests that messages addressed to canisters not mapped to a known subnet
@@ -780,14 +780,14 @@ fn build_streams_with_best_effort_messages() {
 #[test_strategy::proptest]
 fn build_streams_with_refunds(
     // Stream may have up to 5 initial refunds.
-    #[strategy(-5..5isize)] initial_refunds: isize,
-    // And up to 10 total initial messages.
-    #[strategy(-5..#initial_refunds.max(0))] initial_messages: isize,
+    #[strategy(-5..=5isize)] initial_refunds: isize,
+    // And up to 10 total initial messages (canister plus refund).
+    #[strategy(-5..=10-#initial_refunds.max(0))] initial_messages: isize,
 
     // Up to 10 refunds to be routed.
-    #[strategy(-5..10isize)] refunds_to_route: isize,
+    #[strategy(-5..=10isize)] refunds_to_route: isize,
     // Plus up to 10 canister messages to be routed.
-    #[strategy(-5..10isize)] messages_to_route: isize,
+    #[strategy(-5..=10isize)] messages_to_route: isize,
 
     #[strategy(proptest::sample::select(&[
         SubnetType::Application,
@@ -797,7 +797,7 @@ fn build_streams_with_refunds(
     subnet_type: SubnetType,
     // Set the system subnet stream message limit so that it's sometimes relevant
     // (for system subnets) and sometimes not.
-    #[strategy(1..6usize)] system_subnet_stream_msg_limit: usize,
+    #[strategy(1..=6usize)] system_subnet_stream_msg_limit: usize,
 ) {
     // Maximum stream messages. Also the number of canisters per subnet, as the pool
     // may only hold one refund per canister.
