@@ -1,4 +1,4 @@
-use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
+use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, threshold_sig_public_key_to_der};
 use ic_interfaces_registry::{
     RegistryClient, RegistryClientVersionedResult, RegistryVersionedRecord,
 };
@@ -34,10 +34,14 @@ impl RegistryCanisterClient {
         println!("NNS public key being used: \n{content}");
 
         let nns_public_key = parse_threshold_sig_key(nns_pem_path.as_path()).unwrap();
+        let der_encoded_key = threshold_sig_public_key_to_der(nns_public_key).unwrap();
 
         RegistryCanisterClient(Arc::new(RegistryCanister::new_with_agent_transformer(
             vec![nns_url],
-            |a| a.with_nns_public_key(nns_public_key),
+            |agent| {
+                agent.set_root_key(der_encoded_key.clone());
+                agent
+            },
         )))
     }
 }

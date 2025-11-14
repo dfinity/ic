@@ -1,11 +1,13 @@
 use async_trait::async_trait;
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Principal};
 use prost::Message;
 use rand::seq::SliceRandom;
 use std::time::Duration;
 use url::Url;
 
-use ic_canister_client::{Agent, Sender};
+use ic_agent::agent::AgentBuilder;
+use ic_agent::identity::AnonymousIdentity;
+use ic_agent::{Agent, AgentError};
 use ic_interfaces_registry::RegistryRecord;
 use ic_registry_canister_api::{Chunk, GetChunkRequest};
 use ic_registry_transport::{
@@ -42,16 +44,14 @@ impl GetChunk for AgentBasedGetChunk<'_> {
         // Call get_chunk.
         let content_sha256 = Some(content_sha256.to_vec());
         let request = Encode!(&GetChunkRequest { content_sha256 }).map_err(new_err)?;
+        let canister_principal = Principal::from(self.registry_canister_id);
         let get_chunk_response: Vec<u8> = self
             .agent
-            .execute_query(&self.registry_canister_id, "get_chunk", request)
+            .query(&canister_principal, "get_chunk")
+            .with_arg(request)
+            .call()
             .await
-            .map_err(new_err)?
-            // I honestly do not know what it means if None is returned
-            // instead of Some(blob), but it really seems like something
-            // has gone wrong (not just empty reply, but rather, no
-            // reply at all), so we treat it as an error.
-            .ok_or_else(|| new_err("No reply (not even empty)"))?;
+            .map_err(new_err)?;
 
         // Extract chunk from get_chunk call.
         let Chunk { content } = Decode!(&get_chunk_response, Result<Chunk, String>)
@@ -65,13 +65,21 @@ impl GetChunk for AgentBasedGetChunk<'_> {
 
 impl RegistryCanister {
     pub fn new(url: Vec<Url>) -> Self {
-        Self::new_with_agent_transformer(url, |a| a)
+        Self::new_with_agent_builder_transformer(url, |b| b)
     }
 
     pub fn new_with_query_timeout(url: Vec<Url>, t: Duration) -> Self {
-        Self::new_with_agent_transformer(url, |a| a.with_query_timeout(t))
+        Self::new_with_agent_builder_transformer(url, |b| {
+            b.with_http_client(
+                reqwest::Client::builder()
+                    .timeout(t)
+                    .build()
+                    .expect("Failed to build HTTP client"),
+            )
+        })
     }
 
+    /// Creates a RegistryCanister with a single pre-built agent.
     pub fn new_with_agent(agent: Agent) -> Self {
         RegistryCanister {
             canister_id: ic_nns_constants::REGISTRY_CANISTER_ID,
@@ -79,21 +87,60 @@ impl RegistryCanister {
         }
     }
 
-    pub fn new_with_agent_transformer<F>(url: Vec<Url>, f: F) -> Self
+    /// Creates a RegistryCanister with a custom agent transformer.
+    ///
+    /// This is the escape hatch for complex agent setup that requires post-build
+    /// operations (e.g., `set_root_key()`, `fetch_root_key().await`).
+    ///
+    /// The transformer receives built agents with anonymous identity and can
+    /// perform any mutations needed before they're used.
+    pub fn new_with_agent_transformer<F>(urls: Vec<Url>, f: F) -> Self
     where
         F: FnMut(Agent) -> Agent,
     {
         assert!(
-            !url.is_empty(),
-            "empty list of URLs passed to RegistryCanister::new()"
+            !urls.is_empty(),
+            "empty list of URLs passed to RegistryCanister::new_with_agent_transformer()"
         );
 
         RegistryCanister {
             canister_id: ic_nns_constants::REGISTRY_CANISTER_ID,
-            agent: url
+            agent: urls
                 .iter()
-                .map(|url| Agent::new(url.clone(), Sender::Anonymous))
+                .map(|url| {
+                    Agent::builder()
+                        .with_url(url.as_str())
+                        .with_identity(AnonymousIdentity)
+                        .with_verify_query_signatures(false)
+                        .build()
+                        .expect("Failed to build agent")
+                })
                 .map(f)
+                .collect(),
+        }
+    }
+
+    /// Internal helper: creates agents using a builder transformer.
+    fn new_with_agent_builder_transformer<F>(urls: Vec<Url>, mut f: F) -> Self
+    where
+        F: FnMut(AgentBuilder) -> AgentBuilder,
+    {
+        assert!(
+            !urls.is_empty(),
+            "empty list of URLs passed to RegistryCanister"
+        );
+
+        RegistryCanister {
+            canister_id: ic_nns_constants::REGISTRY_CANISTER_ID,
+            agent: urls
+                .iter()
+                .map(|url| {
+                    let builder = Agent::builder()
+                        .with_url(url.as_str())
+                        .with_identity(AnonymousIdentity)
+                        .with_verify_query_signatures(false);
+                    f(builder).build().expect("Failed to build agent")
+                })
                 .collect(),
         }
     }
@@ -114,41 +161,34 @@ impl RegistryCanister {
         version: u64,
     ) -> Result<(Vec<RegistryDelta>, u64), Error> {
         let payload = serialize_get_changes_since_request(version).unwrap();
-        match self
+        let canister_principal = Principal::from(self.canister_id);
+        let response = self
             .choose_random_agent()
-            .execute_query(&self.canister_id, "get_changes_since", payload)
+            .query(&canister_principal, "get_changes_since")
+            .with_arg(payload)
+            .call()
             .await
-        {
-            Ok(result) => match result {
-                Some(response) => {
-                    let (high_capacity_deltas, version) =
-                        deserialize_get_changes_since_response(response)?;
+            .map_err(|e| {
+                Error::UnknownError(format!("Error on registry_get_changes_since: {e}"))
+            })?;
 
-                    let mut inlined_deltas = vec![];
-                    for delta in high_capacity_deltas {
-                        inlined_deltas.push(
-                            dechunkify_delta(
-                                delta,
-                                &AgentBasedGetChunk {
-                                    registry_canister_id: self.canister_id,
-                                    agent: self.choose_random_agent(),
-                                },
-                            )
-                            .await?,
-                        )
-                    }
+        let (high_capacity_deltas, version) = deserialize_get_changes_since_response(response)?;
 
-                    Ok((inlined_deltas, version))
-                }
-
-                None => Err(ic_registry_transport::Error::UnknownError(
-                    "No response was received from registry_get_changes_since.".to_string(),
-                )),
-            },
-            Err(error_string) => Err(ic_registry_transport::Error::UnknownError(format!(
-                "Error on registry_get_changes_since: {error_string}"
-            ))),
+        let mut inlined_deltas = vec![];
+        for delta in high_capacity_deltas {
+            inlined_deltas.push(
+                dechunkify_delta(
+                    delta,
+                    &AgentBasedGetChunk {
+                        registry_canister_id: self.canister_id,
+                        agent: self.choose_random_agent(),
+                    },
+                )
+                .await?,
+            )
         }
+
+        Ok((inlined_deltas, version))
     }
 
     /// Same as `get_changes_since`, but also converts the deltas into transport
@@ -175,20 +215,17 @@ impl RegistryCanister {
         nns_public_key: &ThresholdSigPublicKey,
     ) -> Result<(Vec<RegistryRecord>, RegistryVersion, Time), Error> {
         let payload = serialize_get_changes_since_request(version).unwrap();
+        let canister_principal = Principal::from(self.canister_id);
         let response = self
             .choose_random_agent()
-            .execute_query(&self.canister_id, "get_certified_changes_since", payload)
+            .query(&canister_principal, "get_certified_changes_since")
+            .with_arg(payload)
+            .call()
             .await
             .map_err(|err| {
                 Error::UnknownError(format!(
                     "Failed to query get_certified_changes_since on canister {}: {}",
                     self.canister_id, err,
-                ))
-            })?
-            .ok_or_else(|| {
-                Error::UnknownError(format!(
-                    "No response was received when queried get_certified_changes_since on {}",
-                    self.canister_id,
                 ))
             })?;
 
@@ -208,25 +245,22 @@ impl RegistryCanister {
 
     pub async fn get_latest_version(&self) -> Result<u64, Error> {
         let agent = self.choose_random_agent();
-        match agent
-            .execute_query(&self.canister_id, "get_latest_version", vec![])
+        let canister_principal = Principal::from(self.canister_id);
+        let response = agent
+            .query(&canister_principal, "get_latest_version")
+            .with_arg(vec![])
+            .call()
             .await
-        {
-            Ok(result) => match result {
-                Some(response) => {
-                    match RegistryGetLatestVersionResponse::decode(response.as_slice()) {
-                        Ok(res) => Ok(res.version),
-                        Err(error) => Err(Error::MalformedMessage(error.to_string())),
-                    }
-                }
-                None => Err(ic_registry_transport::Error::UnknownError(
-                    "No response was received from registry_get_value.".to_string(),
-                )),
-            },
-            Err(error_string) => Err(ic_registry_transport::Error::UnknownError(format!(
-                "Error on registry_get_value_since: {} using agent {:?}",
-                error_string, &agent
-            ))),
+            .map_err(|e| {
+                Error::UnknownError(format!(
+                    "Error on registry_get_value_since: {} using agent",
+                    e
+                ))
+            })?;
+
+        match RegistryGetLatestVersionResponse::decode(response.as_slice()) {
+            Ok(res) => Ok(res.version),
+            Err(error) => Err(Error::MalformedMessage(error.to_string())),
         }
     }
 
@@ -240,10 +274,13 @@ impl RegistryCanister {
     ) -> Result<(Vec<u8>, u64), Error> {
         let payload = serialize_get_value_request(key.clone(), version_opt).unwrap();
         let agent = self.choose_random_agent();
+        let canister_principal = Principal::from(self.canister_id);
 
         // Call Registry's get_value method.
         let result = agent
-            .execute_query(&self.canister_id, "get_value", payload)
+            .query(&canister_principal, "get_value")
+            .with_arg(payload)
+            .call()
             .await;
 
         deserialize_and_dechunk_get_value_result(result, self.canister_id, &key, version_opt, agent)
@@ -260,19 +297,13 @@ impl RegistryCanister {
     ) -> Result<(Vec<u8>, u64), Error> {
         let payload = serialize_get_value_request(key.clone(), version_opt).unwrap();
         let agent = self.choose_random_agent();
-        let nonce = format!("{}", chrono::Utc::now().timestamp_nanos_opt().unwrap())
-            .as_bytes()
-            .to_vec();
+        let canister_principal = Principal::from(self.canister_id);
 
         // Call get_value canister method (presumably, we are talking to Registry here).
         let result = agent
-            .execute_update(
-                &self.canister_id,
-                &self.canister_id,
-                "get_value",
-                payload,
-                nonce,
-            )
+            .update(&canister_principal, "get_value")
+            .with_arg(payload)
+            .call_and_wait()
             .await;
 
         deserialize_and_dechunk_get_value_result(result, self.canister_id, &key, version_opt, agent)
@@ -286,30 +317,20 @@ impl RegistryCanister {
         pre_conditions: Vec<Precondition>,
     ) -> Result<u64, Vec<Error>> {
         let payload = serialize_atomic_mutate_request(mutations, pre_conditions);
-        let nonce = format!("{}", chrono::Utc::now().timestamp_nanos_opt().unwrap())
-            .as_bytes()
-            .to_vec();
-        match self
+        let canister_principal = Principal::from(self.canister_id);
+        let response = self
             .choose_random_agent()
-            .execute_update(
-                &self.canister_id,
-                &self.canister_id,
-                "atomic_mutate",
-                payload,
-                nonce,
-            )
+            .update(&canister_principal, "atomic_mutate")
+            .with_arg(payload)
+            .call_and_wait()
             .await
-        {
-            Ok(result) => match result {
-                Some(response) => deserialize_atomic_mutate_response(response),
-                None => Err(vec![ic_registry_transport::Error::UnknownError(
-                    "No response was received from registry_atomic_mutate.".to_string(),
-                )]),
-            },
-            Err(error_string) => Err(vec![ic_registry_transport::Error::UnknownError(format!(
-                "Error on registry_atomic_mutate: {error_string}"
-            ))]),
-        }
+            .map_err(|e| {
+                vec![ic_registry_transport::Error::UnknownError(format!(
+                    "Error on registry_atomic_mutate: {e}"
+                ))]
+            })?;
+
+        deserialize_atomic_mutate_response(response)
     }
 }
 
@@ -349,7 +370,7 @@ pub fn registry_deltas_to_registry_records(
 }
 
 async fn deserialize_and_dechunk_get_value_result(
-    result: Result<Option<Vec<u8>>, String>,
+    result: Result<Vec<u8>, AgentError>,
     // This is used if dechunkification is needed.
     registry_canister_id: CanisterId,
     // The following arguments are mostly so that error messages will contain
@@ -361,7 +382,7 @@ async fn deserialize_and_dechunk_get_value_result(
     let breadcrumbs = || -> String {
         let key = String::from_utf8_lossy(key);
 
-        format!("key={key:?} version={version:?} agent={agent:?}",)
+        format!("key={key:?} version={version:?}",)
     };
 
     // Handle Err.
@@ -372,14 +393,6 @@ async fn deserialize_and_dechunk_get_value_result(
             breadcrumbs(),
         ))
     })?;
-
-    // Handle no reply. Not sure how this is possible.
-    let Some(result) = result else {
-        return Err(ic_registry_transport::Error::UnknownError(format!(
-            "No reply to get_value. {}",
-            breadcrumbs(),
-        )));
-    };
 
     // Deserialize reply
     let result = deserialize_get_value_response(result)?;
