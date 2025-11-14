@@ -34,8 +34,7 @@ use x509_parser::prelude::FromDer;
 
 mod tls;
 
-// TODO: replace this in dev images so that system tests work
-const NNS_PUBLIC_KEY_PATH: &str = "/opt/ic/share/nns_public_key.pem";
+const NNS_PUBLIC_KEY_PATH: &str = "/run/config/nns_public_key.pem";
 
 type ServiceClientType = DiskEncryptionKeyExchangeServiceClient<Channel>;
 pub type CanOpenStore =

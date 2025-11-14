@@ -37,6 +37,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusTime,
     execution_environment::{
         IngressFilterService, IngressHistoryReader, QueryExecutionInput, QueryExecutionService,
+        TransformExecutionService,
     },
     ingress_pool::{
         IngressPool, IngressPoolObject, PoolSection, UnvalidatedIngressArtifact,
@@ -917,6 +918,7 @@ pub struct StateMachine {
     pub metrics_registry: MetricsRegistry,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_handler: Arc<Mutex<QueryExecutionService>>,
+    pub transform_handler: Arc<Mutex<TransformExecutionService>>,
     pub runtime: Arc<Runtime>,
     // The atomicity is required for internal mutability and sending across threads.
     checkpoint_interval_length: AtomicU64,
@@ -2032,6 +2034,7 @@ impl StateMachine {
             message_routing,
             metrics_registry: metrics_registry.clone(),
             query_handler: Arc::new(Mutex::new(execution_services.query_execution_service)),
+            transform_handler: Arc::new(Mutex::new(execution_services.transform_execution_service)),
             ingress_watcher_handle,
             _ingress_watcher_drop_guard: ingress_watcher_drop_guard,
             certified_height_tx,

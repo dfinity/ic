@@ -24,6 +24,7 @@ rust-ini = { workspace = true }
 fs_extra = { workspace = true }
 walkdir = { workspace = true }
 get_if_addrs = { workspace = true }
+ic_sev = { path = "../sev" }
 
 [dev-dependencies]
 once_cell = "1.8"

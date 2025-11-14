@@ -487,7 +487,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.0.14",
             ),
             "ed25519-dalek": crate.spec(
-                version = "^2.1.1",
+                version = "^2.2.0",
                 features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"],
             ),
             "educe": crate.spec(
@@ -860,6 +860,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "maxminddb": crate.spec(
                 version = "^0.24",
+            ),
+            "memchr": crate.spec(
+                version = "2.7",
             ),
             "metrics-proxy": crate.spec(
                 git = "https://github.com/dfinity/metrics-proxy.git",

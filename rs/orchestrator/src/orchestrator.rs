@@ -592,7 +592,7 @@ impl Orchestrator {
 
         if let Some(upgrade) = self.upgrade.take() {
             self.task_tracker.spawn(
-                "upgrade",
+                "GuestOS_upgrade",
                 upgrade_checks(
                     Arc::clone(&self.subnet_assignment),
                     upgrade,
