@@ -111,6 +111,7 @@ impl RegistryCanister {
                     Agent::builder()
                         .with_url(url.as_str())
                         .with_identity(AnonymousIdentity)
+                        .with_verify_query_signatures(false)
                         .build()
                         .expect("Failed to build agent")
                 })
@@ -136,7 +137,8 @@ impl RegistryCanister {
                 .map(|url| {
                     let builder = Agent::builder()
                         .with_url(url.as_str())
-                        .with_identity(AnonymousIdentity);
+                        .with_identity(AnonymousIdentity)
+                        .with_verify_query_signatures(false);
                     f(builder).build().expect("Failed to build agent")
                 })
                 .collect(),

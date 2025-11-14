@@ -13,11 +13,11 @@ use helpers::{
     get_node_record_pb, get_proposer_and_identity, get_subnet_ids, get_subnet_record_with_details,
     parse_proposal_url, shortened_pid_string, shortened_subnet_string,
 };
+use ic_agent::{
+    Agent, Identity,
+    identity::{AnonymousIdentity, BasicIdentity, Secp256k1Identity},
+};
 use ic_btc_interface::{Fees, Flag, SetConfigRequest};
-// Type alias for clarity
-type IcAgent = ic_agent::Agent;
-use ic_agent::Identity;
-use ic_agent::identity::{AnonymousIdentity, BasicIdentity, Secp256k1Identity};
 use ic_crypto_utils_threshold_sig_der::{
     parse_threshold_sig_key, parse_threshold_sig_key_from_der, threshold_sig_public_key_to_der,
 };
@@ -642,7 +642,7 @@ impl ProposalTitle for ProposeToChangeSubnetMembershipCmd {
 
 #[async_trait]
 impl ProposalPayload<ChangeSubnetMembershipPayload> for ProposeToChangeSubnetMembershipCmd {
-    async fn payload(&self, agent: &IcAgent) -> ChangeSubnetMembershipPayload {
+    async fn payload(&self, agent: &Agent) -> ChangeSubnetMembershipPayload {
         let registry_canister = RegistryCanister::new_with_agent(agent.clone());
         let subnet_id = self.subnet.get_id(&registry_canister).await;
         let node_ids_add = self
@@ -742,7 +742,7 @@ impl ProposalTitle for ProposeToRemoveNodeOperatorsCmd {
 
 #[async_trait]
 impl ProposalPayload<RemoveNodeOperatorsPayload> for ProposeToRemoveNodeOperatorsCmd {
-    async fn payload(&self, _: &IcAgent) -> RemoveNodeOperatorsPayload {
+    async fn payload(&self, _: &Agent) -> RemoveNodeOperatorsPayload {
         RemoveNodeOperatorsPayload::new(self.node_operators_to_remove.clone())
     }
 }
@@ -764,7 +764,7 @@ impl ProposalTitle for ProposeToDeployGuestosToAllSubnetNodesCmd {
 impl ProposalPayload<DeployGuestosToAllSubnetNodesPayload>
     for ProposeToDeployGuestosToAllSubnetNodesCmd
 {
-    async fn payload(&self, agent: &IcAgent) -> DeployGuestosToAllSubnetNodesPayload {
+    async fn payload(&self, agent: &Agent) -> DeployGuestosToAllSubnetNodesPayload {
         let registry_canister = RegistryCanister::new_with_agent(agent.clone());
         let subnet_id = self.subnet.get_id(&registry_canister).await;
         DeployGuestosToAllSubnetNodesPayload {
@@ -803,7 +803,7 @@ impl ProposalTitle for ProposeToDeployGuestosToAllUnassignedNodesCmd {
 impl ProposalPayload<DeployGuestosToAllUnassignedNodesPayload>
     for ProposeToDeployGuestosToAllUnassignedNodesCmd
 {
-    async fn payload(&self, _: &IcAgent) -> DeployGuestosToAllUnassignedNodesPayload {
+    async fn payload(&self, _: &Agent) -> DeployGuestosToAllUnassignedNodesPayload {
         DeployGuestosToAllUnassignedNodesPayload {
             elected_replica_version: self.guestos_version_id.clone(),
         }
@@ -862,7 +862,7 @@ impl ProposalTitle for ProposeToTakeSubnetOfflineForRepairsCmd {
 
 #[async_trait]
 impl ProposalPayload<SetSubnetOperationalLevelPayload> for ProposeToTakeSubnetOfflineForRepairsCmd {
-    async fn payload(&self, _agent: &IcAgent) -> SetSubnetOperationalLevelPayload {
+    async fn payload(&self, _agent: &Agent) -> SetSubnetOperationalLevelPayload {
         let ssh_node_state_write_access = self
             .ssh_node_state_write_access
             .clone()
@@ -949,7 +949,7 @@ impl ProposalTitle for ProposeToBringSubnetBackOnlineAfterRepairsCmd {
 impl ProposalPayload<SetSubnetOperationalLevelPayload>
     for ProposeToBringSubnetBackOnlineAfterRepairsCmd
 {
-    async fn payload(&self, agent: &IcAgent) -> SetSubnetOperationalLevelPayload {
+    async fn payload(&self, agent: &Agent) -> SetSubnetOperationalLevelPayload {
         let registry_canister = RegistryCanister::new_with_agent(agent.clone());
 
         let subnet_id = SubnetId::from(self.subnet);
@@ -1009,7 +1009,7 @@ impl ProposalTitle for ProposeToUpdateSshReadonlyAccessForAllUnassignedNodesCmd 
 impl ProposalPayload<UpdateSshReadOnlyAccessForAllUnassignedNodesPayload>
     for ProposeToUpdateSshReadonlyAccessForAllUnassignedNodesCmd
 {
-    async fn payload(&self, _: &IcAgent) -> UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
+    async fn payload(&self, _: &Agent) -> UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
         UpdateSshReadOnlyAccessForAllUnassignedNodesPayload {
             ssh_readonly_keys: self
                 .ssh_readonly_access
@@ -1045,7 +1045,7 @@ impl ProposalTitle for ProposeXdrIcpConversionRateCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateIcpXdrConversionRatePayload> for ProposeXdrIcpConversionRateCmd {
-    async fn payload(&self, _: &IcAgent) -> UpdateIcpXdrConversionRatePayload {
+    async fn payload(&self, _: &Agent) -> UpdateIcpXdrConversionRatePayload {
         UpdateIcpXdrConversionRatePayload {
             data_source: "IC admin".to_string(),
             timestamp_seconds: SystemTime::now()
@@ -1077,7 +1077,7 @@ impl ProposalTitle for StartCanisterCmd {
 
 #[async_trait]
 impl ProposalPayload<StopOrStartCanisterRequest> for StartCanisterCmd {
-    async fn payload(&self, _: &IcAgent) -> StopOrStartCanisterRequest {
+    async fn payload(&self, _: &Agent) -> StopOrStartCanisterRequest {
         StopOrStartCanisterRequest {
             canister_id: self.canister_id,
             action: CanisterAction::Start,
@@ -1117,7 +1117,7 @@ impl ProposalTitle for StopCanisterCmd {
 
 #[async_trait]
 impl ProposalPayload<StopOrStartCanisterRequest> for StopCanisterCmd {
-    async fn payload(&self, _: &IcAgent) -> StopOrStartCanisterRequest {
+    async fn payload(&self, _: &Agent) -> StopOrStartCanisterRequest {
         StopOrStartCanisterRequest {
             canister_id: self.canister_id,
             action: CanisterAction::Stop,
@@ -1195,7 +1195,7 @@ impl ProposalTitle for ProposeToReviseElectedGuestsOsVersionsCmd {
 impl ProposalPayload<ReviseElectedGuestosVersionsPayload>
     for ProposeToReviseElectedGuestsOsVersionsCmd
 {
-    async fn payload(&self, _: &IcAgent) -> ReviseElectedGuestosVersionsPayload {
+    async fn payload(&self, _: &Agent) -> ReviseElectedGuestosVersionsPayload {
         let payload = ReviseElectedGuestosVersionsPayload {
             replica_version_to_elect: self.guestos_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
@@ -1251,7 +1251,7 @@ struct ProposeToChangeNnsCanisterCmd {
 
 #[async_trait]
 impl ProposalPayload<UpgradeRootProposal> for ProposeToChangeNnsCanisterCmd {
-    async fn payload(&self, _: &IcAgent) -> UpgradeRootProposal {
+    async fn payload(&self, _: &Agent) -> UpgradeRootProposal {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -1282,7 +1282,7 @@ impl ProposalTitle for ProposeToChangeNnsCanisterCmd {
 
 #[async_trait]
 impl ProposalPayload<ChangeCanisterRequest> for ProposeToChangeNnsCanisterCmd {
-    async fn payload(&self, _: &IcAgent) -> ChangeCanisterRequest {
+    async fn payload(&self, _: &Agent) -> ChangeCanisterRequest {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -1367,7 +1367,7 @@ impl ProposalTitle for ProposeToHardResetNnsRootToVersionCmd {
 
 #[async_trait]
 impl ProposalPayload<HardResetNnsRootToVersionPayload> for ProposeToHardResetNnsRootToVersionCmd {
-    async fn payload(&self, _: &IcAgent) -> HardResetNnsRootToVersionPayload {
+    async fn payload(&self, _: &Agent) -> HardResetNnsRootToVersionPayload {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -1408,7 +1408,7 @@ impl ProposalTitle for ProposeToUninstallCodeCmd {
 
 #[async_trait]
 impl ProposalPayload<CanisterIdRecord> for ProposeToUninstallCodeCmd {
-    async fn payload(&self, _: &IcAgent) -> CanisterIdRecord {
+    async fn payload(&self, _: &Agent) -> CanisterIdRecord {
         CanisterIdRecord::from(self.canister_id)
     }
 }
@@ -1439,7 +1439,7 @@ impl ProposalTitle for ProposeToRentSubnetCmd {
 
 #[async_trait]
 impl ProposalPayload<SubnetRentalRequest> for ProposeToRentSubnetCmd {
-    async fn payload(&self, _agent: &IcAgent) -> SubnetRentalRequest {
+    async fn payload(&self, _agent: &Agent) -> SubnetRentalRequest {
         SubnetRentalRequest {
             user: self.user,
             rental_condition_id: self.rental_condition_id,
@@ -1621,7 +1621,7 @@ impl ProposalTitle for ProposeToAddNnsCanisterCmd {
 
 #[async_trait]
 impl ProposalPayload<AddCanisterRequest> for ProposeToAddNnsCanisterCmd {
-    async fn payload(&self, _: &IcAgent) -> AddCanisterRequest {
+    async fn payload(&self, _: &Agent) -> AddCanisterRequest {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -1682,7 +1682,7 @@ impl ProposalTitle for ProposeToAddWasmToSnsWasmCmd {
 
 #[async_trait]
 impl ProposalPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
-    async fn payload(&self, _: &IcAgent) -> AddWasmRequest {
+    async fn payload(&self, _: &Agent) -> AddWasmRequest {
         let wasm = read_wasm_module(
             &self.wasm_module_path,
             &self.wasm_module_url,
@@ -1832,7 +1832,7 @@ impl ProposalTitle for ProposeToInsertSnsWasmUpgradePathEntriesCmd {
 impl ProposalPayload<InsertUpgradePathEntriesRequest>
     for ProposeToInsertSnsWasmUpgradePathEntriesCmd
 {
-    async fn payload(&self, _: &IcAgent) -> InsertUpgradePathEntriesRequest {
+    async fn payload(&self, _: &Agent) -> InsertUpgradePathEntriesRequest {
         let force_upgrade_main_upgrade_path = self.force_upgrade_main_upgrade_path.unwrap_or(false);
 
         let sns_governance_canister_id = self.sns_governance_canister_id.map(|c| c.into());
@@ -1931,7 +1931,7 @@ impl ProposalTitle for ProposeToUpdateSnsSubnetIdsInSnsWasmCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateSnsSubnetListRequest> for ProposeToUpdateSnsSubnetIdsInSnsWasmCmd {
-    async fn payload(&self, _: &IcAgent) -> UpdateSnsSubnetListRequest {
+    async fn payload(&self, _: &Agent) -> UpdateSnsSubnetListRequest {
         UpdateSnsSubnetListRequest {
             sns_subnet_ids_to_add: self.sns_subnet_ids_to_add.clone(),
             sns_subnet_ids_to_remove: self.sns_subnet_ids_to_remove.clone(),
@@ -1967,7 +1967,7 @@ impl ProposalTitle for ProposeToUpdateSnsDeployWhitelistCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateAllowedPrincipalsRequest> for ProposeToUpdateSnsDeployWhitelistCmd {
-    async fn payload(&self, _: &IcAgent) -> UpdateAllowedPrincipalsRequest {
+    async fn payload(&self, _: &Agent) -> UpdateAllowedPrincipalsRequest {
         UpdateAllowedPrincipalsRequest {
             added_principals: self.added_principals.clone(),
             removed_principals: self.removed_principals.clone(),
@@ -1991,7 +1991,7 @@ impl ProposalTitle for ProposeToClearProvisionalWhitelistCmd {
 
 #[async_trait]
 impl ProposalPayload<()> for ProposeToClearProvisionalWhitelistCmd {
-    async fn payload(&self, _: &IcAgent) -> () {}
+    async fn payload(&self, _: &Agent) -> () {}
 }
 
 /// Sub-command to submit a proposal set the list of authorized subnets.
@@ -2039,7 +2039,7 @@ impl ProposalTitle for ProposeToSetAuthorizedSubnetworksCmd {
 
 #[async_trait]
 impl ProposalPayload<SetAuthorizedSubnetworkListArgs> for ProposeToSetAuthorizedSubnetworksCmd {
-    async fn payload(&self, _: &IcAgent) -> SetAuthorizedSubnetworkListArgs {
+    async fn payload(&self, _: &Agent) -> SetAuthorizedSubnetworkListArgs {
         let subnets: Vec<SubnetId> = self
             .subnets
             .clone()
@@ -2086,7 +2086,7 @@ impl ProposalTitle for ProposeToUpdateSubnetTypeCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateSubnetTypeArgs> for ProposeToUpdateSubnetTypeCmd {
-    async fn payload(&self, _: &IcAgent) -> UpdateSubnetTypeArgs {
+    async fn payload(&self, _: &Agent) -> UpdateSubnetTypeArgs {
         match self.operation {
             AddOrRemove::Add => UpdateSubnetTypeArgs::Add(self.subnet_type.clone()),
             AddOrRemove::Remove => UpdateSubnetTypeArgs::Remove(self.subnet_type.clone()),
@@ -2139,7 +2139,7 @@ impl ProposalTitle for ProposeToChangeSubnetTypeAssignmentCmd {
 
 #[async_trait]
 impl ProposalPayload<ChangeSubnetTypeAssignmentArgs> for ProposeToChangeSubnetTypeAssignmentCmd {
-    async fn payload(&self, _: &IcAgent) -> ChangeSubnetTypeAssignmentArgs {
+    async fn payload(&self, _: &Agent) -> ChangeSubnetTypeAssignmentArgs {
         match self.operation {
             AddOrRemove::Add => ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
                 subnets: self.subnets.iter().cloned().map(SubnetId::from).collect(),
@@ -2249,7 +2249,7 @@ impl ProposalTitle for ProposeToAddNodeOperatorCmd {
 
 #[async_trait]
 impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
-    async fn payload(&self, _: &IcAgent) -> AddNodeOperatorPayload {
+    async fn payload(&self, _: &Agent) -> AddNodeOperatorPayload {
         let rewardable_nodes = self
             .rewardable_nodes
             .as_ref()
@@ -2347,7 +2347,7 @@ impl ProposalTitle for ProposeToUpdateNodeOperatorConfigCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateNodeOperatorConfigPayload> for ProposeToUpdateNodeOperatorConfigCmd {
-    async fn payload(&self, _: &IcAgent) -> UpdateNodeOperatorConfigPayload {
+    async fn payload(&self, _: &Agent) -> UpdateNodeOperatorConfigPayload {
         let rewardable_nodes = self
             .rewardable_nodes
             .as_ref()
@@ -2471,7 +2471,7 @@ impl ProposalTitle for ProposeToAddOrRemoveDataCentersCmd {
 
 #[async_trait]
 impl ProposalPayload<AddOrRemoveDataCentersProposalPayload> for ProposeToAddOrRemoveDataCentersCmd {
-    async fn payload(&self, _: &IcAgent) -> AddOrRemoveDataCentersProposalPayload {
+    async fn payload(&self, _: &Agent) -> AddOrRemoveDataCentersProposalPayload {
         let payload = self.get_payload();
 
         if !self.skip_confirmation {
@@ -2517,7 +2517,7 @@ impl ProposalTitle for ProposeToUpdateNodeRewardsTableCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateNodeRewardsTableProposalPayload> for ProposeToUpdateNodeRewardsTableCmd {
-    async fn payload(&self, _: &IcAgent) -> UpdateNodeRewardsTableProposalPayload {
+    async fn payload(&self, _: &Agent) -> UpdateNodeRewardsTableProposalPayload {
         let map: BTreeMap<String, BTreeMap<String, NodeRewardRate>> =
             serde_json::from_str(&self.updated_node_rewards)
                 .unwrap_or_else(|e| panic!("Unable to parse updated_node_rewards: {e}"));
@@ -2567,7 +2567,7 @@ impl ProposalTitle for ProposeToSetFirewallConfigCmd {
 
 #[async_trait]
 impl ProposalPayload<SetFirewallConfigPayload> for ProposeToSetFirewallConfigCmd {
-    async fn payload(&self, _: &IcAgent) -> SetFirewallConfigPayload {
+    async fn payload(&self, _: &Agent) -> SetFirewallConfigPayload {
         let firewall_config =
             String::from_utf8(read_file_fully(&self.firewall_config_file)).unwrap();
         let ipv4_prefixes: Vec<String> = if self.ipv4_prefixes.eq("-") {
@@ -2622,7 +2622,7 @@ impl ProposalTitle for ProposeToAddFirewallRulesCmd {
 
 #[async_trait]
 impl ProposalPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRulesCmd {
-    async fn payload(&self, _: &IcAgent) -> AddFirewallRulesPayload {
+    async fn payload(&self, _: &Agent) -> AddFirewallRulesPayload {
         let rule_file = String::from_utf8(read_file_fully(&self.rules_file)).unwrap();
         let rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
             .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
@@ -2671,7 +2671,7 @@ impl ProposalTitle for ProposeToRemoveFirewallRulesCmd {
 
 #[async_trait]
 impl ProposalPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFirewallRulesCmd {
-    async fn payload(&self, _: &IcAgent) -> RemoveFirewallRulesPayload {
+    async fn payload(&self, _: &Agent) -> RemoveFirewallRulesPayload {
         let positions: Vec<i32> = self
             .positions
             .clone()
@@ -2718,7 +2718,7 @@ impl ProposalTitle for ProposeToUpdateFirewallRulesCmd {
 
 #[async_trait]
 impl ProposalPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFirewallRulesCmd {
-    async fn payload(&self, _: &IcAgent) -> UpdateFirewallRulesPayload {
+    async fn payload(&self, _: &Agent) -> UpdateFirewallRulesPayload {
         let rule_file = String::from_utf8(read_file_fully(&self.rules_file)).unwrap();
         let rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
             .unwrap_or_else(|_| panic!("Failed to parse firewall rules"));
@@ -2782,7 +2782,7 @@ impl ProposalTitle for ProposeToRemoveNodesCmd {
 
 #[async_trait]
 impl ProposalPayload<RemoveNodesPayload> for ProposeToRemoveNodesCmd {
-    async fn payload(&self, _: &IcAgent) -> RemoveNodesPayload {
+    async fn payload(&self, _: &Agent) -> RemoveNodesPayload {
         RemoveNodesPayload {
             node_ids: self
                 .node_ids
@@ -2884,7 +2884,7 @@ impl ProposalTitle for ProposeToPrepareCanisterMigrationCmd {
 
 #[async_trait]
 impl ProposalPayload<PrepareCanisterMigrationPayload> for ProposeToPrepareCanisterMigrationCmd {
-    async fn payload(&self, _: &IcAgent) -> PrepareCanisterMigrationPayload {
+    async fn payload(&self, _: &Agent) -> PrepareCanisterMigrationPayload {
         PrepareCanisterMigrationPayload {
             canister_id_ranges: self.canister_id_ranges.clone(),
             source_subnet: SubnetId::from(self.source_subnet),
@@ -2924,7 +2924,7 @@ impl ProposalTitle for ProposeToRerouteCanisterRangesCmd {
 
 #[async_trait]
 impl ProposalPayload<RerouteCanisterRangesPayload> for ProposeToRerouteCanisterRangesCmd {
-    async fn payload(&self, _: &IcAgent) -> RerouteCanisterRangesPayload {
+    async fn payload(&self, _: &Agent) -> RerouteCanisterRangesPayload {
         RerouteCanisterRangesPayload {
             reassigned_canister_ranges: self.canister_id_ranges.clone(),
             source_subnet: SubnetId::from(self.source_subnet),
@@ -2959,7 +2959,7 @@ impl ProposalTitle for ProposeToCompleteCanisterMigrationCmd {
 
 #[async_trait]
 impl ProposalPayload<CompleteCanisterMigrationPayload> for ProposeToCompleteCanisterMigrationCmd {
-    async fn payload(&self, _: &IcAgent) -> CompleteCanisterMigrationPayload {
+    async fn payload(&self, _: &Agent) -> CompleteCanisterMigrationPayload {
         CompleteCanisterMigrationPayload {
             canister_id_ranges: self.canister_id_ranges.clone(),
             migration_trace: self
@@ -3083,7 +3083,7 @@ impl ProposalTitle for ProposeToSetBitcoinConfig {
 
 #[async_trait]
 impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
-    async fn payload(&self, _: &IcAgent) -> BitcoinSetConfigProposal {
+    async fn payload(&self, _: &Agent) -> BitcoinSetConfigProposal {
         let request: SetConfigRequest = SetConfigRequest {
             stability_threshold: self.stability_threshold,
             api_access: self
@@ -3538,7 +3538,7 @@ impl ProposalTitle for ProposeToCreateServiceNervousSystemCmd {
 
 async fn propose_to_create_service_nervous_system(
     cmd: ProposeToCreateServiceNervousSystemCmd,
-    agent: IcAgent,
+    agent: Agent,
     proposer: NeuronId,
 ) {
     let is_dry_run = cmd.is_dry_run();
@@ -3624,7 +3624,7 @@ impl ProposalTitle for ProposeToReviseElectedHostosVersionsCmd {
 impl ProposalPayload<ReviseElectedHostosVersionsPayload>
     for ProposeToReviseElectedHostosVersionsCmd
 {
-    async fn payload(&self, _: &IcAgent) -> ReviseElectedHostosVersionsPayload {
+    async fn payload(&self, _: &Agent) -> ReviseElectedHostosVersionsPayload {
         let payload = ReviseElectedHostosVersionsPayload {
             hostos_version_to_elect: self.hostos_version_to_elect.clone(),
             release_package_sha256_hex: self.release_package_sha256_hex.clone(),
@@ -3696,7 +3696,7 @@ impl ProposalTitle for ProposeToDeployHostosToSomeNodesCmd {
 
 #[async_trait]
 impl ProposalPayload<DeployHostosToSomeNodes> for ProposeToDeployHostosToSomeNodesCmd {
-    async fn payload(&self, _: &IcAgent) -> DeployHostosToSomeNodes {
+    async fn payload(&self, _: &Agent) -> DeployHostosToSomeNodes {
         let node_ids = self
             .node_ids
             .clone()
@@ -3741,7 +3741,7 @@ impl ProposalTitle for ProposeToAddApiBoundaryNodesCmd {
 
 #[async_trait]
 impl ProposalPayload<AddApiBoundaryNodesPayload> for ProposeToAddApiBoundaryNodesCmd {
-    async fn payload(&self, _: &IcAgent) -> AddApiBoundaryNodesPayload {
+    async fn payload(&self, _: &Agent) -> AddApiBoundaryNodesPayload {
         AddApiBoundaryNodesPayload {
             node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
             version: self.version.clone(),
@@ -3775,7 +3775,7 @@ impl ProposalTitle for ProposeToRemoveApiBoundaryNodesCmd {
 
 #[async_trait]
 impl ProposalPayload<RemoveApiBoundaryNodesPayload> for ProposeToRemoveApiBoundaryNodesCmd {
-    async fn payload(&self, _: &IcAgent) -> RemoveApiBoundaryNodesPayload {
+    async fn payload(&self, _: &Agent) -> RemoveApiBoundaryNodesPayload {
         RemoveApiBoundaryNodesPayload {
             node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
         }
@@ -3814,7 +3814,7 @@ impl ProposalTitle for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd {
 impl ProposalPayload<DeployGuestosToSomeApiBoundaryNodes>
     for ProposeToDeployGuestosToSomeApiBoundaryNodesCmd
 {
-    async fn payload(&self, _: &IcAgent) -> DeployGuestosToSomeApiBoundaryNodes {
+    async fn payload(&self, _: &Agent) -> DeployGuestosToSomeApiBoundaryNodes {
         DeployGuestosToSomeApiBoundaryNodes {
             node_ids: self.nodes.iter().cloned().map(NodeId::from).collect(),
             version: self.version.clone(),
@@ -5626,7 +5626,7 @@ async fn propose_external_proposal_from_command<
 >(
     cmd: Command,
     nns_function: NnsFunction,
-    ic_agent: IcAgent,
+    ic_agent: Agent,
     proposer: NeuronId,
 ) {
     let payload = cmd.payload(&ic_agent).await;
@@ -5667,7 +5667,7 @@ async fn propose_external_proposal_from_command<
     };
 }
 
-async fn propose_action_from_command<Command>(cmd: Command, agent: IcAgent, proposer: NeuronId)
+async fn propose_action_from_command<Command>(cmd: Command, agent: Agent, proposer: NeuronId)
 where
     Command: ProposalMetadata + ProposalTitle + ProposalAction,
 {
@@ -6237,7 +6237,7 @@ pub fn store_threshold_sig_pk<P: AsRef<Path>>(pk: &PublicKey, path: P) {
 /// Submit a proposal to add a new node provider record
 async fn propose_to_add_or_remove_node_provider(
     cmd: ProposeToAddOrRemoveNodeProviderCmd,
-    agent: IcAgent,
+    agent: Agent,
     proposer: NeuronId,
 ) {
     let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
@@ -6423,7 +6423,7 @@ fn get_test_identity_if_set(
 /// Submits a root proposal to upgrade the governance canister.
 async fn submit_root_proposal_to_upgrade_governance_canister(
     cmd: SubmitRootProposalToUpgradeGovernanceCanisterCmd,
-    agent: IcAgent,
+    agent: Agent,
 ) {
     let canister_client = RootCanisterClient(NnsCanisterClient::new(agent, ROOT_CANISTER_ID, None));
     let result = canister_client
@@ -6439,7 +6439,7 @@ async fn submit_root_proposal_to_upgrade_governance_canister(
 
 /// Returns the current list of pending root proposals to upgrade the governance
 /// canister.
-async fn get_pending_root_proposals_to_upgrade_governance_canister(agent: IcAgent) {
+async fn get_pending_root_proposals_to_upgrade_governance_canister(agent: Agent) {
     let canister_client = RootCanisterClient(NnsCanisterClient::new(agent, ROOT_CANISTER_ID, None));
     let proposals = canister_client
         .get_pending_root_proposals_to_upgrade_governance_canister()
@@ -6458,7 +6458,7 @@ async fn get_pending_root_proposals_to_upgrade_governance_canister(agent: IcAgen
 /// Votes a root proposal to upgrade the governance canister.
 async fn vote_on_root_proposal_to_upgrade_governance_canister(
     cmd: VoteOnRootProposalToUpgradeGovernanceCanisterCmd,
-    agent: IcAgent,
+    agent: Agent,
 ) {
     let canister_client = RootCanisterClient(NnsCanisterClient::new(agent, ROOT_CANISTER_ID, None));
     let result = canister_client
@@ -6503,7 +6503,7 @@ async fn swap_node_in_subnet_directly(
 /// A client view of an NNS canister.
 struct NnsCanisterClient {
     /// The agent to talk to the IC.
-    agent: IcAgent,
+    agent: Agent,
 
     /// Canister ID of the handler.
     handler_id: CanisterId,
@@ -6515,7 +6515,7 @@ struct NnsCanisterClient {
 }
 
 impl NnsCanisterClient {
-    pub fn new(agent: IcAgent, handler_id: CanisterId, author: Option<NeuronId>) -> Self {
+    pub fn new(agent: Agent, handler_id: CanisterId, author: Option<NeuronId>) -> Self {
         Self {
             agent,
             handler_id,
@@ -6614,11 +6614,11 @@ async fn make_agent_from_identity(
     identity: Arc<dyn Identity>,
     verify_nns_responses: bool,
     nns_public_key_pem_file: Option<PathBuf>,
-) -> IcAgent {
+) -> Agent {
     let nns_url = &nns_urls[0];
     let is_mainnet = is_mainnet(nns_url);
 
-    let agent = IcAgent::builder()
+    let agent = Agent::builder()
         .with_url(nns_url.as_str())
         .with_arc_identity(identity)
         // For local replicas, disable query signature verification
