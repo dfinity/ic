@@ -380,11 +380,11 @@ impl<S> WithdrawalFlowEnd<S>
 where
     S: AsRef<Setup>,
 {
-    pub fn ensure_each_sent_transaction<C>(self, check: C) -> Self
+    pub fn assert_sent_transactions<C>(self, check: C) -> Self
     where
-        C: Fn(&bitcoin::Transaction),
+        C: Fn(&[bitcoin::Transaction]),
     {
-        self.sent_transactions.iter().for_each(check);
+        check(&self.sent_transactions);
         self
     }
 

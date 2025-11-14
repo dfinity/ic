@@ -318,3 +318,14 @@ pub fn into_rust_dogecoin_network(network: Network) -> bitcoin::dogecoin::Networ
         Network::Regtest => bitcoin::dogecoin::Network::Regtest,
     }
 }
+
+/// Expect exactly one element on anything that can be turn into an iterator.
+pub fn only_one<T, I: IntoIterator<Item = T>>(iter: I) -> T {
+    let mut iter = iter.into_iter();
+    let result = iter.next().expect("BUG: expected exactly one item, got 0.");
+    assert!(
+        iter.next().is_none(),
+        "BUG: expected exactly one item, got at least 2"
+    );
+    result
+}

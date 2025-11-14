@@ -182,7 +182,7 @@ mod withdrawal {
     use ic_ckdoge_minter_test_utils::flow::withdrawal::assert_uses_utxos;
     use ic_ckdoge_minter_test_utils::{
         DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-        flow::withdrawal::WithdrawalFlowEnd, txid, utxo_with_value, utxos_with_value,
+        flow::withdrawal::WithdrawalFlowEnd, only_one, txid, utxo_with_value, utxos_with_value,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use std::array;
@@ -214,7 +214,7 @@ mod withdrawal {
             .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
             .expect_withdrawal_request_accepted()
             .dogecoin_await_transaction()
-            .ensure_each_sent_transaction(|sent| assert_uses_utxos(sent, vec![utxo.clone()]))
+            .assert_sent_transactions(|sent| assert_uses_utxos(only_one(sent), vec![utxo.clone()]))
             .minter_await_finalized_single_transaction()
     }
 
@@ -282,7 +282,9 @@ mod withdrawal {
                 .minter_retrieve_doge_with_approval(RETRIEVE_DOGE_MIN_AMOUNT, DOGECOIN_ADDRESS_1)
                 .expect_withdrawal_request_accepted()
                 .dogecoin_await_transaction()
-                .ensure_each_sent_transaction(|sent| assert_uses_utxos(sent, vec![utxo.clone()]))
+                .assert_sent_transactions(|sent| {
+                    assert_uses_utxos(only_one(sent), vec![utxo.clone()])
+                })
         }
 
         let setup = Setup::default();
@@ -294,16 +296,16 @@ mod withdrawal {
 
         deposit_and_withdraw(&setup, 42)
             .minter_await_resubmission()
+            .assert_sent_transactions(|sent| assert_eq!(sent.len(), 2))
             .minter_await_finalized_transaction_by(|sent| {
-                assert_eq!(sent.len(), 2);
                 // Finalize the oldest transaction, the first one that was sent.
                 &sent[0]
             });
 
         deposit_and_withdraw(&setup, 43)
             .minter_await_resubmission()
+            .assert_sent_transactions(|sent| assert_eq!(sent.len(), 2))
             .minter_await_finalized_transaction_by(|sent| {
-                assert_eq!(sent.len(), 2);
                 // Finalize the newest transaction, the last one that was sent.
                 &sent[1]
             });
@@ -311,8 +313,8 @@ mod withdrawal {
         deposit_and_withdraw(&setup, 44)
             .minter_await_resubmission()
             .minter_await_resubmission()
+            .assert_sent_transactions(|sent| assert_eq!(sent.len(), 3))
             .minter_await_finalized_transaction_by(|sent| {
-                assert_eq!(sent.len(), 3);
                 // Finalize the middle transaction, the second one (out-of-3) that was sent.
                 &sent[1]
             });
@@ -364,11 +366,11 @@ mod withdrawal {
             .expect_withdrawal_request_accepted()
             .dogecoin_await_transaction()
             .minter_await_resubmission()
-            .ensure_each_sent_transaction(|sent| assert_eq!(sent.input.len(), 2))
-            .minter_await_finalized_transaction_by(|sent| {
+            .assert_sent_transactions(|sent| {
                 assert_eq!(sent.len(), 2);
-                &sent[1]
-            });
+                sent.iter().for_each(|tx| assert_eq!(tx.input.len(), 2));
+            })
+            .minter_await_finalized_transaction_by(|sent| &sent[1]);
     }
 
     #[test]

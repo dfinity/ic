@@ -1,3 +1,4 @@
+use crate::only_one;
 use ic_ckdoge_minter::EventType;
 use ic_ckdoge_minter::RetrieveBtcRequest;
 use std::collections::BTreeMap;
@@ -70,21 +71,7 @@ impl<E> MinterEventAssert<E> {
         P: Fn(&E) -> bool,
         E: fmt::Debug,
     {
-        let results: Vec<_> = self
-            .events
-            .iter()
-            .enumerate()
-            .filter(|(_index, event)| predicate(*event))
-            .collect();
-        assert_eq!(
-            results.len(),
-            1,
-            "BUG: Expected exactly one event, but got {results:?}. All events: {:?}",
-            self.events
-        );
-        let index = results[0].0;
-        let mut events = self.events;
-        events.swap_remove(index)
+        only_one(self.events.into_iter().filter(|event| predicate(event)))
     }
 }
 
