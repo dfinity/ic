@@ -265,6 +265,7 @@ impl SystemStateModifications {
             | Ok(Ic00Method::DeleteCanister)
             | Ok(Ic00Method::RawRand)
             | Ok(Ic00Method::DepositCycles)
+            | Ok(Ic00Method::FlexibleHttpRequest)
             | Ok(Ic00Method::HttpRequest)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::ECDSAPublicKey)
