@@ -1216,6 +1216,7 @@ fn test_icrc3_get_archives() {
         timestamp: 0,
         fee_collector: None,
         fee_collector_block_index: None,
+        btype: None,
     }
     .encode()
     .size_bytes();
