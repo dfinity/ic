@@ -116,7 +116,7 @@ where
     S: AsRef<Path>,
     T: AsRef<Path>,
 {
-    let rsync_cmd = get_rsync_command(src, target, key_file);
+    let rsync_cmd = get_rsync_command(vec![src], target, key_file);
     exec_rsync(logger, rsync_cmd, require_confirmation)
 }
 
@@ -134,32 +134,31 @@ where
     S: AsRef<Path>,
     T: AsRef<Path>,
 {
-    let mut outputs = Vec::new();
+    let mut rsync_cmd = get_rsync_command(
+        includes
+            .into_iter()
+            // Note the added "." in paths, together with the `--relative` flag below.
+            //
+            // Example if `includes` is vec!["file1", "dir1/dir2"]:
+            // The naive command
+            // `rsync src/file1 src/dir1/dir2 target/`
+            // would copy `file1` into `target/file1`, but `dir2` (and its contents)
+            // into `target/dir2`, losing the `dir1` parent directory.
+            //
+            // Instead, we add `--relative` and add a `./` prefix to each include path:
+            // `rsync --relative src/./file1 src/./dir1/dir2 target/`
+            // This way, rsync preserves the paths relative to the `./` marker:
+            //     - `file1` into `target/file1`,
+            //     - `dir2` into `target/dir1/dir2`.
+            //
+            // See rsync manual at --relative for more details.
+            .map(|include| src.as_ref().join(".").join(include.as_ref())),
+        target.as_ref().join(""),
+        key_file,
+    );
+    rsync_cmd.arg("--relative");
 
-    for include in includes {
-        // Note the "." for relative paths:
-        //
-        // Ex.: `includes` is vec!["file1", "dir1/dir2"]
-        //   - `rsync --relative src/./file1 target/`
-        //      will copy `file1` into `target/file1`
-        //   - `rsync --relative src/./dir1/dir2 target/`
-        //      will copy `dir2` (and its contents) into `target/dir1/dir2`,
-        //      whereas the more naive `rsync src/dir1/dir2 target/`
-        //      would copy `dir2` (and its contents) into `target/dir2`
-        // See rsync manual at --relative for more details.
-        let mut rsync_cmd = get_rsync_command(
-            src.as_ref().join(".").join(include),
-            target.as_ref().join(""),
-            key_file,
-        );
-        rsync_cmd.arg("--relative");
-
-        if let Some(out) = exec_rsync(logger, rsync_cmd, require_confirmation)? {
-            outputs.push(out);
-        }
-    }
-
-    Ok((!outputs.is_empty()).then(|| outputs.join("\n")))
+    exec_rsync(logger, rsync_cmd, require_confirmation)
 }
 
 fn exec_rsync(
@@ -188,9 +187,9 @@ fn exec_rsync(
     }
 }
 
-fn get_rsync_command<S, T>(src: S, target: T, key_file: Option<&PathBuf>) -> Command
+fn get_rsync_command<S, T>(srcs: S, target: T, key_file: Option<&PathBuf>) -> Command
 where
-    S: AsRef<Path>,
+    S: IntoIterator<Item: AsRef<Path>>,
     T: AsRef<Path>,
 {
     let mut rsync = Command::new("rsync");
@@ -201,7 +200,11 @@ where
         .arg("--partial")
         .arg("--progress")
         .arg("--no-g");
-    rsync.arg(src.as_ref()).arg(target.as_ref());
+    rsync.args(
+        srcs.into_iter()
+            .map(|s| s.as_ref().as_os_str().to_os_string()),
+    );
+    rsync.arg(target.as_ref());
     rsync.arg("-e").arg(ssh_helper::get_rsync_ssh_arg(key_file));
 
     rsync
@@ -290,7 +293,7 @@ mod tests {
     #[test]
     fn get_rsync_command_test() {
         let rsync = get_rsync_command(
-            "/tmp/src",
+            vec!["/tmp/src/file1", "/tmp/src/file2", "/tmp/src/dir1"],
             "/tmp/target",
             Some(&PathBuf::from("/tmp/key_file")),
         );
@@ -305,7 +308,9 @@ mod tests {
                 "--partial",
                 "--progress",
                 "--no-g",
-                "/tmp/src",
+                "/tmp/src/file1",
+                "/tmp/src/file2",
+                "/tmp/src/dir1",
                 "/tmp/target",
                 "-e",
                 "ssh -o StrictHostKeyChecking=no -o NumberOfPasswordPrompts=0 -o ConnectionAttempts=4 -o ConnectTimeout=15 -A -i \"/tmp/key_file\""
