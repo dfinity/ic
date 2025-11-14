@@ -17,6 +17,12 @@ fn no_op(bytes: Vec<u8>) -> Vec<u8> {
     bytes
 }
 
+/// Handles a `Call`; performing the downstream calls therein; and returning a
+/// `ReplyMessage` summarizing the outcome of the call and all the downstream
+/// calls (success / synchronous failure / asynchronous failure).
+///
+/// An increasing index is assigned to each call; and sequence errors are
+/// detected by checking against out-of-order call indices from a given caller.
 #[ic_cdk::update(decode_with = "decode", encode_with = "no_op")]
 async fn handle_call((msg, bytes_received_on_call, _): (CallMessage, u32, u32)) -> Vec<u8> {
     // Canister principals have an (undocumented) tag byte of 1. This is good enough
