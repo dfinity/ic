@@ -6,17 +6,21 @@ commonResources: &commonResources
     memory: "128Mi"
     cpu: "500m"
 
-icrcConfig: 
+icrcConfig:
   networkType: mainnet
-  ledgerId: vtrom-gqaaa-aaaaq-aabia-cai
-  storeFile: /data/db.sqlite
+  multiTokens: vtrom-gqaaa-aaaaq-aabia-cai
+  multiTokensStoreDir: /data
   useLocallyBuilt: false
+  # Deploy the latest ICRC Rosetta image from Docker Hub
+  deployLatest: true
 
-icpConfig: 
+icpConfig:
   storeLocation: /data
   tokenSymbol: ICP
   canisterId: xafvr-biaaa-aaaai-aql5q-cai
   useLocallyBuilt: false
+  # Deploy the latest ICP Rosetta image from Docker Hub
+  deployLatest: true
 
 baseService: &baseService
   namespace: "rosetta-api"

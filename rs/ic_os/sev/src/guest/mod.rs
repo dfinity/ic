@@ -1,3 +1,4 @@
+#[cfg(target_os = "linux")]
 use anyhow::{Context, Result, anyhow};
 
 pub mod firmware;
