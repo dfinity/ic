@@ -431,10 +431,20 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         )
     });
 
+    let g2_bytes = random_g2(rng).serialize();
+
     group.bench_function("deserialize", |b| {
         b.iter_batched_ref(
             || random_g2(rng).serialize(),
             |bytes| G2Projective::deserialize(bytes),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("deserialize_public_key", |b| {
+        b.iter_batched_ref(
+            || g2_bytes,
+            |bytes| G2Affine::deserialize_public_key(bytes),
             BatchSize::SmallInput,
         )
     });

@@ -10,6 +10,7 @@ use crate::api::threshold_sign_error::ClibThresholdSignError;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::{
     PublicKeyBytes, ThresholdSigPublicKeyBytesConversionError,
 };
+use ic_crypto_internal_bls12_381_type::G2Affine;
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use std::convert::TryFrom;
 
@@ -32,17 +33,19 @@ impl PublicKey {
     /// Deserializes a `PublicKey` from a *trusted* source.
     ///
     /// # Security Notice
-    /// This uses the "unchecked" G2 deserialization (no subgroup check),
-    /// so should only be used on `PublicKeyBytes` obtained
-    /// from a known, trusted source.
+    ///
+    /// This function may use the "unchecked" G2 deserialization (no
+    /// subgroup check), so should only be used on `PublicKeyBytes`
+    /// obtained from a known, trusted source.
     pub fn from_trusted_bytes(
         bytes: &PublicKeyBytes,
     ) -> Result<Self, ThresholdSigPublicKeyBytesConversionError> {
-        G2Projective::deserialize_unchecked(&bytes.0)
+        G2Affine::deserialize_public_key(&bytes.0)
             .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
                 key_bytes: Some(bytes.0.to_vec()),
                 internal_error: "Invalid public key".to_string(),
             })
+            .map(|pt| pt.into())
             .map(PublicKey)
     }
 }
@@ -50,11 +53,12 @@ impl PublicKey {
 impl TryFrom<&PublicKeyBytes> for PublicKey {
     type Error = ThresholdSigPublicKeyBytesConversionError;
     fn try_from(bytes: &PublicKeyBytes) -> Result<Self, Self::Error> {
-        G2Projective::deserialize(&bytes.0)
+        G2Affine::deserialize_public_key(&bytes.0)
             .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
                 key_bytes: Some(bytes.0.to_vec()),
                 internal_error: "Invalid public key".to_string(),
             })
+            .map(|pt| pt.into())
             .map(PublicKey)
     }
 }
