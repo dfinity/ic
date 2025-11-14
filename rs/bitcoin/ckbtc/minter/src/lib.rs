@@ -255,7 +255,7 @@ pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
         .await
     {
         Ok(fees) => {
-            let fee_estimator = state::read_state(BitcoinFeeEstimator::from_state);
+            let fee_estimator = state::read_state(|s| runtime.fee_estimator(s));
             match fee_estimator.estimate_median_fee(&fees) {
                 Some(median_fee) => {
                     log!(
@@ -1443,6 +1443,8 @@ pub trait CanisterRuntime {
     /// Returns the frequency at which fee percentiles are refreshed.
     fn refresh_fee_percentiles_frequency(&self) -> Duration;
 
+    fn fee_estimator(&self, state: &CkBtcMinterState) -> Box<dyn FeeEstimator>;
+
     /// Retrieves the current transaction fee percentiles.
     async fn get_current_fee_percentiles(
         &self,
@@ -1495,6 +1497,10 @@ impl CanisterRuntime for IcCanisterRuntime {
     fn refresh_fee_percentiles_frequency(&self) -> Duration {
         const ONE_HOUR: Duration = Duration::from_secs(3_600);
         ONE_HOUR
+    }
+
+    fn fee_estimator(&self, state: &CkBtcMinterState) -> Box<dyn FeeEstimator> {
+        Box::new(BitcoinFeeEstimator::from_state(state))
     }
 
     async fn get_current_fee_percentiles(
