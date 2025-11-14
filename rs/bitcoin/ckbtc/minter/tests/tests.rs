@@ -4,7 +4,7 @@ use bitcoin::{Address as BtcAddress, Network as BtcNetwork};
 use candid::{Decode, Encode, Nat, Principal};
 use canlog::LogEntry;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
+use ic_bitcoin_canister_mock::{OutPoint, PushUtxosToAddress, Utxo};
 use ic_btc_checker::{
     BtcNetwork as CheckerBtcNetwork, CheckArg, CheckMode, InitArg as CheckerInitArg,
     UpgradeArg as CheckerUpgradeArg,
@@ -811,13 +811,10 @@ impl CkBtcSetup {
     }
 
     pub fn push_utxos<I: IntoIterator<Item = Utxo>>(&self, utxos: I, address: String) {
-        let request: Vec<_> = utxos
-            .into_iter()
-            .map(|utxo| PushUtxoToAddress {
-                utxo,
-                address: address.clone(),
-            })
-            .collect();
+        let request = PushUtxosToAddress {
+            utxos: utxos.into_iter().collect(),
+            address,
+        };
         assert_reply(
             self.env
                 .execute_ingress(

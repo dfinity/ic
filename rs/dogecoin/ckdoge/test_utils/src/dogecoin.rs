@@ -1,6 +1,6 @@
 use bitcoin::hashes::Hash;
 use candid::{Decode, Encode, Principal};
-use ic_bitcoin_canister_mock::{PushUtxoToAddress, Utxo};
+use ic_bitcoin_canister_mock::{PushUtxosToAddress, Utxo};
 use ic_ckdoge_minter::Txid;
 use ic_management_canister_types::CanisterId;
 use pocket_ic::PocketIc;
@@ -15,7 +15,7 @@ pub struct DogecoinCanister {
 }
 
 impl DogecoinCanister {
-    fn push_utxos_to_address(&self, arg: &Vec<PushUtxoToAddress>) {
+    fn push_utxos_to_address(&self, arg: &PushUtxosToAddress) {
         self.env
             .update_call(
                 self.id,
@@ -27,19 +27,18 @@ impl DogecoinCanister {
     }
 
     pub fn push_utxo(&self, utxo: Utxo, address: String) {
-        self.push_utxos_to_address(&vec![PushUtxoToAddress { address, utxo }])
+        self.push_utxos_to_address(&PushUtxosToAddress {
+            address,
+            utxos: vec![utxo],
+        })
     }
 
     pub fn push_utxos<I: IntoIterator<Item = Utxo>>(&self, utxos: I, address: String) {
-        self.push_utxos_to_address(
-            &utxos
-                .into_iter()
-                .map(|utxo| PushUtxoToAddress {
-                    utxo,
-                    address: address.clone(),
-                })
-                .collect(),
-        );
+        let request = PushUtxosToAddress {
+            utxos: utxos.into_iter().collect(),
+            address,
+        };
+        self.push_utxos_to_address(&request);
     }
 
     pub fn set_fee_percentiles(&self, fee_percentiles: [u64; 101]) {
