@@ -12,9 +12,9 @@ use ic_nervous_system_common::ledger;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_nns_governance_api::{
-    ManageNeuron, ManageNeuronResponse, Topic,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Topic,
     manage_neuron::{
-        ClaimOrRefresh, Command, Configure, Follow, IncreaseDissolveDelay, NeuronIdOrSubaccount,
+        ClaimOrRefresh, Configure, Follow, IncreaseDissolveDelay, NeuronIdOrSubaccount,
         claim_or_refresh::{By, MemoAndController},
         configure::Operation,
     },
@@ -141,10 +141,10 @@ pub fn cmd_add_neuron(time: Time, cmd: &WithNeuronCmd) -> Result<Vec<IngressWith
         print: None,
     });
 
-    let payload = Encode!(&ManageNeuron {
+    let payload = Encode!(&ManageNeuronRequest {
         id: None,
         neuron_id_or_subaccount: None,
-        command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+        command: Some(ManageNeuronCommandRequest::ClaimOrRefresh(ClaimOrRefresh {
             by: Some(By::MemoAndController(MemoAndController {
                 memo,
                 controller: Some(controller)
@@ -217,12 +217,12 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
 
     for (principal, neuron_id) in trusted_neurons {
         let principal = PrincipalId::from_str(principal).expect("Invalid principal");
-        let follow_payload = Encode!(&ManageNeuron {
+        let follow_payload = Encode!(&ManageNeuronRequest {
             id: None,
             neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronId {
                 id: *neuron_id,
             })),
-            command: Some(Command::Follow(Follow {
+            command: Some(ManageNeuronCommandRequest::Follow(Follow {
                 topic: Topic::Unspecified as i32,
                 followees: [NeuronId { id: cmd.neuron_id }].to_vec(),
             })),
@@ -243,10 +243,10 @@ pub fn cmd_make_trusted_neurons_follow_neuron(
 
     // Increase the neuron's delay
     let user_agent = &agent_with_principal_as_sender(&cmd.neuron_controller)?;
-    let delay_payload = Encode!(&ManageNeuron {
+    let delay_payload = Encode!(&ManageNeuronRequest {
         id: Some(NeuronId { id: cmd.neuron_id }),
         neuron_id_or_subaccount: None,
-        command: Some(Command::Configure(Configure {
+        command: Some(ManageNeuronCommandRequest::Configure(Configure {
             operation: Some(Operation::IncreaseDissolveDelay(IncreaseDissolveDelay {
                 additional_dissolve_delay_seconds: 31560000 // one year
             }))

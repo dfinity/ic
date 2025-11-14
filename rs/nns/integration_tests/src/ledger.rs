@@ -11,11 +11,11 @@ use ic_nns_constants::{ALL_NNS_CANISTER_IDS, GENESIS_TOKEN_CANISTER_ID, GOVERNAN
 use ic_nns_governance::governance::INITIAL_NEURON_DISSOLVE_DELAY;
 use ic_nns_governance_api::{
     ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, GovernanceError,
-    ManageNeuron, ManageNeuronResponse, Neuron,
+    ManageNeuronCommandRequest, ManageNeuronRequest, ManageNeuronResponse, Neuron,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
     governance_error::ErrorType,
     manage_neuron::{
-        ClaimOrRefresh, Command, Disburse, NeuronIdOrSubaccount,
+        ClaimOrRefresh, Disburse, NeuronIdOrSubaccount,
         claim_or_refresh::{By, MemoAndController},
     },
     manage_neuron_response::Command as CommandResponse,
@@ -109,10 +109,10 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 .update_from_sender(
                     "manage_neuron",
                     candid_one,
-                    ManageNeuron {
+                    ManageNeuronRequest {
                         neuron_id_or_subaccount: None,
                         id: None,
-                        command: Some(Command::ClaimOrRefresh(ClaimOrRefresh {
+                        command: Some(ManageNeuronCommandRequest::ClaimOrRefresh(ClaimOrRefresh {
                             by: Some(By::MemoAndController(MemoAndController {
                                 memo: nonce,
                                 controller: None,
@@ -164,10 +164,10 @@ fn test_stake_and_disburse_neuron_with_notification() {
                 .update_from_sender(
                     "manage_neuron",
                     candid_one,
-                    ManageNeuron {
+                    ManageNeuronRequest {
                         neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id)),
                         id: None,
-                        command: Some(Command::Disburse(Disburse {
+                        command: Some(ManageNeuronCommandRequest::Disburse(Disburse {
                             amount: None,
                             to_account: Some(
                                 AccountIdentifier::new(user.get_principal_id(), None).into(),
@@ -361,10 +361,10 @@ fn test_stake_and_disburse_neuron_with_account() {
                 .update_from_sender(
                     "manage_neuron",
                     candid_one,
-                    ManageNeuron {
+                    ManageNeuronRequest {
                         neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(neuron_id)),
                         id: None,
-                        command: Some(Command::Disburse(Disburse {
+                        command: Some(ManageNeuronCommandRequest::Disburse(Disburse {
                             amount: None,
                             to_account: Some(
                                 AccountIdentifier::new(user.get_principal_id(), None).into(),

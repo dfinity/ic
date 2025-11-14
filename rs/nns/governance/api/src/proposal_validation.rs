@@ -1,4 +1,4 @@
-use crate::types::Proposal;
+use crate::MakeProposalRequest;
 
 // The limits on NNS proposal title len (in bytes).
 const PROPOSAL_TITLE_BYTES_MIN: usize = 5;
@@ -12,7 +12,9 @@ const PROPOSAL_URL_CHAR_MAX: usize = 2048;
 const PROPOSAL_URL_CHAR_MIN: usize = 10;
 
 /// Validates the user submitted proposal fields.
-pub fn validate_user_submitted_proposal_fields(proposal: &Proposal) -> Result<(), String> {
+pub fn validate_user_submitted_proposal_fields(
+    proposal: &MakeProposalRequest,
+) -> Result<(), String> {
     validate_proposal_title(&proposal.title)?;
     validate_proposal_summary(&proposal.summary)?;
     validate_proposal_url(&proposal.url)?;
