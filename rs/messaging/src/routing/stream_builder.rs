@@ -128,6 +128,11 @@ impl StreamBuilderMetrics {
                 LABEL_VALUE_TYPE_RESPONSE,
                 LABEL_VALUE_STATUS_CANISTER_NOT_FOUND,
             ),
+            (LABEL_VALUE_TYPE_REFUND, LABEL_VALUE_STATUS_SUCCESS),
+            (
+                LABEL_VALUE_TYPE_REFUND,
+                LABEL_VALUE_STATUS_CANISTER_NOT_FOUND,
+            ),
         ] {
             routed_messages.with_label_values(&[msg_type, status]);
         }
@@ -299,15 +304,18 @@ impl StreamBuilderImpl {
 
             // At limit if system subnet limit is hit. This is only enforced for non-local
             // streams to system subnets (i.e., excluding the loopback stream on system
-            // subnets).
+            // subnets). And only applies to canister messages, not refunds.
             destination_subnet_type == SubnetType::System
-                && stream_messages_len >= 2 * self.system_subnet_stream_msg_limit
+                && stream_messages_len - stream.refund_count()
+                    >= 2 * self.system_subnet_stream_msg_limit
         };
 
         let mut streams = state.take_streams();
         let network_topology = state.metadata.network_topology.clone();
 
-        // First, route up to half of `max_stream_messages` refunds into each stream.
+        // First, have up to `max_stream_messages / 2` refunds in each stream (including
+        // already routed ones) while respecting stream message and byte limits.
+        //
         // Refunds are smaller than the smallest possible canister message, so it makes
         // sense to prioritize routing a bounded number of refunds, leaving most of the
         // stream capacity for canister messages (5k refunds are ~250 KB, so only around
@@ -562,7 +570,11 @@ impl StreamBuilderImpl {
                 Some(dst_subnet_id) => {
                     let stream = streams.entry(dst_subnet_id).or_default();
                     let is_loopback_stream = dst_subnet_id == self.subnet_id;
-                    if is_loopback_stream || stream.refund_count() < refund_limit {
+                    if is_loopback_stream
+                        || (stream.refund_count() < refund_limit
+                            && stream.messages().len() < self.max_stream_messages
+                            && stream.count_bytes() < self.target_stream_size_bytes)
+                    {
                         stream.push(StreamMessage::Refund((*refund).into()));
                         self.observe_message_type_status(
                             LABEL_VALUE_TYPE_REFUND,

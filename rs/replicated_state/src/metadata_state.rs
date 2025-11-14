@@ -1004,31 +1004,32 @@ impl Stream {
                 self.messages_size_bytes
             );
 
-            if let StreamMessage::Refund(_) = &msg {
-                self.refund_count -= 1;
+            // Update the message-type-specific stats.
+            match &msg {
+                StreamMessage::Refund(_) => {
+                    self.refund_count -= 1;
+                }
+                StreamMessage::Response(response) if !response.is_best_effort() => {
+                    match self
+                        .guaranteed_response_counts
+                        .get_mut(&response.respondent)
+                    {
+                        Some(0) | None => {
+                            debug_assert!(false);
+                            self.guaranteed_response_counts.remove(&response.respondent);
+                        }
+                        Some(1) => {
+                            self.guaranteed_response_counts.remove(&response.respondent);
+                        }
+                        Some(count) => *count -= 1,
+                    }
+                }
+                _ => {}
             }
             debug_assert_eq!(
                 Self::calculate_refund_count(&self.messages),
                 self.refund_count
             );
-
-            if let StreamMessage::Response(response) = &msg
-                && !response.is_best_effort()
-            {
-                match self
-                    .guaranteed_response_counts
-                    .get_mut(&response.respondent)
-                {
-                    Some(0) | None => {
-                        debug_assert!(false);
-                        self.guaranteed_response_counts.remove(&response.respondent);
-                    }
-                    Some(1) => {
-                        self.guaranteed_response_counts.remove(&response.respondent);
-                    }
-                    Some(count) => *count -= 1,
-                }
-            }
             debug_assert_eq!(
                 Self::calculate_guaranteed_response_counts(&self.messages),
                 self.guaranteed_response_counts
