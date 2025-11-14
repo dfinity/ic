@@ -18,7 +18,7 @@ hmac = "0.12"
 ic_principal = { version = "0.1.1", default-features = false }
 k256 = { workspace = true }
 num-bigint = { workspace = true }
-pem = "1.1.0"
+pem = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 simple_asn1 = { workspace = true }
