@@ -429,6 +429,9 @@ pub struct CkBtcMinterState {
 
     pub last_fee_per_vbyte: Vec<u64>,
 
+    /// The last median fee per vbyte computed from `last_fee_per_vbyte`.
+    pub last_median_fee_per_vbyte: Option<u64>,
+
     /// The fee for a single Bitcoin check request.
     pub check_fee: u64,
 
@@ -1749,6 +1752,7 @@ impl From<InitArgs> for CkBtcMinterState {
             is_distributing_fee: false,
             mode: args.mode,
             last_fee_per_vbyte: vec![1; 100],
+            last_median_fee_per_vbyte: Some(1),
             check_fee: args
                 .check_fee
                 .unwrap_or(crate::lifecycle::init::DEFAULT_CHECK_FEE),

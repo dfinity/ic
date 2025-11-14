@@ -266,6 +266,7 @@ pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
                         fee_estimator.minimum_withrawal_amount(median_fee);
                     mutate_state(|s| {
                         s.last_fee_per_vbyte = fees;
+                        s.last_median_fee_per_vbyte = Some(median_fee);
                         s.fee_based_retrieve_btc_min_amount = fee_based_retrieve_btc_min_amount;
                     });
                     Some(median_fee)
