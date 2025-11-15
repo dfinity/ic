@@ -125,10 +125,24 @@ impl StorageClient {
 
         // Configure cache size if specified
         // Negative values mean KB, positive values mean number of pages
-        if let Some(cache_kb) = cache_size_kb {
-            let cache_size = -cache_kb; // Negative to specify KB
-            conn.pragma_update(None, "cache_size", cache_size)?;
-            tracing::info!("SQLite cache_size set to {} KB", cache_kb);
+        match cache_size_kb {
+            None => {
+                tracing::info!("No cache size configured");
+            }
+            Some(cache_kb) => {
+                let cache_size = -cache_kb; // Negative to specify KB
+                conn.pragma_update(None, "cache_size", cache_size)?;
+                tracing::info!("SQLite cache_size set to {} KB", cache_kb);
+            }
+        }
+
+        match flush_cache_and_shrink_memory {
+            true => {
+                tracing::info!("Flushing cache and shrinking memory after updating balances.")
+            }
+            false => {
+                tracing::info!("Not flushing cache and shrinking memory after updating balances.")
+            }
         }
 
         drop(conn);
