@@ -320,7 +320,7 @@ pub fn add_transport_to_sim<F>(
     registry_handler: RegistryConsensusHandle,
     topology_watcher: watch::Receiver<SubnetTopology>,
     conn_checker: Option<Router>,
-    crypto: Option<Arc<dyn TlsConfig + Send + Sync>>,
+    crypto: Option<Arc<dyn TlsConfig>>,
     state_sync_client: Option<Arc<dyn StateSyncClient<Message = StateSyncMessage>>>,
     consensus_manager: Option<TestConsensus<U64Artifact>>,
     post_setup_future: F,

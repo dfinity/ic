@@ -125,7 +125,7 @@ impl IngressManager {
         ingress_hist_reader: Box<dyn IngressHistoryReader>,
         ingress_pool: Arc<RwLock<dyn IngressPool>>,
         registry_client: Arc<dyn RegistryClient>,
-        ingress_signature_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
+        ingress_signature_crypto: Arc<dyn IngressSigVerifier>,
         metrics_registry: MetricsRegistry,
         subnet_id: SubnetId,
         log: ReplicaLogger,

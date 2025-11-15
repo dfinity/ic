@@ -77,7 +77,7 @@ pub fn start_nns_delegation_manager(
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
     cancellation_token: CancellationToken,
 ) -> (JoinHandle<()>, NNSDelegationReader) {
     let logger = log.clone();
@@ -110,7 +110,7 @@ struct DelegationManager {
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: Arc<dyn RegistryClient>,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
     metrics: DelegationManagerMetrics,
     rt_handle: tokio::runtime::Handle,
 }
@@ -175,7 +175,7 @@ async fn load_root_delegation(
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    tls_config: &(dyn TlsConfig + Send + Sync),
+    tls_config: &dyn TlsConfig,
     metrics: &DelegationManagerMetrics,
 ) -> Option<NNSDelegationBuilder> {
     // On the NNS subnet. No delegation needs to be fetched.
@@ -238,7 +238,7 @@ async fn try_fetch_delegation_from_nns(
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
-    tls_config: &(dyn TlsConfig + Send + Sync),
+    tls_config: &dyn TlsConfig,
     metrics: &DelegationManagerMetrics,
 ) -> Result<NNSDelegationBuilder, BoxError> {
     let (peer_id, node) = match get_random_node_from_nns_subnet(registry_client, nns_subnet_id) {

@@ -92,11 +92,11 @@ pub trait HttpRequestVerifier<C, R>: Send + Sync {
 }
 
 pub struct HttpRequestVerifierImpl {
-    validator: Arc<dyn IngressSigVerifier + Send + Sync>,
+    validator: Arc<dyn IngressSigVerifier>,
 }
 
 impl HttpRequestVerifierImpl {
-    pub fn new(validator: Arc<dyn IngressSigVerifier + Send + Sync>) -> Self {
+    pub fn new(validator: Arc<dyn IngressSigVerifier>) -> Self {
         Self { validator }
     }
 }

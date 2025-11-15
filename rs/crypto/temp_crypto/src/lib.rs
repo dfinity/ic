@@ -488,7 +488,7 @@ pub mod internal {
         }
     }
 
-    impl<C: CryptoServiceProvider, R: CryptoComponentRng, T: Signable> BasicSigner<T>
+    impl<C: CryptoServiceProvider + Send + Sync, R: CryptoComponentRng, T: Signable> BasicSigner<T>
         for TempCryptoComponentGeneric<C, R>
     {
         fn sign_basic(
