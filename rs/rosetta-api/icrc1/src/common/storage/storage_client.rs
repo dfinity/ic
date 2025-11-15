@@ -79,7 +79,12 @@ impl StorageClient {
         std::fs::create_dir_all(db_file_path.parent().unwrap())?;
         let connection = rusqlite::Connection::open(db_file_path)?;
         let batch_size = balance_sync_batch_size.unwrap_or(BALANCE_SYNC_BATCH_SIZE_DEFAULT);
-        Self::new(connection, cache_size_kb, flush_cache_shrink_mem, batch_size)
+        Self::new(
+            connection,
+            cache_size_kb,
+            flush_cache_shrink_mem,
+            batch_size,
+        )
     }
 
     /// Constructs a new SQLite in-memory store.
@@ -151,6 +156,8 @@ impl StorageClient {
                 tracing::info!("Not flushing cache and shrinking memory after updating balances.")
             }
         }
+
+        tracing::info!("Using balance sync batch size {}", balance_sync_batch_size);
 
         drop(conn);
 
