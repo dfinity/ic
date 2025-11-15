@@ -74,11 +74,12 @@ impl StorageClient {
         db_file_path: &Path,
         cache_size_kb: Option<i64>,
         flush_cache_shrink_mem: bool,
-        balance_sync_batch_size: u64,
+        balance_sync_batch_size: Option<u64>,
     ) -> anyhow::Result<Self> {
         std::fs::create_dir_all(db_file_path.parent().unwrap())?;
         let connection = rusqlite::Connection::open(db_file_path)?;
-        Self::new(connection, cache_size_kb, flush_cache_shrink_mem, balance_sync_batch_size)
+        let batch_size = balance_sync_batch_size.unwrap_or(BALANCE_SYNC_BATCH_SIZE_DEFAULT);
+        Self::new(connection, cache_size_kb, flush_cache_shrink_mem, batch_size)
     }
 
     /// Constructs a new SQLite in-memory store.

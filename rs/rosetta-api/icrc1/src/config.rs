@@ -187,8 +187,8 @@ pub struct Args {
     /// are loaded into memory at once when updating account balances.
     /// Lower values reduce memory usage but may slow down sync.
     /// Default is 100000 blocks per batch.
-    #[arg(long = "balance-sync-batch-size", default_value = BATCH_SIZE_DEFAULT)]
-    pub balance_sync_batch_size: u64,
+    #[arg(long = "balance-sync-batch-size")]
+    pub balance_sync_batch_size: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -205,7 +205,7 @@ pub struct ParsedConfig {
     pub watchdog_timeout_seconds: u64,
     pub sqlite_max_cache_kb: Option<i64>,
     pub flush_cache_shrink_mem: bool,
-    pub balance_sync_batch_size: u64,
+    pub balance_sync_batch_size: Option<u64>,
 }
 
 impl ParsedConfig {
@@ -332,7 +332,7 @@ mod tests {
             watchdog_timeout_seconds: 60,
             sqlite_max_cache_kb: None,
             flush_cache_shrink_mem: false,
-            balance_sync_batch_size: 100000,
+            balance_sync_batch_size: Some(BATCH_SIZE_DEFAULT),
         }
     }
 

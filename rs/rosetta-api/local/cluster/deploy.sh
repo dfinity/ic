@@ -9,7 +9,7 @@ set -e
 #   --icrc1-ledgers <ledger_ids>     Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
 #   --sqlite-cache-kb <size>         SQLite cache size in KB (optional, no default)
 #   --flush-cache-shrink-mem         Flush the database cache and shrink the memory after updating account balances
-#   --balance-sync-batch-size <size> Balance sync batch size in blocks (default: 25000)
+#   --balance-sync-batch-size <size> Balance sync batch size in blocks (optional, default: 100000)
 #   --local-icp-image-tar <path>     Path to local ICP image tar file
 #   --local-icrc1-image-tar <path>   Path to local ICRC1 image tar file
 #   --no-icp-latest                  Don't deploy ICP Rosetta latest image
@@ -24,7 +24,7 @@ ICP_SYMBOL="TESTICP"
 ICRC1_LEDGER="3jkp5-oyaaa-aaaaj-azwqa-cai"
 SQLITE_CACHE_KB=""
 FLUSH_CACHE_SHRINK_MEM=false
-BALANCE_SYNC_BATCH_SIZE="10000"
+BALANCE_SYNC_BATCH_SIZE=""
 LOCAL_ICP_IMAGE_TAR=""
 LOCAL_ICRC1_IMAGE_TAR=""
 DEPLOY_ICP_LATEST=true
@@ -259,7 +259,6 @@ HELM_CMD=(helm upgrade --install local-rosetta .
     --set icpConfig.tokenSymbol="$ICP_SYMBOL"
     --set icpConfig.deployLatest="$DEPLOY_ICP_LATEST"
     --set-string icrcConfig.ledgerId="$ESCAPED_ICRC1_LEDGER"
-    --set icrcConfig.balanceSyncBatchSize="$BALANCE_SYNC_BATCH_SIZE" \
     --set icrcConfig.deployLatest="$DEPLOY_ICRC1_LATEST"
     --set icpConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICP_IMAGE_TAR" ]] && echo "true" || echo "false")
     --set icrcConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]] && echo "true" || echo "false")
@@ -268,6 +267,9 @@ HELM_CMD=(helm upgrade --install local-rosetta .
 
 # Add optional sqlite-cache-kb parameter only if specified
 [[ -n "$SQLITE_CACHE_KB" ]] && HELM_CMD+=(--set icrcConfig.sqliteCacheKb="$SQLITE_CACHE_KB")
+
+# Add optional balance-sync-batch-size parameter only if specified
+[[ -n "$BALANCE_SYNC_BATCH_SIZE" ]] && HELM_CMD+=(--set icrcConfig.balanceSyncBatchSize="$BALANCE_SYNC_BATCH_SIZE")
 
 # Add flush-cache-shrink-mem parameter
 HELM_CMD+=(--set icrcConfig.flushCacheShrinkMem="$FLUSH_CACHE_SHRINK_MEM")
