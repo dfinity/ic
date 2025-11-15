@@ -16,7 +16,7 @@ icrcConfig:
   # Recommended: ~10-20% of pod memory limit per database.
   # With 512Mi limit and 2 ledgers: 512MB * 0.15 / 2 = ~38MB per DB
   # Conservative default set to 20MB (20480 KB) per database
-  sqliteCacheKb: 20480
+  # sqliteCacheKb: 20480
   # Deploy the latest ICRC Rosetta image from Docker Hub
   deployLatest: true
 
@@ -77,6 +77,6 @@ cadvisor:
     type: ClusterIP
     port: 8080
 
-  nodeSelector: { }
+  nodeSelector: {}
   tolerations: []
-  affinity: { }
+  affinity: {}

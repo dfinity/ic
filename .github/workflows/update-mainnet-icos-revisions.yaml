@@ -24,7 +24,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}
 
       - name: Update mainnet ICOS versions file

@@ -127,27 +127,63 @@ impl MinterCanister {
         Decode!(&call_result, RetrieveDogeStatus).unwrap()
     }
 
-    pub fn await_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
+    pub fn self_check(&self) {
+        let call_result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "self_check",
+                Encode!().unwrap(),
+            )
+            .expect("BUG: failed to call self_check");
+        Decode!(&call_result, Result<(), String>)
+            .unwrap()
+            .expect("BUG: minter self-check failed")
+    }
+
+    pub fn await_submitted_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
         self.env
             .advance_time(MAX_TIME_IN_QUEUE + Duration::from_nanos(1));
+        let status = self.await_doge_transaction_with_status(ledger_burn_index, |tx_status| {
+            matches!(tx_status, RetrieveDogeStatus::Submitted { .. })
+        });
+        match status {
+            RetrieveDogeStatus::Submitted { txid, .. } => txid,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn await_finalized_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
+        let status = self.await_doge_transaction_with_status(ledger_burn_index, |tx_status| {
+            matches!(tx_status, RetrieveDogeStatus::Confirmed { .. })
+        });
+        match status {
+            RetrieveDogeStatus::Confirmed { txid, .. } => txid,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn await_doge_transaction_with_status<F>(
+        &self,
+        ledger_burn_index: u64,
+        filter: F,
+    ) -> RetrieveDogeStatus
+    where
+        F: Fn(&RetrieveDogeStatus) -> bool,
+    {
         let mut last_status = None;
         let max_ticks = 10;
         for _ in 0..max_ticks {
             let status = self.retrieve_doge_status(ledger_burn_index);
-            match status {
-                RetrieveDogeStatus::Submitted { txid } => {
-                    return txid;
-                }
-                status => {
-                    last_status = Some(status);
-                    self.env.tick();
-                }
+            if filter(&status) {
+                return status;
             }
+            last_status = Some(status);
+            self.env.tick();
         }
         dbg!(self.get_logs());
-        panic!(
-            "the minter did not submit a transaction in {max_ticks} ticks; last status {last_status:?}"
-        )
+        panic!("Unexpected transaction status in {max_ticks} ticks; last status {last_status:?}")
     }
 
     pub fn get_logs(&self) -> Vec<LogEntry<Priority>> {

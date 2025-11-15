@@ -6,7 +6,7 @@ set -e
 # Options:
 #   --icp-ledger <ledger_id>         Set the ICP Ledger ID (default: xafvr-biaaa-aaaai-aql5q-cai)
 #   --icp-symbol <symbol>            Set the ICP token symbol (default: TESTICP)
-#   --icrc1-ledger <ledger_ids>      Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
+#   --icrc1-ledgers <ledger_ids>     Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
 #   --sqlite-cache-kb <size>         SQLite cache size in KB
 #   --flush-cache-shrink-mem         Flush the database cache and shrink the memory after updating account balances (default: false)
 #   --local-icp-image-tar <path>     Path to local ICP image tar file
@@ -42,7 +42,7 @@ while [[ "$#" -gt 0 ]]; do
             ICP_SYMBOL="$2"
             shift
             ;;
-        --icrc1-ledger)
+        --icrc1-ledgers)
             ICRC1_LEDGER="$2"
             shift
             ;;
@@ -240,7 +240,6 @@ load_local_tar() {
 }
 
 # Load local ICP and ICRC1 images if provided
-# Note: The tar files already contain the correct image tags (e.g., icrc-rosetta:local)
 load_local_tar "$LOCAL_ICP_IMAGE_TAR"
 load_local_tar "$LOCAL_ICRC1_IMAGE_TAR"
 

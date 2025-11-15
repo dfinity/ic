@@ -71,7 +71,7 @@ spec:
       volumes:
         {{- range $.Values.volumes }}
         - name: {{ .name }}
-          emptyDir: { }
+          emptyDir: {}
         {{- end }}
 ---
 {{- end }}

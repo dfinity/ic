@@ -572,6 +572,7 @@ impl SchedulerTest {
                 .scaled_subnet_available_memory(&state),
             subnet_available_callbacks: self.scheduler.exec_env.subnet_available_callbacks(&state),
             compute_allocation_used,
+            subnet_memory_reservation: self.scheduler.exec_env.scaled_subnet_memory_reservation(),
         };
         let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);
         self.scheduler.drain_subnet_queues(
