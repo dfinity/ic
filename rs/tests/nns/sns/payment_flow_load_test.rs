@@ -4,8 +4,7 @@ use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::sns_client::SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S;
 use ic_system_test_driver::systest;
 use sns_system_test_lib::sns_deployment::{
-    generate_ticket_participants_workload, initiate_token_swap_with_oc_parameters,
-    sns_setup_with_many_icp_users,
+    generate_ticket_participants_workload, sns_setup_with_many_icp_users,
 };
 use std::time::Duration;
 
@@ -74,7 +73,6 @@ fn main() -> Result<()> {
         .with_overall_timeout(Duration::from_secs(60 * 60)) // 60 min
         .with_timeout_per_test(Duration::from_secs(60 * 60)) // 60 min
         .with_setup(sns_setup_with_many_icp_users)
-        .add_test(systest!(initiate_token_swap_with_oc_parameters))
         .add_test(systest!(workload_rps50_many_ticket_participants))
         .add_test(systest!(workload_rps55_many_ticket_participants))
         .add_test(systest!(workload_rps60_many_ticket_participants))

@@ -2924,7 +2924,7 @@ pub struct XdrConversionRate {
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
-pub struct ListProposalInfo {
+pub struct ListProposalInfoRequest {
     /// Limit on the number of \[ProposalInfo\] to return. If no value is
     /// specified, or if a value greater than 100 is specified, 100
     /// will be used.

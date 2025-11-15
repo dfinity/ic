@@ -175,9 +175,13 @@ pub struct Args {
 
     /// Maximum cache size for SQLite in KB. This controls the PRAGMA cache_size.
     /// Lower values reduce memory usage but may impact performance.
-    /// Default is -2000 (2MB per database).
-    #[arg(long = "sqlite-max-cache-kb", default_value = "2000")]
-    pub sqlite_max_cache_kb: i64,
+    #[arg(long = "sqlite-max-cache-kb")]
+    pub sqlite_max_cache_kb: Option<i64>,
+
+    /// Flush the cache and shrink the memory after processing account balances.
+    /// Lower values reduce memory usage but may impact performance.
+    #[arg(long = "flush-cache-shrink-mem", default_value = "false")]
+    pub flush_cache_shrink_mem: bool,
 
     /// Batch size for account balance synchronization. This controls how many blocks
     /// are loaded into memory at once when updating account balances.
@@ -199,7 +203,8 @@ pub struct ParsedConfig {
     pub offline: bool,
     pub log_file: PathBuf,
     pub watchdog_timeout_seconds: u64,
-    pub sqlite_max_cache_kb: i64,
+    pub sqlite_max_cache_kb: Option<i64>,
+    pub flush_cache_shrink_mem: bool,
     pub balance_sync_batch_size: u64,
 }
 
@@ -246,6 +251,7 @@ impl ParsedConfig {
             log_file: args.log_file,
             watchdog_timeout_seconds: args.watchdog_timeout_seconds,
             sqlite_max_cache_kb: args.sqlite_max_cache_kb,
+            flush_cache_shrink_mem: args.flush_cache_shrink_mem,
             balance_sync_batch_size: args.balance_sync_batch_size,
         })
     }
@@ -324,7 +330,8 @@ mod tests {
             offline: false,
             log_file: PathBuf::from("/test/log"),
             watchdog_timeout_seconds: 60,
-            sqlite_max_cache_kb: 2000,
+            sqlite_max_cache_kb: None,
+            flush_cache_shrink_mem: false,
             balance_sync_batch_size: 100000,
         }
     }

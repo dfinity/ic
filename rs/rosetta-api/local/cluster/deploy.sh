@@ -6,8 +6,9 @@ set -e
 # Options:
 #   --icp-ledger <ledger_id>         Set the ICP Ledger ID (default: xafvr-biaaa-aaaai-aql5q-cai)
 #   --icp-symbol <symbol>            Set the ICP token symbol (default: TESTICP)
-#   --icrc1-ledger <ledger_ids>      Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
-#   --sqlite-cache-kb <size>         SQLite cache size in KB (default: 20480)
+#   --icrc1-ledgers <ledger_ids>     Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
+#   --sqlite-cache-kb <size>         SQLite cache size in KB (optional, no default)
+#   --flush-cache-shrink-mem         Flush the database cache and shrink the memory after updating account balances
 #   --balance-sync-batch-size <size> Balance sync batch size in blocks (default: 25000)
 #   --local-icp-image-tar <path>     Path to local ICP image tar file
 #   --local-icrc1-image-tar <path>   Path to local ICRC1 image tar file
@@ -21,7 +22,8 @@ set -e
 ICP_LEDGER="xafvr-biaaa-aaaai-aql5q-cai"
 ICP_SYMBOL="TESTICP"
 ICRC1_LEDGER="3jkp5-oyaaa-aaaaj-azwqa-cai"
-SQLITE_CACHE_KB="20480"
+SQLITE_CACHE_KB=""
+FLUSH_CACHE_SHRINK_MEM=false
 BALANCE_SYNC_BATCH_SIZE="10000"
 LOCAL_ICP_IMAGE_TAR=""
 LOCAL_ICRC1_IMAGE_TAR=""
@@ -42,13 +44,16 @@ while [[ "$#" -gt 0 ]]; do
             ICP_SYMBOL="$2"
             shift
             ;;
-        --icrc1-ledger)
+        --icrc1-ledgers)
             ICRC1_LEDGER="$2"
             shift
             ;;
         --sqlite-cache-kb)
             SQLITE_CACHE_KB="$2"
             shift
+            ;;
+        --flush-cache-shrink-mem)
+            FLUSH_CACHE_SHRINK_MEM=true
             ;;
         --balance-sync-batch-size)
             BALANCE_SYNC_BATCH_SIZE="$2"
@@ -71,7 +76,7 @@ while [[ "$#" -gt 0 ]]; do
         --clean) CLEAN=true ;;
         --stop) STOP=true ;;
         --help)
-            sed -n '5,19p' "$0"
+            sed -n '5,20p' "$0"
             exit 0
             ;;
         *)
@@ -240,7 +245,6 @@ load_local_tar() {
 }
 
 # Load local ICP and ICRC1 images if provided
-# Note: The tar files already contain the correct image tags (e.g., icrc-rosetta:local)
 load_local_tar "$LOCAL_ICP_IMAGE_TAR"
 load_local_tar "$LOCAL_ICRC1_IMAGE_TAR"
 
@@ -248,17 +252,28 @@ echo "Deploying Helm chart..."
 # Deploy or upgrade the Helm chart
 # Escape commas in ICRC1_LEDGER for Helm (commas are interpreted as value separators)
 ESCAPED_ICRC1_LEDGER="${ICRC1_LEDGER//,/\\,}"
-helm upgrade --install local-rosetta . \
-    --set icpConfig.canisterId="$ICP_LEDGER" \
-    --set icpConfig.tokenSymbol="$ICP_SYMBOL" \
-    --set icpConfig.deployLatest="$DEPLOY_ICP_LATEST" \
-    --set-string icrcConfig.ledgerId="$ESCAPED_ICRC1_LEDGER" \
-    --set icrcConfig.sqliteCacheKb="$SQLITE_CACHE_KB" \
+
+# Build helm command with conditional parameters
+HELM_CMD=(helm upgrade --install local-rosetta .
+    --set icpConfig.canisterId="$ICP_LEDGER"
+    --set icpConfig.tokenSymbol="$ICP_SYMBOL"
+    --set icpConfig.deployLatest="$DEPLOY_ICP_LATEST"
+    --set-string icrcConfig.ledgerId="$ESCAPED_ICRC1_LEDGER"
     --set icrcConfig.balanceSyncBatchSize="$BALANCE_SYNC_BATCH_SIZE" \
-    --set icrcConfig.deployLatest="$DEPLOY_ICRC1_LATEST" \
-    --set icpConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICP_IMAGE_TAR" ]] && echo "true" || echo "false") \
-    --set icrcConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]] && echo "true" || echo "false") \
+    --set icrcConfig.deployLatest="$DEPLOY_ICRC1_LATEST"
+    --set icpConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICP_IMAGE_TAR" ]] && echo "true" || echo "false")
+    --set icrcConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]] && echo "true" || echo "false")
     --kube-context="$MINIKUBE_PROFILE"
+)
+
+# Add optional sqlite-cache-kb parameter only if specified
+[[ -n "$SQLITE_CACHE_KB" ]] && HELM_CMD+=(--set icrcConfig.sqliteCacheKb="$SQLITE_CACHE_KB")
+
+# Add flush-cache-shrink-mem parameter
+HELM_CMD+=(--set icrcConfig.flushCacheShrinkMem="$FLUSH_CACHE_SHRINK_MEM")
+
+# Execute the helm command
+"${HELM_CMD[@]}"
 
 # Wait for Grafana server to be ready
 echo "Waiting for Grafana server to be ready..."

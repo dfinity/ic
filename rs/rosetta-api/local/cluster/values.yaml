@@ -12,11 +12,6 @@ icrcConfig:
   ledgerId: vtrom-gqaaa-aaaaq-aabia-cai
   storeFile: /data/db.sqlite
   useLocallyBuilt: false
-  # SQLite cache size in KB. Lower values reduce memory usage but may impact performance.
-  # Recommended: ~10-20% of pod memory limit per database.
-  # With 512Mi limit and 2 ledgers: 512MB * 0.15 / 2 = ~38MB per DB
-  # Conservative default set to 20MB (20480 KB) per database
-  sqliteCacheKb: 20480
   # Balance synchronization batch size - how many blocks to load into memory at once
   # when updating account balances. Lower values reduce memory spikes but slow down sync.
   # For memory-constrained environments with multiple ledgers, use 10000-25000.
@@ -24,6 +19,8 @@ icrcConfig:
   balanceSyncBatchSize: 10000
   # Deploy the latest ICRC Rosetta image from Docker Hub
   deployLatest: true
+  # Flush the database cache and shrink the memory after updating account balances
+  flushCacheShrinkMem: false
 
 icpConfig:
   storeLocation: /data

@@ -57,6 +57,7 @@ impl TokenInfo {
 pub struct StorageClient {
     storage_connection: Mutex<Connection>,
     token_info: Option<TokenInfo>,
+    flush_cache_and_shrink_memory: bool,
     balance_sync_batch_size: u64,
 }
 
@@ -65,24 +66,25 @@ impl StorageClient {
     pub fn new_persistent(db_file_path: &Path) -> anyhow::Result<Self> {
         std::fs::create_dir_all(db_file_path.parent().unwrap())?;
         let connection = rusqlite::Connection::open(db_file_path)?;
-        Self::new(connection, None, BALANCE_SYNC_BATCH_SIZE_DEFAULT)
+        Self::new(connection, None, false, BALANCE_SYNC_BATCH_SIZE_DEFAULT)
     }
 
     /// Constructs a new SQLite in-persistent store with custom cache size and batch size.
     pub fn new_persistent_with_cache_and_batch_size(
         db_file_path: &Path,
-        cache_size_kb: i64,
+        cache_size_kb: Option<i64>,
+        flush_cache_shrink_mem: bool,
         balance_sync_batch_size: u64,
     ) -> anyhow::Result<Self> {
         std::fs::create_dir_all(db_file_path.parent().unwrap())?;
         let connection = rusqlite::Connection::open(db_file_path)?;
-        Self::new(connection, Some(cache_size_kb), balance_sync_batch_size)
+        Self::new(connection, cache_size_kb, flush_cache_shrink_mem, balance_sync_batch_size)
     }
 
     /// Constructs a new SQLite in-memory store.
     pub fn new_in_memory() -> anyhow::Result<Self> {
         let connection = rusqlite::Connection::open_in_memory()?;
-        Self::new(connection, None, BALANCE_SYNC_BATCH_SIZE_DEFAULT)
+        Self::new(connection, None, false, BALANCE_SYNC_BATCH_SIZE_DEFAULT)
     }
 
     /// Constructs a new SQLite in-memory store with a named DB that can be shared across instances.
@@ -91,7 +93,7 @@ impl StorageClient {
             format!("'file:{name}?mode=memory&cache=shared', uri=True"),
             OpenFlags::default(),
         )?;
-        Self::new(connection, None, BALANCE_SYNC_BATCH_SIZE_DEFAULT)
+        Self::new(connection, None, false, BALANCE_SYNC_BATCH_SIZE_DEFAULT)
     }
 
     pub fn get_token_display_name(&self) -> String {
@@ -113,11 +115,13 @@ impl StorageClient {
     fn new(
         connection: rusqlite::Connection,
         cache_size_kb: Option<i64>,
+        flush_cache_and_shrink_memory: bool,
         balance_sync_batch_size: u64,
     ) -> anyhow::Result<Self> {
         let storage_client = Self {
             storage_connection: Mutex::new(connection),
             token_info: None,
+            flush_cache_and_shrink_memory,
             balance_sync_batch_size,
         };
         let conn = storage_client.storage_connection.lock().unwrap();
@@ -127,10 +131,24 @@ impl StorageClient {
 
         // Configure cache size if specified
         // Negative values mean KB, positive values mean number of pages
-        if let Some(cache_kb) = cache_size_kb {
-            let cache_size = -cache_kb; // Negative to specify KB
-            conn.pragma_update(None, "cache_size", cache_size)?;
-            tracing::info!("SQLite cache_size set to {} KB", cache_kb);
+        match cache_size_kb {
+            None => {
+                tracing::info!("No cache size configured");
+            }
+            Some(cache_kb) => {
+                let cache_size = -cache_kb; // Negative to specify KB
+                conn.pragma_update(None, "cache_size", cache_size)?;
+                tracing::info!("SQLite cache_size set to {} KB", cache_kb);
+            }
+        }
+
+        match flush_cache_and_shrink_memory {
+            true => {
+                tracing::info!("Flushing cache and shrinking memory after updating balances.")
+            }
+            false => {
+                tracing::info!("Not flushing cache and shrinking memory after updating balances.")
+            }
         }
 
         drop(conn);
@@ -304,6 +322,7 @@ impl StorageClient {
         let mut open_connection = self.storage_connection.lock().unwrap();
         storage_operations::update_account_balances(
             &mut open_connection,
+            self.flush_cache_and_shrink_memory,
             self.balance_sync_batch_size,
         )
     }

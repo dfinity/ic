@@ -12,7 +12,7 @@ use rusqlite::{CachedStatement, Params, named_params, params};
 use serde_bytes::ByteBuf;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
-use tracing::info;
+use tracing::{info, trace};
 
 /// Gets the current value of a counter from the database.
 /// Returns None if the counter doesn't exist.
@@ -170,7 +170,11 @@ pub fn get_metadata(connection: &Connection) -> anyhow::Result<Vec<MetadataEntry
     Ok(result)
 }
 
-pub fn update_account_balances(connection: &mut Connection, batch_size: u64) -> anyhow::Result<()> {
+pub fn update_account_balances(
+    connection: &mut Connection,
+    flush_cache_and_shrink_memory: bool,
+    batch_size: u64,
+) -> anyhow::Result<()> {
     // Utility method that tries to fetch the balance from the cache first and, if
     // no balance has been found, fetches it from the database
     fn get_account_balance_with_cache(
@@ -402,12 +406,15 @@ pub fn update_account_balances(connection: &mut Connection, batch_size: u64) -> 
         }
         insert_tx.commit()?;
 
-        // Clear SQLite's prepared statement cache to release memory
-        // This is crucial for long-running syncs with many queries
-        connection.cache_flush()?;
+        if flush_cache_and_shrink_memory {
+            trace!("flushing cache and shrinking memory");
+            // Clear SQLite's prepared statement cache to release memory
+            // This is crucial for long-running syncs with many queries
+            connection.cache_flush()?;
 
-        // Force SQLite to release memory
-        connection.pragma_update(None, "shrink_memory", 1)?;
+            // Force SQLite to release memory
+            connection.pragma_update(None, "shrink_memory", 1)?;
+        }
 
         // Fetch the next batch of blocks
         batch_start_idx = get_highest_block_idx_in_account_balance_table(connection)?
@@ -862,7 +869,7 @@ pub fn repair_fee_collector_balances(
 
     if block_count > 0 {
         info!("Reprocessing all blocks...");
-        update_account_balances(connection, balance_sync_batch_size)?;
+        update_account_balances(connection, false, balance_sync_batch_size)?;
         info!("Successfully reprocessed all blocks");
     } else {
         info!("No blocks to process (empty database)");
