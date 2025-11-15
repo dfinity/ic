@@ -55,6 +55,7 @@ impl TokenInfo {
 pub struct StorageClient {
     storage_connection: Mutex<Connection>,
     token_info: Option<TokenInfo>,
+    flush_cache_and_shrink_memory: bool,
 }
 
 impl StorageClient {
@@ -62,23 +63,24 @@ impl StorageClient {
     pub fn new_persistent(db_file_path: &Path) -> anyhow::Result<Self> {
         std::fs::create_dir_all(db_file_path.parent().unwrap())?;
         let connection = rusqlite::Connection::open(db_file_path)?;
-        Self::new(connection, None)
+        Self::new(connection, None, false)
     }
 
     /// Constructs a new SQLite in-persistent store with custom cache size.
     pub fn new_persistent_with_cache(
         db_file_path: &Path,
-        cache_size_kb: i64,
+        cache_size_kb: Option<i64>,
+        flush_cache_shrink_mem: bool,
     ) -> anyhow::Result<Self> {
         std::fs::create_dir_all(db_file_path.parent().unwrap())?;
         let connection = rusqlite::Connection::open(db_file_path)?;
-        Self::new(connection, Some(cache_size_kb))
+        Self::new(connection, cache_size_kb, flush_cache_shrink_mem)
     }
 
     /// Constructs a new SQLite in-memory store.
     pub fn new_in_memory() -> anyhow::Result<Self> {
         let connection = rusqlite::Connection::open_in_memory()?;
-        Self::new(connection, None)
+        Self::new(connection, None, false)
     }
 
     /// Constructs a new SQLite in-memory store with a named DB that can be shared across instances.
@@ -87,7 +89,7 @@ impl StorageClient {
             format!("'file:{name}?mode=memory&cache=shared', uri=True"),
             OpenFlags::default(),
         )?;
-        Self::new(connection, None)
+        Self::new(connection, None, false)
     }
 
     pub fn get_token_display_name(&self) -> String {
@@ -106,10 +108,15 @@ impl StorageClient {
         }
     }
 
-    fn new(connection: rusqlite::Connection, cache_size_kb: Option<i64>) -> anyhow::Result<Self> {
+    fn new(
+        connection: rusqlite::Connection,
+        cache_size_kb: Option<i64>,
+        flush_cache_and_shrink_memory: bool,
+    ) -> anyhow::Result<Self> {
         let storage_client = Self {
             storage_connection: Mutex::new(connection),
             token_info: None,
+            flush_cache_and_shrink_memory,
         };
         let conn = storage_client.storage_connection.lock().unwrap();
 
@@ -293,7 +300,10 @@ impl StorageClient {
             bail!("Tried to update account balances but there exist gaps in the database.",);
         }
         let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::update_account_balances(&mut open_connection)
+        storage_operations::update_account_balances(
+            &mut open_connection,
+            self.flush_cache_and_shrink_memory,
+        )
     }
 
     /// Retrieves the highest block index in the account balance table.
