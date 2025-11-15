@@ -8,10 +8,11 @@ mod hash;
 pub use hash::CryptoHashDomain;
 pub use hash::CryptoHashable;
 pub use hash::CryptoHashableTestDummy;
-pub use hash::DOMAIN_IC_REQUEST;
 pub use hash::crypto_hash;
 
 mod sign;
+
+pub use sign::DOMAIN_IC_REQUEST;
 
 use ic_management_canister_types_private::EcdsaCurve;
 use ic_management_canister_types_private::MasterPublicKeyId;

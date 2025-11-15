@@ -3,10 +3,8 @@ pub enum DomainSeparator {
     /// The domain separator to be used when calculating the sender signature for a
     /// request to the Internet Computer according to the
     /// [interface specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
-    #[allow(dead_code)]
-    // This variant is only defined to check in tests that there are no
-    // collisions in separators. The used variable is defined in DOMAIN_IC_REQUEST
     IcRequest,
+    IcRequestAuthDelegation,
     NotarizationContent,
     Notarization,
     NotarizationShare,
@@ -70,6 +68,7 @@ impl DomainSeparator {
     pub const fn as_str(&self) -> &'static str {
         match self {
             DomainSeparator::IcRequest => "ic-request",
+            DomainSeparator::IcRequestAuthDelegation => "ic-request-auth-delegation",
             DomainSeparator::NotarizationContent => "notarization_content_domain",
             DomainSeparator::Notarization => "notarization_domain",
             DomainSeparator::NotarizationShare => "notarization_share_domain",
