@@ -97,6 +97,7 @@ class LoadGeneratorStats:
     def get_stats(self):
         with self.lock:
             elapsed = time.time() - self.start_time
+            current_time = time.time()
             total_requests = self.read_success + self.read_failure + self.write_success + self.write_failure
 
             # Calculate average latencies
@@ -108,6 +109,8 @@ class LoadGeneratorStats:
             write_p50, write_p95, write_p99 = self._calculate_percentiles(self.write_latencies)
 
             return {
+                "start_time": self.start_time,
+                "current_time": current_time,
                 "elapsed": elapsed,
                 "total_requests": total_requests,
                 "read_success": self.read_success,
@@ -338,9 +341,15 @@ class LoadGenerator:
         """Print current statistics"""
         stats = self.stats.get_stats()
 
+        # Convert timestamps to UTC datetime strings
+        start_time_utc = datetime.utcfromtimestamp(stats['start_time']).strftime('%Y-%m-%d %H:%M:%S UTC')
+        current_time_utc = datetime.utcfromtimestamp(stats['current_time']).strftime('%Y-%m-%d %H:%M:%S UTC')
+
         print("\n" + "=" * 80)
         print(f"Load Generator Statistics (Elapsed: {stats['elapsed']:.1f}s)")
         print("=" * 80)
+        print(f"Start Time:         {start_time_utc}")
+        print(f"Current Time:       {current_time_utc}")
         print(f"Total Requests:     {stats['total_requests']}")
         print(f"Requests/sec:       {stats['requests_per_second']:.2f}")
         print(f"\nRead Operations:")
