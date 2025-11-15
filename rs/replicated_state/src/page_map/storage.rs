@@ -34,7 +34,7 @@ pub const MAX_NUMBER_OF_FILES: usize = 7;
 
 /// For `get_memory_instructions`, any range with a size of up to that number
 /// of pages will be copied, and larger ranges will be memory mapped instead.
-const MAX_COPY_MEMORY_INSTRUCTION: u64 = 10;
+const MAX_COPY_MEMORY_INSTRUCTION: u64 = u64::MAX;
 
 /// The overlay version used for newly written overlays.
 const CURRENT_OVERLAY_VERSION: OverlayVersion = OverlayVersion::V0;
@@ -283,9 +283,7 @@ impl StorageImpl {
                 .or_insert(start_page_index..last_page_index);
             // For each shard the lowest height version is a base, if it can be loaded fast.
             // It can be mmapped fast if it contains a single range, hence one mmap.
-            if base_path.is_none()
-                && !shards_with_overlays.contains(&shard)
-                && overlay.index_iter().count() == 1
+            if false && !shards_with_overlays.contains(&shard) && overlay.index_iter().count() == 1
             {
                 base_overlays.push(overlay);
             } else {
