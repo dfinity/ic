@@ -705,7 +705,7 @@ mod upgrade {
                     mode: CodeDeploymentMode::Upgrade,
                     module_hash: wasm_hash.clone().as_ref().to_vec(),
                 });
-                changes.last() == Some(&expected_change)
+                changes.last() == Some(&Some(expected_change))
             };
 
         let orchestrator = orchestrator
@@ -774,14 +774,14 @@ mod upgrade {
                 .into_iter()
                 .map(|c| c.details.clone())
                 .collect();
-            matches!(changes.first(), Some(ChangeDetails::Creation(_)))
-                && matches!(changes.get(1), Some(x) if x == &ChangeDetails::CodeDeployment(CodeDeploymentRecord {
+            matches!(changes.first(), Some(Some(ChangeDetails::Creation(_))))
+                && matches!(changes.get(1), Some(Some(x)) if x == &ChangeDetails::CodeDeployment(CodeDeploymentRecord {
                     mode: CodeDeploymentMode::Install,
                     module_hash: wasm_hash.clone().as_ref().to_vec(),
                 }))
                 && matches!(
                     changes.get(2), //ledger will change controller of spawned off archive
-                    None | Some(ChangeDetails::ControllersChange(_))
+                    None | Some(Some(ChangeDetails::ControllersChange(_)))
                 )
                 && changes.len() <= 3
         };
@@ -797,8 +797,8 @@ mod upgrade {
                 mode: CodeDeploymentMode::Upgrade,
                 module_hash: wasm_hash.clone().as_ref().to_vec(),
             });
-            (matches!(changes.get(2), Some(c) if c == &expected_change)
-                || matches!(changes.get(3), Some(c) if c == &expected_change))
+            (matches!(changes.get(2), Some(Some(c)) if c == &expected_change)
+                || matches!(changes.get(3), Some(Some(c)) if c == &expected_change))
                 && changes.len() <= 4
         };
 
@@ -1001,8 +1001,8 @@ mod upgrade {
                 mode: CodeDeploymentMode::Upgrade,
                 module_hash: wasm_hash.clone().as_ref().to_vec(),
             });
-            (matches!(changes.get(2), Some(c) if c == &expected_change)
-                || matches!(changes.get(3), Some(c) if c == &expected_change))
+            (matches!(changes.get(2), Some(Some(c)) if c == &expected_change)
+                || matches!(changes.get(3), Some(Some(c)) if c == &expected_change))
                 && changes.len() <= 4
         };
 
