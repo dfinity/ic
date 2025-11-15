@@ -41,16 +41,16 @@ fn post_upgrade(args: MigrationCanisterInitArgs) {
 
 #[derive(Clone, CandidType, Deserialize)]
 pub struct MigrateCanisterArgs {
-    pub source: Principal,
-    pub target: Principal,
+    pub canister_id: Principal,
+    pub replace_canister_id: Principal,
 }
 
 impl Display for MigrateCanisterArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "MigrateCanisterArgs {{ source: {}, target: {} }}",
-            self.source, self.target
+            "MigrateCanisterArgs {{ canister_id: {}, replace_canister_id: {} }}",
+            self.canister_id, self.replace_canister_id
         )
     }
 }
@@ -72,7 +72,7 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationErr
     if !caller_allowed(&caller) {
         return Err(ValidationError::MigrationsDisabled);
     }
-    match validate_request(args.source, args.target, caller).await {
+    match validate_request(args.canister_id, args.replace_canister_id, caller).await {
         Err(e) => {
             println!("Failed to validate request {}: {}", args, e);
             return Err(e);
@@ -100,16 +100,16 @@ pub enum MigrationStatus {
 }
 
 #[query]
-/// The same (source, target) pair might be present in the `HISTORY`, and valid to process again, so
+/// The same (canister_id, replace_canister_id) pair might be present in the `HISTORY`, and valid to process again, so
 /// we return a vector.
 fn migration_status(args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
-    let mut active: Vec<MigrationStatus> = find_request(args.source, args.target)
+    let mut active: Vec<MigrationStatus> = find_request(args.canister_id, args.replace_canister_id)
         .into_iter()
         .map(|r| MigrationStatus::InProgress {
             status: r.name().to_string(),
         })
         .collect();
-    let events: Vec<MigrationStatus> = find_event(args.source, args.target)
+    let events: Vec<MigrationStatus> = find_event(args.canister_id, args.replace_canister_id)
         .into_iter()
         .map(|event| match event.event {
             crate::EventType::Succeeded { .. } => MigrationStatus::Succeeded { time: event.time },

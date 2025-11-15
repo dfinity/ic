@@ -114,8 +114,8 @@ fn test_canister_migration() {
     assert_eq!(pic.get_subnet(target_canister).unwrap(), subnet_2);
 
     let migrate_canister_args = MigrateCanisterArgs {
-        source: source_canister,
-        target: target_canister,
+        canister_id: source_canister,
+        replace_canister_id: target_canister,
     };
     let res = update_candid::<_, (Result<(), MigrationValidatonError>,)>(
         &pic,
