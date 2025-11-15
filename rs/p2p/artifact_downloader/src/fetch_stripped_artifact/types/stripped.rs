@@ -4,7 +4,10 @@ use ic_protobuf::{
 };
 use ic_types::{
     artifact::{ConsensusMessageId, IdentifiableArtifact, PbArtifact},
-    consensus::ConsensusMessage,
+    consensus::{
+        ConsensusMessage,
+        idkg::{IDkgArtifactId, IDkgArtifactIdDataOf, IDkgPrefixOf},
+    },
 };
 
 use super::SignedIngressId;
@@ -15,12 +18,19 @@ pub(crate) struct StrippedIngressPayload {
     pub(crate) ingress_messages: Vec<SignedIngressId>,
 }
 
+/// Stripped version of the [`Dealings`].
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct StrippedIDkgDealings {
+    pub(crate) stripped_dealings: Vec<(u32, IDkgArtifactId)>,
+}
+
 /// Stripped version of the [`BlockProposal`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct StrippedBlockProposal {
     pub(crate) block_proposal_without_ingresses_proto: pb::BlockProposal,
     pub(crate) stripped_ingress_payload: StrippedIngressPayload,
     pub(crate) unstripped_consensus_message_id: ConsensusMessageId,
+    pub(crate) stripped_dealings: StrippedIDkgDealings,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -85,6 +95,28 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
                 value.unstripped_consensus_message_id,
                 "unstripped_consensus_message_id",
             )?,
+            stripped_dealings: StrippedIDkgDealings {
+                stripped_dealings: value
+                    .stripped_dealings
+                    .into_iter()
+                    .map(|d| {
+                        let did = d
+                            .dealing_id
+                            .ok_or(ProxyDecodeError::Other("missing".to_string()))?;
+                        let dealing_id: IDkgArtifactId = IDkgArtifactId::Dealing(
+                            IDkgPrefixOf::new(try_from_option_field(
+                                did.prefix.as_ref(),
+                                "Dealing::prefix",
+                            )?),
+                            IDkgArtifactIdDataOf::new(try_from_option_field(
+                                did.id_data,
+                                "Dealing::id_data",
+                            )?),
+                        );
+                        Ok((d.dealer_index, dealing_id))
+                    })
+                    .collect::<Result<Vec<_>, ProxyDecodeError>>()?,
+            },
         })
     }
 }
@@ -105,6 +137,23 @@ impl From<StrippedBlockProposal> for pb::StrippedBlockProposal {
                 })
                 .collect(),
             unstripped_consensus_message_id: Some(value.unstripped_consensus_message_id.into()),
+            stripped_dealings: value
+                .stripped_dealings
+                .stripped_dealings
+                .into_iter()
+                .map(|(dealer_index, dealing_id)| {
+                    let IDkgArtifactId::Dealing(id_prefix, id_data) = dealing_id else {
+                        panic!("done now");
+                    };
+                    pb::StrippedDealing {
+                        dealer_index,
+                        dealing_id: Some(pb::PrefixPairIDkg {
+                            prefix: Some((&id_prefix.get()).into()),
+                            id_data: Some(pb::IDkgArtifactIdData::from(id_data.get())),
+                        }),
+                    }
+                })
+                .collect(),
         }
     }
 }
