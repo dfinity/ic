@@ -20,8 +20,7 @@ message HttpsOutcallRequest {
   repeated HttpHeader headers = 3;
   HttpMethod method = 4;
   uint64 max_response_size_bytes = 5;
-  // After the dark launch, this will be removed in favour of socks_proxy_addrs.
-  bool socks_proxy_allowed = 6;
+  reserved 6;
   repeated string socks_proxy_addrs = 7;
 }
 
