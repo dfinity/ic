@@ -11,8 +11,8 @@ use crate::{
     neuron_store::NeuronStore,
     pb::v1::{
         Ballot, BallotInfo, CreateServiceNervousSystem, ExecuteNnsFunction, Followees, InstallCode,
-        KnownNeuron, NnsFunction, Proposal, ProposalData, Topic, Vote,
-        install_code::CanisterInstallMode, proposal::Action,
+        NnsFunction, Proposal, ProposalData, Topic, Vote, install_code::CanisterInstallMode,
+        proposal::Action,
     },
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
@@ -466,14 +466,7 @@ fn compute_ballots_for_new_proposal_with_stable_neurons() -> BenchResult {
 
     let bench_result = bench_fn(|| {
         governance
-            .compute_ballots_for_new_proposal(
-                &Action::RegisterKnownNeuron(KnownNeuron {
-                    id: None,
-                    known_neuron_data: None,
-                }),
-                &NeuronIdProto { id: 1 },
-                123_456_789,
-            )
+            .compute_ballots_for_standard_proposal(123_456_789)
             .expect("Failed!");
     });
 
