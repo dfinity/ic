@@ -263,6 +263,9 @@ HELM_CMD=(helm upgrade --install local-rosetta .
 # Add optional sqlite-cache-kb parameter only if specified
 [[ -n "$SQLITE_CACHE_KB" ]] && HELM_CMD+=(--set icrcConfig.sqliteCacheKb="$SQLITE_CACHE_KB")
 
+# Add flush-cache-shrink-mem parameter
+HELM_CMD+=(--set icrcConfig.flushCacheShrinkMem="$FLUSH_CACHE_SHRINK_MEM")
+
 # Execute the helm command
 "${HELM_CMD[@]}"
 
