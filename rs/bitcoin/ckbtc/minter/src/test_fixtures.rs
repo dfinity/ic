@@ -138,8 +138,8 @@ pub mod mock {
     use crate::management::CallError;
     use crate::updates::update_balance::UpdateBalanceError;
     use crate::{
-        BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, GetCurrentFeePercentilesRequest,
-        GetUtxosRequest, GetUtxosResponse, Network, tx,
+        BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, FeeEstimator,
+        GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse, Network, tx,
     };
     use async_trait::async_trait;
     use candid::Principal;
@@ -166,6 +166,7 @@ pub mod mock {
             fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress;
             fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String;
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
+            fn fee_estimator(&self, state: &CkBtcMinterState) -> Box<dyn FeeEstimator>;
             async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;

@@ -38,7 +38,7 @@ pub mod mock {
     use ic_ckbtc_minter::updates::update_balance::UpdateBalanceError;
     use ic_ckbtc_minter::{
         CanisterRuntime, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
-        Network, tx,
+        Network, fees::FeeEstimator, tx,
     };
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::Memo;
@@ -61,6 +61,7 @@ pub mod mock {
             fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress;
             fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String;
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
+            fn fee_estimator(&self, state: &CkBtcMinterState) -> Box<dyn FeeEstimator>;
             async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;

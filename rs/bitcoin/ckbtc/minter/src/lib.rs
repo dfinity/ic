@@ -19,7 +19,8 @@ use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-use crate::state::{CkBtcMinterState, read_state};
+use crate::fees::{BitcoinFeeEstimator, FeeEstimator};
+use crate::state::{CkBtcMinterState, mutate_state, read_state};
 use crate::updates::get_btc_address;
 use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
@@ -28,6 +29,7 @@ pub use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, U
 
 pub mod address;
 pub mod dashboard;
+pub mod fees;
 pub mod guard;
 pub mod lifecycle;
 pub mod logs;
@@ -239,27 +241,6 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
     })
 }
 
-/// Returns the minimum withdrawal amount based on the current median fee rate (in millisatoshi per byte).
-/// The returned amount is in satoshi.
-fn compute_min_withdrawal_amount(
-    median_fee_rate_e3s: MillisatoshiPerByte,
-    min_withdrawal_amount: u64,
-    check_fee: u64,
-) -> u64 {
-    const PER_REQUEST_RBF_BOUND: u64 = 22_100;
-    const PER_REQUEST_VSIZE_BOUND: u64 = 221;
-    const PER_REQUEST_MINTER_FEE_BOUND: u64 = 305;
-
-    let median_fee_rate = median_fee_rate_e3s / 1_000;
-    ((PER_REQUEST_RBF_BOUND
-        + PER_REQUEST_VSIZE_BOUND * median_fee_rate
-        + PER_REQUEST_MINTER_FEE_BOUND
-        + check_fee)
-        / 50_000)
-        * 50_000
-        + min_withdrawal_amount
-}
-
 /// Returns an estimate for transaction fees in millisatoshi per vbyte. Returns
 /// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
@@ -274,14 +255,24 @@ pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
         .await
     {
         Ok(fees) => {
-            if btc_network == Network::Regtest {
-                return state::read_state(|s| s.estimate_median_fee_per_vbyte());
+            let fee_estimator = state::read_state(|s| runtime.fee_estimator(s));
+            match fee_estimator.estimate_median_fee(&fees) {
+                Some(median_fee) => {
+                    log!(
+                        Priority::Debug,
+                        "[estimate_fee_per_vbyte]: update median fee per vbyte to {median_fee} with {fees:?}"
+                    );
+                    let fee_based_retrieve_btc_min_amount =
+                        fee_estimator.minimum_withrawal_amount(median_fee);
+                    mutate_state(|s| {
+                        s.last_fee_per_vbyte = fees;
+                        s.last_median_fee_per_vbyte = Some(median_fee);
+                        s.fee_based_retrieve_btc_min_amount = fee_based_retrieve_btc_min_amount;
+                    });
+                    Some(median_fee)
+                }
+                None => None,
             }
-            log!(
-                Priority::Debug,
-                "[estimate_fee_per_vbyte]: update median fee per vbyte with {fees:?}"
-            );
-            state::mutate_state(|s| s.update_median_fee_per_vbyte(fees))
         }
         Err(err) => {
             log!(
@@ -1452,6 +1443,8 @@ pub trait CanisterRuntime {
     /// Returns the frequency at which fee percentiles are refreshed.
     fn refresh_fee_percentiles_frequency(&self) -> Duration;
 
+    fn fee_estimator(&self, state: &CkBtcMinterState) -> Box<dyn FeeEstimator>;
+
     /// Retrieves the current transaction fee percentiles.
     async fn get_current_fee_percentiles(
         &self,
@@ -1504,6 +1497,10 @@ impl CanisterRuntime for IcCanisterRuntime {
     fn refresh_fee_percentiles_frequency(&self) -> Duration {
         const ONE_HOUR: Duration = Duration::from_secs(3_600);
         ONE_HOUR
+    }
+
+    fn fee_estimator(&self, state: &CkBtcMinterState) -> Box<dyn FeeEstimator> {
+        Box::new(BitcoinFeeEstimator::from_state(state))
     }
 
     async fn get_current_fee_percentiles(

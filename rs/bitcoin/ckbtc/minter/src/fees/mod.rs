@@ -1,0 +1,81 @@
+use crate::Network;
+use crate::state::CkBtcMinterState;
+use ic_btc_interface::{MillisatoshiPerByte, Satoshi};
+
+pub trait FeeEstimator {
+    fn estimate_median_fee(
+        &self,
+        fee_percentiles: &[MillisatoshiPerByte],
+    ) -> Option<MillisatoshiPerByte>;
+    fn minimum_withrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi;
+}
+
+pub struct BitcoinFeeEstimator {
+    network: Network,
+    retrieve_btc_min_amount: u64,
+    check_fee: u64,
+}
+
+impl BitcoinFeeEstimator {
+    pub fn from_state(state: &CkBtcMinterState) -> Self {
+        Self {
+            network: state.btc_network,
+            retrieve_btc_min_amount: state.retrieve_btc_min_amount,
+            check_fee: state.check_fee,
+        }
+    }
+
+    /// An estimated fee per vbyte of 142 millistatoshis per vbyte was selected around 2025.06.21 01:09:50 UTC
+    /// for Bitcoin Mainnet, whereas the median fee around that time should have been 2_000.
+    /// Until we know the root cause, we ensure that the estimated fee has a meaningful minimum value.
+    pub const fn minimum_fee_per_vbyte(&self) -> MillisatoshiPerByte {
+        match &self.network {
+            Network::Mainnet => 1_500,
+            Network::Testnet => 1_000,
+            Network::Regtest => 0,
+        }
+    }
+}
+
+impl FeeEstimator for BitcoinFeeEstimator {
+    fn estimate_median_fee(
+        &self,
+        fee_percentiles: &[MillisatoshiPerByte],
+    ) -> Option<MillisatoshiPerByte> {
+        /// The default fee we use on regtest networks.
+        const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = 5_000;
+
+        let median_fee = match &self.network {
+            Network::Mainnet | Network::Testnet => {
+                if fee_percentiles.len() < 100 {
+                    return None;
+                }
+                Some(fee_percentiles[50])
+            }
+            Network::Regtest => Some(DEFAULT_REGTEST_FEE),
+        };
+        median_fee.map(|f| f.max(self.minimum_fee_per_vbyte()))
+    }
+
+    /// Returns the minimum withdrawal amount based on the current median fee rate (in millisatoshi per byte).
+    /// The returned amount is in satoshi.
+    fn minimum_withrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi {
+        match self.network {
+            Network::Mainnet | Network::Testnet => {
+                const PER_REQUEST_RBF_BOUND: u64 = 22_100;
+                const PER_REQUEST_VSIZE_BOUND: u64 = 221;
+                const PER_REQUEST_MINTER_FEE_BOUND: u64 = 305;
+
+                let median_fee_rate = median_fee / 1_000;
+                ((PER_REQUEST_RBF_BOUND
+                    + PER_REQUEST_VSIZE_BOUND * median_fee_rate
+                    + PER_REQUEST_MINTER_FEE_BOUND
+                    + self.check_fee)
+                    / 50_000)
+                    * 50_000
+                    + self.retrieve_btc_min_amount
+            }
+            Network::Regtest => self.retrieve_btc_min_amount,
+        }
+    }
+}
