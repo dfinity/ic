@@ -128,6 +128,7 @@ async fn resume_killed_instance_impl(
         icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: None,
         incomplete_state,
         initial_time: None,

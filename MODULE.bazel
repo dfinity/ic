@@ -670,6 +670,13 @@ http_file(
 )
 
 http_file(
+    name = "dogecoin_example_canister",
+    downloaded_file_path = "basic_dogecoin.wasm",
+    sha256 = "2eacb8de00dc2fc9bd43f7a5a8a4cd79c61c40ed3f761df84105a4a450f9e0c4",
+    url = "https://github.com/dfinity/dogecoin-canister/releases/download/example%2Fbasic-dogecoin%2F2025-11-12/basic_dogecoin.wasm",
+)
+
+http_file(
     name = "pocket-ic-mainnet-gz",
     # Calculate this hash using:
     # git checkout $revision

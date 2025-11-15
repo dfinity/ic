@@ -3622,6 +3622,7 @@ dependencies = [
  "ic-certificate-verification",
  "ic-certification",
  "ic-certified-map",
+ "ic-doge-interface",
  "ic-gateway",
  "ic-http-certification",
  "ic-http-gateway",
@@ -6006,6 +6007,17 @@ dependencies = [
  "serde",
  "serde_bytes",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "ic-doge-interface"
+version = "0.1.0"
+source = "git+https://github.com/dfinity/dogecoin-canister?rev=74e6dc9a10ba64d2dbad013282c26d74cd49863f#74e6dc9a10ba64d2dbad013282c26d74cd49863f"
+dependencies = [
+ "candid",
+ "datasize",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]

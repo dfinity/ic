@@ -128,6 +128,7 @@ impl PocketIc {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn from_components(
         subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
         server_url: Option<Url>,
@@ -138,6 +139,7 @@ impl PocketIc {
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
@@ -191,6 +193,7 @@ impl PocketIc {
             icp_config: Some(icp_config),
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
+            dogecoind_addr,
             icp_features: Some(icp_features),
             incomplete_state: None,
             initial_time,

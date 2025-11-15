@@ -1030,6 +1030,7 @@ pub struct StateMachineBuilder {
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     log_level: Option<Level>,
     bitcoin_testnet_uds_path: Option<PathBuf>,
+    dogecoin_testnet_uds_path: Option<PathBuf>,
     remove_old_states: bool,
     /// If a registry version is provided, then new registry records are created for the `StateMachine`
     /// at the provided registry version.
@@ -1073,6 +1074,7 @@ impl StateMachineBuilder {
             with_extra_canister_range: None,
             log_level: Some(Level::Warning),
             bitcoin_testnet_uds_path: None,
+            dogecoin_testnet_uds_path: None,
             remove_old_states: true,
             create_at_registry_version: Some(INITIAL_REGISTRY_VERSION),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
@@ -1298,6 +1300,16 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_dogecoin_testnet_uds_path(
+        self,
+        dogecoin_testnet_uds_path: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            dogecoin_testnet_uds_path,
+            ..self
+        }
+    }
+
     pub fn with_remove_old_states(self, remove_old_states: bool) -> Self {
         Self {
             remove_old_states,
@@ -1403,6 +1415,7 @@ impl StateMachineBuilder {
     /// in the provided association of subnet IDs and `StateMachine`s.
     pub fn build_with_subnets(self, subnets: Arc<dyn Subnets>) -> Arc<StateMachine> {
         let bitcoin_testnet_uds_path = self.bitcoin_testnet_uds_path.clone();
+        let dogecoin_testnet_uds_path = self.dogecoin_testnet_uds_path.clone();
 
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
         let sm = Arc::new(self.build_internal());
@@ -1446,7 +1459,7 @@ impl StateMachineBuilder {
             bitcoin_testnet_uds_metrics_path: None,
             dogecoin_mainnet_uds_path: None,
             dogecoin_mainnet_uds_metrics_path: None,
-            dogecoin_testnet_uds_path: None,
+            dogecoin_testnet_uds_path,
             dogecoin_testnet_uds_metrics_path: None,
             https_outcalls_uds_path: None,
             https_outcalls_uds_metrics_path: None,
@@ -1462,8 +1475,8 @@ impl StateMachineBuilder {
             &sm.metrics_registry,
             bitcoin_clients.btc_mainnet_client,
             bitcoin_clients.btc_testnet_client,
-            bitcoin_clients.doge_testnet_client,
             bitcoin_clients.doge_mainnet_client,
+            bitcoin_clients.doge_testnet_client,
             sm.subnet_id,
             sm.registry_client.clone(),
             BitcoinPayloadBuilderConfig::default(),
