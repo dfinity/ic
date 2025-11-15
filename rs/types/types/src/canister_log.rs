@@ -215,6 +215,11 @@ impl CanisterLog {
         self.records.used_space()
     }
 
+    /// Returns true if the canister log buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        self.used_space() == 0
+    }
+
     /// Returns the remaining space in the canister log buffer.
     pub fn remaining_space(&self) -> usize {
         let records = &self.records;
@@ -238,7 +243,7 @@ impl CanisterLog {
     /// Moves all the logs from `delta_log` to `self`.
     pub fn append_delta_log(&mut self, delta_log: &mut Self) {
         // Record the size of the appended delta log for metrics.
-        self.push_delta_log_size(delta_log.records.used_space());
+        self.push_delta_log_size(delta_log.used_space());
 
         // Assume records sorted cronologically (with increasing idx) and
         // update the system state's next index with the last record's index.
