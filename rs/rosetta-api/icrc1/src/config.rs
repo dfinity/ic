@@ -8,7 +8,6 @@ use url::Url;
 
 const MAINNET_DEFAULT_URL: &str = "https://ic0.app";
 const TESTNET_DEFAULT_URL: &str = "https://exchanges.testnet.dfinity.network";
-const BATCH_SIZE_DEFAULT: &str = "100000";
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum NetworkType {
@@ -332,7 +331,7 @@ mod tests {
             watchdog_timeout_seconds: 60,
             sqlite_max_cache_kb: None,
             flush_cache_shrink_mem: false,
-            balance_sync_batch_size: Some(BATCH_SIZE_DEFAULT),
+            balance_sync_batch_size: Some(100000),
         }
     }
 
