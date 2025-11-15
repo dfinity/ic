@@ -46,7 +46,7 @@ impl TestEnv {
     pub fn new<P: AsRef<Path>>(path: P, logger: Logger) -> Result<TestEnv> {
         let base_path = PathBuf::from(path.as_ref());
         let log_file = append_and_lock_exclusive(base_path.join("test.log"))?;
-        let file_drain = slog_term::FullFormat::new(slog_term::PlainSyncDecorator::new(log_file))
+        let file_drain = slog_term::FullFormat::new(slog_term::PlainDecorator::new(log_file))
             .build()
             .fuse();
         let file_drain = slog_async::Async::new(file_drain)
