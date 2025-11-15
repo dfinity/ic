@@ -47,7 +47,7 @@ use ic_sys::fs::write_protobuf_using_tmp_file;
 use ic_types::{
     Height, NodeId, RegistryVersion, SubnetId,
     consensus::{
-        HasHeight,
+        HasHeight, HasVersion,
         catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
     },
     crypto::*,
@@ -363,11 +363,23 @@ impl CatchUpPackageProvider {
                 std::io::Error::new(std::io::ErrorKind::InvalidData, e),
             )
         })?;
+
+        let state_hash = hex::encode(cup.content.state_hash.clone().get().0);
+
         info!(
             self.logger,
-            "Persisting CUP (registry version={}, height={}) to file {}",
+            "Persisting CUP (replica_version={}, registry_version={}, height={}, signed={}, state_hash={}, timestamp={}) to file {}",
+            cup.content.version(),
             cup.content.registry_version(),
-            cup.height(),
+            cup.content.height(),
+            cup.is_signed(),
+            state_hash,
+            cup.content
+                .block
+                .get_value()
+                .context
+                .time
+                .as_nanos_since_unix_epoch(),
             &cup_file_path.display(),
         );
         write_protobuf_using_tmp_file(&cup_file_path, cup_proto).map_err(|e| {
@@ -376,6 +388,12 @@ impl CatchUpPackageProvider {
                 e,
             )
         })?;
+        info!(
+            self.logger,
+            "Successfully persisted CUP (height={}, state_hash={})",
+            cup.content.height(),
+            state_hash,
+        );
 
         Ok(cup_file_path)
     }
