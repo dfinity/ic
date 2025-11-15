@@ -7,8 +7,8 @@ set -e
 #   --icp-ledger <ledger_id>         Set the ICP Ledger ID (default: xafvr-biaaa-aaaai-aql5q-cai)
 #   --icp-symbol <symbol>            Set the ICP token symbol (default: TESTICP)
 #   --icrc1-ledgers <ledger_ids>     Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
-#   --sqlite-cache-kb <size>         SQLite cache size in KB
-#   --flush-cache-shrink-mem         Flush the database cache and shrink the memory after updating account balances (default: false)
+#   --sqlite-cache-kb <size>         SQLite cache size in KB (optional, no default)
+#   --flush-cache-shrink-mem         Flush the database cache and shrink the memory after updating account balances
 #   --local-icp-image-tar <path>     Path to local ICP image tar file
 #   --local-icrc1-image-tar <path>   Path to local ICRC1 image tar file
 #   --no-icp-latest                  Don't deploy ICP Rosetta latest image
@@ -51,8 +51,7 @@ while [[ "$#" -gt 0 ]]; do
             shift
             ;;
         --flush-cache-shrink-mem)
-            FLUSH_CACHE_SHRINK_MEM="$2"
-            shift
+            FLUSH_CACHE_SHRINK_MEM=true
             ;;
         --local-icp-image-tar)
             LOCAL_ICP_IMAGE_TAR="$2"

@@ -59,13 +59,8 @@ You can make the rosetta nodes point to other ledgers by using these flags:
 - `--icrc1-ledgers <ledger_ids>`: Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: `3jkp5-oyaaa-aaaaj-azwqa-cai`). Example: `--icrc1-ledgers 'ledger1-id,ledger2-id,ledger3-id'`.
 - `--no-icp-latest`: Skip deploying the ICP Rosetta latest image from Docker Hub (useful when you only want to deploy your local build).
 - `--no-icrc1-latest`: Skip deploying the ICRC1 Rosetta latest image from Docker Hub (useful when you only want to deploy your local build).
-- `--sqlite-cache-kb <size>`: Set the SQLite cache size in KB (default: `20480` = 20MB). Lower values reduce memory
-  usage but may impact performance. Adjust based on the number of ledgers and available pod memory.
-- `--flush-cache-shrink-mem <bool>`: Flush the cache and shrink the memory after updating balances (default: false).
-- `--no-icp-latest`: Skip deploying the ICP Rosetta latest image from Docker Hub (useful when you only want to deploy
-  your local build).
-- `--no-icrc1-latest`: Skip deploying the ICRC1 Rosetta latest image from Docker Hub (useful when you only want to
-  deploy your local build).
+- `--sqlite-cache-kb <size>`: Set the SQLite cache size in KB (optional, no default). Lower values reduce memory usage but may impact performance. Adjust based on the number of ledgers and available pod memory.
+- `--flush-cache-shrink-mem`: Flush the cache and shrink the memory after updating balances. If this flag is present, the feature is enabled; otherwise, it remains disabled.
 
 ATTENTION: The first run might take a few minutes to finish as it'll create the cluster and install the necessary charts in it. After that, all the script will do is re-deploy the rosetta images with different configuration if needed.
 
