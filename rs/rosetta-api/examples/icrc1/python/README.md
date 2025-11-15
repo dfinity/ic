@@ -82,6 +82,7 @@ print(f"Transaction hash: {result['transaction_identifier']['hash']}")
 - **get_account_balance.py**: Displays account balance with human-readable formatting
 - **transfer.py**: Transfers tokens between accounts
 - **test_token_info.py**: Demonstrates and tests token info discovery process
+- **load_generator.py**: Load testing utility for stress-testing Rosetta API endpoints
 
 ## Token Information Discovery
 
@@ -218,6 +219,63 @@ python3 transfer.py --node-address http://localhost:8082 \
 ```
 
 When using this command, the sender's principal ID will be automatically derived from the private key.
+
+### Load Testing
+
+Generate load against a Rosetta API instance for performance testing:
+
+```sh
+# Run with 10 req/s, 90% read and 10% write operations indefinitely
+python3 load_generator.py \
+    --node-address http://localhost:8082 \
+    --read-canister-ids <canister-id-1>,<canister-id-2> \
+    --write-canister-ids <canister-id-3> \
+    --private-keys ./key1.pem,./key2.pem \
+    --rate 10 \
+    --write-percent 10
+```
+
+**Run for a specific duration (60 seconds)**:
+```sh
+python3 load_generator.py \
+    --node-address http://localhost:8082 \
+    --read-canister-ids <canister-id> \
+    --rate 50 \
+    --write-percent 0 \
+    --duration 60
+```
+
+**Advanced load testing with multiple canisters and keys**:
+```sh
+python3 load_generator.py \
+    --node-address http://localhost:8082 \
+    --read-canister-ids canister1,canister2,canister3 \
+    --write-canister-ids canister4,canister5 \
+    --private-keys key1.pem,key2.pem,key3.pem \
+    --rate 100 \
+    --write-percent 25 \
+    --duration 300 \
+    --verbose
+```
+
+The load generator features:
+- **Configurable Request Rate**: Control the number of requests per second
+- **Read/Write Mix**: Specify the percentage of write vs read operations
+- **Multi-Canister Support**: Distribute load across multiple ICRC-1 ledgers
+- **Multi-Key Support**: Use multiple private keys for write operations
+- **Real-time Statistics**: Monitor success rates, latencies (avg, p50, p95, p99), and throughput
+- **Graceful Shutdown**: Stop cleanly with CTRL+C and view final statistics
+- **Duration Control**: Run for a specific time or indefinitely
+
+Read operations include:
+- Account balance queries
+- Block reads (recent and random)
+- Network status checks
+
+Write operations include:
+- Token transfers between accounts
+
+The utility automatically distributes requests uniformly across configured canisters and private keys.
 
 ## Testing All Examples
 
