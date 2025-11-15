@@ -8,7 +8,7 @@
 //! directly, which makes it worth the wait. The subsequent error conditions have to be polled by the
 //! caller.
 
-use candid::Principal;
+use candid::{Principal, Reserved};
 use ic_cdk::api::canister_self;
 
 use crate::{
@@ -35,7 +35,7 @@ pub async fn validate_request(
 
     // 1. The source must not be equal to the target.
     if source == target {
-        return Err(ValidationError::SameSubnet);
+        return Err(ValidationError::SameSubnet(Reserved));
     }
 
     // 2. Is the caller controller of the source? This call also fails if we are not controller.
@@ -73,19 +73,19 @@ pub async fn validate_request(
     let source_subnet = get_subnet_for_canister(source).await?;
     let target_subnet = get_subnet_for_canister(target).await?;
     if source_subnet == target_subnet {
-        return Err(ValidationError::SameSubnet);
+        return Err(ValidationError::SameSubnet(Reserved));
     }
     // 6. Is the source stopped?
     if source_status.status != CanisterStatusType::Stopped {
-        return Err(ValidationError::SourceNotStopped);
+        return Err(ValidationError::SourceNotStopped(Reserved));
     }
     // 7. Is the source ready for migration?
     if !source_status.ready_for_migration {
-        return Err(ValidationError::SourceNotReady);
+        return Err(ValidationError::SourceNotReady(Reserved));
     }
     // 8. Is the target stopped?
     if target_status.status != CanisterStatusType::Stopped {
-        return Err(ValidationError::TargetNotStopped);
+        return Err(ValidationError::TargetNotStopped(Reserved));
     }
     // 9. Does the target have snapshots?
     assert_no_snapshots(target).await.into_result(
@@ -94,7 +94,7 @@ pub async fn validate_request(
 
     // 10. Does the source have sufficient cycles for the migration?
     if source_status.cycles < CYCLES_COST_PER_MIGRATION {
-        return Err(ValidationError::SourceInsufficientCycles);
+        return Err(ValidationError::SourceInsufficientCycles(Reserved));
     }
 
     let mut source_original_controllers = source_status.settings.controllers;
