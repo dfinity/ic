@@ -8,7 +8,7 @@ use rosetta_core::metrics::RosettaMetrics;
 use rusqlite::{Connection, OpenFlags};
 use serde_bytes::ByteBuf;
 use std::cmp::Ordering;
-use std::{path::Path, sync::Mutex};
+use std::{path::Path, sync::{Arc, Mutex}};
 use tracing::warn;
 
 #[derive(Debug, Clone)]
@@ -53,7 +53,7 @@ impl TokenInfo {
 
 #[derive(Debug)]
 pub struct StorageClient {
-    storage_connection: Mutex<Connection>,
+    storage_connection: Arc<Mutex<Connection>>,
     token_info: Option<TokenInfo>,
 }
 
@@ -98,7 +98,7 @@ impl StorageClient {
 
     fn new(connection: rusqlite::Connection) -> anyhow::Result<Self> {
         let storage_client = Self {
-            storage_connection: Mutex::new(connection),
+            storage_connection: Arc::new(Mutex::new(connection)),
             token_info: None,
         };
         storage_client
@@ -121,12 +121,12 @@ impl StorageClient {
         self.token_info = Some(token_info);
     }
 
-    pub fn does_blockchain_have_gaps(&self) -> anyhow::Result<bool> {
-        let Some(highest_block_idx) = self.get_highest_block_idx()? else {
+    pub async fn does_blockchain_have_gaps(&self) -> anyhow::Result<bool> {
+        let Some(highest_block_idx) = self.get_highest_block_idx().await? else {
             // If the blockchain is empty, there are no gaps.
             return Ok(false);
         };
-        let block_count = self.get_block_count()?;
+        let block_count = self.get_block_count().await?;
         match block_count.cmp(&highest_block_idx.saturating_add(1)) {
             Ordering::Equal => Ok(false),
             Ordering::Less => {
@@ -148,110 +148,160 @@ impl StorageClient {
     }
 
     // Gets a block with a certain index. Returns `None` if no block exists in the database with that index. Returns an error if multiple blocks with that index exist.
-    pub fn get_block_at_idx(&self, block_idx: u64) -> anyhow::Result<Option<RosettaBlock>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_block_at_idx(&open_connection, block_idx)
+    pub async fn get_block_at_idx(&self, block_idx: u64) -> anyhow::Result<Option<RosettaBlock>> {
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_block_at_idx(&open_connection, block_idx)
+        })
+        .await?
     }
 
     // Gets a block with a certain hash. Returns `None` if no block exists in the database with that hash. Returns an error if multiple blocks with that hash exist.
-    pub fn get_block_by_hash(&self, hash: ByteBuf) -> anyhow::Result<Option<RosettaBlock>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_block_by_hash(&open_connection, hash)
+    pub async fn get_block_by_hash(&self, hash: ByteBuf) -> anyhow::Result<Option<RosettaBlock>> {
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_block_by_hash(&open_connection, hash)
+        })
+        .await?
     }
 
     // Gets the block with the highest block index. Returns `None` if no block exists in the database.
-    pub fn get_block_with_highest_block_idx(&self) -> anyhow::Result<Option<RosettaBlock>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_block_with_highest_block_idx(&open_connection)
+    pub async fn get_block_with_highest_block_idx(&self) -> anyhow::Result<Option<RosettaBlock>> {
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_block_with_highest_block_idx(&open_connection)
+        })
+        .await?
     }
 
     // Gets the block with the lowest block index. Returns `None` if no block exists in the database.
-    pub fn get_block_with_lowest_block_idx(&self) -> anyhow::Result<Option<RosettaBlock>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_block_with_lowest_block_idx(&open_connection)
+    pub async fn get_block_with_lowest_block_idx(&self) -> anyhow::Result<Option<RosettaBlock>> {
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_block_with_lowest_block_idx(&open_connection)
+        })
+        .await?
     }
 
     // Returns a range of blocks including the start index and the end index.
     // Returns an empty vector if the start index is outside of the range of the database.
     // Returns a subsect of the blocks range [start_index,end_index] if the end_index is outside of the range of the database.
-    pub fn get_blocks_by_index_range(
+    pub async fn get_blocks_by_index_range(
         &self,
         start_index: u64,
         end_index: u64,
     ) -> anyhow::Result<Vec<RosettaBlock>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_blocks_by_index_range(&open_connection, start_index, end_index)
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_blocks_by_index_range(&open_connection, start_index, end_index)
+        })
+        .await?
     }
 
     /// Returns all the gaps in the stored blockchain.
     /// Gaps are defined as a range of blocks with indices [a+1,b-1] where the Blocks Block(a) and Block(b) exist in the database but the blocks with indices in the range (a,b) do not.
     /// Exp.: If there exists exactly one gap between the indices [a+1,b-1], then this function will return a vector with a single entry that contains the tuple of blocks [(Block(a),Block(b))].
-    pub fn get_blockchain_gaps(&self) -> anyhow::Result<Vec<(RosettaBlock, RosettaBlock)>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_blockchain_gaps(&open_connection)
+    pub async fn get_blockchain_gaps(&self) -> anyhow::Result<Vec<(RosettaBlock, RosettaBlock)>> {
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_blockchain_gaps(&open_connection)
+        })
+        .await?
     }
 
-    pub fn get_highest_block_idx(&self) -> Result<Option<u64>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_highest_block_idx_in_blocks_table(&open_connection)
+    pub async fn get_highest_block_idx(&self) -> Result<Option<u64>> {
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_highest_block_idx_in_blocks_table(&open_connection)
+        })
+        .await?
     }
 
     // Gets a transaction with a certain hash. Returns [] if no transaction exists in the database with that hash. Returns a vector with multiple entries if more than one transaction
     // with the given transaction hash exists
-    pub fn get_transactions_by_hash(
+    pub async fn get_transactions_by_hash(
         &self,
         hash: ByteBuf,
     ) -> anyhow::Result<Vec<crate::common::storage::types::IcrcTransaction>> {
         Ok(self
-            .get_blocks_by_transaction_hash(hash)?
+            .get_blocks_by_transaction_hash(hash).await?
             .into_iter()
             .map(|block| block.get_transaction())
             .collect::<Vec<crate::common::storage::types::IcrcTransaction>>())
     }
 
-    pub fn get_blocks_by_custom_query<P>(
+    pub async fn get_blocks_by_custom_query(
         &self,
         sql_query: String,
-        params: P,
-    ) -> anyhow::Result<Vec<RosettaBlock>>
-    where
-        P: rusqlite::Params,
-    {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_blocks_by_custom_query(&open_connection, sql_query, params)
+        params: Vec<(String, rusqlite::types::Value)>,
+    ) -> anyhow::Result<Vec<RosettaBlock>> {
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            // Convert Vec<(String, Value)> to the format rusqlite expects
+            let params_refs: Vec<(&str, &dyn rusqlite::ToSql)> = params
+                .iter()
+                .map(|(k, v)| (k.as_str(), v as &dyn rusqlite::ToSql))
+                .collect();
+            storage_operations::get_blocks_by_custom_query(&open_connection, sql_query, params_refs.as_slice())
+        })
+        .await?
     }
 
-    pub fn get_blocks_by_transaction_hash(
+    pub async fn get_blocks_by_transaction_hash(
         &self,
         hash: ByteBuf,
     ) -> anyhow::Result<Vec<RosettaBlock>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_blocks_by_transaction_hash(&open_connection, hash)
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_blocks_by_transaction_hash(&open_connection, hash)
+        })
+        .await?
     }
 
     // Gets a transaction with a certain index. Returns None if no transaction exists in the database with that index. Returns an error if multiple transactions with that index exist.
-    pub fn get_transaction_at_idx(
+    pub async fn get_transaction_at_idx(
         &self,
         block_idx: u64,
     ) -> anyhow::Result<Option<crate::common::storage::types::IcrcTransaction>> {
         Ok(self
-            .get_block_at_idx(block_idx)?
+            .get_block_at_idx(block_idx).await?
             .map(|block| block.get_transaction()))
     }
 
-    pub fn read_metadata(&self) -> anyhow::Result<Vec<MetadataEntry>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_metadata(&open_connection)
+    pub async fn read_metadata(&self) -> anyhow::Result<Vec<MetadataEntry>> {
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_metadata(&open_connection)
+        })
+        .await?
     }
 
-    pub fn write_metadata(&self, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
-        let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::store_metadata(&mut open_connection, metadata)
+    pub async fn write_metadata(&self, metadata: Vec<MetadataEntry>) -> anyhow::Result<()> {
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let mut open_connection = conn.lock().unwrap();
+            storage_operations::store_metadata(&mut open_connection, metadata)
+        })
+        .await?
     }
 
-    pub fn reset_blocks_counter(&self) -> Result<()> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::reset_blocks_counter(&open_connection)
+    pub async fn reset_blocks_counter(&self) -> Result<()> {
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::reset_blocks_counter(&open_connection)
+        })
+        .await?
     }
 
     fn create_tables(&self) -> Result<(), rusqlite::Error> {
@@ -261,63 +311,94 @@ impl StorageClient {
 
     // Populates the blocks and transactions table by the Rosettablocks provided
     // This function does NOT populate the account_balance table.
-    pub fn store_blocks(&self, blocks: Vec<RosettaBlock>) -> anyhow::Result<()> {
-        let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::store_blocks(&mut open_connection, blocks)
+    pub async fn store_blocks(&self, blocks: Vec<RosettaBlock>) -> anyhow::Result<()> {
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let mut open_connection = conn.lock().unwrap();
+            storage_operations::store_blocks(&mut open_connection, blocks)
+        })
+        .await?
     }
 
     // Extracts the information from the transaction and blocks table and fills the account balance table with that information
     // Throws an error if there are gaps in the transaction or blocks table.
-    pub fn update_account_balances(&self) -> anyhow::Result<()> {
-        if self.does_blockchain_have_gaps()? {
+    pub async fn update_account_balances(&self) -> anyhow::Result<()> {
+        if self.does_blockchain_have_gaps().await? {
             bail!("Tried to update account balances but there exist gaps in the database.",);
         }
-        let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::update_account_balances(&mut open_connection)
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let mut open_connection = conn.lock().unwrap();
+            storage_operations::update_account_balances(&mut open_connection)
+        })
+        .await?
     }
 
     /// Retrieves the highest block index in the account balance table.
     /// Returns None if the account balance table is empty.
-    pub fn get_highest_block_idx_in_account_balance_table(&self) -> Result<Option<u64>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_highest_block_idx_in_account_balance_table(&open_connection)
+    pub async fn get_highest_block_idx_in_account_balance_table(&self) -> Result<Option<u64>> {
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_highest_block_idx_in_account_balance_table(&open_connection)
+        })
+        .await?
     }
 
     // Retrieves the account balance at a certain block height
     // Returns None if the account does not exist in the database
-    pub fn get_account_balance_at_block_idx(
+    pub async fn get_account_balance_at_block_idx(
         &self,
         account: &Account,
         block_idx: u64,
     ) -> anyhow::Result<Option<Nat>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_account_balance_at_block_idx(&open_connection, account, block_idx)
+        let conn = Arc::clone(&self.storage_connection);
+        let account = account.clone();
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_account_balance_at_block_idx(&open_connection, &account, block_idx)
+        })
+        .await?
     }
 
     // Retrieves the account balance at the heighest block height in the database
     // Returns None if the account does not exist in the database
-    pub fn get_account_balance(&self, account: &Account) -> anyhow::Result<Option<Nat>> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_account_balance_at_highest_block_idx(&open_connection, account)
+    pub async fn get_account_balance(&self, account: &Account) -> anyhow::Result<Option<Nat>> {
+        let conn = Arc::clone(&self.storage_connection);
+        let account = account.clone();
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_account_balance_at_highest_block_idx(&open_connection, &account)
+        })
+        .await?
     }
 
     // Retrieves the aggregated balance of all subaccounts for a given principal at a specific block height
-    pub fn get_aggregated_balance_for_principal_at_block_idx(
+    pub async fn get_aggregated_balance_for_principal_at_block_idx(
         &self,
         principal: &ic_base_types::PrincipalId,
         block_idx: u64,
     ) -> anyhow::Result<Nat> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_aggregated_balance_for_principal_at_block_idx(
-            &open_connection,
-            principal,
-            block_idx,
-        )
+        let conn = Arc::clone(&self.storage_connection);
+        let principal = *principal;
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_aggregated_balance_for_principal_at_block_idx(
+                &open_connection,
+                &principal,
+                block_idx,
+            )
+        })
+        .await?
     }
 
-    pub fn get_block_count(&self) -> anyhow::Result<u64> {
-        let open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_block_count(&open_connection)
+    pub async fn get_block_count(&self) -> anyhow::Result<u64> {
+        let conn = Arc::clone(&self.storage_connection);
+        tokio::task::spawn_blocking(move || {
+            let open_connection = conn.lock().unwrap();
+            storage_operations::get_block_count(&open_connection)
+        })
+        .await?
     }
 
     /// Repairs account balances for databases created before the fee collector block index fix.
@@ -330,6 +411,7 @@ impl StorageClient {
     ///
     /// Returns `Ok(())` if the repair was successful, or an error if the repair failed.
     pub fn repair_fee_collector_balances(&self) -> anyhow::Result<()> {
+        // Note: This is called during initialization (new()), so we keep it synchronous
         let mut open_connection = self.storage_connection.lock().unwrap();
         storage_operations::repair_fee_collector_balances(&mut open_connection)
     }
@@ -371,6 +453,8 @@ mod tests {
     proptest! {
           #[test]
           fn test_read_and_write_blocks_u64(blockchain in prop::collection::vec(blocks_strategy::<U64>(arb_amount()),0..5)){
+           let rt = tokio::runtime::Runtime::new().unwrap();
+           rt.block_on(async {
            let storage_client_memory = StorageClient::new_in_memory().unwrap();
            let mut rosetta_blocks = vec![];
            for (index,block) in blockchain.into_iter().enumerate(){
@@ -387,17 +471,20 @@ mod tests {
                rosetta_blocks.push(rosetta_block)
            }
 
-           storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
+           storage_client_memory.store_blocks(rosetta_blocks.clone()).await.unwrap();
            for rosetta_block in rosetta_blocks.into_iter(){
-               let block_read = storage_client_memory.get_block_at_idx(rosetta_block.clone().index).unwrap().unwrap();
+               let block_read = storage_client_memory.get_block_at_idx(rosetta_block.clone().index).await.unwrap().unwrap();
                assert_eq!(block_read,rosetta_block);
-               let block_read = storage_client_memory.get_block_by_hash(rosetta_block.clone().get_block_hash()).unwrap().unwrap();
+               let block_read = storage_client_memory.get_block_by_hash(rosetta_block.clone().get_block_hash()).await.unwrap().unwrap();
                assert_eq!(block_read,rosetta_block);
            }
+           })
        }
 
        #[test]
        fn test_read_and_write_blocks_u256(blockchain in prop::collection::vec(blocks_strategy::<U256>(arb_amount()),0..5)){
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
         let storage_client_memory = StorageClient::new_in_memory().unwrap();
         let mut rosetta_blocks = vec![];
         for (index,block) in blockchain.into_iter().enumerate(){
@@ -413,27 +500,30 @@ mod tests {
                // Make sure the encoding and decoding works
                rosetta_blocks.push(rosetta_block)
         }
-        storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
+        storage_client_memory.store_blocks(rosetta_blocks.clone()).await.unwrap();
         for rosetta_block in rosetta_blocks.into_iter(){
-            let block_read = storage_client_memory.get_block_at_idx(rosetta_block.clone().index).unwrap().unwrap();
+            let block_read = storage_client_memory.get_block_at_idx(rosetta_block.clone().index).await.unwrap().unwrap();
             assert_eq!(block_read,rosetta_block);
-            let block_read = storage_client_memory.get_block_by_hash(rosetta_block.clone().get_block_hash()).unwrap().unwrap();
+            let block_read = storage_client_memory.get_block_by_hash(rosetta_block.clone().get_block_hash()).await.unwrap().unwrap();
             assert_eq!(block_read,rosetta_block);
         }
+        })
     }
 
           #[test]
           fn test_read_and_write_transactions(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000)){
+              let rt = tokio::runtime::Runtime::new().unwrap();
+              rt.block_on(async {
               let storage_client_memory = StorageClient::new_in_memory().unwrap();
               let rosetta_blocks: Vec<_> = blockchain.0.iter().zip(blockchain.1.iter())
                   .map(|(block, index)| RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.clone().encode()), *index as u64).unwrap())
                   .collect();
-              storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
+              storage_client_memory.store_blocks(rosetta_blocks.clone()).await.unwrap();
               for block in rosetta_blocks.clone(){
                   let tx0 = block.get_transaction();
-                  let tx1 = storage_client_memory.get_block_at_idx(block.index).unwrap().unwrap().get_transaction();
-                  let tx2 = storage_client_memory.get_transaction_at_idx(block.index).unwrap().unwrap();
-                  let tx3 = &storage_client_memory.get_transactions_by_hash(block.clone().get_transaction_hash()).unwrap().clone()[0];
+                  let tx1 = storage_client_memory.get_block_at_idx(block.index).await.unwrap().unwrap().get_transaction();
+                  let tx2 = storage_client_memory.get_transaction_at_idx(block.index).await.unwrap().unwrap();
+                  let tx3 = &storage_client_memory.get_transactions_by_hash(block.clone().get_transaction_hash()).await.unwrap().clone()[0];
                   assert_eq!(tx0,tx1);
                   assert_eq!(tx1,tx2);
                   assert_eq!(tx2,*tx3);
@@ -442,50 +532,56 @@ mod tests {
               if !rosetta_blocks.is_empty() {
                let last_block = &rosetta_blocks[rosetta_blocks.len().saturating_sub(1)];
               // If the index is out of range the function should return `None`.
-              assert!(storage_client_memory.get_transaction_at_idx(last_block.index+1).unwrap().is_none());
+              assert!(storage_client_memory.get_transaction_at_idx(last_block.index+1).await.unwrap().is_none());
 
               // Duplicate the last transaction generated
               let duplicate_tx_block = RosettaBlock::from_generic_block(last_block.get_generic_block(), last_block.index + 1).unwrap();
-              storage_client_memory.store_blocks([duplicate_tx_block.clone()].to_vec()).unwrap();
+              storage_client_memory.store_blocks([duplicate_tx_block.clone()].to_vec()).await.unwrap();
 
               // The hash of the duplicated transaction should still be the same --> There should be two transactions with the same transaction hash.
-              assert_eq!(storage_client_memory.get_transactions_by_hash(duplicate_tx_block.clone().get_transaction_hash()).unwrap().len(),2);
+              assert_eq!(storage_client_memory.get_transactions_by_hash(duplicate_tx_block.clone().get_transaction_hash()).await.unwrap().len(),2);
               }
+           })
            }
 
           #[test]
           fn test_highest_lowest_block_index(blocks in prop::collection::vec(blocks_strategy::<U256>(arb_amount::<U256>()),1..100)){
+              let rt = tokio::runtime::Runtime::new().unwrap();
+              rt.block_on(async {
               let storage_client_memory = StorageClient::new_in_memory().unwrap();
               let mut rosetta_blocks = vec![];
               for (index,block) in blocks.clone().into_iter().enumerate(){
                   rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
               }
-              storage_client_memory.store_blocks(rosetta_blocks).unwrap();
-              let block_read = storage_client_memory.get_block_with_highest_block_idx().unwrap().unwrap();
+              storage_client_memory.store_blocks(rosetta_blocks).await.unwrap();
+              let block_read = storage_client_memory.get_block_with_highest_block_idx().await.unwrap().unwrap();
               // Indexing starts at 0.
               assert_eq!(block_read.index,(blocks.len() as u64)-1);
-              let block_read = storage_client_memory.get_block_with_lowest_block_idx().unwrap().unwrap();
+              let block_read = storage_client_memory.get_block_with_lowest_block_idx().await.unwrap().unwrap();
               assert_eq!(block_read.index,0);
-              let blocks_read = storage_client_memory.get_blocks_by_index_range(0,blocks.len() as u64).unwrap();
+              let blocks_read = storage_client_memory.get_blocks_by_index_range(0,blocks.len() as u64).await.unwrap();
               // Storage should return all blocks that are stored.
               assert_eq!(blocks_read.len(),blocks.len());
-              let blocks_read = storage_client_memory.get_blocks_by_index_range(blocks.len() as u64 +1,blocks.len() as u64 +2).unwrap();
+              let blocks_read = storage_client_memory.get_blocks_by_index_range(blocks.len() as u64 +1,blocks.len() as u64 +2).await.unwrap();
               // Start index is outside of the index range of the blocks stored in the database -> Should return an empty vector.
               assert!(blocks_read.is_empty());
-              let blocks_read = storage_client_memory.get_blocks_by_index_range(1,blocks.len() as u64 + 2).unwrap();
+              let blocks_read = storage_client_memory.get_blocks_by_index_range(1,blocks.len() as u64 + 2).await.unwrap();
               // End index is outside of the blocks stored in the database --> Returns subset of blocks stored in the database.
               assert_eq!(blocks_read.len(),blocks.len().saturating_sub(1));
+           })
            }
 
           #[test]
           fn test_deriving_gaps_from_storage(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000).no_shrink()){
+              let rt = tokio::runtime::Runtime::new().unwrap();
+              rt.block_on(async {
               let storage_client_memory = StorageClient::new_in_memory().unwrap();
               let mut rosetta_blocks = vec![];
               for i in 0..blockchain.0.len() {
                rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&blockchain.0[i].clone().encode()),blockchain.1[i] as u64).unwrap());
               }
 
-              storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
+              storage_client_memory.store_blocks(rosetta_blocks.clone()).await.unwrap();
 
               // This function will return a list of all the non consecutive intervals.
               let non_consecutive_intervals = |blocks: Vec<u64>| {
@@ -502,9 +598,9 @@ mod tests {
               };
 
               // Fetch the database gaps and map them to indices tuples.
-              let derived_gaps = storage_client_memory.get_blockchain_gaps().unwrap().into_iter().map(|(a,b)| (a.index,b.index)).collect::<Vec<(u64,u64)>>();
+              let derived_gaps = storage_client_memory.get_blockchain_gaps().await.unwrap().into_iter().map(|(a,b)| (a.index,b.index)).collect::<Vec<(u64,u64)>>();
               // Does the blockchain have gaps?
-              let has_gaps = storage_client_memory.does_blockchain_have_gaps().unwrap();
+              let has_gaps = storage_client_memory.does_blockchain_have_gaps().await.unwrap();
 
               // If the database is empty the returned gaps vector should simply be empty.
               if rosetta_blocks.last().is_some(){
@@ -520,34 +616,41 @@ mod tests {
 
                   assert!(!has_gaps);
               }
+           })
            }
 
            #[test]
            fn test_read_and_write_metadata(metadata in metadata_strategy()) {
+               let rt = tokio::runtime::Runtime::new().unwrap();
+               rt.block_on(async {
                let storage_client_memory = StorageClient::new_in_memory().unwrap();
                let entries_write = metadata.iter().map(|(key, value)| MetadataEntry::from_metadata_value(key, value)).collect::<Result<Vec<MetadataEntry>>>().unwrap();
                let metadata_write = Metadata::from_metadata_entries(&entries_write).unwrap();
-               storage_client_memory.write_metadata(entries_write).unwrap();
-               let entries_read = storage_client_memory.read_metadata().unwrap();
+               storage_client_memory.write_metadata(entries_write).await.unwrap();
+               let entries_read = storage_client_memory.read_metadata().await.unwrap();
                let metadata_read = Metadata::from_metadata_entries(&entries_read).unwrap();
 
                assert_eq!(metadata_write, metadata_read);
+               })
            }
 
            #[test]
            fn test_updating_account_balances_for_blockchain_with_gaps(blockchain in valid_blockchain_with_gaps_strategy::<U256>(1000)){
+               let rt = tokio::runtime::Runtime::new().unwrap();
+               rt.block_on(async {
                let storage_client_memory = StorageClient::new_in_memory().unwrap();
                let mut rosetta_blocks = vec![];
                for i in 0..blockchain.0.len() {
                 rosetta_blocks.push(RosettaBlock::from_encoded_block(&blockchain.0[i].clone().encode(),blockchain.1[i] as u64).unwrap());
                }
 
-               storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
+               storage_client_memory.store_blocks(rosetta_blocks.clone()).await.unwrap();
 
-               if !storage_client_memory.get_blockchain_gaps().unwrap().is_empty(){
+               if !storage_client_memory.get_blockchain_gaps().await.unwrap().is_empty(){
                // Updating of account balances should not be possible if the stored blockchain contains gaps
-               assert!(storage_client_memory.update_account_balances().is_err())
+               assert!(storage_client_memory.update_account_balances().await.is_err())
                }
+           })
            }
        }
 }

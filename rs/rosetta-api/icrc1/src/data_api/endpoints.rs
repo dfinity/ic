@@ -11,16 +11,17 @@ use std::sync::Arc;
 // This endpoint is used to determine whether ICRC Rosetta is ready to be querried for data.
 // It returns Status Code 200 if an initial sync of the blockchain has been done
 // This means that no gaps in the blockchain exist and the genesis block has already been fetched
-pub async fn ready(State(state): State<Arc<MultiTokenAppState>>) -> (StatusCode, Json<()>) {
-    if state
-        .token_states
-        .values()
-        .all(|state| initial_sync_is_completed(&state.storage, state.synched.clone()))
-    {
-        (StatusCode::OK, Json(()))
-    } else {
-        (StatusCode::SERVICE_UNAVAILABLE, Json(()))
+pub async fn ready(
+    State(state): State<Arc<MultiTokenAppState>>,
+) -> StatusCode {
+    for token_state in state.token_states.values() {
+        let storage = Arc::clone(&token_state.storage);
+        let synched = Arc::clone(&token_state.synched);
+        if !initial_sync_is_completed(&*storage, synched).await {
+            return StatusCode::SERVICE_UNAVAILABLE;
+        }
     }
+    StatusCode::OK
 }
 
 pub async fn health() -> (StatusCode, Json<()>) {
@@ -57,7 +58,7 @@ pub async fn network_status(
 ) -> Result<Json<NetworkStatusResponse>> {
     let state = get_state_from_network_id(&request.0.network_identifier, &state)
         .map_err(|err| Error::invalid_network_id(&format!("{err:?}")))?;
-    Ok(Json(services::network_status(&state.storage)?))
+    Ok(Json(services::network_status(&state.storage).await?))
 }
 
 pub async fn block(
@@ -71,7 +72,7 @@ pub async fn block(
         &request.0.block_identifier,
         state.metadata.decimals,
         state.metadata.symbol.clone(),
-    )?))
+    ).await?))
 }
 
 pub async fn block_transaction(
@@ -86,7 +87,7 @@ pub async fn block_transaction(
         &request.0.transaction_identifier,
         state.metadata.decimals,
         state.metadata.symbol.clone(),
-    )?))
+    ).await?))
 }
 
 pub async fn mempool(
@@ -120,7 +121,7 @@ pub async fn account_balance(
         &request.metadata,
         state.metadata.decimals,
         state.metadata.symbol.clone(),
-    )?))
+    ).await?))
 }
 
 pub async fn search_transactions(
@@ -134,7 +135,7 @@ pub async fn search_transactions(
         request,
         state.metadata.symbol.clone(),
         state.metadata.decimals,
-    )?))
+    ).await?))
 }
 
 pub async fn call(
@@ -151,5 +152,5 @@ pub async fn call(
             state.metadata.symbol.clone(),
             state.metadata.decimals.into(),
         ),
-    )?))
+    ).await?))
 }

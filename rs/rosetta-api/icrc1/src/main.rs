@@ -119,7 +119,7 @@ async fn load_metadata(
     is_offline: bool,
 ) -> anyhow::Result<Metadata> {
     if is_offline {
-        let db_metadata_entries = storage.read_metadata()?;
+        let db_metadata_entries = storage.read_metadata().await?;
         let are_metadata_set = token_def.are_metadata_args_set();
         // If metadata is empty and the args are not set, bail out.
         if db_metadata_entries.is_empty() && !are_metadata_set {
@@ -189,7 +189,7 @@ async fn load_metadata(
         .map(|(key, value)| MetadataEntry::from_metadata_value(key, value))
         .collect::<Result<Vec<MetadataEntry>>>()?;
 
-    storage.write_metadata(ic_metadata_entries.clone())?;
+    storage.write_metadata(ic_metadata_entries.clone()).await?;
 
     Metadata::from_metadata_entries(&ic_metadata_entries)
 }

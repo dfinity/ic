@@ -84,9 +84,10 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
     }
 }
 
-pub fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusResponse, Error> {
+pub async fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusResponse, Error> {
     let highest_processed_block = storage_client
         .get_highest_block_idx_in_account_balance_table()
+        .await
         .map_err(|e| Error::unable_to_find_block(&e))?
         .ok_or_else(|| {
             Error::unable_to_find_block(&"Highest processed block not found".to_owned())
@@ -94,11 +95,13 @@ pub fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusRes
 
     let current_block = storage_client
         .get_block_at_idx(highest_processed_block)
+        .await
         .map_err(|e| Error::unable_to_find_block(&e))?
         .ok_or_else(|| Error::unable_to_find_block(&"Current block not found".to_owned()))?;
 
     let genesis_block = storage_client
         .get_block_at_idx(0)
+        .await
         .map_err(|e| {
             Error::unable_to_find_block(&format!("Error retrieving genesis block: {e:?}"))
         })?
@@ -120,7 +123,7 @@ pub fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusRes
     })
 }
 
-pub fn block_transaction(
+pub async fn block_transaction(
     storage_client: &StorageClient,
     block_identifier: &BlockIdentifier,
     transaction_identifier: &TransactionIdentifier,
@@ -129,6 +132,7 @@ pub fn block_transaction(
 ) -> Result<BlockTransactionResponse, Error> {
     let rosetta_block =
         get_rosetta_block_from_block_identifier(block_identifier.clone(), storage_client)
+            .await
             .map_err(|err| Error::invalid_block_identifier(&err))?;
 
     if &rosetta_block.clone().get_block_identifier() != block_identifier {
@@ -159,7 +163,7 @@ pub fn block_transaction(
     Ok(rosetta_core::response_types::BlockTransactionResponse { transaction })
 }
 
-pub fn block(
+pub async fn block(
     storage_client: &StorageClient,
     partial_block_identifier: &PartialBlockIdentifier,
     decimals: u8,
@@ -167,6 +171,7 @@ pub fn block(
 ) -> Result<BlockResponse, Error> {
     let rosetta_block =
         get_rosetta_block_from_partial_block_identifier(partial_block_identifier, storage_client)
+            .await
             .map_err(|err| Error::invalid_block_identifier(&err))?;
     let currency = Currency {
         symbol,
@@ -185,7 +190,7 @@ pub fn block(
     Ok(BlockResponse::new(Some(block)))
 }
 
-pub fn account_balance(
+pub async fn account_balance(
     storage_client: &StorageClient,
     account_identifier: &AccountIdentifier,
     partial_block_identifier: &Option<PartialBlockIdentifier>,
@@ -194,9 +199,11 @@ pub fn account_balance(
 ) -> Result<AccountBalanceResponse, Error> {
     let rosetta_block = match partial_block_identifier {
         Some(block_id) => get_rosetta_block_from_partial_block_identifier(block_id, storage_client)
+            .await
             .map_err(|err| Error::invalid_block_identifier(&err))?,
         None => storage_client
             .get_block_with_highest_block_idx()
+            .await
             .map_err(|e| Error::unable_to_find_block(&e))?
             .ok_or_else(|| Error::unable_to_find_block(&"Current block not found".to_owned()))?,
     };
@@ -207,6 +214,7 @@ pub fn account_balance(
                 .map_err(|err| Error::parsing_unsuccessful(&err))?),
             rosetta_block.index,
         )
+        .await
         .map_err(|e| Error::unable_to_find_account_balance(&e))?
         .unwrap_or(Nat(BigUint::zero()));
 
@@ -224,7 +232,7 @@ pub fn account_balance(
     })
 }
 
-pub fn account_balance_with_metadata(
+pub async fn account_balance_with_metadata(
     storage_client: &StorageClient,
     account_identifier: &AccountIdentifier,
     partial_block_identifier: &Option<PartialBlockIdentifier>,
@@ -234,9 +242,11 @@ pub fn account_balance_with_metadata(
 ) -> Result<AccountBalanceResponse, Error> {
     let rosetta_block = match partial_block_identifier {
         Some(block_id) => get_rosetta_block_from_partial_block_identifier(block_id, storage_client)
+            .await
             .map_err(|err| Error::invalid_block_identifier(&err))?,
         None => storage_client
             .get_block_with_highest_block_idx()
+            .await
             .map_err(|e| Error::unable_to_find_block(&e))?
             .ok_or_else(|| Error::unable_to_find_block(&"Current block not found".to_owned()))?,
     };
@@ -272,6 +282,7 @@ pub fn account_balance_with_metadata(
                 &account.owner.into(),
                 rosetta_block.index,
             )
+            .await
             .map_err(|e| Error::unable_to_find_account_balance(&e))?
     } else {
         // Get balance for the specific account (principal + subaccount)
@@ -281,6 +292,7 @@ pub fn account_balance_with_metadata(
                     .map_err(|err| Error::parsing_unsuccessful(&err))?),
                 rosetta_block.index,
             )
+            .await
             .map_err(|e| Error::unable_to_find_account_balance(&e))?
             .unwrap_or(Nat(BigUint::zero()))
     };
@@ -299,7 +311,7 @@ pub fn account_balance_with_metadata(
     })
 }
 
-pub fn search_transactions(
+pub async fn search_transactions(
     storage_client: &StorageClient,
     request: SearchTransactionsRequest,
     symbol: String,
@@ -349,6 +361,7 @@ pub fn search_transactions(
 
     let rosetta_block_with_highest_block_index = storage_client
         .get_block_with_highest_block_idx()
+        .await
         .map_err(|e| Error::unable_to_find_block(&e))?;
 
     let Some(rosetta_block_with_highest_block_index) = rosetta_block_with_highest_block_index
@@ -425,9 +438,9 @@ pub fn search_transactions(
     // Base query to fetch the blocks
     let mut command =
         String::from("SELECT idx,serialized_block FROM blocks WHERE idx <= :max_block_idx ");
-    let mut parameters: Vec<(&str, Box<dyn rusqlite::ToSql>)> = Vec::new();
+    let mut parameters: Vec<(String, rusqlite::types::Value)> = Vec::new();
 
-    parameters.push((":max_block_idx", Box::new(start_idx)));
+    parameters.push((":max_block_idx".to_string(), rusqlite::types::Value::Integer(start_idx as i64)));
 
     if let Some(transaction_identifier) = request.transaction_identifier.clone() {
         command.push_str("AND tx_hash = :tx_hash ");
@@ -439,46 +452,37 @@ pub fn search_transactions(
             })?
             .as_slice()
             .to_vec();
-        parameters.push((":tx_hash", Box::new(tx_hash)));
+        parameters.push((":tx_hash".to_string(), rusqlite::types::Value::Blob(tx_hash)));
     }
 
     if let Some(operation_type) = operation_type {
         command.push_str("AND operation_type = :operation_type ");
         parameters.push((
-            ":operation_type",
-            Box::new(operation_type.to_string().to_lowercase()),
+            ":operation_type".to_string(),
+            rusqlite::types::Value::Text(operation_type.to_string().to_lowercase()),
         ));
     }
 
     if let Some(account) = account {
         command.push_str("AND ((from_principal = :account_principal AND from_subaccount = :account_subaccount) OR (to_principal = :account_principal AND to_subaccount = :account_subaccount) OR (spender_principal = :account_principal AND spender_subaccount = :account_subaccount)) ");
         parameters.push((
-            ":account_principal",
-            Box::new(account.owner.as_slice().to_vec()),
+            ":account_principal".to_string(),
+            rusqlite::types::Value::Blob(account.owner.as_slice().to_vec()),
         ));
         parameters.push((
-            ":account_subaccount",
-            Box::new(*account.effective_subaccount()),
+            ":account_subaccount".to_string(),
+            rusqlite::types::Value::Blob(account.effective_subaccount().to_vec()),
         ));
     }
 
     command.push_str("ORDER BY idx DESC ");
 
     command.push_str("LIMIT :limit ");
-    parameters.push((":limit", Box::new(limit)));
+    parameters.push((":limit".to_string(), rusqlite::types::Value::Integer(limit as i64)));
 
     let mut rosetta_blocks = storage_client
-        .get_blocks_by_custom_query(
-            command,
-            parameters
-                .iter()
-                .map(|(key, param)| {
-                    let param_ref: &dyn rusqlite::ToSql = param.as_ref();
-                    (key.to_owned(), param_ref)
-                })
-                .collect::<Vec<_>>()
-                .as_slice(),
-        )
+        .get_blocks_by_custom_query(command, parameters)
+        .await
         .map_err(|e| Error::unable_to_find_block(&format!("Error fetching blocks: {e:?}")))?;
 
     let mut transactions = vec![];
@@ -529,27 +533,38 @@ pub fn search_transactions(
     })
 }
 
-pub fn initial_sync_is_completed(
+pub async fn initial_sync_is_completed(
     storage_client: &StorageClient,
     sync_state: Arc<Mutex<Option<bool>>>,
 ) -> bool {
-    let mut synched = sync_state.lock().unwrap();
-    if synched.is_some() && synched.unwrap() {
-        synched.unwrap()
-    } else {
-        let block_count = storage_client.get_block_count();
-        let highest_index = storage_client.get_highest_block_idx_in_account_balance_table();
-        *synched = Some(match (block_count, highest_index) {
-            // If the blockchain contains no blocks we mark it as not completed
-            (Ok(block_count), Ok(Some(highest_index))) if block_count == highest_index + 1 => true,
-            _ => false,
-        });
-        // Unwrap is safe because it was just set
-        (*synched).unwrap()
+    // Check if already synced (without holding lock across await)
+    {
+        let synched = sync_state.lock().unwrap();
+        if synched.is_some() && synched.unwrap() {
+            return synched.unwrap();
+        }
     }
+    
+    // Need to check sync status - release lock before await
+    let block_count = storage_client.get_block_count().await;
+    let highest_index = storage_client.get_highest_block_idx_in_account_balance_table().await;
+    
+    let is_synced = match (block_count, highest_index) {
+        // If the blockchain contains no blocks we mark it as not completed
+        (Ok(block_count), Ok(Some(highest_index))) if block_count == highest_index + 1 => true,
+        _ => false,
+    };
+    
+    // Update cached state
+    {
+        let mut synched = sync_state.lock().unwrap();
+        *synched = Some(is_synced);
+    }
+    
+    is_synced
 }
 
-pub fn call(
+pub async fn call(
     storage_client: &StorageClient,
     method_name: &str,
     parameters: ObjectMap,
@@ -572,6 +587,7 @@ pub fn call(
                 blocks.extend(
                     storage_client
                         .get_blocks_by_index_range(lowest_index, highest_index)
+                        .await
                         .map_err(|err| Error::unable_to_find_block(&err))?
                         .into_iter()
                         .map(|block| {
@@ -632,6 +648,8 @@ mod test {
         })]
                        #[test]
                     fn test_network_status_service(blockchain in valid_blockchain_strategy::<U256>(BLOCKCHAIN_LENGTH)){
+                        let rt = tokio::runtime::Runtime::new().unwrap();
+                        rt.block_on(async {
                         let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
                         let mut rosetta_blocks = vec![];
                         let mut added_index = 0;
@@ -648,16 +666,16 @@ mod test {
                         }
 
                         // If there is no block in the database the service should return an error
-                        let network_status_err = network_status(&storage_client_memory).unwrap_err();
+                        let network_status_err = network_status(&storage_client_memory).await.unwrap_err();
                         assert!(network_status_err.0.message.contains("Unable to find block"));
                         if !rosetta_blocks.is_empty() {
 
-                        storage_client_memory.store_blocks(rosetta_blocks).unwrap();
-                        storage_client_memory.update_account_balances().unwrap();
-                        let block_with_highest_idx = storage_client_memory.get_block_with_highest_block_idx().unwrap().unwrap();
-                        let genesis_block = storage_client_memory.get_block_with_lowest_block_idx().unwrap().unwrap();
+                        storage_client_memory.store_blocks(rosetta_blocks).await.unwrap();
+                        storage_client_memory.update_account_balances().await.unwrap();
+                        let block_with_highest_idx = storage_client_memory.get_block_with_highest_block_idx().await.unwrap().unwrap();
+                        let genesis_block = storage_client_memory.get_block_with_lowest_block_idx().await.unwrap().unwrap();
 
-                        let network_status_response = network_status(&storage_client_memory).unwrap();
+                        let network_status_response = network_status(&storage_client_memory).await.unwrap();
 
                         assert_eq!(NetworkStatusResponse {
                             current_block_identifier: BlockIdentifier::from(block_with_highest_idx.clone()),
@@ -668,10 +686,13 @@ mod test {
                             peers: vec![],
                         },network_status_response)
                     }
+                    })
                     }
 
                     #[test]
                     fn test_block_service(blockchain in valid_blockchain_strategy::<U256>(BLOCKCHAIN_LENGTH)){
+                        let rt = tokio::runtime::Runtime::new().unwrap();
+                        rt.block_on(async move {
                         let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
                         let invalid_block_hash = "0x1234".to_string();
                         let invalid_block_idx = blockchain.len() as u64 + 1;
@@ -682,7 +703,7 @@ mod test {
                             rosetta_blocks.push(RosettaBlock::from_generic_block(encoded_block_to_generic_block(&block.encode()),index as u64).unwrap());
                         }
 
-                        storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
+                        storage_client_memory.store_blocks(rosetta_blocks.clone()).await.unwrap();
 
                         let metadata = Metadata{
                             symbol: "ICP".to_string(),
@@ -695,7 +716,7 @@ mod test {
                         };
 
                         // If the block identifier index does not exist the service should return an error
-                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
+                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).await;
                         if blockchain.is_empty() {
                             assert!(block_res.is_err());
                         } else {
@@ -708,7 +729,7 @@ mod test {
                         };
 
                         // If the block identifier hash does not exist the service should return an error
-                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
+                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).await;
 
                         if blockchain.is_empty() {
                             assert!(block_res.is_err());
@@ -722,7 +743,7 @@ mod test {
                         };
 
                         // If the block identifier hash is invalid the service should return an error
-                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
+                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).await;
 
                         if blockchain.is_empty() {
                             assert!(block_res.is_err());
@@ -739,7 +760,7 @@ mod test {
                             };
 
                         // If the block identifier index is valid the service should return the block
-                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).unwrap();
+                        let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).await.unwrap();
                         let mut expected_block_res = BlockResponse {
                             block: Some(
                                 icrc1_rosetta_block_to_rosetta_core_block(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
@@ -763,7 +784,7 @@ mod test {
                             };
 
                             // If the block identifier hash is valid the service should return the block
-                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).unwrap();
+                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).await.unwrap();
                             compare_blocks(block_res.block.unwrap(),expected_block_res.clone().block.unwrap());
 
                             block_identifier = PartialBlockIdentifier{
@@ -772,7 +793,7 @@ mod test {
                             };
 
                             // If the block identifier index and hash are provided but do not match the same block the service should return an error
-                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
+                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).await;
                             assert!(block_res.unwrap_err().0.description.unwrap().contains(format!("Both index {} and hash {} were provided but they do not match the same block",valid_block_idx.clone(),invalid_block_hash.clone()).as_str()));
 
                             block_identifier = PartialBlockIdentifier{
@@ -781,7 +802,7 @@ mod test {
                             };
 
                             // If the block identifier index and hash are provided but neither of them match a block the service should return an error
-                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
+                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).await;
                             assert!(block_res.unwrap_err().0.description.unwrap().contains(&format!("Block at index {} could not be found",invalid_block_idx.clone())));
 
                             block_identifier = PartialBlockIdentifier{
@@ -790,7 +811,7 @@ mod test {
                             };
 
                             // If the block identifier index is invalid and the hash is valid the service should return an error
-                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone());
+                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).await;
                             assert!(block_res.unwrap_err().0.description.unwrap().contains(format!("Block at index {invalid_block_idx} could not be found").as_str()));
 
                             block_identifier = PartialBlockIdentifier{
@@ -798,13 +819,16 @@ mod test {
                                 hash: None
                             };
                             // If neither block index nor hash is provided, the service should return the last block
-                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).unwrap();
+                            let block_res = block(&storage_client_memory,&block_identifier,metadata.decimals,metadata.symbol.clone()).await.unwrap();
                             compare_blocks(block_res.block.unwrap(),expected_block_res.block.unwrap());
                 }
+            })
             }
 
             #[test]
             fn test_block_transaction_service(blockchain in valid_blockchain_strategy::<U256>((MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST*5).try_into().unwrap())){
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async move {
                 let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
                 let invalid_block_hash = "0x1234".to_string();
                 let invalid_block_idx = blockchain.len() as u64 + 1;
@@ -830,13 +854,13 @@ mod test {
                 };
 
                 // If the storage is empty the service should return an error
-                let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
+                let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone()).await;
                 assert!(block_transaction_res.is_err());
 
-                storage_client_memory.store_blocks(rosetta_blocks.clone()).unwrap();
+                storage_client_memory.store_blocks(rosetta_blocks.clone()).await.unwrap();
 
                 // If the block identifier index is invalid the service should return an error
-                let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
+                let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone()).await;
 
                 if blockchain.is_empty() {
                     assert!(block_transaction_res.is_err());
@@ -858,7 +882,7 @@ mod test {
                     };
 
                     // If the block identifier index and hash are valid the service should return the block
-                    let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone()).unwrap();
+                    let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone()).await.unwrap();
                     let mut expected_block_transaction_res = rosetta_core::response_types::BlockTransactionResponse { transaction: icrc1_rosetta_block_to_rosetta_core_transaction(rosetta_blocks[valid_block_idx as usize].clone(), Currency {
                         symbol: metadata.symbol.clone(),
                         decimals: metadata.decimals.into(),
@@ -876,7 +900,7 @@ mod test {
                     };
 
                     // If the transaction identifier hash does not match a transaction in the block the service should return an error
-                    let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
+                    let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone()).await;
                     assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains("Invalid transaction identifier provided"));
 
                     block_identifier = BlockIdentifier{
@@ -885,9 +909,10 @@ mod test {
                     };
 
                     // If the block identifier hash is invalid the service should return an error
-                    let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone());
+                    let block_transaction_res = block_transaction(&storage_client_memory,&block_identifier,&transaction_identifier,metadata.decimals,metadata.symbol.clone()).await;
                     assert!(block_transaction_res.unwrap_err().0.description.unwrap().contains(format!("Both index {} and hash {} were provided but they do not match the same block",valid_block_idx.clone(),invalid_block_hash.clone()).as_str()));
                 }
+        })
         }
     }
 
@@ -903,6 +928,8 @@ mod test {
             .run(
                 &(valid_blockchain_strategy::<U256>(BLOCKCHAIN_LENGTH).no_shrink()),
                 |blockchain| {
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    rt.block_on(async move {
                     let storage_client_memory = StorageClient::new_in_memory().unwrap();
                     let mut rosetta_blocks = vec![];
 
@@ -918,12 +945,13 @@ mod test {
 
                     storage_client_memory
                         .store_blocks(rosetta_blocks.clone())
+                        .await
                         .unwrap();
                     let mut search_transactions_request = SearchTransactionsRequest {
                         ..Default::default()
                     };
 
-                    fn traverse_all_transactions(
+                    async fn traverse_all_transactions(
                         storage_client: &StorageClient,
                         mut search_transactions_request: SearchTransactionsRequest,
                     ) -> Vec<BlockTransaction> {
@@ -935,6 +963,7 @@ mod test {
                                 "ICP".to_string(),
                                 8,
                             )
+                            .await
                             .unwrap();
                             transactions.extend(result.clone().transactions);
                             search_transactions_request.offset = result.next_offset;
@@ -960,6 +989,7 @@ mod test {
                             "ICP".to_string(),
                             8,
                         )
+                        .await
                         .unwrap();
                         assert_eq!(
                             result.total_count,
@@ -977,6 +1007,7 @@ mod test {
                                 "ICP".to_string(),
                                 8,
                             )
+                            .await
                             .unwrap();
 
                             let num_of_transactions_with_hash = rosetta_blocks
@@ -1021,6 +1052,7 @@ mod test {
                             "ICP".to_string(),
                             8,
                         )
+                        .await
                         .unwrap();
                         assert_eq!(
                             result.transactions.len(),
@@ -1046,6 +1078,7 @@ mod test {
                             "ICP".to_string(),
                             8,
                         )
+                        .await
                         .unwrap();
                         assert_eq!(result.transactions.len(), 1);
 
@@ -1072,6 +1105,7 @@ mod test {
                             "ICP".to_string(),
                             8,
                         )
+                        .await
                         .unwrap();
                         assert_eq!(
                             result.transactions.len(),
@@ -1088,7 +1122,7 @@ mod test {
                         let result = traverse_all_transactions(
                             &storage_client_memory,
                             search_transactions_request.clone(),
-                        );
+                        ).await;
 
                         // The service should return the correct number of transactions if the max block is set, max block is an index so if the index is 10 there are 11 blocks/transactions to search through
                         assert_eq!(result.len(), rosetta_blocks.len().min(10 + 1));
@@ -1111,7 +1145,7 @@ mod test {
                         let result = traverse_all_transactions(
                             &storage_client_memory,
                             search_transactions_request.clone(),
-                        );
+                        ).await;
                         assert_eq!(result.len(), num_of_transfer_transactions);
 
                         search_transactions_request.type_ = Some("BURN".to_string());
@@ -1127,7 +1161,7 @@ mod test {
                         let result = traverse_all_transactions(
                             &storage_client_memory,
                             search_transactions_request.clone(),
-                        );
+                        ).await;
                         assert_eq!(result.len(), num_of_burn_transactions);
 
                         search_transactions_request.type_ = Some("MINT".to_string());
@@ -1143,7 +1177,7 @@ mod test {
                         let result = traverse_all_transactions(
                             &storage_client_memory,
                             search_transactions_request.clone(),
-                        );
+                        ).await;
                         assert_eq!(result.len(), num_of_mint_transactions);
 
                         search_transactions_request.type_ = Some("APPROVE".to_string());
@@ -1159,7 +1193,7 @@ mod test {
                         let result = traverse_all_transactions(
                             &storage_client_memory,
                             search_transactions_request.clone(),
-                        );
+                        ).await;
                         assert_eq!(result.len(), num_of_approve_transactions);
 
                         search_transactions_request = SearchTransactionsRequest {
@@ -1225,7 +1259,7 @@ mod test {
                         let result = traverse_all_transactions(
                             &storage_client_memory,
                             search_transactions_request.clone(),
-                        );
+                        ).await;
                         assert_eq!(result.len(), num_of_transactions_with_account);
                         let involved_accounts = result[0]
                             .transaction
@@ -1252,7 +1286,7 @@ mod test {
                         let result = traverse_all_transactions(
                             &storage_client_memory,
                             search_transactions_request.clone(),
-                        );
+                        ).await;
                         // If the account does not exist the service should return an empty list
                         assert_eq!(result.len(), 0);
 
@@ -1266,17 +1300,18 @@ mod test {
                             search_transactions_request.clone(),
                             "ICP".to_string(),
                             8,
-                        );
+                        ).await;
                         assert!(result.is_err());
                     }
+                    });
                     Ok(())
                 },
             )
             .unwrap()
     }
 
-    #[test]
-    fn test_fetch_block_from_empty_blockchain() {
+    #[tokio::test]
+    async fn test_fetch_block_from_empty_blockchain() {
         let storage_client_memory = Arc::new(StorageClient::new_in_memory().unwrap());
 
         let metadata = Metadata {
@@ -1294,7 +1329,8 @@ mod test {
             &block_identifier,
             metadata.decimals,
             metadata.symbol.clone(),
-        );
+        )
+        .await;
         assert!(block_res.is_err());
 
         let block_identifier = PartialBlockIdentifier {
@@ -1306,7 +1342,8 @@ mod test {
             &block_identifier,
             metadata.decimals,
             metadata.symbol.clone(),
-        );
+        )
+        .await;
         assert!(block_res.is_err());
 
         let block_identifier = PartialBlockIdentifier {
@@ -1318,7 +1355,8 @@ mod test {
             &block_identifier,
             metadata.decimals,
             metadata.symbol.clone(),
-        );
+        )
+        .await;
         assert!(block_res.is_err());
 
         let block_identifier = PartialBlockIdentifier {
@@ -1330,7 +1368,8 @@ mod test {
             &block_identifier,
             metadata.decimals,
             metadata.symbol.clone(),
-        );
+        )
+        .await;
         assert!(block_res.is_err());
     }
 
@@ -1346,6 +1385,8 @@ mod test {
             .run(
                 &(valid_blockchain_strategy::<U256>(BLOCKCHAIN_LENGTH * 25).no_shrink()),
                 |blockchain| {
+                    let rt = tokio::runtime::Runtime::new().unwrap();
+                    rt.block_on(async move {
                     let storage_client_memory = StorageClient::new_in_memory().unwrap();
                     let mut rosetta_blocks = vec![];
 
@@ -1362,6 +1403,7 @@ mod test {
                         .unwrap(),
                         currency.clone(),
                     )
+                    .await
                     .unwrap()
                     .result
                     .try_into()
@@ -1380,6 +1422,7 @@ mod test {
 
                     storage_client_memory
                         .store_blocks(rosetta_blocks.clone())
+                        .await
                         .unwrap();
                     let highest_block_index = rosetta_blocks.len().saturating_sub(1) as u64;
                     // Call with 0 numbers of blocks
@@ -1393,6 +1436,7 @@ mod test {
                         .unwrap(),
                         currency.clone(),
                     )
+                    .await
                     .unwrap()
                     .result
                     .try_into()
@@ -1413,6 +1457,7 @@ mod test {
                         .unwrap(),
                         currency.clone(),
                     )
+                    .await
                     .unwrap();
                     let query_block_response: QueryBlockRangeResponse =
                         response.result.try_into().unwrap();
@@ -1453,6 +1498,7 @@ mod test {
                         ObjectMap::try_from(query_blocks_request).unwrap(),
                         currency.clone(),
                     )
+                    .await
                     .unwrap();
 
                     assert!(query_blocks_response.idempotent);
@@ -1491,6 +1537,7 @@ mod test {
                         ObjectMap::try_from(query_blocks_request).unwrap(),
                         currency.clone(),
                     )
+                    .await
                     .unwrap()
                     .result
                     .try_into()
@@ -1504,13 +1551,14 @@ mod test {
                     );
 
                     Ok(())
+                    })
                 },
             )
             .unwrap();
     }
 
-    #[test]
-    fn test_account_balance_with_aggregate_all_subaccounts() {
+    #[tokio::test]
+    async fn test_account_balance_with_aggregate_all_subaccounts() {
         use crate::common::storage::types::{
             IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
         };
@@ -1549,8 +1597,8 @@ mod test {
             0,
         )];
 
-        storage_client.store_blocks(blocks).unwrap();
-        storage_client.update_account_balances().unwrap();
+        storage_client.store_blocks(blocks).await.unwrap();
+        storage_client.update_account_balances().await.unwrap();
 
         // Test 1: Aggregate flag with subaccount should fail
         let account_with_subaccount = Account {
@@ -1571,7 +1619,8 @@ mod test {
             &metadata_obj,
             metadata.decimals,
             metadata.symbol.clone(),
-        );
+        )
+        .await;
 
         assert!(result.is_err());
         // Now that we have blocks, we should get the validation error
@@ -1637,8 +1686,8 @@ mod test {
             ),
         ];
 
-        storage_client2.store_blocks(blocks).unwrap();
-        storage_client2.update_account_balances().unwrap();
+        storage_client2.store_blocks(blocks).await.unwrap();
+        storage_client2.update_account_balances().await.unwrap();
 
         // Test aggregated balance: Should be 500 + 1000 = 1500
         // For aggregated balance, we need to use an account identifier that represents
@@ -1656,7 +1705,8 @@ mod test {
             &metadata_obj,
             metadata.decimals,
             metadata.symbol.clone(),
-        );
+        )
+        .await;
 
         assert!(result.is_ok());
         let balance_response = result.unwrap();
@@ -1672,7 +1722,8 @@ mod test {
             &None,
             metadata.decimals,
             metadata.symbol.clone(),
-        );
+        )
+        .await;
         assert!(result1.is_ok());
         assert_eq!(result1.unwrap().balances[0].value.to_string(), "1000");
 
@@ -1684,7 +1735,8 @@ mod test {
             &None,
             metadata.decimals,
             metadata.symbol.clone(),
-        );
+        )
+        .await;
         assert!(result_main.is_ok());
         assert_eq!(result_main.unwrap().balances[0].value.to_string(), "500");
 
@@ -1696,7 +1748,8 @@ mod test {
             &None,
             metadata.decimals,
             metadata.symbol.clone(),
-        );
+        )
+        .await;
 
         assert!(result.is_ok());
         let balance_response = result.unwrap();
@@ -1705,8 +1758,8 @@ mod test {
         assert_eq!(balance_response.balances[0].value.to_string(), "500");
     }
 
-    #[test]
-    fn test_subaccount_transfers_and_balances() {
+    #[tokio::test]
+    async fn test_subaccount_transfers_and_balances() {
         use crate::common::storage::types::{
             IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
         };
@@ -1853,10 +1906,10 @@ mod test {
         ];
 
         // Store blocks
-        storage_client.store_blocks(blocks).unwrap();
+        storage_client.store_blocks(blocks).await.unwrap();
 
         // Update account balances
-        storage_client.update_account_balances().unwrap();
+        storage_client.update_account_balances().await.unwrap();
 
         // Test individual account balances
         let main_balance = account_balance(
@@ -1866,6 +1919,7 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         )
+        .await
         .unwrap();
         // Main account: 1000 - 300 - 10 - 200 - 10 = 480
         assert_eq!(main_balance.balances[0].value.to_string(), "480");
@@ -1877,6 +1931,7 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         )
+        .await
         .unwrap();
         // Account1: 300 - 150 - 10 = 140
         assert_eq!(account1_balance.balances[0].value.to_string(), "140");
@@ -1888,6 +1943,7 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         )
+        .await
         .unwrap();
         // Account2: 200
         assert_eq!(account2_balance.balances[0].value.to_string(), "200");
@@ -1899,6 +1955,7 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         )
+        .await
         .unwrap();
         // Other account: 150
         assert_eq!(other_balance.balances[0].value.to_string(), "150");
@@ -1918,14 +1975,15 @@ mod test {
             metadata.decimals,
             metadata.symbol.clone(),
         )
+        .await
         .unwrap();
 
         // Aggregated balance: 480 (main) + 140 (account1) + 200 (account2) = 820
         assert_eq!(aggregated_balance.balances[0].value.to_string(), "820");
     }
 
-    #[test]
-    fn test_construction_api_subaccount_preservation() {
+    #[tokio::test]
+    async fn test_construction_api_subaccount_preservation() {
         // Test that the construction API preserves subaccounts correctly through the entire flow
         use crate::common::utils::utils::rosetta_core_operations_to_icrc1_operation;
         use candid::{Nat, Principal};
@@ -2035,8 +2093,8 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_account_identifier_round_trip_conversion_bug() {
+    #[tokio::test]
+    async fn test_account_identifier_round_trip_conversion_bug() {
         // This test specifically checks the AccountIdentifier round-trip conversion
         // and should FAIL with the buggy code that always uses effective_subaccount()
         use candid::Principal;
@@ -2083,8 +2141,8 @@ mod test {
         );
     }
 
-    #[test]
-    fn test_debug_aggregated_balance_sql() {
+    #[tokio::test]
+    async fn test_debug_aggregated_balance_sql() {
         use crate::common::storage::types::{
             IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
         };
@@ -2184,21 +2242,24 @@ mod test {
         ];
 
         // Store blocks and update balances
-        storage_client.store_blocks(blocks).unwrap();
-        storage_client.update_account_balances().unwrap();
+        storage_client.store_blocks(blocks).await.unwrap();
+        storage_client.update_account_balances().await.unwrap();
 
         // Check individual balances (use a reasonable high block index instead of u64::MAX)
         let high_block_idx = 1000u64;
         let main_balance = storage_client
             .get_account_balance_at_block_idx(&main_account, high_block_idx)
+            .await
             .unwrap()
             .unwrap_or(Nat::from(0u64));
         let explicit_zero_balance = storage_client
             .get_account_balance_at_block_idx(&explicit_zero_account, high_block_idx)
+            .await
             .unwrap()
             .unwrap_or(Nat::from(0u64));
         let account1_balance = storage_client
             .get_account_balance_at_block_idx(&account1, high_block_idx)
+            .await
             .unwrap()
             .unwrap_or(Nat::from(0u64));
 
@@ -2213,6 +2274,7 @@ mod test {
                 &PrincipalId::from(principal),
                 high_block_idx,
             )
+            .await
             .unwrap();
 
         println!("Aggregated balance: {aggregated_balance}");
@@ -2250,8 +2312,8 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_mint_and_burn_fees() {
+    #[tokio::test]
+    async fn test_mint_and_burn_fees() {
         use crate::common::storage::types::{
             IcrcBlock, IcrcOperation, IcrcTransaction, RosettaBlock,
         };
@@ -2272,99 +2334,108 @@ mod test {
         };
         let main_account_id = AccountIdentifier::from(main_account);
 
-        let add_mint_block =
-            |block_id: u64, amount: u64, fee: Option<u64>, effective_fee: Option<u64>| {
-                let blocks = vec![RosettaBlock::from_icrc_ledger_block(
-                    IcrcBlock {
-                        parent_hash: None,
-                        transaction: IcrcTransaction {
-                            operation: IcrcOperation::Mint {
-                                to: main_account,
-                                amount: Nat::from(amount),
-                                fee: fee.map(Into::into),
-                            },
-                            created_at_time: None,
-                            memo: None,
+        // Helper to add a mint block
+        async fn add_mint(
+            storage: &StorageClient,
+            main_account: Account,
+            block_id: u64,
+            amount: u64,
+            fee: Option<u64>,
+            effective_fee: Option<u64>,
+        ) {
+            let blocks = vec![RosettaBlock::from_icrc_ledger_block(
+                IcrcBlock {
+                    parent_hash: None,
+                    transaction: IcrcTransaction {
+                        operation: IcrcOperation::Mint {
+                            to: main_account,
+                            amount: Nat::from(amount),
+                            fee: fee.map(Into::into),
                         },
-                        effective_fee: effective_fee.map(Into::into),
-                        timestamp: 1,
-                        fee_collector: None,
-                        fee_collector_block_index: None,
+                        created_at_time: None,
+                        memo: None,
                     },
-                    block_id,
-                )];
+                    effective_fee: effective_fee.map(Into::into),
+                    timestamp: 1,
+                    fee_collector: None,
+                    fee_collector_block_index: None,
+                },
+                block_id,
+            )];
+            storage.store_blocks(blocks).await.unwrap();
+            storage.update_account_balances().await.unwrap();
+        }
 
-                storage_client.store_blocks(blocks).unwrap();
-                storage_client.update_account_balances().unwrap();
-            };
-
-        let add_burn_block =
-            |block_id: u64, amount: u64, fee: Option<u64>, effective_fee: Option<u64>| {
-                let blocks = vec![RosettaBlock::from_icrc_ledger_block(
-                    IcrcBlock {
-                        parent_hash: None,
-                        transaction: IcrcTransaction {
-                            operation: IcrcOperation::Burn {
-                                from: main_account,
-                                amount: Nat::from(amount),
-                                fee: fee.map(Into::into),
-                                spender: None,
-                            },
-                            created_at_time: None,
-                            memo: None,
+        // Helper to add a burn block
+        async fn add_burn(
+            storage: &StorageClient,
+            main_account: Account,
+            block_id: u64,
+            amount: u64,
+            fee: Option<u64>,
+            effective_fee: Option<u64>,
+        ) {
+            let blocks = vec![RosettaBlock::from_icrc_ledger_block(
+                IcrcBlock {
+                    parent_hash: None,
+                    transaction: IcrcTransaction {
+                        operation: IcrcOperation::Burn {
+                            from: main_account,
+                            amount: Nat::from(amount),
+                            fee: fee.map(Into::into),
+                            spender: None,
                         },
-                        effective_fee: effective_fee.map(Into::into),
-                        timestamp: 1,
-                        fee_collector: None,
-                        fee_collector_block_index: None,
+                        created_at_time: None,
+                        memo: None,
                     },
-                    block_id,
-                )];
+                    effective_fee: effective_fee.map(Into::into),
+                    timestamp: 1,
+                    fee_collector: None,
+                    fee_collector_block_index: None,
+                },
+                block_id,
+            )];
+            storage.store_blocks(blocks).await.unwrap();
+            storage.update_account_balances().await.unwrap();
+        }
 
-                storage_client.store_blocks(blocks).unwrap();
-                storage_client.update_account_balances().unwrap();
-            };
-
-        let check_account_balance = |expected_balance: &str| {
-            let result = account_balance(
-                &storage_client,
-                &main_account_id,
-                &None,
-                decimals,
-                symbol.to_string(),
-            );
-
+        // Helper to check account balance
+        async fn check_balance(
+            storage: &StorageClient,
+            account_id: &AccountIdentifier,
+            expected: &str,
+            decimals: u8,
+            symbol: &str,
+        ) {
+            let result = account_balance(storage, account_id, &None, decimals, symbol.to_string()).await;
             assert!(result.is_ok());
             let balance_response = result.unwrap();
             assert_eq!(balance_response.balances.len(), 1);
-            assert_eq!(
-                balance_response.balances[0].value.to_string(),
-                expected_balance
-            );
-        };
+            assert_eq!(balance_response.balances[0].value.to_string(), expected);
+        }
 
         // The operation fee of 100 is applied
-        add_mint_block(0, 1000, Some(100), None);
-        check_account_balance("900");
-        add_burn_block(1, 100, Some(100), None);
-        check_account_balance("700");
+        add_mint(&storage_client, main_account, 0, 1000, Some(100), None).await;
+        check_balance(&storage_client, &main_account_id, "900", decimals, symbol).await;
+        add_burn(&storage_client, main_account, 1, 100, Some(100), None).await;
+        check_balance(&storage_client, &main_account_id, "700", decimals, symbol).await;
 
         // The block effective_fee of 100 is applied
-        add_mint_block(2, 200, Some(200), Some(100));
-        check_account_balance("800");
-        add_burn_block(3, 200, Some(200), Some(100));
-        check_account_balance("500");
+        add_mint(&storage_client, main_account, 2, 200, Some(200), Some(100)).await;
+        check_balance(&storage_client, &main_account_id, "800", decimals, symbol).await;
+        add_burn(&storage_client, main_account, 3, 200, Some(200), Some(100)).await;
+        check_balance(&storage_client, &main_account_id, "500", decimals, symbol).await;
 
         // The block effective_fee of 100 is applied
-        add_mint_block(4, 200, None, Some(100));
-        check_account_balance("600");
-        add_burn_block(5, 200, None, Some(100));
-        check_account_balance("300");
+        add_mint(&storage_client, main_account, 4, 200, None, Some(100)).await;
+        check_balance(&storage_client, &main_account_id, "600", decimals, symbol).await;
+        add_burn(&storage_client, main_account, 5, 200, None, Some(100)).await;
+        check_balance(&storage_client, &main_account_id, "300", decimals, symbol).await;
 
         // No fee
-        add_mint_block(6, 200, None, None);
-        check_account_balance("500");
-        add_burn_block(7, 200, None, None);
-        check_account_balance("300");
+        add_mint(&storage_client, main_account, 6, 200, None, None).await;
+        check_balance(&storage_client, &main_account_id, "500", decimals, symbol).await;
+        add_burn(&storage_client, main_account, 7, 200, None, None).await;
+        check_balance(&storage_client, &main_account_id, "300", decimals, symbol).await;
     }
 }
