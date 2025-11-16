@@ -47,7 +47,7 @@ import signal
 import sys
 import threading
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timedelta
 
 from rosetta_client import RosettaClient
@@ -145,6 +145,9 @@ class LoadGeneratorStats:
 class LoadGenerator:
     """Main load generator class"""
 
+    # Maximum number of principals to track per canister
+    MAX_PRINCIPALS_PER_CANISTER = 1000
+
     def __init__(
         self,
         node_address,
@@ -174,6 +177,11 @@ class LoadGenerator:
         # Pre-derive principals from private keys
         self.key_principals = {}
 
+        # Track principals seen in blocks per canister (for realistic balance queries)
+        # Using deque with maxlen for automatic FIFO eviction
+        self.principals_per_canister = {}
+        self.principals_lock = threading.Lock()
+
         # Signal handler for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
 
@@ -181,6 +189,50 @@ class LoadGenerator:
         """Handle CTRL+C gracefully"""
         print("\n\nStopping load generator...")
         self.running = False
+
+    def _extract_principals_from_block(self, block_data, canister_id):
+        """Extract principals from a block and add them to the tracking deque"""
+        try:
+            # Extract principals from transactions in the block
+            principals = set()
+            
+            # Check for transactions in the block
+            if isinstance(block_data, dict):
+                # Look for transaction data
+                transaction = block_data.get("transaction", {})
+                if transaction:
+                    # Extract from operations
+                    operations = transaction.get("operations", [])
+                    for operation in operations:
+                        if isinstance(operation, dict):
+                            # Extract account from operation
+                            account = operation.get("account", {})
+                            if account:
+                                address = account.get("address")
+                                if address and address != "aaaaa-aa":
+                                    principals.add(address)
+            
+            # Add principals to the per-canister tracking deque
+            if principals:
+                with self.principals_lock:
+                    # Initialize deque for this canister if it doesn't exist
+                    if canister_id not in self.principals_per_canister:
+                        self.principals_per_canister[canister_id] = deque(maxlen=self.MAX_PRINCIPALS_PER_CANISTER)
+                    
+                    canister_deque = self.principals_per_canister[canister_id]
+                    added_count = 0
+                    
+                    # Add principals that aren't already in the deque
+                    for principal in principals:
+                        if principal not in canister_deque:
+                            canister_deque.append(principal)
+                            added_count += 1
+                    
+                    if self.verbose and added_count > 0:
+                        print(f"Added {added_count} new principal(s) from block for {canister_id} (total: {len(canister_deque)})")
+        except Exception as e:
+            if self.verbose:
+                print(f"Error extracting principals from block: {e}")
 
     def initialize(self):
         """Initialize clients and derive key information"""
@@ -244,12 +296,21 @@ class LoadGenerator:
         start = time.time()
         try:
             if operation == "balance":
-                # Query balance for a random principal (use one of our keys or a dummy principal)
-                if self.key_principals:
+                # Query balance for a random principal from those seen in blocks
+                principal = None
+                with self.principals_lock:
+                    canister_principals = list(self.principals_per_canister.get(canister_id, []))
+                
+                if canister_principals:
+                    # Use a principal seen in blocks for this canister
+                    principal = random.choice(canister_principals)
+                elif self.key_principals:
+                    # Fall back to using one of our key principals
                     principal = random.choice(list(self.key_principals.values()))
                 else:
-                    # Use a dummy principal for balance queries
+                    # Last resort: use anonymous principal
                     principal = "aaaaa-aa"
+                
                 client.get_balance(principal=principal, subaccount=None, verbose=False)
 
             elif operation == "block":
@@ -258,7 +319,10 @@ class LoadGenerator:
                 current_height = status.get("current_block_identifier", {}).get("index", 0)
                 # Read a block within the last 100 blocks
                 block_index = max(0, current_height - random.randint(0, 100))
-                client.get_block(block_index=block_index, block_hash=None, verbose=False)
+                block_data = client.get_block(block_index=block_index, block_hash=None, verbose=False)
+                
+                # Extract principals from the block for future balance queries
+                self._extract_principals_from_block(block_data, canister_id)
 
             elif operation == "status":
                 # Get network status
@@ -376,6 +440,15 @@ class LoadGenerator:
             print(f"\nOperation Breakdown:")
             for op, count in sorted(stats["operation_counts"].items()):
                 print(f"  {op:20s}: {count}")
+
+        # Print tracked principals info
+        with self.principals_lock:
+            total_principals = sum(len(principals) for principals in self.principals_per_canister.values())
+            if total_principals > 0:
+                print(f"\nTracked Principals (max {self.MAX_PRINCIPALS_PER_CANISTER} per canister):")
+                print(f"  Total:            {total_principals}")
+                for canister_id, principals in sorted(self.principals_per_canister.items()):
+                    print(f"  {canister_id}: {len(principals)}/{self.MAX_PRINCIPALS_PER_CANISTER}")
 
         # Print errors if any
         if stats["error_counts"]:
