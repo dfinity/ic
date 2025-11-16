@@ -33,10 +33,16 @@ lazy_static! {
 
 async fn check_storage_validity(storage_client: Arc<StorageClient>, highest_index: u64) {
     // Get the tip of the blockchain from the storage client
-    let tip_block = storage_client.get_block_with_highest_block_idx().await.unwrap();
+    let tip_block = storage_client
+        .get_block_with_highest_block_idx()
+        .await
+        .unwrap();
 
     // Get the genesis block from the blockchain
-    let genesis_block = storage_client.get_block_with_lowest_block_idx().await.unwrap();
+    let genesis_block = storage_client
+        .get_block_with_lowest_block_idx()
+        .await
+        .unwrap();
 
     // Get the the entire blockchain
     let blocks_stored = storage_client

@@ -8,7 +8,10 @@ use rosetta_core::metrics::RosettaMetrics;
 use rusqlite::{Connection, OpenFlags};
 use serde_bytes::ByteBuf;
 use std::cmp::Ordering;
-use std::{path::Path, sync::{Arc, Mutex}};
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 use tracing::warn;
 
 #[derive(Debug, Clone)]
@@ -231,7 +234,8 @@ impl StorageClient {
         hash: ByteBuf,
     ) -> anyhow::Result<Vec<crate::common::storage::types::IcrcTransaction>> {
         Ok(self
-            .get_blocks_by_transaction_hash(hash).await?
+            .get_blocks_by_transaction_hash(hash)
+            .await?
             .into_iter()
             .map(|block| block.get_transaction())
             .collect::<Vec<crate::common::storage::types::IcrcTransaction>>())
@@ -250,7 +254,11 @@ impl StorageClient {
                 .iter()
                 .map(|(k, v)| (k.as_str(), v as &dyn rusqlite::ToSql))
                 .collect();
-            storage_operations::get_blocks_by_custom_query(&open_connection, sql_query, params_refs.as_slice())
+            storage_operations::get_blocks_by_custom_query(
+                &open_connection,
+                sql_query,
+                params_refs.as_slice(),
+            )
         })
         .await?
     }
@@ -273,7 +281,8 @@ impl StorageClient {
         block_idx: u64,
     ) -> anyhow::Result<Option<crate::common::storage::types::IcrcTransaction>> {
         Ok(self
-            .get_block_at_idx(block_idx).await?
+            .get_block_at_idx(block_idx)
+            .await?
             .map(|block| block.get_transaction()))
     }
 
@@ -356,7 +365,11 @@ impl StorageClient {
         let account = account.clone();
         tokio::task::spawn_blocking(move || {
             let open_connection = conn.lock().unwrap();
-            storage_operations::get_account_balance_at_block_idx(&open_connection, &account, block_idx)
+            storage_operations::get_account_balance_at_block_idx(
+                &open_connection,
+                &account,
+                block_idx,
+            )
         })
         .await?
     }

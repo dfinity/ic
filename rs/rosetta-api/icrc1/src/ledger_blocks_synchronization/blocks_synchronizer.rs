@@ -282,18 +282,21 @@ pub async fn sync_from_the_tip(
 
     // The starting point of the synchronization process is either 0 if the database is empty or the highest stored block index plus one.
     // The trailing parent hash is either `None` if the database is empty or the block hash of the block with the highest block index in storage.
-    let sync_range = storage_client.get_block_with_highest_block_idx().await?.map_or(
-        SyncRange::new(0, tip_block_index, ByteBuf::from(tip_block_hash), None),
-        |block| {
-            SyncRange::new(
-                // If storage is up to date then the start index is the same as the tip of the ledger.
-                block.index + 1,
-                tip_block_index,
-                ByteBuf::from(tip_block_hash),
-                Some(block.clone().get_block_hash()),
-            )
-        },
-    );
+    let sync_range = storage_client
+        .get_block_with_highest_block_idx()
+        .await?
+        .map_or(
+            SyncRange::new(0, tip_block_index, ByteBuf::from(tip_block_hash), None),
+            |block| {
+                SyncRange::new(
+                    // If storage is up to date then the start index is the same as the tip of the ledger.
+                    block.index + 1,
+                    tip_block_index,
+                    ByteBuf::from(tip_block_hash),
+                    Some(block.clone().get_block_hash()),
+                )
+            },
+        );
 
     // Do not make a sync call if the storage is up to date with the replica's ledger.
     if !sync_range.index_range.is_empty() {

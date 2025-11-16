@@ -84,7 +84,9 @@ pub fn network_options(ledger_id: &Principal) -> NetworkOptionsResponse {
     }
 }
 
-pub async fn network_status(storage_client: &StorageClient) -> Result<NetworkStatusResponse, Error> {
+pub async fn network_status(
+    storage_client: &StorageClient,
+) -> Result<NetworkStatusResponse, Error> {
     let highest_processed_block = storage_client
         .get_highest_block_idx_in_account_balance_table()
         .await
@@ -440,7 +442,10 @@ pub async fn search_transactions(
         String::from("SELECT idx,serialized_block FROM blocks WHERE idx <= :max_block_idx ");
     let mut parameters: Vec<(String, rusqlite::types::Value)> = Vec::new();
 
-    parameters.push((":max_block_idx".to_string(), rusqlite::types::Value::Integer(start_idx as i64)));
+    parameters.push((
+        ":max_block_idx".to_string(),
+        rusqlite::types::Value::Integer(start_idx as i64),
+    ));
 
     if let Some(transaction_identifier) = request.transaction_identifier.clone() {
         command.push_str("AND tx_hash = :tx_hash ");
@@ -452,7 +457,10 @@ pub async fn search_transactions(
             })?
             .as_slice()
             .to_vec();
-        parameters.push((":tx_hash".to_string(), rusqlite::types::Value::Blob(tx_hash)));
+        parameters.push((
+            ":tx_hash".to_string(),
+            rusqlite::types::Value::Blob(tx_hash),
+        ));
     }
 
     if let Some(operation_type) = operation_type {
@@ -478,7 +486,10 @@ pub async fn search_transactions(
     command.push_str("ORDER BY idx DESC ");
 
     command.push_str("LIMIT :limit ");
-    parameters.push((":limit".to_string(), rusqlite::types::Value::Integer(limit as i64)));
+    parameters.push((
+        ":limit".to_string(),
+        rusqlite::types::Value::Integer(limit as i64),
+    ));
 
     let mut rosetta_blocks = storage_client
         .get_blocks_by_custom_query(command, parameters)
@@ -544,23 +555,25 @@ pub async fn initial_sync_is_completed(
             return synched.unwrap();
         }
     }
-    
+
     // Need to check sync status - release lock before await
     let block_count = storage_client.get_block_count().await;
-    let highest_index = storage_client.get_highest_block_idx_in_account_balance_table().await;
-    
+    let highest_index = storage_client
+        .get_highest_block_idx_in_account_balance_table()
+        .await;
+
     let is_synced = match (block_count, highest_index) {
         // If the blockchain contains no blocks we mark it as not completed
         (Ok(block_count), Ok(Some(highest_index))) if block_count == highest_index + 1 => true,
         _ => false,
     };
-    
+
     // Update cached state
     {
         let mut synched = sync_state.lock().unwrap();
         *synched = Some(is_synced);
     }
-    
+
     is_synced
 }
 
@@ -930,77 +943,59 @@ mod test {
                 |blockchain| {
                     let rt = tokio::runtime::Runtime::new().unwrap();
                     rt.block_on(async move {
-                    let storage_client_memory = StorageClient::new_in_memory().unwrap();
-                    let mut rosetta_blocks = vec![];
+                        let storage_client_memory = StorageClient::new_in_memory().unwrap();
+                        let mut rosetta_blocks = vec![];
 
-                    for (index, block) in blockchain.clone().into_iter().enumerate() {
-                        rosetta_blocks.push(
-                            RosettaBlock::from_generic_block(
-                                encoded_block_to_generic_block(&block.encode()),
-                                index as u64,
-                            )
-                            .unwrap(),
-                        );
-                    }
-
-                    storage_client_memory
-                        .store_blocks(rosetta_blocks.clone())
-                        .await
-                        .unwrap();
-                    let mut search_transactions_request = SearchTransactionsRequest {
-                        ..Default::default()
-                    };
-
-                    async fn traverse_all_transactions(
-                        storage_client: &StorageClient,
-                        mut search_transactions_request: SearchTransactionsRequest,
-                    ) -> Vec<BlockTransaction> {
-                        let mut transactions = vec![];
-                        loop {
-                            let result = search_transactions(
-                                storage_client,
-                                search_transactions_request.clone(),
-                                "ICP".to_string(),
-                                8,
-                            )
-                            .await
-                            .unwrap();
-                            transactions.extend(result.clone().transactions);
-                            search_transactions_request.offset = result.next_offset;
-
-                            if search_transactions_request.offset.is_none() {
-                                break;
-                            }
+                        for (index, block) in blockchain.clone().into_iter().enumerate() {
+                            rosetta_blocks.push(
+                                RosettaBlock::from_generic_block(
+                                    encoded_block_to_generic_block(&block.encode()),
+                                    index as u64,
+                                )
+                                .unwrap(),
+                            );
                         }
 
-                        transactions
-                    }
+                        storage_client_memory
+                            .store_blocks(rosetta_blocks.clone())
+                            .await
+                            .unwrap();
+                        let mut search_transactions_request = SearchTransactionsRequest {
+                            ..Default::default()
+                        };
 
-                    if !blockchain.is_empty() {
-                        // The maximum number of transactions that can be returned is the minimum between the maximum number of transactions per request or the entire blockchain
-                        let maximum_number_returnable_transactions = rosetta_blocks
-                            .len()
-                            .min(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as usize);
+                        async fn traverse_all_transactions(
+                            storage_client: &StorageClient,
+                            mut search_transactions_request: SearchTransactionsRequest,
+                        ) -> Vec<BlockTransaction> {
+                            let mut transactions = vec![];
+                            loop {
+                                let result = search_transactions(
+                                    storage_client,
+                                    search_transactions_request.clone(),
+                                    "ICP".to_string(),
+                                    8,
+                                )
+                                .await
+                                .unwrap();
+                                transactions.extend(result.clone().transactions);
+                                search_transactions_request.offset = result.next_offset;
 
-                        // If no filters are provided the service should return all transactions or the maximum of transactions per request
-                        let result = search_transactions(
-                            &storage_client_memory,
-                            search_transactions_request.clone(),
-                            "ICP".to_string(),
-                            8,
-                        )
-                        .await
-                        .unwrap();
-                        assert_eq!(
-                            result.total_count,
-                            maximum_number_returnable_transactions as i64
-                        );
-                        assert_eq!(result.transactions.len() as i64, result.total_count);
+                                if search_transactions_request.offset.is_none() {
+                                    break;
+                                }
+                            }
 
-                        // We traverse through all the blocks and check if the transactions are returned correctly if the transaction identifier is provided
-                        for rosetta_block in rosetta_blocks.iter() {
-                            search_transactions_request.transaction_identifier =
-                                Some(rosetta_block.clone().get_transaction_identifier());
+                            transactions
+                        }
+
+                        if !blockchain.is_empty() {
+                            // The maximum number of transactions that can be returned is the minimum between the maximum number of transactions per request or the entire blockchain
+                            let maximum_number_returnable_transactions = rosetta_blocks
+                                .len()
+                                .min(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as usize);
+
+                            // If no filters are provided the service should return all transactions or the maximum of transactions per request
                             let result = search_transactions(
                                 &storage_client_memory,
                                 search_transactions_request.clone(),
@@ -1009,300 +1004,332 @@ mod test {
                             )
                             .await
                             .unwrap();
+                            assert_eq!(
+                                result.total_count,
+                                maximum_number_returnable_transactions as i64
+                            );
+                            assert_eq!(result.transactions.len() as i64, result.total_count);
 
-                            let num_of_transactions_with_hash = rosetta_blocks
+                            // We traverse through all the blocks and check if the transactions are returned correctly if the transaction identifier is provided
+                            for rosetta_block in rosetta_blocks.iter() {
+                                search_transactions_request.transaction_identifier =
+                                    Some(rosetta_block.clone().get_transaction_identifier());
+                                let result = search_transactions(
+                                    &storage_client_memory,
+                                    search_transactions_request.clone(),
+                                    "ICP".to_string(),
+                                    8,
+                                )
+                                .await
+                                .unwrap();
+
+                                let num_of_transactions_with_hash = rosetta_blocks
+                                    .iter()
+                                    .filter(|block| {
+                                        (*block).clone().get_transaction_hash()
+                                            == rosetta_block.clone().get_transaction_hash()
+                                    })
+                                    .count();
+
+                                // The total count should be the number of transactions with the same transaction identifier
+                                assert_eq!(
+                                    result.total_count,
+                                    num_of_transactions_with_hash as i64
+                                );
+                                // If we provide a transaction identifier the service should return the transactions that match the transaction identifier
+                                let mut expected_transaction =
+                                    icrc1_rosetta_block_to_rosetta_core_transaction(
+                                        rosetta_block.clone(),
+                                        Currency {
+                                            symbol: "ICP".to_string(),
+                                            decimals: 8,
+                                            metadata: None,
+                                        },
+                                    )
+                                    .unwrap();
+                                expected_transaction.operations.iter_mut().for_each(|op| {
+                                    op.status = Some(STATUS_COMPLETED.to_string());
+                                });
+                                assert_eq!(
+                                    result.transactions[0].transaction,
+                                    expected_transaction
+                                );
+                                // If the transaction identifier is provided the next offset should be None
+                                assert_eq!(result.next_offset, None);
+                            }
+
+                            search_transactions_request = SearchTransactionsRequest {
+                                ..Default::default()
+                            };
+
+                            // Let's check that setting the max_block option works as intended
+                            search_transactions_request.max_block =
+                                Some(rosetta_blocks.last().unwrap().index as i64);
+                            let result = search_transactions(
+                                &storage_client_memory,
+                                search_transactions_request.clone(),
+                                "ICP".to_string(),
+                                8,
+                            )
+                            .await
+                            .unwrap();
+                            assert_eq!(
+                                result.transactions.len(),
+                                maximum_number_returnable_transactions
+                            );
+
+                            // The transactiosn should be returned in descending order of block index
+                            assert_eq!(
+                                result.transactions.first().unwrap().block_identifier,
+                                rosetta_blocks
+                                    .last()
+                                    .unwrap()
+                                    .clone()
+                                    .get_block_identifier()
+                            );
+
+                            // If we set the limit to something below the maximum number of blocks we should only receive that number of blocks
+                            search_transactions_request.max_block = None;
+                            search_transactions_request.limit = Some(1);
+                            let result = search_transactions(
+                                &storage_client_memory,
+                                search_transactions_request.clone(),
+                                "ICP".to_string(),
+                                8,
+                            )
+                            .await
+                            .unwrap();
+                            assert_eq!(result.transactions.len(), 1);
+
+                            // The expected offset is the index of the highest block fetched minus the limit
+                            let expected_offset = 1;
+                            assert_eq!(
+                                result.next_offset,
+                                if rosetta_blocks.len() > 1 {
+                                    Some(expected_offset)
+                                } else {
+                                    None
+                                }
+                            );
+
+                            search_transactions_request.limit = None;
+
+                            // Setting the offset to greater than 0 only makes sense if the storage contains more than 1 block
+                            search_transactions_request.offset =
+                                Some(rosetta_blocks.len().saturating_sub(1).min(1) as i64);
+
+                            let result = search_transactions(
+                                &storage_client_memory,
+                                search_transactions_request.clone(),
+                                "ICP".to_string(),
+                                8,
+                            )
+                            .await
+                            .unwrap();
+                            assert_eq!(
+                                result.transactions.len(),
+                                if rosetta_blocks.len() == 1 {
+                                    1
+                                } else {
+                                    rosetta_blocks.len().saturating_sub(1)
+                                }
+                                .min(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as usize)
+                            );
+
+                            search_transactions_request.offset = None;
+                            search_transactions_request.max_block = Some(10);
+                            let result = traverse_all_transactions(
+                                &storage_client_memory,
+                                search_transactions_request.clone(),
+                            )
+                            .await;
+
+                            // The service should return the correct number of transactions if the max block is set, max block is an index so if the index is 10 there are 11 blocks/transactions to search through
+                            assert_eq!(result.len(), rosetta_blocks.len().min(10 + 1));
+
+                            search_transactions_request = SearchTransactionsRequest {
+                                ..Default::default()
+                            };
+
+                            // We make sure that the service returns the correct number of transactions for each operation type
+                            search_transactions_request.type_ = Some("TRANSFER".to_string());
+                            let num_of_transfer_transactions = rosetta_blocks
                                 .iter()
                                 .filter(|block| {
-                                    (*block).clone().get_transaction_hash()
-                                        == rosetta_block.clone().get_transaction_hash()
+                                    matches!(
+                                        block.block.transaction.operation,
+                                        IcrcOperation::Transfer { .. }
+                                    )
+                                })
+                                .count();
+                            let result = traverse_all_transactions(
+                                &storage_client_memory,
+                                search_transactions_request.clone(),
+                            )
+                            .await;
+                            assert_eq!(result.len(), num_of_transfer_transactions);
+
+                            search_transactions_request.type_ = Some("BURN".to_string());
+                            let num_of_burn_transactions = rosetta_blocks
+                                .iter()
+                                .filter(|block| {
+                                    matches!(
+                                        block.block.transaction.operation,
+                                        IcrcOperation::Burn { .. }
+                                    )
+                                })
+                                .count();
+                            let result = traverse_all_transactions(
+                                &storage_client_memory,
+                                search_transactions_request.clone(),
+                            )
+                            .await;
+                            assert_eq!(result.len(), num_of_burn_transactions);
+
+                            search_transactions_request.type_ = Some("MINT".to_string());
+                            let num_of_mint_transactions = rosetta_blocks
+                                .iter()
+                                .filter(|block| {
+                                    matches!(
+                                        block.block.transaction.operation,
+                                        IcrcOperation::Mint { .. }
+                                    )
+                                })
+                                .count();
+                            let result = traverse_all_transactions(
+                                &storage_client_memory,
+                                search_transactions_request.clone(),
+                            )
+                            .await;
+                            assert_eq!(result.len(), num_of_mint_transactions);
+
+                            search_transactions_request.type_ = Some("APPROVE".to_string());
+                            let num_of_approve_transactions = rosetta_blocks
+                                .iter()
+                                .filter(|block| {
+                                    matches!(
+                                        block.block.transaction.operation,
+                                        IcrcOperation::Approve { .. }
+                                    )
+                                })
+                                .count();
+                            let result = traverse_all_transactions(
+                                &storage_client_memory,
+                                search_transactions_request.clone(),
+                            )
+                            .await;
+                            assert_eq!(result.len(), num_of_approve_transactions);
+
+                            search_transactions_request = SearchTransactionsRequest {
+                                ..Default::default()
+                            };
+
+                            // We make sure that the service returns the correct number of transactions for each account
+                            search_transactions_request.account_identifier = Some(
+                                match rosetta_blocks[0].block.transaction.operation {
+                                    IcrcOperation::Transfer { from, .. } => from,
+                                    IcrcOperation::Mint { to, .. } => to,
+                                    IcrcOperation::Burn { from, .. } => from,
+                                    IcrcOperation::Approve { from, .. } => from,
+                                }
+                                .into(),
+                            );
+
+                            let num_of_transactions_with_account = rosetta_blocks
+                                .iter()
+                                .filter(|block| match block.block.transaction.operation {
+                                    IcrcOperation::Transfer {
+                                        from, to, spender, ..
+                                    } => spender
+                                        .map_or(vec![from, to], |spender| vec![from, to, spender])
+                                        .contains(
+                                            &search_transactions_request
+                                                .account_identifier
+                                                .clone()
+                                                .unwrap()
+                                                .try_into()
+                                                .unwrap(),
+                                        ),
+                                    IcrcOperation::Mint { to, .. } => {
+                                        to == search_transactions_request
+                                            .account_identifier
+                                            .clone()
+                                            .unwrap()
+                                            .try_into()
+                                            .unwrap()
+                                    }
+                                    IcrcOperation::Burn { from, spender, .. } => spender
+                                        .map_or(vec![from], |spender| vec![from, spender])
+                                        .contains(
+                                            &search_transactions_request
+                                                .account_identifier
+                                                .clone()
+                                                .unwrap()
+                                                .try_into()
+                                                .unwrap(),
+                                        ),
+                                    IcrcOperation::Approve { from, spender, .. } => [from, spender]
+                                        .contains(
+                                            &search_transactions_request
+                                                .account_identifier
+                                                .clone()
+                                                .unwrap()
+                                                .try_into()
+                                                .unwrap(),
+                                        ),
                                 })
                                 .count();
 
-                            // The total count should be the number of transactions with the same transaction identifier
-                            assert_eq!(result.total_count, num_of_transactions_with_hash as i64);
-                            // If we provide a transaction identifier the service should return the transactions that match the transaction identifier
-                            let mut expected_transaction =
-                                icrc1_rosetta_block_to_rosetta_core_transaction(
-                                    rosetta_block.clone(),
-                                    Currency {
-                                        symbol: "ICP".to_string(),
-                                        decimals: 8,
-                                        metadata: None,
-                                    },
-                                )
-                                .unwrap();
-                            expected_transaction.operations.iter_mut().for_each(|op| {
-                                op.status = Some(STATUS_COMPLETED.to_string());
-                            });
-                            assert_eq!(result.transactions[0].transaction, expected_transaction);
-                            // If the transaction identifier is provided the next offset should be None
-                            assert_eq!(result.next_offset, None);
-                        }
-
-                        search_transactions_request = SearchTransactionsRequest {
-                            ..Default::default()
-                        };
-
-                        // Let's check that setting the max_block option works as intended
-                        search_transactions_request.max_block =
-                            Some(rosetta_blocks.last().unwrap().index as i64);
-                        let result = search_transactions(
-                            &storage_client_memory,
-                            search_transactions_request.clone(),
-                            "ICP".to_string(),
-                            8,
-                        )
-                        .await
-                        .unwrap();
-                        assert_eq!(
-                            result.transactions.len(),
-                            maximum_number_returnable_transactions
-                        );
-
-                        // The transactiosn should be returned in descending order of block index
-                        assert_eq!(
-                            result.transactions.first().unwrap().block_identifier,
-                            rosetta_blocks
-                                .last()
-                                .unwrap()
-                                .clone()
-                                .get_block_identifier()
-                        );
-
-                        // If we set the limit to something below the maximum number of blocks we should only receive that number of blocks
-                        search_transactions_request.max_block = None;
-                        search_transactions_request.limit = Some(1);
-                        let result = search_transactions(
-                            &storage_client_memory,
-                            search_transactions_request.clone(),
-                            "ICP".to_string(),
-                            8,
-                        )
-                        .await
-                        .unwrap();
-                        assert_eq!(result.transactions.len(), 1);
-
-                        // The expected offset is the index of the highest block fetched minus the limit
-                        let expected_offset = 1;
-                        assert_eq!(
-                            result.next_offset,
-                            if rosetta_blocks.len() > 1 {
-                                Some(expected_offset)
-                            } else {
-                                None
-                            }
-                        );
-
-                        search_transactions_request.limit = None;
-
-                        // Setting the offset to greater than 0 only makes sense if the storage contains more than 1 block
-                        search_transactions_request.offset =
-                            Some(rosetta_blocks.len().saturating_sub(1).min(1) as i64);
-
-                        let result = search_transactions(
-                            &storage_client_memory,
-                            search_transactions_request.clone(),
-                            "ICP".to_string(),
-                            8,
-                        )
-                        .await
-                        .unwrap();
-                        assert_eq!(
-                            result.transactions.len(),
-                            if rosetta_blocks.len() == 1 {
-                                1
-                            } else {
-                                rosetta_blocks.len().saturating_sub(1)
-                            }
-                            .min(MAX_TRANSACTIONS_PER_SEARCH_TRANSACTIONS_REQUEST as usize)
-                        );
-
-                        search_transactions_request.offset = None;
-                        search_transactions_request.max_block = Some(10);
-                        let result = traverse_all_transactions(
-                            &storage_client_memory,
-                            search_transactions_request.clone(),
-                        ).await;
-
-                        // The service should return the correct number of transactions if the max block is set, max block is an index so if the index is 10 there are 11 blocks/transactions to search through
-                        assert_eq!(result.len(), rosetta_blocks.len().min(10 + 1));
-
-                        search_transactions_request = SearchTransactionsRequest {
-                            ..Default::default()
-                        };
-
-                        // We make sure that the service returns the correct number of transactions for each operation type
-                        search_transactions_request.type_ = Some("TRANSFER".to_string());
-                        let num_of_transfer_transactions = rosetta_blocks
-                            .iter()
-                            .filter(|block| {
-                                matches!(
-                                    block.block.transaction.operation,
-                                    IcrcOperation::Transfer { .. }
-                                )
-                            })
-                            .count();
-                        let result = traverse_all_transactions(
-                            &storage_client_memory,
-                            search_transactions_request.clone(),
-                        ).await;
-                        assert_eq!(result.len(), num_of_transfer_transactions);
-
-                        search_transactions_request.type_ = Some("BURN".to_string());
-                        let num_of_burn_transactions = rosetta_blocks
-                            .iter()
-                            .filter(|block| {
-                                matches!(
-                                    block.block.transaction.operation,
-                                    IcrcOperation::Burn { .. }
-                                )
-                            })
-                            .count();
-                        let result = traverse_all_transactions(
-                            &storage_client_memory,
-                            search_transactions_request.clone(),
-                        ).await;
-                        assert_eq!(result.len(), num_of_burn_transactions);
-
-                        search_transactions_request.type_ = Some("MINT".to_string());
-                        let num_of_mint_transactions = rosetta_blocks
-                            .iter()
-                            .filter(|block| {
-                                matches!(
-                                    block.block.transaction.operation,
-                                    IcrcOperation::Mint { .. }
-                                )
-                            })
-                            .count();
-                        let result = traverse_all_transactions(
-                            &storage_client_memory,
-                            search_transactions_request.clone(),
-                        ).await;
-                        assert_eq!(result.len(), num_of_mint_transactions);
-
-                        search_transactions_request.type_ = Some("APPROVE".to_string());
-                        let num_of_approve_transactions = rosetta_blocks
-                            .iter()
-                            .filter(|block| {
-                                matches!(
-                                    block.block.transaction.operation,
-                                    IcrcOperation::Approve { .. }
-                                )
-                            })
-                            .count();
-                        let result = traverse_all_transactions(
-                            &storage_client_memory,
-                            search_transactions_request.clone(),
-                        ).await;
-                        assert_eq!(result.len(), num_of_approve_transactions);
-
-                        search_transactions_request = SearchTransactionsRequest {
-                            ..Default::default()
-                        };
-
-                        // We make sure that the service returns the correct number of transactions for each account
-                        search_transactions_request.account_identifier = Some(
-                            match rosetta_blocks[0].block.transaction.operation {
-                                IcrcOperation::Transfer { from, .. } => from,
-                                IcrcOperation::Mint { to, .. } => to,
-                                IcrcOperation::Burn { from, .. } => from,
-                                IcrcOperation::Approve { from, .. } => from,
-                            }
-                            .into(),
-                        );
-
-                        let num_of_transactions_with_account = rosetta_blocks
-                            .iter()
-                            .filter(|block| match block.block.transaction.operation {
-                                IcrcOperation::Transfer {
-                                    from, to, spender, ..
-                                } => spender
-                                    .map_or(vec![from, to], |spender| vec![from, to, spender])
-                                    .contains(
-                                        &search_transactions_request
-                                            .account_identifier
-                                            .clone()
-                                            .unwrap()
-                                            .try_into()
-                                            .unwrap(),
-                                    ),
-                                IcrcOperation::Mint { to, .. } => {
-                                    to == search_transactions_request
+                            let result = traverse_all_transactions(
+                                &storage_client_memory,
+                                search_transactions_request.clone(),
+                            )
+                            .await;
+                            assert_eq!(result.len(), num_of_transactions_with_account);
+                            let involved_accounts = result[0]
+                                .transaction
+                                .operations
+                                .iter()
+                                .map(|op| op.account.clone().unwrap())
+                                .collect::<Vec<AccountIdentifier>>();
+                            assert!(
+                                involved_accounts.contains(
+                                    &search_transactions_request
                                         .account_identifier
                                         .clone()
                                         .unwrap()
-                                        .try_into()
-                                        .unwrap()
+                                )
+                            );
+
+                            search_transactions_request.account_identifier = Some(
+                                Account {
+                                    owner: ic_base_types::PrincipalId::new_anonymous().into(),
+                                    subaccount: Some([9; 32]),
                                 }
-                                IcrcOperation::Burn { from, spender, .. } => spender
-                                    .map_or(vec![from], |spender| vec![from, spender])
-                                    .contains(
-                                        &search_transactions_request
-                                            .account_identifier
-                                            .clone()
-                                            .unwrap()
-                                            .try_into()
-                                            .unwrap(),
-                                    ),
-                                IcrcOperation::Approve { from, spender, .. } => [from, spender]
-                                    .contains(
-                                        &search_transactions_request
-                                            .account_identifier
-                                            .clone()
-                                            .unwrap()
-                                            .try_into()
-                                            .unwrap(),
-                                    ),
-                            })
-                            .count();
-
-                        let result = traverse_all_transactions(
-                            &storage_client_memory,
-                            search_transactions_request.clone(),
-                        ).await;
-                        assert_eq!(result.len(), num_of_transactions_with_account);
-                        let involved_accounts = result[0]
-                            .transaction
-                            .operations
-                            .iter()
-                            .map(|op| op.account.clone().unwrap())
-                            .collect::<Vec<AccountIdentifier>>();
-                        assert!(
-                            involved_accounts.contains(
-                                &search_transactions_request
-                                    .account_identifier
-                                    .clone()
-                                    .unwrap()
+                                .into(),
+                            );
+                            let result = traverse_all_transactions(
+                                &storage_client_memory,
+                                search_transactions_request.clone(),
                             )
-                        );
+                            .await;
+                            // If the account does not exist the service should return an empty list
+                            assert_eq!(result.len(), 0);
 
-                        search_transactions_request.account_identifier = Some(
-                            Account {
-                                owner: ic_base_types::PrincipalId::new_anonymous().into(),
-                                subaccount: Some([9; 32]),
-                            }
-                            .into(),
-                        );
-                        let result = traverse_all_transactions(
-                            &storage_client_memory,
-                            search_transactions_request.clone(),
-                        ).await;
-                        // If the account does not exist the service should return an empty list
-                        assert_eq!(result.len(), 0);
+                            search_transactions_request = SearchTransactionsRequest {
+                                ..Default::default()
+                            };
 
-                        search_transactions_request = SearchTransactionsRequest {
-                            ..Default::default()
-                        };
-
-                        search_transactions_request.type_ = Some("INVALID_OPS".to_string());
-                        let result = search_transactions(
-                            &storage_client_memory,
-                            search_transactions_request.clone(),
-                            "ICP".to_string(),
-                            8,
-                        ).await;
-                        assert!(result.is_err());
-                    }
+                            search_transactions_request.type_ = Some("INVALID_OPS".to_string());
+                            let result = search_transactions(
+                                &storage_client_memory,
+                                search_transactions_request.clone(),
+                                "ICP".to_string(),
+                                8,
+                            )
+                            .await;
+                            assert!(result.is_err());
+                        }
                     });
                     Ok(())
                 },
@@ -1387,170 +1414,173 @@ mod test {
                 |blockchain| {
                     let rt = tokio::runtime::Runtime::new().unwrap();
                     rt.block_on(async move {
-                    let storage_client_memory = StorageClient::new_in_memory().unwrap();
-                    let mut rosetta_blocks = vec![];
+                        let storage_client_memory = StorageClient::new_in_memory().unwrap();
+                        let mut rosetta_blocks = vec![];
 
-                    let currency = Currency::new("ICP".to_string(), 8);
+                        let currency = Currency::new("ICP".to_string(), 8);
 
-                    // Call on an empty database
-                    let response: QueryBlockRangeResponse = call(
-                        &storage_client_memory,
-                        "query_block_range",
-                        ObjectMap::try_from(QueryBlockRangeRequest {
-                            highest_block_index: 100,
-                            number_of_blocks: 10,
-                        })
-                        .unwrap(),
-                        currency.clone(),
-                    )
-                    .await
-                    .unwrap()
-                    .result
-                    .try_into()
-                    .unwrap();
-                    assert!(response.blocks.is_empty());
-
-                    for (index, block) in blockchain.clone().into_iter().enumerate() {
-                        rosetta_blocks.push(
-                            RosettaBlock::from_generic_block(
-                                encoded_block_to_generic_block(&block.encode()),
-                                index as u64,
-                            )
+                        // Call on an empty database
+                        let response: QueryBlockRangeResponse = call(
+                            &storage_client_memory,
+                            "query_block_range",
+                            ObjectMap::try_from(QueryBlockRangeRequest {
+                                highest_block_index: 100,
+                                number_of_blocks: 10,
+                            })
                             .unwrap(),
-                        );
-                    }
+                            currency.clone(),
+                        )
+                        .await
+                        .unwrap()
+                        .result
+                        .try_into()
+                        .unwrap();
+                        assert!(response.blocks.is_empty());
 
-                    storage_client_memory
-                        .store_blocks(rosetta_blocks.clone())
+                        for (index, block) in blockchain.clone().into_iter().enumerate() {
+                            rosetta_blocks.push(
+                                RosettaBlock::from_generic_block(
+                                    encoded_block_to_generic_block(&block.encode()),
+                                    index as u64,
+                                )
+                                .unwrap(),
+                            );
+                        }
+
+                        storage_client_memory
+                            .store_blocks(rosetta_blocks.clone())
+                            .await
+                            .unwrap();
+                        let highest_block_index = rosetta_blocks.len().saturating_sub(1) as u64;
+                        // Call with 0 numbers of blocks
+                        let response: QueryBlockRangeResponse = call(
+                            &storage_client_memory,
+                            "query_block_range",
+                            ObjectMap::try_from(QueryBlockRangeRequest {
+                                highest_block_index,
+                                number_of_blocks: 0,
+                            })
+                            .unwrap(),
+                            currency.clone(),
+                        )
+                        .await
+                        .unwrap()
+                        .result
+                        .try_into()
+                        .unwrap();
+                        assert!(response.blocks.is_empty());
+
+                        // Call with higher index than there are blocks in the database
+                        let response = call(
+                            &storage_client_memory,
+                            "query_block_range",
+                            ObjectMap::try_from(QueryBlockRangeRequest {
+                                highest_block_index: (rosetta_blocks.len() * 2) as u64,
+                                number_of_blocks: std::cmp::max(
+                                    rosetta_blocks.len() as u64,
+                                    MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST,
+                                ),
+                            })
+                            .unwrap(),
+                            currency.clone(),
+                        )
                         .await
                         .unwrap();
-                    let highest_block_index = rosetta_blocks.len().saturating_sub(1) as u64;
-                    // Call with 0 numbers of blocks
-                    let response: QueryBlockRangeResponse = call(
-                        &storage_client_memory,
-                        "query_block_range",
-                        ObjectMap::try_from(QueryBlockRangeRequest {
-                            highest_block_index,
-                            number_of_blocks: 0,
-                        })
-                        .unwrap(),
-                        currency.clone(),
-                    )
-                    .await
-                    .unwrap()
-                    .result
-                    .try_into()
-                    .unwrap();
-                    assert!(response.blocks.is_empty());
-
-                    // Call with higher index than there are blocks in the database
-                    let response = call(
-                        &storage_client_memory,
-                        "query_block_range",
-                        ObjectMap::try_from(QueryBlockRangeRequest {
-                            highest_block_index: (rosetta_blocks.len() * 2) as u64,
-                            number_of_blocks: std::cmp::max(
-                                rosetta_blocks.len() as u64,
-                                MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST,
-                            ),
-                        })
-                        .unwrap(),
-                        currency.clone(),
-                    )
-                    .await
-                    .unwrap();
-                    let query_block_response: QueryBlockRangeResponse =
-                        response.result.try_into().unwrap();
-                    // If the blocks measured from the highest block index asked for are not in the database the service should return an empty array of blocks
-                    if rosetta_blocks.len() >= MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize {
-                        assert_eq!(query_block_response.blocks.len(), 0);
-                        assert!(!response.idempotent);
-                    }
-                    // If some of the blocks measured from the highest block index asked for are in the database the service should return the blocks that are in the database
-                    else {
-                        if rosetta_blocks.len() * 2
-                            > MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize
+                        let query_block_response: QueryBlockRangeResponse =
+                            response.result.try_into().unwrap();
+                        // If the blocks measured from the highest block index asked for are not in the database the service should return an empty array of blocks
+                        if rosetta_blocks.len() >= MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize
                         {
-                            assert_eq!(
-                                query_block_response.blocks.len(),
-                                rosetta_blocks
-                                    .len()
-                                    .saturating_sub((rosetta_blocks.len() * 2).saturating_sub(
-                                        MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize
-                                    ))
-                                    .saturating_sub(1)
-                            );
-                        } else {
-                            assert_eq!(query_block_response.blocks.len(), rosetta_blocks.len());
+                            assert_eq!(query_block_response.blocks.len(), 0);
+                            assert!(!response.idempotent);
                         }
-                        assert!(!response.idempotent);
-                    }
+                        // If some of the blocks measured from the highest block index asked for are in the database the service should return the blocks that are in the database
+                        else {
+                            if rosetta_blocks.len() * 2
+                                > MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize
+                            {
+                                assert_eq!(
+                                    query_block_response.blocks.len(),
+                                    rosetta_blocks
+                                        .len()
+                                        .saturating_sub((rosetta_blocks.len() * 2).saturating_sub(
+                                            MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize
+                                        ))
+                                        .saturating_sub(1)
+                                );
+                            } else {
+                                assert_eq!(query_block_response.blocks.len(), rosetta_blocks.len());
+                            }
+                            assert!(!response.idempotent);
+                        }
 
-                    let number_of_blocks = (rosetta_blocks.len() / 2) as u64;
-                    let query_blocks_request = QueryBlockRangeRequest {
-                        highest_block_index,
-                        number_of_blocks,
-                    };
+                        let number_of_blocks = (rosetta_blocks.len() / 2) as u64;
+                        let query_blocks_request = QueryBlockRangeRequest {
+                            highest_block_index,
+                            number_of_blocks,
+                        };
 
-                    let query_blocks_response = call(
-                        &storage_client_memory,
-                        "query_block_range",
-                        ObjectMap::try_from(query_blocks_request).unwrap(),
-                        currency.clone(),
-                    )
-                    .await
-                    .unwrap();
-
-                    assert!(query_blocks_response.idempotent);
-                    let response: QueryBlockRangeResponse =
-                        query_blocks_response.result.try_into().unwrap();
-                    let querried_blocks = response.blocks;
-                    assert_eq!(
-                        querried_blocks.len(),
-                        std::cmp::min(number_of_blocks, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST)
-                            as usize
-                    );
-                    if !querried_blocks.is_empty() {
-                        assert_eq!(
-                            querried_blocks.first().unwrap().block_identifier.index,
-                            highest_block_index
-                                .saturating_sub(std::cmp::min(
-                                    number_of_blocks,
-                                    MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST
-                                ))
-                                .saturating_add(1)
-                        );
-                        assert_eq!(
-                            querried_blocks.last().unwrap().block_identifier.index,
-                            highest_block_index
-                        );
-                    }
-
-                    let query_blocks_request = QueryBlockRangeRequest {
-                        highest_block_index,
-                        number_of_blocks: MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST + 1,
-                    };
-
-                    let query_blocks_response: QueryBlockRangeResponse = call(
-                        &storage_client_memory,
-                        "query_block_range",
-                        ObjectMap::try_from(query_blocks_request).unwrap(),
-                        currency.clone(),
-                    )
-                    .await
-                    .unwrap()
-                    .result
-                    .try_into()
-                    .unwrap();
-                    assert_eq!(
-                        query_blocks_response.blocks.len(),
-                        std::cmp::min(
-                            MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize,
-                            rosetta_blocks.len()
+                        let query_blocks_response = call(
+                            &storage_client_memory,
+                            "query_block_range",
+                            ObjectMap::try_from(query_blocks_request).unwrap(),
+                            currency.clone(),
                         )
-                    );
+                        .await
+                        .unwrap();
 
-                    Ok(())
+                        assert!(query_blocks_response.idempotent);
+                        let response: QueryBlockRangeResponse =
+                            query_blocks_response.result.try_into().unwrap();
+                        let querried_blocks = response.blocks;
+                        assert_eq!(
+                            querried_blocks.len(),
+                            std::cmp::min(
+                                number_of_blocks,
+                                MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST
+                            ) as usize
+                        );
+                        if !querried_blocks.is_empty() {
+                            assert_eq!(
+                                querried_blocks.first().unwrap().block_identifier.index,
+                                highest_block_index
+                                    .saturating_sub(std::cmp::min(
+                                        number_of_blocks,
+                                        MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST
+                                    ))
+                                    .saturating_add(1)
+                            );
+                            assert_eq!(
+                                querried_blocks.last().unwrap().block_identifier.index,
+                                highest_block_index
+                            );
+                        }
+
+                        let query_blocks_request = QueryBlockRangeRequest {
+                            highest_block_index,
+                            number_of_blocks: MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST + 1,
+                        };
+
+                        let query_blocks_response: QueryBlockRangeResponse = call(
+                            &storage_client_memory,
+                            "query_block_range",
+                            ObjectMap::try_from(query_blocks_request).unwrap(),
+                            currency.clone(),
+                        )
+                        .await
+                        .unwrap()
+                        .result
+                        .try_into()
+                        .unwrap();
+                        assert_eq!(
+                            query_blocks_response.blocks.len(),
+                            std::cmp::min(
+                                MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST as usize,
+                                rosetta_blocks.len()
+                            )
+                        );
+
+                        Ok(())
                     })
                 },
             )
@@ -2407,7 +2437,8 @@ mod test {
             decimals: u8,
             symbol: &str,
         ) {
-            let result = account_balance(storage, account_id, &None, decimals, symbol.to_string()).await;
+            let result =
+                account_balance(storage, account_id, &None, decimals, symbol.to_string()).await;
             assert!(result.is_ok());
             let balance_response = result.unwrap();
             assert_eq!(balance_response.balances.len(), 1);
