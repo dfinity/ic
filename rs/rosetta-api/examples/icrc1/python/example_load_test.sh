@@ -44,15 +44,15 @@ echo ""
 
 # Scenario 1: Read-only light load test
 echo "=== Scenario 1: Read-only Light Load Test ==="
-echo "Running 5 req/s for 10 seconds (read-only)"
+echo "Running 5 read req/s for 10 seconds"
 echo ""
 
 if [ -n "$READ_CANISTER_IDS" ]; then
     python3 load_generator.py \
         --node-address "$NODE_ADDRESS" \
         --read-canister-ids "$READ_CANISTER_IDS" \
-        --rate 5 \
-        --write-percent 0 \
+        --read-rate 5 \
+        --write-rate 0 \
         --duration 10
     
     echo ""
@@ -62,15 +62,15 @@ fi
 
 # Scenario 2: Read-only moderate load test
 echo "=== Scenario 2: Read-only Moderate Load Test ==="
-echo "Running 20 req/s for 15 seconds (read-only)"
+echo "Running 20 read req/s for 15 seconds"
 echo ""
 
 if [ -n "$READ_CANISTER_IDS" ]; then
     python3 load_generator.py \
         --node-address "$NODE_ADDRESS" \
         --read-canister-ids "$READ_CANISTER_IDS" \
-        --rate 20 \
-        --write-percent 0 \
+        --read-rate 20 \
+        --write-rate 0 \
         --duration 15
     
     echo ""
@@ -81,7 +81,7 @@ fi
 # Scenario 3: Mixed read/write load test (only if private key is provided)
 if [ -n "$WRITE_CANISTER_IDS" ] && [ -n "$PRIVATE_KEY" ] && [ -f "$PRIVATE_KEY" ]; then
     echo "=== Scenario 3: Mixed Read/Write Load Test ==="
-    echo "Running 10 req/s for 20 seconds (90% read, 10% write)"
+    echo "Running 9 read req/s and 1 write req/s for 20 seconds"
     echo ""
     
     # Use read canister IDs if specified, otherwise fall back to write canister IDs for reads
@@ -92,8 +92,8 @@ if [ -n "$WRITE_CANISTER_IDS" ] && [ -n "$PRIVATE_KEY" ] && [ -f "$PRIVATE_KEY" 
         --read-canister-ids "$READ_IDS" \
         --write-canister-ids "$WRITE_CANISTER_IDS" \
         --private-keys "$PRIVATE_KEY" \
-        --rate 10 \
-        --write-percent 10 \
+        --read-rate 9 \
+        --write-rate 1 \
         --duration 20
     
     echo ""

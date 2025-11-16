@@ -3,42 +3,43 @@
 ICRC Rosetta API Load Generator
 
 This script generates configurable load against an ICRC Rosetta instance by running
-read and write tests at a specified rate. It supports:
+read and write tests at specified rates. It supports:
 
 - Read-only tests: account balance queries, block reads, network info
 - Read-write tests: token transfers
-- Configurable request rate and read/write split
+- Separate configurable request rates for reads and writes
+- High throughput support (up to 20000+ req/s)
 - Uniform distribution across canisters and private keys
 - Time-limited or indefinite execution
 - Real-time statistics and reporting
+- Automatic principal tracking from blocks for realistic balance queries
 
 Examples:
-    # Run indefinitely with 10 req/s, 90% read and 10% write
+    # Run indefinitely with 90 read req/s and 10 write req/s
     python3 load_generator.py \\
         --node-address http://localhost:8082 \\
         --read-canister-ids ryjl3-tyaaa-aaaaa-aaaba-cai \\
         --write-canister-ids ryjl3-tyaaa-aaaaa-aaaba-cai \\
         --private-keys ./key1.pem,./key2.pem \\
-        --rate 10 \\
-        --write-percent 10
+        --read-rate 90 \\
+        --write-rate 10
 
-    # Run for 60 seconds with 50 req/s, 100% read
+    # Run for 60 seconds with 50 read req/s, no writes
     python3 load_generator.py \\
         --node-address http://localhost:8082 \\
         --read-canister-ids canister1,canister2,canister3 \\
-        --rate 50 \\
-        --write-percent 0 \\
+        --read-rate 50 \\
+        --write-rate 0 \\
         --duration 60
 
-    # Run with multiple canisters and keys
+    # High throughput: 15000 read req/s and 5000 write req/s
     python3 load_generator.py \\
         --node-address http://localhost:8082 \\
         --read-canister-ids canister1,canister2 \\
-        --write-canister-ids canister3,canister4 \\
-        --private-keys key1.pem,key2.pem,key3.pem \\
-        --rate 20 \\
-        --write-percent 25 \\
-        --duration 300
+        --write-canister-ids canister3 \\
+        --private-keys ./key.pem \\
+        --read-rate 15000 \\
+        --write-rate 5000
 """
 
 import argparse
@@ -154,8 +155,8 @@ class LoadGenerator:
         read_canister_ids,
         write_canister_ids,
         private_keys,
-        rate,
-        write_percent,
+        read_rate,
+        write_rate,
         duration,
         verbose,
     ):
@@ -163,8 +164,8 @@ class LoadGenerator:
         self.read_canister_ids = read_canister_ids
         self.write_canister_ids = write_canister_ids
         self.private_keys = private_keys
-        self.rate = rate
-        self.write_percent = write_percent
+        self.read_rate = read_rate
+        self.write_rate = write_rate
         self.duration = duration
         self.verbose = verbose
         self.stats = LoadGeneratorStats()
@@ -386,20 +387,24 @@ class LoadGenerator:
             if self.verbose:
                 print(f"Write test failed: {e}")
 
-    def worker(self, num_workers):
-        """Worker thread that generates requests"""
+    def read_worker(self, num_workers, target_rate):
+        """Worker thread that generates read requests"""
         # Calculate inter-request delay based on rate and number of workers
         # Each worker handles a fraction of the total rate
-        delay = num_workers / self.rate if self.rate > 0 else 0
+        delay = num_workers / target_rate if target_rate > 0 else 0
 
         while self.running:
-            # Decide whether to do a read or write test
-            if random.random() * 100 < self.write_percent and self.write_clients and self.private_keys:
-                self.run_write_test()
-            else:
-                self.run_read_test()
+            self.run_read_test()
+            time.sleep(delay)
 
-            # Sleep to maintain the desired rate
+    def write_worker(self, num_workers, target_rate):
+        """Worker thread that generates write requests"""
+        # Calculate inter-request delay based on rate and number of workers
+        # Each worker handles a fraction of the total rate
+        delay = num_workers / target_rate if target_rate > 0 else 0
+
+        while self.running:
+            self.run_write_test()
             time.sleep(delay)
 
     def print_stats(self):
@@ -464,10 +469,13 @@ class LoadGenerator:
         self.initialize()
 
         # Validate configuration
-        if self.write_percent > 0 and (not self.write_clients or not self.private_keys):
-            print("Warning: Write percentage > 0 but no write canisters or private keys configured")
+        if self.write_rate > 0 and (not self.write_clients or not self.private_keys):
+            print("Warning: Write rate > 0 but no write canisters or private keys configured")
             print("Only read tests will be executed")
-            self.write_percent = 0
+            self.write_rate = 0
+
+        # Calculate total rate
+        total_rate = self.read_rate + self.write_rate
 
         # Print configuration
         print("\n" + "=" * 80)
@@ -477,23 +485,36 @@ class LoadGenerator:
         print(f"Read Canisters:     {len(self.read_canister_ids)} canister(s)")
         print(f"Write Canisters:    {len(self.write_canister_ids)} canister(s)")
         print(f"Private Keys:       {len(self.private_keys)} key(s)")
-        print(f"Target Rate:        {self.rate} requests/second")
-        print(f"Write Percentage:   {self.write_percent}%")
+        print(f"Read Rate:          {self.read_rate} requests/second")
+        print(f"Write Rate:         {self.write_rate} requests/second")
+        print(f"Total Rate:         {total_rate} requests/second")
         print(
             f"Duration:           {'Indefinite (until CTRL+C)' if self.duration is None else f'{self.duration} seconds'}")
         print("=" * 80)
 
         # Calculate optimal number of workers for parallelism
         # Use 2x the rate to ensure enough parallelism even with high latency requests
-        # Minimum of 4 workers, maximum of 100 to avoid excessive threading overhead
-        num_workers = int(min(100, max(4, self.rate * 2)))
-        print(f"Worker Threads:     {num_workers}")
+        # Minimum of 2 workers per rate type, maximum of 10000 total to support high throughput
+        num_read_workers = int(min(10000, max(2, self.read_rate * 2))) if self.read_rate > 0 else 0
+        num_write_workers = int(min(10000, max(2, self.write_rate * 2))) if self.write_rate > 0 else 0
+        
+        print(f"Read Worker Threads:  {num_read_workers}")
+        print(f"Write Worker Threads: {num_write_workers}")
+        print(f"Total Worker Threads: {num_read_workers + num_write_workers}")
         print("\nStarting load generation... (Press CTRL+C to stop)\n")
 
         # Start worker threads
         workers = []
-        for _ in range(num_workers):
-            t = threading.Thread(target=self.worker, args=(num_workers,), daemon=True)
+        
+        # Start read workers
+        for _ in range(num_read_workers):
+            t = threading.Thread(target=self.read_worker, args=(num_read_workers, self.read_rate), daemon=True)
+            t.start()
+            workers.append(t)
+        
+        # Start write workers
+        for _ in range(num_write_workers):
+            t = threading.Thread(target=self.write_worker, args=(num_write_workers, self.write_rate), daemon=True)
             t.start()
             workers.append(t)
 
@@ -557,17 +578,24 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run indefinitely with 10 req/s, 90%% read and 10%% write
+  # Run indefinitely with 90 read req/s and 10 write req/s
   python3 load_generator.py --node-address http://localhost:8082 \\
       --read-canister-ids ryjl3-tyaaa-aaaaa-aaaba-cai \\
       --write-canister-ids ryjl3-tyaaa-aaaaa-aaaba-cai \\
       --private-keys ./key1.pem,./key2.pem \\
-      --rate 10 --write-percent 10
+      --read-rate 90 --write-rate 10
 
-  # Run for 60 seconds with 50 req/s, 100%% read
+  # Run for 60 seconds with 50 read req/s, no writes
   python3 load_generator.py --node-address http://localhost:8082 \\
       --read-canister-ids canister1,canister2,canister3 \\
-      --rate 50 --write-percent 0 --duration 60
+      --read-rate 50 --write-rate 0 --duration 60
+
+  # High throughput: 15000 read req/s and 5000 write req/s
+  python3 load_generator.py --node-address http://localhost:8082 \\
+      --read-canister-ids canister1,canister2 \\
+      --write-canister-ids canister3 \\
+      --private-keys ./key.pem \\
+      --read-rate 15000 --write-rate 5000
         """,
     )
 
@@ -594,17 +622,17 @@ Examples:
     )
 
     parser.add_argument(
-        "--rate",
+        "--read-rate",
         type=float,
-        required=True,
-        help="Target request rate in requests per second (e.g., 10, 50, 100)",
+        default=0,
+        help="Target read request rate in requests per second (e.g., 10, 50, 100, 10000)",
     )
 
     parser.add_argument(
-        "--write-percent",
+        "--write-rate",
         type=float,
-        default=10,
-        help="Percentage of requests that should be write operations (0-100, default: 10)",
+        default=0,
+        help="Target write request rate in requests per second (e.g., 1, 10, 100, 5000)",
     )
 
     parser.add_argument(
@@ -627,16 +655,24 @@ Examples:
         print("Error: At least one of --read-canister-ids or --write-canister-ids must be specified")
         sys.exit(1)
 
-    if args.write_percent < 0 or args.write_percent > 100:
-        print("Error: --write-percent must be between 0 and 100")
+    if args.read_rate < 0:
+        print("Error: --read-rate must be >= 0")
         sys.exit(1)
 
-    if args.write_percent > 0 and (not write_canister_ids or not private_keys):
-        print("Error: --write-canister-ids and --private-keys are required when --write-percent > 0")
+    if args.write_rate < 0:
+        print("Error: --write-rate must be >= 0")
         sys.exit(1)
 
-    if args.rate <= 0:
-        print("Error: --rate must be greater than 0")
+    if args.read_rate == 0 and args.write_rate == 0:
+        print("Error: At least one of --read-rate or --write-rate must be greater than 0")
+        sys.exit(1)
+
+    if args.read_rate > 0 and not read_canister_ids:
+        print("Error: --read-canister-ids is required when --read-rate > 0")
+        sys.exit(1)
+
+    if args.write_rate > 0 and (not write_canister_ids or not private_keys):
+        print("Error: --write-canister-ids and --private-keys are required when --write-rate > 0")
         sys.exit(1)
 
     if args.duration is not None and args.duration <= 0:
@@ -649,8 +685,8 @@ Examples:
         read_canister_ids=read_canister_ids,
         write_canister_ids=write_canister_ids,
         private_keys=private_keys,
-        rate=args.rate,
-        write_percent=args.write_percent,
+        read_rate=args.read_rate,
+        write_rate=args.write_rate,
         duration=args.duration,
         verbose=args.verbose,
     )
