@@ -322,10 +322,11 @@ class LoadGenerator:
             if self.verbose:
                 print(f"Write test failed: {e}")
 
-    def worker(self):
+    def worker(self, num_workers):
         """Worker thread that generates requests"""
-        # Calculate inter-request delay based on rate
-        delay = 1.0 / self.rate if self.rate > 0 else 0
+        # Calculate inter-request delay based on rate and number of workers
+        # Each worker handles a fraction of the total rate
+        delay = num_workers / self.rate if self.rate > 0 else 0
 
         while self.running:
             # Decide whether to do a read or write test
@@ -408,13 +409,18 @@ class LoadGenerator:
         print(
             f"Duration:           {'Indefinite (until CTRL+C)' if self.duration is None else f'{self.duration} seconds'}")
         print("=" * 80)
+
+        # Calculate optimal number of workers for parallelism
+        # Use 2x the rate to ensure enough parallelism even with high latency requests
+        # Minimum of 4 workers, maximum of 100 to avoid excessive threading overhead
+        num_workers = int(min(100, max(4, self.rate * 2)))
+        print(f"Worker Threads:     {num_workers}")
         print("\nStarting load generation... (Press CTRL+C to stop)\n")
 
-        # Start worker threads (one per logical core for parallelism)
-        num_workers = int(max(1, self.rate // 10))  # Scale workers based on rate
+        # Start worker threads
         workers = []
         for _ in range(num_workers):
-            t = threading.Thread(target=self.worker, daemon=True)
+            t = threading.Thread(target=self.worker, args=(num_workers,), daemon=True)
             t.start()
             workers.append(t)
 
