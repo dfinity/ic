@@ -15,6 +15,10 @@ prometheus:
           - source_labels: [__meta_kubernetes_pod_label_app]
             action: keep
             regex: '.*'
+          # Add the app label to metrics
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: replace
+            target_label: app
           # Use the prometheus.io/port annotation if available
           - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
             action: replace
