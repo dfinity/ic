@@ -32,9 +32,9 @@ use strum_macros::{EnumCount, EnumIter};
 /// but we target this number with merges.
 pub const MAX_NUMBER_OF_FILES: usize = 7;
 
-/// For `get_memory_instructions`, any range with a size of up to that number
-/// of pages will be copied, and larger ranges will be memory mapped instead.
-const MAX_COPY_MEMORY_INSTRUCTION: u64 = u64::MAX;
+// For `get_memory_instructions`, any range with a size of up to that number
+// of pages will be copied, and larger ranges will be memory mapped instead.
+// const MAX_COPY_MEMORY_INSTRUCTION: u64 = u64::MAX;
 
 /// The overlay version used for newly written overlays.
 const CURRENT_OVERLAY_VERSION: OverlayVersion = OverlayVersion::V0;
@@ -263,7 +263,7 @@ impl StorageImpl {
         })?;
         let mut shards_with_overlays = BTreeSet::<Shard>::new();
         let mut range_by_shard = BTreeMap::<Shard, Range<PageIndex>>::new();
-        let mut base_overlays = Vec::<OverlayFile>::new();
+        let base_overlays = Vec::<OverlayFile>::new();
         let mut overlays = Vec::<OverlayFile>::new();
         for path in overlay_paths.iter() {
             let overlay = OverlayFile::load(path)?;
@@ -283,12 +283,14 @@ impl StorageImpl {
                 .or_insert(start_page_index..last_page_index);
             // For each shard the lowest height version is a base, if it can be loaded fast.
             // It can be mmapped fast if it contains a single range, hence one mmap.
-            if false && !shards_with_overlays.contains(&shard) && overlay.index_iter().count() == 1
-            {
-                base_overlays.push(overlay);
-            } else {
-                overlays.push(overlay);
-            }
+            // if base_path.is_none()
+            //     && !shards_with_overlays.contains(&shard)
+            //     && overlay.index_iter().count() == 1
+            // {
+            //     base_overlays.push(overlay);
+            // } else {
+            overlays.push(overlay);
+            // }
             shards_with_overlays.insert(shard);
         }
         for prev_next in range_by_shard.values().collect::<Vec<_>>().windows(2) {
@@ -651,14 +653,16 @@ impl OverlayFile {
                 })
                 .count() as u64;
 
-            if needed_pages > MAX_COPY_MEMORY_INSTRUCTION {
-                // If we need many pages from the `page_index_range`, we mmap the entire range.
-                let offset = page_index_range.start_file_index.get() as usize * PAGE_SIZE;
-                result.push((
-                    page_index_range.start_page..page_index_range.end_page,
-                    MemoryMapOrData::MemoryMap(self.mapping.file_descriptor().clone(), offset),
-                ));
-            } else if needed_pages > 0 {
+            // if needed_pages > MAX_COPY_MEMORY_INSTRUCTION {
+            //     // If we need many pages from the `page_index_range`, we mmap the entire range.
+            //     let offset = page_index_range.start_file_index.get() as usize * PAGE_SIZE;
+            //     result.push((
+            //         page_index_range.start_page..page_index_range.end_page,
+            //         MemoryMapOrData::MemoryMap(self.mapping.file_descriptor().clone(), offset),
+            //     ));
+            // } else
+
+            if needed_pages > 0 {
                 // We copy the needed pages individually.
                 for (page_index, file_index) in page_index_range.iter_page_and_file_indices() {
                     let filter_index = page_index.get() - range.start.get();
