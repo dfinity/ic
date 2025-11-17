@@ -148,13 +148,15 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
         match &secret_key {
             CspSecretKey::TlsEd25519(secret_key_der) => {
-                let secret_key = ic_ed25519::PrivateKey::deserialize_pkcs8(&secret_key_der.bytes)
+                let secret_key = ic_ed25519::PrivateKey::deserialize_pkcs8(secret_key_der.bytes.expose_secret())
                     .map_err(|e| {
                         CspTlsSignError::MalformedSecretKey {
                             error: format!("Failed to convert TLS secret key DER from key store to Ed25519 secret key: {e:?}")
                     }})?;
 
-                let signature_bytes = secret_key.sign_message(message);
+                let signature = secret_key.sign_message(message);
+                let signature_bytes =
+                    ic_crypto_internal_basic_sig_ed25519::types::SignatureBytes(signature);
 
                 Ok(CspSignature::Ed25519(signature_bytes))
             }
