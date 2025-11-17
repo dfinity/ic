@@ -1000,7 +1000,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.2.6",
             ),
             "pem": crate.spec(
-                version = "^1.0.1",
+                version = "^3",
+                features = ["std"],
                 default_features = False,
             ),
             "pin-project-lite": crate.spec(
