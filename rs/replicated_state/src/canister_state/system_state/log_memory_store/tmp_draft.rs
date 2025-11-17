@@ -273,7 +273,21 @@ impl Header {
     }
 
     fn advance_position(&self, position: MemoryPosition, distance: MemorySize) -> MemoryPosition {
-        MemoryPosition::new((position.get() + distance.get()) % self.data_capacity.get())
+        debug_assert!(self.data_capacity.get() > 0);
+        (position + distance) % self.data_capacity
+    }
+
+    fn is_alive(&self, position: MemoryPosition) -> bool {
+        if self.data_size.get() == 0 {
+            return false;
+        }
+        if self.data_head <= self.data_tail {
+            // No wrap.
+            self.data_head <= position && position < self.data_tail
+        } else {
+            // Wraps around.
+            position >= self.data_head || position < self.data_tail
+        }
     }
 }
 
@@ -383,13 +397,8 @@ impl IndexTable {
         entries
     }
 
-    /// Returns the coarse range of memory positions [start, end) for the given filter.
-    pub fn get_coarse_range(
-        &self,
-        filter: Option<Filter>,
-    ) -> Option<(MemoryPosition, MemoryPosition)> {
-        const END_OFFSET: MemorySize = MemorySize::new(1);
-
+    /// Returns the coarse range of index entries [start, end] for the given filter.
+    pub fn get_coarse_range(&self, filter: Option<Filter>) -> Option<(IndexEntry, IndexEntry)> {
         let entries = self.valid_sorted_entries();
         if entries.is_empty() {
             return None;
@@ -397,8 +406,7 @@ impl IndexTable {
 
         if entries.len() == 1 {
             // Only one valid entry means only one record (the front) is in the buffer.
-            let start = entries[0].position;
-            return Some((start, (start + END_OFFSET) % self.data_capacity));
+            return Some((entries[0], entries[0]));
         }
 
         // Below this line there's always at least 2 unique entries covering the full valid range
@@ -431,55 +439,44 @@ impl IndexTable {
                     .collect()
             };
 
-        let clamp_end_by_size =
-            |entries: &Vec<IndexEntry>, size_limit: MemorySize| -> MemoryPosition {
-                let start_position = entries.first().unwrap().position;
-                for entry in entries {
-                    if self.distance(start_position, entry.position) >= size_limit {
-                        return entry.position;
-                    }
+        let clamp_end_by_size = |entries: &Vec<IndexEntry>, size_limit: MemorySize| -> IndexEntry {
+            let start_position = entries.first().unwrap().position;
+            for entry in entries {
+                if self.distance(start_position, entry.position) >= size_limit {
+                    return *entry;
                 }
-                entries.last().unwrap().position
-            };
+            }
+            *entries.last().unwrap()
+        };
 
         let size_limit = RESULT_MAX_SIZE + self.segment_size;
-        let (start_inclusive, end_inclusive) = match filter {
+        let (start, end) = match filter {
             Some(Filter::ByIdx(range)) => {
-                let start_inclusive = find_start_by_key(range.start, |e| e.idx);
-                let end_inclusive = find_end_by_key(range.end, |e| e.idx);
-                let subset = filter_by_idx(&entries, start_inclusive.idx, end_inclusive.idx);
-                (
-                    start_inclusive.position,
-                    clamp_end_by_size(&subset, size_limit),
-                )
+                let start = find_start_by_key(range.start, |e| e.idx);
+                let end = find_end_by_key(range.end, |e| e.idx);
+                let subset = filter_by_idx(&entries, start.idx, end.idx);
+                (start, clamp_end_by_size(&subset, size_limit))
             }
             Some(Filter::ByTimestamp(range)) => {
-                let start_inclusive = find_start_by_key(range.start, |e| e.timestamp);
-                let end_inclusive = find_end_by_key(range.end, |e| e.timestamp);
-                let subset = filter_by_idx(&entries, start_inclusive.idx, end_inclusive.idx);
-                (
-                    start_inclusive.position,
-                    clamp_end_by_size(&subset, size_limit),
-                )
+                let start = find_start_by_key(range.start, |e| e.timestamp);
+                let end = find_end_by_key(range.end, |e| e.timestamp);
+                let subset = filter_by_idx(&entries, start.idx, end.idx);
+                (start, clamp_end_by_size(&subset, size_limit))
             }
             None => {
-                let mut start_inclusive = entries.first().unwrap().position;
-                let end_inclusive = entries.last().unwrap().position;
+                let mut start = entries.first().unwrap();
+                let end = entries.last().unwrap();
                 for entry in entries.iter().rev() {
-                    let distance = self.distance(entry.position, end_inclusive);
-                    start_inclusive = entry.position;
-                    if distance >= size_limit {
+                    start = entry;
+                    if self.distance(entry.position, end.position) >= size_limit {
                         break;
                     }
                 }
-                (start_inclusive, end_inclusive)
+                (*start, *end)
             }
         };
 
-        Some((
-            start_inclusive,
-            (end_inclusive + END_OFFSET) % self.data_capacity,
-        ))
+        Some((start, end))
     }
 
     /// Calculates the distance between two memory positions in the ring buffer.
@@ -487,6 +484,7 @@ impl IndexTable {
         if to >= from {
             to - from // no wrap
         } else {
+            debug_assert!(self.data_capacity.get() > 0);
             (self.data_capacity + to) - from // wrap
         }
     }
@@ -610,12 +608,10 @@ impl StructIO {
 
     pub fn load_index(&self) -> IndexTable {
         let h = self.load_header();
-        let front = if h.data_size.get() > 0 {
-            let pos = h.data_head;
-            Some(IndexEntry::new(pos, &self.load_record_without_content(pos)))
-        } else {
-            None
-        };
+        let pos = h.data_head;
+        let front = self
+            .load_record_without_content(pos)
+            .map(|record| IndexEntry::new(pos, &record));
         let entries = if h.index_entries_count == 0 {
             vec![]
         } else {
@@ -675,28 +671,36 @@ impl StructIO {
         (idx, timestamp, len, position)
     }
 
-    fn load_record_without_content(&self, position: MemoryPosition) -> LogRecord {
-        let (offset, capacity) = (DATA_REGION_OFFSET, self.load_header().data_capacity);
+    fn load_record_without_content(&self, position: MemoryPosition) -> Option<LogRecord> {
+        let h = self.load_header();
+        if !h.is_alive(position) {
+            return None;
+        }
+        let (offset, capacity) = (DATA_REGION_OFFSET, h.data_capacity);
         let (idx, timestamp, len, _position) = self.load_record_header(position, offset, capacity);
-        LogRecord {
+        Some(LogRecord {
             idx,
             timestamp,
             len,
             content: vec![], // Content is not loaded here.
-        }
+        })
     }
 
-    pub fn load_record(&self, position: MemoryPosition) -> LogRecord {
-        let (offset, capacity) = (DATA_REGION_OFFSET, self.load_header().data_capacity);
+    pub fn load_record(&self, position: MemoryPosition) -> Option<LogRecord> {
+        let h = self.load_header();
+        if !h.is_alive(position) {
+            return None;
+        }
+        let (offset, capacity) = (DATA_REGION_OFFSET, h.data_capacity);
         let (idx, timestamp, len, position) = self.load_record_header(position, offset, capacity);
         let (content, _position) =
             self.read_wrapped_vec(position, MemorySize::new(len as u64), offset, capacity);
-        LogRecord {
+        Some(LogRecord {
             idx,
             timestamp,
             len,
             content,
-        }
+        })
     }
 
     pub fn save_record(&self, position: MemoryPosition, record: &LogRecord) {
@@ -935,11 +939,13 @@ impl RingBuffer {
     fn drop_front(&mut self) -> Option<LogRecord> {
         let mut h = self.io.load_header();
         // No need to read the content of log record being removed.
-        let record = self.io.load_record_without_content(h.data_head);
+        let record = self.io.load_record_without_content(h.data_head)?;
         let removed_size = MemorySize::new(record.bytes_len() as u64);
         h.data_head = h.advance_position(h.data_head, removed_size);
         h.data_size = h.data_size.saturating_sub(removed_size);
         self.io.save_header(&h);
+        // No need to update the index here since front entry is never
+        // stored in the PageMap but rather computed on table load.
         Some(record)
     }
 
@@ -952,7 +958,7 @@ impl RingBuffer {
     /// Fetches canister logs according to the optional filter.
     pub fn fetch_canister_logs(&self, filter: Option<Filter>) -> Vec<LogRecord> {
         let index = self.io.load_index();
-        let (start_inclusive, end_exclusive) = match index.get_coarse_range(filter.clone()) {
+        let (start_inclusive, end_inclusive) = match index.get_coarse_range(filter.clone()) {
             Some(range) => range,
             None => return vec![],
         };
@@ -961,11 +967,13 @@ impl RingBuffer {
         let mut records = Vec::new();
 
         // Walk the coarse range collecting all records in order.
-        let mut cur = start_inclusive;
-        while cur < end_exclusive {
-            let record = self.io.load_record(cur);
-            cur = header.advance_position(cur, MemorySize::new(record.bytes_len() as u64));
-            records.push(record);
+        let mut pos = start_inclusive.position;
+        while let Some(record) = self.io.load_record(pos) {
+            if record.idx > end_inclusive.idx {
+                break; // Reached the end of the range.
+            }
+            records.push(record.clone());
+            pos = header.advance_position(pos, MemorySize::new(record.bytes_len() as u64));
         }
 
         match filter {
