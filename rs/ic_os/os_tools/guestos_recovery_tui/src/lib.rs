@@ -1055,6 +1055,78 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                 Style::default().fg(Color::DarkGray),
             )]));
             text.push(Line::from(""));
+
+            // Show error logs on failure
+            // Combine stdout and stderr, with stdout taking precedence (script logs to stdout)
+            let mut all_log_lines = Vec::new();
+
+            // Add all stdout lines (these contain all the log messages from log_message())
+            for line in &stdout_lines {
+                all_log_lines.push(line.clone());
+            }
+
+            // Add stderr lines that aren't duplicates
+            for line in &stderr_lines {
+                if !stdout_lines.contains(line) {
+                    all_log_lines.push(line.clone());
+                }
+            }
+
+            if !all_log_lines.is_empty() {
+                text.push(Line::from(vec![Span::styled(
+                    "Error logs:",
+                    Style::default().fg(Color::Red).bold(),
+                )]));
+                text.push(Line::from(""));
+
+                // Calculate how many lines we can fit in the terminal
+                // Reserve space for: title (1), error message (4-5), logs header (2), "Press any key" (1), borders (2)
+                let available_height = size.height.saturating_sub(11);
+                let lines_to_show = all_log_lines.len().min(available_height as usize);
+
+                // Show the last N lines that fit, or all if they fit
+                let start_idx = if all_log_lines.len() > lines_to_show {
+                    all_log_lines.len() - lines_to_show
+                } else {
+                    0
+                };
+
+                for line in &all_log_lines[start_idx..] {
+                    // Truncate very long lines to fit terminal width (leave some margin for borders)
+                    let max_width = (size.width.saturating_sub(4)) as usize;
+                    let display_line = if line.len() > max_width {
+                        format!("{}...", &line[..max_width.saturating_sub(3)])
+                    } else {
+                        line.clone()
+                    };
+                    text.push(Line::from(format!("  {}", display_line)));
+                }
+
+                // Just show the last N lines that fit, no scroll indicator needed
+            } else if !error_messages.is_empty() {
+                // Show error messages if we have them but no full logs
+                text.push(Line::from(vec![Span::styled(
+                    "Error details:",
+                    Style::default().fg(Color::Red).bold(),
+                )]));
+                text.push(Line::from(""));
+                for error in &error_messages {
+                    let max_width = (size.width.saturating_sub(4)) as usize;
+                    let display_line = if error.len() > max_width {
+                        format!("{}...", &error[..max_width.saturating_sub(3)])
+                    } else {
+                        error.clone()
+                    };
+                    text.push(Line::from(format!("  {}", display_line)));
+                }
+            } else {
+                // If no logs captured, indicate where to look
+                text.push(Line::from(""));
+                text.push(Line::from(
+                    "No error logs captured. Check system logs for details:",
+                ));
+                text.push(Line::from("  journalctl -t guestos-recovery-upgrader"));
+            }
         }
 
         text.push(Line::from(""));
@@ -1076,31 +1148,10 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     teardown_terminal(&mut terminal, use_alternate_screen)?;
 
     if !output.status.success() {
-        let error_summary = if !error_messages.is_empty() {
-            // Show all error messages, not just the last 20
-            format!("\n\nError output:\n{}", error_messages.join("\n"))
-        } else {
-            // If we didn't capture any error messages, show raw stderr/stdout
-            let stderr_str = String::from_utf8_lossy(&output.stderr);
-            let stdout_str = String::from_utf8_lossy(&output.stdout);
-            let mut raw_output = String::new();
-            if !stdout_str.trim().is_empty() {
-                raw_output.push_str(&format!("\n\nStdout:\n{}", stdout_str));
-            }
-            if !stderr_str.trim().is_empty() {
-                raw_output.push_str(&format!("\n\nStderr:\n{}", stderr_str));
-            }
-            if raw_output.is_empty() {
-                "\n\nNo output captured from recovery upgrader. Check system logs with: journalctl -t guestos-recovery-upgrader"
-                    .to_string()
-            } else {
-                raw_output
-            }
-        };
+        // Error details were already shown in the TUI, just return a simple error
         anyhow::bail!(
-            "Recovery upgrader failed with exit code: {:?}{}",
-            output.status.code(),
-            error_summary
+            "Recovery upgrader failed with exit code: {:?}",
+            output.status.code()
         );
     }
 
