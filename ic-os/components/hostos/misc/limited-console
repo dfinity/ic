@@ -3,6 +3,9 @@
 
 source /opt/ic/bin/config.sh
 
+# Disable less shell escapes for security
+export LESSSECURE=1
+
 # Restricted PATH for rbash commands
 # IMPORTANT: /opt/ic/bin/rbash must come FIRST so 'bash' resolves to /opt/ic/bin/rbash/bash (rbash)
 # instead of /bin/bash, preventing shell escape. Standard commands still work via /bin.
@@ -100,7 +103,10 @@ while true; do
         continue
     fi
 
-    # Parse command and arguments
-    read -r cmd args <<< "$command"
-    execute_command "$cmd" $args
+    # Parse command and arguments safely using array to prevent command injection
+    # This safely splits the input while preserving quoted arguments
+    read -ra cmd_array <<< "$command"
+    cmd="${cmd_array[0]}"
+    # Pass remaining arguments as separate array elements to prevent injection
+    execute_command "$cmd" "${cmd_array[@]:1}"
 done
