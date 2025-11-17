@@ -314,9 +314,9 @@ impl App {
 
         let test_size = terminal_guard.get_mut().size()?;
         if let Err(e) = validate_terminal_size(test_size) {
-            let mut term = terminal_guard.terminal.take().unwrap();
-            teardown_terminal(&mut term)?;
-            return Err(e);
+            return Self::teardown_and_error(terminal_guard, e, || {
+                "Terminal size validation failed".to_string()
+            });
         }
 
         execute!(terminal_guard.get_mut().backend_mut(), EnableMouseCapture)
