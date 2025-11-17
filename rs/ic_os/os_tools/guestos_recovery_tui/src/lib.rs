@@ -749,12 +749,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     // Build the command - sudo should pass arguments through correctly
     let mut cmd = build_upgrader_command(params);
 
-    // Debug: Log what we're about to execute (this will help diagnose if params are empty)
-    eprintln!(
-        "DEBUG: Executing recovery with params: version='{}', version_hash='{}', recovery_hash='{}'",
-        params.version, params.version_hash, params.recovery_hash
-    );
-
     let output = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

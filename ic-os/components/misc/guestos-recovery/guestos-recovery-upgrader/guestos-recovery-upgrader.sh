@@ -42,13 +42,9 @@ parse_args() {
     done
 }
 
-# Helper function to log messages to console, serial, logger, and stdout/stderr
+# Helper function to log messages to logger, and stdout/stderr
 log_message() {
     local message="$1"
-
-    # Write to console and serial (for system visibility)
-    echo "$message" >/dev/tty1 2>/dev/null || true
-    echo "$message" >/dev/ttyS0 2>/dev/null || true
     # Write to system logger
     logger -t guestos-recovery-upgrader "$message" 2>/dev/null || true
     # Write to stdout so the TUI can capture it
@@ -280,7 +276,7 @@ main() {
     VERSION_HASH=""
     RECOVERY_HASH=""
     parse_args "$@"
-    
+
     # Debug: Log parsed values
     log_message "Parsed VERSION='$VERSION' VERSION_HASH='$VERSION_HASH' RECOVERY_HASH='$RECOVERY_HASH'"
 
