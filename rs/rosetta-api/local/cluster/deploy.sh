@@ -202,8 +202,12 @@ helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q kube-promet
     helm install kube-prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace --kube-context="$MINIKUBE_PROFILE"
 }
 
-# Wait for kube-prometheus-stack to be ready
-echo "Waiting for kube-prometheus-stack to be ready..."
+# Wait for kube-prometheus-stack operator to be ready first
+echo "Waiting for kube-prometheus-stack operator to be ready..."
+wait_for_ready pod app=kube-prometheus-stack-operator monitoring 300
+
+# Wait for Prometheus to be ready
+echo "Waiting for Prometheus to be ready..."
 wait_for_ready pod app.kubernetes.io/name=prometheus monitoring 300
 
 # Forward Prometheus port if not already forwarded
