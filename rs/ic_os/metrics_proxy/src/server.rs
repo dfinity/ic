@@ -155,7 +155,7 @@ impl Server {
                 router
             }
             ServerKind::PrometheusMetricsServer(_) => match self.metrics_collector.clone() {
-                Some(pl) => router.route_layer(pl),
+                Some(pl) => router.layer(pl),
                 None => router,
             },
         };

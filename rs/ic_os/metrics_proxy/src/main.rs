@@ -1,5 +1,7 @@
 use axum_otel_metrics::{HttpMetricsLayerBuilder, PathSkipper};
 use clap::Parser;
+use opentelemetry::global;
+use opentelemetry_sdk::metrics::SdkMeterProvider;
 use std::sync::Arc;
 use tokio::task::JoinSet;
 
@@ -7,6 +9,19 @@ use tokio::task::JoinSet;
 #[command(author, version, about, long_about = None)]
 struct MetricsProxyArgs {
     config: std::path::PathBuf,
+}
+
+fn configure_metrics_provider() -> SdkMeterProvider {
+    let registry = prometheus::Registry::new();
+    let exporter = opentelemetry_prometheus::exporter()
+        .with_registry(registry)
+        .build()
+        .unwrap();
+
+    let provider = SdkMeterProvider::builder().with_reader(exporter).build();
+
+    global::set_meter_provider(provider.clone());
+    provider
 }
 
 pub async fn run() {
@@ -20,11 +35,14 @@ pub async fn run() {
 
     simple_logger::init_with_level(log::Level::Info).unwrap();
 
+    let meter_provider = configure_metrics_provider();
+
     let cfg = maybecfg.unwrap();
     let mut telemetry = cfg.metrics.clone().map(|listener| {
         (
             listener,
             HttpMetricsLayerBuilder::new()
+                .with_provider(meter_provider)
                 .with_skipper(PathSkipper::new_with_fn(Arc::new(move |_: &str| false)))
                 .build(),
         )
