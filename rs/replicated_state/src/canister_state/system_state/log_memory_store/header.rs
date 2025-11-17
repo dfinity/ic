@@ -30,7 +30,7 @@ impl Header {
             version: 1,
             magic: *MAGIC,
 
-            index_table_pages: INDEX_TABLE_PAGES,
+            index_table_pages: INDEX_TABLE_PAGES as u16,
             index_entries_count: 0,
 
             data_offset: DATA_REGION_OFFSET,
