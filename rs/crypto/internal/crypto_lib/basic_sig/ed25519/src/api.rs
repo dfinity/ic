@@ -111,34 +111,6 @@ pub fn secret_key_to_pkcs8_v1_der(sk: &types::SecretKeyBytes) -> SecretBytes {
     SecretBytes::new(der)
 }
 
-/// Serializes an Ed25519 key pair to PKCS8 v2 format in DER encoding (RFC 5958).
-/// The serialization includes both the secret and the public key.
-pub fn secret_key_to_pkcs8_v2_der(
-    sk: &types::SecretKeyBytes,
-    pk: &types::PublicKeyBytes,
-) -> SecretBytes {
-    // Prefixing the following bytes to the secret key.
-    let mut der_sk = vec![
-        48, 83, // A sequence of 83 bytes follows.
-        2, 1, // An integer denoting version
-        1, // 0 if secret key only, 1 if public key is also present
-        48, 5, // An element of 5 bytes follows
-        6, 3, 43, 101, 112, // The OID
-        4, 34, // An octet string of 34 bytes follows.
-        4, 32, // An octet string of 32 bytes follows.
-    ];
-    der_sk.extend_from_slice(sk.0.expose_secret());
-
-    // Prefixing the following bytes to the public key.
-    der_sk.extend_from_slice(&[
-        161, 35, // An explicitly tagged with 35 bytes.
-        3, 33, // A bitstring of 33 bytes follows.
-        0,  // The bitstring (32 bytes) is divisible by 8
-    ]);
-    der_sk.extend_from_slice(&pk.0);
-    SecretBytes::new(der_sk)
-}
-
 /// Signs a message with an Ed25519 secret key.
 ///
 /// # Errors

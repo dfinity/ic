@@ -25,7 +25,7 @@ mod serialization {
     use crate::types::{PublicKeyBytes, SecretKeyBytes};
     use crate::{
         KeyDecodingError, public_key_from_der, secret_key_from_pkcs8_v1_der,
-        secret_key_to_pkcs8_v1_der, secret_key_to_pkcs8_v2_der,
+        secret_key_to_pkcs8_v1_der,
     };
     use assert_matches::assert_matches;
     use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;
@@ -119,33 +119,6 @@ mod serialization {
         let sk_der = secret_key_to_pkcs8_v1_der(&sk_bytes);
 
         assert_eq!(sk_der, sk_expected);
-    }
-
-    #[test]
-    fn should_correctly_encode_sk_as_pkcs8_v2_der() {
-        let sk_raw = [
-            23, 222, 179, 132, 243, 182, 175, 46, 55, 255, 145, 82, 212, 63, 65, 46, 184, 145, 149,
-            235, 110, 217, 184, 26, 140, 179, 27, 0, 1, 223, 93, 27,
-        ];
-        let pk_raw = [
-            166, 67, 137, 39, 17, 63, 64, 114, 183, 163, 58, 74, 233, 230, 14, 103, 51, 197, 76,
-            214, 93, 201, 74, 166, 220, 49, 145, 172, 32, 154, 60, 17,
-        ];
-        let sk_pkcs8_v2_der = [
-            48, 83, 2, 1, 1, 48, 5, 6, 3, 43, 101, 112, 4, 34, 4, 32, 23, 222, 179, 132, 243, 182,
-            175, 46, 55, 255, 145, 82, 212, 63, 65, 46, 184, 145, 149, 235, 110, 217, 184, 26, 140,
-            179, 27, 0, 1, 223, 93, 27, 161, 35, 3, 33, 0, 166, 67, 137, 39, 17, 63, 64, 114, 183,
-            163, 58, 74, 233, 230, 14, 103, 51, 197, 76, 214, 93, 201, 74, 166, 220, 49, 145, 172,
-            32, 154, 60, 17,
-        ];
-
-        let sk = SecretKeyBytes(SecretArray::new_and_dont_zeroize_argument(&sk_raw));
-        let pk = PublicKeyBytes(pk_raw);
-
-        assert_eq!(
-            secret_key_to_pkcs8_v2_der(&sk, &pk),
-            SecretBytes::new(sk_pkcs8_v2_der.to_vec())
-        );
     }
 
     // TODO(CRP-616) Add more failure tests with corrupted DER-keys.
