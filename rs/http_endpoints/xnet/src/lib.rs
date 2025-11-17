@@ -198,7 +198,7 @@ fn start_server(
     metrics: Arc<XNetEndpointMetrics>,
     certified_stream_store: Arc<impl CertifiedStreamStore + 'static>,
     runtime_handle: runtime::Handle,
-    tls: Arc<impl TlsConfig + Send + Sync + 'static>,
+    tls: Arc<impl TlsConfig + 'static>,
     registry_client: Arc<impl RegistryClient + 'static>,
     log: ReplicaLogger,
     shutdown_notify: Arc<Notify>,
@@ -308,7 +308,7 @@ impl XNetEndpoint {
     pub fn new(
         runtime_handle: runtime::Handle,
         certified_stream_store: Arc<impl CertifiedStreamStore + 'static>,
-        tls: Arc<impl TlsConfig + Send + Sync + 'static>,
+        tls: Arc<impl TlsConfig + 'static>,
         registry_client: Arc<impl RegistryClient + 'static>,
         config: Config,
         metrics: &MetricsRegistry,

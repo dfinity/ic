@@ -30,10 +30,10 @@ use ic_nns_governance_api::{
     Governance as ApiGovernanceProto, GovernanceError, ListKnownNeuronsResponse,
     ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
     ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListNodeProvidersResponse,
-    ListProposalInfo, ListProposalInfoResponse, ManageNeuronCommandRequest, ManageNeuronRequest,
-    ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, Neuron, NeuronIndexData,
-    NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary, RewardEvent,
-    SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
+    ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics,
+    Neuron, NeuronIndexData, NeuronInfo, NodeProvider, Proposal, ProposalInfo, RestoreAgingSummary,
+    RewardEvent, SettleCommunityFundParticipation, SettleNeuronsFundParticipationRequest,
     SettleNeuronsFundParticipationResponse, UpdateNodeProvider, Vote,
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
     governance::GovernanceCachedMetrics,
@@ -366,9 +366,9 @@ fn get_pending_proposals() -> Vec<ProposalInfo> {
 }
 
 #[query]
-fn list_proposals(req: ListProposalInfo) -> ListProposalInfoResponse {
+fn list_proposals(req: ListProposalInfoRequest) -> ListProposalInfoResponse {
     debug_log("list_proposals");
-    with_governance(|governance| governance.list_proposals(&caller(), &req.into()))
+    with_governance(|governance| governance.list_proposals(&caller(), req))
 }
 
 #[query]

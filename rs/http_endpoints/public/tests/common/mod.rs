@@ -378,7 +378,7 @@ pub struct HttpEndpointBuilder {
     registry_client: Arc<dyn RegistryClient>,
     delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
     certified_height: Option<Height>,
     ingress_pool_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_channel_capacity: usize,
@@ -437,7 +437,7 @@ impl HttpEndpointBuilder {
         self
     }
 
-    pub fn with_tls_config(mut self, tls_config: impl TlsConfig + Send + Sync + 'static) -> Self {
+    pub fn with_tls_config(mut self, tls_config: impl TlsConfig + 'static) -> Self {
         self.tls_config = Arc::new(tls_config);
         self
     }

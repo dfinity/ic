@@ -4,11 +4,11 @@ use ic_interfaces_registry::RegistryClient;
 use std::sync::Arc;
 
 /// A crypto component that should only be used for verification.
-pub trait CryptoComponentForVerificationOnly: Crypto + Send + Sync {}
+pub trait CryptoComponentForVerificationOnly: Crypto {}
 
 // Blanket implementation of `CryptoComponentForVerificationOnly` for all types
 // that fulfill the requirements.
-impl<T> CryptoComponentForVerificationOnly for T where T: Crypto + Send + Sync {}
+impl<T> CryptoComponentForVerificationOnly for T where T: Crypto {}
 
 /// Returns a crypto component that should only be used for verification.
 ///

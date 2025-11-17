@@ -1,0 +1,17 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "utils",
+    srcs = ["src/lib.rs"],
+    crate_name = "messaging_test_utils",
+    version = "0.1.0",
+    deps = [
+        # Keep sorted
+        "//rs/rust_canisters/messaging_test",
+        "//rs/types/types",
+        "@crate_index//:candid",
+        "@crate_index//:proptest",
+    ],
+)

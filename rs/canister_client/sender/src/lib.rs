@@ -238,9 +238,3 @@ pub fn ed25519_public_key_to_der(mut key: Vec<u8>) -> Vec<u8> {
     encoded.append(&mut key);
     encoded
 }
-
-pub fn ed25519_public_key_from_der(mut key_der: Vec<u8>) -> Vec<u8> {
-    assert!(key_der.len() > 12);
-    key_der.drain(0..12);
-    key_der
-}
