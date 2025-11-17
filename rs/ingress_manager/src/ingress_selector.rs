@@ -161,10 +161,10 @@ impl IngressSelector for IngressManager {
                 // For a given canister, add valid ingress messsages until quota is met
                 let queue = &mut canister_queues.get_mut(&canister_id).unwrap();
                 while let Some(msg) = queue.msgs.last() {
-                    let ingress = &msg.msg.signed_ingress;
+                    let ingress = &msg.msg;
                     let result = self.validate_ingress(
                         IngressMessageId::from(ingress),
-                        ingress,
+                        &ingress.signed_ingress,
                         &state,
                         context,
                         &settings,
@@ -244,7 +244,11 @@ impl IngressSelector for IngressManager {
         // In the improbable case, that the deserialized form fits the size limit but the
         // serialized form does not, we need to remove some `SignedIngress` and try again.
         let payload = loop {
-            let payload = IngressPayload::from_iter(messages_in_payload.iter().copied());
+            let payload = IngressPayload::from_iter(
+                messages_in_payload
+                    .iter()
+                    .map(|ingress| (IngressMessageId::from(*ingress), &ingress.signed_ingress)),
+            );
             let payload_size = payload.count_bytes();
             if payload_size < byte_limit.get() as usize {
                 break payload;
