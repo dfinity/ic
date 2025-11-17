@@ -274,19 +274,31 @@ impl Header {
 
     fn advance_position(&self, position: MemoryPosition, distance: MemorySize) -> MemoryPosition {
         debug_assert!(self.data_capacity.get() > 0);
+        debug_assert!(distance.get() > 0);
         (position + distance) % self.data_capacity
     }
 
+    fn is_empty(&self) -> bool {
+        if self.data_head == self.data_tail {
+            // If head == tail, the buffer is empty only if size is zero.
+            self.data_size.get() == 0
+        } else {
+            false
+        }
+    }
+
     fn is_alive(&self, position: MemoryPosition) -> bool {
-        if self.data_size.get() == 0 {
+        if self.is_empty() {
             return false;
         }
-        if self.data_head <= self.data_tail {
-            // No wrap.
+        if self.data_head < self.data_tail {
+            // No wrap, position is in [head, tail)
             self.data_head <= position && position < self.data_tail
         } else {
-            // Wraps around.
-            position >= self.data_head || position < self.data_tail
+            // Wraps around, position is in [0, tail) or [head, capacity)
+            position < self.data_tail
+                || (self.data_head <= position
+                    && position < MemoryPosition::new(self.data_capacity.get()))
         }
     }
 }
@@ -950,6 +962,7 @@ impl RingBuffer {
     }
 
     fn update_index(&self, position: MemoryPosition, record: &LogRecord) {
+        // TODO: optimize for loading lots of records in a row.
         let mut index = self.io.load_index();
         index.update(position, record);
         self.io.save_index(index);
