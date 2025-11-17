@@ -21,22 +21,6 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-// Check if we're likely in a web console by checking TERM
-// Web consoles often use basic terminal types that don't support alternate screen well
-// Note: "linux" is commonly used by VGA consoles which DO support TUI, so we don't exclude it
-fn is_likely_web_console() -> bool {
-    // Check TERM environment variable
-    if let Ok(term) = std::env::var("TERM") {
-        // "dumb" is a non-interactive terminal that definitely won't work
-        // "vt100" might work but is often used by web consoles
-        // "linux" is used by VGA consoles which support TUI, so we allow it
-        if term == "dumb" {
-            return true;
-        }
-        // For other basic terminals, we'll let the TUI setup try and fail gracefully
-    }
-    false
-}
 
 // Test if we can actually write to the terminal and see output
 fn test_terminal_output() -> Result<()> {
