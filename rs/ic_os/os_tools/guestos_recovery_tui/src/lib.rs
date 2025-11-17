@@ -646,39 +646,6 @@ fn extract_errors_from_logs(stdout_lines: &[String], stderr_lines: &[String]) ->
     }
 }
 
-/// Query journalctl for errors (fallback when process output has none)
-fn extract_errors_from_journalctl(start_time: u64) -> Result<Vec<String>> {
-    let journalctl_output = Command::new("journalctl")
-        .arg("-t")
-        .arg("guestos-recovery-upgrader")
-        .arg("--since")
-        .arg(format!("@{}", start_time))
-        .arg("--no-pager")
-        .arg("-o")
-        .arg("cat")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()?;
-
-    let journalctl_lines = parse_log_lines(&journalctl_output.stdout);
-
-    // Try explicit errors first, then fallback to last N lines
-    let journal_errors: Vec<String> = journalctl_lines
-        .iter()
-        .filter(|line| is_error_line(line))
-        .cloned()
-        .collect();
-
-    if !journal_errors.is_empty() {
-        Ok(journal_errors)
-    } else if !journalctl_lines.is_empty() {
-        let start = journalctl_lines.len().saturating_sub(MAX_ERROR_LINES);
-        Ok(journalctl_lines[start..].to_vec())
-    } else {
-        Ok(Vec::new())
-    }
-}
-
 fn truncate_line(line: &str, max_width: usize) -> String {
     if line.len() > max_width {
         format!("{}...", &line[..max_width.saturating_sub(3)])
@@ -844,11 +811,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         f.render_widget(para, size);
     })?;
 
-    let start_time = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs();
-
     if params.version.is_empty() || params.version_hash.is_empty() {
         anyhow::bail!("Invalid parameters: version and version-hash must be non-empty");
     }
@@ -986,16 +948,11 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     let stderr_lines = parse_log_lines(&output.stderr);
 
     let success_message = detect_success_message(&stdout_lines);
-    let mut error_messages = if output.status.success() {
+    let error_messages = if output.status.success() {
         Vec::new()
     } else {
         extract_errors_from_logs(&stdout_lines, &stderr_lines)
     };
-
-    // Fallback to journalctl if no errors found
-    if error_messages.is_empty() && !output.status.success() {
-        error_messages = extract_errors_from_journalctl(start_time)?;
-    }
 
     let success = output.status.success();
     terminal_guard.get_mut().draw(|f| {
