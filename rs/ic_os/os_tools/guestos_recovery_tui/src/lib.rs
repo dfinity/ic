@@ -15,7 +15,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Read};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -609,6 +609,28 @@ fn parse_log_lines(bytes: &[u8]) -> Vec<String> {
         .collect()
 }
 
+/// Spawns a thread to read lines from a stream and append them to a shared log buffer
+fn spawn_log_reader_thread<R>(
+    stream: R,
+    log_lines: Arc<Mutex<Vec<String>>>,
+) -> thread::JoinHandle<()>
+where
+    R: Read + Send + 'static,
+{
+    thread::spawn(move || {
+        let reader = BufReader::new(stream);
+        for line in reader.lines() {
+            match line {
+                Ok(line) => {
+                    let mut logs = log_lines.lock().unwrap();
+                    logs.push(line);
+                }
+                Err(_) => break,
+            }
+        }
+    })
+}
+
 fn calculate_log_viewport(total_lines: usize, available_height: usize) -> (usize, usize) {
     let lines_to_show = total_lines.min(available_height);
     let start_idx = total_lines.saturating_sub(lines_to_show);
@@ -841,8 +863,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     let mut child = cmd.spawn().context("Failed to spawn recovery upgrader")?;
 
     let log_lines = Arc::new(Mutex::new(Vec::<String>::new()));
-    let log_lines_stdout = Arc::clone(&log_lines);
-    let log_lines_stderr = Arc::clone(&log_lines);
 
     let stdout = child
         .stdout
@@ -853,31 +873,8 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         .take()
         .ok_or_else(|| anyhow::anyhow!("Failed to get stderr handle"))?;
 
-    let stdout_handle = thread::spawn(move || {
-        let reader = BufReader::new(stdout);
-        for line in reader.lines() {
-            match line {
-                Ok(line) => {
-                    let mut logs = log_lines_stdout.lock().unwrap();
-                    logs.push(line);
-                }
-                Err(_) => break,
-            }
-        }
-    });
-
-    let stderr_handle = thread::spawn(move || {
-        let reader = BufReader::new(stderr);
-        for line in reader.lines() {
-            match line {
-                Ok(line) => {
-                    let mut logs = log_lines_stderr.lock().unwrap();
-                    logs.push(line);
-                }
-                Err(_) => break,
-            }
-        }
-    });
+    let stdout_handle = spawn_log_reader_thread(stdout, Arc::clone(&log_lines));
+    let stderr_handle = spawn_log_reader_thread(stderr, Arc::clone(&log_lines));
 
     let mut last_log_count = 0;
     let status = loop {
