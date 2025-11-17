@@ -321,6 +321,8 @@ main() {
     log_message "Recovery Upgrader completed successfully"
 
     log_message "Launching GuestOS on the new version..."
+    systemctl restart guestos.service
+    log_message "GuestOS service restart initiated"
 }
 
 main "$@"
