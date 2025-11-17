@@ -54,7 +54,7 @@ pub mod turmoil;
 pub fn temp_crypto_component_with_tls_keys(
     registry_and_data: &RegistryConsensusHandle,
     node_id: NodeId,
-) -> Arc<dyn TlsConfig + Send + Sync> {
+) -> Arc<dyn TlsConfig> {
     TempCryptoComponent::builder()
         .with_registry_client_and_data(
             registry_and_data.registry_client.clone(),
