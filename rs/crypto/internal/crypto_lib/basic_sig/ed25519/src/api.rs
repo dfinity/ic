@@ -1,7 +1,7 @@
 //! API for Ed25519 basic signature
 use super::types;
 use ic_crypto_internal_basic_sig_der_utils as der_utils;
-use ic_crypto_secrets_containers::{SecretArray};
+use ic_crypto_secrets_containers::SecretArray;
 use ic_types::crypto::{AlgorithmId, CryptoError, CryptoResult};
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;

@@ -140,7 +140,9 @@ impl KeyPair {
     /// `rustls::sign::any_ecdsa_type`.
     pub fn serialize_for_rustls(&self) -> Vec<u8> {
         match self {
-            KeyPair::Ed25519 { secret_key, .. } => secret_key.serialize_pkcs8(ic_ed25519::PrivateKeyFormat::Pkcs8v2),
+            KeyPair::Ed25519 { secret_key, .. } => {
+                secret_key.serialize_pkcs8(ic_ed25519::PrivateKeyFormat::Pkcs8v2)
+            }
             KeyPair::Secp256r1 { secret_key, .. } => secret_key.serialize_rfc5915_der(),
         }
     }

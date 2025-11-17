@@ -22,7 +22,7 @@ mod keygen {
 }
 
 mod serialization {
-    use crate::{public_key_from_der};
+    use crate::public_key_from_der;
 
     // Example DER-pk from https://tools.ietf.org/html/rfc8410#section-10.1
     const PK_DER_BASE64: &str = "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE";
