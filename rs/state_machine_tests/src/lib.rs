@@ -4691,7 +4691,10 @@ pub fn certify_latest_state_helper(
         state_manager
             .deliver_state_certification(certify_hash(secret_key, subnet_id, height, hash));
     }
-    assert_eq!(state_manager.latest_certified_height(), state_manager.latest_state_height());
+    assert_eq!(
+        state_manager.latest_certified_height(),
+        state_manager.latest_state_height()
+    );
 }
 
 fn certify_hash(
