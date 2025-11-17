@@ -486,7 +486,7 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 /// Set the list of subnets in which a principal is allowed to create
 /// canisters. If `subnets` is empty, remove the mapping for a
 /// principal. If `who` is None, set the default list of subnets.
-#[update(hidden = true)]
+#[update]
 fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
     let SetAuthorizedSubnetworkListArgs { who, subnets } = arg;
     with_state_mut(|state| {
@@ -533,7 +533,7 @@ fn set_authorized_subnetwork_list(arg: SetAuthorizedSubnetworkListArgs) {
     });
 }
 
-#[update(hidden = true, manual_reply = true)]
+#[update(manual_reply = true)]
 fn update_subnet_type(args: UpdateSubnetTypeArgs) {
     match do_update_subnet_type(args) {
         Ok(response) => ManualReply::<()>::one(response),
@@ -604,7 +604,7 @@ fn remove_subnet_type(subnet_type: String) -> UpdateSubnetTypeResult {
     })
 }
 
-#[update(hidden = true, manual_reply = true)]
+#[update(manual_reply = true)]
 fn change_subnet_type_assignment(args: ChangeSubnetTypeAssignmentArgs) {
     match do_change_subnet_type_assignment(args) {
         Ok(response) => ManualReply::<()>::one(response),

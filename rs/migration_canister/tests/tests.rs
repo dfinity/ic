@@ -24,8 +24,8 @@ pub const MIGRATION_CANISTER_ID: CanisterId = CanisterId::from_u64(17);
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 struct MigrateCanisterArgs {
-    pub source: Principal,
-    pub target: Principal,
+    pub canister_id: Principal,
+    pub replace_canister_id: Principal,
 }
 
 #[derive(CandidType, Deserialize, Default)]
@@ -401,9 +401,16 @@ async fn migration_succeeds() {
         CanisterChangeDetails::CanisterCodeDeployment(_)
     ));
 
-    migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target })
-        .await
-        .unwrap();
+    migrate_canister(
+        &pic,
+        sender,
+        &MigrateCanisterArgs {
+            canister_id: source,
+            replace_canister_id: target,
+        },
+    )
+    .await
+    .unwrap();
 
     let mut logs = Logs::default();
 
@@ -562,12 +569,12 @@ async fn concurrent_migration_source() {
     let target2 = targets[1];
 
     let args1 = MigrateCanisterArgs {
-        source,
-        target: target1,
+        canister_id: source,
+        replace_canister_id: target1,
     };
     let args2 = MigrateCanisterArgs {
-        source,
-        target: target2,
+        canister_id: source,
+        replace_canister_id: target2,
     };
     concurrent_migration(&pic, sender, args1, args2, source).await;
 }
@@ -592,12 +599,12 @@ async fn concurrent_migration_target() {
     let target = targets[0];
 
     let args1 = MigrateCanisterArgs {
-        source: source1,
-        target,
+        canister_id: source1,
+        replace_canister_id: target,
     };
     let args2 = MigrateCanisterArgs {
-        source: source2,
-        target,
+        canister_id: source2,
+        replace_canister_id: target,
     };
     concurrent_migration(&pic, sender, args1, args2, target).await;
 }
@@ -620,8 +627,15 @@ async fn validation_fails_not_allowlisted() {
     let source = sources[0];
     let target = targets[0];
 
-    let Err(ValidationError::MigrationsDisabled(Reserved)) =
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
+    let Err(ValidationError::MigrationsDisabled(Reserved)) = migrate_canister(
+        &pic,
+        sender,
+        &MigrateCanisterArgs {
+            canister_id: source,
+            replace_canister_id: target,
+        },
+    )
+    .await
     else {
         panic!()
     };
@@ -629,7 +643,10 @@ async fn validation_fails_not_allowlisted() {
     migrate_canister(
         &pic,
         special_caller,
-        &MigrateCanisterArgs { source, target },
+        &MigrateCanisterArgs {
+            canister_id: source,
+            replace_canister_id: target,
+        },
     )
     .await
     .unwrap();
@@ -656,8 +673,8 @@ async fn validation_fails_not_found() {
         &pic,
         sender,
         &MigrateCanisterArgs {
-            source: nonexistent_canister,
-            target,
+            canister_id: nonexistent_canister,
+            replace_canister_id: target,
         },
     )
     .await
@@ -670,8 +687,8 @@ async fn validation_fails_not_found() {
         &pic,
         sender,
         &MigrateCanisterArgs {
-            source,
-            target: nonexistent_canister,
+            canister_id: source,
+            replace_canister_id: nonexistent_canister,
         },
     )
     .await
@@ -696,8 +713,8 @@ async fn validation_fails_same_canister() {
         &pic,
         sender,
         &MigrateCanisterArgs {
-            source,
-            target: source,
+            canister_id: source,
+            replace_canister_id: source,
         },
     )
     .await
@@ -732,8 +749,15 @@ async fn validation_fails_same_subnet() {
         )
         .await;
 
-    let Err(ValidationError::SameSubnet(Reserved)) =
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
+    let Err(ValidationError::SameSubnet(Reserved)) = migrate_canister(
+        &pic,
+        sender,
+        &MigrateCanisterArgs {
+            canister_id: source,
+            replace_canister_id: target,
+        },
+    )
+    .await
     else {
         panic!()
     };
@@ -753,8 +777,15 @@ async fn validation_fails_caller_not_controller() {
     let bad_sender = target_controllers[1];
     let source = sources[0];
     let target = targets[0];
-    let Err(ValidationError::CallerNotController { canister }) =
-        migrate_canister(&pic, bad_sender, &MigrateCanisterArgs { source, target }).await
+    let Err(ValidationError::CallerNotController { canister }) = migrate_canister(
+        &pic,
+        bad_sender,
+        &MigrateCanisterArgs {
+            canister_id: source,
+            replace_canister_id: target,
+        },
+    )
+    .await
     else {
         panic!()
     };
@@ -762,8 +793,15 @@ async fn validation_fails_caller_not_controller() {
 
     // sender not controller of target
     let bad_sender = source_controllers[1];
-    let Err(ValidationError::CallerNotController { canister }) =
-        migrate_canister(&pic, bad_sender, &MigrateCanisterArgs { source, target }).await
+    let Err(ValidationError::CallerNotController { canister }) = migrate_canister(
+        &pic,
+        bad_sender,
+        &MigrateCanisterArgs {
+            canister_id: source,
+            replace_canister_id: target,
+        },
+    )
+    .await
     else {
         panic!()
     };
@@ -787,8 +825,15 @@ async fn validation_fails_mc_not_source_controller() {
     let sender = source_controllers[0];
     let source = sources[0];
     let target = targets[0];
-    let Err(ValidationError::NotController { canister }) =
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
+    let Err(ValidationError::NotController { canister }) = migrate_canister(
+        &pic,
+        sender,
+        &MigrateCanisterArgs {
+            canister_id: source,
+            replace_canister_id: target,
+        },
+    )
+    .await
     else {
         panic!()
     };
@@ -812,8 +857,15 @@ async fn validation_fails_mc_not_target_controller() {
     let sender = source_controllers[0];
     let source = sources[0];
     let target = targets[0];
-    let Err(ValidationError::NotController { canister }) =
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await
+    let Err(ValidationError::NotController { canister }) = migrate_canister(
+        &pic,
+        sender,
+        &MigrateCanisterArgs {
+            canister_id: source,
+            replace_canister_id: target,
+        },
+    )
+    .await
     else {
         panic!()
     };
@@ -836,7 +888,15 @@ async fn validation_fails_not_stopped() {
     // source
     pic.start_canister(source, Some(sender)).await.unwrap();
     assert!(matches!(
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
+        migrate_canister(
+            &pic,
+            sender,
+            &MigrateCanisterArgs {
+                canister_id: source,
+                replace_canister_id: target
+            }
+        )
+        .await,
         Err(ValidationError::SourceNotStopped(Reserved))
     ));
 
@@ -845,7 +905,15 @@ async fn validation_fails_not_stopped() {
     // target
     pic.start_canister(target, Some(sender)).await.unwrap();
     assert!(matches!(
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
+        migrate_canister(
+            &pic,
+            sender,
+            &MigrateCanisterArgs {
+                canister_id: source,
+                replace_canister_id: target
+            }
+        )
+        .await,
         Err(ValidationError::TargetNotStopped(Reserved))
     ));
 }
@@ -874,7 +942,15 @@ async fn validation_fails_disabled() {
     .unwrap();
 
     assert!(matches!(
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
+        migrate_canister(
+            &pic,
+            sender,
+            &MigrateCanisterArgs {
+                canister_id: source,
+                replace_canister_id: target
+            }
+        )
+        .await,
         Err(ValidationError::MigrationsDisabled(Reserved))
     ));
 }
@@ -904,7 +980,15 @@ async fn validation_fails_snapshot() {
         .await
         .unwrap();
     assert!(matches!(
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
+        migrate_canister(
+            &pic,
+            sender,
+            &MigrateCanisterArgs {
+                canister_id: source,
+                replace_canister_id: target
+            }
+        )
+        .await,
         Err(ValidationError::TargetHasSnapshots(Reserved))
     ));
 }
@@ -927,7 +1011,15 @@ async fn validation_fails_insufficient_cycles() {
     let target = targets[0];
 
     assert!(matches!(
-        migrate_canister(&pic, sender, &MigrateCanisterArgs { source, target }).await,
+        migrate_canister(
+            &pic,
+            sender,
+            &MigrateCanisterArgs {
+                canister_id: source,
+                replace_canister_id: target
+            }
+        )
+        .await,
         Err(ValidationError::SourceInsufficientCycles(Reserved))
     ));
 }
@@ -944,7 +1036,10 @@ async fn status_correct() {
     let sender = source_controllers[0];
     let source = sources[0];
     let target = targets[0];
-    let args = MigrateCanisterArgs { source, target };
+    let args = MigrateCanisterArgs {
+        canister_id: source,
+        replace_canister_id: target,
+    };
     migrate_canister(&pic, sender, &args).await.unwrap();
 
     let status = get_status(&pic, sender, &args).await;
@@ -1031,7 +1126,10 @@ async fn after_validation_source_not_stopped() {
     let sender = source_controllers[0];
     let source = sources[0];
     let target = targets[0];
-    let args = MigrateCanisterArgs { source, target };
+    let args = MigrateCanisterArgs {
+        canister_id: source,
+        replace_canister_id: target,
+    };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // validation succeeded. now we break migration by interfering.
     pic.start_canister(source, Some(sender)).await.unwrap();
@@ -1057,7 +1155,10 @@ async fn after_validation_target_not_stopped() {
     let sender = source_controllers[0];
     let source = sources[0];
     let target = targets[0];
-    let args = MigrateCanisterArgs { source, target };
+    let args = MigrateCanisterArgs {
+        canister_id: source,
+        replace_canister_id: target,
+    };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // validation succeeded. now we break migration by interfering.
     pic.start_canister(target, Some(sender)).await.unwrap();
@@ -1083,7 +1184,10 @@ async fn after_validation_target_has_snapshot() {
     let sender = target_controllers[0];
     let source = sources[0];
     let target = targets[0];
-    let args = MigrateCanisterArgs { source, target };
+    let args = MigrateCanisterArgs {
+        canister_id: source,
+        replace_canister_id: target,
+    };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // validation succeeded. now we break migration by interfering.
     // install a minimal Wasm module
@@ -1127,7 +1231,10 @@ async fn after_validation_insufficient_cycles() {
     let target = targets[0];
     // Top up just enough to pass validation..
     pic.add_cycles(source, 10_000_000_000_000).await;
-    let args = MigrateCanisterArgs { source, target };
+    let args = MigrateCanisterArgs {
+        canister_id: source,
+        replace_canister_id: target,
+    };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // ..but then burn some cycles by reinstalling to get under the required amount.
     pic.reinstall_canister(
@@ -1161,7 +1268,10 @@ async fn failure_controllers_restored() {
     let sender = source_controllers[0];
     let source = sources[0];
     let target = targets[0];
-    let args = MigrateCanisterArgs { source, target };
+    let args = MigrateCanisterArgs {
+        canister_id: source,
+        replace_canister_id: target,
+    };
     migrate_canister(&pic, sender, &args).await.unwrap();
     // Validation succeeded. Now we break migration by interfering.
     pic.start_canister(source, Some(sender)).await.unwrap();
@@ -1195,7 +1305,10 @@ async fn success_controllers_restored() {
     let sender = source_controllers[0];
     let source = sources[0];
     let target = targets[0];
-    let args = MigrateCanisterArgs { source, target };
+    let args = MigrateCanisterArgs {
+        canister_id: source,
+        replace_canister_id: target,
+    };
     migrate_canister(&pic, sender, &args).await.unwrap();
     for _ in 0..10 {
         advance(&pic).await;
@@ -1237,8 +1350,8 @@ async fn parallel_migrations() {
             &pic,
             source_controllers[0],
             &MigrateCanisterArgs {
-                source: sources[i],
-                target: targets[i],
+                canister_id: sources[i],
+                replace_canister_id: targets[i],
             },
         )
         .await
@@ -1249,8 +1362,8 @@ async fn parallel_migrations() {
         &pic,
         source_controllers[0],
         &MigrateCanisterArgs {
-            source: sources[NUM_MIGRATIONS - 1],
-            target: targets[NUM_MIGRATIONS - 1],
+            canister_id: sources[NUM_MIGRATIONS - 1],
+            replace_canister_id: targets[NUM_MIGRATIONS - 1],
         },
     )
     .await;
@@ -1264,8 +1377,8 @@ async fn parallel_migrations() {
             &pic,
             source_controllers[0],
             &MigrateCanisterArgs {
-                source: sources[i],
-                target: targets[i],
+                canister_id: sources[i],
+                replace_canister_id: targets[i],
             },
         )
         .await;
@@ -1298,8 +1411,8 @@ async fn parallel_validations() {
                 Principal::anonymous(),
                 "migrate_canister",
                 Encode!(&MigrateCanisterArgs {
-                    source: sources[i],
-                    target: targets[i],
+                    canister_id: sources[i],
+                    replace_canister_id: targets[i],
                 })
                 .unwrap(),
             )

@@ -517,7 +517,7 @@ type ListNodeProvidersResponse = record {
   node_providers : vec NodeProvider;
 };
 
-type ListProposalInfo = record {
+type ListProposalInfoRequest = record {
   include_reward_status : vec int32;
   omit_large_fields : opt bool;
   before_proposal : opt ProposalId;
@@ -611,11 +611,19 @@ type MergeResponse = record {
   source_neuron_info : opt NeuronInfo;
 };
 
+type DateUtc = record {
+  year : nat32;
+  month : nat32;
+  day : nat32;
+};
+
 type MonthlyNodeProviderRewards = record {
   minimum_xdr_permyriad_per_icp : opt nat64;
   registry_version : opt nat64;
   node_providers : vec NodeProvider;
   timestamp : nat64;
+  start_date : opt DateUtc;
+  end_date : opt DateUtc;
   rewards : vec RewardNodeProvider;
   xdr_conversion_rate : opt XdrConversionRate;
   maximum_node_provider_rewards_e8s : opt nat64;
@@ -1453,7 +1461,7 @@ service : (Governance) -> {
       ListNodeProviderRewardsResponse,
     ) query;
   list_node_providers : () -> (ListNodeProvidersResponse) query;
-  list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
+  list_proposals : (ListProposalInfoRequest) -> (ListProposalInfoResponse) query;
   list_neuron_votes : (ListNeuronVotesRequest) -> (ListNeuronVotesResponse) query;
   manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
