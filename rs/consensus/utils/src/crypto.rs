@@ -478,7 +478,7 @@ pub trait ConsensusCrypto:
 {
 }
 
-impl<C: Crypto + Send + Sync> ConsensusCrypto for C {}
+impl<C: Crypto> ConsensusCrypto for C {}
 
 #[cfg(test)]
 mod tests {
