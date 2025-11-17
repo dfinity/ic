@@ -4,7 +4,7 @@ This module defines utilities for building Rust canisters.
 
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("//bazel:candid.bzl", "did_git_test")
+load("//bazel/candid:defs.bzl", "did_git_test")
 
 def _wasm_rust_transition_impl(_settings, attr):
     return {
@@ -65,7 +65,7 @@ wasm_rust_binary_rule = rule(
     },
 )
 
-def rust_canister(name, service_file, visibility = ["//visibility:public"], testonly = False, opt = "3", **kwargs):
+def rust_canister(name, service_file, visibility = ["//visibility:public"], testonly = False, opt = "3", did_check = True, **kwargs):
     """Defines a Rust program that builds into a WebAssembly module.
 
     The following targets are generated:
@@ -79,6 +79,7 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
       visibility: visibility of the Wasm target
       opt: opt-level for the Wasm target
       testonly: testonly attribute for Wasm target
+      did_check: generate a did compatibility test (default: True)
       **kwargs: additional arguments to pass a rust_binary.
     """
 
@@ -142,10 +143,11 @@ def rust_canister(name, service_file, visibility = ["//visibility:public"], test
         actual = service_file,
         visibility = visibility,
     )
-    did_git_test(
-        name = name + "_did_git_test",
-        did = service_file,
-    )
+    if did_check:
+        did_git_test(
+            name = name + "_did_git_test",
+            did = service_file,
+        )
 
 def motoko_canister(name, entry, deps, **kwargs):
     """Defines a Motoko program that builds into a WebAssembly module.

@@ -437,7 +437,6 @@ pub(crate) struct CanisterHttp {
 pub(crate) struct Subnet {
     pub state_machine: Arc<StateMachine>,
     pub canister_http: Arc<Mutex<CanisterHttp>>,
-    delegation_from_nns: watch::Sender<Option<NNSDelegationBuilder>>,
     _canister_http_adapter_parts: CanisterHttpAdapterParts,
 }
 
@@ -455,15 +454,13 @@ impl Subnet {
             https_outcalls_uds_path: Some(uds_path),
             ..Default::default()
         };
-        let (nns_delegation_tx, nns_delegation_rx) = watch::channel(None);
         let client = setup_canister_http_client(
             state_machine.runtime.handle().clone(),
             &state_machine.metrics_registry,
             adapter_config,
-            state_machine.query_handler.lock().unwrap().clone(),
+            state_machine.transform_handler.lock().unwrap().clone(),
             MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             state_machine.replica_logger.clone(),
-            NNSDelegationReader::new(nns_delegation_rx, state_machine.replica_logger.clone()),
         );
         let canister_http = Arc::new(Mutex::new(CanisterHttp {
             client: Arc::new(Mutex::new(client)),
@@ -472,23 +469,12 @@ impl Subnet {
         Self {
             state_machine,
             canister_http,
-            delegation_from_nns: nns_delegation_tx,
             _canister_http_adapter_parts: canister_http_adapter_parts,
         }
     }
 
     fn get_subnet_id(&self) -> SubnetId {
         self.state_machine.get_subnet_id()
-    }
-
-    fn set_delegation_from_nns(&self, delegation_from_nns: CertificateDelegation) {
-        let builder = NNSDelegationBuilder::try_new(
-            delegation_from_nns.certificate,
-            self.get_subnet_id(),
-            &self.state_machine.replica_logger,
-        )
-        .unwrap();
-        self.delegation_from_nns.send(Some(builder)).unwrap();
     }
 }
 
@@ -967,16 +953,6 @@ impl PocketIcSubnets {
         for subnet in self.subnets.get_all() {
             subnet.state_machine.set_time(time);
             subnet.state_machine.execute_round();
-        }
-
-        // Fetch the NNS delegation for the newly created subnet.
-        // This can only be done after updating the registry and executing
-        // a round on the NNS subnet (above).
-        let nns_subnet = self.get_nns().unwrap();
-        if subnet_id != nns_subnet.get_subnet_id() {
-            let delegation = nns_subnet.get_delegation_for_subnet(subnet_id).unwrap();
-            let subnet = self.subnets.get_subnet(subnet_id).unwrap();
-            subnet.set_delegation_from_nns(delegation);
         }
 
         let subnet_config = SubnetConfigInternal {
@@ -3393,14 +3369,6 @@ fn process_mock_canister_https_response(
     };
     let timeout = context.time + Duration::from_secs(5 * 60);
     let canister_id = context.request.sender;
-    let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
-    let builder = delegation.map(|delegation| {
-        NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &subnet.replica_logger)
-            .unwrap()
-    });
-    let (_, delegation_rx) = watch::channel(builder);
-    let nns_delegation_reader =
-        NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone());
 
     let response_to_content = |response: &CanisterHttpResponse| match response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
@@ -3421,10 +3389,9 @@ fn process_mock_canister_https_response(
             let mut client = CanisterHttpAdapterClientImpl::new(
                 pic.runtime.handle().clone(),
                 grpc_channel,
-                subnet.query_handler.lock().unwrap().clone(),
+                subnet.transform_handler.lock().unwrap().clone(),
                 1,
                 MetricsRegistry::new(),
-                nns_delegation_reader.clone(),
                 subnet.replica_logger.clone(),
             );
             client
