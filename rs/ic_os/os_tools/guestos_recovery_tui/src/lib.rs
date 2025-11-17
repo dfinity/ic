@@ -69,6 +69,9 @@ impl Drop for TerminalGuard {
             let _ = disable_raw_mode();
             let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
             let _ = terminal.show_cursor();
+            // Clear the normal screen after leaving alternate screen to prevent interference from background logs
+            let _ = execute!(io::stdout(), TerminalClear(ClearType::All));
+            let _ = io::stdout().flush();
         }
     }
 }
@@ -950,16 +953,18 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     })?;
 
     // Poll for key events with periodic redraws to prevent background logs from interfering
-    // Direct writes to /dev/tty1 or /dev/ttyS0 bypass the TUI, so we need periodic redraws to ensure the screen stays clean.
+    // Direct writes to /dev/tty1 or /dev/ttyS0 bypass the TUI, so we need to clear before redraw
+    // Logs come every 15 minutes, so 2 seconds is plenty
     loop {
-        // Poll with longer timeout - logs come every 15 minutes, so 2 seconds is plenty
+        // Poll with timeout - logs come every 15 minutes, so 2 seconds is plenty
         if event::poll(Duration::from_millis(2000))? {
             if let Event::Key(_) = event::read()? {
                 break;
             }
         } else {
-            // No event yet, periodically redraw to ensure screen stays clean if logs wrote to terminal
-            // Redraw without clearing to avoid flashing - overwriting should be sufficient
+            // No event yet, clear and redraw to ensure screen stays clean if logs wrote to terminal
+            // Must clear before redraw because direct terminal writes aren't fully overwritten by draw() alone
+            let _ = terminal_guard.get_mut().clear();
             terminal_guard.get_mut().draw(|f| {
                 draw_completion_screen(
                     f,
