@@ -79,11 +79,13 @@ impl RingBuffer {
         let record = self.io.read_record(h.data_head)?;
 
         // Update header to drop the record.
-        // Lookup table unaffected, since it tracks only latest per bucket.
         let removed_size = MemorySize::new(record.bytes_len() as u64);
         h.data_head = h.advance_position(h.data_head, removed_size);
         h.data_size = h.data_size.saturating_sub(removed_size);
         self.io.write_header(&h);
+
+        // No need to update lookup table, because buckets only track the latest records,
+        // and front record is calculated on-the-fly when lookup table is read.
 
         Some(record)
     }
