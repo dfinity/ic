@@ -816,7 +816,7 @@ rustls = { version = "0.23.18", default-features = false, features = [
     "brotli",
     "tls12",
 ] }
-rustls-pemfile = "1.0.3"
+rustls-pemfile = "2.1.2"
 schemars = { version = "0.8.21", features = ["derive"] }
 scopeguard = "1.2.0"
 semver = { version = "1.0.9", features = ["serde"] }

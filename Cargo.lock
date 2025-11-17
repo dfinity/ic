@@ -17529,7 +17529,7 @@ dependencies = [
  "regex",
  "reqwest 0.12.15",
  "rustls 0.23.27",
- "rustls-pemfile 1.0.4",
+ "rustls-pemfile 2.2.0",
  "serde",
  "serde_yaml",
  "simple_logger",

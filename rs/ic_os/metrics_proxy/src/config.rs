@@ -65,21 +65,31 @@ impl TryFrom<&ListenOn> for Protocol {
                 if let Err(err) = certdata {
                     return Err(Self::Error::CertificateFileReadError(err));
                 }
-                let keydata = std::fs::read(other.key_file.clone().unwrap());
-                if let Err(err) = keydata {
-                    return Err(Self::Error::KeyFileReadError(err));
-                }
 
                 let mut certs_cursor: Cursor<Vec<u8>> = Cursor::new(certdata.unwrap());
                 let certs_loaded = rustls_pemfile::certs(&mut certs_cursor);
-                if let Err(err) = certs_loaded {
-                    return Err(Self::Error::CertificateFileReadError(err));
+
+                let mut certs_parsed = vec![];
+                let mut errors = vec![];
+                for maybe_cert in certs_loaded {
+                    let cert = match maybe_cert {
+                        Ok(cert) => cert,
+                        Err(e) => {
+                            errors.push(e);
+                            continue;
+                        }
+                    };
+
+                    certs_parsed.push(cert);
                 }
-                let certs_parsed: Vec<CertificateDer> = certs_loaded
-                    .unwrap()
-                    .into_iter()
-                    .map(|cert| CertificateDer::from_slice(&cert).into_owned())
-                    .collect();
+
+                if !errors.is_empty() {
+                    return Err(Self::Error::CertificateFileReadError(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        format!("Received the following errors: {errors:#?}"),
+                    )));
+                }
+
                 if certs_parsed.is_empty() {
                     return Err(Self::Error::CertificateFileReadError(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -90,38 +100,12 @@ impl TryFrom<&ListenOn> for Protocol {
                     )));
                 }
 
-                let mut key_cursor = Cursor::new(keydata.unwrap());
-                let mut keys_loaded: Vec<Vec<u8>> = vec![];
-
-                match rustls_pemfile::pkcs8_private_keys(&mut key_cursor) {
-                    Err(err) => return Err(Self::Error::KeyFileReadError(err)),
-                    Ok(res) => keys_loaded.extend(res),
-                }
-                key_cursor.set_position(0);
-                match rustls_pemfile::rsa_private_keys(&mut key_cursor) {
-                    Err(err) => return Err(Self::Error::KeyFileReadError(err)),
-                    Ok(res) => keys_loaded.extend(res),
-                }
-                key_cursor.set_position(0);
-                match rustls_pemfile::ec_private_keys(&mut key_cursor) {
-                    Err(err) => return Err(Self::Error::KeyFileReadError(err)),
-                    Ok(res) => keys_loaded.extend(res),
-                }
-
-                if keys_loaded.len() != 1 {
-                    return Err(Self::Error::KeyFileReadError(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
-                            "{} contains {} keys whereas it should contain only 1",
-                            other.key_file.clone().unwrap().display(),
-                            keys_loaded.len(),
-                        ),
-                    )));
-                }
+                let key = PrivateKeyDer::from_pem_file(other.key_file.as_ref().unwrap())
+                    .map_err(Self::Error::KeyFileReadError)?;
 
                 Ok(Self::Https {
                     certificate: certs_parsed,
-                    key: PrivateKeyDer::from_pem_slice(&keys_loaded[0]).unwrap(),
+                    key,
                 })
             }
             _ => Err(Self::Error::InvalidURL(InvalidURLError::UnsupportedScheme(
@@ -266,7 +250,7 @@ enum ListenOnParseError {
     CertificateFileRequired,
     KeyFileRequired,
     CertificateFileReadError(std::io::Error),
-    KeyFileReadError(std::io::Error),
+    KeyFileReadError(rustls::pki_types::pem::Error),
     SSLOptionsNotAllowed,
 }
 
