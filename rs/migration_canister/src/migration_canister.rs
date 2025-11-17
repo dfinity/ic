@@ -4,7 +4,7 @@
 
 use std::fmt::Display;
 
-use candid::{CandidType, Principal};
+use candid::{CandidType, Principal, Reserved};
 use ic_cdk::{api::msg_caller, init, post_upgrade, println, query, update};
 use serde::Deserialize;
 use strum::Display;
@@ -56,31 +56,31 @@ impl Display for MigrateCanisterArgs {
 }
 
 #[update]
-async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationError> {
+async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), Option<ValidationError>> {
     if migrations_disabled() {
-        return Err(ValidationError::MigrationsDisabled);
+        return Err(Some(ValidationError::MigrationsDisabled(Reserved)));
     }
     // Prevent too many interleaved validations.
     let Ok(_guard) = ValidationGuard::new() else {
-        return Err(ValidationError::RateLimited);
+        return Err(Some(ValidationError::RateLimited(Reserved)));
     };
     if rate_limited() {
-        return Err(ValidationError::RateLimited);
+        return Err(Some(ValidationError::RateLimited(Reserved)));
     }
     let caller = msg_caller();
     // For soft rollout purposes
     if !caller_allowed(&caller) {
-        return Err(ValidationError::MigrationsDisabled);
+        return Err(Some(ValidationError::MigrationsDisabled(Reserved)));
     }
     match validate_request(args.canister_id, args.replace_canister_id, caller).await {
         Err(e) => {
             println!("Failed to validate request {}: {}", args, e);
-            return Err(e);
+            return Err(Some(e));
         }
         Ok(request) => {
             // Need to check the rate limit again
             if rate_limited() {
-                return Err(ValidationError::RateLimited);
+                return Err(Some(ValidationError::RateLimited(Reserved)));
             }
             println!("Accepted request {}", request);
             insert_request(RequestState::Accepted { request });

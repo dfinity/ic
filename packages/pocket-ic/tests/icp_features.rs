@@ -117,7 +117,7 @@ fn test_canister_migration() {
         canister_id: source_canister,
         replace_canister_id: target_canister,
     };
-    let res = update_candid::<_, (Result<(), MigrationValidatonError>,)>(
+    let res = update_candid::<_, (Result<(), Option<MigrationValidatonError>>,)>(
         &pic,
         canister_migration_orchestrator,
         "migrate_canister",
