@@ -42,11 +42,6 @@ alias(
 )
 
 alias(
-    name = "ormolu-format",
-    actual = "//pre-commit:ormolu-format",
-)
-
-alias(
     name = "gen_rust_project",
     actual = "@rules_rust//tools/rust_analyzer:gen_rust_project",
 )
@@ -144,6 +139,18 @@ alias(
     actual = select({
         "@platforms//os:osx": "@rclone-x86_64-darwin//:rclone",  # No arm64 build for this version, use amd64 for now.
         "@bazel_tools//src/conditions:linux_x86_64": "@rclone-x86_64-linux//:rclone",
+        "//conditions:default": "@platforms//:incompatible",
+    }),
+)
+
+### trivy, used by ic-os for vulnerability scanning
+
+alias(
+    name = "trivy",
+    actual = select({
+        "@bazel_tools//src/conditions:linux_x86_64": "@trivy-x86_64-linux//:trivy",
+        "@bazel_tools//src/conditions:darwin_arm64": "@trivy-aarch64-darwin//:trivy",
+        "@bazel_tools//src/conditions:darwin_x86_64": "@trivy-x86_64-darwin//:trivy",
         "//conditions:default": "@platforms//:incompatible",
     }),
 )

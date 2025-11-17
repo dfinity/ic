@@ -6,6 +6,7 @@ pub mod wasm_chunk_store;
 pub use self::task_queue::{TaskQueue, is_low_wasm_memory_hook_condition_satisfied};
 
 use self::wasm_chunk_store::{WasmChunkStore, WasmChunkStoreMetadata};
+use super::queues::refunds::RefundPool;
 use super::queues::{CanisterInput, can_push};
 pub use super::queues::{CanisterOutputQueuesIterator, memory_usage_of_request};
 use crate::metadata_state::subnet_call_context_manager::InstallCodeCallId;
@@ -502,7 +503,7 @@ impl SystemState {
             ingress_induction_cycles_debit: Cycles::zero(),
             reserved_balance: Cycles::zero(),
             reserved_balance_limit: None,
-            memory_allocation: MemoryAllocation::BestEffort,
+            memory_allocation: MemoryAllocation::default(),
             environment_variables: Default::default(),
             wasm_memory_threshold: NumBytes::new(0),
             freeze_threshold,
@@ -1032,7 +1033,7 @@ impl SystemState {
         input_queue_type: InputQueueType,
     ) -> Result<bool, (StateError, RequestOrResponse)> {
         #[cfg(debug_assertions)]
-        let balance_before = self.balance_with_messages(Some(msg.cycles()));
+        let balance_before = self.balance_with_messages(None, Some(msg.cycles()));
 
         let res = self.push_input_impl(
             msg,
@@ -1044,6 +1045,7 @@ impl SystemState {
         #[cfg(debug_assertions)]
         self.assert_balance_with_messages(
             balance_before,
+            None,
             res.as_ref().err().map(|(_, msg)| msg.cycles()),
         );
 
@@ -1392,7 +1394,7 @@ impl SystemState {
         own_subnet_type: SubnetType,
     ) {
         #[cfg(debug_assertions)]
-        let balance_before = self.balance_with_messages(None);
+        let balance_before = self.balance_with_messages(None, None);
 
         self.induct_messages_to_self_impl(
             subnet_available_guaranteed_response_memory,
@@ -1400,7 +1402,7 @@ impl SystemState {
         );
 
         #[cfg(debug_assertions)]
-        self.assert_balance_with_messages(balance_before, None);
+        self.assert_balance_with_messages(balance_before, None, None);
     }
 
     /// Implementation of `induct_messages_to_self`. Separated, to make it easier to
@@ -1490,8 +1492,7 @@ impl SystemState {
         self.queues.has_expired_deadlines(current_time)
     }
 
-    /// Drops expired messages given a current time. Returns the total amount of
-    /// attached cycles that was lost.
+    /// Drops expired messages given a current time.
     ///
     /// See [`CanisterQueues::time_out_messages`] for further details.
     pub fn time_out_messages(
@@ -1499,19 +1500,22 @@ impl SystemState {
         current_time: Time,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
-    ) -> Cycles {
+    ) {
         #[cfg(debug_assertions)]
-        let balance_before = self.balance_with_messages(None);
+        let balance_before = self.balance_with_messages(Some(refunds), None);
 
-        let cycles_lost =
-            self.queues
-                .time_out_messages(current_time, own_canister_id, local_canisters, metrics);
+        self.queues.time_out_messages(
+            current_time,
+            own_canister_id,
+            local_canisters,
+            refunds,
+            metrics,
+        );
 
         #[cfg(debug_assertions)]
-        self.assert_balance_with_messages(balance_before, Some(cycles_lost));
-
-        cycles_lost
+        self.assert_balance_with_messages(balance_before, Some(refunds), None);
     }
 
     /// Queries whether the `CallContextManager` in `self.state` holds any not
@@ -1590,27 +1594,30 @@ impl SystemState {
     }
 
     /// Removes the largest best-effort message in the underlying pool. Returns
-    /// `true` if a message was removed; `false` otherwise; along with any attached
-    /// cycles that were lost (if a reject response with a refund was not enqueued).
+    /// `true` if a message was removed; `false` otherwise.
+    ///
+    /// Enqueues a refund message if the shed message had attached cycles and no
+    /// reject response refunding the cycles was enqueued.
     ///
     /// Time complexity: `O(log(n))`.
     pub fn shed_largest_message(
         &mut self,
         own_canister_id: &CanisterId,
         local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        refunds: &mut RefundPool,
         metrics: &impl DroppedMessageMetrics,
-    ) -> (bool, Cycles) {
+    ) -> bool {
         #[cfg(debug_assertions)]
-        let balance_before = self.balance_with_messages(None);
+        let balance_before = self.balance_with_messages(Some(refunds), None);
 
-        let res = self
-            .queues
-            .shed_largest_message(own_canister_id, local_canisters, metrics);
+        let message_shed =
+            self.queues
+                .shed_largest_message(own_canister_id, local_canisters, refunds, metrics);
 
         #[cfg(debug_assertions)]
-        self.assert_balance_with_messages(balance_before, Some(res.1));
+        self.assert_balance_with_messages(balance_before, Some(refunds), None);
 
-        res
+        message_shed
     }
 
     /// Re-partitions the local and remote input schedules of `self.queues`
@@ -1872,18 +1879,11 @@ impl SystemState {
     /// Enqueues or removes `OnLowWasmMemory` task from `task_queue`
     /// depending if the condition for `OnLowWasmMemoryHook` is satisfied:
     ///
-    /// 1. In the case of `memory_allocation`
-    ///    `wasm_memory_threshold >= min(memory_allocation - memory_usage_without_wasm_memory, wasm_memory_limit) - wasm_memory_usage`
-    /// 2. Without memory allocation
-    ///    `wasm_memory_threshold >= wasm_memory_limit - wasm_memory_usage`
+    ///   `wasm_memory_threshold > wasm_memory_limit - wasm_memory_usage`
     ///
     /// Note: if `wasm_memory_limit` is not set, its default value is 4 GiB.
-    pub fn update_on_low_wasm_memory_hook_status(
-        &mut self,
-        memory_usage: NumBytes,
-        wasm_memory_usage: NumBytes,
-    ) {
-        if self.is_low_wasm_memory_hook_condition_satisfied(memory_usage, wasm_memory_usage) {
+    pub fn update_on_low_wasm_memory_hook_status(&mut self, wasm_memory_usage: NumBytes) {
+        if self.is_low_wasm_memory_hook_condition_satisfied(wasm_memory_usage) {
             self.task_queue.enqueue(ExecutionTask::OnLowWasmMemory);
         } else {
             self.task_queue.remove(ExecutionTask::OnLowWasmMemory);
@@ -1891,50 +1891,47 @@ impl SystemState {
     }
 
     /// Returns the `OnLowWasmMemory` hook status without updating the `task_queue`.
-    pub fn is_low_wasm_memory_hook_condition_satisfied(
-        &self,
-        memory_usage: NumBytes,
-        wasm_memory_usage: NumBytes,
-    ) -> bool {
-        let memory_allocation = match self.memory_allocation {
-            MemoryAllocation::Reserved(bytes) => Some(bytes),
-            MemoryAllocation::BestEffort => None,
-        };
-
+    pub fn is_low_wasm_memory_hook_condition_satisfied(&self, wasm_memory_usage: NumBytes) -> bool {
         let wasm_memory_limit = self.wasm_memory_limit;
         let wasm_memory_threshold = self.wasm_memory_threshold;
 
         is_low_wasm_memory_hook_condition_satisfied(
-            memory_usage,
             wasm_memory_usage,
-            memory_allocation,
             wasm_memory_limit,
             wasm_memory_threshold,
         )
     }
 
     /// Computes the canister's total cycle balance including cycles attached to
-    /// messages in queues; plus any `extra_cycles` (e.g. messages being enqueued or
-    /// returned wrapped in an `Err`).
+    /// messages in queues; pooled refunds; plus any `extra_cycles` (e.g. messages
+    /// being enqueued; or returned wrapped in an `Err`).
     ///
     /// To be used together with `assert_balance_with_messages()` to ensure that no
     /// cycles were lost or duplicated while inducting, timing out or shedding
     /// messages.
     #[cfg(debug_assertions)]
-    fn balance_with_messages(&self, extra_cycles: Option<Cycles>) -> Cycles {
-        self.cycles_balance + self.queues.attached_cycles() + extra_cycles.unwrap_or_default()
+    pub(crate) fn balance_with_messages(
+        &self,
+        refunds: Option<&RefundPool>,
+        extra_cycles: Option<Cycles>,
+    ) -> Cycles {
+        self.cycles_balance
+            + self.queues.attached_cycles()
+            + refunds.map(RefundPool::compute_total).unwrap_or_default()
+            + extra_cycles.unwrap_or_default()
     }
 
     /// Validates that the canister's total cycle balance including cycles attached
-    /// to messages in queues (plus any cycles being returned) is the same as
-    /// `balance_before` (the balance computed at the top of the caller function).
+    /// to messages in queues; pooled refunds, plus any cycles being returned is the
+    /// same as `balance_before` (computed at the top of the caller function).
     #[cfg(debug_assertions)]
     fn assert_balance_with_messages(
         &self,
         balance_before: Cycles,
+        refunds: Option<&RefundPool>,
         returned_cycles: Option<Cycles>,
     ) {
-        let balance_after = self.balance_with_messages(returned_cycles);
+        let balance_after = self.balance_with_messages(refunds, returned_cycles);
         assert_eq!(
             balance_before, balance_after,
             "Cycles lost or duplicated: before = {balance_before}, after = {balance_after}",

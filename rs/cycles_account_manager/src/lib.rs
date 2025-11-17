@@ -15,13 +15,13 @@
 
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::CyclesAccountManagerConfig;
-use ic_interfaces::execution_environment::CanisterOutOfCyclesError;
+use ic_interfaces::execution_environment::{CanisterOutOfCyclesError, MessageMemoryUsage};
 use ic_logger::{ReplicaLogger, error, info};
 use ic_management_canister_types_private::Method;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterState, MessageMemoryUsage, SystemState,
+    CanisterState, SystemState,
     canister_state::{execution_state::WasmExecutionMode, system_state::CyclesUseCase},
 };
 use ic_types::{
@@ -30,7 +30,7 @@ use ic_types::{
     batch::CanisterCyclesCostSchedule,
     canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES,
     canister_log::MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES,
-    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Request, Response, SignedIngress},
+    messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, Payload, Request, SignedIngress},
 };
 use prometheus::IntCounter;
 use serde::{Deserialize, Serialize};
@@ -331,10 +331,7 @@ impl CyclesAccountManager {
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> [(CyclesUseCase, Cycles); 3] {
-        let memory = match memory_allocation {
-            MemoryAllocation::Reserved(bytes) => bytes,
-            MemoryAllocation::BestEffort => memory_usage,
-        };
+        let memory = memory_allocation.allocated_bytes(memory_usage);
         [
             (
                 CyclesUseCase::Memory,
@@ -983,13 +980,13 @@ impl CyclesAccountManager {
         &self,
         log: &ReplicaLogger,
         error_counter: &IntCounter,
-        response: &Response,
+        response: &Payload,
         prepayment_for_response_transmission: Cycles,
         subnet_size: usize,
         cost_schedule: CanisterCyclesCostSchedule,
     ) -> Cycles {
         let max_expected_bytes = MAX_INTER_CANISTER_PAYLOAD_IN_BYTES.get();
-        let transmitted_bytes = response.payload_size_bytes().get();
+        let transmitted_bytes = response.size_bytes().get();
         debug_assert!(transmitted_bytes <= max_expected_bytes);
         if max_expected_bytes < transmitted_bytes {
             error_counter.inc();
@@ -1334,6 +1331,33 @@ impl CyclesAccountManager {
                     + self.config.http_request_per_byte_fee * request_size.get()
                     + self.config.http_response_per_byte_fee * response_size)
                     * (subnet_size as u64)
+            }
+        }
+    }
+
+    pub fn http_request_fee_v2(
+        &self,
+        request_size: NumBytes,
+        http_roundtrip_time: Duration,
+        raw_response_size: NumBytes,
+        transform: NumInstructions,
+        transformed_response_size: NumBytes,
+        subnet_size: usize,
+        cost_schedule: CanisterCyclesCostSchedule,
+    ) -> Cycles {
+        match cost_schedule {
+            CanisterCyclesCostSchedule::Free => Cycles::new(0),
+            CanisterCyclesCostSchedule::Normal => {
+                let n = subnet_size as u64;
+                (Cycles::new(1_000_000)
+                    + Cycles::new(50) * request_size.get()
+                    + Cycles::new(140_000) * n
+                    + Cycles::new(800) * n * n
+                    + Cycles::new(50) * raw_response_size.get()
+                    + Cycles::new(300) * http_roundtrip_time.as_millis() as u64
+                    + Cycles::new(transform.get() as u128 / 13)
+                    + (Cycles::new(10) * n + Cycles::new(650)) * transformed_response_size.get())
+                    * n
             }
         }
     }

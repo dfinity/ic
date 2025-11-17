@@ -895,7 +895,11 @@ impl XNetPayloadBuilderImpl {
                     SliceValidationResult::Invalid(_) => {
                         info!(
                             self.log,
-                            "Invalid slice from {}: {:?}", subnet_id, validation_result
+                            "Invalid slice from {}: {:?}. Referenced certified height {}. Gap to chain tip {}.",
+                            subnet_id,
+                            validation_result,
+                            validation_context.certified_height,
+                            past_payloads.len()
                         );
                     }
 
