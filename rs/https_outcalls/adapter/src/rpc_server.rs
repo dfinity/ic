@@ -336,29 +336,22 @@ impl HttpsOutcallsService for CanisterHttp {
                     self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
                         .await
                         .map_err(|socks_err| {
-                            format!(
-                                "Request failed direct connect {direct_err:?} and connect through socks {socks_err:?}"
+                            self.metrics
+                                .request_errors
+                                .with_label_values(&[LABEL_CONNECT])
+                                .inc();
+                            Status::new(
+                                tonic::Code::Unavailable,
+                                format!(
+                                    "Connecting to {:.50} failed: direct connect {direct_err:?} and connect through socks {socks_err:?}",
+                                    uri.host().unwrap_or(""), 
+                                ),
                             )
                         })
                 }
                 Ok(resp) => Ok(resp),
             }
-        }
-        .map_err(|err| {
-            debug!(self.logger, "Failed to connect: {}", err);
-            self.metrics
-                .request_errors
-                .with_label_values(&[LABEL_CONNECT])
-                .inc();
-            Status::new(
-                tonic::Code::Unavailable,
-                format!(
-                    "Connecting to {:.50} failed: {}",
-                    uri.host().unwrap_or(""),
-                    err,
-                ),
-            )
-        })?;
+        }?;
         self.metrics
             .network_traffic
             .with_label_values(&[LABEL_UPLOAD])

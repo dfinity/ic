@@ -28,10 +28,8 @@ impl Cli {
     pub fn get_config(&self) -> Result<Config, CliError> {
         // The expected JSON config.
         let file = File::open(&self.config).map_err(CliError::Io)?;
-        let config: Config =
-            serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()))?;
 
-        Ok(config)
+        serde_json::from_reader(file).map_err(|err| CliError::Deserialize(err.to_string()))
     }
 }
 
