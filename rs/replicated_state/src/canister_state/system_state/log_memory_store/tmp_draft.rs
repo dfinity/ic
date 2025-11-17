@@ -173,6 +173,14 @@ impl Rem<MemorySize> for MemoryPosition {
     }
 }
 
+// position - position = size
+impl Sub<MemoryPosition> for MemoryPosition {
+    type Output = MemorySize;
+    fn sub(self, rhs: MemoryPosition) -> MemorySize {
+        MemorySize(self.0 - rhs.0)
+    }
+}
+
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 pub struct MemorySize(u64);
@@ -216,6 +224,14 @@ impl Sub<MemoryPosition> for MemorySize {
     type Output = Self;
     fn sub(self, rhs: MemoryPosition) -> Self {
         Self(self.0 - rhs.0)
+    }
+}
+
+// size + position = size
+impl Add<MemoryPosition> for MemorySize {
+    type Output = Self;
+    fn add(self, rhs: MemoryPosition) -> Self {
+        Self(self.0 + rhs.0)
     }
 }
 
@@ -300,6 +316,7 @@ pub struct IndexTable {
     pub front: Option<IndexEntry>, // Position of the oldest live record.
     pub entries: Vec<IndexEntry>,  // Array of entries covering all segments.
     pub segment_size: MemorySize,  // Size of each segment in bytes.
+    pub data_capacity: MemorySize, // Total capacity of the data region.
 }
 
 impl IndexTable {
@@ -327,6 +344,7 @@ impl IndexTable {
             front,
             entries,
             segment_size: MemorySize::new(segment_size as u64),
+            data_capacity,
         }
     }
 
@@ -347,25 +365,130 @@ impl IndexTable {
     }
 
     /// Returns a vector of valid entries sorted by idx for coarse searching.
-    pub fn get_valid_sorted_entries(&self) -> Vec<IndexEntry> {
+    pub fn valid_sorted_entries(&self) -> Vec<IndexEntry> {
         let front = match self.front {
             None => return vec![], // No entries if front is None.
             Some(entry) => entry,
         };
         // Collect entries with idx after front.idx, those are valid buckets.
-        let mut valid_entries: Vec<_> = self
+        let mut entries: Vec<_> = self
             .entries
             .iter()
             .filter(|e| e.is_valid() && front.idx < e.idx)
             .cloned()
             .collect();
-        valid_entries.push(front);
-        valid_entries.sort_by_key(|e| e.idx);
-        valid_entries
+        entries.push(front);
+        entries.sort_by_key(|e| e.idx);
+        entries.dedup_by_key(|e| e.idx);
+        entries
     }
 
-    pub fn get_coarse_range(&self, _filter: Option<FetchCanisterLogsRange>) -> Option<()> {
-        unimplemented!()
+    /// Returns the coarse range of memory positions [start, end) for the given filter.
+    pub fn get_coarse_range(
+        &self,
+        filter: Option<Filter>,
+    ) -> Option<(MemoryPosition, MemoryPosition)> {
+        const END_OFFSET: MemorySize = MemorySize::new(1);
+
+        let entries = self.valid_sorted_entries();
+        if entries.is_empty() {
+            return None;
+        }
+
+        if entries.len() == 1 {
+            // Only one valid entry means only one record (the front) is in the buffer.
+            let start = entries[0].position;
+            return Some((start, (start + END_OFFSET) % self.data_capacity));
+        }
+
+        // Below this line there's always at least 2 unique entries covering the full valid range
+        // from the oldest to the latest log record.
+
+        // Left fallback for start: exact match or previous entry.
+        let find_start_by_key = |key: u64, key_fn: fn(&IndexEntry) -> u64| -> IndexEntry {
+            match entries.binary_search_by_key(&key, key_fn) {
+                Ok(idx) => entries[idx],      // Exact match.
+                Err(0) => entries[0],         // Below range, return first.
+                Err(idx) => entries[idx - 1], // Left fallback.
+            }
+        };
+
+        // Right fallback for end: exact match or next entry.
+        let find_end_by_key = |key: u64, key_fn: fn(&IndexEntry) -> u64| -> IndexEntry {
+            match entries.binary_search_by_key(&key, key_fn) {
+                Ok(idx) => entries[idx],                         // Exact match.
+                Err(idx) if idx < entries.len() => entries[idx], // Right fallback.
+                _ => *entries.last().unwrap(),                   // Above range, return last.
+            }
+        };
+
+        let filter_by_idx =
+            |entries: &Vec<IndexEntry>, start_idx: u64, end_idx: u64| -> Vec<IndexEntry> {
+                entries
+                    .iter()
+                    .filter(|e| start_idx <= e.idx && e.idx <= end_idx)
+                    .cloned()
+                    .collect()
+            };
+
+        let clamp_end_by_size =
+            |entries: &Vec<IndexEntry>, size_limit: MemorySize| -> MemoryPosition {
+                let start_position = entries.first().unwrap().position;
+                for entry in entries {
+                    if self.distance(start_position, entry.position) >= size_limit {
+                        return entry.position;
+                    }
+                }
+                entries.last().unwrap().position
+            };
+
+        let size_limit = RESULT_MAX_SIZE + self.segment_size;
+        let (start_inclusive, end_inclusive) = match filter {
+            Some(Filter::ByIdx(range)) => {
+                let start_inclusive = find_start_by_key(range.start, |e| e.idx);
+                let end_inclusive = find_end_by_key(range.end, |e| e.idx);
+                let subset = filter_by_idx(&entries, start_inclusive.idx, end_inclusive.idx);
+                (
+                    start_inclusive.position,
+                    clamp_end_by_size(&subset, size_limit),
+                )
+            }
+            Some(Filter::ByTimestamp(range)) => {
+                let start_inclusive = find_start_by_key(range.start, |e| e.timestamp);
+                let end_inclusive = find_end_by_key(range.end, |e| e.timestamp);
+                let subset = filter_by_idx(&entries, start_inclusive.idx, end_inclusive.idx);
+                (
+                    start_inclusive.position,
+                    clamp_end_by_size(&subset, size_limit),
+                )
+            }
+            None => {
+                let mut start_inclusive = entries.first().unwrap().position;
+                let end_inclusive = entries.last().unwrap().position;
+                for entry in entries.iter().rev() {
+                    let distance = self.distance(entry.position, end_inclusive);
+                    start_inclusive = entry.position;
+                    if distance >= size_limit {
+                        break;
+                    }
+                }
+                (start_inclusive, end_inclusive)
+            }
+        };
+
+        Some((
+            start_inclusive,
+            (end_inclusive + END_OFFSET) % self.data_capacity,
+        ))
+    }
+
+    /// Calculates the distance between two memory positions in the ring buffer.
+    fn distance(&self, from: MemoryPosition, to: MemoryPosition) -> MemorySize {
+        if to >= from {
+            to - from // no wrap
+        } else {
+            (self.data_capacity + to) - from // wrap
+        }
     }
 }
 
@@ -384,6 +507,13 @@ impl LogRecord {
         // read the record header without loading the full content,
         // but still need to know the full size of the record.
         8 + 8 + 4 + self.len as usize
+    }
+
+    pub fn matches(&self, filter: &Filter) -> bool {
+        match filter {
+            Filter::ByIdx(r) => r.start <= self.idx && self.idx < r.end,
+            Filter::ByTimestamp(r) => r.start <= self.timestamp && self.timestamp < r.end,
+        }
     }
 }
 
@@ -820,9 +950,73 @@ impl RingBuffer {
     }
 
     /// Fetches canister logs according to the optional filter.
-    pub fn fetch_canister_logs(&self, _filter: Option<Filter>) -> Vec<LogRecord> {
-        // todo: first implement get_coarse_range()
-        unimplemented!()
+    pub fn fetch_canister_logs(&self, filter: Option<Filter>) -> Vec<LogRecord> {
+        let index = self.io.load_index();
+        let (start_inclusive, end_exclusive) = match index.get_coarse_range(filter.clone()) {
+            Some(range) => range,
+            None => return vec![],
+        };
+
+        let header = self.io.load_header();
+        let mut records = Vec::new();
+
+        // Walk the coarse range collecting all records in order.
+        let mut cur = start_inclusive;
+        while cur < end_exclusive {
+            let record = self.io.load_record(cur);
+            cur = header.advance_position(cur, MemorySize::new(record.bytes_len() as u64));
+            records.push(record);
+        }
+
+        match filter {
+            Some(ref f) => {
+                // When a filter is present — keep oldest records (prefix) that match the filter.
+                let filtered: Vec<_> = records.into_iter().filter(|r| r.matches(f)).collect();
+                take_by_size(&filtered, RESULT_MAX_SIZE, true)
+            }
+            None => {
+                // No filter — return newest records (suffix) up to the size limit.
+                take_by_size(&records, RESULT_MAX_SIZE, false)
+            }
+        }
+    }
+}
+
+/// Keep a prefix or a suffix of `records` whose total serialized size does not
+/// exceed `limit` bytes — prefix keeps oldest-first; suffix keeps newest-first.
+/// Returns a Vec<LogRecord> in chronological order (oldest-first).
+pub fn take_by_size(records: &[LogRecord], limit: MemorySize, take_prefix: bool) -> Vec<LogRecord> {
+    let limit = limit.get() as usize;
+    if limit == 0 || records.is_empty() {
+        return Vec::new();
+    }
+
+    let mut total: usize = 0;
+    if take_prefix {
+        // Find how many from the front fit.
+        let mut end: usize = 0;
+        for r in records.iter() {
+            let sz = r.bytes_len();
+            if total + sz > limit {
+                break;
+            }
+            total += sz;
+            end += 1;
+        }
+        records[..end].to_vec()
+    } else {
+        // Find start index so that records[start..] (the newest records)
+        // fit into the limit — walk backward and then clone that tail.
+        let mut start: usize = records.len();
+        while start > 0 {
+            let sz = records[start - 1].bytes_len();
+            if total + sz > limit {
+                break;
+            }
+            total += sz;
+            start -= 1;
+        }
+        records[start..].to_vec()
     }
 }
 
