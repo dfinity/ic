@@ -351,7 +351,7 @@ type http_request_args = record {
         context : blob;
     };
     is_replicated : opt bool;
-    pricing_version: opt nat32;
+    pricing_version : opt nat32;
 };
 
 type flexible_http_request_args = record {
@@ -364,9 +364,9 @@ type flexible_http_request_args = record {
         context : blob;
     };
     requested_counts: opt record {
-        min_responses: nat64;
-        max_responses: nat64;
-        total_requests: nat64;
+        min_responses : nat64;
+        max_responses : nat64;
+        total_requests : nat64;
     };
 };
 
