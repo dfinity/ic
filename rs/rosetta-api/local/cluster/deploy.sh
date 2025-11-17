@@ -202,7 +202,7 @@ helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q kube-promet
     helm install kube-prometheus prometheus-community/kube-prometheus-stack \
         --namespace monitoring \
         --create-namespace \
-        --set grafana.adminPassword=admin \
+        --values kube-prometheus-values.yaml \
         --kube-context="$MINIKUBE_PROFILE"
 }
 
