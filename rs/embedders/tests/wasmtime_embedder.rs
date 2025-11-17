@@ -2129,7 +2129,7 @@ fn wasm64_import_system_api_functions() {
       )
       (import "ic0" "call_on_cleanup"
         (func $ic0_call_on_cleanup (param $fun i64) (param $env i64)))
-      (import "ic0" "call_data_append" 
+      (import "ic0" "call_data_append"
         (func $ic0_call_data_append (param i64) (param i64)))
 
       (import "ic0" "canister_cycle_balance128"
@@ -3234,14 +3234,14 @@ fn large_wasm64_stable_read_write_test() {
             (i64.store (i64.const 4294967314) (i64.const 108))
             (i64.store (i64.const 4294967315) (i64.const 108))
             (i64.store (i64.const 4294967316) (i64.const 111))
-           
+
             (drop (call $stable_grow (i64.const 10)))
 
             ;; Write to stable memory from large heap offset.
             (call $ic0_stable64_write (i64.const 0) (i64.const 4294967312) (i64.const 5))
             ;; Read from stable memory at a different heap offset.
             (call $ic0_stable64_read (i64.const 4294967320) (i64.const 0) (i64.const 5))
-           
+
             ;; Return the result of the read operation.
             (call $msg_reply_data_append (i64.const 4294967320) (i64.const 5))
             (call $msg_reply)
@@ -3415,7 +3415,7 @@ fn test_environment_variable_system_api() {
             (call $trap (i32.const 0) (i32.const 0))
           )
         )
-       
+
         ;; Copy first name to memory
         (local.set $index (i32.const 0))
         (local.set $name_size (call $env_var_name_size (local.get $index)))
@@ -3425,7 +3425,7 @@ fn test_environment_variable_system_api() {
             (i32.const 0)          ;; offset
             (local.get $name_size) ;; (name) size
         )
-        
+
         ;; Assert that the first name exists:
         (if (i32.ne (call $env_var_name_exists (local.get $name_dst) (local.get $name_size)) (i32.const 1))
           (then

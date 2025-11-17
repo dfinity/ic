@@ -14,6 +14,7 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 use std::sync::Mutex;
+use userfaultfd::UffdBuilder;
 
 use crate::{
     AccessKind, DirtyPageTracking, MemoryTracker,
@@ -71,12 +72,22 @@ fn setup(
         .unwrap()
     };
 
+    let uffd = Arc::new(
+        UffdBuilder::new()
+            .close_on_exec(true)
+            .non_blocking(true)
+            .user_mode_only(true)
+            .create()
+            .expect("Failed to create userfaultfd"),
+    );
+
     let tracker = PrefetchingMemoryTracker::new(
         memory,
         NumBytes::new((memory_pages * PAGE_SIZE) as u64),
         no_op_logger(),
         dirty_page_tracking,
         page_map.clone(),
+        uffd,
     )
     .unwrap();
     (tracker, page_map, memory, vec)

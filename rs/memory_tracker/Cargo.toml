@@ -18,6 +18,7 @@ lazy_static = { workspace = true }
 libc = { workspace = true }
 nix = { workspace = true }
 slog = { workspace = true }
+userfaultfd = { workspace = true }
 
 [features]
 default = []

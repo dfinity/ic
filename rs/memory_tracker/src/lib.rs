@@ -3,7 +3,8 @@ use ic_replicated_state::{PageIndex, PageMap};
 use ic_sys::PageBytes;
 use ic_types::NumBytes;
 use nix::errno::Errno;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
+use userfaultfd::{ReadWrite, Uffd};
 
 use crate::prefetching::PrefetchingMemoryTracker;
 
@@ -35,16 +36,23 @@ pub trait MemoryTracker {
         log: ReplicaLogger,
         dirty_page_tracking: DirtyPageTracking,
         page_map: PageMap,
+        uffd: Arc<Uffd>,
     ) -> nix::Result<Self>
     where
         Self: Sized;
 
-    /// Handles missing page signal (SIGSEGV or SIGBUS).
     fn handle_sigsegv(
         &self,
         access_kind: Option<AccessKind>,
         fault_address: *mut libc::c_void,
     ) -> bool;
+
+    fn handle_uffd_fault(
+        &self,
+        uffd: &Uffd,
+        access_kind: ReadWrite,
+        fault_address: *mut libc::c_void,
+    ) -> Option<(*mut libc::c_void, usize)>;
 
     /// Returns `true` if `address` is contained in the memory tracker.
     fn contains(&self, address: *const libc::c_void) -> bool;
@@ -102,6 +110,9 @@ pub trait MemoryTracker {
 
     /// Add the total time spent in signal handler.
     fn add_sigsegv_handler_duration(&self, elapsed: Duration);
+
+    /// Returns whether dirty page tracking is on or off.
+    fn dirty_page_tracking(&self) -> DirtyPageTracking;
 }
 
 /// Dynamic dispatch is used to minimize code changes.
@@ -115,6 +126,7 @@ pub fn new(
     log: ReplicaLogger,
     dirty_page_tracking: DirtyPageTracking,
     page_map: PageMap,
+    uffd: Arc<Uffd>,
 ) -> nix::Result<SigsegvMemoryTracker> {
     Ok(Box::new(PrefetchingMemoryTracker::new(
         start,
@@ -122,6 +134,7 @@ pub fn new(
         log,
         dirty_page_tracking,
         page_map,
+        uffd,
     )?))
 }
 
