@@ -1,0 +1,43 @@
+proxies:
+  - listen_on:
+      url: http://0.0.0.0:18080/proxy
+      request_response_timeout: 5s
+    connect_to:
+      url: http://localhost:9100/metrics
+      # A connection to a local SSL-enabled server
+      # with self-signed certificates.
+      # url: https://localhost:9100/metrics
+      # This enables requests to SSL servers with
+      # bad certificates or incorrect host names.
+      tolerate_bad_tls: true
+    label_filters:
+      - regex: .*
+        actions:
+          - drop
+      - regex: node_cpu_.*
+        actions:
+          - reduce_time_resolution:
+              resolution: 5s
+          - keep
+      - regex: node_hwmon_temp_celsius
+        actions:
+          - reduce_time_resolution:
+              resolution: 5s
+          - keep
+    cache_duration: 1s
+  - listen_on:
+      url: http://0.0.0.0:18080/proxy2
+    connect_to:
+      url: http://localhost:9100/metrics
+    label_filters:
+      - regex: .*
+        actions:
+          - drop
+      - regex: node_cpu_.*
+        actions:
+          - reduce_time_resolution:
+              resolution: 5s
+          - keep
+    cache_duration: 1s
+metrics:
+  url: http://127.0.0.1:18081/metrics
