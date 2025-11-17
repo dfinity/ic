@@ -36,7 +36,6 @@ fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
 
 fn teardown_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
     disable_raw_mode().context("Failed to disable raw mode")?;
-    // Always try to leave alternate screen (safe even if we never entered it)
     let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
     terminal.show_cursor().context("Failed to show cursor")?;
     Ok(())
@@ -71,7 +70,7 @@ impl Drop for TerminalGuard {
 
 fn build_upgrader_command(params: &RecoveryParams) -> Command {
     let mut cmd = Command::new("sudo");
-    cmd.arg("-n") // Non-interactive (no password prompt)
+    cmd.arg("-n")
         .arg("/opt/ic/bin/guestos-recovery-upgrader.sh")
         .arg(format!("version={}", params.version))
         .arg(format!("version-hash={}", params.version_hash))
@@ -216,8 +215,9 @@ impl App {
         }
     }
 
+    /// Runs the interactive TUI and returns the recovery parameters if the user proceeds.
+    /// Returns `None` if the user exits without proceeding.
     pub fn run(&mut self) -> Result<Option<RecoveryParams>> {
-        // Check if we're in a TTY (both stdin and stdout need to be TTYs for interactive TUI)
         if !atty::is(atty::Stream::Stdout) || !atty::is(atty::Stream::Stdin) {
             anyhow::bail!(
                 "This program requires an interactive terminal.\n\
@@ -229,10 +229,8 @@ impl App {
         let terminal = setup_terminal()?;
         let mut terminal_guard = TerminalGuard::new(terminal);
 
-        // Test that we can actually render - check terminal size first
         let test_size = terminal_guard.get_mut().size()?;
         if test_size.width < 10 || test_size.height < 15 {
-            // Clean up before bailing
             let mut term = terminal_guard.terminal.take().unwrap();
             teardown_terminal(&mut term)?;
             anyhow::bail!(
@@ -245,31 +243,12 @@ impl App {
         execute!(terminal_guard.get_mut().backend_mut(), EnableMouseCapture)
             .context("Failed to enable mouse capture")?;
 
-        // Test render to verify terminal works
-        terminal_guard.get_mut().draw(|f: &mut Frame| {
-            let size = f.size();
-            let test_text = vec![
-                Line::from(""),
-                Line::from("Testing terminal..."),
-                Line::from(""),
-            ];
-            let para = Paragraph::new(test_text)
-                .block(Block::default().borders(Borders::NONE))
-                .alignment(Alignment::Center);
-            f.render_widget(para, size);
-        })?;
-
-        // Small delay to ensure the test render is visible
-        std::thread::sleep(std::time::Duration::from_millis(100));
-
-        // Initial draw
         terminal_guard.get_mut().draw(|f: &mut Frame| self.ui(f))?;
 
         let result = loop {
             match event::read() {
                 Ok(Event::Key(key)) => {
                     if key.kind == KeyEventKind::Press || key.kind == KeyEventKind::Repeat {
-                        // Handle Ctrl+C explicitly to ensure we can always exit
                         if key.code == KeyCode::Char('c')
                             && key.modifiers.contains(KeyModifiers::CONTROL)
                         {
@@ -292,7 +271,6 @@ impl App {
                             if let Err(e) =
                                 terminal_guard.get_mut().draw(|f: &mut Frame| self.ui(f))
                             {
-                                // If rendering fails, clean up and bail
                                 let mut term = terminal_guard.terminal.take().unwrap();
                                 teardown_terminal(&mut term)?;
                                 return Err(e).context("Failed to render TUI - terminal may not support required features");
@@ -300,11 +278,8 @@ impl App {
                         }
                     }
                 }
-                Ok(_) => {
-                    // Ignore non-key events
-                }
+                Ok(_) => {}
                 Err(e) => {
-                    // If we can't read events, clean up and bail
                     let mut term = terminal_guard.terminal.take().unwrap();
                     teardown_terminal(&mut term)?;
                     return Err(e).context("Failed to read terminal events - terminal may not support required features");
@@ -314,9 +289,6 @@ impl App {
 
         execute!(terminal_guard.get_mut().backend_mut(), DisableMouseCapture)
             .context("Failed to disable mouse capture")?;
-        // Explicitly clean up (guard will also clean up on drop, but this ensures proper order)
-        let mut terminal = terminal_guard.terminal.take().unwrap();
-        teardown_terminal(&mut terminal)?;
         result
     }
 
@@ -382,7 +354,6 @@ impl App {
     fn ui(&self, f: &mut Frame) {
         let size = f.size();
 
-        // Ensure minimum terminal size to prevent panics
         if size.width < 10 || size.height < 15 {
             let error_text = vec![
                 Line::from("Terminal too small"),
@@ -399,19 +370,17 @@ impl App {
             return;
         }
 
-        // Create main layout: [Title(1), Instructions(3), Fields(9), Buttons(1), Spacer(flex)]
         let main_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(1), // Title
-                Constraint::Length(3), // Instructions
-                Constraint::Length(9), // Fields (exactly 3 fields × 3 lines each)
-                Constraint::Length(1), // Buttons
-                Constraint::Min(0),    // Spacer (takes remaining space)
+                Constraint::Length(1),
+                Constraint::Length(3),
+                Constraint::Length(9),
+                Constraint::Length(1),
+                Constraint::Min(0),
             ])
             .split(size);
 
-        // Title
         let title = Paragraph::new("NNS recovery")
             .block(
                 Block::default()
@@ -422,7 +391,6 @@ impl App {
             .style(Style::default().bold());
         f.render_widget(title, main_layout[0]);
 
-        // Instructions
         let instructions = vec![
             Line::from("Enter the information supplied by the recovery coordinator."),
             Line::from("Use Up/Down arrows or TAB to move between fields."),
@@ -432,17 +400,15 @@ impl App {
             .wrap(Wrap { trim: true });
         f.render_widget(instructions_para, main_layout[1]);
 
-        // Fields area - split into 3 equal parts for the input fields
         let fields_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3), // VERSION field
-                Constraint::Length(3), // VERSION-HASH field
-                Constraint::Length(3), // RECOVERY-HASH field
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(3),
             ])
             .split(main_layout[2]);
 
-        // Input fields
         let field_configs = [
             (
                 Field::Version,
@@ -471,7 +437,6 @@ impl App {
             self.render_input_field(f, *field, label, value, description, *area);
         }
 
-        // Buttons - center horizontally
         let check_text = "<Run recovery>";
         let exit_text = "<Exit>";
         let check_text_len = check_text.len() as u16;
@@ -500,18 +465,15 @@ impl App {
             ),
         );
 
-        // Error message (overlay)
         if let Some(ref error) = self.error_message {
             const MIN_BOX_WIDTH: u16 = 60;
             const BOX_HEIGHT: u16 = 5;
             const BORDER_PADDING: u16 = 4;
 
-            // Calculate box width: clamp error length between min and max, add border padding
             let max_width = (size.width * 80 / 100).max(MIN_BOX_WIDTH);
             let error_text_width = error.len().min(u16::MAX as usize) as u16;
             let box_width = error_text_width.clamp(MIN_BOX_WIDTH, max_width) + BORDER_PADDING;
 
-            // Center vertically: split screen into 50% top, box height, 50% bottom
             let vertical_area = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([
@@ -521,7 +483,6 @@ impl App {
                 ])
                 .split(size)[1];
 
-            // Center horizontally: calculate start position to center the box
             let start_x = vertical_area.x + (vertical_area.width.saturating_sub(box_width)) / 2;
             let error_area = Rect::new(start_x, vertical_area.y, box_width, BOX_HEIGHT);
 
@@ -577,17 +538,17 @@ impl App {
     }
 }
 
+/// Displays a status screen and runs the recovery upgrader script with the given parameters.
+/// Shows real-time logs and a completion screen with results.
 pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     let terminal = setup_terminal()?;
     let mut terminal_guard = TerminalGuard::new(terminal);
 
-    // Show status screen
     let version_line = format!("  VERSION: {}", params.version);
     let version_hash_line = format!("  VERSION-HASH: {}", params.version_hash);
     let recovery_hash_line = format!("  RECOVERY-HASH: {}", params.recovery_hash);
     terminal_guard.get_mut().draw(|f| {
         let size = f.size();
-        // Ensure minimum terminal size
         if size.width < 10 || size.height < 5 {
             return;
         }
@@ -613,34 +574,25 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         f.render_widget(para, size);
     })?;
 
-    // Get timestamp before running command to read journalctl logs as fallback
     let start_time = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
 
-    // Validate parameters before running
     if params.version.is_empty() || params.version_hash.is_empty() {
         anyhow::bail!("Invalid parameters: version and version-hash must be non-empty");
     }
 
-    // Run the upgrader script with command line parameters
-    // The script now writes to stdout (via log_message), so we can capture it directly
-    // Build the command - sudo should pass arguments through correctly
     let mut cmd = build_upgrader_command(params);
-
-    // Spawn the process so we can read output in real-time
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
     let mut child = cmd.spawn().context("Failed to spawn recovery upgrader")?;
 
-    // Shared log buffer for real-time display
     let log_lines = Arc::new(Mutex::new(Vec::<String>::new()));
     let log_lines_stdout = Arc::clone(&log_lines);
     let log_lines_stderr = Arc::clone(&log_lines);
 
-    // Take stdout and stderr handles
     let stdout = child
         .stdout
         .take()
@@ -650,7 +602,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         .take()
         .ok_or_else(|| anyhow::anyhow!("Failed to get stderr handle"))?;
 
-    // Spawn threads to read stdout and stderr
     let stdout_handle = thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines().filter_map(Result::ok) {
@@ -667,25 +618,20 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         }
     });
 
-    // Update TUI in real-time while process is running
     let mut last_log_count = 0;
     let status = loop {
-        // Check if process has finished (non-blocking)
         match child.try_wait() {
             Ok(Some(status)) => {
-                // Process finished, wait for threads to finish reading any remaining output
                 stdout_handle.join().ok();
                 stderr_handle.join().ok();
                 break status;
             }
             Ok(None) => {
-                // Process still running, update display with current logs
                 let logs = log_lines.lock().unwrap();
                 let current_logs: Vec<String> = logs.clone();
                 let current_count = current_logs.len();
                 drop(logs);
 
-                // Only redraw if we have new logs (to avoid excessive redraws)
                 if current_count > last_log_count {
                     terminal_guard
                         .get_mut()
@@ -709,7 +655,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                                 Line::from(""),
                             ];
 
-                            // Show the last N lines that fit in the terminal
                             let available_height = size.height.saturating_sub(10);
                             let lines_to_show = current_logs.len().min(available_height as usize);
                             let start_idx = if current_logs.len() > lines_to_show {
@@ -748,7 +693,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                     last_log_count = current_count;
                 }
 
-                // Small delay to avoid excessive CPU usage
                 thread::sleep(std::time::Duration::from_millis(100));
             }
             Err(e) => {
@@ -757,45 +701,37 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         }
     };
 
-    // Get final logs for completion screen
     let logs = log_lines.lock().unwrap();
     let all_logs: Vec<String> = logs.clone();
     drop(logs);
 
-    // Create output structure for compatibility with existing code
     let output = std::process::Output {
         status,
         stdout: all_logs.join("\n").into_bytes(),
         stderr: vec![],
     };
 
-    // Parse output for errors and success messages
     let mut error_messages = Vec::new();
     let mut success_message = None;
 
-    // Parse stdout - the script now writes all log messages here via log_message()
     let stdout_lines: Vec<String> = String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(|s| s.to_string())
-        .filter(|s| !s.trim().is_empty()) // Filter out empty lines
+        .filter(|s| !s.trim().is_empty())
         .collect();
 
-    // Parse stderr - errors might also go here
     let stderr_lines: Vec<String> = String::from_utf8_lossy(&output.stderr)
         .lines()
         .map(|s| s.to_string())
-        .filter(|s| !s.trim().is_empty()) // Filter out empty lines
+        .filter(|s| !s.trim().is_empty())
         .collect();
 
-    // Check for success message in stdout
     for line in &stdout_lines {
         if line.contains("Recovery Upgrader completed successfully") {
             success_message = Some("Recovery Upgrader completed successfully".to_string());
         }
     }
 
-    // Collect error information: prefer stdout (where script logs), then stderr
-    // Look for explicit ERROR: markers first, but also include debug messages
     let mut explicit_errors = Vec::new();
     let mut debug_messages = Vec::new();
 
@@ -803,7 +739,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         if line.contains("ERROR:") || line.contains("error:") || line.contains("Error:") {
             explicit_errors.push(line.clone());
         }
-        // Also capture debug messages that help diagnose parameter issues
         if line.contains("Received") && line.contains("arguments") {
             debug_messages.push(line.clone());
         }
@@ -818,24 +753,18 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     }
 
     if !explicit_errors.is_empty() {
-        // Include debug messages along with errors to help diagnose
         error_messages = debug_messages;
         error_messages.extend(explicit_errors);
     } else if !output.status.success() {
-        // If command failed but no explicit ERROR markers, show recent output
-        // Prefer stderr if available, otherwise stdout
         if !stderr_lines.is_empty() {
-            // Show last 30 lines of stderr
             let start = stderr_lines.len().saturating_sub(30);
             error_messages = stderr_lines[start..].to_vec();
         } else if !stdout_lines.is_empty() {
-            // Show last 30 lines of stdout
             let start = stdout_lines.len().saturating_sub(30);
             error_messages = stdout_lines[start..].to_vec();
         }
     }
 
-    // Fallback: if we still have no error messages and command failed, try journalctl
     if error_messages.is_empty() && !output.status.success() {
         let journalctl_output = Command::new("journalctl")
             .arg("-t")
@@ -844,7 +773,7 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
             .arg(format!("@{}", start_time))
             .arg("--no-pager")
             .arg("-o")
-            .arg("cat") // Output format: just the message without metadata
+            .arg("cat")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .output();
@@ -856,7 +785,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                 .filter(|s| !s.trim().is_empty())
                 .collect();
 
-            // Look for ERROR messages in journalctl
             let mut explicit_errors = Vec::new();
             for line in &journalctl_lines {
                 if line.contains("ERROR:") || line.contains("error:") || line.contains("Error:") {
@@ -866,17 +794,14 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
             if !explicit_errors.is_empty() {
                 error_messages = explicit_errors;
             } else if !journalctl_lines.is_empty() {
-                // Show last 30 lines of journalctl logs
                 let start = journalctl_lines.len().saturating_sub(30);
                 error_messages = journalctl_lines[start..].to_vec();
             }
         }
     }
 
-    // Show completion message with all logs
     terminal_guard.get_mut().draw(|f| {
         let size = f.size();
-        // Ensure minimum terminal size
         if size.width < 10 || size.height < 5 {
             return;
         }
@@ -897,7 +822,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         let mut text = Vec::new();
 
         if success {
-            // Make success message prominent
             text.push(Line::from(""));
             let success_msg = if let Some(ref msg) = success_message {
                 format!("✓ {}", msg)
@@ -909,7 +833,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                 Style::default().fg(Color::Green).bold(),
             )]));
             text.push(Line::from(""));
-            // Add a separator line that fits the terminal width
             let separator = "─".repeat((size.width.saturating_sub(4)).max(10) as usize);
             text.push(Line::from(vec![Span::styled(
                 separator,
@@ -926,7 +849,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                 Style::default().fg(Color::Red).bold(),
             )]));
             text.push(Line::from(""));
-            // Add a separator line that fits the terminal width
             let separator = "─".repeat((size.width.saturating_sub(4)).max(10) as usize);
             text.push(Line::from(vec![Span::styled(
                 separator,
@@ -934,16 +856,12 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
             )]));
             text.push(Line::from(""));
 
-            // Show error logs on failure
-            // Combine stdout and stderr, with stdout taking precedence (script logs to stdout)
             let mut all_log_lines = Vec::new();
 
-            // Add all stdout lines (these contain all the log messages from log_message())
             for line in &stdout_lines {
                 all_log_lines.push(line.clone());
             }
 
-            // Add stderr lines that aren't duplicates
             for line in &stderr_lines {
                 if !stdout_lines.contains(line) {
                     all_log_lines.push(line.clone());
@@ -957,12 +875,9 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                 )]));
                 text.push(Line::from(""));
 
-                // Calculate how many lines we can fit in the terminal
-                // Reserve space for: title (1), error message (4-5), logs header (2), "Press any key" (1), borders (2)
                 let available_height = size.height.saturating_sub(11);
                 let lines_to_show = all_log_lines.len().min(available_height as usize);
 
-                // Show the last N lines that fit, or all if they fit
                 let start_idx = if all_log_lines.len() > lines_to_show {
                     all_log_lines.len() - lines_to_show
                 } else {
@@ -970,7 +885,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                 };
 
                 for line in &all_log_lines[start_idx..] {
-                    // Truncate very long lines to fit terminal width (leave some margin for borders)
                     let max_width = (size.width.saturating_sub(4)) as usize;
                     let display_line = if line.len() > max_width {
                         format!("{}...", &line[..max_width.saturating_sub(3)])
@@ -979,10 +893,7 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                     };
                     text.push(Line::from(format!("  {}", display_line)));
                 }
-
-                // Just show the last N lines that fit, no scroll indicator needed
             } else if !error_messages.is_empty() {
-                // Show error messages if we have them but no full logs
                 text.push(Line::from(vec![Span::styled(
                     "Error details:",
                     Style::default().fg(Color::Red).bold(),
@@ -998,7 +909,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                     text.push(Line::from(format!("  {}", display_line)));
                 }
             } else {
-                // If no logs captured, indicate where to look
                 text.push(Line::from(""));
                 text.push(Line::from(
                     "No error logs captured. Check system logs for details:",
@@ -1017,22 +927,18 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         f.render_widget(para, size);
     })?;
 
-    // Wait for key press
     if let Event::Key(_) = event::read()? {}
 
-    // Explicitly clean up (guard will also clean up on drop, but this ensures proper order)
     let mut terminal = terminal_guard.terminal.take().unwrap();
     teardown_terminal(&mut terminal)?;
 
     if !output.status.success() {
-        // Error details were already shown in the TUI, just return a simple error
         anyhow::bail!(
             "Recovery upgrader failed with exit code: {:?}",
             output.status.code()
         );
     }
 
-    // Log success message if available
     if let Some(ref msg) = success_message {
         eprintln!("{}", msg);
     } else if output.status.success() {
