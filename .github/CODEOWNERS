@@ -222,6 +222,7 @@ go_deps.bzl               @dfinity/idx
 /rs/rust_canisters/call_loop_canister                   @dfinity/team-dsm
 /rs/rust_canisters/call_tree_test/                      @dfinity/team-dsm
 /rs/rust_canisters/canister_creator                     @dfinity/team-dsm
+/rs/rust_canisters/downstream_calls_test/               @dfinity/team-dsm
 /rs/rust_canisters/load_simulator                       @dfinity/team-dsm
 /rs/rust_canisters/memory_test/                         @dfinity/team-dsm
 /rs/rust_canisters/messaging_test/                      @dfinity/team-dsm
