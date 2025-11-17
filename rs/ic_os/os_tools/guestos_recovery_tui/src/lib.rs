@@ -5,7 +5,8 @@ use crossterm::event::{
 };
 use crossterm::execute;
 use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+    Clear as TerminalClear, ClearType, EnterAlternateScreen, LeaveAlternateScreen,
+    disable_raw_mode, enable_raw_mode,
 };
 use ratatui::{
     Frame, Terminal,
@@ -15,10 +16,11 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
-use std::io::{self, BufRead, BufReader};
+use std::io::{self, BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode().context("Failed to enable raw mode")?;
@@ -38,6 +40,9 @@ fn teardown_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> R
     disable_raw_mode().context("Failed to disable raw mode")?;
     let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
     terminal.show_cursor().context("Failed to show cursor")?;
+    // Clear the normal screen after leaving alternate screen to prevent interference from background logs
+    let _ = execute!(io::stdout(), TerminalClear(ClearType::All));
+    let _ = io::stdout().flush();
     Ok(())
 }
 
@@ -246,44 +251,46 @@ impl App {
         terminal_guard.get_mut().draw(|f: &mut Frame| self.ui(f))?;
 
         let result = loop {
-            match event::read() {
-                Ok(Event::Key(key)) => {
-                    if key.kind == KeyEventKind::Press || key.kind == KeyEventKind::Repeat {
-                        if key.code == KeyCode::Char('c')
-                            && key.modifiers.contains(KeyModifiers::CONTROL)
-                        {
-                            break Ok(None);
-                        }
-
-                        let needs_redraw = match self.handle_input(key)? {
-                            InputResult::Continue => true,
-                            InputResult::Exit => break Ok(None),
-                            InputResult::Proceed => match self.params.validate() {
-                                Ok(_) => break Ok(Some(self.params.clone())),
-                                Err(e) => {
-                                    self.error_message = Some(e.to_string());
-                                    true
-                                }
-                            },
-                        };
-
-                        if needs_redraw {
-                            if let Err(e) =
-                                terminal_guard.get_mut().draw(|f: &mut Frame| self.ui(f))
+            // Poll with periodic redraws to ensure the screen stays clean.
+            if event::poll(Duration::from_millis(2000))? {
+                match event::read()? {
+                    Event::Key(key) => {
+                        if key.kind == KeyEventKind::Press || key.kind == KeyEventKind::Repeat {
+                            if key.code == KeyCode::Char('c')
+                                && key.modifiers.contains(KeyModifiers::CONTROL)
                             {
-                                let mut term = terminal_guard.terminal.take().unwrap();
-                                teardown_terminal(&mut term)?;
-                                return Err(e).context("Failed to render TUI - terminal may not support required features");
+                                break Ok(None);
+                            }
+
+                            let needs_redraw = match self.handle_input(key)? {
+                                InputResult::Continue => true,
+                                InputResult::Exit => break Ok(None),
+                                InputResult::Proceed => match self.params.validate() {
+                                    Ok(_) => break Ok(Some(self.params.clone())),
+                                    Err(e) => {
+                                        self.error_message = Some(e.to_string());
+                                        true
+                                    }
+                                },
+                            };
+
+                            if needs_redraw {
+                                if let Err(e) =
+                                    terminal_guard.get_mut().draw(|f: &mut Frame| self.ui(f))
+                                {
+                                    let mut term = terminal_guard.terminal.take().unwrap();
+                                    teardown_terminal(&mut term)?;
+                                    return Err(e).context("Failed to render TUI - terminal may not support required features");
+                                }
                             }
                         }
                     }
+                    _ => {}
                 }
-                Ok(_) => {}
-                Err(e) => {
-                    let mut term = terminal_guard.terminal.take().unwrap();
-                    teardown_terminal(&mut term)?;
-                    return Err(e).context("Failed to read terminal events - terminal may not support required features");
-                }
+            } else {
+                // No event yet, periodically redraw to prevent log interference
+                // Redraw without clearing to avoid flashing - overwriting should be sufficient
+                terminal_guard.get_mut().draw(|f: &mut Frame| self.ui(f))?;
             }
         };
 
@@ -538,6 +545,139 @@ impl App {
     }
 }
 
+fn draw_completion_screen(
+    f: &mut Frame,
+    success: bool,
+    success_message: &Option<String>,
+    output: &std::process::Output,
+    stdout_lines: &[String],
+    stderr_lines: &[String],
+    error_messages: &[String],
+) {
+    let size = f.size();
+    if size.width < 10 || size.height < 5 {
+        return;
+    }
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(if success {
+            "Recovery Completed"
+        } else {
+            "Recovery Failed"
+        })
+        .style(if success {
+            Style::default().fg(Color::Green).bold()
+        } else {
+            Style::default().fg(Color::Red).bold()
+        });
+
+    let mut text = Vec::new();
+
+    if success {
+        text.push(Line::from(""));
+        let success_msg = match success_message {
+            Some(msg) => format!("✓ {}", msg),
+            None => "✓ Recovery completed successfully!".to_string(),
+        };
+        text.push(Line::from(vec![Span::styled(
+            success_msg,
+            Style::default().fg(Color::Green).bold(),
+        )]));
+        text.push(Line::from(""));
+        let separator = "─".repeat((size.width.saturating_sub(4)).max(10) as usize);
+        text.push(Line::from(vec![Span::styled(
+            separator,
+            Style::default().fg(Color::DarkGray),
+        )]));
+        text.push(Line::from(""));
+    } else {
+        text.push(Line::from(""));
+        text.push(Line::from(vec![Span::styled(
+            format!(
+                "✗ Recovery failed with exit code: {:?}",
+                output.status.code()
+            ),
+            Style::default().fg(Color::Red).bold(),
+        )]));
+        text.push(Line::from(""));
+        let separator = "─".repeat((size.width.saturating_sub(4)).max(10) as usize);
+        text.push(Line::from(vec![Span::styled(
+            separator,
+            Style::default().fg(Color::DarkGray),
+        )]));
+        text.push(Line::from(""));
+
+        let mut all_log_lines = Vec::new();
+
+        for line in stdout_lines {
+            all_log_lines.push(line.clone());
+        }
+
+        for line in stderr_lines {
+            if !stdout_lines.contains(line) {
+                all_log_lines.push(line.clone());
+            }
+        }
+
+        if !all_log_lines.is_empty() {
+            text.push(Line::from(vec![Span::styled(
+                "Error logs:",
+                Style::default().fg(Color::Red).bold(),
+            )]));
+            text.push(Line::from(""));
+
+            let available_height = size.height.saturating_sub(11);
+            let lines_to_show = all_log_lines.len().min(available_height as usize);
+
+            let start_idx = if all_log_lines.len() > lines_to_show {
+                all_log_lines.len() - lines_to_show
+            } else {
+                0
+            };
+
+            for line in &all_log_lines[start_idx..] {
+                let max_width = (size.width.saturating_sub(4)) as usize;
+                let display_line = if line.len() > max_width {
+                    format!("{}...", &line[..max_width.saturating_sub(3)])
+                } else {
+                    line.clone()
+                };
+                text.push(Line::from(format!("  {}", display_line)));
+            }
+        } else if !error_messages.is_empty() {
+            text.push(Line::from(vec![Span::styled(
+                "Error details:",
+                Style::default().fg(Color::Red).bold(),
+            )]));
+            text.push(Line::from(""));
+            for error in error_messages {
+                let max_width = (size.width.saturating_sub(4)) as usize;
+                let display_line = if error.len() > max_width {
+                    format!("{}...", &error[..max_width.saturating_sub(3)])
+                } else {
+                    error.clone()
+                };
+                text.push(Line::from(format!("  {}", display_line)));
+            }
+        } else {
+            text.push(Line::from(""));
+            text.push(Line::from(
+                "No error logs captured. Check system logs for details:",
+            ));
+            text.push(Line::from("  journalctl -t guestos-recovery-upgrader"));
+        }
+    }
+
+    text.push(Line::from(""));
+    text.push(Line::from("Press any key to continue..."));
+
+    let para = Paragraph::new(text)
+        .block(block)
+        .alignment(Alignment::Left)
+        .wrap(Wrap { trim: true });
+    f.render_widget(para, size);
+}
+
 /// Displays a status screen and runs the recovery upgrader script with the given parameters.
 /// Shows real-time logs and a completion screen with results.
 pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
@@ -618,7 +758,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         }
     });
 
-    let mut last_log_count = 0;
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => {
@@ -629,69 +768,66 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
             Ok(None) => {
                 let logs = log_lines.lock().unwrap();
                 let current_logs: Vec<String> = logs.clone();
-                let current_count = current_logs.len();
                 drop(logs);
 
-                if current_count > last_log_count {
-                    terminal_guard
-                        .get_mut()
-                        .draw(|f| {
-                            let size = f.size();
-                            if size.width < 10 || size.height < 5 {
-                                return;
-                            }
-                            let block = Block::default()
-                                .borders(Borders::ALL)
-                                .title("GuestOS Recovery Upgrader")
-                                .style(Style::default().bold());
+                // Always redraw periodically to prevent background log interference
+                // Redraw without clearing to avoid flashing - overwriting should be sufficient
+                terminal_guard
+                    .get_mut()
+                    .draw(|f| {
+                        let size = f.size();
+                        if size.width < 10 || size.height < 5 {
+                            return;
+                        }
+                        let block = Block::default()
+                            .borders(Borders::ALL)
+                            .title("GuestOS Recovery Upgrader")
+                            .style(Style::default().bold());
 
-                            let mut text = vec![
-                                Line::from("Parameters:"),
-                                Line::from(version_line.clone()),
-                                Line::from(version_hash_line.clone()),
-                                Line::from(recovery_hash_line.clone()),
-                                Line::from(""),
-                                Line::from("Recovery process logs:"),
-                                Line::from(""),
-                            ];
+                        let mut text = vec![
+                            Line::from("Parameters:"),
+                            Line::from(version_line.clone()),
+                            Line::from(version_hash_line.clone()),
+                            Line::from(recovery_hash_line.clone()),
+                            Line::from(""),
+                            Line::from("Recovery process logs:"),
+                            Line::from(""),
+                        ];
 
-                            let available_height = size.height.saturating_sub(10);
-                            let lines_to_show = current_logs.len().min(available_height as usize);
-                            let start_idx = if current_logs.len() > lines_to_show {
-                                current_logs.len() - lines_to_show
+                        let available_height = size.height.saturating_sub(10);
+                        let lines_to_show = current_logs.len().min(available_height as usize);
+                        let start_idx = if current_logs.len() > lines_to_show {
+                            current_logs.len() - lines_to_show
+                        } else {
+                            0
+                        };
+
+                        for line in &current_logs[start_idx..] {
+                            let max_width = (size.width.saturating_sub(4)) as usize;
+                            let display_line = if line.len() > max_width {
+                                format!("{}...", &line[..max_width.saturating_sub(3)])
                             } else {
-                                0
+                                line.clone()
                             };
+                            text.push(Line::from(format!("  {}", display_line)));
+                        }
 
-                            for line in &current_logs[start_idx..] {
-                                let max_width = (size.width.saturating_sub(4)) as usize;
-                                let display_line = if line.len() > max_width {
-                                    format!("{}...", &line[..max_width.saturating_sub(3)])
-                                } else {
-                                    line.clone()
-                                };
-                                text.push(Line::from(format!("  {}", display_line)));
-                            }
+                        if current_logs.len() > lines_to_show {
+                            text.push(Line::from(""));
+                            text.push(Line::from(format!(
+                                "  ... (showing last {} of {} log lines)",
+                                lines_to_show,
+                                current_logs.len()
+                            )));
+                        }
 
-                            if current_logs.len() > lines_to_show {
-                                text.push(Line::from(""));
-                                text.push(Line::from(format!(
-                                    "  ... (showing last {} of {} log lines)",
-                                    lines_to_show,
-                                    current_logs.len()
-                                )));
-                            }
-
-                            let para = Paragraph::new(text)
-                                .block(block)
-                                .alignment(Alignment::Left)
-                                .wrap(Wrap { trim: true });
-                            f.render_widget(para, size);
-                        })
-                        .ok();
-
-                    last_log_count = current_count;
-                }
+                        let para = Paragraph::new(text)
+                            .block(block)
+                            .alignment(Alignment::Left)
+                            .wrap(Wrap { trim: true });
+                        f.render_widget(para, size);
+                    })
+                    .ok();
 
                 thread::sleep(std::time::Duration::from_millis(100));
             }
@@ -800,136 +936,46 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         }
     }
 
+    let success = output.status.success();
     terminal_guard.get_mut().draw(|f| {
-        let size = f.size();
-        if size.width < 10 || size.height < 5 {
-            return;
-        }
-        let success = output.status.success();
-        let block = Block::default()
-            .borders(Borders::ALL)
-            .title(if success {
-                "Recovery Completed"
-            } else {
-                "Recovery Failed"
-            })
-            .style(if success {
-                Style::default().fg(Color::Green).bold()
-            } else {
-                Style::default().fg(Color::Red).bold()
-            });
-
-        let mut text = Vec::new();
-
-        if success {
-            text.push(Line::from(""));
-            let success_msg = if let Some(ref msg) = success_message {
-                format!("✓ {}", msg)
-            } else {
-                "✓ Recovery completed successfully!".to_string()
-            };
-            text.push(Line::from(vec![Span::styled(
-                success_msg,
-                Style::default().fg(Color::Green).bold(),
-            )]));
-            text.push(Line::from(""));
-            let separator = "─".repeat((size.width.saturating_sub(4)).max(10) as usize);
-            text.push(Line::from(vec![Span::styled(
-                separator,
-                Style::default().fg(Color::DarkGray),
-            )]));
-            text.push(Line::from(""));
-        } else {
-            text.push(Line::from(""));
-            text.push(Line::from(vec![Span::styled(
-                format!(
-                    "✗ Recovery failed with exit code: {:?}",
-                    output.status.code()
-                ),
-                Style::default().fg(Color::Red).bold(),
-            )]));
-            text.push(Line::from(""));
-            let separator = "─".repeat((size.width.saturating_sub(4)).max(10) as usize);
-            text.push(Line::from(vec![Span::styled(
-                separator,
-                Style::default().fg(Color::DarkGray),
-            )]));
-            text.push(Line::from(""));
-
-            let mut all_log_lines = Vec::new();
-
-            for line in &stdout_lines {
-                all_log_lines.push(line.clone());
-            }
-
-            for line in &stderr_lines {
-                if !stdout_lines.contains(line) {
-                    all_log_lines.push(line.clone());
-                }
-            }
-
-            if !all_log_lines.is_empty() {
-                text.push(Line::from(vec![Span::styled(
-                    "Error logs:",
-                    Style::default().fg(Color::Red).bold(),
-                )]));
-                text.push(Line::from(""));
-
-                let available_height = size.height.saturating_sub(11);
-                let lines_to_show = all_log_lines.len().min(available_height as usize);
-
-                let start_idx = if all_log_lines.len() > lines_to_show {
-                    all_log_lines.len() - lines_to_show
-                } else {
-                    0
-                };
-
-                for line in &all_log_lines[start_idx..] {
-                    let max_width = (size.width.saturating_sub(4)) as usize;
-                    let display_line = if line.len() > max_width {
-                        format!("{}...", &line[..max_width.saturating_sub(3)])
-                    } else {
-                        line.clone()
-                    };
-                    text.push(Line::from(format!("  {}", display_line)));
-                }
-            } else if !error_messages.is_empty() {
-                text.push(Line::from(vec![Span::styled(
-                    "Error details:",
-                    Style::default().fg(Color::Red).bold(),
-                )]));
-                text.push(Line::from(""));
-                for error in &error_messages {
-                    let max_width = (size.width.saturating_sub(4)) as usize;
-                    let display_line = if error.len() > max_width {
-                        format!("{}...", &error[..max_width.saturating_sub(3)])
-                    } else {
-                        error.clone()
-                    };
-                    text.push(Line::from(format!("  {}", display_line)));
-                }
-            } else {
-                text.push(Line::from(""));
-                text.push(Line::from(
-                    "No error logs captured. Check system logs for details:",
-                ));
-                text.push(Line::from("  journalctl -t guestos-recovery-upgrader"));
-            }
-        }
-
-        text.push(Line::from(""));
-        text.push(Line::from("Press any key to continue..."));
-
-        let para = Paragraph::new(text)
-            .block(block)
-            .alignment(Alignment::Left)
-            .wrap(Wrap { trim: true });
-        f.render_widget(para, size);
+        draw_completion_screen(
+            f,
+            success,
+            &success_message,
+            &output,
+            &stdout_lines,
+            &stderr_lines,
+            &error_messages,
+        );
     })?;
 
-    if let Event::Key(_) = event::read()? {}
+    // Poll for key events with periodic redraws to prevent background logs from interfering
+    // Direct writes to /dev/tty1 or /dev/ttyS0 bypass the TUI, so we need periodic redraws to ensure the screen stays clean.
+    loop {
+        // Poll with longer timeout - logs come every 15 minutes, so 2 seconds is plenty
+        if event::poll(Duration::from_millis(2000))? {
+            if let Event::Key(_) = event::read()? {
+                break;
+            }
+        } else {
+            // No event yet, periodically redraw to ensure screen stays clean if logs wrote to terminal
+            // Redraw without clearing to avoid flashing - overwriting should be sufficient
+            terminal_guard.get_mut().draw(|f| {
+                draw_completion_screen(
+                    f,
+                    success,
+                    &success_message,
+                    &output,
+                    &stdout_lines,
+                    &stderr_lines,
+                    &error_messages,
+                );
+            })?;
+        }
+    }
 
     let mut terminal = terminal_guard.terminal.take().unwrap();
+    let _ = terminal.clear();
     teardown_terminal(&mut terminal)?;
 
     if !output.status.success() {
