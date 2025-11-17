@@ -6,7 +6,6 @@ use config_types::{
 };
 use deterministic_ips::node_type::NodeType;
 use deterministic_ips::{IpVariant, MacAddr6Ext, calculate_deterministic_mac};
-use linux_kernel_command_line::KernelCommandLine;
 use std::net::Ipv6Addr;
 use std::path::Path;
 use utils::to_cidr;
@@ -121,20 +120,18 @@ fn guestos_recovery_hash(
     hostos_cmdline_content: &str,
     recovery_file_path: &Path,
 ) -> Result<Option<RecoveryConfig>> {
-    let hostos_cmdline = hostos_cmdline_content.parse::<KernelCommandLine>()?;
-
-    if let Some(recovery_hash_value) = hostos_cmdline.get_argument("recovery-hash") {
-        if !recovery_file_path.exists() {
-            mark_hostos_recovered(recovery_file_path)?;
-            Ok(Some(RecoveryConfig {
-                recovery_hash: recovery_hash_value,
-            }))
-        } else {
-            Ok(None)
-        }
-    } else {
-        Ok(None)
+    if let Some(recovery_hash_value) = hostos_cmdline_content
+        .split(" ")
+        .find_map(|v| v.strip_prefix("recovery-hash="))
+        && !recovery_file_path.exists()
+    {
+        mark_hostos_recovered(recovery_file_path)?;
+        return Ok(Some(RecoveryConfig {
+            recovery_hash: recovery_hash_value.to_string(),
+        }));
     }
+
+    Ok(None)
 }
 
 /// Marks that HostOS has booted GuestOS in recovery mode by creating a tracking file.
