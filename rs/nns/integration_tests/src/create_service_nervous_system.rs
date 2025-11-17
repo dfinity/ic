@@ -9,7 +9,7 @@ use ic_nns_common::pb::v1::{self as nns_common_pb, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
 use ic_nns_governance_api::{
-    ListProposalInfo,
+    ListProposalInfoRequest,
     MakeProposalRequest,
     // Perhaps surprisingly, CreateServiceNervousSystem is not needed by
     // this file, because we simply use a constant of that type
@@ -135,7 +135,7 @@ fn test_several_proposals() {
     // Step 3.1: Inspect proposals.
 
     // There should only be two proposals of type CreateServiceNervousSystem.
-    let final_proposals = nns_list_proposals(&state_machine, ListProposalInfo::default())
+    let final_proposals = nns_list_proposals(&state_machine, ListProposalInfoRequest::default())
         .proposal_info
         .into_iter()
         .filter_map(

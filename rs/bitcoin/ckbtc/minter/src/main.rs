@@ -175,12 +175,7 @@ fn retrieve_btc_status_v2_by_account(target: Option<Account>) -> Vec<BtcRetrieva
 
 #[query]
 fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
-    read_state(|s| {
-        s.known_utxos_for_account(&Account {
-            owner: args.owner.unwrap_or(ic_cdk::api::msg_caller()),
-            subaccount: args.subaccount,
-        })
-    })
+    ic_ckbtc_minter::queries::get_known_utxos(args)
 }
 
 #[update]

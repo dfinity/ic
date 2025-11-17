@@ -1,7 +1,11 @@
 use crate::dashboard::build_dashboard;
 use crate::metrics::encode_metrics;
+use crate::state::read_state;
+use crate::updates::update_balance::UpdateBalanceArgs;
 use candid::CandidType;
+use ic_btc_interface::Utxo;
 use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 
 #[derive(CandidType, Deserialize)]
@@ -18,6 +22,15 @@ pub struct EstimateFeeArg {
 pub struct WithdrawalFee {
     pub minter_fee: u64,
     pub bitcoin_fee: u64,
+}
+
+pub fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
+    read_state(|s| {
+        s.known_utxos_for_account(&Account {
+            owner: args.owner.unwrap_or(ic_cdk::api::msg_caller()),
+            subaccount: args.subaccount,
+        })
+    })
 }
 
 pub fn http_request(req: HttpRequest) -> HttpResponse {

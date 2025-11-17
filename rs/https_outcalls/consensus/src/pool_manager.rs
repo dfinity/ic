@@ -746,6 +746,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -852,6 +853,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 // NOTE: We need at least some context in the state, otherwise next_callback_id will be 0 and no
@@ -965,6 +967,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -1097,6 +1100,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -1235,6 +1239,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
                 state_manager
                     .get_mut()
@@ -1338,6 +1343,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -1450,6 +1456,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -1631,6 +1638,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -1742,6 +1750,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
                 state_manager
                     .get_mut()
@@ -1865,6 +1874,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
                 state_manager
                     .get_mut()
@@ -1996,6 +2006,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
                 state_manager
                     .get_mut()
@@ -2118,6 +2129,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -2234,6 +2246,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 state_manager
@@ -2382,6 +2395,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::NonReplicated(delegated_node_id),
+                    pricing_version: PricingVersion::Legacy,
                 };
                 state_manager
                     .get_mut()
@@ -2480,6 +2494,7 @@ pub mod test {
                     transform: None,
                     time: ic_types::Time::from_nanos_since_unix_epoch(10),
                     replication: Replication::FullyReplicated,
+                    pricing_version: PricingVersion::Legacy,
                 };
 
                 // Expect times to be called exactly once to check that already
