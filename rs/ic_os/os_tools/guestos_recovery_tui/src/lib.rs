@@ -739,9 +739,23 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         .unwrap()
         .as_secs();
 
+    // Validate parameters before running
+    if params.version.is_empty() || params.version_hash.is_empty() {
+        anyhow::bail!("Invalid parameters: version and version-hash must be non-empty");
+    }
+
     // Run the upgrader script with command line parameters
     // The script now writes to stdout (via log_message), so we can capture it directly
-    let output = build_upgrader_command(params)
+    // Build the command - sudo should pass arguments through correctly
+    let mut cmd = build_upgrader_command(params);
+
+    // Debug: Log what we're about to execute (this will help diagnose if params are empty)
+    eprintln!(
+        "DEBUG: Executing recovery with params: version='{}', version_hash='{}', recovery_hash='{}'",
+        params.version, params.version_hash, params.recovery_hash
+    );
+
+    let output = cmd
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .output()
@@ -773,11 +787,20 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     }
 
     // Collect error information: prefer stdout (where script logs), then stderr
-    // Look for explicit ERROR: markers first
+    // Look for explicit ERROR: markers first, but also include debug messages
     let mut explicit_errors = Vec::new();
+    let mut debug_messages = Vec::new();
+
     for line in &stdout_lines {
         if line.contains("ERROR:") || line.contains("error:") || line.contains("Error:") {
             explicit_errors.push(line.clone());
+        }
+        // Also capture debug messages that help diagnose parameter issues
+        if line.contains("Received") && line.contains("arguments") {
+            debug_messages.push(line.clone());
+        }
+        if line.contains("Parsed VERSION") || line.contains("Parsed VERSION_HASH") {
+            debug_messages.push(line.clone());
         }
     }
     for line in &stderr_lines {
@@ -787,7 +810,9 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     }
 
     if !explicit_errors.is_empty() {
-        error_messages = explicit_errors;
+        // Include debug messages along with errors to help diagnose
+        error_messages = debug_messages;
+        error_messages.extend(explicit_errors);
     } else if !output.status.success() {
         // If command failed but no explicit ERROR markers, show recent output
         // Prefer stderr if available, otherwise stdout

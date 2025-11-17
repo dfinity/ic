@@ -31,7 +31,8 @@ root	ALL=(ALL:ALL) NOPASSWD:ALL
 
 # Allow limited-console to run the recovery upgrader script with root privileges
 # This is needed for losetup, mount, and block device operations
-# The recovery tool calls it directly: sudo -n /opt/ic/bin/guestos-recovery-upgrader.sh
+# The recovery tool calls it via: sudo -n /opt/ic/bin/guestos-recovery-upgrader.sh ...
+# Specifying the command without arguments allows it to be run with any arguments
 limited-console ALL=(ALL:ALL) NOPASSWD: /opt/ic/bin/guestos-recovery-upgrader.sh
 
 # See sudoers(5) for more information on "#include" directives:

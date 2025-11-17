@@ -43,7 +43,6 @@ parse_args() {
 }
 
 # Helper function to log messages to console, serial, logger, and stdout/stderr
-# stdout/stderr are captured by the TUI, while tty1/ttyS0/logger go to system logs
 log_message() {
     local message="$1"
 
@@ -52,7 +51,7 @@ log_message() {
     echo "$message" >/dev/ttyS0 2>/dev/null || true
     # Write to system logger
     logger -t guestos-recovery-upgrader "$message" 2>/dev/null || true
-    # Also write to stdout so the TUI can capture it
+    # Write to stdout so the TUI can capture it
     echo "$message"
 }
 
@@ -276,12 +275,14 @@ guestos_upgrade_cleanup() {
 
 main() {
     log_message "Starting GuestOS Recovery Upgrader"
-
     # Parse command line arguments
     VERSION=""
     VERSION_HASH=""
     RECOVERY_HASH=""
     parse_args "$@"
+    
+    # Debug: Log parsed values
+    log_message "Parsed VERSION='$VERSION' VERSION_HASH='$VERSION_HASH' RECOVERY_HASH='$RECOVERY_HASH'"
 
     if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ]; then
         log_message "ERROR: version and version-hash parameters are required"
@@ -326,4 +327,4 @@ main() {
     log_message "Launching GuestOS on the new version..."
 }
 
-main
+main "$@"
