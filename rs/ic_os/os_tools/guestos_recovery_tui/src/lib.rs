@@ -631,6 +631,16 @@ where
     })
 }
 
+/// Creates the parameter display lines for the UI
+fn create_parameter_lines(params: &RecoveryParams) -> Vec<Line<'_>> {
+    vec![
+        Line::from("Parameters:"),
+        Line::from(format!("  VERSION: {}", params.version)),
+        Line::from(format!("  VERSION-HASH: {}", params.version_hash)),
+        Line::from(format!("  RECOVERY-HASH: {}", params.recovery_hash)),
+    ]
+}
+
 fn calculate_log_viewport(total_lines: usize, available_height: usize) -> (usize, usize) {
     let lines_to_show = total_lines.min(available_height);
     let start_idx = total_lines.saturating_sub(lines_to_show);
@@ -822,9 +832,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     let terminal = setup_terminal()?;
     let mut terminal_guard = TerminalGuard::new(terminal);
 
-    let version_line = format!("  VERSION: {}", params.version);
-    let version_hash_line = format!("  VERSION-HASH: {}", params.version_hash);
-    let recovery_hash_line = format!("  RECOVERY-HASH: {}", params.recovery_hash);
     terminal_guard.get_mut().draw(|f| {
         let size = f.size();
         if is_terminal_too_small(size) {
@@ -835,15 +842,10 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
             .title("GuestOS Recovery Upgrader")
             .style(Style::default().bold());
 
-        let text = vec![
-            Line::from("Parameters:"),
-            Line::from(version_line.clone()),
-            Line::from(version_hash_line.clone()),
-            Line::from(recovery_hash_line.clone()),
-            Line::from(""),
-            Line::from("Starting recovery process..."),
-            Line::from("This may take several minutes. Please wait..."),
-        ];
+        let mut text = create_parameter_lines(params);
+        text.push(Line::from(""));
+        text.push(Line::from("Starting recovery process..."));
+        text.push(Line::from("This may take several minutes. Please wait..."));
 
         let para = Paragraph::new(text)
             .block(block)
@@ -904,15 +906,10 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                                 .title("GuestOS Recovery Upgrader")
                                 .style(Style::default().bold());
 
-                            let mut text = vec![
-                                Line::from("Parameters:"),
-                                Line::from(version_line.clone()),
-                                Line::from(version_hash_line.clone()),
-                                Line::from(recovery_hash_line.clone()),
-                                Line::from(""),
-                                Line::from("Recovery process logs:"),
-                                Line::from(""),
-                            ];
+                            let mut text = create_parameter_lines(params);
+                            text.push(Line::from(""));
+                            text.push(Line::from("Recovery process logs:"));
+                            text.push(Line::from(""));
 
                             let available_height = size.height.saturating_sub(10) as usize;
                             let (start_idx, lines_to_show) =
