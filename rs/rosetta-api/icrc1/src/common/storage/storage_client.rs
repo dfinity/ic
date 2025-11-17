@@ -391,15 +391,17 @@ impl StorageClient {
             bail!("Tried to update account balances but there exist gaps in the database.",);
         }
         let conn = Arc::clone(&self.storage_connection);
+        let flush_cache_and_shrink_memory = self.flush_cache_and_shrink_memory;
+        let balance_sync_batch_size = self.balance_sync_batch_size;
         tokio::task::spawn_blocking(move || {
             let mut open_connection = conn.lock().unwrap();
             storage_operations::update_account_balances(
                 &mut open_connection,
-                self.flush_cache_and_shrink_memory,
-                self.balance_sync_batch_size,
+                flush_cache_and_shrink_memory,
+                balance_sync_batch_size,
             )
         })
-            .await?
+        .await?
     }
 
     /// Retrieves the highest block index in the account balance table.
