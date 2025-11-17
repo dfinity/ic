@@ -16,8 +16,10 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
-use std::io::{self, Write};
+use std::io::{self, BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 // Check if we're likely in a web console by checking TERM
 // Web consoles often use basic terminal types that don't support alternate screen well
@@ -749,11 +751,145 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     // Build the command - sudo should pass arguments through correctly
     let mut cmd = build_upgrader_command(params);
 
-    let output = cmd
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .context("Failed to run recovery upgrader")?;
+    // Spawn the process so we can read output in real-time
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    let mut child = cmd.spawn().context("Failed to spawn recovery upgrader")?;
+
+    // Shared log buffer for real-time display
+    let log_lines = Arc::new(Mutex::new(Vec::<String>::new()));
+    let log_lines_stdout = Arc::clone(&log_lines);
+    let log_lines_stderr = Arc::clone(&log_lines);
+
+    // Take stdout and stderr handles
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get stdout handle"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get stderr handle"))?;
+
+    // Spawn threads to read stdout and stderr
+    let stdout_handle = thread::spawn(move || {
+        let reader = BufReader::new(stdout);
+        for line in reader.lines().filter_map(Result::ok) {
+            let mut logs = log_lines_stdout.lock().unwrap();
+            logs.push(line);
+        }
+    });
+
+    let stderr_handle = thread::spawn(move || {
+        let reader = BufReader::new(stderr);
+        for line in reader.lines().filter_map(Result::ok) {
+            let mut logs = log_lines_stderr.lock().unwrap();
+            logs.push(line);
+        }
+    });
+
+    // Update TUI in real-time while process is running
+    let mut last_log_count = 0;
+    let status = loop {
+        // Check if process has finished (non-blocking)
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                // Process finished, wait for threads to finish reading any remaining output
+                stdout_handle.join().ok();
+                stderr_handle.join().ok();
+                break status;
+            }
+            Ok(None) => {
+                // Process still running, update display with current logs
+                let logs = log_lines.lock().unwrap();
+                let current_logs: Vec<String> = logs.clone();
+                let current_count = current_logs.len();
+                drop(logs);
+
+                // Only redraw if we have new logs (to avoid excessive redraws)
+                if current_count > last_log_count {
+                    terminal_guard
+                        .get_mut()
+                        .draw(|f| {
+                            let size = f.size();
+                            if size.width < 10 || size.height < 5 {
+                                return;
+                            }
+                            let block = Block::default()
+                                .borders(Borders::ALL)
+                                .title("GuestOS Recovery Upgrader")
+                                .style(Style::default().bold());
+
+                            let mut text = vec![
+                                Line::from("Parameters:"),
+                                Line::from(version_line.clone()),
+                                Line::from(version_hash_line.clone()),
+                                Line::from(recovery_hash_line.clone()),
+                                Line::from(""),
+                                Line::from("Recovery process logs:"),
+                                Line::from(""),
+                            ];
+
+                            // Show the last N lines that fit in the terminal
+                            let available_height = size.height.saturating_sub(10);
+                            let lines_to_show = current_logs.len().min(available_height as usize);
+                            let start_idx = if current_logs.len() > lines_to_show {
+                                current_logs.len() - lines_to_show
+                            } else {
+                                0
+                            };
+
+                            for line in &current_logs[start_idx..] {
+                                let max_width = (size.width.saturating_sub(4)) as usize;
+                                let display_line = if line.len() > max_width {
+                                    format!("{}...", &line[..max_width.saturating_sub(3)])
+                                } else {
+                                    line.clone()
+                                };
+                                text.push(Line::from(format!("  {}", display_line)));
+                            }
+
+                            if current_logs.len() > lines_to_show {
+                                text.push(Line::from(""));
+                                text.push(Line::from(format!(
+                                    "  ... (showing last {} of {} log lines)",
+                                    lines_to_show,
+                                    current_logs.len()
+                                )));
+                            }
+
+                            let para = Paragraph::new(text)
+                                .block(block)
+                                .alignment(Alignment::Left)
+                                .wrap(Wrap { trim: true });
+                            f.render_widget(para, size);
+                        })
+                        .ok();
+
+                    last_log_count = current_count;
+                }
+
+                // Small delay to avoid excessive CPU usage
+                thread::sleep(std::time::Duration::from_millis(100));
+            }
+            Err(e) => {
+                return Err(anyhow::anyhow!("Error waiting for process: {}", e));
+            }
+        }
+    };
+
+    // Get final logs for completion screen
+    let logs = log_lines.lock().unwrap();
+    let all_logs: Vec<String> = logs.clone();
+    drop(logs);
+
+    // Create output structure for compatibility with existing code
+    let output = std::process::Output {
+        status,
+        stdout: all_logs.join("\n").into_bytes(),
+        stderr: vec![],
+    };
 
     // Parse output for errors and success messages
     let mut error_messages = Vec::new();
@@ -859,7 +995,7 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         }
     }
 
-    // Show completion message
+    // Show completion message with all logs
     terminal_guard.get_mut().draw(|f| {
         let size = f.size();
         // Ensure minimum terminal size
@@ -895,33 +1031,65 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
             )));
         }
 
-        // Add error messages if any
-        if !error_messages.is_empty() {
+        // Show all captured log output from the script
+        // Combine stdout and stderr, with stdout taking precedence (script logs to stdout)
+        let mut all_log_lines = Vec::new();
+
+        // Add all stdout lines (these contain all the log messages from log_message())
+        for line in &stdout_lines {
+            all_log_lines.push(line.clone());
+        }
+
+        // Add stderr lines that aren't duplicates
+        for line in &stderr_lines {
+            if !stdout_lines.contains(line) {
+                all_log_lines.push(line.clone());
+            }
+        }
+
+        if !all_log_lines.is_empty() {
             text.push(Line::from(""));
-            text.push(Line::from("Error output:"));
-            // Limit to last 20 lines to avoid overwhelming the display, but show the most recent errors
-            let lines_to_show: Vec<_> = error_messages.iter().rev().take(20).rev().collect();
-            for error in lines_to_show {
-                // Truncate very long lines to prevent display issues
-                let display_line = if error.len() > 200 {
-                    format!("{}...", &error[..200])
+            text.push(Line::from("Recovery process logs:"));
+            text.push(Line::from(""));
+
+            // Calculate how many lines we can fit in the terminal
+            // Reserve space for: title (1), status (1-2), separator (2), "Press any key" (1), borders (2)
+            let available_height = size.height.saturating_sub(7);
+            let lines_to_show = all_log_lines.len().min(available_height as usize);
+
+            // Show the last N lines that fit, or all if they fit
+            let start_idx = if all_log_lines.len() > lines_to_show {
+                all_log_lines.len() - lines_to_show
+            } else {
+                0
+            };
+
+            for line in &all_log_lines[start_idx..] {
+                // Truncate very long lines to fit terminal width (leave some margin for borders)
+                let max_width = (size.width.saturating_sub(4)) as usize;
+                let display_line = if line.len() > max_width {
+                    format!("{}...", &line[..max_width.saturating_sub(3)])
                 } else {
-                    error.clone()
+                    line.clone()
                 };
                 text.push(Line::from(format!("  {}", display_line)));
             }
-            if error_messages.len() > 20 {
+
+            if all_log_lines.len() > lines_to_show {
+                text.push(Line::from(""));
                 text.push(Line::from(format!(
-                    "  ... (showing last 20 of {} error lines)",
-                    error_messages.len()
+                    "  ... (showing last {} of {} log lines, scroll up to see more)",
+                    lines_to_show,
+                    all_log_lines.len()
                 )));
             }
         } else {
-            // If no error messages captured, at least indicate where to look
+            // If no logs captured, indicate where to look
             text.push(Line::from(""));
             text.push(Line::from(
-                "No error output captured. Check system logs for details.",
+                "No log output captured. Check system logs for details:",
             ));
+            text.push(Line::from("  journalctl -t guestos-recovery-upgrader"));
         }
 
         // Ensure we always have at least one line
