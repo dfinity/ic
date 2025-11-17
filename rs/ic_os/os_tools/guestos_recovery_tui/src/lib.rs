@@ -24,6 +24,10 @@ use std::thread;
 const MIN_TERMINAL_WIDTH: u16 = 10;
 const MIN_TERMINAL_HEIGHT: u16 = 15;
 
+// Field length constants
+const VERSION_LENGTH: usize = 40; // Git commit hash length (hex characters)
+const HASH_LENGTH: usize = 64; // SHA256 hash length (hex characters)
+
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode().context("Failed to enable raw mode")?;
 
@@ -98,9 +102,15 @@ pub struct RecoveryParams {
 
 impl RecoveryParams {
     pub fn validate(&self) -> Result<()> {
-        Self::validate_hex_field(&self.version, 40, "VERSION", "Git commit hash")?;
-        Self::validate_hex_field(&self.version_hash, 64, "VERSION-HASH", "SHA256")?;
-        Self::validate_hex_field(&self.recovery_hash, 64, "RECOVERY-HASH", "SHA256")?;
+        if let Some(len) = Field::Version.required_length() {
+            Self::validate_hex_field(&self.version, len, "VERSION", "Git commit hash")?;
+        }
+        if let Some(len) = Field::VersionHash.required_length() {
+            Self::validate_hex_field(&self.version_hash, len, "VERSION-HASH", "SHA256")?;
+        }
+        if let Some(len) = Field::RecoveryHash.required_length() {
+            Self::validate_hex_field(&self.recovery_hash, len, "RECOVERY-HASH", "SHA256")?;
+        }
         Ok(())
     }
 
@@ -155,10 +165,11 @@ impl Field {
         )
     }
 
-    fn max_length(&self) -> Option<usize> {
+    /// Returns the required length for this field
+    fn required_length(&self) -> Option<usize> {
         match self {
-            Field::Version => Some(40),
-            Field::VersionHash | Field::RecoveryHash => Some(64),
+            Field::Version => Some(VERSION_LENGTH),
+            Field::VersionHash | Field::RecoveryHash => Some(HASH_LENGTH),
             _ => None,
         }
     }
@@ -210,7 +221,7 @@ impl App {
 
     fn handle_input_char(&mut self, c: char) {
         if let (Some(max_len), Some(field_value)) = (
-            self.current_field.max_length(),
+            self.current_field.required_length(),
             self.current_field.get_value_mut(&mut self.params),
         ) {
             if field_value.len() < max_len && c.is_ascii_hexdigit() {
@@ -387,11 +398,11 @@ impl App {
         let main_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(1),
-                Constraint::Length(3),
-                Constraint::Length(9),
-                Constraint::Length(1),
-                Constraint::Min(0),
+                Constraint::Length(1), // Title area
+                Constraint::Length(3), // Instructions area
+                Constraint::Length(9), // Input fields area (3 fields × 3 rows each)
+                Constraint::Length(1), // Button area
+                Constraint::Min(0),    // Remaining space (for error overlay)
             ])
             .split(size);
 
@@ -417,9 +428,9 @@ impl App {
         let fields_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(3),
-                Constraint::Length(3),
-                Constraint::Length(3),
+                Constraint::Length(3), // Version field
+                Constraint::Length(3), // VersionHash field
+                Constraint::Length(3), // RecoveryHash field
             ])
             .split(main_layout[2]);
 
