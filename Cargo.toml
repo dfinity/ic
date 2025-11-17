@@ -598,7 +598,7 @@ async-trait = "0.1.89"
 axum = { version = "0.8.4", features = ["ws"] }
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 axum-server = { version = "0.7.2", features = ["tls-rustls-no-provider"] }
-axum-otel-metrics = "0.11.0"
+axum-prometheus = "0.9.0"
 backoff = "0.4"
 base64 = { version = "0.13.1" }
 bincode = "1.3.3"

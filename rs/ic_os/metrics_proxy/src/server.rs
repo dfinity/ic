@@ -9,7 +9,8 @@ use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::middleware::map_response;
 use axum::{Router, routing::get};
-use axum_otel_metrics::HttpMetricsLayer;
+use axum_prometheus::metrics_exporter_prometheus::PrometheusHandle;
+use axum_prometheus::{GenericMetricLayer, Handle};
 use hyper;
 use hyper::body::Bytes;
 use hyper::body::Incoming;
@@ -64,7 +65,8 @@ enum ServerKind {
 
 pub struct Server {
     config: ServerKind,
-    metrics_collector: Option<HttpMetricsLayer>,
+    metrics_collector: Option<GenericMetricLayer<'static, PrometheusHandle, Handle>>,
+    metrics_handle: Option<PrometheusHandle>,
 }
 
 impl From<HttpProxy> for Server {
@@ -81,6 +83,7 @@ impl Server {
         Server {
             config: ServerKind::PrometheusMetricsProxy(config),
             metrics_collector: None,
+            metrics_handle: None,
         }
     }
 
@@ -91,15 +94,25 @@ impl Server {
         Server {
             config: ServerKind::PrometheusMetricsServer(listen_on),
             metrics_collector: None,
+            metrics_handle: None,
         }
     }
 
     #[must_use]
     /// Enables telemetry collection.
-    pub fn with_telemetry(self, ml: HttpMetricsLayer) -> Self {
+    pub fn with_telemetry(self, ml: GenericMetricLayer<'static, PrometheusHandle, Handle>) -> Self {
         Server {
-            config: self.config,
             metrics_collector: Some(ml),
+            ..self
+        }
+    }
+
+    #[must_use]
+    /// Enables telemetry collection.
+    pub fn with_metrics_handle(self, mh: PrometheusHandle) -> Self {
+        Server {
+            metrics_handle: Some(mh),
+            ..self
         }
     }
 
@@ -154,8 +167,8 @@ impl Server {
                 }
                 router
             }
-            ServerKind::PrometheusMetricsServer(_) => match self.metrics_collector.clone() {
-                Some(pl) => router.layer(pl),
+            ServerKind::PrometheusMetricsServer(_) => match self.metrics_handle {
+                Some(handle) => router.route("/metrics", get(|| async move { handle.render() })),
                 None => router,
             },
         };
@@ -176,8 +189,8 @@ impl Server {
         // Experimentally, if the telemetry layer does not go last, then
         // whatever errors the timeout layers bubble up, the telemetry
         // layer cannot register as an HTTP error.
-        if let Some(pl) = self.metrics_collector {
-            router = router.layer(pl);
+        if let Some(collector_layer) = self.metrics_collector.clone() {
+            router = router.layer(collector_layer);
         }
 
         let incoming = TcpListener::bind(&listener.sockaddr)

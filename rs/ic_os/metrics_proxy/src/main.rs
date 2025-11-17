@@ -1,27 +1,11 @@
-use axum_otel_metrics::{HttpMetricsLayerBuilder, PathSkipper};
+use axum_prometheus::{PrometheusMetricLayer, PrometheusMetricLayerBuilder};
 use clap::Parser;
-use opentelemetry::global;
-use opentelemetry_sdk::metrics::SdkMeterProvider;
-use std::sync::Arc;
 use tokio::task::JoinSet;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct MetricsProxyArgs {
     config: std::path::PathBuf,
-}
-
-fn configure_metrics_provider() -> SdkMeterProvider {
-    let registry = prometheus::Registry::new();
-    let exporter = opentelemetry_prometheus::exporter()
-        .with_registry(registry)
-        .build()
-        .unwrap();
-
-    let provider = SdkMeterProvider::builder().with_reader(exporter).build();
-
-    global::set_meter_provider(provider.clone());
-    provider
 }
 
 pub async fn run() {
@@ -35,17 +19,14 @@ pub async fn run() {
 
     simple_logger::init_with_level(log::Level::Info).unwrap();
 
-    let meter_provider = configure_metrics_provider();
-
     let cfg = maybecfg.unwrap();
     let mut telemetry = cfg.metrics.clone().map(|listener| {
-        (
-            listener,
-            HttpMetricsLayerBuilder::new()
-                .with_provider(meter_provider)
-                .with_skipper(PathSkipper::new_with_fn(Arc::new(move |_: &str| false)))
-                .build(),
-        )
+        let (prometheus_layer, metrics_handle) = PrometheusMetricLayerBuilder::new()
+            .with_ignore_patterns(&["/metrics"])
+            .enable_response_body_size(true)
+            .with_default_metrics()
+            .build_pair();
+        (listener, prometheus_layer, metrics_handle)
     });
 
     let proxylist: Vec<metrics_proxy::config::HttpProxy> = cfg.into();
@@ -53,16 +34,19 @@ pub async fn run() {
     for proxy in proxylist {
         let mut server = metrics_proxy::server::Server::from(proxy);
         telemetry = match telemetry {
-            Some((t, m)) => {
-                server = server.with_telemetry(m.clone());
-                Some((t, m))
+            Some((t, pl, mh)) => {
+                server = server.with_telemetry(pl.clone());
+                server = server.with_metrics_handle(mh.clone());
+                Some((t, pl, mh))
             }
             _ => None,
         };
         set.spawn(async move { server.serve().await });
     }
-    if let Some((t, m)) = telemetry {
-        let server = metrics_proxy::server::Server::for_service_metrics(t).with_telemetry(m);
+    if let Some((t, pl, mh)) = telemetry {
+        let server = metrics_proxy::server::Server::for_service_metrics(t)
+            .with_telemetry(pl)
+            .with_metrics_handle(mh);
         set.spawn(async move { server.serve().await });
     }
 
