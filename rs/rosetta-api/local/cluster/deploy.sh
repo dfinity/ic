@@ -199,7 +199,11 @@ wait_for_ready pod app.kubernetes.io/name=cadvisor monitoring 300
 # Install or upgrade kube-prometheus-stack (includes Prometheus, Grafana, Alertmanager, Node Exporter, etc.)
 helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q kube-prometheus || {
     echo "Installing kube-prometheus-stack..."
-    helm install kube-prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --create-namespace --kube-context="$MINIKUBE_PROFILE"
+    helm install kube-prometheus prometheus-community/kube-prometheus-stack \
+        --namespace monitoring \
+        --create-namespace \
+        --set grafana.adminPassword=admin \
+        --kube-context="$MINIKUBE_PROFILE"
 }
 
 # Wait for kube-prometheus-stack operator to be ready first
