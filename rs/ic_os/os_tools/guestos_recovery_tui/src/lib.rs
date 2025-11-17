@@ -5,8 +5,7 @@ use crossterm::event::{
 };
 use crossterm::execute;
 use crossterm::terminal::{
-    Clear as TerminalClear, ClearType, EnterAlternateScreen, LeaveAlternateScreen,
-    disable_raw_mode, enable_raw_mode,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::{
     Frame, Terminal,
@@ -16,71 +15,29 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-
-// Test if we can actually write to the terminal and see output
-fn test_terminal_output() -> Result<()> {
-    use std::io::Write;
-    let mut stdout = io::stdout();
-    // Write a test message that should be visible
-    write!(stdout, "\r\n\x1b[2KTesting terminal output...\r\n")?;
-    stdout.flush()?;
-    // Give it a moment to appear
-    std::thread::sleep(std::time::Duration::from_millis(200));
-    Ok(())
-}
-
-fn setup_terminal() -> Result<(Terminal<CrosstermBackend<io::Stdout>>, bool)> {
-    // For web consoles, skip alternate screen mode entirely to avoid issues
-    let skip_alternate_screen = is_likely_web_console();
-
-    // Test if output works BEFORE enabling raw mode
-    // If this fails or output doesn't appear, we know the terminal won't work
-    if let Err(e) = test_terminal_output() {
-        anyhow::bail!(
-            "Cannot write to terminal: {}. This terminal may not support the required features.",
-            e
-        );
-    }
-
+fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode().context("Failed to enable raw mode")?;
+
     let mut stdout = io::stdout();
-
-    let use_alternate_screen = if skip_alternate_screen {
-        // Skip alternate screen for web consoles - it often causes issues
-        false
-    } else {
-        // Try to enter alternate screen mode, but don't fail if it doesn't work
-        match execute!(stdout, EnterAlternateScreen) {
-            Ok(_) => true,
-            Err(_) => false,
-        }
-    };
-
-    // Explicitly clear the screen to ensure we start with a clean slate
-    // This is especially important for web consoles where alternate screen might not work
-    let _ = execute!(stdout, TerminalClear(ClearType::All));
-    // Flush to ensure clear command is sent
-    stdout.flush()?;
+    // Try to enter alternate screen mode, but don't fail if it doesn't work
+    let _ = execute!(stdout, EnterAlternateScreen);
 
     let backend = CrosstermBackend::new(stdout);
-    let terminal = Terminal::new(backend).context("Failed to create terminal")?;
-    Ok((terminal, use_alternate_screen))
+    let mut terminal = Terminal::new(backend).context("Failed to create terminal")?;
+    terminal.clear().context("Failed to clear terminal")?;
+
+    Ok(terminal)
 }
 
-fn teardown_terminal(
-    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    use_alternate_screen: bool,
-) -> Result<()> {
+fn teardown_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
     disable_raw_mode().context("Failed to disable raw mode")?;
-    if use_alternate_screen {
-        execute!(terminal.backend_mut(), LeaveAlternateScreen)
-            .context("Failed to leave alternate screen")?;
-    }
+    // Always try to leave alternate screen (safe even if we never entered it)
+    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
     terminal.show_cursor().context("Failed to show cursor")?;
     Ok(())
 }
@@ -88,14 +45,12 @@ fn teardown_terminal(
 // Guard struct to ensure terminal cleanup on panic
 struct TerminalGuard {
     terminal: Option<Terminal<CrosstermBackend<io::Stdout>>>,
-    use_alternate_screen: bool,
 }
 
 impl TerminalGuard {
-    fn new(terminal: Terminal<CrosstermBackend<io::Stdout>>, use_alternate_screen: bool) -> Self {
+    fn new(terminal: Terminal<CrosstermBackend<io::Stdout>>) -> Self {
         Self {
             terminal: Some(terminal),
-            use_alternate_screen,
         }
     }
 
@@ -108,9 +63,7 @@ impl Drop for TerminalGuard {
     fn drop(&mut self) {
         if let Some(ref mut terminal) = self.terminal {
             let _ = disable_raw_mode();
-            if self.use_alternate_screen {
-                let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
-            }
+            let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
             let _ = terminal.show_cursor();
         }
     }
@@ -263,56 +216,6 @@ impl App {
         }
     }
 
-    // Simple text-based fallback for web consoles that don't support TUI
-    fn run_text_mode(&mut self) -> Result<Option<RecoveryParams>> {
-        println!("\n=== NNS Recovery Tool (Text Mode) ===");
-        println!("Enter the information supplied by the recovery coordinator.\n");
-
-        // Get VERSION
-        print!("VERSION (40 hex characters): ");
-        io::stdout().flush()?;
-        let mut version = String::new();
-        io::stdin().read_line(&mut version)?;
-        self.params.version = version.trim().to_string();
-
-        // Get VERSION-HASH
-        print!("VERSION-HASH (64 hex characters): ");
-        io::stdout().flush()?;
-        let mut version_hash = String::new();
-        io::stdin().read_line(&mut version_hash)?;
-        self.params.version_hash = version_hash.trim().to_string();
-
-        // Get RECOVERY-HASH
-        print!("RECOVERY-HASH (64 hex characters): ");
-        io::stdout().flush()?;
-        let mut recovery_hash = String::new();
-        io::stdin().read_line(&mut recovery_hash)?;
-        self.params.recovery_hash = recovery_hash.trim().to_string();
-
-        // Validate
-        if let Err(e) = self.params.validate() {
-            eprintln!("\nError: {}", e);
-            return Ok(None);
-        }
-
-        println!("\nParameters entered:");
-        println!("  VERSION: {}", self.params.version);
-        println!("  VERSION-HASH: {}", self.params.version_hash);
-        println!("  RECOVERY-HASH: {}", self.params.recovery_hash);
-        print!("\nProceed with recovery? (yes/no): ");
-        io::stdout().flush()?;
-
-        let mut confirm = String::new();
-        io::stdin().read_line(&mut confirm)?;
-
-        if confirm.trim().to_lowercase() == "yes" {
-            Ok(Some(self.params.clone()))
-        } else {
-            println!("Recovery cancelled.");
-            Ok(None)
-        }
-    }
-
     pub fn run(&mut self) -> Result<Option<RecoveryParams>> {
         // Check if we're in a TTY (both stdin and stdout need to be TTYs for interactive TUI)
         if !atty::is(atty::Stream::Stdout) || !atty::is(atty::Stream::Stdin) {
@@ -323,21 +226,15 @@ impl App {
             );
         }
 
-        // For web consoles, use simple text mode instead of TUI
-        if is_likely_web_console() {
-            return self.run_text_mode();
-        }
-
-        let (terminal, use_alternate_screen) = setup_terminal()?;
-        let mut terminal_guard = TerminalGuard::new(terminal, use_alternate_screen);
+        let terminal = setup_terminal()?;
+        let mut terminal_guard = TerminalGuard::new(terminal);
 
         // Test that we can actually render - check terminal size first
         let test_size = terminal_guard.get_mut().size()?;
         if test_size.width < 10 || test_size.height < 15 {
             // Clean up before bailing
-            let use_alt = terminal_guard.use_alternate_screen;
             let mut term = terminal_guard.terminal.take().unwrap();
-            teardown_terminal(&mut term, use_alt)?;
+            teardown_terminal(&mut term)?;
             anyhow::bail!(
                 "Terminal too small: {}x{} (minimum: 10x15). Please resize your terminal.",
                 test_size.width,
@@ -396,9 +293,8 @@ impl App {
                                 terminal_guard.get_mut().draw(|f: &mut Frame| self.ui(f))
                             {
                                 // If rendering fails, clean up and bail
-                                let use_alt = terminal_guard.use_alternate_screen;
                                 let mut term = terminal_guard.terminal.take().unwrap();
-                                teardown_terminal(&mut term, use_alt)?;
+                                teardown_terminal(&mut term)?;
                                 return Err(e).context("Failed to render TUI - terminal may not support required features");
                             }
                         }
@@ -409,9 +305,8 @@ impl App {
                 }
                 Err(e) => {
                     // If we can't read events, clean up and bail
-                    let use_alt = terminal_guard.use_alternate_screen;
                     let mut term = terminal_guard.terminal.take().unwrap();
-                    teardown_terminal(&mut term, use_alt)?;
+                    teardown_terminal(&mut term)?;
                     return Err(e).context("Failed to read terminal events - terminal may not support required features");
                 }
             }
@@ -420,9 +315,8 @@ impl App {
         execute!(terminal_guard.get_mut().backend_mut(), DisableMouseCapture)
             .context("Failed to disable mouse capture")?;
         // Explicitly clean up (guard will also clean up on drop, but this ensures proper order)
-        let use_alternate_screen = terminal_guard.use_alternate_screen;
         let mut terminal = terminal_guard.terminal.take().unwrap();
-        teardown_terminal(&mut terminal, use_alternate_screen)?;
+        teardown_terminal(&mut terminal)?;
         result
     }
 
@@ -684,8 +578,8 @@ impl App {
 }
 
 pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
-    let (terminal, use_alternate_screen) = setup_terminal()?;
-    let mut terminal_guard = TerminalGuard::new(terminal, use_alternate_screen);
+    let terminal = setup_terminal()?;
+    let mut terminal_guard = TerminalGuard::new(terminal);
 
     // Show status screen
     let version_line = format!("  VERSION: {}", params.version);
@@ -1127,9 +1021,8 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     if let Event::Key(_) = event::read()? {}
 
     // Explicitly clean up (guard will also clean up on drop, but this ensures proper order)
-    let use_alternate_screen = terminal_guard.use_alternate_screen;
     let mut terminal = terminal_guard.terminal.take().unwrap();
-    teardown_terminal(&mut terminal, use_alternate_screen)?;
+    teardown_terminal(&mut terminal)?;
 
     if !output.status.success() {
         // Error details were already shown in the TUI, just return a simple error
