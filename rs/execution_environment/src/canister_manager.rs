@@ -753,6 +753,12 @@ impl CanisterManager {
         ) {
             Err(err) => (Err(err), cycles),
             Ok(validate_settings) => {
+                // Test coverage relies on the fact that
+                // the IC method `provisional_create_canister_with_cycles`
+                // implemented by `CanisterManager::create_canister_with_cycles`
+                // uses the same code (in `CanisterManager::create_canister_helper`)
+                // as the production IC method `create_canister`
+                // implemented by this function `CanisterManager::create_canister`.
                 let canister_id = match self.create_canister_helper(
                     origin,
                     cycles,
@@ -1191,6 +1197,7 @@ impl CanisterManager {
         sender: PrincipalId,
         canister_id_to_delete: CanisterId,
         state: &mut ReplicatedState,
+        round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
         if let Ok(canister_id) = CanisterId::try_from(sender)
             && canister_id == canister_id_to_delete
@@ -1218,7 +1225,16 @@ impl CanisterManager {
 
         // Take out the canister from `ReplicatedState`.
         let canister_to_delete = state.take_canister_state(&canister_id_to_delete).unwrap();
+        let canister_memory_allocated_bytes = canister_to_delete.memory_allocated_bytes();
+
+        // Delete canister snapshots that are stored separately in `ReplicatedState`.
         state.delete_snapshots(canister_to_delete.canister_id());
+
+        round_limits.subnet_available_memory.increment(
+            canister_memory_allocated_bytes,
+            NumBytes::from(0),
+            NumBytes::from(0),
+        );
 
         // Leftover cycles in the balance are considered `consumed`.
         let leftover_cycles = NominalCycles::from(canister_to_delete.system_state.balance());
@@ -1297,6 +1313,13 @@ impl CanisterManager {
 
         // Validate settings before `create_canister_helper` applies them
         // No creation fee applied.
+        //
+        // Test coverage relies on the fact that
+        // the IC method `provisional_create_canister_with_cycles`
+        // implemented by this function `CanisterManager::create_canister_with_cycles`
+        // uses the same code (in `CanisterManager::create_canister_helper`)
+        // as the production IC method `create_canister`
+        // implemented by `CanisterManager::create_canister`.
         match self.validate_settings_for_canister_creation(
             settings,
             round_limits.compute_allocation_used,

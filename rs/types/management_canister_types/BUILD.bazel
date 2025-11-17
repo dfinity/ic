@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:candid.bzl", "did_git_test")
 load("//bazel:fuzz_testing.bzl", "DEFAULT_RUSTC_FLAGS_FOR_FUZZING")
+load("//bazel/candid:defs.bzl", "did_git_test")
 
 # This library is private to the replica and other guestOS processes.
 # These crates are considered direct users of the management
