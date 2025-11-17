@@ -47,8 +47,11 @@ async fn test_get_value_handles_chunked_records() {
     let endpoint = pocket_ic.make_live(None).await; // Make PocketIc callable by ic-admin.
 
     // Step 2: Call the code under test.
-
-    let registry_canister = RegistryCanister::new(vec![endpoint]);
+    let root_key = pocket_ic.root_key().await.unwrap();
+    let registry_canister = RegistryCanister::new_with_agent_transformer(vec![endpoint], |agent| {
+        agent.set_root_key(root_key.clone());
+        agent
+    });
     let query_result = registry_canister
         .get_value(b"daniel_wong_42".to_vec(), None)
         .await
