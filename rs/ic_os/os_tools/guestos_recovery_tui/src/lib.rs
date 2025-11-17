@@ -717,6 +717,7 @@ fn draw_completion_screen(
     stdout_lines: &[String],
     stderr_lines: &[String],
     error_messages: &[String],
+    params: &RecoveryParams,
 ) {
     let size = f.size();
     if is_terminal_too_small(size) {
@@ -771,6 +772,19 @@ fn draw_completion_screen(
         )]));
         text.push(Line::from(""));
 
+        // Add recovery parameters
+        text.push(Line::from(vec![Span::styled(
+            "Recovery Parameters:",
+            Style::default().fg(Color::Yellow).bold(),
+        )]));
+        text.extend(create_parameter_lines(params));
+        text.push(Line::from(""));
+        text.push(Line::from(vec![Span::styled(
+            create_separator(size.width),
+            Style::default().fg(Color::DarkGray),
+        )]));
+        text.push(Line::from(""));
+
         let mut all_log_lines = Vec::new();
 
         for line in stdout_lines {
@@ -790,7 +804,9 @@ fn draw_completion_screen(
             )]));
             text.push(Line::from(""));
 
-            let available_height = size.height.saturating_sub(11) as usize;
+            // Account for: header (1), exit code (2), separator (2), parameters header (1),
+            // parameters (4), separator (2), error logs header (2), footer (2) = 16 lines
+            let available_height = size.height.saturating_sub(16) as usize;
             let (start_idx, _) = calculate_log_viewport(all_log_lines.len(), available_height);
 
             let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
@@ -983,6 +999,7 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
             &stdout_lines,
             &stderr_lines,
             &error_messages,
+            params,
         );
     })?;
 
