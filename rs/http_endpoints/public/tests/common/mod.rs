@@ -15,7 +15,8 @@ use ic_http_endpoints_public::start_server;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
     execution_environment::{
-        IngressFilterService, QueryExecutionInput, QueryExecutionResponse, QueryExecutionService,
+        IngressFilterInput, IngressFilterResponse, IngressFilterService, QueryExecutionInput,
+        QueryExecutionResponse, QueryExecutionService,
     },
     ingress_pool::IngressPoolThrottler,
 };
@@ -38,7 +39,6 @@ use ic_registry_keys::{
     make_crypto_threshold_signing_pubkey_key, make_provisional_whitelist_record_key,
     make_subnet_record_key,
 };
-use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -78,7 +78,7 @@ use tokio_util::sync::CancellationToken;
 use tower::{Service, ServiceExt, util::BoxCloneService};
 use tower_test::mock::Handle;
 
-pub type IngressFilterHandle = Handle<(ProvisionalWhitelist, SignedIngress), Result<(), UserError>>;
+pub type IngressFilterHandle = Handle<IngressFilterInput, Result<(), UserError>>;
 pub type QueryExecutionHandle = Handle<QueryExecutionInput, QueryExecutionResponse>;
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
@@ -103,24 +103,22 @@ fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle)
 
 #[allow(clippy::type_complexity)]
 pub fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle) {
-    let (service, handle) =
-        tower_test::mock::pair::<(ProvisionalWhitelist, SignedIngress), Result<(), UserError>>();
+    let (service, handle) = tower_test::mock::pair::<IngressFilterInput, Result<(), UserError>>();
 
-    let infallible_service =
-        tower::service_fn(move |request: (ProvisionalWhitelist, SignedIngress)| {
-            let mut service_clone = service.clone();
-            async move {
-                Ok::<Result<(), UserError>, Infallible>({
-                    service_clone
-                        .ready()
-                        .await
-                        .expect("Mocking Infallible service. Waiting for readiness failed.")
-                        .call(request)
-                        .await
-                        .expect("Mocking Infallible service and can therefore not return an error.")
-                })
-            }
-        });
+    let infallible_service = tower::service_fn(move |request: IngressFilterInput| {
+        let mut service_clone = service.clone();
+        async move {
+            Ok::<IngressFilterResponse, Infallible>(Ok({
+                service_clone
+                    .ready()
+                    .await
+                    .expect("Mocking Infallible service. Waiting for readiness failed.")
+                    .call(request)
+                    .await
+                    .expect("Mocking Infallible service and can therefore not return an error.")
+            }))
+        }
+    });
     (BoxCloneService::new(infallible_service), handle)
 }
 

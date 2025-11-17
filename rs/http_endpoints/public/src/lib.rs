@@ -27,6 +27,7 @@ cfg_if::cfg_if! {
 pub use call::{
     IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle, call_async, call_sync,
 };
+
 use common::CONTENT_TYPE_CBOR;
 pub use common::{cors_layer, make_plaintext_response};
 use ic_http_endpoints_async_utils::start_tcp_listener;
@@ -55,7 +56,7 @@ use axum::{
     error_handling::HandleErrorLayer,
     extract::{DefaultBodyLimit, MatchedPath, State},
     middleware::Next,
-    response::Redirect,
+    response::{IntoResponse, Redirect, Response},
     routing::get,
 };
 use crossbeam::atomic::AtomicCell;
@@ -117,6 +118,12 @@ const TLS_HANDHAKE_BYTES: u8 = 22;
 pub struct HttpError {
     pub status: StatusCode,
     pub message: String,
+}
+
+impl IntoResponse for HttpError {
+    fn into_response(self) -> Response {
+        (self.status, self.message).into_response()
+    }
 }
 
 /// Struct that holds all endpoint services.

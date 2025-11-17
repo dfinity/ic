@@ -36,7 +36,7 @@ use tower_test::mock::Handle;
 pub mod common;
 use common::{basic_registry_client, get_free_localhost_socket_addr, setup_ingress_filter_mock};
 
-type IngressFilterHandle = Handle<(ProvisionalWhitelist, SignedIngress), Result<(), UserError>>;
+type IngressFilterHandle = Handle<IngressFilterInput, IngressFilterResponse>;
 type CallServiceEndpoint = BoxCloneService<Request<Body>, Response<Body>, Infallible>;
 
 #[derive(Clone, Debug, Arbitrary)]
