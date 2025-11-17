@@ -1,0 +1,78 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:serde",
+    "@crate_index//:serde_yaml",
+    "@crate_index//:reqwest",
+    "@crate_index//:tokio",
+    "@crate_index//:prometheus-parse",
+    "@crate_index//:axum",
+    "@crate_index//:hyper",
+    "@crate_index//:tower",
+    "@crate_index//:tower-http",
+    "@crate_index//:duration-string",
+    "@crate_index//:regex",
+    "@crate_index//:itertools",
+    "@crate_index//:clap",
+    "@crate_index//:rustls-pemfile",
+    "@crate_index//:rustls",
+    "@crate_index//:hyper-rustls",
+    "@crate_index//:exitcode",
+    "@crate_index//:pretty_assertions",
+    "@crate_index//:url",
+    "@crate_index//:prometheus",
+    "@crate_index//:lazy_static",
+    "@crate_index//:axum-otel-metrics",
+    "@crate_index//:opentelemetry",
+    "@crate_index//:http",
+    "@crate_index//:futures-util",
+    "@crate_index//:http-body",
+    "@crate_index//:http-body-util",
+    "@crate_index//:hyper-util",
+    "@crate_index//:log",
+    "@crate_index//:pin-project-lite",
+    "@crate_index//:tokio-rustls",
+    "@crate_index//:simple_logger",
+    "@crate_index//:rand",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "metrics_proxy",
+    srcs = glob(
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
+    ),
+    aliases = ALIASES,
+    crate_name = "metrics_proxy",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
+    deps = DEPENDENCIES,
+)
+
+rust_binary(
+    name = "metrics_proxy_bin",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + [":metrics_proxy"],
+)
+
+rust_test(
+    name = "metrics_proxy_test",
+    crate = ":metrics_proxy",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

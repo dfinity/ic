@@ -1,0 +1,50 @@
+[package]
+name = "metrics-proxy"
+version.workspace = true
+edition.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+serde.workspace = true
+serde_yaml.workspace = true
+reqwest.workspace = true
+tokio.workspace = true
+prometheus-parse.workspace = true
+axum.workspace = true
+hyper.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+duration-string.workspace = true
+regex.workspace = true
+itertools.workspace = true
+clap.workspace = true
+rustls-pemfile.workspace = true
+rustls.workspace = true
+hyper-rustls.workspace = true
+exitcode.workspace = true
+pretty_assertions.workspace = true
+url.workspace = true
+prometheus.workspace = true
+lazy_static.workspace = true
+axum-otel-metrics.workspace = true
+opentelemetry.workspace = true
+http.workspace = true
+futures-util.workspace = true
+http-body.workspace = true
+http-body-util.workspace = true
+hyper-util.workspace = true
+log.workspace = true
+pin-project-lite.workspace = true
+tokio-rustls.workspace = true
+simple_logger.workspace = true
+rand.workspace = true
+
+[features]
+default = ["rustls-tls-webpki-roots"]
+rustls-tls-native-roots = ["reqwest/rustls-tls-native-roots"]
+rustls-tls-webpki-roots = ["reqwest/rustls-tls-webpki-roots"]
+
+[[bin]]
+name = "metrics-proxy"
+path = "src/main.rs"

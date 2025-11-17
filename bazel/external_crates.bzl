@@ -252,6 +252,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.10.1",
                 features = ["typed-header"],
             ),
+            "axum-otel-metrics": crate.spec(
+                version = "0.12.0"
+            ),
             "axum-server": crate.spec(
                 version = "^0.7.2",
                 features = [
@@ -480,6 +483,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "devicemapper": crate.spec(
                 version = "0.34",
             ),
+            "duration-string": crate.spec(
+                version = "0.3.0",
+                features = ["serde"],
+            ),
             "dfx-core": crate.spec(
                 version = "^0.1.4",
             ),
@@ -518,6 +525,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
+            ),
+            "exitcode": crate.spec(
+                version = "1.1.2"
             ),
             "eyre": crate.spec(
                 version = "^0.6.8",
@@ -841,6 +851,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "local-ip-address": crate.spec(
                 version = "^0.5.6",
+            ),
+            "log": crate.spec(
+                version = "0.4.20"
             ),
             "loopdev-3": crate.spec(
                 version = "0.5",
@@ -1292,6 +1305,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "simple_asn1": crate.spec(
                 version = "^0.6.2",
             ),
+            "simple_logger": crate.spec(
+                version = "4.3.0"
+            ),
             "simple_moving_average": crate.spec(
                 version = "^1.0.2",
             ),
@@ -1489,6 +1505,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "util",
                     "compression-full",
                     "tracing",
+                    "timeout",
                 ],
             ),
             "tower_governor": crate.spec(
