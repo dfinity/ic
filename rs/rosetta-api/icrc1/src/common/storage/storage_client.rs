@@ -11,7 +11,7 @@ use std::cmp::Ordering;
 use std::{path::Path, sync::Mutex};
 use tracing::warn;
 
-pub(crate) const BALANCE_SYNC_BATCH_SIZE_DEFAULT: u64 = 100_000;
+const BALANCE_SYNC_BATCH_SIZE_DEFAULT: u64 = 100_000;
 
 #[derive(Debug, Clone)]
 pub struct TokenInfo {
