@@ -6,6 +6,9 @@ mod memory;
 mod ring_buffer;
 mod struct_io;
 
+// TODO: remove this.
+mod tmp_draft;
+
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_types::CanisterLog;
