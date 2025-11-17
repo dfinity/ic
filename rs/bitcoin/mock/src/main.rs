@@ -1,5 +1,6 @@
 #![allow(deprecated)]
 use candid::candid_method;
+use ic_bitcoin_canister_mock::PushUtxosToAddress;
 use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, Utxo, UtxosFilterInRequest,
@@ -41,6 +42,17 @@ impl Default for State {
             mempool: BTreeSet::new(),
             tip_height: DEFAULT_TIP_HEIGHT,
         }
+    }
+}
+
+impl State {
+    fn push_utxos_to_address(&mut self, utxos: Vec<Utxo>, address: Address) {
+        self.utxo_to_address
+            .extend(utxos.iter().map(|utxo| (utxo.clone(), address.clone())));
+        self.address_to_utxos
+            .entry(address)
+            .or_default()
+            .extend(utxos);
     }
 }
 
@@ -131,14 +143,9 @@ fn get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
 
 #[candid_method(update)]
 #[update]
-fn push_utxo_to_address(req: ic_bitcoin_canister_mock::PushUtxoToAddress) {
+fn push_utxos_to_address(args: PushUtxosToAddress) {
     mutate_state(|s| {
-        s.utxo_to_address
-            .insert(req.utxo.clone(), req.address.clone());
-        s.address_to_utxos
-            .entry(req.address)
-            .or_default()
-            .insert(req.utxo);
+        s.push_utxos_to_address(args.utxos, args.address);
     });
 }
 
