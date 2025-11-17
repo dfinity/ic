@@ -22,6 +22,7 @@ use rustls::ClientConfig;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::version::TLS13;
 use sev::firmware::guest::AttestationReport;
+use sev::parser::ByteParser;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::net::TcpStream;
@@ -33,8 +34,7 @@ use x509_parser::prelude::FromDer;
 
 mod tls;
 
-// TODO: replace this in dev images so that system tests work
-const NNS_PUBLIC_KEY_PATH: &str = "/opt/ic/share/nns_public_key.pem";
+const NNS_PUBLIC_KEY_PATH: &str = "/run/config/nns_public_key.pem";
 
 type ServiceClientType = DiskEncryptionKeyExchangeServiceClient<Channel>;
 pub type CanOpenStore =

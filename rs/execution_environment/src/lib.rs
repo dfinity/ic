@@ -29,6 +29,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::wasm_executor::WasmExecutor;
 use ic_interfaces::execution_environment::{
     IngressFilterService, IngressHistoryReader, QueryExecutionService, Scheduler,
+    TransformExecutionService,
 };
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::ReplicaLogger;
@@ -42,8 +43,8 @@ use ic_types::{
     messages::{CallContextId, MessageId},
 };
 pub use metrics::IngressFilterMetrics;
-pub use query_handler::InternalHttpQueryHandler;
-use query_handler::{HttpQueryHandler, QueryScheduler, QuerySchedulerFlag};
+pub use query_handler::{DataCertificateWithDelegationMetadata, InternalHttpQueryHandler};
+use query_handler::{HttpQueryHandler, QueryScheduler};
 pub use scheduler::RoundSchedule;
 use scheduler::SchedulerImpl;
 use std::{path::Path, sync::Arc};
@@ -86,7 +87,7 @@ pub struct ExecutionServices {
     pub ingress_history_writer: Arc<IngressHistoryWriterImpl>,
     pub ingress_history_reader: Box<dyn IngressHistoryReader>,
     pub query_execution_service: QueryExecutionService,
-    pub https_outcalls_service: QueryExecutionService,
+    pub transform_execution_service: TransformExecutionService,
     pub scheduler: Box<dyn Scheduler<State = ReplicatedState>>,
     pub query_stats_payload_builder: QueryStatsPayloadBuilderParams,
     pub cycles_account_manager: Arc<CyclesAccountManager>,
@@ -136,7 +137,7 @@ impl ExecutionServices {
 
         // Creating the async services require that a tokio runtime context is available.
 
-        let query_execution_service = HttpQueryHandler::new_service(
+        let query_execution_service = HttpQueryHandler::new_query_service(
             Arc::clone(&sync_query_handler) as Arc<_>,
             query_scheduler.clone(),
             Arc::clone(&state_reader),
@@ -144,7 +145,7 @@ impl ExecutionServices {
             "regular",
             true,
         );
-        let https_outcalls_service = HttpQueryHandler::new_service(
+        let transform_execution_service = HttpQueryHandler::new_transform_service(
             Arc::clone(&sync_query_handler) as Arc<_>,
             query_scheduler.clone(),
             Arc::clone(&state_reader),
@@ -172,7 +173,7 @@ impl ExecutionServices {
             ingress_history_writer,
             ingress_history_reader,
             query_execution_service,
-            https_outcalls_service,
+            transform_execution_service,
             scheduler,
             query_stats_payload_builder,
             cycles_account_manager,
@@ -400,7 +401,6 @@ fn setup_execution_helper(
         config.embedders_config.query_execution_threads_per_canister,
         config.query_scheduling_time_slice_per_canister,
         metrics_registry,
-        QuerySchedulerFlag::UseNewSchedulingAlgorithm,
     );
 
     let ingress_filter_metrics: Arc<_> = IngressFilterMetrics::new(metrics_registry).into();

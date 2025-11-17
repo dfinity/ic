@@ -1,8 +1,8 @@
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary", "motoko_library")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:candid.bzl", "did_git_test")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
+load("//bazel/candid:defs.bzl", "did_git_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -89,9 +89,9 @@ rust_ic_test_suite(
         "//rs/ledger_suite/icp/index:ic-icp-index-canister",
         "//rs/ledger_suite/icp/ledger:ledger-canister-wasm",
         "//rs/pocket_ic_server:pocket-ic-server",
-        "@mainnet_icp_index_canister//file",
-        "@mainnet_icp_ledger-archive-node-canister//file",
-        "@mainnet_icp_ledger_canister//file",
+        "@mainnet_canisters//:archive.wasm.gz",
+        "@mainnet_canisters//:index.wasm.gz",
+        "@mainnet_canisters//:ledger.wasm.gz",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp",
@@ -99,9 +99,9 @@ rust_ic_test_suite(
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm)",
         "LEDGER_PROXY_WASM_PATH": "$(rootpath :ledger_proxy.wasm)",
-        "MAINNET_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_index_canister//file)",
-        "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger-archive-node-canister//file)",
-        "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
+        "MAINNET_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:index.wasm.gz)",
+        "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:archive.wasm.gz)",
+        "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:ledger.wasm.gz)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
     },
     deps = [
@@ -165,18 +165,18 @@ rust_ic_test_suite(
         "//rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm",
         "//rs/ledger_suite/icp/index:ic-icp-index-canister",
         "//rs/ledger_suite/icp/ledger:ledger-canister-wasm-allowance-getter",
-        "@mainnet_icp_index_canister//file",
-        "@mainnet_icp_ledger-archive-node-canister//file",
-        "@mainnet_icp_ledger_canister//file",
+        "@mainnet_canisters//:archive.wasm.gz",
+        "@mainnet_canisters//:index.wasm.gz",
+        "@mainnet_canisters//:ledger.wasm.gz",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/ledger_suite/icp",
         "IC_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/index:ic-icp-index-canister)",
         "LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/archive:ledger-archive-node-canister-wasm)",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/ledger_suite/icp/ledger:ledger-canister-wasm-allowance-getter)",
-        "MAINNET_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_index_canister//file)",
-        "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger-archive-node-canister//file)",
-        "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_icp_ledger_canister//file)",
+        "MAINNET_ICP_INDEX_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:index.wasm.gz)",
+        "MAINNET_ICP_LEDGER_ARCHIVE_NODE_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:archive.wasm.gz)",
+        "MAINNET_ICP_LEDGER_CANISTER_WASM_PATH": "$(rootpath @mainnet_canisters//:ledger.wasm.gz)",
     },
     tags = [
         "fi_tests_nightly",  # Run this test in the fi-tests-nightly GitHub Action job.

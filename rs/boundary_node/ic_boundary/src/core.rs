@@ -46,7 +46,7 @@ use ic_registry_local_store::{LocalStore, LocalStoreImpl};
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::messages::MessageId;
 use nix::unistd::{Pid, getpgid, setpgid};
-use rustls::client::danger::ServerCertVerifier;
+use rustls::{client::danger::ServerCertVerifier, server::ResolvesServerCert};
 use tokio::{
     select,
     signal::unix::SignalKind,
@@ -59,7 +59,7 @@ use tracing::warn;
 use crate::{
     bouncer,
     check::{Checker, Runner as CheckRunner},
-    cli::Cli,
+    cli::{self, Cli},
     dns::DnsResolver,
     errors::ErrorCause,
     firewall::{FirewallGenerator, SystemdReloader},
@@ -92,9 +92,6 @@ use crate::{
     },
     tls_verify::TlsVerifier,
 };
-
-#[cfg(feature = "tls")]
-use {crate::cli, rustls::server::ResolvesServerCert};
 
 pub const SERVICE_NAME: &str = "ic_boundary";
 pub const AUTHOR_NAME: &str = "Boundary Node Team <boundary-nodes@dfinity.org>";
@@ -135,7 +132,6 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         );
     }
 
-    #[cfg(feature = "tls")]
     if cli.listen.listen_http_port.is_none()
         && cli.listen.listen_http_unix_socket.is_none()
         && cli.listen.listen_https_port.is_none()
@@ -143,11 +139,6 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
         bail!(
             "at least one of --listen-http-port / --listen-https-port / --listen-http-unix-socket must be specified"
         );
-    }
-
-    #[cfg(not(feature = "tls"))]
-    if cli.listen.listen_http_port.is_none() && cli.listen.listen_http_unix_socket.is_none() {
-        bail!("at least one of --listen-http-port / --listen-http-unix-socket must be specified");
     }
 
     // Make sure ic-boundary is the leader of its own process group
@@ -433,7 +424,6 @@ pub async fn main(mut cli: Cli) -> Result<(), Error> {
     }
 
     // HTTPS
-    #[cfg(feature = "tls")]
     if cli.listen.listen_https_port.is_some() {
         let srv = setup_https(
             router,
@@ -744,7 +734,6 @@ fn setup_registry(
     Ok(())
 }
 
-#[cfg(feature = "tls")]
 fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     use ic_bn_lib::tls;
 
@@ -764,7 +753,6 @@ fn setup_tls_resolver_stub(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
     Ok(Arc::new(resolver))
 }
 
-#[cfg(feature = "tls")]
 fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     use ic_bn_lib::tls;
     use tokio_util::sync::CancellationToken;
@@ -791,7 +779,6 @@ fn setup_tls_resolver_acme(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>
 
 /// Try to load the static resolver first, then ACME one.
 /// This is needed for integration tests where we cannot easily separate test/prod environments
-#[cfg(feature = "tls")]
 fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Error> {
     warn!("TLS: Trying resolver: static files");
     match setup_tls_resolver_stub(cli) {
@@ -819,7 +806,6 @@ fn setup_tls_resolver(cli: &cli::Tls) -> Result<Arc<dyn ResolvesServerCert>, Err
     bail!("TLS: no resolvers were able to load")
 }
 
-#[cfg(feature = "tls")]
 fn setup_https(
     router: Router,
     opts: bnhttp::server::Options,

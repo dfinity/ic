@@ -82,7 +82,7 @@ pub fn test(env: TestEnv) {
         }
 
         block_on(async {
-            let url = format!("https://[{webserver_ipv6}]:20443");
+            let url = format!("https://[{webserver_ipv6}]");
             for canister in &proxy_canisters {
                 leave_proxy_canister_running(canister, url.clone(), logger.clone()).await;
             }
@@ -124,6 +124,7 @@ async fn leave_proxy_canister_running(proxy_canister: &Canister<'_>, url: String
                             method: HttpMethod::GET,
                             max_response_bytes: None,
                             is_replicated: Some(true),
+                            pricing_version: None,
                         },
                         cycles: 500_000_000_000,
                     },

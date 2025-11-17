@@ -1,12 +1,16 @@
 mod dogecoin;
 mod events;
+pub mod flow;
 mod ledger;
 mod minter;
 
 use crate::dogecoin::DogecoinCanister;
+use crate::flow::{deposit::DepositFlowStart, withdrawal::WithdrawalFlowStart};
 use crate::ledger::LedgerCanister;
 pub use crate::minter::MinterCanister;
+use bitcoin::TxOut;
 use candid::{Encode, Principal};
+use ic_bitcoin_canister_mock::{OutPoint, Utxo};
 use ic_ckdoge_minter::{
     Txid, get_dogecoin_canister_id,
     lifecycle::init::{InitArgs, MinterArg, Mode, Network},
@@ -17,6 +21,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::ErrorCode;
 use pocket_ic::RejectCode;
 use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
+use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
@@ -24,11 +29,17 @@ use std::time::Duration;
 pub const NNS_ROOT_PRINCIPAL: Principal = Principal::from_slice(&[0_u8]);
 pub const USER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 42]);
 pub const DOGECOIN_ADDRESS_1: &str = "DJfU2p6woQ9GiBdiXsWZWJnJ9uDdZfSSNC";
-pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 100_000_000;
+pub const DOGE: u64 = 100_000_000;
+pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 50 * DOGE;
+// 0.01 DOGE, ca 0.002 USD (2025.09.06)
+pub const LEDGER_TRANSFER_FEE: u64 = DOGE / 100;
+const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
 pub const MIN_CONFIRMATIONS: u32 = 60;
+pub const BLOCK_TIME: Duration = Duration::from_secs(60);
 
 pub struct Setup {
     pub env: Arc<PocketIc>,
+    doge_network: Network,
     dogecoin: CanisterId,
     minter: CanisterId,
     ledger: CanisterId,
@@ -95,7 +106,7 @@ impl Setup {
                 ecdsa_key_name: "key_1".into(),
                 retrieve_doge_min_amount: RETRIEVE_DOGE_MIN_AMOUNT,
                 ledger_id: ledger,
-                max_time_in_queue_nanos: Duration::from_secs(10).as_nanos() as u64,
+                max_time_in_queue_nanos: MAX_TIME_IN_QUEUE.as_nanos() as u64,
                 min_confirmations: Some(MIN_CONFIRMATIONS),
                 mode: Mode::GeneralAvailability,
                 get_utxos_cache_expiration_seconds: Some(Duration::from_secs(60).as_secs()),
@@ -119,8 +130,7 @@ impl Setup {
                     ]),
                 }),
                 initial_balances: vec![],
-                // 0.1 DOGE, ca 0.02 USD (2025.09.06)
-                transfer_fee: 10_000_000_u32.into(),
+                transfer_fee: LEDGER_TRANSFER_FEE.into(),
                 decimals: Some(8),
                 token_name: "ckDOGE".to_string(),
                 token_symbol: "ckDOGE".to_string(),
@@ -149,6 +159,7 @@ impl Setup {
 
         Self {
             env,
+            doge_network,
             dogecoin,
             minter,
             ledger,
@@ -175,11 +186,38 @@ impl Setup {
             id: self.ledger,
         }
     }
+
+    pub fn network(&self) -> Network {
+        self.doge_network
+    }
+
+    pub fn deposit_flow(&self) -> DepositFlowStart<&Setup> {
+        DepositFlowStart::new(self)
+    }
+
+    pub fn withdrawal_flow(&self) -> WithdrawalFlowStart<&Setup> {
+        WithdrawalFlowStart::new(self)
+    }
+
+    pub fn parse_dogecoin_address(&self, address: impl Into<String>) -> bitcoin::dogecoin::Address {
+        let address = address.into();
+        address
+            .parse::<bitcoin::dogecoin::Address<_>>()
+            .unwrap()
+            .require_network(into_rust_dogecoin_network(self.network()))
+            .unwrap()
+    }
 }
 
 impl Default for Setup {
     fn default() -> Self {
         Self::new(Network::Mainnet)
+    }
+}
+
+impl AsRef<Setup> for Setup {
+    fn as_ref(&self) -> &Setup {
+        self
     }
 }
 
@@ -208,6 +246,86 @@ pub fn assert_trap<T: Debug>(result: Result<T, RejectResponse>, message: &str) {
     );
 }
 
-pub fn txid() -> Txid {
-    Txid::from([42u8; 32])
+pub fn txid(bytes: [u8; 32]) -> Txid {
+    Txid::from(bytes)
+}
+
+pub fn utxo_with_value(value: u64) -> Utxo {
+    Utxo {
+        height: 0,
+        outpoint: OutPoint {
+            txid: txid([42u8; 32]),
+            vout: 1,
+        },
+        value,
+    }
+}
+
+pub fn utxos_with_value(values: &[u64]) -> BTreeSet<Utxo> {
+    assert!(
+        values.len() < u16::MAX as usize,
+        "Adapt logic below to create more unique UTXOs!"
+    );
+    let utxos = values
+        .iter()
+        .enumerate()
+        .map(|(i, &value)| {
+            let mut txid = [0; 32];
+            txid[0] = (i % 256) as u8;
+            txid[1] = (i / 256) as u8;
+            Utxo {
+                height: 0,
+                outpoint: OutPoint {
+                    txid: Txid::from(txid),
+                    vout: 1,
+                },
+                value,
+            }
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(values.len(), utxos.len());
+    utxos
+}
+
+pub fn into_outpoint(
+    value: ic_ckdoge_minter::OutPoint,
+) -> bitcoin::blockdata::transaction::OutPoint {
+    use bitcoin::hashes::Hash;
+
+    bitcoin::blockdata::transaction::OutPoint {
+        txid: bitcoin::blockdata::transaction::Txid::from_slice(value.txid.as_ref()).unwrap(),
+        vout: value.vout,
+    }
+}
+
+pub fn parse_dogecoin_address(network: Network, tx_out: &TxOut) -> bitcoin::dogecoin::Address {
+    bitcoin::dogecoin::Address::from_script(
+        tx_out.script_pubkey.as_script(),
+        into_rust_dogecoin_network(network),
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "BUG: invalid Dogecoin address from script '{}': {e}",
+            tx_out.script_pubkey
+        )
+    })
+}
+
+pub fn into_rust_dogecoin_network(network: Network) -> bitcoin::dogecoin::Network {
+    match network {
+        Network::Mainnet => bitcoin::dogecoin::Network::Dogecoin,
+        Network::Testnet => bitcoin::dogecoin::Network::Testnet,
+        Network::Regtest => bitcoin::dogecoin::Network::Regtest,
+    }
+}
+
+/// Expect exactly one element on anything that can be turn into an iterator.
+pub fn only_one<T, I: IntoIterator<Item = T>>(iter: I) -> T {
+    let mut iter = iter.into_iter();
+    let result = iter.next().expect("BUG: expected exactly one item, got 0.");
+    assert!(
+        iter.next().is_none(),
+        "BUG: expected exactly one item, got at least 2"
+    );
+    result
 }
