@@ -4675,12 +4675,23 @@ pub fn certify_latest_state_helper(
     secret_key: &SecretKeyBytes,
     subnet_id: SubnetId,
 ) {
+    if state_manager.latest_state_height() == Height::from(0) {
+        let (height, replicated_state) = state_manager.take_tip();
+        state_manager.commit_and_certify(
+            replicated_state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
+    }
+    assert_ne!(state_manager.latest_state_height(), Height::from(0));
     if state_manager.latest_state_height() > state_manager.latest_certified_height() {
         let state_hashes = state_manager.list_state_hashes_to_certify();
         let (height, hash) = state_hashes.last().unwrap();
         state_manager
             .deliver_state_certification(certify_hash(secret_key, subnet_id, height, hash));
     }
+    assert_eq!(state_manager.latest_certified_height(), state_manager.latest_state_height());
 }
 
 fn certify_hash(
