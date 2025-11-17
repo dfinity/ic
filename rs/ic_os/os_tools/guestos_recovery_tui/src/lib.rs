@@ -1019,82 +1019,42 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         let mut text = Vec::new();
 
         if success {
-            if let Some(ref msg) = success_message {
-                text.push(Line::from(msg.clone()));
-            } else {
-                text.push(Line::from("Recovery completed successfully!"));
-            }
-        } else {
-            text.push(Line::from(format!(
-                "Recovery failed with exit code: {:?}",
-                output.status.code()
-            )));
-        }
-
-        // Show all captured log output from the script
-        // Combine stdout and stderr, with stdout taking precedence (script logs to stdout)
-        let mut all_log_lines = Vec::new();
-
-        // Add all stdout lines (these contain all the log messages from log_message())
-        for line in &stdout_lines {
-            all_log_lines.push(line.clone());
-        }
-
-        // Add stderr lines that aren't duplicates
-        for line in &stderr_lines {
-            if !stdout_lines.contains(line) {
-                all_log_lines.push(line.clone());
-            }
-        }
-
-        if !all_log_lines.is_empty() {
+            // Make success message prominent
             text.push(Line::from(""));
-            text.push(Line::from("Recovery process logs:"));
-            text.push(Line::from(""));
-
-            // Calculate how many lines we can fit in the terminal
-            // Reserve space for: title (1), status (1-2), separator (2), "Press any key" (1), borders (2)
-            let available_height = size.height.saturating_sub(7);
-            let lines_to_show = all_log_lines.len().min(available_height as usize);
-
-            // Show the last N lines that fit, or all if they fit
-            let start_idx = if all_log_lines.len() > lines_to_show {
-                all_log_lines.len() - lines_to_show
+            let success_msg = if let Some(ref msg) = success_message {
+                format!("✓ {}", msg)
             } else {
-                0
+                "✓ Recovery completed successfully!".to_string()
             };
-
-            for line in &all_log_lines[start_idx..] {
-                // Truncate very long lines to fit terminal width (leave some margin for borders)
-                let max_width = (size.width.saturating_sub(4)) as usize;
-                let display_line = if line.len() > max_width {
-                    format!("{}...", &line[..max_width.saturating_sub(3)])
-                } else {
-                    line.clone()
-                };
-                text.push(Line::from(format!("  {}", display_line)));
-            }
-
-            if all_log_lines.len() > lines_to_show {
-                text.push(Line::from(""));
-                text.push(Line::from(format!(
-                    "  ... (showing last {} of {} log lines, scroll up to see more)",
-                    lines_to_show,
-                    all_log_lines.len()
-                )));
-            }
-        } else {
-            // If no logs captured, indicate where to look
+            text.push(Line::from(vec![Span::styled(
+                success_msg,
+                Style::default().fg(Color::Green).bold(),
+            )]));
             text.push(Line::from(""));
-            text.push(Line::from(
-                "No log output captured. Check system logs for details:",
-            ));
-            text.push(Line::from("  journalctl -t guestos-recovery-upgrader"));
-        }
-
-        // Ensure we always have at least one line
-        if text.is_empty() {
-            text.push(Line::from("Processing complete."));
+            // Add a separator line that fits the terminal width
+            let separator = "─".repeat((size.width.saturating_sub(4)).max(10) as usize);
+            text.push(Line::from(vec![Span::styled(
+                separator,
+                Style::default().fg(Color::DarkGray),
+            )]));
+            text.push(Line::from(""));
+        } else {
+            text.push(Line::from(""));
+            text.push(Line::from(vec![Span::styled(
+                format!(
+                    "✗ Recovery failed with exit code: {:?}",
+                    output.status.code()
+                ),
+                Style::default().fg(Color::Red).bold(),
+            )]));
+            text.push(Line::from(""));
+            // Add a separator line that fits the terminal width
+            let separator = "─".repeat((size.width.saturating_sub(4)).max(10) as usize);
+            text.push(Line::from(vec![Span::styled(
+                separator,
+                Style::default().fg(Color::DarkGray),
+            )]));
+            text.push(Line::from(""));
         }
 
         text.push(Line::from(""));
