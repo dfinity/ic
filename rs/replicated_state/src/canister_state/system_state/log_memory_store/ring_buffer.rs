@@ -85,7 +85,7 @@ impl RingBuffer {
 
         // Save the record at the tail position.
         let mut h = self.io.load_header();
-        self.io.save_record(h.data_tail, &record);
+        self.io.save_record(h.data_tail, record);
 
         // Update header with new tail position, size and next idx.
         let position = h.data_tail;
