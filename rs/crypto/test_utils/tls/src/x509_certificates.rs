@@ -21,6 +21,7 @@ const RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE: &str = "9999123123595
 const SECS_PER_DAY: u64 = 60 * 60 * 24;
 
 #[derive(Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum KeyPair {
     Ed25519 {
         secret_key: ic_ed25519::PrivateKey,
