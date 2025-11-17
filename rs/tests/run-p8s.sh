@@ -1,3 +1,5 @@
+#! /usr/bin/env nix-shell
+#! nix-shell run-p8s.nix -i bash
 
 # TODO: Rewrite this to use docker instead of Nix
 # See: https://dfinity.atlassian.net/browse/VER-1941
@@ -76,7 +78,6 @@ done
 
 PROMETHEUS_PORT="${PROMETHEUS_PORT:-9090}"
 GRAFANA_PORT="${GRAFANA_PORT:-3000}"
-GRAFANA="/usr"
 
 info() { echo "$*"; }
 warn() { info "$*" 1>&2; }
