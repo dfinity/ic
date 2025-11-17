@@ -1577,9 +1577,8 @@ fn test_update_neuron_errors_out_expectedly() {
 }
 
 #[test]
-fn test_compute_ballots_for_new_proposal() {
+fn test_compute_ballots_for_manage_neuron_proposal() {
     const CREATED_TIMESTAMP_SECONDS: u64 = 1729791574;
-    let now_seconds = CREATED_TIMESTAMP_SECONDS + 999;
 
     fn new_neuron_builder(id: u64) -> NeuronBuilder {
         NeuronBuilder::new_for_test(
@@ -1617,24 +1616,12 @@ fn test_compute_ballots_for_new_proposal() {
     );
 
     governance.add_neuron(10, neuron_10).unwrap();
-    governance
-        .add_neuron(200, new_neuron_builder(200).build())
-        .unwrap();
-    governance
-        .add_neuron(3_000, new_neuron_builder(3_000).build())
-        .unwrap();
 
-    let manage_neuron_action = Action::ManageNeuron(Box::new(ManageNeuron {
-        id: Some(NeuronId { id: 10 }),
-        neuron_id_or_subaccount: None,
-        command: None,
-    }));
-    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
-        .compute_ballots_for_new_proposal(&manage_neuron_action, &NeuronId { id: 10 }, now_seconds)
-        .expect("Failed computing ballots for new proposal");
+    let managed_id = manage_neuron::NeuronIdOrSubaccount::NeuronId(NeuronId { id: 10 });
+    let ballots = governance
+        .compute_ballots_for_manage_neuron_proposal(&managed_id, &NeuronId { id: 10 })
+        .expect("Failed computing ballots for manage neuron proposal");
 
-    let expected = 7; // 7 followees
-    assert_eq!(tot_potential_voting_power, expected);
     assert_eq!(
         ballots,
         hashmap! {
@@ -1647,18 +1634,41 @@ fn test_compute_ballots_for_new_proposal() {
         206 => Ballot { voting_power: 1, vote: Vote::Unspecified as i32 },
         }
     );
+}
 
-    let motion_action = Action::Motion(Default::default());
-    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
-        .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
-        .expect("Failed computing ballots for new proposal");
-    // Similar to previous; this time though, Action::ManageNeuron, the weird
-    // special case.
-    let expected_potential_voting_power: u64 =
-        governance.neuron_store.with_active_neurons_iter(|iter| {
-            iter.map(|neuron| neuron.potential_voting_power(now_seconds))
-                .sum()
-        });
+#[test]
+fn test_compute_ballots_for_standard_proposal() {
+    const CREATED_TIMESTAMP_SECONDS: u64 = 1729791574;
+    let now_seconds = CREATED_TIMESTAMP_SECONDS + 999;
+
+    fn new_neuron_builder(id: u64) -> NeuronBuilder {
+        NeuronBuilder::new_for_test(
+            id,
+            DissolveStateAndAge::NotDissolving {
+                dissolve_delay_seconds: 12 * ONE_MONTH_SECONDS,
+                aging_since_timestamp_seconds: CREATED_TIMESTAMP_SECONDS + 42,
+            },
+        )
+        .with_cached_neuron_stake_e8s(id * E8)
+    }
+
+    let mut governance = Governance::new(
+        Default::default(),
+        Arc::<MockEnvironment>::default(),
+        Arc::new(StubIcpLedger {}),
+        Arc::new(StubCMC {}),
+        Box::new(MockRandomness::new()),
+    );
+
+    governance
+        .add_neuron(10, new_neuron_builder(10).build())
+        .unwrap();
+    governance
+        .add_neuron(200, new_neuron_builder(200).build())
+        .unwrap();
+    governance
+        .add_neuron(3_000, new_neuron_builder(3_000).build())
+        .unwrap();
 
     let deciding_vote = |g: &Governance, id, now| {
         g.neuron_store
@@ -1667,6 +1677,18 @@ fn test_compute_ballots_for_new_proposal() {
             })
             .unwrap()
     };
+
+    // Test with initial timestamp
+    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
+        .compute_ballots_for_standard_proposal(now_seconds)
+        .expect("Failed computing ballots for standard proposal");
+
+    let expected_potential_voting_power: u64 =
+        governance.neuron_store.with_active_neurons_iter(|iter| {
+            iter.map(|neuron| neuron.potential_voting_power(now_seconds))
+                .sum()
+        });
+
     assert_eq!(tot_potential_voting_power, expected_potential_voting_power);
     assert_eq!(
         ballots,
@@ -1677,12 +1699,12 @@ fn test_compute_ballots_for_new_proposal() {
         }
     );
 
-    // Not affected by refresh.
+    // Test again with a much later timestamp (not affected by refresh)
     let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
 
     let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
-        .compute_ballots_for_new_proposal(&motion_action, &NeuronId { id: 10 }, now_seconds)
-        .expect("Failed computing ballots for new proposal");
+        .compute_ballots_for_standard_proposal(now_seconds)
+        .expect("Failed computing ballots for standard proposal");
     let expected: u64 = governance.neuron_store.with_active_neurons_iter(|iter| {
         iter.map(|neuron| neuron.potential_voting_power(now_seconds))
             .sum()
