@@ -20,6 +20,10 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+// Terminal size constants
+const MIN_TERMINAL_WIDTH: u16 = 10;
+const MIN_TERMINAL_HEIGHT: u16 = 15;
+
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode().context("Failed to enable raw mode")?;
 
@@ -61,9 +65,7 @@ impl TerminalGuard {
 impl Drop for TerminalGuard {
     fn drop(&mut self) {
         if let Some(ref mut terminal) = self.terminal {
-            let _ = disable_raw_mode();
-            let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
-            let _ = terminal.show_cursor();
+            let _ = teardown_terminal(terminal);
         }
     }
 }
@@ -196,6 +198,16 @@ impl App {
         self.error_message = None;
     }
 
+    fn teardown_and_error(
+        mut terminal_guard: TerminalGuard,
+        e: impl Into<anyhow::Error>,
+        context: impl FnOnce() -> String,
+    ) -> Result<Option<RecoveryParams>> {
+        let mut term = terminal_guard.terminal.take().unwrap();
+        teardown_terminal(&mut term)?;
+        Err(e.into()).with_context(context)
+    }
+
     fn handle_input_char(&mut self, c: char) {
         if let (Some(max_len), Some(field_value)) = (
             self.current_field.max_length(),
@@ -230,13 +242,15 @@ impl App {
         let mut terminal_guard = TerminalGuard::new(terminal);
 
         let test_size = terminal_guard.get_mut().size()?;
-        if test_size.width < 10 || test_size.height < 15 {
+        if test_size.width < MIN_TERMINAL_WIDTH || test_size.height < MIN_TERMINAL_HEIGHT {
             let mut term = terminal_guard.terminal.take().unwrap();
             teardown_terminal(&mut term)?;
             anyhow::bail!(
-                "Terminal too small: {}x{} (minimum: 10x15). Please resize your terminal.",
+                "Terminal too small: {}x{} (minimum: {}x{}). Please resize your terminal.",
                 test_size.width,
-                test_size.height
+                test_size.height,
+                MIN_TERMINAL_WIDTH,
+                MIN_TERMINAL_HEIGHT
             );
         }
 
@@ -271,18 +285,18 @@ impl App {
                             if let Err(e) =
                                 terminal_guard.get_mut().draw(|f: &mut Frame| self.ui(f))
                             {
-                                let mut term = terminal_guard.terminal.take().unwrap();
-                                teardown_terminal(&mut term)?;
-                                return Err(e).context("Failed to render TUI - terminal may not support required features");
+                                return Self::teardown_and_error(terminal_guard, e, || {
+                                    "Failed to render TUI - terminal may not support required features".to_string()
+                                });
                             }
                         }
                     }
                 }
                 Ok(_) => {}
                 Err(e) => {
-                    let mut term = terminal_guard.terminal.take().unwrap();
-                    teardown_terminal(&mut term)?;
-                    return Err(e).context("Failed to read terminal events - terminal may not support required features");
+                    return Self::teardown_and_error(terminal_guard, e, || {
+                        "Failed to read terminal events - terminal may not support required features".to_string()
+                    });
                 }
             }
         };
@@ -327,10 +341,10 @@ impl App {
                     self.current_field,
                     Field::CheckArtifactsButton | Field::ExitButton
                 ) {
-                    self.current_field = match self.current_field {
-                        Field::CheckArtifactsButton => Field::ExitButton,
-                        Field::ExitButton => Field::CheckArtifactsButton,
-                        _ => unreachable!(),
+                    self.current_field = if self.current_field == Field::CheckArtifactsButton {
+                        Field::ExitButton
+                    } else {
+                        Field::CheckArtifactsButton
                     };
                     self.clear_error();
                 }
@@ -354,12 +368,12 @@ impl App {
     fn ui(&self, f: &mut Frame) {
         let size = f.size();
 
-        if size.width < 10 || size.height < 15 {
+        if size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT {
             let error_text = vec![
                 Line::from("Terminal too small"),
                 Line::from(format!(
-                    "Minimum size: 10x15, current: {}x{}",
-                    size.width, size.height
+                    "Minimum size: {}x{}, current: {}x{}",
+                    MIN_TERMINAL_WIDTH, MIN_TERMINAL_HEIGHT, size.width, size.height
                 )),
                 Line::from("Please resize your terminal"),
             ];
@@ -538,6 +552,18 @@ impl App {
     }
 }
 
+fn truncate_line(line: &str, max_width: usize) -> String {
+    if line.len() > max_width {
+        format!("{}...", &line[..max_width.saturating_sub(3)])
+    } else {
+        line.to_string()
+    }
+}
+
+fn create_separator(width: u16) -> String {
+    "─".repeat((width.saturating_sub(4)).max(10) as usize)
+}
+
 fn draw_completion_screen(
     f: &mut Frame,
     success: bool,
@@ -548,7 +574,7 @@ fn draw_completion_screen(
     error_messages: &[String],
 ) {
     let size = f.size();
-    if size.width < 10 || size.height < 5 {
+    if size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT {
         return;
     }
     let block = Block::default()
@@ -577,7 +603,7 @@ fn draw_completion_screen(
             Style::default().fg(Color::Green).bold(),
         )]));
         text.push(Line::from(""));
-        let separator = "─".repeat((size.width.saturating_sub(4)).max(10) as usize);
+        let separator = create_separator(size.width);
         text.push(Line::from(vec![Span::styled(
             separator,
             Style::default().fg(Color::DarkGray),
@@ -593,7 +619,7 @@ fn draw_completion_screen(
             Style::default().fg(Color::Red).bold(),
         )]));
         text.push(Line::from(""));
-        let separator = "─".repeat((size.width.saturating_sub(4)).max(10) as usize);
+        let separator = create_separator(size.width);
         text.push(Line::from(vec![Span::styled(
             separator,
             Style::default().fg(Color::DarkGray),
@@ -628,14 +654,9 @@ fn draw_completion_screen(
                 0
             };
 
+            let max_width = (size.width.saturating_sub(4)) as usize;
             for line in &all_log_lines[start_idx..] {
-                let max_width = (size.width.saturating_sub(4)) as usize;
-                let display_line = if line.len() > max_width {
-                    format!("{}...", &line[..max_width.saturating_sub(3)])
-                } else {
-                    line.clone()
-                };
-                text.push(Line::from(format!("  {}", display_line)));
+                text.push(Line::from(format!("  {}", truncate_line(line, max_width))));
             }
         } else if !error_messages.is_empty() {
             text.push(Line::from(vec![Span::styled(
@@ -643,14 +664,9 @@ fn draw_completion_screen(
                 Style::default().fg(Color::Red).bold(),
             )]));
             text.push(Line::from(""));
+            let max_width = (size.width.saturating_sub(4)) as usize;
             for error in error_messages {
-                let max_width = (size.width.saturating_sub(4)) as usize;
-                let display_line = if error.len() > max_width {
-                    format!("{}...", &error[..max_width.saturating_sub(3)])
-                } else {
-                    error.clone()
-                };
-                text.push(Line::from(format!("  {}", display_line)));
+                text.push(Line::from(format!("  {}", truncate_line(error, max_width))));
             }
         } else {
             text.push(Line::from(""));
@@ -682,7 +698,7 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     let recovery_hash_line = format!("  RECOVERY-HASH: {}", params.recovery_hash);
     terminal_guard.get_mut().draw(|f| {
         let size = f.size();
-        if size.width < 10 || size.height < 5 {
+        if size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT {
             return;
         }
         let block = Block::default()
@@ -737,17 +753,21 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
 
     let stdout_handle = thread::spawn(move || {
         let reader = BufReader::new(stdout);
-        for line in reader.lines().filter_map(Result::ok) {
-            let mut logs = log_lines_stdout.lock().unwrap();
-            logs.push(line);
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                let mut logs = log_lines_stdout.lock().unwrap();
+                logs.push(line);
+            }
         }
     });
 
     let stderr_handle = thread::spawn(move || {
         let reader = BufReader::new(stderr);
-        for line in reader.lines().filter_map(Result::ok) {
-            let mut logs = log_lines_stderr.lock().unwrap();
-            logs.push(line);
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                let mut logs = log_lines_stderr.lock().unwrap();
+                logs.push(line);
+            }
         }
     });
 
@@ -761,17 +781,18 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
             }
             Ok(None) => {
                 let logs = log_lines.lock().unwrap();
-                let current_logs: Vec<String> = logs.clone();
-                let current_count = current_logs.len();
-                drop(logs);
-
+                let current_count = logs.len();
                 // Only redraw if we have new logs
                 if current_count > last_log_count {
+                    let current_logs: Vec<String> = logs.clone();
+                    drop(logs);
+
                     terminal_guard
                         .get_mut()
                         .draw(|f| {
                             let size = f.size();
-                            if size.width < 10 || size.height < 5 {
+                            if size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT
+                            {
                                 return;
                             }
                             let block = Block::default()
@@ -797,14 +818,12 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                                 0
                             };
 
+                            let max_width = (size.width.saturating_sub(4)) as usize;
                             for line in &current_logs[start_idx..] {
-                                let max_width = (size.width.saturating_sub(4)) as usize;
-                                let display_line = if line.len() > max_width {
-                                    format!("{}...", &line[..max_width.saturating_sub(3)])
-                                } else {
-                                    line.clone()
-                                };
-                                text.push(Line::from(format!("  {}", display_line)));
+                                text.push(Line::from(format!(
+                                    "  {}",
+                                    truncate_line(line, max_width)
+                                )));
                             }
 
                             if current_logs.len() > lines_to_show {
@@ -825,6 +844,8 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                         .ok();
 
                     last_log_count = current_count;
+                } else {
+                    drop(logs);
                 }
 
                 thread::sleep(std::time::Duration::from_millis(100));
@@ -860,31 +881,35 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         .filter(|s| !s.trim().is_empty())
         .collect();
 
+    // Check for success message
     for line in &stdout_lines {
         if line.contains("Recovery Upgrader completed successfully") {
             success_message = Some("Recovery Upgrader completed successfully".to_string());
+            break;
         }
     }
 
-    let mut explicit_errors = Vec::new();
-    let mut debug_messages = Vec::new();
+    // Extract error patterns
+    fn is_error_line(line: &str) -> bool {
+        line.contains("ERROR:") || line.contains("error:") || line.contains("Error:")
+    }
 
-    for line in &stdout_lines {
-        if line.contains("ERROR:") || line.contains("error:") || line.contains("Error:") {
-            explicit_errors.push(line.clone());
-        }
-        if line.contains("Received") && line.contains("arguments") {
-            debug_messages.push(line.clone());
-        }
-        if line.contains("Parsed VERSION") || line.contains("Parsed VERSION_HASH") {
-            debug_messages.push(line.clone());
-        }
-    }
-    for line in &stderr_lines {
-        if line.contains("ERROR:") || line.contains("error:") || line.contains("Error:") {
-            explicit_errors.push(line.clone());
-        }
-    }
+    let explicit_errors: Vec<String> = stdout_lines
+        .iter()
+        .chain(stderr_lines.iter())
+        .filter(|line| is_error_line(line))
+        .cloned()
+        .collect();
+
+    let debug_messages: Vec<String> = stdout_lines
+        .iter()
+        .filter(|line| {
+            (line.contains("Received") && line.contains("arguments"))
+                || line.contains("Parsed VERSION")
+                || line.contains("Parsed VERSION_HASH")
+        })
+        .cloned()
+        .collect();
 
     if !explicit_errors.is_empty() {
         error_messages = debug_messages;
@@ -919,14 +944,14 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                 .filter(|s| !s.trim().is_empty())
                 .collect();
 
-            let mut explicit_errors = Vec::new();
-            for line in &journalctl_lines {
-                if line.contains("ERROR:") || line.contains("error:") || line.contains("Error:") {
-                    explicit_errors.push(line.clone());
-                }
-            }
-            if !explicit_errors.is_empty() {
-                error_messages = explicit_errors;
+            let journal_errors: Vec<String> = journalctl_lines
+                .iter()
+                .filter(|line| is_error_line(line))
+                .cloned()
+                .collect();
+
+            if !journal_errors.is_empty() {
+                error_messages = journal_errors;
             } else if !journalctl_lines.is_empty() {
                 let start = journalctl_lines.len().saturating_sub(30);
                 error_messages = journalctl_lines[start..].to_vec();
