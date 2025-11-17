@@ -24,6 +24,25 @@ use std::thread;
 const MIN_TERMINAL_WIDTH: u16 = 10;
 const MIN_TERMINAL_HEIGHT: u16 = 15;
 
+/// Checks if the terminal size is too small for the UI
+fn is_terminal_too_small(size: Rect) -> bool {
+    size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT
+}
+
+/// Validates terminal size and returns an error if too small
+fn validate_terminal_size(size: Rect) -> Result<()> {
+    if is_terminal_too_small(size) {
+        anyhow::bail!(
+            "Terminal too small: {}x{} (minimum: {}x{}). Please resize your terminal.",
+            size.width,
+            size.height,
+            MIN_TERMINAL_WIDTH,
+            MIN_TERMINAL_HEIGHT
+        );
+    }
+    Ok(())
+}
+
 // Field length constants
 const VERSION_LENGTH: usize = 40; // Git commit hash length (hex characters)
 const HASH_LENGTH: usize = 64; // SHA256 hash length (hex characters)
@@ -253,16 +272,10 @@ impl App {
         let mut terminal_guard = TerminalGuard::new(terminal);
 
         let test_size = terminal_guard.get_mut().size()?;
-        if test_size.width < MIN_TERMINAL_WIDTH || test_size.height < MIN_TERMINAL_HEIGHT {
+        if let Err(e) = validate_terminal_size(test_size) {
             let mut term = terminal_guard.terminal.take().unwrap();
             teardown_terminal(&mut term)?;
-            anyhow::bail!(
-                "Terminal too small: {}x{} (minimum: {}x{}). Please resize your terminal.",
-                test_size.width,
-                test_size.height,
-                MIN_TERMINAL_WIDTH,
-                MIN_TERMINAL_HEIGHT
-            );
+            return Err(e);
         }
 
         execute!(terminal_guard.get_mut().backend_mut(), EnableMouseCapture)
@@ -379,7 +392,7 @@ impl App {
     fn ui(&self, f: &mut Frame) {
         let size = f.size();
 
-        if size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT {
+        if is_terminal_too_small(size) {
             let error_text = vec![
                 Line::from("Terminal too small"),
                 Line::from(format!(
@@ -585,7 +598,7 @@ fn draw_completion_screen(
     error_messages: &[String],
 ) {
     let size = f.size();
-    if size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT {
+    if is_terminal_too_small(size) {
         return;
     }
     let block = Block::default()
@@ -709,7 +722,7 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     let recovery_hash_line = format!("  RECOVERY-HASH: {}", params.recovery_hash);
     terminal_guard.get_mut().draw(|f| {
         let size = f.size();
-        if size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT {
+        if is_terminal_too_small(size) {
             return;
         }
         let block = Block::default()
@@ -802,8 +815,7 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                         .get_mut()
                         .draw(|f| {
                             let size = f.size();
-                            if size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT
-                            {
+                            if is_terminal_too_small(size) {
                                 return;
                             }
                             let block = Block::default()
