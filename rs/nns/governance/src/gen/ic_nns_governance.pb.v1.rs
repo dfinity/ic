@@ -423,8 +423,9 @@ pub struct Proposal {
     /// 2000 bytes.
     #[prost(string, tag = "2")]
     pub url: ::prost::alloc::string::String,
-    /// A self-describing action that can be understood without the schema of a specific
-    /// proposal type.
+    /// A self-describing action that can be understood without the schema of a specific proposal type.
+    /// This is populated and stored at the time of proposal creation and does not change as the
+    /// proposal type evolves.
     #[prost(message, optional, tag = "30")]
     pub self_describing_action: ::core::option::Option<SelfDescribingProposalAction>,
     /// This section describes the action that the proposal proposes to
@@ -4125,6 +4126,7 @@ pub mod value {
         Blob(::prost::alloc::vec::Vec<u8>),
         #[prost(string, tag = "2")]
         Text(::prost::alloc::string::String),
+        /// nat/int are stored as bytes since candid Nat/Int does not have equivalent protobuf types.
         #[prost(bytes, tag = "3")]
         Nat(::prost::alloc::vec::Vec<u8>),
         #[prost(bytes, tag = "4")]

@@ -2963,7 +2963,7 @@ pub struct ListProposalInfoRequest {
     /// request doesn't exceed the message size limit.
     pub omit_large_fields: Option<bool>,
     /// Whether to include self-describing proposal actions in the response.
-    pub use_self_describing_action: Option<bool>,
+    pub return_self_describing_action: Option<bool>,
 }
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Clone, Debug, PartialEq)]
 pub struct ListProposalInfoResponse {
@@ -4528,5 +4528,5 @@ pub struct SelfDescribingProposalAction {
 
 #[derive(candid::CandidType, candid::Deserialize, serde::Serialize, Debug, Clone, PartialEq)]
 pub struct GetPendingProposalsRequest {
-    pub use_self_describing_action: Option<bool>,
+    pub return_self_describing_action: Option<bool>,
 }

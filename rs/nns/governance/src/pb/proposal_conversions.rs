@@ -5,7 +5,7 @@ use ic_nns_governance_api::{self as pb_api, SelfDescribingProposalAction};
 use std::collections::{BTreeSet, HashMap};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ProposalDisplayOptions {
+pub(crate) struct ProposalDisplayOptions {
     omit_large_fields_requested: bool,
     show_self_describing_action: bool,
     show_action: bool,
@@ -15,21 +15,21 @@ pub struct ProposalDisplayOptions {
 impl ProposalDisplayOptions {
     pub fn for_list_proposals(
         omit_large_fields_requested: bool,
-        use_self_describing_action_requested: bool,
+        return_self_describing_action: bool,
     ) -> Self {
         Self {
             omit_large_fields_requested,
-            show_self_describing_action: use_self_describing_action_requested,
-            show_action: !use_self_describing_action_requested,
+            show_self_describing_action: return_self_describing_action,
+            show_action: !return_self_describing_action,
             multi_query: true,
         }
     }
 
-    pub fn for_get_pending_proposals(use_self_describing_action_requested: bool) -> Self {
+    pub fn for_get_pending_proposals(return_self_describing_action: bool) -> Self {
         Self {
             omit_large_fields_requested: false,
-            show_self_describing_action: use_self_describing_action_requested,
-            show_action: !use_self_describing_action_requested,
+            show_self_describing_action: return_self_describing_action,
+            show_action: !return_self_describing_action,
             multi_query: true,
         }
     }
@@ -43,10 +43,6 @@ impl ProposalDisplayOptions {
         }
     }
 
-    pub fn omit_large_fields_requested(&self) -> bool {
-        self.omit_large_fields_requested
-    }
-
     pub fn show_self_describing_action(&self) -> bool {
         self.show_self_describing_action
     }
@@ -55,8 +51,12 @@ impl ProposalDisplayOptions {
         self.show_action
     }
 
-    pub fn multi_query(&self) -> bool {
+    pub fn omit_large_execute_nns_function_payload(&self) -> bool {
         self.multi_query
+    }
+
+    pub fn omit_create_service_nervous_system_large_fields(&self) -> bool {
+        self.omit_large_fields_requested && self.multi_query
     }
 }
 
@@ -243,20 +243,23 @@ fn convert_action(
             pb_api::proposal::Action::InstallCode(convert_install_code(v))
         }
         pb::proposal::Action::ExecuteNnsFunction(v) => {
-            pb_api::proposal::Action::ExecuteNnsFunction(convert_execute_nns_function(v, true))
+            pb_api::proposal::Action::ExecuteNnsFunction(convert_execute_nns_function(
+                v,
+                display_options.omit_large_execute_nns_function_payload(),
+            ))
         }
         pb::proposal::Action::CreateServiceNervousSystem(v) => {
             pb_api::proposal::Action::CreateServiceNervousSystem(
                 convert_create_service_nervous_system(
                     v,
-                    display_options.omit_large_fields_requested(),
+                    display_options.omit_create_service_nervous_system_large_fields(),
                 ),
             )
         }
     }
 }
 
-pub fn convert_proposal(
+pub(crate) fn convert_proposal(
     item: &pb::Proposal,
     display_options: ProposalDisplayOptions,
 ) -> pb_api::Proposal {
@@ -308,7 +311,7 @@ fn convert_ballots(
     ballots
 }
 
-pub fn proposal_data_to_info(
+pub(crate) fn proposal_data_to_info(
     data: &pb::ProposalData,
     display_options: ProposalDisplayOptions,
     caller_neurons: &BTreeSet<NeuronId>,

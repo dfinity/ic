@@ -525,7 +525,7 @@ type ListProposalInfoRequest = record {
   exclude_topic : vec int32;
   include_all_manage_neuron_proposals : opt bool;
   include_status : vec int32;
-  use_self_describing_action : opt bool;
+  return_self_describing_action : opt bool;
 };
 
 type ListProposalInfoResponse = record {
@@ -1443,7 +1443,7 @@ type Value = variant {
 };
 
 type GetPendingProposalsRequest = record {
-  use_self_describing_action : opt bool;
+  return_self_describing_action : opt bool;
 }
 
 service : (Governance) -> {

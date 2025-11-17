@@ -625,8 +625,9 @@ message Proposal {
   // 2000 bytes.
   string url = 2;
 
-  // A self-describing action that can be understood without the schema of a specific
-  // proposal type.
+  // A self-describing action that can be understood without the schema of a specific proposal type.
+  // This is populated and stored at the time of proposal creation and does not change as the
+  // proposal type evolves.
   SelfDescribingProposalAction self_describing_action = 30;
 
   // This section describes the action that the proposal proposes to
@@ -2632,6 +2633,7 @@ message Value {
   oneof value {
     bytes blob = 1;
     string text = 2;
+    // nat/int are stored as bytes since candid Nat/Int does not have equivalent protobuf types.
     bytes nat = 3;
     bytes int = 4;
     ValueArray array = 5;

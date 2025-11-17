@@ -3721,9 +3721,9 @@ impl Governance {
     ) -> Vec<ProposalInfo> {
         let now = self.env.now();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
-        let use_self_describing_action_requested = is_self_describing_proposal_actions_enabled()
+        let return_self_describing_action = is_self_describing_proposal_actions_enabled()
             && req
-                .and_then(|r| r.use_self_describing_action)
+                .and_then(|r| r.return_self_describing_action)
                 .unwrap_or(false);
         self.heap_data
             .proposals
@@ -3733,7 +3733,7 @@ impl Governance {
                 proposal_data_to_info(
                     data,
                     ProposalDisplayOptions::for_get_pending_proposals(
-                        use_self_describing_action_requested,
+                        return_self_describing_action,
                     ),
                     &caller_neurons,
                     now,
@@ -3842,8 +3842,8 @@ impl Governance {
             req.include_reward_status.iter().cloned().collect();
         let include_status: HashSet<i32> = req.include_status.iter().cloned().collect();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
-        let use_self_describing_action_requested = is_self_describing_proposal_actions_enabled()
-            && req.use_self_describing_action.unwrap_or(false);
+        let return_self_describing_action = is_self_describing_proposal_actions_enabled()
+            && req.return_self_describing_action.unwrap_or(false);
         let now = self.env.now();
         let proposal_matches_request = |data: &ProposalData| -> bool {
             let topic = data.topic();
@@ -3894,7 +3894,7 @@ impl Governance {
                     proposal_data,
                     ProposalDisplayOptions::for_list_proposals(
                         req.omit_large_fields.unwrap_or_default(),
-                        use_self_describing_action_requested,
+                        return_self_describing_action,
                     ),
                     &caller_neurons,
                     now,
