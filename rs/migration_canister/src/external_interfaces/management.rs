@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use candid::{CandidType, Principal};
+use candid::{CandidType, Principal, Reserved};
 use ic_cdk::{
     api::{canister_self, canister_version},
     call::Call,
@@ -267,7 +267,7 @@ pub async fn assert_no_snapshots(canister_id: Principal) -> ProcessingResult<(),
             if snapshots.is_empty() {
                 ProcessingResult::Success(())
             } else {
-                ProcessingResult::FatalFailure(ValidationError::TargetHasSnapshots)
+                ProcessingResult::FatalFailure(ValidationError::TargetHasSnapshots(Reserved))
             }
         }
         Err(e) => {
