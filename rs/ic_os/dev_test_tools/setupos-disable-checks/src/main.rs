@@ -16,7 +16,6 @@ const CHECK_DISABLER_CMDLINE_ARGS: [&str; 3] = [
     "ic.setupos.check_network",
     "ic.setupos.check_age",
 ];
-const CHECK_INSTALL_DISABLER_CMDLINE_ARGS: [&str; 1] = ["ic.setupos.perform_installation"];
 const SERVICE_NAME: &str = "setupos-disable-checks";
 
 #[derive(Parser)]
@@ -25,18 +24,13 @@ struct Cli {
     #[arg(long, default_value = "disk.img")]
     /// Path to SetupOS disk image; its GRUB boot partition will be modified.
     image_path: PathBuf,
-    #[arg(long, action)]
-    /// If specified, defeats the installation routine altogether.
-    defeat_installer: bool,
 }
 
 /// Munge the kernel command line:
 /// defeat_setup_checks: if true, defeat the checks; if false, ensure they are active
-/// defeat_installer: if true, disable the installer; if false, ensure the installer runs
 fn munge(
     input: &str,
     defeat_setup_checks: bool,
-    defeat_installer: bool,
 ) -> Result<String, ImproperlyQuotedValue> {
     let boot_args_re = Regex::new(r"(^|\n)BOOT_ARGS=(.*)(\s+#|\n|$)").unwrap();
     let (left, prevmatch, mut boot_args, postmatch, right) = match boot_args_re.captures(input) {
@@ -67,11 +61,6 @@ fn munge(
             .ensure_single_argument(arg, defeat_setup_checks.then_some("0"))
             .unwrap();
     }
-    for arg in CHECK_INSTALL_DISABLER_CMDLINE_ARGS.iter() {
-        boot_args
-            .ensure_single_argument(arg, defeat_installer.then_some("0"))
-            .unwrap();
-    }
 
     let boot_args_str: String = boot_args.into();
 
@@ -95,13 +84,7 @@ async fn main() -> Result<(), Error> {
     let mut bootfs = ExtPartition::open(cli.image_path, Some(5)).await?;
 
     // Overwrite checks.
-    if cli.defeat_installer {
-        eprintln!(
-            "Defeating installer routine as well as age, hardware and network checks in SetupOS"
-        );
-    } else {
-        eprintln!("Defeating age, hardware and network checks in SetupOS");
-    }
+    eprintln!("Defeating age, hardware and network checks in SetupOS");
 
     let temp_boot_args = NamedTempFile::new()?;
     fs::write(
@@ -109,7 +92,6 @@ async fn main() -> Result<(), Error> {
         munge(
             std::str::from_utf8(&bootfs.read_file(boot_args_path).await?)?,
             true,
-            cli.defeat_installer,
         )
         .context("Could not parse the BOOT_ARGS variable in the existing boot_args file")?,
     )
@@ -139,10 +121,9 @@ mod tests {
                 r#"# This file contains nothing.
 "#,
                 true,
-                true,
                 r#"# This file has been modified by setupos-disable-checks.
 # This file contains nothing.
-BOOT_ARGS="ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.perform_installation=0"
+BOOT_ARGS="ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0"
 "#,
             ),
             (
@@ -152,10 +133,9 @@ BOOT_ARGS="security=selinux selinux=1 enforcing=0"
 # Postfix.
 "#,
                 true,
-                true,
                 r#"# This file has been modified by setupos-disable-checks.
 # Hello hello.
-BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.perform_installation=0"
+BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0"
 # Postfix.
 "#,
             ),
@@ -164,34 +144,31 @@ BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic
                 r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0"
 "#,
                 true,
-                true,
                 r#"# This file has been modified by setupos-disable-checks.
-BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0 ic.setupos.perform_installation=0"
+BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0"
 "#,
             ),
             (
-                "variables for defeat installer are set, and checks are prevented from being defeated",
+                "checks are prevented from being defeated",
                 r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0"
 "#,
                 false,
-                true,
                 r#"# This file has been modified by setupos-disable-checks.
-BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware ic.setupos.check_network ic.setupos.check_age ic.setupos.perform_installation=0"
+BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware ic.setupos.check_network ic.setupos.check_age"
 "#,
             ),
             (
-                "variables for defeat checks are set, and installer is prevented from being defeated",
+                "variables for defeat checks are set",
                 r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_age"
 "#,
                 true,
-                false,
                 r#"# This file has been modified by setupos-disable-checks.
-BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_age=0 ic.setupos.check_network=0 ic.setupos.perform_installation"
+BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_age=0 ic.setupos.check_network=0"
 "#,
             ),
         ];
-        for (test_name, input, defeat_checks, defeat_installer, expected) in table.into_iter() {
-            let result = munge(input, defeat_checks, defeat_installer).unwrap();
+        for (test_name, input, defeat_checks, expected) in table.into_iter() {
+            let result = munge(input, defeat_checks).unwrap();
             if result != expected {
                 panic!(
                     "During test {test_name}:
