@@ -189,19 +189,28 @@ wait_for_nns_canister_has_new_code() {
     local NETWORK=$1
     local CANISTER_NAME=$2
 
+    # These might not be consistent, but that is highly unlikely.
     ORIGINAL_WASM_HASH="$(nns_canister_hash ic "${CANISTER_NAME}")"
+    OLD_GIT_COMMIT_ID="$(dfx canister --ic metadata "$(nns_canister_id "${CANISTER_NAME}")" git_commit_id)"
 
-    echo "The original WASM hash is ${ORIGINAL_WASM_HASH}."
+    echo "The original WASM hash is"
+    echo "  ${ORIGINAL_WASM_HASH}"
+    echo "The canister now (self-reports that it is) running code built from git commit ID"
+    echo "  ${OLD_GIT_COMMIT_ID}"
     echo "We will now poll until it changes. Please, stand by..."
     echo
 
-    for i in {1..100}; do
+    for i in {1..600}; do
         sleep 6
         LATEST_WASM_HASH="$(nns_canister_hash ic "${CANISTER_NAME}")"
 
         if [[ "${LATEST_WASM_HASH}" != "${ORIGINAL_WASM_HASH}" ]]; then
             echo
-            echo "The WASM hash for ${CANISTER_NAME} has changed to ${LATEST_WASM_HASH}."
+            echo "The WASM hash for ${CANISTER_NAME} has changed to"
+            echo "  ${LATEST_WASM_HASH}"
+            NEW_GIT_COMMIT_ID="$(dfx canister --ic metadata "$(nns_canister_id "${CANISTER_NAME}")" git_commit_id)"
+            echo "The canister now (self-reports that it is) running code built from git commit ID"
+            echo "  ${NEW_GIT_COMMIT_ID}"
             return
         fi
 
@@ -209,7 +218,7 @@ wait_for_nns_canister_has_new_code() {
     done
 
     echo
-    echo "Giving up. The canister's WASM hash has not changed after 10 minutes."
+    echo "Giving up. The canister's WASM hash has not changed after 1 hour."
     return 1
 }
 

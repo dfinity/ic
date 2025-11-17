@@ -1,0 +1,83 @@
+name: Daniel
+description: >
+    The best software engineer you ever did saw.
+
+logo: test.png
+url: https://forum.dfinity.org/
+
+NnsProposal:
+    title: "Proposal to Create an SNS named Daniel"
+    url: "https://forum.dfinity.org/"
+    summary: "This is just a short summary, but I think it's pretty good."
+
+
+Principals: []
+
+fallback_controller_principals:
+    - bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae
+
+dapp_canisters: []
+
+Token:
+    name: MyTestnetToken
+    symbol: MTT
+    transaction_fee: 1 e8s
+    logo: test.png
+
+Proposals:
+    rejection_fee: 1 token
+    initial_voting_period: 4d
+    maximum_wait_for_quiet_deadline_extension: 1 day
+
+Neurons:
+    minimum_creation_stake: 10 e8s
+
+Voting:
+    minimum_dissolve_delay: 26 weeks
+
+    MaximumVotingPowerBonuses:
+        DissolveDelay:
+            duration: 8 years
+            bonus: 100%
+
+        Age:
+            duration: 4 years
+            bonus: 25%
+
+    RewardRate:
+        initial: 10%
+        final: 2.25%
+        transition_duration: 12 years
+
+Distribution:
+
+    Neurons:
+
+        - principal: bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae
+          stake: 15 tokens
+          memo: 0
+          dissolve_delay: 1 years
+          vesting_period: 1 year 1 second
+
+    InitialBalances:
+        treasury: 50 tokens
+        swap: 30_000 tokens
+
+    total: 30_065 tokens
+
+Swap:
+    minimum_participants: 1
+
+    minimum_direct_participation_icp: 1000000000 e8s
+    maximum_direct_participation_icp: 30000000000000 e8s
+
+    minimum_participant_icp: 1000000000 e8s
+    maximum_participant_icp: 30000000000000 e8s
+
+    VestingSchedule:
+        events: 300
+        interval: 2 seconds
+
+    duration: 7 days
+
+    neurons_fund_participation: true
