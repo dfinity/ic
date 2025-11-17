@@ -380,7 +380,10 @@ pub struct LogRecord {
 
 impl LogRecord {
     pub fn bytes_len(&self) -> usize {
-        8 + 8 + 4 + self.content.len()
+        // IMPORTANT: do not check the content length here, as we can only
+        // read the record header without loading the full content,
+        // but still need to know the full size of the record.
+        8 + 8 + 4 + self.len as usize
     }
 }
 
@@ -477,10 +480,12 @@ impl StructIO {
 
     pub fn load_index(&self) -> IndexTable {
         let h = self.load_header();
-        let front_position = h.data_head;
-        let front = self
-            .load_record_without_content(front_position)
-            .map(|record| IndexEntry::new(front_position, &record));
+        let front = if h.data_size.get() > 0 {
+            let pos = h.data_head;
+            Some(IndexEntry::new(pos, &self.load_record_without_content(pos)))
+        } else {
+            None
+        };
         let entries = if h.index_entries_count == 0 {
             vec![]
         } else {
@@ -528,19 +533,48 @@ impl StructIO {
         self.write_raw_u64(addr, entry.position.get())
     }
 
-    fn load_record_without_content(&self, position: MemoryPosition) -> Option<LogRecord> {
-        // TODO: reading record must read data region with wrapping.
-        unimplemented!()
+    fn load_record_header(
+        &self,
+        position: MemoryPosition,
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> (u64, u64, u32, MemoryPosition) {
+        let (idx, position) = self.read_wrapped_u64(position, offset, capacity);
+        let (timestamp, position) = self.read_wrapped_u64(position, offset, capacity);
+        let (len, position) = self.read_wrapped_u32(position, offset, capacity);
+        (idx, timestamp, len, position)
     }
 
-    pub fn load_record(&self, position: MemoryPosition) -> Option<LogRecord> {
-        // TODO: reading record must read data region with wrapping.
-        unimplemented!()
+    fn load_record_without_content(&self, position: MemoryPosition) -> LogRecord {
+        let (offset, capacity) = (DATA_REGION_OFFSET, self.load_header().data_capacity);
+        let (idx, timestamp, len, _position) = self.load_record_header(position, offset, capacity);
+        LogRecord {
+            idx,
+            timestamp,
+            len,
+            content: vec![], // Content is not loaded here.
+        }
+    }
+
+    pub fn load_record(&self, position: MemoryPosition) -> LogRecord {
+        let (offset, capacity) = (DATA_REGION_OFFSET, self.load_header().data_capacity);
+        let (idx, timestamp, len, position) = self.load_record_header(position, offset, capacity);
+        let (content, _position) =
+            self.read_wrapped_vec(position, MemorySize::new(len as u64), offset, capacity);
+        LogRecord {
+            idx,
+            timestamp,
+            len,
+            content,
+        }
     }
 
     pub fn save_record(&self, position: MemoryPosition, record: &LogRecord) {
-        // TODO: writing record must write data region with wrapping.
-        unimplemented!()
+        let (offset, capacity) = (DATA_REGION_OFFSET, self.load_header().data_capacity);
+        let position = self.write_wrapped_u64(position, record.idx, offset, capacity);
+        let position = self.write_wrapped_u64(position, record.timestamp, offset, capacity);
+        let position = self.write_wrapped_u32(position, record.len, offset, capacity);
+        _ = self.write_wrapped_bytes(position, &record.content, offset, capacity);
     }
 
     fn read_raw_vec(&self, address: MemoryAddress, len: MemorySize) -> (Vec<u8>, MemoryAddress) {
@@ -563,10 +597,10 @@ impl StructIO {
     fn read_wrapped_vec(
         &self,
         position: MemoryPosition,
+        len: MemorySize,
         offset: MemoryAddress,
         capacity: MemorySize,
-        len: MemorySize,
-    ) -> (Vec<u8>, MemoryAddress) {
+    ) -> (Vec<u8>, MemoryPosition) {
         let remaining_size = capacity - position;
         let bytes = if len <= remaining_size {
             // No wrap.
@@ -580,7 +614,7 @@ impl StructIO {
             bytes.append(&mut second_part);
             bytes
         };
-        (bytes, offset + (position + len) % capacity)
+        (bytes, (position + len) % capacity)
     }
 
     fn read_wrapped_bytes<const N: usize>(
@@ -588,7 +622,7 @@ impl StructIO {
         position: MemoryPosition,
         offset: MemoryAddress,
         capacity: MemorySize,
-    ) -> ([u8; N], MemoryAddress) {
+    ) -> ([u8; N], MemoryPosition) {
         let mut result = [0u8; N];
         let len = MemorySize::new(N as u64);
         let remaining = capacity - position;
@@ -604,16 +638,16 @@ impl StructIO {
             let (second_part, _addr) = self.read_raw_vec(offset, len - remaining);
             result[first_part_size..].copy_from_slice(&second_part);
         }
-        (result, offset + (position + len) % capacity)
+        (result, (position + len) % capacity)
     }
 
     fn write_wrapped_bytes(
         &self,
         position: MemoryPosition,
+        bytes: &[u8],
         offset: MemoryAddress,
         capacity: MemorySize,
-        bytes: &[u8],
-    ) -> MemoryAddress {
+    ) -> MemoryPosition {
         let remaining_size = capacity - position;
         let len = MemorySize::new(bytes.len() as u64);
         if len <= remaining_size {
@@ -625,7 +659,7 @@ impl StructIO {
             self.write_raw_bytes(offset + position, &bytes[..split]);
             self.write_raw_bytes(offset, &bytes[split..]);
         }
-        offset + (position + len) % capacity
+        (position + len) % capacity
     }
 
     fn read_raw_u8(&self, address: MemoryAddress) -> (u8, MemoryAddress) {
@@ -666,62 +700,62 @@ impl StructIO {
 
     fn read_wrapped_u16(
         &self,
-        pos: MemoryPosition,
-        addr: MemoryAddress,
-        cap: MemorySize,
-    ) -> (u16, MemoryAddress) {
-        let (bytes, addr) = self.read_wrapped_bytes::<2>(pos, addr, cap);
-        (u16::from_le_bytes(bytes), addr)
+        position: MemoryPosition,
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> (u16, MemoryPosition) {
+        let (bytes, position) = self.read_wrapped_bytes::<2>(position, offset, capacity);
+        (u16::from_le_bytes(bytes), position)
     }
 
     fn read_wrapped_u32(
         &self,
-        pos: MemoryPosition,
-        addr: MemoryAddress,
-        cap: MemorySize,
-    ) -> (u32, MemoryAddress) {
-        let (bytes, addr) = self.read_wrapped_bytes::<4>(pos, addr, cap);
-        (u32::from_le_bytes(bytes), addr)
+        position: MemoryPosition,
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> (u32, MemoryPosition) {
+        let (bytes, position) = self.read_wrapped_bytes::<4>(position, offset, capacity);
+        (u32::from_le_bytes(bytes), position)
     }
 
     fn read_wrapped_u64(
         &self,
-        pos: MemoryPosition,
-        addr: MemoryAddress,
-        cap: MemorySize,
-    ) -> (u64, MemoryAddress) {
-        let (bytes, addr) = self.read_wrapped_bytes::<8>(pos, addr, cap);
-        (u64::from_le_bytes(bytes), addr)
+        position: MemoryPosition,
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> (u64, MemoryPosition) {
+        let (bytes, position) = self.read_wrapped_bytes::<8>(position, offset, capacity);
+        (u64::from_le_bytes(bytes), position)
     }
 
     fn write_wrapped_u16(
         &self,
-        pos: MemoryPosition,
-        addr: MemoryAddress,
-        cap: MemorySize,
+        position: MemoryPosition,
         value: u16,
-    ) -> MemoryAddress {
-        self.write_wrapped_bytes(pos, addr, cap, &value.to_le_bytes())
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> MemoryPosition {
+        self.write_wrapped_bytes(position, &value.to_le_bytes(), offset, capacity)
     }
 
     fn write_wrapped_u32(
         &self,
-        pos: MemoryPosition,
-        addr: MemoryAddress,
-        cap: MemorySize,
+        position: MemoryPosition,
         value: u32,
-    ) -> MemoryAddress {
-        self.write_wrapped_bytes(pos, addr, cap, &value.to_le_bytes())
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> MemoryPosition {
+        self.write_wrapped_bytes(position, &value.to_le_bytes(), offset, capacity)
     }
 
     fn write_wrapped_u64(
         &self,
-        pos: MemoryPosition,
-        addr: MemoryAddress,
-        cap: MemorySize,
+        position: MemoryPosition,
         value: u64,
-    ) -> MemoryAddress {
-        self.write_wrapped_bytes(pos, addr, cap, &value.to_le_bytes())
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> MemoryPosition {
+        self.write_wrapped_bytes(position, &value.to_le_bytes(), offset, capacity)
     }
 }
 
@@ -748,7 +782,7 @@ impl RingBuffer {
         }
         // Free space by popping old records if needed.
         while MemorySize::new(self.used_space() as u64) + added_size > capacity {
-            if self.pop_front().is_none() {
+            if self.drop_front().is_none() {
                 break; // No more records to pop, limit reached.
             }
         }
@@ -768,9 +802,10 @@ impl RingBuffer {
         self.update_index(position, &record);
     }
 
-    fn pop_front(&mut self) -> Option<LogRecord> {
+    fn drop_front(&mut self) -> Option<LogRecord> {
         let mut h = self.io.load_header();
-        let record = self.io.load_record(h.data_head)?;
+        // No need to read the content of log record being removed.
+        let record = self.io.load_record_without_content(h.data_head);
         let removed_size = MemorySize::new(record.bytes_len() as u64);
         h.data_head = h.advance_position(h.data_head, removed_size);
         h.data_size = h.data_size.saturating_sub(removed_size);
@@ -806,47 +841,3 @@ mod tests {
         assert!(true);
     }
 }
-
-/*
-This code is currently missing serialization and deserialization logic
-for the Header, vector of IndexEntries, and log records.
-I would like (de-)serialization function to look something like this:
-
-fn save_header(header: &Header, writer: ?) {
-    writer.write_raw_bytes(&header.magic);
-    writer.write_u8(header.version);
-    writer.write_u16(header.index_table_pages);
-    writer.write_u16(header.index_entries_count);
-    writer.write_u64(header.data_offset.get());
-    writer.write_u64(header.data_capacity.get());
-    writer.write_u64(header.data_size.get());
-    writer.write_u64(header.data_head.get());
-    writer.write_u64(header.data_tail.get());
-    writer.write_u64(header.next_idx);
-}
-
-key features I like is that I don't need to provide explicit offsets for each field,
-it understands the size of each field automatically, and the order of fields is preserved.
-Similar thing for deserialization.
-
-My example requires implementation of ByteWriter and ByteReader.
-I don't know if that's the best solution, it was my first idea.
-But I would like you to suggest the best implementation so the
-serialization and deserialization code is as clean and maintainable as possible.
-
-provide the implementation for serialization and deserialization
-for Header, vector of IndexEntries.
-as for the LogRecord we can only do the serialization at the moment,
-because we know the length of content.
-
-but for deserialization we first need to read from file the length of content,
-then read the content itself.
-
-therefore my approach currently is to (de-)serialize into byte array and then read/write
-from/to file using existing read/write methods that works with byte arrays.
-
-I don't know if that's the best approach either.
-would it make sense to implement reader/writer that works directly with file?
-
-please provide the best solution and only return the code for serialization and deserialization.
-*/
