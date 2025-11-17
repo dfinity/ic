@@ -22,10 +22,9 @@ mod keygen {
 }
 
 mod serialization {
-    use crate::types::{PublicKeyBytes, SecretKeyBytes};
     use crate::{
         KeyDecodingError, public_key_from_der, secret_key_from_pkcs8_v1_der,
-        secret_key_to_pkcs8_v1_der,
+        secret_key_to_pkcs8_v1_der, types::SecretKeyBytes,
     };
     use assert_matches::assert_matches;
     use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;

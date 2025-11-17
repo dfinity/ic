@@ -42,7 +42,7 @@ fn should_generate_ed25519_secret_key_as_pkcs8_v1_format_in_der_encoding() {
     .expect("failed to generate TLS keys");
 
     assert_matches!(
-        ic_ed25519::PrivateKey::deserialize_pkcs8(&secret_key.bytes.expose_secret()),
+        ic_ed25519::PrivateKey::deserialize_pkcs8(secret_key.bytes.expose_secret()),
         Ok(_)
     );
 }
@@ -83,7 +83,7 @@ fn should_generate_self_signed_certificate() {
     )
     .expect("conversion to Ed25519 public key failed");
 
-    assert_eq!(pk.verify_signature(&msg, &sig), Ok(()));
+    assert_eq!(pk.verify_signature(msg, &sig), Ok(()));
 }
 
 #[test]
