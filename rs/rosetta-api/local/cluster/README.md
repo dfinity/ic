@@ -59,6 +59,15 @@ You can make the rosetta nodes point to other ledgers by using these flags:
 - `--icrc1-ledgers <ledger_ids>`: Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: `3jkp5-oyaaa-aaaaj-azwqa-cai`). Example: `--icrc1-ledgers 'ledger1-id,ledger2-id,ledger3-id'`.
 - `--no-icp-latest`: Skip deploying the ICP Rosetta latest image from Docker Hub (useful when you only want to deploy your local build).
 - `--no-icrc1-latest`: Skip deploying the ICRC1 Rosetta latest image from Docker Hub (useful when you only want to deploy your local build).
+- `--sqlite-cache-kb <size>`: Set the SQLite cache size in KB (optional, no default). Lower values reduce memory usage but may impact performance. Adjust based on the number of ledgers and available pod memory.
+- `--flush-cache-shrink-mem`: Flush the cache and shrink the memory after updating balances. If this flag is present, the feature is enabled; otherwise, it remains disabled.
+- `--balance-sync-batch-size <size>`: Set the balance synchronization batch size in blocks (default: `25000`). This
+  controls how many blocks are loaded into memory at once when updating account balances. Lower values (10000-15000)
+  prevent OOM spikes but slow down sync. Higher values (50000-100000) sync faster but use more memory.
+- `--no-icp-latest`: Skip deploying the ICP Rosetta latest image from Docker Hub (useful when you only want to deploy
+  your local build).
+- `--no-icrc1-latest`: Skip deploying the ICRC1 Rosetta latest image from Docker Hub (useful when you only want to
+  deploy your local build).
 
 ATTENTION: The first run might take a few minutes to finish as it'll create the cluster and install the necessary charts in it. After that, all the script will do is re-deploy the rosetta images with different configuration if needed.
 
@@ -143,12 +152,98 @@ For example, the following command installs all prod and local images in a clean
 
 Grafana will run on port 3000. If you're running this in a remote devenv, you'll need to forward your local machine port to your devenv's one in order to access the service from your browser.
 
-The first time you open `http://localhost:3000`, you'll be asked for login credentials. Use `admin` for both username and password. You'll be asked to change the password, you can either do so or just skip, it doesn't matter.
+The first time you open `http://localhost:3000`, you'll be asked for login credentials. Use `admin` for both username
+and password. You'll be asked to change the password, you can either do so or just skip, it doesn't matter.
 
-Once in Grafana, import a new dashboard. As an option to import, you'll see a text box to input a json file. Copy and paste the contents of the `rosetta_load_dashboard.json` file in this directory.
+Once in Grafana, import a new dashboard. As an option to import, you'll see a text box to input a json file. Copy and
+paste the contents of the `rosetta_load_dashboard.json` file in this directory.
 
-Services and pods with suffix `-latest` represent jobs running with the prod images while the ones with suffix `-local` are the ones running with the locally built ones.
+Services and pods with suffix `-latest` represent jobs running with the prod images while the ones with suffix `-local`
+are the ones running with the locally built ones.
 
+## Memory Configuration and Tuning
+
+ICRC Rosetta uses SQLite for each ledger's blockchain data storage. When running multiple ledgers, memory usage can
+increase significantly. The deployment includes several memory optimizations:
+
+### Default Settings
+
+- Pod memory limit: `512Mi`
+- Pod memory request: `256Mi`
+- SQLite cache per database: `20MB` (20480 KB)
+
+### Memory Usage Calculation
+
+For multiple ledgers, estimate memory usage as:
+
+- Base overhead: ~100-150MB
+- Per ledger: ~50-100MB (includes SQLite cache + application overhead)
+
+With 2 ledgers and default settings, expect ~200-300MB usage.
+
+### Adjusting SQLite Cache Size
+
+If you experience OOM errors or want to optimize:
+
+1. **Reduce cache for more ledgers:**
+   ```bash
+   ./deploy.sh --icrc1-ledger 'ledger1,ledger2,ledger3' --sqlite-cache-kb 10240
+   ```
+
+2. **Increase cache for better performance (fewer ledgers):**
+   ```bash
+   ./deploy.sh --icrc1-ledger 'ledger1' --sqlite-cache-kb 51200
+   ```
+
+3. **Modify pod memory limits** by editing `values.yaml`:
+   ```yaml
+   commonResources: &commonResources
+     limits:
+       memory: "1Gi"  # Increase for more ledgers or larger cache
+   ```
+
+### Rule of Thumb
+
+Set SQLite cache to approximately 10-20% of pod memory limit, divided by the number of ledgers:
+
+```
+cache_per_db_kb = (pod_memory_mb * 0.15 * 1024) / num_ledgers
+```
+
+### Understanding OOM Kills and Memory Spikes
+
+If you see sudden 200MB+ memory spikes followed by OOM kills in Grafana, this is caused by the **account balance
+synchronization** process. ICRC Rosetta:
+
+1. **Fetches blocks from the ledger** and stores them in SQLite (low memory)
+2. **Updates account balances** by loading a batch of blocks into RAM along with an account balance cache
+
+The default batch size was 100,000 blocks, which could consume 200-300MB+ of RAM instantly. The new default is 25,000
+blocks to prevent OOM in memory-constrained environments.
+
+**Symptoms:**
+
+- Sudden memory spike of 150-250MB
+- Container killed shortly after (OOM)
+- Happens during initial sync or when catching up after downtime
+
+**Solutions:**
+
+1. **Reduce batch size** for very constrained environments (2+ ledgers, 512Mi limit):
+   ```bash
+   ./deploy.sh --icrc1-ledger 'ledger1,ledger2,ledger3' --balance-sync-batch-size 10000
+   ```
+
+2. **Increase pod memory** if you want faster sync:
+   ```yaml
+   # In values.yaml
+   commonResources:
+     limits:
+       memory: "1Gi"
+   ```
+
+3. **Monitor in Grafana**: Watch the memory panel during sync to find the optimal balance between speed and memory
+   usage.
 
 ## Notes
 - The script will automatically install Minikube if they are not found.
