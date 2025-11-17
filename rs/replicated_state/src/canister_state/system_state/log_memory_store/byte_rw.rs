@@ -1,3 +1,5 @@
+#![allow(dead_code)] // TODO: don't forget to cleanup.
+
 pub(crate) struct ByteWriter<'a> {
     buf: &'a mut [u8],
     pos: usize,

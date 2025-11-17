@@ -1,3 +1,5 @@
+#![allow(dead_code)] // TODO: don't forget to cleanup.
+
 mod byte_rw;
 mod header;
 mod log_record;

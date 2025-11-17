@@ -1,3 +1,5 @@
+#![allow(dead_code)] // TODO: don't forget to cleanup.
+
 use super::byte_rw::ByteWriter;
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 

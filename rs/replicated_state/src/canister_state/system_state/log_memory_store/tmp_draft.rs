@@ -72,6 +72,7 @@ entries older than `front.idx` are discarded, and duplicates are removed.
 The resulting vector covers the entire range of live data in steps of `segment_size`
 and serves as a fast guide for subsequent user queries.
 */
+#![allow(dead_code)] // TODO: don't forget to cleanup.
 
 use std::cell::RefCell;
 use std::ops::Add;
@@ -517,5 +518,21 @@ impl RingBuffer {
     pub fn fetch_canister_logs(&self, filter: Option<Filter>) -> Vec<LogRecord> {
         // todo: first implement get_coarse_range()
         unimplemented!()
+    }
+}
+
+/*
+bazel test //rs/replicated_state:replicated_state_test \
+  --test_output=streamed \
+  --test_arg=--nocapture \
+  --test_arg=tmp_draft
+*/
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tmp() {
+        assert!(true);
     }
 }

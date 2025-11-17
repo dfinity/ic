@@ -1,3 +1,5 @@
+#![allow(dead_code)] // TODO: don't forget to cleanup.
+
 use crate::canister_state::system_state::log_memory_store::{
     header::{HeaderV1, HeaderV1Blob},
     log_record::LogRecord,

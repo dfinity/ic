@@ -1,3 +1,5 @@
+#![allow(dead_code)] // TODO: don't forget to cleanup.
+
 use super::byte_rw::{ByteReader, ByteWriter};
 use crate::canister_state::system_state::log_memory_store::{
     lookup::LOOKUP_ENTRY_SIZE,
