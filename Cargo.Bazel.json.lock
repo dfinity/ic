@@ -1,5 +1,5 @@
 {
-  "checksum": "91d29d4db0b0b6292b9591e3e4d16220d18592828d9bdbf163c64c2cbd4235bf",
+  "checksum": "963d5646cd0edbdd328080c06133651225be3da0fff159ffd1861afe23077d4c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21450,7 +21450,7 @@
               "target": "pcre2"
             },
             {
-              "id": "pem 1.1.1",
+              "id": "pem 3.0.3",
               "target": "pem"
             },
             {
@@ -53473,53 +53473,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "pem 1.1.1": {
-      "name": "pem",
-      "version": "1.1.1",
-      "package_url": "https://github.com/jcreekmore/pem-rs.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/pem/1.1.1/download",
-          "sha256": "a8835c273a76a90455d7344889b0964598e3316e2a79ede8e36f16bdcf2228b8"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "pem",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "pem",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "base64 0.13.1",
-              "target": "base64"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "1.1.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE.md"
     },
     "pem 3.0.3": {
       "name": "pem",
@@ -94407,7 +94360,7 @@
     "parking_lot 0.12.1",
     "paste 1.0.15",
     "pcre2 0.2.6",
-    "pem 1.1.1",
+    "pem 3.0.3",
     "pin-project-lite 0.2.13",
     "ping 0.5.0",
     "pkcs8 0.10.2",
