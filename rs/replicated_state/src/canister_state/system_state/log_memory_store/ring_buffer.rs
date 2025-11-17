@@ -1,7 +1,7 @@
 #![allow(dead_code)] // TODO: don't forget to cleanup.
 
 use crate::canister_state::system_state::log_memory_store::{
-    header::HeaderV1,
+    header::Header,
     log_record::LogRecord,
     memory::{MemoryAddress, MemoryPosition, MemorySize},
     struct_io::StructIO,
@@ -10,12 +10,24 @@ use crate::page_map::{PAGE_SIZE, PageIndex, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_sys::PageBytes;
 
-const MAGIC: &[u8; 3] = b"LMS";
-pub(crate) const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
-pub(crate) const V1_HEADER_SIZE: MemorySize = MemorySize::new(PAGE_SIZE as u64);
-pub(crate) const V1_LOOKUP_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(V1_HEADER_SIZE);
+// PageMap file layout.
+// Header layout constants.
+pub const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
+pub const HEADER_RESERVED_SIZE: MemorySize = MemorySize::new(PAGE_SIZE as u64);
+pub const HEADER_SIZE: MemorySize = MemorySize::new(56);
+pub const MAGIC: &[u8; 3] = b"LMS";
+// Index table layout constants.
+pub const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_RESERVED_SIZE);
+pub const INDEX_TABLE_PAGES: u16 = 1;
+pub const INDEX_TABLE_SIZE: MemorySize =
+    MemorySize::new(INDEX_TABLE_PAGES as u64 * PAGE_SIZE as u64);
+pub const INDEX_ENTRY_SIZE: MemorySize = MemorySize::new(24);
+// Data region layout constants.
+pub const DATA_REGION_OFFSET: MemoryAddress = INDEX_TABLE_OFFSET.add_size(INDEX_TABLE_SIZE);
 
-const LOOKUP_TABLE_PAGES: u16 = 1; // For buffer up to 2 MiB data capacity 1 page is enough.
+// Ring buffer constraints.
+pub const DATA_CAPACITY_MAX: MemorySize = MemorySize::new(100 * 1024 * 1024); // 100 MiB
+pub const RESULT_MAX_SIZE: MemorySize = MemorySize::new(2_000_000); // 2 MB
 
 struct RingBuffer {
     io: StructIO,
@@ -24,29 +36,14 @@ struct RingBuffer {
 impl RingBuffer {
     pub fn new(page_map: PageMap, data_capacity: MemorySize) -> Self {
         let mut io = StructIO::new(page_map);
-        let data_offset = V1_LOOKUP_TABLE_OFFSET.add_size(MemorySize::new(
-            (LOOKUP_TABLE_PAGES as u64) * (PAGE_SIZE as u64),
-        ));
-        let header = HeaderV1 {
-            magic: *MAGIC,
-            version: 1,
-            lookup_table_pages: LOOKUP_TABLE_PAGES,
-            lookup_entries_count: 0,
-            data_offset,
-            data_capacity,
-            data_size: MemorySize::new(0),
-            data_head: MemoryPosition::new(0),
-            data_tail: MemoryPosition::new(0),
-            next_idx: 0,
-        };
-        io.write_header(&header);
+        io.save_header(&Header::new(data_capacity));
 
         Self { io }
     }
 
     pub fn init(page_map: PageMap, data_capacity: MemorySize) -> Self {
         let io = StructIO::new(page_map);
-        if io.read_header().magic != *MAGIC {
+        if io.load_header().magic != *MAGIC {
             // Not initialized yet, create a new instance.
             return Self::new(io.into_page_map(), data_capacity);
         }
@@ -62,101 +59,142 @@ impl RingBuffer {
     }
 
     pub fn capacity(&self) -> usize {
-        self.io.read_header().data_capacity.get() as usize
+        self.io.load_header().data_capacity.get() as usize
     }
 
     pub fn used_space(&self) -> usize {
-        self.io.read_header().data_size.get() as usize
+        self.io.load_header().data_size.get() as usize
     }
 
     pub fn next_id(&self) -> u64 {
-        self.io.read_header().next_idx
+        self.io.load_header().next_idx
     }
 
-    /// Remove and return the first log record from the ring buffer, `None` if empty.
-    pub fn pop_front(&mut self) -> Option<LogRecord> {
-        let mut h = self.io.read_header();
-        let record = self.io.read_record(h.data_head)?;
-
-        // Update header to drop the record.
-        let removed_size = MemorySize::new(record.bytes_len() as u64);
-        h.data_head = h.advance_position(h.data_head, removed_size);
-        h.data_size = h.data_size.saturating_sub(removed_size);
-        self.io.write_header(&h);
-
-        // No need to update lookup table, because buckets only track the latest records,
-        // and front record is calculated on-the-fly when lookup table is read.
-
-        Some(record)
-    }
-
-    /// Appends a new log record to the back of the ring buffer.
-    pub fn push_back(&mut self, record: &LogRecord) {
-        // Ensure there is enough free space for the new record.
+    pub fn append(&mut self, record: &LogRecord) {
         let added_size = MemorySize::new(record.bytes_len() as u64);
-        self.make_free_space_within_limit(added_size);
-
-        // Write the record at the tail position.
-        let mut h = self.io.read_header();
-        self.io.write_record(record, h.data_tail);
-
-        // Update header with new tail position, size and next idx.
-        let last_record_position = h.data_tail;
-        h.data_tail = h.advance_position(h.data_tail, added_size);
-        h.data_size = h.data_size.saturating_add(added_size);
-        h.next_idx = record.idx + 1;
-        self.io.write_header(&h);
-
-        // Update lookup table after writing the record and updating the header.
-        self.update_lookup_table_last(record, last_record_position);
-    }
-
-    /// Ensures there is enough free space for bytes_len by removing old records.
-    fn make_free_space_within_limit(&mut self, bytes_len: MemorySize) {
-        while self.used_space() + bytes_len.as_usize() > self.capacity() {
+        let capacity = MemorySize::new(self.capacity() as u64);
+        if added_size > capacity {
+            return;
+        }
+        // Free space by popping old records if needed.
+        while MemorySize::new(self.used_space() as u64) + added_size > capacity {
             if self.pop_front().is_none() {
                 break; // No more records to pop, limit reached.
             }
         }
+
+        // Save the record at the tail position.
+        let mut h = self.io.load_header();
+        self.io.save_record(h.data_tail, &record);
+
+        // Update header with new tail position, size and next idx.
+        let position = h.data_tail;
+        h.data_tail = h.advance_position(position, added_size);
+        h.data_size = h.data_size.saturating_add(added_size);
+        h.next_idx = record.idx + 1;
+        self.io.save_header(&h);
+
+        // Update lookup table after writing the record and updating the header.
+        self.update_index(position, record);
     }
 
-    fn update_lookup_table_last(&mut self, record: &LogRecord, position: MemoryPosition) {
-        let mut lookup_table = self.io.read_lookup_table();
-        lookup_table.update_last(record, position);
-        self.io.write_lookup_table(&lookup_table);
+    fn pop_front(&mut self) -> Option<LogRecord> {
+        let mut h = self.io.load_header();
+        let record = self.io.load_record(h.data_head)?;
+        let removed_size = MemorySize::new(record.bytes_len() as u64);
+        h.data_head = h.advance_position(h.data_head, removed_size);
+        h.data_size = h.data_size.saturating_sub(removed_size);
+        self.io.save_header(&h);
+        // No need to update the index here since front entry is never
+        // stored in the PageMap but rather computed on table load.
+        Some(record)
+    }
+
+    fn update_index(&mut self, position: MemoryPosition, record: &LogRecord) {
+        // TODO: optimize for loading lots of records in a row.
+        let mut index = self.io.load_index();
+        index.update(position, record);
+        self.io.save_index(index);
     }
 
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
-        let header = self.io.read_header();
-        if header.is_empty() {
-            return Vec::new();
-        }
+        let index = self.io.load_index();
+        let (start_inclusive, end_inclusive) = match index.get_coarse_range(filter.clone()) {
+            Some(range) => range,
+            None => return vec![],
+        };
 
-        let range = self.io.read_lookup_table().get_range(&filter);
-        if range.is_none() {
-            return Vec::new();
-        }
-        let (start, end) = range.unwrap();
-        let mut result = Vec::new();
-        let mut current = start;
-        let filter_ref = filter.as_ref();
+        let header = self.io.load_header();
+        let mut records = Vec::new();
 
-        while current <= end {
-            let record = match self.io.read_record(current) {
-                Some(r) => r,
-                None => break, // Stop when no more records can be read.
-            };
-            if filter_ref.is_none_or(|f| record.matches(f)) {
-                result.push(record.to_canister_log_record());
+        // Walk the coarse range collecting all records in order.
+        let mut pos = start_inclusive.position;
+        while let Some(record) = self.io.load_record(pos) {
+            if record.idx > end_inclusive.idx {
+                break; // Reached the end of the range.
             }
-            let record_size = MemorySize::new(record.bytes_len() as u64);
-            if record_size.get() == 0 {
-                break; // Prevent infinite loop on corrupted record.
-            }
-            current = header.advance_position(current, record_size);
+            records.push(record.clone());
+            pos = header.advance_position(pos, MemorySize::new(record.bytes_len() as u64));
         }
 
-        result
+        let records = match filter {
+            Some(ref f) => {
+                // When a filter is present — keep oldest records (prefix) that match the filter.
+                let filtered: Vec<_> = records.into_iter().filter(|r| r.matches(f)).collect();
+                take_by_size(&filtered, RESULT_MAX_SIZE, true)
+            }
+            None => {
+                // No filter — return newest records (suffix) up to the size limit.
+                take_by_size(&records, RESULT_MAX_SIZE, false)
+            }
+        };
+
+        records
+            .into_iter()
+            .map(|r| CanisterLogRecord {
+                idx: r.idx,
+                timestamp_nanos: r.timestamp,
+                content: r.content,
+            })
+            .collect()
+    }
+}
+
+/// Keep a prefix or a suffix of `records` whose total serialized size does not
+/// exceed `limit` bytes — prefix keeps oldest-first; suffix keeps newest-first.
+/// Returns a Vec<LogRecord> in chronological order (oldest-first).
+pub fn take_by_size(records: &[LogRecord], limit: MemorySize, take_prefix: bool) -> Vec<LogRecord> {
+    let limit = limit.get() as usize;
+    if limit == 0 || records.is_empty() {
+        return Vec::new();
+    }
+
+    let mut total: usize = 0;
+    if take_prefix {
+        // Find how many from the front fit.
+        let mut end: usize = 0;
+        for r in records.iter() {
+            let sz = r.bytes_len();
+            if total + sz > limit {
+                break;
+            }
+            total += sz;
+            end += 1;
+        }
+        records[..end].to_vec()
+    } else {
+        // Find start index so that records[start..] (the newest records)
+        // fit into the limit — walk backward and then clone that tail.
+        let mut start: usize = records.len();
+        while start > 0 {
+            let sz = records[start - 1].bytes_len();
+            if total + sz > limit {
+                break;
+            }
+            total += sz;
+            start -= 1;
+        }
+        records[start..].to_vec()
     }
 }
 
@@ -165,23 +203,23 @@ mod tests {
     use super::*;
     use crate::canister_state::system_state::log_memory_store::memory::MemorySize;
     use crate::page_map::PageMap;
-    use ic_management_canister_types_private::FetchCanisterLogsRange;
+    use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsRange};
 
     const TEST_DATA_CAPACITY: MemorySize = MemorySize::new(2_000_000); // 2 MB
 
-    fn log_record(idx: u64, ts_nanos: u64, message: &str) -> LogRecord {
+    fn log_record(idx: u64, timestamp: u64, message: &str) -> LogRecord {
         LogRecord {
             idx,
-            ts_nanos,
+            timestamp,
             len: message.len() as u32,
             content: message.as_bytes().to_vec(),
         }
     }
 
-    fn canister_log_record(idx: u64, ts_nanos: u64, message: &str) -> CanisterLogRecord {
+    fn canister_log_record(idx: u64, timestamp: u64, message: &str) -> CanisterLogRecord {
         CanisterLogRecord {
             idx,
-            timestamp_nanos: ts_nanos,
+            timestamp_nanos: timestamp,
             content: message.as_bytes().to_vec(),
         }
     }
@@ -206,8 +244,8 @@ mod tests {
 
         let a = log_record(0, 100, "a");
         let b = log_record(1, 200, "bb");
-        ring_buffer.push_back(&a);
-        ring_buffer.push_back(&b);
+        ring_buffer.append(&a);
+        ring_buffer.append(&b);
 
         assert_eq!(ring_buffer.used_space(), a.bytes_len() + b.bytes_len());
         assert_eq!(ring_buffer.pop_front().unwrap(), a);
@@ -229,13 +267,13 @@ mod tests {
         let r3 = log_record(3, 400, "12345");
 
         // Add and remove one record to test wrap-around.
-        rb.push_back(&r0);
+        rb.append(&r0);
         rb.pop_front().unwrap();
 
         // Now add three records that exactly fit the capacity.
-        rb.push_back(&r1);
-        rb.push_back(&r2);
-        rb.push_back(&r3);
+        rb.append(&r1);
+        rb.append(&r2);
+        rb.append(&r3);
 
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert_eq!(rb.pop_front().unwrap(), r2);
@@ -256,13 +294,13 @@ mod tests {
         let r3 = log_record(3, 400, "123456"); // 26 bytes to force eviction.
 
         // Add and remove one record to test wrap-around.
-        rb.push_back(&r0);
+        rb.append(&r0);
         rb.pop_front().unwrap();
 
         // Now add three records, the last one should evict the first.
-        rb.push_back(&r1);
-        rb.push_back(&r2);
-        rb.push_back(&r3);
+        rb.append(&r1);
+        rb.append(&r2);
+        rb.append(&r3);
 
         assert_eq!(rb.pop_front().unwrap(), r2);
         assert_eq!(rb.pop_front().unwrap(), r3);
@@ -284,7 +322,7 @@ mod tests {
             while ring_buffer.used_space() + record.bytes_len() > ring_buffer.capacity() {
                 popped.push(ring_buffer.pop_front().expect("expected record to pop"));
             }
-            ring_buffer.push_back(&record);
+            ring_buffer.append(&record);
             pushed.push(record);
         }
         while let Some(r) = ring_buffer.pop_front() {
@@ -304,9 +342,9 @@ mod tests {
         let r0 = log_record(0, 1000, "alpha");
         let r1 = log_record(1, 2000, "beta");
         let r2 = log_record(2, 3000, "gamma");
-        ring_buffer.push_back(&r0);
-        ring_buffer.push_back(&r1);
-        ring_buffer.push_back(&r2);
+        ring_buffer.append(&r0);
+        ring_buffer.append(&r1);
+        ring_buffer.append(&r2);
 
         // No filter.
         let res = ring_buffer.records(None);

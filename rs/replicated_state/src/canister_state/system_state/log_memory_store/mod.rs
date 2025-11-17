@@ -1,12 +1,11 @@
 #![allow(dead_code)] // TODO: don't forget to cleanup.
 
-mod byte_rw;
-mod header;
-mod log_record;
-mod lookup;
-mod memory;
-mod ring_buffer;
-mod struct_io;
+pub(crate) mod header;
+pub(crate) mod index_table;
+pub(crate) mod log_record;
+pub(crate) mod memory;
+pub(crate) mod ring_buffer;
+pub(crate) mod struct_io;
 
 // TODO: remove this.
 mod tmp_draft;

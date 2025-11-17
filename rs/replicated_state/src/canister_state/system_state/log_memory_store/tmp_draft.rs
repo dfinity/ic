@@ -278,18 +278,16 @@ impl Header {
         (position + distance) % self.data_capacity
     }
 
-    fn is_empty(&self) -> bool {
-        if self.data_head == self.data_tail {
-            // If head == tail, the buffer is empty only if size is zero.
-            self.data_size.get() == 0
-        } else {
-            false
-        }
-    }
-
     fn is_alive(&self, position: MemoryPosition) -> bool {
-        if self.is_empty() {
-            return false;
+        if self.data_head == self.data_tail {
+            // If head==tail and size==0, the buffer is empty.
+            if self.data_size.get() == 0 {
+                return false;
+            }
+            // if head==tail but size==capacity, the buffer is full.
+            if self.data_size.get() == self.data_capacity.get() {
+                return true;
+            }
         }
         if self.data_head < self.data_tail {
             // No wrap, position is in [head, tail)

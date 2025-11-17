@@ -1,40 +1,14 @@
-#![allow(dead_code)] // TODO: don't forget to cleanup.
-
 use crate::canister_state::system_state::log_memory_store::{
-    header::{HeaderV1, HeaderV1Blob},
+    header::Header,
+    index_table::{IndexEntry, IndexTable},
     log_record::LogRecord,
-    lookup::{LookupEntry, LookupTable},
     memory::{MemoryAddress, MemoryPosition, MemorySize},
-    ring_buffer::{HEADER_OFFSET, V1_LOOKUP_TABLE_OFFSET},
+    ring_buffer::{DATA_REGION_OFFSET, HEADER_OFFSET, INDEX_TABLE_OFFSET},
 };
 use crate::page_map::{Buffer, PageIndex, PageMap};
 use ic_sys::PageBytes;
-use std::convert::From;
 
-struct MemoryChunk {
-    offset: MemoryAddress,
-    capacity: MemorySize,
-}
-
-impl MemoryChunk {
-    fn remaining_size(&self, pos: MemoryPosition) -> MemorySize {
-        self.capacity - pos
-    }
-
-    fn distance(&self, start: MemoryPosition, end: MemoryPosition) -> MemorySize {
-        if end >= start {
-            end - start // No wrap.
-        } else {
-            (self.capacity + end) - start // Wrap around.
-        }
-    }
-
-    fn advance_position(&self, pos: MemoryPosition, size: MemorySize) -> MemoryPosition {
-        (pos + size) % self.capacity
-    }
-}
-
-pub(crate) struct StructIO {
+pub struct StructIO {
     buffer: Buffer,
 }
 
@@ -53,173 +27,355 @@ impl StructIO {
         self.buffer.into_page_map()
     }
 
-    fn write_bytes(&mut self, addr: MemoryAddress, bytes: &[u8]) {
-        self.buffer.write(bytes, addr.get());
-    }
-
-    fn read_vec(&self, addr: MemoryAddress, len: usize) -> Vec<u8> {
-        let mut bytes = vec![0; len];
-        self.buffer.read(&mut bytes, addr.get());
-        bytes
-    }
-
-    fn read_bytes<const N: usize>(&self, addr: MemoryAddress) -> [u8; N] {
-        let mut bytes = [0; N];
-        self.buffer.read(&mut bytes, addr.get());
-        bytes
-    }
-
-    /// Writes the header to the buffer.
-    pub fn write_header(&mut self, header: &HeaderV1) {
-        self.buffer
-            .write(HeaderV1Blob::from(header).as_bytes(), HEADER_OFFSET.get());
-    }
-
-    /// Reads the header from the buffer.
-    pub fn read_header(&self) -> HeaderV1 {
-        HeaderV1::from(&HeaderV1Blob::from_bytes(self.read_bytes(HEADER_OFFSET)))
-    }
-
-    pub fn write_lookup_table(&mut self, lookup_table: &LookupTable) {
-        // Serialize lookup table buckets.
-        self.write_bytes(V1_LOOKUP_TABLE_OFFSET, &lookup_table.serialized_buckets());
-        // Update header with the lookup buckets count.
-        let mut h = self.read_header();
-        h.lookup_entries_count = lookup_table.buckets_len();
-        self.write_header(&h);
-    }
-
-    pub fn read_lookup_table(&self) -> LookupTable {
-        let h = self.read_header();
-        let front = self.read_lookup_entry(h.data_head);
-        if h.lookup_table_used_bytes() == 0 {
-            LookupTable::new(front, h.lookup_table_pages, h.data_capacity, &[])
-        } else {
-            let bytes = self.read_vec(V1_LOOKUP_TABLE_OFFSET, h.lookup_table_used_bytes());
-            LookupTable::new(front, h.lookup_table_pages, h.data_capacity, &bytes)
+    pub fn load_header(&self) -> Header {
+        let (magic, addr) = self.read_raw_bytes::<3>(HEADER_OFFSET);
+        let (version, addr) = self.read_raw_u8(addr);
+        let (index_table_pages, addr) = self.read_raw_u16(addr);
+        let (index_entries_count, addr) = self.read_raw_u16(addr);
+        let (data_offset, addr) = self.read_raw_u64(addr);
+        let (data_capacity, addr) = self.read_raw_u64(addr);
+        let (data_size, addr) = self.read_raw_u64(addr);
+        let (data_head, addr) = self.read_raw_u64(addr);
+        let (data_tail, addr) = self.read_raw_u64(addr);
+        let (next_idx, _addr) = self.read_raw_u64(addr);
+        Header {
+            magic,
+            version,
+            index_table_pages,
+            index_entries_count,
+            data_offset: MemoryAddress::new(data_offset),
+            data_capacity: MemorySize::new(data_capacity),
+            data_size: MemorySize::new(data_size),
+            data_head: MemoryPosition::new(data_head),
+            data_tail: MemoryPosition::new(data_tail),
+            next_idx,
         }
     }
 
-    fn read_lookup_entry(&self, position: MemoryPosition) -> Option<LookupEntry> {
-        let record = self.read_record_without_content(position)?;
-        Some(LookupEntry::new(&record, position))
+    pub fn save_header(&mut self, header: &Header) {
+        let mut addr = HEADER_OFFSET;
+        addr = self.write_raw_bytes(addr, &header.magic);
+        addr = self.write_raw_u8(addr, header.version);
+        addr = self.write_raw_u16(addr, header.index_table_pages);
+        addr = self.write_raw_u16(addr, header.index_entries_count);
+        addr = self.write_raw_u64(addr, header.data_offset.get());
+        addr = self.write_raw_u64(addr, header.data_capacity.get());
+        addr = self.write_raw_u64(addr, header.data_size.get());
+        addr = self.write_raw_u64(addr, header.data_head.get());
+        addr = self.write_raw_u64(addr, header.data_tail.get());
+        _ = self.write_raw_u64(addr, header.next_idx);
     }
 
-    fn write_data_bytes(&mut self, pos: MemoryPosition, bytes: &[u8], data: &MemoryChunk) {
-        let remaining_size = data.remaining_size(pos);
-        if MemorySize::new(bytes.len() as u64) <= remaining_size {
-            // No wrap.
-            self.write_bytes(data.offset + pos, bytes);
+    pub fn load_index(&self) -> IndexTable {
+        let h = self.load_header();
+        let pos = h.data_head;
+        let front = self
+            .load_record_without_content(pos)
+            .map(|record| IndexEntry::new(pos, &record));
+        let entries = if h.index_entries_count == 0 {
+            vec![]
         } else {
-            // Wrap around.
-            let split = remaining_size.get() as usize;
-            self.write_bytes(data.offset + pos, &bytes[..split]);
-            self.write_bytes(data.offset, &bytes[split..]);
-        }
-    }
-
-    fn read_data_vec(&self, pos: MemoryPosition, len: usize, data: &MemoryChunk) -> Vec<u8> {
-        let remaining_size = data.remaining_size(pos);
-        if MemorySize::new(len as u64) <= remaining_size {
-            // No wrap.
-            self.read_vec(data.offset + pos, len)
-        } else {
-            // Wrap around.
-            let mut content = Vec::with_capacity(len);
-            let first_part_size = remaining_size.get() as usize;
-            content.extend_from_slice(&self.read_vec(data.offset + pos, first_part_size));
-            let second_part_size = len - first_part_size;
-            content.extend_from_slice(&self.read_vec(data.offset, second_part_size));
-            content
-        }
-    }
-
-    fn read_data_bytes<const N: usize>(&self, pos: MemoryPosition, data: &MemoryChunk) -> [u8; N] {
-        let remaining_size = data.remaining_size(pos);
-        if MemorySize::new(N as u64) <= remaining_size {
-            // No wrap.
-            self.read_bytes(data.offset + pos)
-        } else {
-            // Wrap around.
-            let mut bytes = [0; N];
-            let split = remaining_size.get() as usize;
-            self.buffer
-                .read(&mut bytes[..split], (data.offset + pos).get());
-            self.buffer.read(&mut bytes[split..], data.offset.get());
-            bytes
-        }
-    }
-
-    fn read_data_u64(&self, pos: MemoryPosition, data: &MemoryChunk) -> u64 {
-        u64::from_le_bytes(self.read_data_bytes::<8>(pos, data))
-    }
-
-    fn read_data_u32(&self, pos: MemoryPosition, data: &MemoryChunk) -> u32 {
-        u32::from_le_bytes(self.read_data_bytes::<4>(pos, data))
-    }
-
-    pub fn write_record(&mut self, record: &LogRecord, position: MemoryPosition) {
-        let bytes: Vec<u8> = record.into();
-        debug_assert_eq!(bytes.len(), record.bytes_len());
-        let h = self.read_header();
-        let data = MemoryChunk {
-            offset: h.data_offset,
-            capacity: h.data_capacity,
+            let mut entries = Vec::with_capacity(h.index_entries_count as usize);
+            let mut addr = INDEX_TABLE_OFFSET;
+            for _ in 0..h.index_entries_count {
+                let (entry, next_addr) = self.read_index_entry(addr);
+                entries.push(entry);
+                addr = next_addr;
+            }
+            entries
         };
-        self.write_data_bytes(position, &bytes, &data);
+        IndexTable::new(front, h.data_capacity, h.index_table_pages, entries)
     }
 
-    /// Retrieves a log record at the given address, if it exists.
-    pub fn read_record(&self, mut pos: MemoryPosition) -> Option<LogRecord> {
-        let h = self.read_header();
-        h.validate_address(h.data_offset + pos)?;
-        let data = MemoryChunk {
-            offset: h.data_offset,
-            capacity: h.data_capacity,
-        };
+    pub fn save_index(&mut self, index: IndexTable) {
+        // Save entries.
+        let mut addr = INDEX_TABLE_OFFSET;
+        for entry in index.entries.iter() {
+            addr = self.write_index_entry(addr, entry)
+        }
+        // Update header with the entries count.
+        let mut header = self.load_header();
+        header.index_entries_count = index.entries.len() as u16;
+        self.save_header(&header);
+    }
 
-        let idx = self.read_data_u64(pos, &data);
-        pos = h.advance_position(pos, MemorySize::new(8));
+    fn read_index_entry(&self, addr: MemoryAddress) -> (IndexEntry, MemoryAddress) {
+        let (idx, addr) = self.read_raw_u64(addr);
+        let (timestamp, addr) = self.read_raw_u64(addr);
+        let (position, addr) = self.read_raw_u64(addr);
+        (
+            IndexEntry {
+                idx,
+                timestamp,
+                position: MemoryPosition::new(position),
+            },
+            addr,
+        )
+    }
 
-        let ts_nanos = self.read_data_u64(pos, &data);
-        pos = h.advance_position(pos, MemorySize::new(8));
+    fn write_index_entry(&mut self, addr: MemoryAddress, entry: &IndexEntry) -> MemoryAddress {
+        let addr = self.write_raw_u64(addr, entry.idx);
+        let addr = self.write_raw_u64(addr, entry.timestamp);
+        self.write_raw_u64(addr, entry.position.get())
+    }
 
-        let len = self.read_data_u32(pos, &data);
-        pos = h.advance_position(pos, MemorySize::new(4));
+    fn load_record_header(
+        &self,
+        position: MemoryPosition,
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> (u64, u64, u32, MemoryPosition) {
+        let (idx, position) = self.read_wrapped_u64(position, offset, capacity);
+        let (timestamp, position) = self.read_wrapped_u64(position, offset, capacity);
+        let (len, position) = self.read_wrapped_u32(position, offset, capacity);
+        (idx, timestamp, len, position)
+    }
 
-        let content = self.read_data_vec(pos, len as usize, &data);
-
+    pub fn load_record_without_content(&self, position: MemoryPosition) -> Option<LogRecord> {
+        let h = self.load_header();
+        if !h.is_alive(position) {
+            return None;
+        }
+        let (offset, capacity) = (DATA_REGION_OFFSET, h.data_capacity);
+        let (idx, timestamp, len, _position) = self.load_record_header(position, offset, capacity);
         Some(LogRecord {
             idx,
-            ts_nanos,
+            timestamp,
+            len,
+            content: vec![], // Content is not loaded here.
+        })
+    }
+
+    pub fn load_record(&self, position: MemoryPosition) -> Option<LogRecord> {
+        let h = self.load_header();
+        if !h.is_alive(position) {
+            return None;
+        }
+        let (offset, capacity) = (DATA_REGION_OFFSET, h.data_capacity);
+        let (idx, timestamp, len, position) = self.load_record_header(position, offset, capacity);
+        let (content, _position) =
+            self.read_wrapped_vec(position, MemorySize::new(len as u64), offset, capacity);
+        Some(LogRecord {
+            idx,
+            timestamp,
             len,
             content,
         })
     }
 
-    /// Reads only the header of a log record at the given offset, without its content.
-    fn read_record_without_content(&self, mut pos: MemoryPosition) -> Option<LogRecord> {
-        let h = self.read_header();
-        h.validate_address(h.data_offset + pos)?;
-        let data = MemoryChunk {
-            offset: h.data_offset,
-            capacity: h.data_capacity,
+    pub fn save_record(&mut self, position: MemoryPosition, record: &LogRecord) {
+        let (offset, capacity) = (DATA_REGION_OFFSET, self.load_header().data_capacity);
+        let position = self.write_wrapped_u64(position, record.idx, offset, capacity);
+        let position = self.write_wrapped_u64(position, record.timestamp, offset, capacity);
+        let position = self.write_wrapped_u32(position, record.len, offset, capacity);
+        _ = self.write_wrapped_bytes(position, &record.content, offset, capacity);
+    }
+
+    fn read_raw_vec(&self, address: MemoryAddress, len: MemorySize) -> (Vec<u8>, MemoryAddress) {
+        let mut bytes = vec![0; len.get() as usize];
+        self.buffer.read(&mut bytes, address.get() as usize);
+        (bytes, address + len)
+    }
+
+    fn read_raw_bytes<const N: usize>(&self, address: MemoryAddress) -> ([u8; N], MemoryAddress) {
+        let mut bytes = [0; N];
+        self.buffer.read(&mut bytes, address.get() as usize);
+        (bytes, address + MemorySize::new(N as u64))
+    }
+
+    fn write_raw_bytes(&mut self, address: MemoryAddress, bytes: &[u8]) -> MemoryAddress {
+        self.buffer.write(bytes, address.get() as usize);
+        address + MemorySize::new(bytes.len() as u64)
+    }
+
+    fn read_wrapped_vec(
+        &self,
+        position: MemoryPosition,
+        len: MemorySize,
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> (Vec<u8>, MemoryPosition) {
+        let remaining_size = capacity - position;
+        let bytes = if len <= remaining_size {
+            // No wrap.
+            let (bytes, _addr) = self.read_raw_vec(offset + position, len);
+            bytes
+        } else {
+            // Wraps around.
+            let (mut bytes, _addr) = self.read_raw_vec(offset + position, remaining_size);
+            let second_part_size = len - remaining_size;
+            let (mut second_part, _addr) = self.read_raw_vec(offset, second_part_size);
+            bytes.append(&mut second_part);
+            bytes
+        };
+        (bytes, (position + len) % capacity)
+    }
+
+    fn read_wrapped_bytes<const N: usize>(
+        &self,
+        position: MemoryPosition,
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> ([u8; N], MemoryPosition) {
+        let mut result = [0u8; N];
+        let len = MemorySize::new(N as u64);
+        let remaining = capacity - position;
+        if len <= remaining {
+            // No wrap.
+            let (bytes, _addr) = self.read_raw_vec(offset + position, len);
+            result.copy_from_slice(&bytes);
+        } else {
+            // Wraps around.
+            let first_part_size = remaining.get() as usize;
+            let (first_part, _addr) = self.read_raw_vec(offset + position, remaining);
+            result[..first_part_size].copy_from_slice(&first_part);
+            let (second_part, _addr) = self.read_raw_vec(offset, len - remaining);
+            result[first_part_size..].copy_from_slice(&second_part);
+        }
+        (result, (position + len) % capacity)
+    }
+
+    fn write_wrapped_bytes(
+        &mut self,
+        position: MemoryPosition,
+        bytes: &[u8],
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> MemoryPosition {
+        let remaining_size = capacity - position;
+        let len = MemorySize::new(bytes.len() as u64);
+        if len <= remaining_size {
+            // No wrap.
+            self.write_raw_bytes(offset + position, bytes);
+        } else {
+            // Wrap around.
+            let split = remaining_size.get() as usize;
+            self.write_raw_bytes(offset + position, &bytes[..split]);
+            self.write_raw_bytes(offset, &bytes[split..]);
+        }
+        (position + len) % capacity
+    }
+
+    fn read_raw_u8(&self, address: MemoryAddress) -> (u8, MemoryAddress) {
+        let (bytes, addr) = self.read_raw_bytes::<1>(address);
+        (bytes[0], addr)
+    }
+
+    fn read_raw_u16(&self, address: MemoryAddress) -> (u16, MemoryAddress) {
+        let (bytes, addr) = self.read_raw_bytes::<2>(address);
+        (u16::from_le_bytes(bytes), addr)
+    }
+
+    fn read_raw_u32(&self, address: MemoryAddress) -> (u32, MemoryAddress) {
+        let (bytes, addr) = self.read_raw_bytes::<4>(address);
+        (u32::from_le_bytes(bytes), addr)
+    }
+
+    fn read_raw_u64(&self, address: MemoryAddress) -> (u64, MemoryAddress) {
+        let (bytes, addr) = self.read_raw_bytes::<8>(address);
+        (u64::from_le_bytes(bytes), addr)
+    }
+
+    fn write_raw_u8(&mut self, address: MemoryAddress, value: u8) -> MemoryAddress {
+        self.write_raw_bytes(address, &value.to_le_bytes())
+    }
+
+    fn write_raw_u16(&mut self, address: MemoryAddress, value: u16) -> MemoryAddress {
+        self.write_raw_bytes(address, &value.to_le_bytes())
+    }
+
+    fn write_raw_u32(&mut self, address: MemoryAddress, value: u32) -> MemoryAddress {
+        self.write_raw_bytes(address, &value.to_le_bytes())
+    }
+
+    fn write_raw_u64(&mut self, address: MemoryAddress, value: u64) -> MemoryAddress {
+        self.write_raw_bytes(address, &value.to_le_bytes())
+    }
+
+    fn read_wrapped_u16(
+        &self,
+        position: MemoryPosition,
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> (u16, MemoryPosition) {
+        let (bytes, position) = self.read_wrapped_bytes::<2>(position, offset, capacity);
+        (u16::from_le_bytes(bytes), position)
+    }
+
+    fn read_wrapped_u32(
+        &self,
+        position: MemoryPosition,
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> (u32, MemoryPosition) {
+        let (bytes, position) = self.read_wrapped_bytes::<4>(position, offset, capacity);
+        (u32::from_le_bytes(bytes), position)
+    }
+
+    fn read_wrapped_u64(
+        &self,
+        position: MemoryPosition,
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> (u64, MemoryPosition) {
+        let (bytes, position) = self.read_wrapped_bytes::<8>(position, offset, capacity);
+        (u64::from_le_bytes(bytes), position)
+    }
+
+    fn write_wrapped_u16(
+        &mut self,
+        position: MemoryPosition,
+        value: u16,
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> MemoryPosition {
+        self.write_wrapped_bytes(position, &value.to_le_bytes(), offset, capacity)
+    }
+
+    fn write_wrapped_u32(
+        &mut self,
+        position: MemoryPosition,
+        value: u32,
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> MemoryPosition {
+        self.write_wrapped_bytes(position, &value.to_le_bytes(), offset, capacity)
+    }
+
+    fn write_wrapped_u64(
+        &mut self,
+        position: MemoryPosition,
+        value: u64,
+        offset: MemoryAddress,
+        capacity: MemorySize,
+    ) -> MemoryPosition {
+        self.write_wrapped_bytes(position, &value.to_le_bytes(), offset, capacity)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_header_roundtrip_serialization() {
+        let original = Header {
+            magic: *b"abc",
+            version: 1,
+            index_table_pages: 2,
+            index_entries_count: 3,
+            data_offset: MemoryAddress::new(4),
+            data_capacity: MemorySize::new(5),
+            data_size: MemorySize::new(6),
+            data_head: MemoryPosition::new(7),
+            data_tail: MemoryPosition::new(8),
+            next_idx: 9,
         };
 
-        let idx = self.read_data_u64(pos, &data);
-        pos = h.advance_position(pos, MemorySize::new(8));
+        let mut io = StructIO::new(PageMap::new_for_testing());
+        io.save_header(&original);
+        let loaded = io.load_header();
 
-        let ts_nanos = self.read_data_u64(pos, &data);
-        pos = h.advance_position(pos, MemorySize::new(8));
-
-        let len = self.read_data_u32(pos, &data);
-        _ = h.advance_position(pos, MemorySize::new(4));
-
-        Some(LogRecord {
-            idx,
-            ts_nanos,
-            len,
-            content: Vec::new(),
-        })
+        assert_eq!(original, loaded);
     }
 }
