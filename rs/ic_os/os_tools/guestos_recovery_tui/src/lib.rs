@@ -47,6 +47,11 @@ fn validate_terminal_size(size: Rect) -> Result<()> {
 const VERSION_LENGTH: usize = 40; // Git commit hash length (hex characters)
 const HASH_LENGTH: usize = 64; // SHA256 hash length (hex characters)
 
+// UI layout constants
+const TEXT_PADDING: u16 = 4; // Padding for text display
+const MAX_ERROR_LINES: usize = 30; // Maximum number of error lines to display
+const PROCESS_POLL_INTERVAL_MS: u64 = 100; // Polling interval for process monitoring
+
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode().context("Failed to enable raw mode")?;
 
@@ -591,6 +596,89 @@ fn calculate_log_viewport(total_lines: usize, available_height: usize) -> (usize
     (start_idx, lines_to_show)
 }
 
+fn is_error_line(line: &str) -> bool {
+    line.contains("ERROR:") || line.contains("error:") || line.contains("Error:")
+}
+
+/// Detects success message in stdout
+fn detect_success_message(stdout_lines: &[String]) -> Option<String> {
+    const SUCCESS_INDICATOR: &str = "Recovery Upgrader completed successfully";
+    stdout_lines
+        .iter()
+        .find(|line| line.contains(SUCCESS_INDICATOR))
+        .map(|_| SUCCESS_INDICATOR.to_string())
+}
+
+/// Extracts errors from stdout/stderr (tries explicit errors, then fallback to last N lines)
+fn extract_errors_from_logs(stdout_lines: &[String], stderr_lines: &[String]) -> Vec<String> {
+    // Try explicit errors first
+    let explicit_errors: Vec<String> = stdout_lines
+        .iter()
+        .chain(stderr_lines.iter())
+        .filter(|line| is_error_line(line))
+        .cloned()
+        .collect();
+
+    if !explicit_errors.is_empty() {
+        // Include debug context with explicit errors
+        let mut messages: Vec<String> = stdout_lines
+            .iter()
+            .filter(|line| {
+                (line.contains("Received") && line.contains("arguments"))
+                    || line.contains("Parsed VERSION")
+                    || line.contains("Parsed VERSION_HASH")
+            })
+            .cloned()
+            .collect();
+        messages.extend(explicit_errors);
+        return messages;
+    }
+
+    // Fallback: last N lines from stderr or stdout
+    if !stderr_lines.is_empty() {
+        let start = stderr_lines.len().saturating_sub(MAX_ERROR_LINES);
+        stderr_lines[start..].to_vec()
+    } else if !stdout_lines.is_empty() {
+        let start = stdout_lines.len().saturating_sub(MAX_ERROR_LINES);
+        stdout_lines[start..].to_vec()
+    } else {
+        Vec::new()
+    }
+}
+
+/// Query journalctl for errors (fallback when process output has none)
+fn extract_errors_from_journalctl(start_time: u64) -> Result<Vec<String>> {
+    let journalctl_output = Command::new("journalctl")
+        .arg("-t")
+        .arg("guestos-recovery-upgrader")
+        .arg("--since")
+        .arg(format!("@{}", start_time))
+        .arg("--no-pager")
+        .arg("-o")
+        .arg("cat")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()?;
+
+    let journalctl_lines = parse_log_lines(&journalctl_output.stdout);
+
+    // Try explicit errors first, then fallback to last N lines
+    let journal_errors: Vec<String> = journalctl_lines
+        .iter()
+        .filter(|line| is_error_line(line))
+        .cloned()
+        .collect();
+
+    if !journal_errors.is_empty() {
+        Ok(journal_errors)
+    } else if !journalctl_lines.is_empty() {
+        let start = journalctl_lines.len().saturating_sub(MAX_ERROR_LINES);
+        Ok(journalctl_lines[start..].to_vec())
+    } else {
+        Ok(Vec::new())
+    }
+}
+
 fn truncate_line(line: &str, max_width: usize) -> String {
     if line.len() > max_width {
         format!("{}...", &line[..max_width.saturating_sub(3)])
@@ -600,7 +688,7 @@ fn truncate_line(line: &str, max_width: usize) -> String {
 }
 
 fn create_separator(width: u16) -> String {
-    "─".repeat((width.saturating_sub(4)).max(10) as usize)
+    "─".repeat((width.saturating_sub(TEXT_PADDING)).max(10) as usize)
 }
 
 fn draw_completion_screen(
@@ -687,7 +775,7 @@ fn draw_completion_screen(
             let available_height = size.height.saturating_sub(11) as usize;
             let (start_idx, _) = calculate_log_viewport(all_log_lines.len(), available_height);
 
-            let max_width = (size.width.saturating_sub(4)) as usize;
+            let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
             for line in &all_log_lines[start_idx..] {
                 text.push(Line::from(format!("  {}", truncate_line(line, max_width))));
             }
@@ -697,7 +785,7 @@ fn draw_completion_screen(
                 Style::default().fg(Color::Red).bold(),
             )]));
             text.push(Line::from(""));
-            let max_width = (size.width.saturating_sub(4)) as usize;
+            let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
             for error in error_messages {
                 text.push(Line::from(format!("  {}", truncate_line(error, max_width))));
             }
@@ -846,7 +934,7 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                             let (start_idx, lines_to_show) =
                                 calculate_log_viewport(current_logs.len(), available_height);
 
-                            let max_width = (size.width.saturating_sub(4)) as usize;
+                            let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
                             for line in &current_logs[start_idx..] {
                                 text.push(Line::from(format!(
                                     "  {}",
@@ -876,7 +964,7 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                     drop(logs);
                 }
 
-                thread::sleep(std::time::Duration::from_millis(100));
+                thread::sleep(std::time::Duration::from_millis(PROCESS_POLL_INTERVAL_MS));
             }
             Err(e) => {
                 return Err(anyhow::anyhow!("Error waiting for process: {}", e));
@@ -894,84 +982,19 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         stderr: vec![],
     };
 
-    let mut error_messages = Vec::new();
-    let mut success_message = None;
-
     let stdout_lines = parse_log_lines(&output.stdout);
     let stderr_lines = parse_log_lines(&output.stderr);
 
-    // Check for success message
-    for line in &stdout_lines {
-        if line.contains("Recovery Upgrader completed successfully") {
-            success_message = Some("Recovery Upgrader completed successfully".to_string());
-            break;
-        }
-    }
+    let success_message = detect_success_message(&stdout_lines);
+    let mut error_messages = if output.status.success() {
+        Vec::new()
+    } else {
+        extract_errors_from_logs(&stdout_lines, &stderr_lines)
+    };
 
-    // Extract error patterns
-    fn is_error_line(line: &str) -> bool {
-        line.contains("ERROR:") || line.contains("error:") || line.contains("Error:")
-    }
-
-    let explicit_errors: Vec<String> = stdout_lines
-        .iter()
-        .chain(stderr_lines.iter())
-        .filter(|line| is_error_line(line))
-        .cloned()
-        .collect();
-
-    let debug_messages: Vec<String> = stdout_lines
-        .iter()
-        .filter(|line| {
-            (line.contains("Received") && line.contains("arguments"))
-                || line.contains("Parsed VERSION")
-                || line.contains("Parsed VERSION_HASH")
-        })
-        .cloned()
-        .collect();
-
-    if !explicit_errors.is_empty() {
-        error_messages = debug_messages;
-        error_messages.extend(explicit_errors);
-    } else if !output.status.success() {
-        if !stderr_lines.is_empty() {
-            let start = stderr_lines.len().saturating_sub(30);
-            error_messages = stderr_lines[start..].to_vec();
-        } else if !stdout_lines.is_empty() {
-            let start = stdout_lines.len().saturating_sub(30);
-            error_messages = stdout_lines[start..].to_vec();
-        }
-    }
-
+    // Fallback to journalctl if no errors found
     if error_messages.is_empty() && !output.status.success() {
-        let journalctl_output = Command::new("journalctl")
-            .arg("-t")
-            .arg("guestos-recovery-upgrader")
-            .arg("--since")
-            .arg(format!("@{}", start_time))
-            .arg("--no-pager")
-            .arg("-o")
-            .arg("cat")
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output();
-
-        if let Ok(journal_output) = journalctl_output {
-            let journalctl_lines = parse_log_lines(&journal_output.stdout);
-
-            let journal_errors: Vec<String> = journalctl_lines
-                .iter()
-                .filter(|line| is_error_line(line))
-                .cloned()
-                .collect();
-
-            if !journal_errors.is_empty() {
-                error_messages = journal_errors;
-            } else if !journalctl_lines.is_empty() {
-                let start = journalctl_lines.len().saturating_sub(30);
-                error_messages = journalctl_lines[start..].to_vec();
-            }
-        }
+        error_messages = extract_errors_from_journalctl(start_time)?;
     }
 
     let success = output.status.success();
