@@ -1,4 +1,4 @@
-use ic_base_types::{EnvironmentVariables, NumBytes, NumSeconds};
+use ic_base_types::{CanisterEnvironmentVariables, NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, UserError};
 use ic_management_canister_types_private::{CanisterSettingsArgs, LogVisibilityV2};
 use ic_types::{
@@ -27,7 +27,7 @@ pub(crate) struct CanisterSettings {
     pub(crate) log_visibility: Option<LogVisibilityV2>,
     pub(crate) log_memory_limit: Option<NumBytes>,
     pub(crate) wasm_memory_limit: Option<NumBytes>,
-    pub(crate) environment_variables: Option<EnvironmentVariables>,
+    pub(crate) environment_variables: Option<CanisterEnvironmentVariables>,
 }
 
 impl CanisterSettings {
@@ -41,7 +41,7 @@ impl CanisterSettings {
         log_visibility: Option<LogVisibilityV2>,
         log_memory_limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
-        environment_variables: Option<EnvironmentVariables>,
+        environment_variables: Option<CanisterEnvironmentVariables>,
     ) -> Self {
         Self {
             controllers,
@@ -93,7 +93,7 @@ impl CanisterSettings {
         self.wasm_memory_limit
     }
 
-    pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
+    pub fn environment_variables(&self) -> Option<&CanisterEnvironmentVariables> {
         self.environment_variables.as_ref()
     }
 }
@@ -176,7 +176,7 @@ impl TryFrom<CanisterSettingsArgs> for CanisterSettings {
                 if environment_variables.len() != original_length {
                     return Err(UpdateSettingsError::DuplicateEnvironmentVariables);
                 }
-                Some(EnvironmentVariables::new(environment_variables))
+                Some(CanisterEnvironmentVariables::new(environment_variables))
             }
             None => None,
         };
@@ -219,7 +219,7 @@ pub(crate) struct CanisterSettingsBuilder {
     log_visibility: Option<LogVisibilityV2>,
     log_memory_limit: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
-    environment_variables: Option<EnvironmentVariables>,
+    environment_variables: Option<CanisterEnvironmentVariables>,
 }
 
 #[allow(dead_code)]
@@ -317,7 +317,10 @@ impl CanisterSettingsBuilder {
         }
     }
 
-    pub fn with_environment_variables(self, environment_variables: EnvironmentVariables) -> Self {
+    pub fn with_environment_variables(
+        self,
+        environment_variables: CanisterEnvironmentVariables,
+    ) -> Self {
         Self {
             environment_variables: Some(environment_variables),
             ..self
@@ -407,7 +410,7 @@ pub(crate) struct ValidatedCanisterSettings {
     log_visibility: Option<LogVisibilityV2>,
     log_memory_limit: Option<NumBytes>,
     wasm_memory_limit: Option<NumBytes>,
-    environment_variables: Option<EnvironmentVariables>,
+    environment_variables: Option<CanisterEnvironmentVariables>,
 }
 
 impl ValidatedCanisterSettings {
@@ -422,7 +425,7 @@ impl ValidatedCanisterSettings {
         log_visibility: Option<LogVisibilityV2>,
         log_memory_limit: Option<NumBytes>,
         wasm_memory_limit: Option<NumBytes>,
-        environment_variables: Option<EnvironmentVariables>,
+        environment_variables: Option<CanisterEnvironmentVariables>,
     ) -> Self {
         Self {
             controllers,
@@ -479,7 +482,7 @@ impl ValidatedCanisterSettings {
         self.wasm_memory_limit
     }
 
-    pub fn environment_variables(&self) -> Option<&EnvironmentVariables> {
+    pub fn environment_variables(&self) -> Option<&CanisterEnvironmentVariables> {
         self.environment_variables.as_ref()
     }
 }
