@@ -771,15 +771,15 @@ http_archive(
 http_archive(
     name = "dfx-x86_64-darwin",
     build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "4b1c24805f655576fb97f61aba019fbbe7c1bdca0598a5c1a9220a4bfe80f460",
-    url = "https://github.com/dfinity/sdk/releases/download/0.20.1/dfx-0.20.1-x86_64-darwin.tar.gz",
+    sha256 = "be1079c5f48e4bb88c2421f65b501040250a13a4ea57c6ccc1d3edf17812f674",
+    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-x86_64-darwin.tar.gz",
 )
 
 http_archive(
     name = "dfx-x86_64-linux",
     build_file = "@//third_party:BUILD.dfx.bazel",
-    sha256 = "011c8a6ff9af0578ee2c8b0a7af3abc5b3d5950cc64421b4c3a7acd1fc18265e",
-    url = "https://github.com/dfinity/sdk/releases/download/0.20.1/dfx-0.20.1-x86_64-linux.tar.gz",
+    sha256 = "d1473ae15ece44e782f0f2f8ac586ead349fe434189df8b587eb738becce0138",
+    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-x86_64-linux.tar.gz",
 )
 
 http_file(
