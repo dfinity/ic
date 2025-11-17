@@ -172,6 +172,9 @@ impl Field {
         Field::ExitButton,
     ];
 
+    const INPUT_FIELDS: &'static [Field] =
+        &[Field::Version, Field::VersionHash, Field::RecoveryHash];
+
     fn next(&self) -> Self {
         let pos = Self::ALL.iter().position(|&f| f == *self).unwrap_or(0);
         Self::ALL[(pos + 1) % Self::ALL.len()]
@@ -183,10 +186,7 @@ impl Field {
     }
 
     fn is_input_field(&self) -> bool {
-        matches!(
-            self,
-            Field::Version | Field::VersionHash | Field::RecoveryHash
-        )
+        Self::INPUT_FIELDS.contains(self)
     }
 
     /// Returns the required length for this field
@@ -204,6 +204,39 @@ impl Field {
             Field::VersionHash => Some(&mut params.version_hash),
             Field::RecoveryHash => Some(&mut params.recovery_hash),
             _ => None,
+        }
+    }
+
+    fn label(&self) -> &'static str {
+        match self {
+            Field::Version => "VERSION:",
+            Field::VersionHash => "VERSION-HASH:",
+            Field::RecoveryHash => "RECOVERY-HASH:",
+            _ => "",
+        }
+    }
+
+    fn description(&self) -> &'static str {
+        match self {
+            Field::Version => {
+                "Mandatory. The commit ID of the recovery-GuestOS update image (40 hex characters)."
+            }
+            Field::VersionHash => {
+                "Mandatory. The SHA256 sum of the recovery-GuestOS update image (64 hex characters)."
+            }
+            Field::RecoveryHash => {
+                "Mandatory. The SHA256 sum of the recovery.tar.zst (64 hex characters)."
+            }
+            _ => "",
+        }
+    }
+
+    fn get_value<'a>(&self, params: &'a RecoveryParams) -> &'a str {
+        match self {
+            Field::Version => &params.version,
+            Field::VersionHash => &params.version_hash,
+            Field::RecoveryHash => &params.recovery_hash,
+            _ => "",
         }
     }
 }
@@ -423,7 +456,7 @@ impl App {
                 Constraint::Length(3), // Instructions area
                 Constraint::Length(9), // Input fields area (3 fields × 3 rows each)
                 Constraint::Length(1), // Button area
-                Constraint::Min(0),    // Remaining space (for error overlay)
+                Constraint::Min(0),    // Remaining space
             ])
             .split(size);
 
@@ -455,32 +488,15 @@ impl App {
             ])
             .split(main_layout[2]);
 
-        let field_configs = [
-            (
-                Field::Version,
-                "VERSION:",
-                &self.params.version,
-                "Mandatory. The commit ID of the recovery-GuestOS update image (40 hex characters).",
-                fields_layout[0],
-            ),
-            (
-                Field::VersionHash,
-                "VERSION-HASH:",
-                &self.params.version_hash,
-                "Mandatory. The SHA256 sum of the recovery-GuestOS update image (64 hex characters).",
-                fields_layout[1],
-            ),
-            (
-                Field::RecoveryHash,
-                "RECOVERY-HASH:",
-                &self.params.recovery_hash,
-                "Mandatory. The SHA256 sum of the recovery.tar.zst (64 hex characters).",
-                fields_layout[2],
-            ),
-        ];
-
-        for (field, label, value, description, area) in field_configs.iter() {
-            self.render_input_field(f, *field, label, value, description, *area);
+        for (i, field) in Field::INPUT_FIELDS.iter().enumerate() {
+            self.render_input_field(
+                f,
+                *field,
+                field.label(),
+                field.get_value(&self.params),
+                field.description(),
+                fields_layout[i],
+            );
         }
 
         let check_text = "<Run recovery>";
