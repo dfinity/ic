@@ -324,8 +324,6 @@ pub(crate) fn lower_bound_by_min_distance(
 
 #[cfg(test)]
 mod tests {
-    use slog::Record;
-
     use super::*;
 
     const TEST_DATA_CAPACITY: MemorySize = MemorySize::new(2_000_000); // 2 MB

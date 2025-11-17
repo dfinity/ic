@@ -7,9 +7,7 @@ use crate::canister_state::system_state::log_memory_store::{
     struct_io::StructIO,
 };
 use crate::page_map::{PAGE_SIZE, PageIndex, PageMap};
-use ic_management_canister_types_private::{
-    CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRange,
-};
+use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_sys::PageBytes;
 
 const MAGIC: &[u8; 3] = b"LMS";
@@ -167,6 +165,7 @@ mod tests {
     use super::*;
     use crate::canister_state::system_state::log_memory_store::memory::MemorySize;
     use crate::page_map::PageMap;
+    use ic_management_canister_types_private::FetchCanisterLogsRange;
 
     const TEST_DATA_CAPACITY: MemorySize = MemorySize::new(2_000_000); // 2 MB
 

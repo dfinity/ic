@@ -93,7 +93,7 @@ const INDEX_ENTRY_SIZE: MemorySize = MemorySize::new(24);
 
 const DATA_REGION_OFFSET: MemoryAddress = INDEX_TABLE_OFFSET.add_size(INDEX_TABLE_SIZE);
 
-const INVALID_INDEX_ENTRY_IDX: u64 = u64::MAX;
+const INVALID_INDEX_ENTRY: u64 = u64::MAX;
 
 /// Represents a range for fetching canister logs.
 #[derive(Debug, Clone)]
@@ -283,14 +283,14 @@ impl IndexEntry {
 
     fn invalid() -> Self {
         Self {
-            idx: INVALID_INDEX_ENTRY_IDX,
-            timestamp: 0,                     // Not important.
-            position: MemoryPosition::new(0), // Not important.
+            idx: INVALID_INDEX_ENTRY,
+            timestamp: INVALID_INDEX_ENTRY,
+            position: MemoryPosition::new(INVALID_INDEX_ENTRY),
         }
     }
 
     fn is_valid(&self) -> bool {
-        self.idx != INVALID_INDEX_ENTRY_IDX
+        self.idx != INVALID_INDEX_ENTRY
     }
 }
 
@@ -364,7 +364,7 @@ impl IndexTable {
         valid_entries
     }
 
-    pub fn get_coarse_range(&self, filter: Option<FetchCanisterLogsRange>) -> Option<()> {
+    pub fn get_coarse_range(&self, _filter: Option<FetchCanisterLogsRange>) -> Option<()> {
         unimplemented!()
     }
 }
@@ -820,7 +820,7 @@ impl RingBuffer {
     }
 
     /// Fetches canister logs according to the optional filter.
-    pub fn fetch_canister_logs(&self, filter: Option<Filter>) -> Vec<LogRecord> {
+    pub fn fetch_canister_logs(&self, _filter: Option<Filter>) -> Vec<LogRecord> {
         // todo: first implement get_coarse_range()
         unimplemented!()
     }
@@ -832,12 +832,3 @@ bazel test //rs/replicated_state:replicated_state_test \
   --test_arg=--nocapture \
   --test_arg=tmp_draft
 */
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_tmp() {
-        assert!(true);
-    }
-}

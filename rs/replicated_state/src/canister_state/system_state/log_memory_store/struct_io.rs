@@ -3,7 +3,7 @@
 use crate::canister_state::system_state::log_memory_store::{
     header::{HeaderV1, HeaderV1Blob},
     log_record::LogRecord,
-    lookup::{LookupEntry, LookupTable, to_entries},
+    lookup::{LookupEntry, LookupTable},
     memory::{MemoryAddress, MemoryPosition, MemorySize},
     ring_buffer::{HEADER_OFFSET, V1_LOOKUP_TABLE_OFFSET},
 };
@@ -213,7 +213,7 @@ impl StructIO {
         pos = h.advance_position(pos, MemorySize::new(8));
 
         let len = self.read_data_u32(pos, &data);
-        pos = h.advance_position(pos, MemorySize::new(4));
+        _ = h.advance_position(pos, MemorySize::new(4));
 
         Some(LogRecord {
             idx,
