@@ -20,7 +20,6 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode().context("Failed to enable raw mode")?;
@@ -254,46 +253,44 @@ impl App {
         terminal_guard.get_mut().draw(|f: &mut Frame| self.ui(f))?;
 
         let result = loop {
-            // Poll with periodic redraws to ensure the screen stays clean.
-            if event::poll(Duration::from_millis(2000))? {
-                match event::read()? {
-                    Event::Key(key) => {
-                        if key.kind == KeyEventKind::Press || key.kind == KeyEventKind::Repeat {
-                            if key.code == KeyCode::Char('c')
-                                && key.modifiers.contains(KeyModifiers::CONTROL)
-                            {
-                                break Ok(None);
-                            }
+            match event::read() {
+                Ok(Event::Key(key)) => {
+                    if key.kind == KeyEventKind::Press || key.kind == KeyEventKind::Repeat {
+                        if key.code == KeyCode::Char('c')
+                            && key.modifiers.contains(KeyModifiers::CONTROL)
+                        {
+                            break Ok(None);
+                        }
 
-                            let needs_redraw = match self.handle_input(key)? {
-                                InputResult::Continue => true,
-                                InputResult::Exit => break Ok(None),
-                                InputResult::Proceed => match self.params.validate() {
-                                    Ok(_) => break Ok(Some(self.params.clone())),
-                                    Err(e) => {
-                                        self.error_message = Some(e.to_string());
-                                        true
-                                    }
-                                },
-                            };
-
-                            if needs_redraw {
-                                if let Err(e) =
-                                    terminal_guard.get_mut().draw(|f: &mut Frame| self.ui(f))
-                                {
-                                    let mut term = terminal_guard.terminal.take().unwrap();
-                                    teardown_terminal(&mut term)?;
-                                    return Err(e).context("Failed to render TUI - terminal may not support required features");
+                        let needs_redraw = match self.handle_input(key)? {
+                            InputResult::Continue => true,
+                            InputResult::Exit => break Ok(None),
+                            InputResult::Proceed => match self.params.validate() {
+                                Ok(_) => break Ok(Some(self.params.clone())),
+                                Err(e) => {
+                                    self.error_message = Some(e.to_string());
+                                    true
                                 }
+                            },
+                        };
+
+                        if needs_redraw {
+                            if let Err(e) =
+                                terminal_guard.get_mut().draw(|f: &mut Frame| self.ui(f))
+                            {
+                                let mut term = terminal_guard.terminal.take().unwrap();
+                                teardown_terminal(&mut term)?;
+                                return Err(e).context("Failed to render TUI - terminal may not support required features");
                             }
                         }
                     }
-                    _ => {}
                 }
-            } else {
-                // No event yet, periodically redraw to prevent log interference
-                // Redraw without clearing to avoid flashing - overwriting should be sufficient
-                terminal_guard.get_mut().draw(|f: &mut Frame| self.ui(f))?;
+                Ok(_) => {}
+                Err(e) => {
+                    let mut term = terminal_guard.terminal.take().unwrap();
+                    teardown_terminal(&mut term)?;
+                    return Err(e).context("Failed to read terminal events - terminal may not support required features");
+                }
             }
         };
 
@@ -761,6 +758,7 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         }
     });
 
+    let mut last_log_count = 0;
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => {
@@ -771,66 +769,70 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
             Ok(None) => {
                 let logs = log_lines.lock().unwrap();
                 let current_logs: Vec<String> = logs.clone();
+                let current_count = current_logs.len();
                 drop(logs);
 
-                // Always redraw periodically to prevent background log interference
-                // Redraw without clearing to avoid flashing - overwriting should be sufficient
-                terminal_guard
-                    .get_mut()
-                    .draw(|f| {
-                        let size = f.size();
-                        if size.width < 10 || size.height < 5 {
-                            return;
-                        }
-                        let block = Block::default()
-                            .borders(Borders::ALL)
-                            .title("GuestOS Recovery Upgrader")
-                            .style(Style::default().bold());
+                // Only redraw if we have new logs
+                if current_count > last_log_count {
+                    terminal_guard
+                        .get_mut()
+                        .draw(|f| {
+                            let size = f.size();
+                            if size.width < 10 || size.height < 5 {
+                                return;
+                            }
+                            let block = Block::default()
+                                .borders(Borders::ALL)
+                                .title("GuestOS Recovery Upgrader")
+                                .style(Style::default().bold());
 
-                        let mut text = vec![
-                            Line::from("Parameters:"),
-                            Line::from(version_line.clone()),
-                            Line::from(version_hash_line.clone()),
-                            Line::from(recovery_hash_line.clone()),
-                            Line::from(""),
-                            Line::from("Recovery process logs:"),
-                            Line::from(""),
-                        ];
+                            let mut text = vec![
+                                Line::from("Parameters:"),
+                                Line::from(version_line.clone()),
+                                Line::from(version_hash_line.clone()),
+                                Line::from(recovery_hash_line.clone()),
+                                Line::from(""),
+                                Line::from("Recovery process logs:"),
+                                Line::from(""),
+                            ];
 
-                        let available_height = size.height.saturating_sub(10);
-                        let lines_to_show = current_logs.len().min(available_height as usize);
-                        let start_idx = if current_logs.len() > lines_to_show {
-                            current_logs.len() - lines_to_show
-                        } else {
-                            0
-                        };
-
-                        for line in &current_logs[start_idx..] {
-                            let max_width = (size.width.saturating_sub(4)) as usize;
-                            let display_line = if line.len() > max_width {
-                                format!("{}...", &line[..max_width.saturating_sub(3)])
+                            let available_height = size.height.saturating_sub(10);
+                            let lines_to_show = current_logs.len().min(available_height as usize);
+                            let start_idx = if current_logs.len() > lines_to_show {
+                                current_logs.len() - lines_to_show
                             } else {
-                                line.clone()
+                                0
                             };
-                            text.push(Line::from(format!("  {}", display_line)));
-                        }
 
-                        if current_logs.len() > lines_to_show {
-                            text.push(Line::from(""));
-                            text.push(Line::from(format!(
-                                "  ... (showing last {} of {} log lines)",
-                                lines_to_show,
-                                current_logs.len()
-                            )));
-                        }
+                            for line in &current_logs[start_idx..] {
+                                let max_width = (size.width.saturating_sub(4)) as usize;
+                                let display_line = if line.len() > max_width {
+                                    format!("{}...", &line[..max_width.saturating_sub(3)])
+                                } else {
+                                    line.clone()
+                                };
+                                text.push(Line::from(format!("  {}", display_line)));
+                            }
 
-                        let para = Paragraph::new(text)
-                            .block(block)
-                            .alignment(Alignment::Left)
-                            .wrap(Wrap { trim: true });
-                        f.render_widget(para, size);
-                    })
-                    .ok();
+                            if current_logs.len() > lines_to_show {
+                                text.push(Line::from(""));
+                                text.push(Line::from(format!(
+                                    "  ... (showing last {} of {} log lines)",
+                                    lines_to_show,
+                                    current_logs.len()
+                                )));
+                            }
+
+                            let para = Paragraph::new(text)
+                                .block(block)
+                                .alignment(Alignment::Left)
+                                .wrap(Wrap { trim: true });
+                            f.render_widget(para, size);
+                        })
+                        .ok();
+
+                    last_log_count = current_count;
+                }
 
                 thread::sleep(std::time::Duration::from_millis(100));
             }
@@ -952,32 +954,7 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         );
     })?;
 
-    // Poll for key events with periodic redraws to prevent background logs from interfering
-    // Direct writes to /dev/tty1 or /dev/ttyS0 bypass the TUI, so we need to clear before redraw
-    // Logs come every 15 minutes, so 2 seconds is plenty
-    loop {
-        // Poll with timeout - logs come every 15 minutes, so 2 seconds is plenty
-        if event::poll(Duration::from_millis(2000))? {
-            if let Event::Key(_) = event::read()? {
-                break;
-            }
-        } else {
-            // No event yet, clear and redraw to ensure screen stays clean if logs wrote to terminal
-            // Must clear before redraw because direct terminal writes aren't fully overwritten by draw() alone
-            let _ = terminal_guard.get_mut().clear();
-            terminal_guard.get_mut().draw(|f| {
-                draw_completion_screen(
-                    f,
-                    success,
-                    &success_message,
-                    &output,
-                    &stdout_lines,
-                    &stderr_lines,
-                    &error_messages,
-                );
-            })?;
-        }
-    }
+    if let Event::Key(_) = event::read()? {}
 
     let mut terminal = terminal_guard.terminal.take().unwrap();
     let _ = terminal.clear();
