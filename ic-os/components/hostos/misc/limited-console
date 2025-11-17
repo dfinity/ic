@@ -109,4 +109,5 @@ while true; do
     cmd="${cmd_array[0]}"
     # Pass remaining arguments as separate array elements to prevent injection
     execute_command "$cmd" "${cmd_array[@]:1}"
+
 done
