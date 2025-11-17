@@ -244,14 +244,17 @@ impl App {
     }
 
     fn handle_input_char(&mut self, c: char) {
-        if let (Some(max_len), Some(field_value)) = (
+        match (
             self.current_field.required_length(),
             self.current_field.get_value_mut(&mut self.params),
         ) {
-            if field_value.len() < max_len && c.is_ascii_hexdigit() {
+            (Some(max_len), Some(field_value))
+                if field_value.len() < max_len && c.is_ascii_hexdigit() =>
+            {
                 field_value.push(c);
                 self.clear_error();
             }
+            _ => {}
         }
     }
 
@@ -310,14 +313,14 @@ impl App {
                             },
                         };
 
-                        if needs_redraw {
-                            if let Err(e) =
+                        if needs_redraw
+                            && let Err(e) =
                                 terminal_guard.get_mut().draw(|f: &mut Frame| self.ui(f))
-                            {
-                                return Self::teardown_and_error(terminal_guard, e, || {
-                                    "Failed to render TUI - terminal may not support required features".to_string()
-                                });
-                            }
+                        {
+                            return Self::teardown_and_error(terminal_guard, e, || {
+                                "Failed to render TUI - terminal may not support required features"
+                                    .to_string()
+                            });
                         }
                     }
                 }
@@ -837,9 +840,12 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     let stdout_handle = thread::spawn(move || {
         let reader = BufReader::new(stdout);
         for line in reader.lines() {
-            if let Ok(line) = line {
-                let mut logs = log_lines_stdout.lock().unwrap();
-                logs.push(line);
+            match line {
+                Ok(line) => {
+                    let mut logs = log_lines_stdout.lock().unwrap();
+                    logs.push(line);
+                }
+                Err(_) => break,
             }
         }
     });
@@ -847,9 +853,12 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     let stderr_handle = thread::spawn(move || {
         let reader = BufReader::new(stderr);
         for line in reader.lines() {
-            if let Ok(line) = line {
-                let mut logs = log_lines_stderr.lock().unwrap();
-                logs.push(line);
+            match line {
+                Ok(line) => {
+                    let mut logs = log_lines_stderr.lock().unwrap();
+                    logs.push(line);
+                }
+                Err(_) => break,
             }
         }
     });
