@@ -2336,7 +2336,7 @@ impl StateMachine {
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone())))
             .unwrap()
-            .expect("The latest state should be certified.")
+            .expect("The latest state should be certified")
             .map_err(SubmitIngressError::UserError)?;
 
         // All checks were successful at this point so we can push the ingress message to the ingress pool.
@@ -4132,7 +4132,7 @@ impl StateMachine {
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone())))
             .unwrap()
-            .expect("The latest state should be certified.")?;
+            .expect("The latest state should be certified")?;
 
         let msg_id = msg.content().id();
         let builder = PayloadBuilder::new().signed_ingress(msg);
