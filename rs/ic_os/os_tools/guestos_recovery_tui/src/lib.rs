@@ -5,8 +5,7 @@ use crossterm::event::{
 };
 use crossterm::execute;
 use crossterm::terminal::{
-    Clear as TerminalClear, ClearType, EnterAlternateScreen, LeaveAlternateScreen,
-    disable_raw_mode, enable_raw_mode,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::{
     Frame, Terminal,
@@ -16,7 +15,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -39,9 +38,6 @@ fn teardown_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> R
     disable_raw_mode().context("Failed to disable raw mode")?;
     let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
     terminal.show_cursor().context("Failed to show cursor")?;
-    // Clear the normal screen after leaving alternate screen to prevent interference from background logs
-    let _ = execute!(io::stdout(), TerminalClear(ClearType::All));
-    let _ = io::stdout().flush();
     Ok(())
 }
 
@@ -68,9 +64,6 @@ impl Drop for TerminalGuard {
             let _ = disable_raw_mode();
             let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
             let _ = terminal.show_cursor();
-            // Clear the normal screen after leaving alternate screen to prevent interference from background logs
-            let _ = execute!(io::stdout(), TerminalClear(ClearType::All));
-            let _ = io::stdout().flush();
         }
     }
 }
