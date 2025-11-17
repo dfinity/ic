@@ -576,6 +576,21 @@ impl App {
     }
 }
 
+/// Parses log lines from bytes, filtering out empty lines
+fn parse_log_lines(bytes: &[u8]) -> Vec<String> {
+    String::from_utf8_lossy(bytes)
+        .lines()
+        .map(|s| s.to_string())
+        .filter(|s| !s.trim().is_empty())
+        .collect()
+}
+
+fn calculate_log_viewport(total_lines: usize, available_height: usize) -> (usize, usize) {
+    let lines_to_show = total_lines.min(available_height);
+    let start_idx = total_lines.saturating_sub(lines_to_show);
+    (start_idx, lines_to_show)
+}
+
 fn truncate_line(line: &str, max_width: usize) -> String {
     if line.len() > max_width {
         format!("{}...", &line[..max_width.saturating_sub(3)])
@@ -669,14 +684,8 @@ fn draw_completion_screen(
             )]));
             text.push(Line::from(""));
 
-            let available_height = size.height.saturating_sub(11);
-            let lines_to_show = all_log_lines.len().min(available_height as usize);
-
-            let start_idx = if all_log_lines.len() > lines_to_show {
-                all_log_lines.len() - lines_to_show
-            } else {
-                0
-            };
+            let available_height = size.height.saturating_sub(11) as usize;
+            let (start_idx, _) = calculate_log_viewport(all_log_lines.len(), available_height);
 
             let max_width = (size.width.saturating_sub(4)) as usize;
             for line in &all_log_lines[start_idx..] {
@@ -833,13 +842,9 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
                                 Line::from(""),
                             ];
 
-                            let available_height = size.height.saturating_sub(10);
-                            let lines_to_show = current_logs.len().min(available_height as usize);
-                            let start_idx = if current_logs.len() > lines_to_show {
-                                current_logs.len() - lines_to_show
-                            } else {
-                                0
-                            };
+                            let available_height = size.height.saturating_sub(10) as usize;
+                            let (start_idx, lines_to_show) =
+                                calculate_log_viewport(current_logs.len(), available_height);
 
                             let max_width = (size.width.saturating_sub(4)) as usize;
                             for line in &current_logs[start_idx..] {
@@ -892,17 +897,8 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     let mut error_messages = Vec::new();
     let mut success_message = None;
 
-    let stdout_lines: Vec<String> = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(|s| s.to_string())
-        .filter(|s| !s.trim().is_empty())
-        .collect();
-
-    let stderr_lines: Vec<String> = String::from_utf8_lossy(&output.stderr)
-        .lines()
-        .map(|s| s.to_string())
-        .filter(|s| !s.trim().is_empty())
-        .collect();
+    let stdout_lines = parse_log_lines(&output.stdout);
+    let stderr_lines = parse_log_lines(&output.stderr);
 
     // Check for success message
     for line in &stdout_lines {
@@ -961,11 +957,7 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
             .output();
 
         if let Ok(journal_output) = journalctl_output {
-            let journalctl_lines: Vec<String> = String::from_utf8_lossy(&journal_output.stdout)
-                .lines()
-                .map(|s| s.to_string())
-                .filter(|s| !s.trim().is_empty())
-                .collect();
+            let journalctl_lines = parse_log_lines(&journal_output.stdout);
 
             let journal_errors: Vec<String> = journalctl_lines
                 .iter()
