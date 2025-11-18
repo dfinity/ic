@@ -37,7 +37,6 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
-            set -euo pipefail
             export DID_CHECK_REV="$(git merge-base '${{ github.event.pull_request.base.sha }}' HEAD)"
             echo "DID_CHECK_REV=$DID_CHECK_REV"
             bazel test //... \
