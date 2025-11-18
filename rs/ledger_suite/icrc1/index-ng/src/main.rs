@@ -143,8 +143,8 @@ struct State {
 
     /// The ICRC-107 fee collector. Example values:
     /// - `None` - legacy fee collector is used.
-    /// - `Some(None)` - 107 fee collecor is enabled but fees are burned.
-    /// - `Some(Some(account1))` - 107 fee collecor is enabled, `account1` collects the fees.
+    /// - `Some(None)` - 107 fee collector is enabled but fees are burned.
+    /// - `Some(Some(account1))` - 107 fee collector is enabled, `account1` collects the fees.
     fee_collector_107: Option<Option<Account>>,
 }
 
