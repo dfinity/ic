@@ -59,6 +59,7 @@ You can make the rosetta nodes point to other ledgers by using these flags:
 - `--icrc1-ledgers <ledger_ids>`: Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: `3jkp5-oyaaa-aaaaj-azwqa-cai`). Example: `--icrc1-ledgers 'ledger1-id,ledger2-id,ledger3-id'`.
 - `--no-icp-latest`: Skip deploying the ICP Rosetta latest image from Docker Hub (useful when you only want to deploy your local build).
 - `--no-icrc1-latest`: Skip deploying the ICRC1 Rosetta latest image from Docker Hub (useful when you only want to deploy your local build).
+- `--use-persistent-volumes`: Use persistent volumes for the `/data` partition. Data will survive pod restarts and the `--clean` flag.
 
 ATTENTION: The first run might take a few minutes to finish as it'll create the cluster and install the necessary charts in it. After that, all the script will do is re-deploy the rosetta images with different configuration if needed.
 
@@ -129,15 +130,56 @@ Example that only deploys the local ICP Rosetta build (no latest ICP Rosetta, no
 ./deploy.sh --local-icp-image-tar /path/to/icp.tar --local-icrc1-image-tar /path/to/icrc1.tar --no-icp-latest --no-icrc1-latest
 ```
 
+### Using Persistent Volumes
+
+By default, the Rosetta services use ephemeral storage (emptyDir volumes) for their `/data` partition, which means data is lost when pods are deleted or the cluster is cleaned.
+
+To enable persistent storage that survives pod restarts and cluster cleanups, use the `--use-persistent-volumes` flag:
+
+```bash
+./deploy.sh --use-persistent-volumes
+```
+
+This creates separate persistent volumes for each Rosetta service:
+- `icp-rosetta-latest-pvc` - ICP Rosetta latest version
+- `icp-rosetta-local-pvc` - ICP Rosetta local build
+- `icrc-rosetta-latest-pvc` - ICRC Rosetta latest version
+- `icrc-rosetta-local-pvc` - ICRC Rosetta local build
+
+Each volume is 50Gi by default and uses the `standard` storage class. Data stored in these volumes will persist across:
+- Pod restarts and updates
+- Helm chart upgrades
+- Cluster cleanups using the `--clean` flag
+
+Example deploying with persistent volumes:
+
+```bash
+./deploy.sh --use-persistent-volumes --local-icrc1-image-tar /tmp/icrc_rosetta_image.tar
+```
+
+Example cleaning up while preserving data:
+
+```bash
+./deploy.sh --clean --use-persistent-volumes
+```
+
 ### Cleaning up
 
-You can add the `--clean` flag to any usage of `./deploy.sh`. That will wipe out the current cluster and install it from scratch.
+You can add the `--clean` flag to any usage of `./deploy.sh`. That will wipe out the current cluster and install it from scratch. If you're using persistent volumes with `--use-persistent-volumes`, the `--clean` flag will preserve the volumes and their data.
 
 For example, the following command installs all prod and local images in a clean cluster:
 
 ```bash
 ./deploy.sh --local-icp-image-tar /tmp/rosetta_image.tar --local-icrc1-image-tar /tmp/icrc_rosetta_image.tar --clean
 ```
+
+To completely remove all data including persistent volumes, use the `--purge` flag instead:
+
+```bash
+./deploy.sh --purge
+```
+
+The `--purge` flag will delete the cluster, Helm releases, and all persistent volumes.
 
 ## Monitoring with Grafana
 
