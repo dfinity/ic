@@ -196,8 +196,6 @@ impl RegistryReplicator {
         config: &Config,
         metrics_addr: SocketAddr,
     ) -> (Self, MetricsHttpEndpoint) {
-        let replicator = RegistryReplicator::new_from_config(logger.clone(), node_id, config).await;
-
         let metrics_config = MetricsConfig {
             exporter: Exporter::Http(metrics_addr),
             ..Default::default()
@@ -208,6 +206,8 @@ impl RegistryReplicator {
             MetricsRegistry::global(),
             &logger.inner_logger.root,
         );
+
+        let replicator = RegistryReplicator::new_from_config(logger, node_id, config).await;
 
         (replicator, metrics_endpoint)
     }
