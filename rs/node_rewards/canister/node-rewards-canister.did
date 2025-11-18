@@ -6,6 +6,10 @@ type DateUtc = record {
   year: opt nat32;
 };
 
+pub struct RewardsCalculationVersion {
+    pub version: u32,
+}
+
 type NodeMetricsDaily = record {
   subnet_assigned: opt principal;
   subnet_assigned_failure_rate: opt float64;
@@ -73,11 +77,13 @@ type NodeProvidersRewards = record {
     principal;
     nat64;
   };
+  rewards_calculation_version: RewardsCalculationVersion;
 };
 
 type GetNodeProvidersRewardsRequest = record {
   from_day: DateUtc;
   to_day: DateUtc;
+  rewards_calculation_version: opt RewardsCalculationVersion;
 };
 
 type GetNodeProvidersRewardsResponse = variant { Ok: NodeProvidersRewards; Err: text };

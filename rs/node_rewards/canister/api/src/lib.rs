@@ -5,20 +5,19 @@ pub mod providers_rewards;
 mod api_native_conversion;
 
 use chrono::{DateTime, Datelike, NaiveDate};
-use rewards_calculation::performance_based_algorithm::PerformanceBasedAlgorithm;
+use rewards_calculation::AlgorithmVersion;
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
 use std::fmt::Display;
 
-// Rewards Calculator Version used
 #[derive(candid::CandidType, candid::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RewardsCalculatorVersion {
-    V1,
+pub struct RewardsCalculationVersion {
+    pub version: u32,
 }
 
-impl RewardsCalculatorVersion {
-    pub fn algorithm(&self) -> &'static dyn PerformanceBasedAlgorithm {
-        match self {
-            RewardsCalculatorVersion::V1 => &RewardsCalculationV1,
+impl Default for RewardsCalculationVersion {
+    fn default() -> Self {
+        Self {
+            version: RewardsCalculationV1::VERSION,
         }
     }
 }

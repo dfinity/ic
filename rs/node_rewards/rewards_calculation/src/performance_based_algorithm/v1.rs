@@ -1,11 +1,9 @@
-use crate::performance_based_algorithm::results::RewardsCalculatorResults;
+use crate::AlgorithmVersion;
 use crate::performance_based_algorithm::{
     PerformanceBasedAlgorithm, PerformanceBasedAlgorithmInputProvider,
 };
-use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-
 // ================================================================================================
 // VERSIONING SAFETY WARNING
 // ================================================================================================
@@ -33,6 +31,10 @@ impl PerformanceBasedAlgorithm for RewardsCalculationV1 {
     const MAX_FAILURE_RATE: Decimal = dec!(0.6);
     const MIN_REWARDS_REDUCTION: Decimal = dec!(0);
     const MAX_REWARDS_REDUCTION: Decimal = dec!(0.8);
+}
+
+impl AlgorithmVersion for RewardsCalculationV1 {
+    const VERSION: u32 = 1;
 }
 
 #[cfg(test)]

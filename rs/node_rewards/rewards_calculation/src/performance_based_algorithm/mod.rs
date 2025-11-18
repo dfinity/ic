@@ -1,3 +1,4 @@
+use crate::AlgorithmVersion;
 use crate::performance_based_algorithm::results::{
     DailyNodeFailureRate, DailyNodeProviderRewards, DailyNodeRewards, DailyResults,
     NodeMetricsDaily, NodeTypeRegionBaseRewards, RewardsCalculatorResults, Type3RegionBaseRewards,
@@ -84,7 +85,7 @@ pub trait PerformanceBasedAlgorithmInputProvider {
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String>;
 }
 
-pub trait PerformanceBasedAlgorithm {
+pub trait PerformanceBasedAlgorithm: AlgorithmVersion {
     /// The percentile used to calculate the failure rate for a subnet.
     const SUBNET_FAILURE_RATE_PERCENTILE: f64;
 
@@ -109,7 +110,6 @@ pub trait PerformanceBasedAlgorithm {
     const REWARDS_TABLE_DAYS: Decimal = dec!(30.4375);
 
     fn calculate_rewards(
-        &self,
         from_date: NaiveDate,
         to_date: NaiveDate,
         input_provider: impl PerformanceBasedAlgorithmInputProvider,
