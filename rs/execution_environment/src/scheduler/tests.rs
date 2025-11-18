@@ -1090,7 +1090,7 @@ fn only_charge_for_allocation_after_specified_duration() {
     let canister = test.create_canister_with(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
-        MemoryAllocation::Reserved(NumBytes::from(bytes_per_cycle)),
+        MemoryAllocation::from(NumBytes::from(bytes_per_cycle)),
         None,
         Some(initial_time),
         None,
@@ -1140,7 +1140,7 @@ fn charging_for_message_memory_works() {
     let canister = test.create_canister_with(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         Some(initial_time),
         None,
@@ -1296,7 +1296,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
         test.create_canister_with(
             Cycles::new(100),
             ComputeAllocation::zero(),
-            MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+            MemoryAllocation::from(NumBytes::from(1 << 30)),
             None,
             Some(initial_time),
             None,
@@ -1320,7 +1320,7 @@ fn canisters_with_insufficient_cycles_are_uninstalled() {
         );
         assert_eq!(
             canister.system_state.memory_allocation,
-            MemoryAllocation::BestEffort
+            MemoryAllocation::default()
         );
         assert_eq!(canister.system_state.canister_version, 1);
     }
@@ -1341,7 +1341,7 @@ fn snapshot_is_deleted_when_canister_is_out_of_cycles() {
     let canister_id = test.create_canister_with_controller(
         Cycles::new(12_700_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
         None,
@@ -1447,7 +1447,7 @@ fn snapshot_is_deleted_when_uninstalled_canister_is_out_of_cycles() {
     let canister_id = test.create_canister_with_controller(
         Cycles::new(12_700_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
         None,
@@ -1579,7 +1579,7 @@ fn dont_charge_allocations_for_long_running_canisters() {
     let canister = test.create_canister_with(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
-        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
         None,
@@ -1587,7 +1587,7 @@ fn dont_charge_allocations_for_long_running_canisters() {
     let paused_canister = test.create_canister_with(
         Cycles::new(initial_cycles),
         ComputeAllocation::zero(),
-        MemoryAllocation::Reserved(NumBytes::from(1 << 30)),
+        MemoryAllocation::from(NumBytes::from(1 << 30)),
         None,
         Some(initial_time),
         None,
@@ -1833,7 +1833,7 @@ fn max_canisters_per_round() {
             let canister_id = test.create_canister_with(
                 Cycles::new(0),
                 ComputeAllocation::zero(),
-                MemoryAllocation::BestEffort,
+                MemoryAllocation::default(),
                 None,
                 None,
                 None,
@@ -2168,7 +2168,7 @@ fn execute_heartbeat_once_per_round_in_system_subnet() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterHeartbeat),
         None,
         None,
@@ -2188,7 +2188,7 @@ fn execute_global_timer_once_per_round_in_system_subnet() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterGlobalTimer),
         None,
         None,
@@ -2209,7 +2209,7 @@ fn global_timer_is_not_scheduled_if_not_expired() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterGlobalTimer),
         None,
         None,
@@ -2229,7 +2229,7 @@ fn global_timer_is_not_scheduled_if_global_timer_method_is_not_exported() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         None,
         None,
@@ -2249,7 +2249,7 @@ fn heartbeat_is_not_scheduled_if_the_canister_is_stopped() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterHeartbeat),
         None,
         Some(CanisterStatusType::Stopped),
@@ -2267,7 +2267,7 @@ fn global_timer_is_not_scheduled_if_the_canister_is_stopped() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterGlobalTimer),
         None,
         Some(CanisterStatusType::Stopped),
@@ -2301,7 +2301,7 @@ fn execute_heartbeat_before_messages() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterHeartbeat),
         None,
         None,
@@ -2333,7 +2333,7 @@ fn execute_global_timer_before_messages() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterGlobalTimer),
         None,
         None,
@@ -2464,7 +2464,7 @@ fn test_drain_subnet_messages_no_long_running_canisters() {
             let local_canister = test.create_canister_with(
                 Cycles::new(1_000_000_000_000),
                 ComputeAllocation::zero(),
-                MemoryAllocation::BestEffort,
+                MemoryAllocation::default(),
                 None,
                 None,
                 None,
@@ -2627,7 +2627,7 @@ fn execute_multiple_heartbeats() {
         let canister = test.create_canister_with(
             Cycles::new(1_000_000_000_000),
             ComputeAllocation::zero(),
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             Some(SystemMethod::CanisterHeartbeat),
             None,
             None,
@@ -2734,7 +2734,7 @@ fn can_record_metrics_for_a_round() {
         let canister = test.create_canister_with(
             Cycles::new(1_000_000_000_000_000),
             ComputeAllocation::try_from(compute_allocation).unwrap(),
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             None,
             None,
             None,
@@ -2841,7 +2841,7 @@ fn prepay_failures_counted() {
     let canister_with_cycles = test.create_canister_with(
         Cycles::new(1_000_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         None,
         None,
@@ -2849,7 +2849,7 @@ fn prepay_failures_counted() {
     let canister_without_cycles = test.create_canister_with(
         Cycles::new(10),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         None,
         None,
@@ -3042,6 +3042,7 @@ fn canister_is_stopped_if_timeout_occurs_and_ready_to_stop() {
             transform: None,
             max_response_bytes: None,
             is_replicated: None,
+            pricing_version: None,
         })
         .unwrap();
 
@@ -3410,7 +3411,7 @@ fn heartbeat_metrics_are_recorded() {
     let canister0 = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterHeartbeat),
         None,
         None,
@@ -3418,7 +3419,7 @@ fn heartbeat_metrics_are_recorded() {
     let canister1 = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterHeartbeat),
         None,
         None,
@@ -3729,7 +3730,7 @@ fn scheduler_maintains_canister_order() {
         let id = test.create_canister_with(
             Cycles::new(1_000_000_000_000_000_000),
             ComputeAllocation::try_from(*ca).unwrap(),
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             None,
             None,
             None,
@@ -4115,6 +4116,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
             context: transform_context,
         }),
         is_replicated: None,
+        pricing_version: None,
     };
 
     // Create request to `HttpRequest` method.
@@ -4204,6 +4206,7 @@ fn http_outcalls_free() {
             context: transform_context,
         }),
         is_replicated: None,
+        pricing_version: None,
     };
 
     // Create request to `HttpRequest` method.
@@ -4246,7 +4249,7 @@ fn consumed_cycles_are_updated_from_valid_canisters() {
     let canister_id = test.create_canister_with(
         Cycles::from(5_000_000_000_000u128),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         None,
         None,
@@ -4281,7 +4284,7 @@ fn consumed_cycles_are_updated_from_deleted_canisters() {
     let canister_id = test.create_canister_with(
         initial_balance,
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         None,
         Some(CanisterStatusType::Stopped),
@@ -4456,7 +4459,7 @@ fn construct_scheduler_for_prop_test(
         let canister = test.create_canister_with(
             Cycles::new(1_000_000_000_000_000_000),
             ca,
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             if heartbeat {
                 Some(SystemMethod::CanisterHeartbeat)
             } else {
@@ -5499,7 +5502,7 @@ fn dts_update_and_heartbeat() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         Some(SystemMethod::CanisterHeartbeat),
         None,
         None,
@@ -5631,7 +5634,7 @@ fn test_is_next_method_added_to_task_queue() {
     let canister = test.create_canister_with(
         Cycles::new(1_000_000_000_000),
         ComputeAllocation::zero(),
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         None,
         None,
         None,

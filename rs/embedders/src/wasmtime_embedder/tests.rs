@@ -21,11 +21,13 @@ use ic_config::{
     subnet_config::SchedulerConfig,
 };
 use ic_cycles_account_manager::ResourceSaturation;
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, MessageMemoryUsage, SubnetAvailableMemory,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
-use ic_replicated_state::{Memory, MessageMemoryUsage, NetworkTopology, SystemState};
+use ic_replicated_state::{Memory, NetworkTopology, SystemState};
 use ic_sys::PageIndex;
 use ic_test_utilities::cycles_account_manager::CyclesAccountManagerBuilder;
 use ic_test_utilities_types::ids::canister_test_id;

@@ -47,6 +47,11 @@ external_actor(
 motoko_canister(
     name = "lifeline_canister",
     entry = "lifeline.mo",
+    moc_flags = [
+        # The lifeline canister has no stable variables so we use the classical orthogonal persistence
+        # with 32bit main memory such that upgrades don't require the wasm_memory_persistence option.
+        "--legacy-persistence",
+    ],
     deps = [
         # Keep sorted.
         ":governance",

@@ -13,8 +13,8 @@ use nested::{HOST_VM_NAME, registration};
 
 use nested::util::{
     NODE_UPGRADE_BACKOFF, NODE_UPGRADE_TIMEOUT, elect_guestos_version,
-    get_blessed_guestos_versions, get_unassigned_nodes_config, update_unassigned_nodes,
-    wait_for_expected_guest_version,
+    get_blessed_guestos_versions, get_unassigned_nodes_config, try_logging_guestos_diagnostics,
+    update_unassigned_nodes, wait_for_expected_guest_version,
 };
 
 fn main() -> Result<()> {
@@ -48,9 +48,11 @@ pub fn upgrade_guestos(env: TestEnv) {
 
     registration(env.clone());
 
-    let guest_ipv6 = env
+    let host = env
         .get_nested_vm(HOST_VM_NAME)
-        .expect("Unable to find HostOS node.")
+        .expect("Unable to find HostOS node.");
+
+    let guest_ipv6 = host
         .get_nested_network()
         .expect("Unable to get nested network")
         .guest_ip;
@@ -100,7 +102,7 @@ pub fn upgrade_guestos(env: TestEnv) {
             &target_version,
             sha256,
             vec![upgrade_url],
-            guest_launch_measurements,
+            Some(guest_launch_measurements),
         )
         .await;
 
@@ -128,5 +130,11 @@ pub fn upgrade_guestos(env: TestEnv) {
         )
         .await
         .expect("guest failed to upgrade");
+
+        info!(logger, "Waiting for Orchestrator dashboard...");
+        if let Err(e) = host.await_orchestrator_dashboard_accessible() {
+            try_logging_guestos_diagnostics(&host, &logger);
+            panic!("Orchestrator dashboard is not accessible: {e}");
+        }
     });
 }

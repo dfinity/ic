@@ -880,8 +880,9 @@ fn valid_tecdsa_inputs_with_receivers(
     }
 }
 
-// Copy of the ECDSA owned pattern for Schnorr.
-// Helper owned inputs for ThresholdSchnorrSigInputs to keep tests readable.
+// Copy of ic_crypto_test_utils_canister_threshold_sigs::ThresholdSchnorrSigInputsOwned.
+// The latter cannot be used here because ic-types (this crate here) has a dev-dependency on
+// ic_crypto_test_utils_canister_threshold_sigs, which has a dependency on ic-types.
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct ThresholdSchnorrSigInputsOwned {
     pub caller: PrincipalId,

@@ -366,6 +366,10 @@ pub trait StateReader: Send + Sync {
     /// state.
     fn get_latest_state(&self) -> Labeled<Arc<Self::State>>;
 
+    /// Returns a shared object of the state at the latest certified block
+    /// height. If nothing was certified so far, returns `None`.
+    fn get_latest_certified_state(&self) -> Option<Labeled<Arc<Self::State>>>;
+
     /// Returns the height of the latest state available.
     fn latest_state_height(&self) -> Height;
 

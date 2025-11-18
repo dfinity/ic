@@ -420,7 +420,9 @@ impl SystemMetadata {
         for range in routing_table_ranges.iter().rev() {
             let start = canister_id_into_u64(range.start);
             let end = canister_id_into_u64(range.end);
-            if start % CANISTER_IDS_PER_SUBNET == 0 && end == start + CANISTER_IDS_PER_SUBNET - 1 {
+            if start.is_multiple_of(CANISTER_IDS_PER_SUBNET)
+                && end == start + CANISTER_IDS_PER_SUBNET - 1
+            {
                 // Found the `[N * 2^20, (N+1) * 2^20 - 1]` (sub)range, use it as allocation
                 // range.
                 //
@@ -795,6 +797,7 @@ impl SystemMetadata {
                     status,
                     self.time(),
                     u64::MAX.into(), // No need to enforce ingress memory limits,
+                    |_| {},
                 );
             }
         }
@@ -1147,6 +1150,7 @@ impl IngressHistoryState {
         status: IngressStatus,
         time: Time,
         ingress_memory_capacity: NumBytes,
+        observe_time_in_terminal_state: impl Fn(u64),
     ) -> Arc<IngressStatus> {
         // Store the associated expiry time for the given message id only for a
         // "terminal" ingress status. This way we are not risking deleting any status
@@ -1173,7 +1177,11 @@ impl IngressHistoryState {
         }
 
         if self.memory_usage > ingress_memory_capacity.get() as usize {
-            self.forget_terminal_statuses(ingress_memory_capacity);
+            self.forget_terminal_statuses(
+                ingress_memory_capacity,
+                time,
+                observe_time_in_terminal_state,
+            );
         }
 
         debug_assert_eq!(
@@ -1243,7 +1251,12 @@ impl IngressHistoryState {
     /// Note that this function must remain private and should only be
     /// called from within `insert` to ensure that `next_terminal_time`
     /// is consistently updated and we don't miss any completed statuses.
-    fn forget_terminal_statuses(&mut self, target_size: NumBytes) {
+    fn forget_terminal_statuses(
+        &mut self,
+        target_size: NumBytes,
+        now: Time,
+        observe_time_in_terminal_state: impl Fn(u64),
+    ) {
         // In debug builds we store the length of the statuses map here so that
         // we can later debug_assert that no status disappeared.
         #[cfg(debug_assertions)]
@@ -1262,7 +1275,13 @@ impl IngressHistoryState {
                 break;
             }
 
+            // We keep track of entries by how much they are evicted before their "pruning_time".
+            let time_until_pruning = time.saturating_duration_since(now);
+            let time_in_ingress_history_secs =
+                MAX_INGRESS_TTL.saturating_sub(time_until_pruning).as_secs();
+
             for id in ids.iter() {
+                observe_time_in_terminal_state(time_in_ingress_history_secs);
                 match statuses.get(id).map(Arc::as_ref) {
                     Some(IngressStatus::Known {
                         receiver,

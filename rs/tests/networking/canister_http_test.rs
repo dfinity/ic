@@ -54,7 +54,7 @@ pub fn test(env: TestEnv) {
     block_on(async {
         test_proxy_canister(
             &proxy_canister,
-            format!("https://[{webserver_ipv6}]:20443"),
+            format!("https://[{webserver_ipv6}]"),
             logger,
         )
         .await;
@@ -95,6 +95,7 @@ async fn test_proxy_canister(proxy_canister: &Canister<'_>, url: String, logger:
                             method: HttpMethod::GET,
                             max_response_bytes: None,
                             is_replicated: None,
+                            pricing_version: None,
                         },
                         cycles: 500_000_000_000,
                     },

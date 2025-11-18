@@ -42,7 +42,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata,
+    CanisterQueues, NetworkTopology, RefundPool, ReplicatedState, SystemMetadata,
     canister_snapshots::CanisterSnapshots,
 };
 use ic_test_utilities_state::ReplicatedStateBuilder;
@@ -206,6 +206,7 @@ pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
             BTreeMap::new(),
             metadata,
             CanisterQueues::default(),
+            RefundPool::default(),
             RawQueryStats::default(),
             CanisterSnapshots::default(),
         )),
@@ -377,7 +378,7 @@ pub struct HttpEndpointBuilder {
     registry_client: Arc<dyn RegistryClient>,
     delegation_from_nns: Option<CertificateDelegation>,
     pprof_collector: Arc<dyn PprofCollector>,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
     certified_height: Option<Height>,
     ingress_pool_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_channel_capacity: usize,
@@ -436,7 +437,7 @@ impl HttpEndpointBuilder {
         self
     }
 
-    pub fn with_tls_config(mut self, tls_config: impl TlsConfig + Send + Sync + 'static) -> Self {
+    pub fn with_tls_config(mut self, tls_config: impl TlsConfig + 'static) -> Self {
         self.tls_config = Arc::new(tls_config);
         self
     }

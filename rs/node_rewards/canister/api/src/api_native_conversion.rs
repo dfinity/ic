@@ -17,20 +17,20 @@ impl TryFrom<native_types::NodeMetricsDaily> for NodeMetricsDaily {
     fn try_from(src: native_types::NodeMetricsDaily) -> Result<Self, Self::Error> {
         Ok(Self {
             subnet_assigned: Some(src.subnet_assigned.get()),
-            subnet_assigned_fr_percent: Some(
-                src.subnet_assigned_fr_percent
+            subnet_assigned_failure_rate: Some(
+                src.subnet_assigned_failure_rate
                     .to_f64()
                     .ok_or("Conversion to f64 failed (subnet_assigned_fr_percent)")?,
             ),
             num_blocks_proposed: Some(src.num_blocks_proposed),
             num_blocks_failed: Some(src.num_blocks_failed),
-            original_fr_percent: Some(
-                src.original_fr_percent
+            original_failure_rate: Some(
+                src.original_failure_rate
                     .to_f64()
                     .ok_or("Conversion to f64 failed (original_fr_percent)")?,
             ),
-            relative_fr_percent: Some(
-                src.relative_fr_percent
+            relative_failure_rate: Some(
+                src.relative_failure_rate
                     .to_f64()
                     .ok_or("Conversion to f64 failed (relative_fr_percent)")?,
             ),
@@ -49,15 +49,15 @@ impl TryFrom<native_types::DailyNodeFailureRate> for DailyNodeFailureRate {
                     node_metrics: Some(NodeMetricsDaily::try_from(node_metrics)?),
                 })
             }
-            native_types::DailyNodeFailureRate::NonSubnetMember { extrapolated_fr } => {
-                Ok(DailyNodeFailureRate::NonSubnetMember {
-                    extrapolated_fr_percent: Some(
-                        extrapolated_fr
-                            .to_f64()
-                            .ok_or("Conversion to f64 failed (extrapolated_fr)")?,
-                    ),
-                })
-            }
+            native_types::DailyNodeFailureRate::NonSubnetMember {
+                extrapolated_failure_rate,
+            } => Ok(DailyNodeFailureRate::NonSubnetMember {
+                extrapolated_failure_rate: Some(
+                    extrapolated_failure_rate
+                        .to_f64()
+                        .ok_or("Conversion to f64 failed (extrapolated_fr)")?,
+                ),
+            }),
         }
     }
 }
@@ -72,26 +72,28 @@ impl TryFrom<native_types::DailyNodeRewards> for DailyNodeRewards {
             node_reward_type: Some(src.node_reward_type.to_string()),
             region: Some(src.region),
             dc_id: Some(src.dc_id),
-            daily_node_fr: Some(DailyNodeFailureRate::try_from(src.daily_node_fr)?),
-            performance_multiplier_percent: Some(
-                src.performance_multiplier_percent
+            daily_node_failure_rate: Some(DailyNodeFailureRate::try_from(
+                src.daily_node_failure_rate,
+            )?),
+            performance_multiplier: Some(
+                src.performance_multiplier
                     .to_f64()
                     .ok_or("Conversion to f64 failed (performance_multiplier_percent)")?,
             ),
-            rewards_reduction_percent: Some(
-                src.rewards_reduction_percent
+            rewards_reduction: Some(
+                src.rewards_reduction
                     .to_f64()
                     .ok_or("Conversion to f64 failed (rewards_reduction_percent)")?,
             ),
             base_rewards_xdr_permyriad: Some(
                 src.base_rewards_xdr_permyriad
-                    .to_u64()
-                    .ok_or("Conversion to u64 failed (base_rewards_xdr_permyriad)")?,
+                    .to_f64()
+                    .ok_or("Conversion to f64 failed (base_rewards_xdr_permyriad)")?,
             ),
             adjusted_rewards_xdr_permyriad: Some(
                 src.adjusted_rewards_xdr_permyriad
-                    .to_u64()
-                    .ok_or("Conversion to u64 failed (adjusted_rewards_xdr_permyriad)")?,
+                    .to_f64()
+                    .ok_or("Conversion to f64 failed (adjusted_rewards_xdr_permyriad)")?,
             ),
         })
     }
@@ -105,12 +107,12 @@ impl TryFrom<native_types::NodeTypeRegionBaseRewards> for NodeTypeRegionBaseRewa
         Ok(Self {
             monthly_xdr_permyriad: Some(
                 src.monthly_xdr_permyriad
-                    .to_u64()
+                    .to_f64()
                     .ok_or("Conversion to f64 failed (monthly_xdr_permyriad)")?,
             ),
             daily_xdr_permyriad: Some(
                 src.daily_xdr_permyriad
-                    .to_u64()
+                    .to_f64()
                     .ok_or("Conversion to f64 failed (daily_xdr_permyriad)")?,
             ),
             node_reward_type: Some(src.node_reward_type.to_string()),
@@ -129,18 +131,18 @@ impl TryFrom<native_types::Type3RegionBaseRewards> for Type3RegionBaseRewards {
             nodes_count: Some(src.nodes_count as u64),
             avg_rewards_xdr_permyriad: Some(
                 src.avg_rewards_xdr_permyriad
-                    .to_u64()
-                    .ok_or("Conversion to u64 failed (avg_rewards_xdr_permyriad)")?,
+                    .to_f64()
+                    .ok_or("Conversion to f64 failed (avg_rewards_xdr_permyriad)")?,
             ),
-            avg_coefficient_percent: Some(
-                src.avg_coefficient_percent
+            avg_coefficient: Some(
+                src.avg_coefficient
                     .to_f64()
                     .ok_or("Conversion to f64 failed (avg_coefficient_percent)")?,
             ),
             daily_xdr_permyriad: Some(
                 src.daily_xdr_permyriad
-                    .to_u64()
-                    .ok_or("Conversion to u64 failed (daily_xdr_permyriad)")?,
+                    .to_f64()
+                    .ok_or("Conversion to f64 failed (daily_xdr_permyriad)")?,
             ),
         })
     }
@@ -152,11 +154,8 @@ impl TryFrom<native_types::DailyNodeProviderRewards> for DailyNodeProviderReward
 
     fn try_from(src: native_types::DailyNodeProviderRewards) -> Result<Self, Self::Error> {
         Ok(Self {
-            rewards_total_xdr_permyriad: Some(
-                src.rewards_total_xdr_permyriad
-                    .to_u64()
-                    .ok_or("Conversion to u64 failed (rewards_total_xdr_permyriad)")?,
-            ),
+            total_base_rewards_xdr_permyriad: Some(src.total_base_rewards_xdr_permyriad),
+            total_adjusted_rewards_xdr_permyriad: Some(src.total_adjusted_rewards_xdr_permyriad),
             base_rewards: src
                 .base_rewards
                 .into_iter()
@@ -182,8 +181,8 @@ impl TryFrom<native_types::DailyResults> for DailyResults {
 
     fn try_from(src: native_types::DailyResults) -> Result<Self, Self::Error> {
         Ok(Self {
-            subnets_fr: src
-                .subnets_fr_percent
+            subnets_failure_rate: src
+                .subnets_failure_rate
                 .into_iter()
                 .map(|(k, v)| {
                     v.to_f64()

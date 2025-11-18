@@ -50,8 +50,12 @@ where
 
     let router_metrics = RouterMetrics::new(metrics_registry);
 
-    let mut blockchain_manager =
-        BlockchainManager::new(blockchain_state, logger.clone(), router_metrics.clone());
+    let mut blockchain_manager = BlockchainManager::new(
+        blockchain_state,
+        config.request_timeout(),
+        logger.clone(),
+        router_metrics.clone(),
+    );
     let mut transaction_manager = TransactionStore::new(logger.clone(), metrics_registry);
     let mut connection_manager = ConnectionManager::new(
         config,

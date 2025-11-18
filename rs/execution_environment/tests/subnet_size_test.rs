@@ -534,6 +534,7 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
                         context: vec![],
                     }),
                     is_replicated: None,
+                    pricing_version: None,
                 })
                 .unwrap(),
             ),
@@ -749,6 +750,8 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: CyclesAccountManagerConfig::system_subnet()
                 .default_reserved_balance_limit,
+            fetch_canister_logs_base_fee: Cycles::new(0),
+            fetch_canister_logs_per_byte_fee: Cycles::new(0),
         },
         SubnetType::Application | SubnetType::VerifiedApplication => CyclesAccountManagerConfig {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
@@ -783,6 +786,8 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
                 .default_reserved_balance_limit,
+            fetch_canister_logs_base_fee: Cycles::new(1_000_000),
+            fetch_canister_logs_per_byte_fee: Cycles::new(800),
         },
     }
 }

@@ -10,10 +10,6 @@ documentation.workspace = true
 name = "ic-boundary"
 path = "src/main.rs"
 
-[features]
-bench = []
-tls = []
-
 [dependencies]
 anyhow = { workspace = true }
 arc-swap = "1.7.1"
@@ -100,12 +96,5 @@ url = { workspace = true }
 x509-parser = { workspace = true }
 
 [dev-dependencies]
-criterion = { workspace = true }
 indoc = "1.0"
-tempfile = { workspace = true }
 tokio-tungstenite = "0.26"
-
-[[bench]]
-name = "perf"
-harness = false
-required-features = ["bench"]

@@ -58,7 +58,7 @@ fn bitcoin_integration_test() {
         p2p: true,
         ..Conf::default()
     };
-    let bitcoind = Daemon::new(&bitcoind_path, BtcNetwork::Regtest, conf).unwrap();
+    let bitcoind = Daemon::new(&bitcoind_path, BtcNetwork::Regtest, conf);
 
     let icp_features = IcpFeatures {
         bitcoin: Some(IcpFeaturesConfig::DefaultConfig),
@@ -98,7 +98,7 @@ fn bitcoin_integration_test() {
     let btc_rpc = &bitcoind.rpc_client;
 
     // `n` must be more than 100 (Coinbase maturity rule) so that the reward for the first block can be sent out
-    let mut n = 101;
+    let n = 101;
     // retry generating blocks until the bitcoind is up and running
     let start = std::time::Instant::now();
     loop {
@@ -157,7 +157,6 @@ fn bitcoin_integration_test() {
                         .assume_checked(),
                 )
                 .unwrap();
-            n += 1;
         }
     }
 }

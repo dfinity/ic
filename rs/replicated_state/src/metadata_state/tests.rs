@@ -30,7 +30,7 @@ use ic_test_utilities_types::{
 use ic_types::{
     Cycles, ExecutionRound, Height,
     batch::BlockmakerMetrics,
-    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, Replication},
+    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, PricingVersion, Replication},
     consensus::idkg::{IDkgMasterPublicKeyId, PreSigId, common::PreSignature},
     crypto::{
         AlgorithmId,
@@ -88,6 +88,7 @@ fn can_prune_old_ingress_history_entries() {
         },
         time,
         NumBytes::from(u64::MAX),
+        |_| {},
     );
     ingress_history.insert(
         message_id2.clone(),
@@ -99,6 +100,7 @@ fn can_prune_old_ingress_history_entries() {
         },
         time,
         NumBytes::from(u64::MAX),
+        |_| {},
     );
     ingress_history.insert(
         message_id3.clone(),
@@ -110,6 +112,7 @@ fn can_prune_old_ingress_history_entries() {
         },
         time + MAX_INGRESS_TTL / 2,
         NumBytes::from(u64::MAX),
+        |_| {},
     );
 
     // Pretend that the time has advanced
@@ -137,6 +140,7 @@ fn entries_sorted_lexicographically() {
             },
             time,
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
     let mut expected: Vec<_> = (0..10u64).map(message_test_id).collect();
@@ -446,6 +450,7 @@ fn system_metadata_split() {
             },
             time,
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
     let mut subnet_queues = CanisterQueues::default();
@@ -598,6 +603,7 @@ fn subnet_call_contexts_deserialization() {
         transform: Some(transform.clone()),
         time: UNIX_EPOCH,
         replication: Replication::FullyReplicated,
+        pricing_version: PricingVersion::Legacy,
     };
     subnet_call_context_manager.push_context(SubnetCallContext::CanisterHttpRequest(
         canister_http_request,
@@ -949,7 +955,7 @@ fn test_status_terminal(i: u64) -> IngressStatus {
         state: IngressState::Failed(UserError::new(ErrorCode::SubnetOversubscribed, "Error")),
     };
 
-    if i % 2 == 0 {
+    if i.is_multiple_of(2) {
         test_status_completed(i)
     } else {
         test_status_failed(i)
@@ -979,6 +985,7 @@ fn ingress_history_insert_beyond_limit_will_succeed() {
             status.clone(),
             Time::from_nanos_since_unix_epoch(i),
             limit,
+            |_| {},
         );
         (message_id, status)
     };
@@ -1073,12 +1080,14 @@ fn ingress_history_forget_completed_does_not_touch_other_statuses() {
             status.clone(),
             Time::from_nanos_since_unix_epoch(0),
             NumBytes::from(0),
+            |_| {},
         );
         ingress_history_no_limit.insert(
             message_test_id(i as u64),
             status,
             Time::from_nanos_since_unix_epoch(0),
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     });
 
@@ -1088,7 +1097,11 @@ fn ingress_history_forget_completed_does_not_touch_other_statuses() {
 
     // Forgetting terminal statuses when the ingress history only contains non-terminal
     // statuses should be a no-op.
-    ingress_history_limit.forget_terminal_statuses(NumBytes::from(0));
+    ingress_history_limit.forget_terminal_statuses(
+        NumBytes::from(0),
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
     // ... except the next_terminal_time is updated to the first key in the `pruning_times` map.
     ingress_history_before.next_terminal_time =
         *ingress_history_limit.pruning_times().next().unwrap().0;
@@ -1112,6 +1125,7 @@ fn ingress_history_respects_limits() {
                 test_status_terminal(i),
                 Time::from_nanos_since_unix_epoch(i),
                 terminal_size,
+                |_| {},
             );
 
             let terminal_count = ingress_history
@@ -1170,13 +1184,18 @@ fn ingress_history_insert_before_next_complete_time_resets_it() {
             test_status_terminal(i),
             Time::from_nanos_since_unix_epoch(i),
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
 
     // ... and trigger forgetting terminal statuses with a limit sufficient
     // for 5 non-terminal entries
     let status_size = NumBytes::from(5 * test_status_terminal(0).payload_bytes() as u64);
-    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(
+        status_size,
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
 
     // ... which should lead to the next_terminal_time pointing to 6 + TTL.
     assert_eq!(
@@ -1190,6 +1209,7 @@ fn ingress_history_insert_before_next_complete_time_resets_it() {
         test_status_terminal(11),
         Time::from_nanos_since_unix_epoch(3),
         NumBytes::from(u64::MAX),
+        |_| {},
     );
 
     // ... should lead to resetting the next_terminal_time to 3 + TTL.
@@ -1201,7 +1221,11 @@ fn ingress_history_insert_before_next_complete_time_resets_it() {
     // At this point forgetting terminal statuses with a limit sufficient
     // for 5 statuses should lead to "forgetting" the terminal status
     // we just inserted above.
-    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(
+        status_size,
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
 
     let expected_forgotten = ingress_history.get(&message_test_id(11)).unwrap();
 
@@ -1231,13 +1255,18 @@ fn ingress_history_forget_behaves_the_same_with_reset_next_complete_time() {
             test_status_terminal(i),
             Time::from_nanos_since_unix_epoch(i),
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
 
     // ... and trigger forgetting terminal statuses with a limit sufficient
     // for 5 non-terminal entries
     let status_size = NumBytes::from(5 * test_status_terminal(0).payload_bytes() as u64);
-    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(
+        status_size,
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
 
     // ... which should lead to the next_terminal_time pointing to 6 + TTL.
     assert_eq!(
@@ -1260,18 +1289,28 @@ fn ingress_history_forget_behaves_the_same_with_reset_next_complete_time() {
         test_status_terminal(11),
         Time::from_nanos_since_unix_epoch(3),
         NumBytes::from(u64::MAX),
+        |_| {},
     );
     ingress_history_reset.insert(
         message_test_id(11),
         test_status_terminal(11),
         Time::from_nanos_since_unix_epoch(3),
         NumBytes::from(u64::MAX),
+        |_| {},
     );
 
     // ... and trigger forgetting terminal statuses with a limit sufficient
     // for 5 non-terminal entries
-    ingress_history.forget_terminal_statuses(status_size);
-    ingress_history_reset.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(
+        status_size,
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
+    ingress_history_reset.forget_terminal_statuses(
+        status_size,
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
 
     // ... which should bring both versions of the ingress history in the
     // same state.
@@ -1291,13 +1330,18 @@ fn ingress_history_roundtrip_encode() {
             test_status_terminal(i),
             Time::from_nanos_since_unix_epoch(i),
             NumBytes::from(u64::MAX),
+            |_| {},
         );
     }
 
     // ... and trigger forgetting terminal statuses with a limit sufficient
     // for 5 non-terminal entries
     let status_size = NumBytes::from(5 * test_status_terminal(0).payload_bytes() as u64);
-    ingress_history.forget_terminal_statuses(status_size);
+    ingress_history.forget_terminal_statuses(
+        status_size,
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
 
     let ingress_history_proto = pb::IngressHistoryState::from(&ingress_history);
 
@@ -1343,6 +1387,7 @@ fn ingress_history_split() {
                     },
                     time,
                     NumBytes::from(u64::MAX),
+                    |_| {},
                 );
             }
         }
@@ -1352,7 +1397,11 @@ fn ingress_history_split() {
     // We should have 10 messages, 5 for each canister.
     assert_eq!(10, ingress_history.len());
     // Bump `next_terminal_time` to the time of the oldest terminal state (canister_1, Completed).
-    ingress_history.forget_terminal_statuses(NumBytes::from(u64::MAX));
+    ingress_history.forget_terminal_statuses(
+        NumBytes::from(u64::MAX),
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
     assert_ne!(
         0,
         ingress_history
@@ -1380,7 +1429,11 @@ fn ingress_history_split() {
     // We should only have 8 messages, 3 terminal ones for canister_1 and 5 for canister_2.
     assert_eq!(8, expected.len());
     // Bump `next_terminal_time` to the time of the oldest terminal state (canister_1, Completed).
-    expected.forget_terminal_statuses(NumBytes::from(u64::MAX));
+    expected.forget_terminal_statuses(
+        NumBytes::from(u64::MAX),
+        Time::from_nanos_since_unix_epoch(0),
+        |_| {},
+    );
 
     ingress_history.prune_after_split(is_local_canister);
     assert_eq!(expected, ingress_history);
@@ -1823,6 +1876,15 @@ fn compatibility_for_reject_reason() {
             .collect::<Vec<i32>>(),
         [1, 2, 3, 4, 5, 6, 7]
     );
+}
+
+#[test]
+fn refund_proto_roundtrip() {
+    let initial = Refund::anonymous(*LOCAL_CANISTER, Cycles::new(1_000_000));
+    let encoded = pb_queues::Refund::from(&initial);
+    let round_trip = Refund::try_from(encoded).unwrap();
+
+    assert_eq!(initial, round_trip);
 }
 
 #[test]

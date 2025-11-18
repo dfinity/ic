@@ -37,7 +37,7 @@ use reqwest::{StatusCode, Url};
 use serde::{Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use slog::Level;
-use std::fs::{File, read_dir};
+use std::fs::read_dir;
 use std::future::Future;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
@@ -128,6 +128,7 @@ impl PocketIc {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn from_components(
         subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
         server_url: Option<Url>,
@@ -138,6 +139,7 @@ impl PocketIc {
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
@@ -154,10 +156,7 @@ impl PocketIc {
             server_url
         };
 
-        let subnet_config_set = subnet_config_set
-            .into()
-            .try_with_icp_features(&icp_features)
-            .unwrap();
+        let subnet_config_set: ExtendedSubnetConfigSet = subnet_config_set.into();
 
         // copy the read-only state dir to the state dir
         // (creating an empty temp dir to serve as the state dir if no state dir is provided)
@@ -182,19 +181,6 @@ impl PocketIc {
             .expect("Failed to copy state directory");
         };
 
-        // now that we initialized the state dir, we check if it contains a topology file
-        let has_topology = state_dir
-            .as_ref()
-            .map(|state_dir| File::open(state_dir.state_dir().join("topology.json")).is_ok())
-            .unwrap_or_default();
-
-        // if there is no topology to fetch from the state dir,
-        // the topology will be derived from the provided subnet config set
-        // that we need to validate
-        if !has_topology {
-            subnet_config_set.validate().unwrap();
-        }
-
         let instance_config = InstanceConfig {
             subnet_config_set,
             http_gateway_config,
@@ -207,6 +193,7 @@ impl PocketIc {
             icp_config: Some(icp_config),
             log_level: log_level.map(|l| l.to_string()),
             bitcoind_addr,
+            dogecoind_addr,
             icp_features: Some(icp_features),
             incomplete_state: None,
             initial_time,
