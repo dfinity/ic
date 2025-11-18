@@ -10,6 +10,7 @@ import "types/v1/artifact.proto";
 import "types/v1/dkg.proto";
 import "types/v1/idkg.proto";
 import "types/v1/types.proto";
+import "registry/subnet/v1/subnet.proto";
 
 message CertificationMessage {
   oneof msg {
@@ -239,6 +240,16 @@ message GetIngressMessageInBlockRequest {
 
 message GetIngressMessageInBlockResponse {
   bytes ingress_message = 1;
+}
+
+message GetIDkgDealingInBlockRequest {
+  uint32 node_index = 1;
+  IDkgArtifactId dealing_id = 2;
+  ConsensusMessageId block_proposal_id = 3;
+}
+
+message GetIDkgDealingInBlockResponse {
+  registry.subnet.v1.IDkgSignedDealingTuple signed_dealing = 1;
 }
 
 message StrippedBlockProposal {

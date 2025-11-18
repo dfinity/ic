@@ -3,17 +3,17 @@ use ic_protobuf::{
     types::v1 as pb,
 };
 use ic_types::{
+    NodeIndex,
     artifact::ConsensusMessageId,
-    consensus::ConsensusMessageHash,
-    crypto::{CryptoHash, CryptoHashOf},
+    consensus::{ConsensusMessageHash, idkg::IDkgArtifactId},
+    crypto::{CryptoHash, CryptoHashOf, canister_threshold_sig::idkg::SignedIDkgDealing},
     messages::SignedRequestBytes,
 };
 
 use super::SignedIngressId;
 
-/// Parameters for the `/block/ingress/` rpc requests.
+/// Parameters for the `/block/ingress/rpc` requests.
 #[derive(Clone, Debug, PartialEq)]
-// FIXME(kpop): check that it's a block proposal indeed
 pub(crate) struct GetIngressMessageInBlockRequest {
     pub(crate) signed_ingress_id: SignedIngressId,
     pub(crate) block_proposal_id: ConsensusMessageId,
@@ -63,8 +63,8 @@ impl From<GetIngressMessageInBlockRequest> for pb::GetIngressMessageInBlockReque
     }
 }
 
-/// `/block/ingress/` rpc response.
-#[derive(Debug, PartialEq)]
+/// `/block/ingress/rpc` response.
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct GetIngressMessageInBlockResponse {
     pub(crate) serialized_ingress_message: SignedRequestBytes,
 }
@@ -83,6 +83,87 @@ impl From<GetIngressMessageInBlockResponse> for pb::GetIngressMessageInBlockResp
     fn from(value: GetIngressMessageInBlockResponse) -> Self {
         pb::GetIngressMessageInBlockResponse {
             ingress_message: value.serialized_ingress_message.into(),
+        }
+    }
+}
+
+/// Parameters for the `/block/idkg_dealing/rpc` requests.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct GetIDkgDealingInBlockRequest {
+    pub(crate) node_index: NodeIndex,
+    pub(crate) dealing_id: IDkgArtifactId,
+    pub(crate) block_proposal_id: ConsensusMessageId,
+}
+
+impl TryFrom<pb::GetIDkgDealingInBlockRequest> for GetIDkgDealingInBlockRequest {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::GetIDkgDealingInBlockRequest) -> Result<Self, Self::Error> {
+        let dealing_id =
+            try_from_option_field(value.dealing_id, "GetIDkgDealingInBlockRequest::dealing_id")?;
+        let consensus_message_id: ConsensusMessageId = try_from_option_field(
+            value.block_proposal_id,
+            "GetIDkgDealingInBlockRequest::block_proposal_id",
+        )?;
+
+        match &consensus_message_id.hash {
+            ConsensusMessageHash::BlockProposal(_) => {}
+            // if it's not block proposal => return an error;
+            _ => {
+                return Err(ProxyDecodeError::Other(String::from(
+                    "Not a BlockProposal consensus message id",
+                )));
+            }
+        };
+
+        match &dealing_id {
+            IDkgArtifactId::Dealing(_, _) => {}
+            // if it's not a dealing => return an error;
+            _ => {
+                return Err(ProxyDecodeError::Other(String::from(
+                    "Not a dealing artifact id",
+                )));
+            }
+        };
+
+        Ok(Self {
+            node_index: value.node_index,
+            block_proposal_id: consensus_message_id,
+            dealing_id,
+        })
+    }
+}
+
+impl From<GetIDkgDealingInBlockRequest> for pb::GetIDkgDealingInBlockRequest {
+    fn from(value: GetIDkgDealingInBlockRequest) -> Self {
+        Self {
+            node_index: value.node_index,
+            dealing_id: Some(value.dealing_id.into()),
+            block_proposal_id: Some(value.block_proposal_id.into()),
+        }
+    }
+}
+
+/// `/block/idkg_dealing/rpc` response.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct GetIDkgDealingInBlockResponse {
+    pub(crate) signed_dealing: SignedIDkgDealing,
+}
+
+impl TryFrom<pb::GetIDkgDealingInBlockResponse> for GetIDkgDealingInBlockResponse {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb::GetIDkgDealingInBlockResponse) -> Result<Self, Self::Error> {
+        Ok(Self {
+            signed_dealing: try_from_option_field(value.signed_dealing.as_ref(), "signed_dealing")?,
+        })
+    }
+}
+
+impl From<GetIDkgDealingInBlockResponse> for pb::GetIDkgDealingInBlockResponse {
+    fn from(value: GetIDkgDealingInBlockResponse) -> Self {
+        pb::GetIDkgDealingInBlockResponse {
+            signed_dealing: Some((&value.signed_dealing).into()),
         }
     }
 }
