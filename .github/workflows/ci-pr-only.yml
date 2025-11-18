@@ -37,6 +37,7 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
+            git fetch origin '${{ github.event.pull_request.base.ref }}'
             export DID_CHECK_REV="$(git rev-parse '${{ github.event.pull_request.base.ref }}')"
             echo "DID_CHECK_REV=$DID_CHECK_REV"
             bazel test //... \
