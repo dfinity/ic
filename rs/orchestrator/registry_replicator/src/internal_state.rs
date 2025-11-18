@@ -50,8 +50,8 @@ pub(crate) struct InternalState {
     registry_client: Arc<dyn RegistryClient>,
     local_store: Arc<dyn LocalStore>,
     latest_version: RegistryVersion,
-    nns_pub_key: Option<ThresholdSigPublicKey>,
     nns_urls: Vec<Url>,
+    nns_pub_key: Option<ThresholdSigPublicKey>,
     registry_canister: Option<Arc<RegistryCanister>>,
     registry_canister_fallback: Option<Arc<RegistryCanister>>,
     poll_delay: Duration,
@@ -64,13 +64,13 @@ impl InternalState {
         node_id: Option<NodeId>,
         registry_client: Arc<dyn RegistryClient>,
         local_store: Arc<dyn LocalStore>,
-        config_urls: Vec<Url>,
-        maybe_config_pub_key: Option<ThresholdSigPublicKey>,
+        config_nns_urls: Vec<Url>,
+        maybe_config_nns_pub_key: Option<ThresholdSigPublicKey>,
         poll_delay: Duration,
     ) -> Self {
-        let registry_canister_fallback = if !config_urls.is_empty() {
+        let registry_canister_fallback = if !config_nns_urls.is_empty() {
             Some(Arc::new(RegistryCanister::new_with_query_timeout(
-                config_urls,
+                config_nns_urls,
                 poll_delay,
             )))
         } else {
@@ -82,8 +82,8 @@ impl InternalState {
             registry_client,
             local_store,
             latest_version: ZERO_REGISTRY_VERSION,
-            nns_pub_key: maybe_config_pub_key,
             nns_urls: vec![],
+            nns_pub_key: maybe_config_nns_pub_key,
             registry_canister: None,
             registry_canister_fallback,
             poll_delay,
@@ -626,8 +626,8 @@ mod test {
             let local_store = Arc::new(LocalStoreImpl::new(tempdir.path()));
             let registry_client = Arc::new(FakeRegistryClient::new(local_store.clone()));
 
-            let config_urls = vec![Url::parse("http://fallback:1234").unwrap()];
-            let config_pub_key = create_threshold_sig_public_key(0);
+            let config_nns_urls = vec![Url::parse("http://fallback:1234").unwrap()];
+            let config_nns_pub_key = create_threshold_sig_public_key(0);
 
             // Initialize root subnet, public key and node record in the registry
             // The node endpoint is invalid on purpose to trigger failures.
@@ -693,14 +693,14 @@ mod test {
                 None,
                 Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
                 Arc::clone(&local_store) as Arc<dyn LocalStore>,
-                config_urls.clone(),
-                Some(config_pub_key),
+                config_nns_urls.clone(),
+                Some(config_nns_pub_key),
                 TEST_POLL_DELAY,
             );
 
             // Will first try to fetch from data found inside the registry
             let node_api_url = internal_state.http_endpoint_to_url(&http_endpoint).unwrap();
-            let fallback_url = &config_urls[0];
+            let fallback_url = &config_nns_urls[0];
             for _ in 0..MAX_CONSECUTIVE_FAILURES {
                 let result = internal_state.poll().await;
                 assert!(result.is_err_and(|err| {

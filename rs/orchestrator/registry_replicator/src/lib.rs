@@ -78,8 +78,8 @@ impl PollableRegistryClient for RegistryClientImpl {
 pub struct RegistryReplicator {
     logger: ReplicaLogger,
     node_id: Option<NodeId>,
-    fallback_nns_urls: Vec<Url>,
-    fallback_nns_pub_key: Option<ThresholdSigPublicKey>,
+    config_nns_urls: Vec<Url>,
+    config_nns_pub_key: Option<ThresholdSigPublicKey>,
     registry_client: Arc<dyn PollableRegistryClient>,
     local_store: Arc<dyn LocalStore>,
     started: Arc<AtomicBool>,
@@ -97,8 +97,8 @@ impl RegistryReplicator {
         local_store_path: P,
         poll_delay: Duration,
         metrics_registry: MetricsRegistry,
-        nns_urls: Vec<Url>,
-        nns_pub_key: Option<ThresholdSigPublicKey>,
+        config_nns_urls: Vec<Url>,
+        config_nns_pub_key: Option<ThresholdSigPublicKey>,
     ) -> Self {
         let local_store = Arc::new(LocalStoreImpl::new(&local_store_path));
         std::fs::create_dir_all(local_store_path)
@@ -106,8 +106,13 @@ impl RegistryReplicator {
 
         // Initialize the registry local store. Will not return if the nns is not
         // reachable.
-        Self::initialize_local_store(&logger, local_store.clone(), nns_urls.clone(), nns_pub_key)
-            .await;
+        Self::initialize_local_store(
+            &logger,
+            local_store.clone(),
+            config_nns_urls.clone(),
+            config_nns_pub_key,
+        )
+        .await;
 
         let registry_client = Arc::new(RegistryClientImpl::new(
             local_store.clone(),
@@ -127,8 +132,8 @@ impl RegistryReplicator {
         Self {
             logger,
             node_id,
-            fallback_nns_urls: nns_urls,
-            fallback_nns_pub_key: nns_pub_key,
+            config_nns_urls,
+            config_nns_pub_key,
             registry_client,
             local_store,
             started: Arc::new(AtomicBool::new(false)),
@@ -145,8 +150,8 @@ impl RegistryReplicator {
         logger: ReplicaLogger,
         local_store_path: P,
         poll_delay: Duration,
-        nns_urls: Vec<Url>,
-        nns_pub_key: Option<ThresholdSigPublicKey>,
+        config_nns_urls: Vec<Url>,
+        config_nns_pub_key: Option<ThresholdSigPublicKey>,
     ) -> Self {
         Self::new_impl(
             logger,
@@ -154,8 +159,8 @@ impl RegistryReplicator {
             local_store_path,
             poll_delay,
             MetricsRegistry::new(),
-            nns_urls,
-            nns_pub_key,
+            config_nns_urls,
+            config_nns_pub_key,
         )
         .await
     }
@@ -167,7 +172,8 @@ impl RegistryReplicator {
         node_id: Option<NodeId>,
         config: &Config,
     ) -> Self {
-        let (nns_urls, nns_pub_key) = Self::parse_registry_access_info_from_config(&logger, config);
+        let (config_nns_urls, config_nns_pub_key) =
+            Self::parse_registry_access_info_from_config(&logger, config);
 
         Self::new_impl(
             logger,
@@ -175,8 +181,8 @@ impl RegistryReplicator {
             &config.registry_client.local_store,
             Duration::from_millis(config.nns_registry_replicator.poll_delay_duration_ms),
             MetricsRegistry::global(),
-            nns_urls,
-            nns_pub_key,
+            config_nns_urls,
+            config_nns_pub_key,
         )
         .await
     }
@@ -335,8 +341,8 @@ impl RegistryReplicator {
             self.node_id,
             self.registry_client.clone(),
             self.local_store.clone(),
-            self.fallback_nns_urls.clone(),
-            self.fallback_nns_pub_key,
+            self.config_nns_urls.clone(),
+            self.config_nns_pub_key,
             self.poll_delay,
         );
 
@@ -396,8 +402,8 @@ impl RegistryReplicator {
             self.node_id,
             self.registry_client.clone(),
             self.local_store.clone(),
-            self.fallback_nns_urls.clone(),
-            self.fallback_nns_pub_key,
+            self.config_nns_urls.clone(),
+            self.config_nns_pub_key,
             self.poll_delay,
         )
         .poll()
