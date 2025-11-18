@@ -9,9 +9,25 @@ use ratatui::{
 use crate::{App, Field, RecoveryParams};
 use anyhow::Result;
 
+// ============================================================================
+// Constants
+// ============================================================================
+
 // Terminal size constants
 const MIN_TERMINAL_WIDTH: u16 = 10;
 const MIN_TERMINAL_HEIGHT: u16 = 15;
+
+// UI layout constants
+pub(crate) const TEXT_PADDING: u16 = 4; // Padding for text display
+const MIN_BOX_WIDTH: u16 = 60;
+const BOX_HEIGHT: u16 = 5;
+const BORDER_PADDING: u16 = 4;
+const STATUS_SCREEN_OVERHEAD: u16 = 10;
+const COMPLETION_SCREEN_OVERHEAD: u16 = 16;
+
+// ============================================================================
+// Terminal Validation
+// ============================================================================
 
 fn is_terminal_too_small(size: Rect) -> bool {
     size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT
@@ -30,13 +46,9 @@ pub(crate) fn validate_terminal_size(size: Rect) -> Result<()> {
     Ok(())
 }
 
-// UI layout constants
-pub(crate) const TEXT_PADDING: u16 = 4; // Padding for text display
-const MIN_BOX_WIDTH: u16 = 60;
-const BOX_HEIGHT: u16 = 5;
-const BORDER_PADDING: u16 = 4;
-const STATUS_SCREEN_OVERHEAD: u16 = 10;
-const COMPLETION_SCREEN_OVERHEAD: u16 = 16;
+// ============================================================================
+// Main UI Rendering
+// ============================================================================
 
 /// Renders the main UI for the App
 pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
@@ -173,6 +185,10 @@ pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
     }
 }
 
+// ============================================================================
+// Component Rendering Functions
+// ============================================================================
+
 fn render_input_field(
     app: &App,
     f: &mut Frame,
@@ -210,70 +226,9 @@ fn render_button(app: &App, f: &mut Frame, text: &str, field: Field, area: Rect)
     f.render_widget(para, area);
 }
 
-/// Creates the parameter display lines for the UI
-pub(crate) fn create_parameter_lines(params: &RecoveryParams) -> Vec<Line<'_>> {
-    vec![
-        Line::from("Parameters:"),
-        Line::from(format!("  VERSION: {}", params.version)),
-        Line::from(format!("  VERSION-HASH: {}", params.version_hash)),
-        Line::from(format!("  RECOVERY-HASH: {}", params.recovery_hash)),
-    ]
-}
-
-pub(crate) fn calculate_log_viewport(
-    total_lines: usize,
-    available_height: usize,
-) -> (usize, usize) {
-    let lines_to_show = total_lines.min(available_height);
-    let start_idx = total_lines.saturating_sub(lines_to_show);
-    (start_idx, lines_to_show)
-}
-
-pub(crate) fn truncate_line(line: &str, max_width: usize) -> String {
-    if line.len() > max_width {
-        format!("{}...", &line[..max_width.saturating_sub(3)])
-    } else {
-        line.to_string()
-    }
-}
-
-/// Formats log lines with indentation and truncation for display.
-#[allow(mismatched_lifetime_syntaxes)]
-fn format_log_lines(lines: &[String], max_width: usize) -> Vec<Line> {
-    lines
-        .iter()
-        .map(|line| Line::from(format!("  {}", truncate_line(line, max_width))))
-        .collect()
-}
-
-fn create_separator(width: u16) -> String {
-    "─".repeat((width.saturating_sub(TEXT_PADDING)).max(10) as usize)
-}
-
-/// Creates a bordered block with a title and optional styling.
-#[allow(mismatched_lifetime_syntaxes)]
-fn create_bordered_block(title: &str, style: Option<Style>) -> Block {
-    let mut block = Block::default().borders(Borders::ALL).title(title);
-    if let Some(s) = style {
-        block = block.style(s);
-    }
-    block
-}
-
-/// Renders a text block (paragraph) with a block border, alignment, and text wrapping.
-fn render_text_block(
-    f: &mut Frame,
-    text: Vec<Line>,
-    block: Block,
-    area: Rect,
-    alignment: Alignment,
-) {
-    let para = Paragraph::new(text)
-        .block(block)
-        .alignment(alignment)
-        .wrap(Wrap { trim: true });
-    f.render_widget(para, area);
-}
+// ============================================================================
+// Screen Rendering Functions
+// ============================================================================
 
 /// Draws the initial status screen showing parameters and "Starting recovery..." message
 pub(crate) fn draw_status_screen(f: &mut Frame, params: &RecoveryParams) {
@@ -447,4 +402,74 @@ pub(crate) fn draw_completion_screen(
     text.push(Line::from("Press any key to continue..."));
 
     render_text_block(f, text, block, size, Alignment::Left);
+}
+
+// ============================================================================
+// UI Utility Functions
+// ============================================================================
+
+/// Creates the parameter display lines for the UI
+pub(crate) fn create_parameter_lines(params: &RecoveryParams) -> Vec<Line<'_>> {
+    vec![
+        Line::from("Parameters:"),
+        Line::from(format!("  VERSION: {}", params.version)),
+        Line::from(format!("  VERSION-HASH: {}", params.version_hash)),
+        Line::from(format!("  RECOVERY-HASH: {}", params.recovery_hash)),
+    ]
+}
+
+pub(crate) fn calculate_log_viewport(
+    total_lines: usize,
+    available_height: usize,
+) -> (usize, usize) {
+    let lines_to_show = total_lines.min(available_height);
+    let start_idx = total_lines.saturating_sub(lines_to_show);
+    (start_idx, lines_to_show)
+}
+
+/// Truncates a line to fit within the maximum width, appending "..." if needed
+pub(crate) fn truncate_line(line: &str, max_width: usize) -> String {
+    if line.len() > max_width {
+        format!("{}...", &line[..max_width.saturating_sub(3)])
+    } else {
+        line.to_string()
+    }
+}
+
+/// Formats log lines with indentation and truncation for display.
+#[allow(mismatched_lifetime_syntaxes)]
+fn format_log_lines(lines: &[String], max_width: usize) -> Vec<Line> {
+    lines
+        .iter()
+        .map(|line| Line::from(format!("  {}", truncate_line(line, max_width))))
+        .collect()
+}
+
+fn create_separator(width: u16) -> String {
+    "─".repeat((width.saturating_sub(TEXT_PADDING)).max(10) as usize)
+}
+
+/// Creates a bordered block with a title and optional styling.
+#[allow(mismatched_lifetime_syntaxes)]
+fn create_bordered_block(title: &str, style: Option<Style>) -> Block {
+    let mut block = Block::default().borders(Borders::ALL).title(title);
+    if let Some(s) = style {
+        block = block.style(s);
+    }
+    block
+}
+
+/// Renders a text block (paragraph) with a block border, alignment, and text wrapping.
+fn render_text_block(
+    f: &mut Frame,
+    text: Vec<Line>,
+    block: Block,
+    area: Rect,
+    alignment: Alignment,
+) {
+    let para = Paragraph::new(text)
+        .block(block)
+        .alignment(alignment)
+        .wrap(Wrap { trim: true });
+    f.render_widget(para, area);
 }

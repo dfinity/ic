@@ -15,6 +15,10 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+// ============================================================================
+// Constants
+// ============================================================================
+
 // Field length constants
 const VERSION_LENGTH: usize = 40; // Git commit hash length (hex characters)
 const HASH_LENGTH: usize = 64; // SHA256 hash length (hex characters)
@@ -22,6 +26,10 @@ const HASH_LENGTH: usize = 64; // SHA256 hash length (hex characters)
 // Process monitoring constants
 const MAX_ERROR_LINES: usize = 30; // Maximum number of error lines to display
 const PROCESS_POLL_INTERVAL_MS: u64 = 100; // Polling interval for process monitoring
+
+// ============================================================================
+// Terminal Management
+// ============================================================================
 
 fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode().context("Failed to enable raw mode")?;
@@ -44,7 +52,7 @@ fn teardown_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> R
     Ok(())
 }
 
-// Guard struct to ensure terminal cleanup on panic
+/// Guard struct to ensure terminal cleanup on panic
 struct TerminalGuard {
     terminal: Option<Terminal<CrosstermBackend<io::Stdout>>>,
 }
@@ -69,6 +77,10 @@ impl Drop for TerminalGuard {
     }
 }
 
+// ============================================================================
+// Command Building
+// ============================================================================
+
 fn build_upgrader_command(params: &RecoveryParams) -> Command {
     let mut cmd = Command::new("sudo");
     cmd.arg("-n")
@@ -78,6 +90,10 @@ fn build_upgrader_command(params: &RecoveryParams) -> Command {
         .arg(format!("recovery-hash={}", params.recovery_hash));
     cmd
 }
+
+// ============================================================================
+// Types and Data Structures
+// ============================================================================
 
 enum InputResult {
     Continue,
@@ -405,6 +421,10 @@ impl App {
     }
 }
 
+// ============================================================================
+// Process and Log Monitoring
+// ============================================================================
+
 /// Parses log lines from bytes, filtering out empty lines
 fn parse_log_lines(bytes: &[u8]) -> Vec<String> {
     String::from_utf8_lossy(bytes)
@@ -536,6 +556,10 @@ fn extract_errors_from_logs(stdout_lines: &[String], stderr_lines: &[String]) ->
         Vec::new()
     }
 }
+
+// ============================================================================
+// Main Execution
+// ============================================================================
 
 /// Displays a status screen and runs the recovery upgrader script with the given parameters.
 /// Shows real-time logs and a completion screen with results.
