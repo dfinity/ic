@@ -6,20 +6,22 @@ use crate::canister_state::system_state::log_memory_store::{
 use crate::page_map::PAGE_SIZE;
 use ic_management_canister_types_private::FetchCanisterLogsFilter;
 
+/// Sentinel value for invalid index entries.
 const INVALID_INDEX_ENTRY: u64 = u64::MAX;
 
-/// A single index entry representing a segment in the data region.
-/// Stores the position of the newest log record in its segment.
+/// Lightweight pointer to a single log record used by the index table.
+/// Holds the record `idx` (unique increasing id), its `timestamp` and the
+/// `position` inside the data region where the record header begins.
 #[derive(Debug, Clone, Copy)]
 pub struct IndexEntry {
-    pub idx: u64,                 // Incremental ID of the record.
-    pub timestamp: u64,           // Timestamp in nanoseconds.
-    pub position: MemoryPosition, // Offset in the data region of the newest record.
+    pub idx: u64,
+    pub timestamp: u64,
+    pub position: MemoryPosition,
 }
-
-// TODO: assert IndexEntry size.
+const _: () = assert!(std::mem::size_of::<IndexEntry>() == INDEX_ENTRY_SIZE.get() as usize);
 
 impl IndexEntry {
+    /// Creates an `IndexEntry` pointing to `position` for `record`.
     pub fn new(position: MemoryPosition, record: &LogRecord) -> Self {
         Self {
             idx: record.idx,
@@ -28,6 +30,7 @@ impl IndexEntry {
         }
     }
 
+    /// Creates an explicitly invalid entry, used to initialize empty slots.
     fn invalid() -> Self {
         Self {
             idx: INVALID_INDEX_ENTRY,
@@ -36,22 +39,37 @@ impl IndexEntry {
         }
     }
 
+    /// True when this entry contains a valid pointer to a record.
     fn is_valid(&self) -> bool {
         self.idx != INVALID_INDEX_ENTRY
     }
 }
 
-/// Index table structure mapping segments of the data region to IndexEntry elements.
+/// Index table used to speed up searches in the log’s data region.
+///
+/// The data region is a large ring buffer that stores log records. Because only
+/// the head and tail positions are known, scanning the buffer to locate a
+/// specific record would normally require reading many records sequentially.
+///
+/// The index table solves this by dividing the data region into fixed-size
+/// segments. Each segment has an `IndexEntry` pointing to the most recent record
+/// written in that segment. The table also tracks the position of the oldest
+/// live record (`front`).
+///
+/// Together, these entries let the system quickly determine which parts of the
+/// ring buffer may contain records of interest, reducing the amount of data
+/// that must be read during large or targeted searches.
 #[derive(Debug)]
 pub struct IndexTable {
-    pub front: Option<IndexEntry>, // Position of the oldest live record.
-    pub entries: Vec<IndexEntry>,  // Array of entries covering all segments.
-    pub segment_size: MemorySize,  // Size of each segment in bytes.
+    pub front: Option<IndexEntry>, // Position of the oldest live log record.
+    pub entries: Vec<IndexEntry>,  // Array of entries covering all data region segments.
+    pub segment_size: MemorySize,  // Size of each data region segment in bytes.
     pub data_capacity: MemorySize, // Total capacity of the data region.
 }
 
 impl IndexTable {
-    /// Creates a new IndexTable with all entries invalid and segment size calculated.
+    /// Creates a table that partitions the data region into fixed-size segments.
+    /// If no entries are provided, all segments start out invalid.
     pub fn new(
         front: Option<IndexEntry>, // front might be empty if there are no log records yet.
         data_capacity: MemorySize,
@@ -79,13 +97,22 @@ impl IndexTable {
         }
     }
 
-    /// Updates the last record in the corresponding segment.
+    /// Records the most recent log entry associated with the segment that contains `position`.
+    ///
+    /// This operation assumes that log records arrive strictly in increasing `idx` order —
+    /// meaning each update corresponds to a newer record than any previously stored one.
+    /// Because segments keep only the newest record, providing an out-of-order record would
+    /// silently overwrite newer data and corrupt segment ordering.
+    ///
+    /// IMPORTANT: callers must guarantee monotonic `idx` progression.
     pub fn update(&mut self, position: MemoryPosition, record: &LogRecord) {
         if let Some(index) = self.segment_index(position) {
             self.entries[index] = IndexEntry::new(position, record);
         }
     }
 
+    /// Map a data-region position to its segment index, or return `None` if
+    /// the position falls outside the table’s layout.
     fn segment_index(&self, position: MemoryPosition) -> Option<usize> {
         let segment_size = self.segment_size.get();
         if segment_size == 0 {
@@ -95,7 +122,8 @@ impl IndexTable {
         (idx < self.entries.len()).then_some(idx)
     }
 
-    /// Returns a vector of valid entries sorted by idx for coarse searching.
+    /// Return all valid entries at or after `front`, sorted by increasing idx.
+    /// Used to narrow down searches without scanning the entire region.
     pub fn valid_sorted_entries(&self) -> Vec<IndexEntry> {
         let front = match self.front {
             None => return vec![], // No entries if front is None.
@@ -114,7 +142,8 @@ impl IndexTable {
         entries
     }
 
-    /// Returns the coarse range of index entries [start, end] for the given filter.
+    /// Compute a coarse `[start, end]` inclusive entry range that bounds the query
+    /// described by `filter`, minimizing how much of the ring must be scanned.
     pub fn get_coarse_range(
         &self,
         filter: Option<FetchCanisterLogsFilter>,
@@ -175,13 +204,21 @@ impl IndexTable {
                 let start = find_start_by_key(range.start, |e| e.idx);
                 let end = find_end_by_key(range.end, |e| e.idx);
                 let subset = filter_by_idx(&entries, start.idx, end.idx);
-                (start, clamp_end_by_size(&subset, size_limit))
+                if subset.is_empty() {
+                    (start, end)
+                } else {
+                    (start, clamp_end_by_size(&subset, size_limit))
+                }
             }
             Some(FetchCanisterLogsFilter::ByTimestampNanos(range)) => {
                 let start = find_start_by_key(range.start, |e| e.timestamp);
                 let end = find_end_by_key(range.end, |e| e.timestamp);
                 let subset = filter_by_idx(&entries, start.idx, end.idx);
-                (start, clamp_end_by_size(&subset, size_limit))
+                if subset.is_empty() {
+                    (start, end)
+                } else {
+                    (start, clamp_end_by_size(&subset, size_limit))
+                }
             }
             None => {
                 let mut start = entries.first().unwrap();
@@ -199,7 +236,7 @@ impl IndexTable {
         Some((start, end))
     }
 
-    /// Calculates the distance between two memory positions in the ring buffer.
+    /// Calculates forward distance between two positions in the ring, handles wraparound.
     fn distance(&self, from: MemoryPosition, to: MemoryPosition) -> MemorySize {
         if to >= from {
             to - from // no wrap
