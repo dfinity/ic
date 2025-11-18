@@ -1,7 +1,7 @@
-use std::cmp::max;
 use crate::lifecycle::init::Network;
-use ic_ckbtc_minter::{MillisatoshiPerByte, Satoshi};
-use ic_ckbtc_minter::fees::FeeEstimator;
+use crate::tx::UnsignedTransaction;
+use ic_ckbtc_minter::{MillisatoshiPerByte, Satoshi, fees::FeeEstimator};
+use std::cmp::max;
 
 pub struct Koinu(u64);
 
@@ -44,7 +44,7 @@ impl FeeEstimator for DogecoinFeeEstimator {
     /// ```text
     /// 1.46 DOGE * num_inputs + 0.04 DOGE * num_outputs + 0.26 DOGE,
     /// ```
-    fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> Satoshi {
+    fn evaluate_minter_fee(&self, num_inputs: u64, num_outputs: u64) -> Satoshi {
         //in Koinu
         const MINTER_FEE_PER_INPUT: u64 = 146_000_000;
         //in Koinu
@@ -83,5 +83,8 @@ impl FeeEstimator for DogecoinFeeEstimator {
             }
             Network::Regtest => self.retrieve_doge_min_amount,
         }
+    }
+    fn evaluate_transaction_fee(&self, _: &UnsignedTransaction, _: u64) -> u64 {
+        todo!()
     }
 }

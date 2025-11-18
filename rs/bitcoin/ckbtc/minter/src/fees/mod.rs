@@ -1,5 +1,6 @@
-use crate::Network;
 use crate::state::CkBtcMinterState;
+use crate::tx::UnsignedTransaction;
+use crate::{Network, fake_sign};
 use ic_btc_interface::{MillisatoshiPerByte, Satoshi};
 use std::cmp::max;
 
@@ -10,8 +11,11 @@ pub trait FeeEstimator {
     ) -> Option<MillisatoshiPerByte>;
 
     /// Evaluate the fee necessary to cover the minter's cycles consumption.
-    fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> Satoshi;
+    fn evaluate_minter_fee(&self, num_inputs: u64, num_outputs: u64) -> Satoshi;
 
+    fn evaluate_transaction_fee(&self, tx: &UnsignedTransaction, fee_rate: u64) -> u64;
+
+    // move to CanisterRuntime
     fn minimum_withrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi;
 }
 
@@ -62,7 +66,7 @@ impl FeeEstimator for BitcoinFeeEstimator {
         median_fee.map(|f| f.max(self.minimum_fee_per_vbyte()))
     }
 
-    fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> u64 {
+    fn evaluate_minter_fee(&self, num_inputs: u64, num_outputs: u64) -> u64 {
         const MINTER_FEE_PER_INPUT: u64 = 146;
         const MINTER_FEE_PER_OUTPUT: u64 = 4;
         const MINTER_FEE_CONSTANT: u64 = 26;
@@ -96,5 +100,14 @@ impl FeeEstimator for BitcoinFeeEstimator {
             }
             Network::Regtest => self.retrieve_btc_min_amount,
         }
+    }
+
+    fn evaluate_transaction_fee(
+        &self,
+        unsigned_tx: &UnsignedTransaction,
+        fee_per_vbyte: u64,
+    ) -> u64 {
+        let tx_vsize = fake_sign(unsigned_tx).vsize();
+        (tx_vsize as u64 * fee_per_vbyte) / 1000
     }
 }
