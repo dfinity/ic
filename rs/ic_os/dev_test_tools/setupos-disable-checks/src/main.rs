@@ -11,11 +11,6 @@ use tokio::fs;
 
 use partition_tools::{Partition, ext::ExtPartition};
 
-const CHECK_DISABLER_CMDLINE_ARGS: [&str; 3] = [
-    "ic.setupos.check_hardware",
-    "ic.setupos.check_network",
-    "ic.setupos.check_age",
-];
 const SERVICE_NAME: &str = "setupos-disable-checks";
 
 #[derive(Parser)]
@@ -56,11 +51,9 @@ fn munge(
         ),
     };
 
-    for arg in CHECK_DISABLER_CMDLINE_ARGS.iter() {
-        boot_args
-            .ensure_single_argument(arg, defeat_setup_checks.then_some("0"))
-            .unwrap();
-    }
+    boot_args
+        .ensure_single_argument("ic.setupos.run_checks", defeat_setup_checks.then_some("0"))
+        .unwrap();
 
     let boot_args_str: String = boot_args.into();
 
@@ -123,7 +116,7 @@ mod tests {
                 true,
                 r#"# This file has been modified by setupos-disable-checks.
 # This file contains nothing.
-BOOT_ARGS="ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0"
+BOOT_ARGS="ic.setupos.run_checks=0"
 "#,
             ),
             (
@@ -135,7 +128,7 @@ BOOT_ARGS="security=selinux selinux=1 enforcing=0"
                 true,
                 r#"# This file has been modified by setupos-disable-checks.
 # Hello hello.
-BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0"
+BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks=0"
 # Postfix.
 "#,
             ),
@@ -145,25 +138,25 @@ BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic
 "#,
                 true,
                 r#"# This file has been modified by setupos-disable-checks.
-BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0"
+BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks=0"
 "#,
             ),
             (
                 "checks are prevented from being defeated",
-                r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0"
+                r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks=0"
 "#,
                 false,
                 r#"# This file has been modified by setupos-disable-checks.
-BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware ic.setupos.check_network ic.setupos.check_age"
+BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks"
 "#,
             ),
             (
                 "variables for defeat checks are set",
-                r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_age"
+                r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks"
 "#,
                 true,
                 r#"# This file has been modified by setupos-disable-checks.
-BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.check_hardware=0 ic.setupos.check_age=0 ic.setupos.check_network=0"
+BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks=0"
 "#,
             ),
         ];

@@ -300,7 +300,7 @@ function verify_sev_snp() {
 
 main() {
     log_start "$(basename $0)"
-    if kernel_cmdline_bool_default_true ic.setupos.check_hardware; then
+    if kernel_cmdline_bool_default_true ic.setupos.run_checks; then
         detect_hardware_generation
         verify_cpu
         verify_memory
