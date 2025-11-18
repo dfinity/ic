@@ -9,34 +9,11 @@ use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::Rect};
+use ratatui::{Frame, Terminal, backend::CrosstermBackend};
 use std::io::{self, BufRead, BufReader, Read};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
-
-// Terminal size constants
-pub(crate) const MIN_TERMINAL_WIDTH: u16 = 10;
-pub(crate) const MIN_TERMINAL_HEIGHT: u16 = 15;
-
-/// Checks if the terminal size is too small for the UI
-pub(crate) fn is_terminal_too_small(size: Rect) -> bool {
-    size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT
-}
-
-/// Validates terminal size and returns an error if too small
-fn validate_terminal_size(size: Rect) -> Result<()> {
-    if is_terminal_too_small(size) {
-        anyhow::bail!(
-            "Terminal too small: {}x{} (minimum: {}x{}). Please resize your terminal.",
-            size.width,
-            size.height,
-            MIN_TERMINAL_WIDTH,
-            MIN_TERMINAL_HEIGHT
-        );
-    }
-    Ok(())
-}
 
 // Field length constants
 const VERSION_LENGTH: usize = 40; // Git commit hash length (hex characters)
@@ -307,7 +284,7 @@ impl App {
         let mut terminal_guard = TerminalGuard::new(terminal);
 
         let test_size = terminal_guard.get_mut().size()?;
-        if let Err(e) = validate_terminal_size(test_size) {
+        if let Err(e) = ui::validate_terminal_size(test_size) {
             return Self::teardown_and_error(terminal_guard, e, || {
                 "Terminal size validation failed".to_string()
             });

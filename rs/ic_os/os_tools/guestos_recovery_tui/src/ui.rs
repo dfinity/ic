@@ -6,9 +6,29 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
-use crate::{
-    App, Field, MIN_TERMINAL_HEIGHT, MIN_TERMINAL_WIDTH, RecoveryParams, is_terminal_too_small,
-};
+use crate::{App, Field, RecoveryParams};
+use anyhow::Result;
+
+// Terminal size constants
+const MIN_TERMINAL_WIDTH: u16 = 10;
+const MIN_TERMINAL_HEIGHT: u16 = 15;
+
+fn is_terminal_too_small(size: Rect) -> bool {
+    size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT
+}
+
+pub(crate) fn validate_terminal_size(size: Rect) -> Result<()> {
+    if is_terminal_too_small(size) {
+        anyhow::bail!(
+            "Terminal too small: {}x{} (minimum: {}x{}). Please resize your terminal.",
+            size.width,
+            size.height,
+            MIN_TERMINAL_WIDTH,
+            MIN_TERMINAL_HEIGHT
+        );
+    }
+    Ok(())
+}
 
 // UI layout constants
 pub(crate) const TEXT_PADDING: u16 = 4; // Padding for text display
