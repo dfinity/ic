@@ -68,6 +68,7 @@ type GetNodeProvidersRewardsCalculationResponse = variant { Ok: DailyResults; Er
 
 type GetNodeProvidersRewardsCalculationRequest = record {
   day: DateUtc;
+  algorithm_version: opt RewardsCalculationVersion;
 };
 
 // get_node_providers_rewards
