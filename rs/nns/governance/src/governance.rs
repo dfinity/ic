@@ -7860,7 +7860,7 @@ impl Governance {
                 Encode!(&GetNodeProvidersRewardsRequest {
                     from_day: start_date,
                     to_day: end_date,
-                    rewards_calculation_version: None
+                    algorithm_version: None
                 })
                 .unwrap(),
             )

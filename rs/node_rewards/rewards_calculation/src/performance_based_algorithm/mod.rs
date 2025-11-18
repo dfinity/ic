@@ -85,7 +85,7 @@ pub trait PerformanceBasedAlgorithmInputProvider {
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String>;
 }
 
-pub trait PerformanceBasedAlgorithm: AlgorithmVersion {
+trait PerformanceBasedAlgorithm: AlgorithmVersion {
     /// The percentile used to calculate the failure rate for a subnet.
     const SUBNET_FAILURE_RATE_PERCENTILE: f64;
 
@@ -139,6 +139,7 @@ pub trait PerformanceBasedAlgorithm: AlgorithmVersion {
         }
 
         Ok(RewardsCalculatorResults {
+            algorithm_version: Self::VERSION,
             total_rewards_xdr_permyriad,
             daily_results,
         })

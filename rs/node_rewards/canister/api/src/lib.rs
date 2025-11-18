@@ -10,11 +10,11 @@ use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
 use std::fmt::Display;
 
 #[derive(candid::CandidType, candid::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct RewardsCalculationVersion {
+pub struct RewardsCalculationAlgorithmVersion {
     pub version: u32,
 }
 
-impl Default for RewardsCalculationVersion {
+impl Default for RewardsCalculationAlgorithmVersion {
     fn default() -> Self {
         Self {
             version: RewardsCalculationV1::VERSION,

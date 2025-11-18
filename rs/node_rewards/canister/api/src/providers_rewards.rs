@@ -1,4 +1,4 @@
-use crate::{DateUtc, RewardsCalculationVersion};
+use crate::{DateUtc, RewardsCalculationAlgorithmVersion};
 use candid::{CandidType, Deserialize, Principal};
 use std::collections::BTreeMap;
 
@@ -6,12 +6,12 @@ use std::collections::BTreeMap;
 pub struct GetNodeProvidersRewardsRequest {
     pub from_day: DateUtc,
     pub to_day: DateUtc,
-    pub rewards_calculation_version: Option<RewardsCalculationVersion>,
+    pub algorithm_version: Option<RewardsCalculationAlgorithmVersion>,
 }
 pub type GetNodeProvidersRewardsResponse = Result<NodeProvidersRewards, String>;
 
 #[derive(CandidType, Deserialize, Debug, PartialEq)]
 pub struct NodeProvidersRewards {
     pub rewards_xdr_permyriad: BTreeMap<Principal, u64>,
-    pub rewards_calculation_version: RewardsCalculationVersion,
+    pub algorithm_version: RewardsCalculationAlgorithmVersion,
 }

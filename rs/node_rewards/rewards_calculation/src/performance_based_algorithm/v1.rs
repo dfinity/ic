@@ -1,7 +1,9 @@
 use crate::AlgorithmVersion;
+use crate::performance_based_algorithm::results::RewardsCalculatorResults;
 use crate::performance_based_algorithm::{
     PerformanceBasedAlgorithm, PerformanceBasedAlgorithmInputProvider,
 };
+use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 // ================================================================================================
@@ -35,6 +37,20 @@ impl PerformanceBasedAlgorithm for RewardsCalculationV1 {
 
 impl AlgorithmVersion for RewardsCalculationV1 {
     const VERSION: u32 = 1;
+}
+
+impl RewardsCalculationV1 {
+    pub fn calculate_rewards(
+        from_date: NaiveDate,
+        to_date: NaiveDate,
+        input_provider: impl PerformanceBasedAlgorithmInputProvider,
+    ) -> Result<RewardsCalculatorResults, String> {
+        <RewardsCalculationV1 as PerformanceBasedAlgorithm>::calculate_rewards(
+            from_date,
+            to_date,
+            input_provider,
+        )
+    }
 }
 
 #[cfg(test)]

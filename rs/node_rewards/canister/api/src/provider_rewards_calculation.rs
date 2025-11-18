@@ -1,5 +1,5 @@
 pub use crate::DateUtc;
-use crate::RewardsCalculationVersion;
+use crate::RewardsCalculationAlgorithmVersion;
 use candid::{CandidType, Deserialize};
 use ic_base_types::{PrincipalId, SubnetId};
 use std::collections::BTreeMap;
@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 #[derive(CandidType, Clone, Deserialize)]
 pub struct GetNodeProvidersRewardsCalculationRequest {
     pub day: DateUtc,
-    pub rewards_calculation_version: Option<RewardsCalculationVersion>,
+    pub algorithm_version: Option<RewardsCalculationAlgorithmVersion>,
 }
 
 // TODO: Remove useless level of indirection: https://github.com/dfinity/ic/pull/7071/files#r2406450031
