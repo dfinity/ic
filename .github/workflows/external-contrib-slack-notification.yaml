@@ -26,6 +26,6 @@ jobs:
         uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
         with:
           channel-id: eng-idx
-          slack-message: "External Contribution PR: <${{ github.event.pull_request.html_url }}|${{ steps.sanitize.outputs.safe_title }}>"
+          slack-message: "External Contribution: <${{ github.event.pull_request.html_url }}|${{ steps.sanitize.outputs.safe_title }}>"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
