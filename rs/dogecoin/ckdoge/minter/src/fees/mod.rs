@@ -3,8 +3,10 @@ use crate::tx::UnsignedTransaction;
 use ic_ckbtc_minter::{MillisatoshiPerByte, Satoshi, fees::FeeEstimator};
 use std::cmp::max;
 
-pub struct Koinu(u64);
-
+// TODO DEFI-2458: have proper domain design for handling units:
+// * fee rate (millistatoshis/vbyte or millikoinus/byte)
+// * base unit (satoshi or koinu)
+// * millis base unit (millisatoshis or millikoinus)
 pub struct DogecoinFeeEstimator {
     network: Network,
     retrieve_doge_min_amount: u64,
