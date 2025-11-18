@@ -52,17 +52,17 @@ spec:
             - {{ $.Values.icrcConfig.ledgerId | quote }}
             - "--store-file"
             - {{ $.Values.icrcConfig.storeFile | quote }}
-            {{- if $.Values.icrcConfig.sqliteCacheKb }}
+          {{- if $.Values.icrcConfig.sqliteCacheKb }}
             - "--sqlite-max-cache-kb"
             - {{ $.Values.icrcConfig.sqliteCacheKb | quote }}
-            {{- end }}
-            {{- if eq (toString $.Values.icrcConfig.flushCacheShrinkMem) "true" }}
+          {{- end }}
+          {{- if eq (toString $.Values.icrcConfig.flushCacheShrinkMem) "true" }}
             - "--flush-cache-shrink-mem"
-            {{- end }}
-            {{- if $.Values.icrcConfig.balanceSyncBatchSize }}
+          {{- end }}
+          {{- if $.Values.icrcConfig.balanceSyncBatchSize }}
             - "--balance-sync-batch-size"
             - {{ $.Values.icrcConfig.balanceSyncBatchSize | quote }}
-            {{- end }}
+          {{- end }}
           ports:
             - containerPort: {{ .containerPort }}
           volumeMounts:
@@ -80,7 +80,7 @@ spec:
       volumes:
         {{- range $.Values.volumes }}
         - name: {{ .name }}
-          emptyDir: {}
+          emptyDir: { }
         {{- end }}
 ---
 {{- end }}

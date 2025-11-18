@@ -14,7 +14,7 @@ use std::{
 };
 use tracing::warn;
 
-pub(crate) const BALANCE_SYNC_BATCH_SIZE_DEFAULT: u64 = 100_000;
+const BALANCE_SYNC_BATCH_SIZE_DEFAULT: u64 = 100_000;
 
 #[derive(Debug, Clone)]
 pub struct TokenInfo {
@@ -135,11 +135,8 @@ impl StorageClient {
         };
         let conn = storage_client.storage_connection.lock().unwrap();
 
-        // Configure foreign keys (pragma_update for settings that don't return results)
         conn.pragma_update(None, "foreign_keys", 1)?;
 
-        // Configure cache size if specified
-        // Negative values mean KB, positive values mean number of pages
         match cache_size_kb {
             None => {
                 tracing::info!("No cache size configured");

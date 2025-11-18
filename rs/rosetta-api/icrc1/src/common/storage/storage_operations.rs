@@ -408,11 +408,7 @@ pub fn update_account_balances(
 
         if flush_cache_and_shrink_memory {
             trace!("flushing cache and shrinking memory");
-            // Clear SQLite's prepared statement cache to release memory
-            // This is crucial for long-running syncs with many queries
             connection.cache_flush()?;
-
-            // Force SQLite to release memory
             connection.pragma_update(None, "shrink_memory", 1)?;
         }
 

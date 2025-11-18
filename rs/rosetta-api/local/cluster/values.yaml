@@ -74,6 +74,6 @@ cadvisor:
     type: ClusterIP
     port: 8080
 
-  nodeSelector: { }
+  nodeSelector: {}
   tolerations: []
-  affinity: { }
+  affinity: {}
