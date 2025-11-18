@@ -1,5 +1,5 @@
 use crate::address::BitcoinAddress;
-use crate::fees::{BitcoinFeeEstimator, FeeEstimator};
+use crate::fees::BitcoinFeeEstimator;
 use crate::lifecycle::init::InitArgs;
 use crate::queries::WithdrawalFee;
 use crate::{
@@ -166,11 +166,12 @@ pub fn build_unsigned_transaction(
 
 pub mod mock {
     use crate::CkBtcMinterState;
+    use crate::fees::BitcoinFeeEstimator;
     use crate::management::CallError;
     use crate::updates::update_balance::UpdateBalanceError;
     use crate::{
-        BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, FeeEstimator,
-        GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse, Network, tx,
+        BitcoinAddress, BtcAddressCheckStatus, CanisterRuntime, GetCurrentFeePercentilesRequest,
+        GetUtxosRequest, GetUtxosResponse, Network, tx,
     };
     use async_trait::async_trait;
     use candid::Principal;
@@ -187,6 +188,7 @@ pub mod mock {
 
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
+            type Fee = BitcoinFeeEstimator;
             fn caller(&self) -> Principal;
             fn id(&self) -> Principal;
             fn time(&self) -> u64;
@@ -197,7 +199,7 @@ pub mod mock {
             fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress;
             fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String;
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
-            fn fee_estimator(&self, state: &CkBtcMinterState) -> Box<dyn FeeEstimator>;
+            fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator;
             async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;

@@ -758,6 +758,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         None => return,
     };
     let key_name = state::read_state(|s| s.ecdsa_key_name.clone());
+    let fee_estimator = state::read_state(|s| runtime.fee_estimator(s));
     resubmit_transactions(
         &key_name,
         fee_per_vbyte,
@@ -773,6 +774,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
             })
         },
         runtime,
+        &fee_estimator,
     )
     .await
 }
@@ -781,6 +783,7 @@ pub async fn resubmit_transactions<
     R: CanisterRuntime,
     F: Fn(&OutPoint) -> Option<Account>,
     G: Fn(Txid, state::SubmittedBtcTransaction, state::eventlog::ReplacedReason),
+    Fee: FeeEstimator,
 >(
     key_name: &str,
     fee_per_vbyte: u64,
@@ -792,8 +795,8 @@ pub async fn resubmit_transactions<
     lookup_outpoint_account: F,
     replace_transaction: G,
     runtime: &R,
+    fee_estimator: &Fee,
 ) {
-    let fee_estimator = read_state(|s| runtime.fee_estimator(s));
     for (old_txid, submitted_tx) in transactions {
         let tx_fee_per_vbyte = match submitted_tx.fee_per_vbyte {
             Some(prev_fee) => {
@@ -822,7 +825,7 @@ pub async fn resubmit_transactions<
             outputs,
             main_address.clone(),
             tx_fee_per_vbyte,
-            &fee_estimator,
+            fee_estimator,
         ) {
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
@@ -855,7 +858,7 @@ pub async fn resubmit_transactions<
                     outputs,
                     main_address.clone(),
                     fee_per_vbyte, // Use normal fee
-                    &fee_estimator,
+                    fee_estimator,
                 )
             }
             result => result,
@@ -1412,6 +1415,9 @@ pub fn estimate_retrieve_btc_fee(
 
 #[async_trait]
 pub trait CanisterRuntime {
+    /// Type used to estimate fees.
+    type Fee: FeeEstimator;
+
     /// Returns the caller of the current call.
     fn caller(&self) -> Principal {
         ic_cdk::api::msg_caller()
@@ -1456,7 +1462,8 @@ pub trait CanisterRuntime {
     /// Returns the frequency at which fee percentiles are refreshed.
     fn refresh_fee_percentiles_frequency(&self) -> Duration;
 
-    fn fee_estimator(&self, state: &CkBtcMinterState) -> Box<dyn FeeEstimator>;
+    /// How to estimate fees.
+    fn fee_estimator(&self, state: &CkBtcMinterState) -> Self::Fee;
 
     /// Retrieves the current transaction fee percentiles.
     async fn get_current_fee_percentiles(
@@ -1507,13 +1514,15 @@ pub struct IcCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
+    type Fee = BitcoinFeeEstimator;
+
     fn refresh_fee_percentiles_frequency(&self) -> Duration {
         const ONE_HOUR: Duration = Duration::from_secs(3_600);
         ONE_HOUR
     }
 
-    fn fee_estimator(&self, state: &CkBtcMinterState) -> Box<dyn FeeEstimator> {
-        Box::new(BitcoinFeeEstimator::from_state(state))
+    fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator {
+        BitcoinFeeEstimator::from_state(state)
     }
 
     async fn get_current_fee_percentiles(

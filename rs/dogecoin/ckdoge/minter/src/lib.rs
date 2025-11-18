@@ -15,7 +15,6 @@ use async_trait::async_trait;
 use candid::Principal;
 pub use dogecoin_canister::get_dogecoin_canister_id;
 use ic_cdk::management_canister::SignWithEcdsaArgs;
-use ic_ckbtc_minter::fees::FeeEstimator;
 use ic_ckbtc_minter::{
     CanisterRuntime, CheckTransactionResponse, GetCurrentFeePercentilesRequest, GetUtxosRequest,
     GetUtxosResponse, management::CallError, state::CkBtcMinterState, tx,
@@ -43,8 +42,10 @@ pub struct DogeCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for DogeCanisterRuntime {
-    fn fee_estimator(&self, state: &CkBtcMinterState) -> Box<dyn FeeEstimator> {
-        Box::new(DogecoinFeeEstimator::from_state(state))
+    type Fee = DogecoinFeeEstimator;
+
+    fn fee_estimator(&self, state: &CkBtcMinterState) -> DogecoinFeeEstimator {
+        DogecoinFeeEstimator::from_state(state)
     }
 
     fn refresh_fee_percentiles_frequency(&self) -> Duration {
