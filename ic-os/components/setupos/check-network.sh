@@ -225,7 +225,7 @@ function query_nns_nodes() {
 # Establish run order
 main() {
     log_start "$(basename $0)"
-    if kernel_cmdline_bool_default_true ic.setupos.run_checks; then
+    if check_cmdline_var ic.setupos.run_checks; then
         check_generate_network_config
         read_config_variables
         get_network_settings
