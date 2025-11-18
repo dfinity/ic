@@ -37,10 +37,11 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
-            DID_CHECK_REV="$(git merge-base '${{ github.event.pull_request.base.sha }}' HEAD)" \
-              bazel test //... \
-                --build_tag_filters="didc" \
-                --test_tag_filters="didc"
+            export DID_CHECK_REV="$(git merge-base '${{ github.event.pull_request.base.sha }}' HEAD)"
+            echo "DID_CHECK_REV=$DID_CHECK_REV"
+            bazel test //... \
+              --build_tag_filters="didc" \
+              --test_tag_filters="didc"
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
   insta-tests:
