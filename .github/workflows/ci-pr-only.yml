@@ -29,15 +29,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # ensures we checkout out the latest base, which we
-          # compare against (pull_request.base.sha)
-          fetch-depth: 0
           ref: ${{ inputs.commit-sha }}
       - name: Run candid compatibility checks
         uses: ./.github/actions/bazel
         with:
           run: |
-            export DID_CHECK_REV="$(git rev-parse 'origin/${{ github.event.pull_request.base.ref }}')"
+            export DID_CHECK_REV="$(git rev-list HEAD ^${{ github.event.pull_request.head.sha }} --skip=1 -1)"
             echo "DID_CHECK_REV=$DID_CHECK_REV"
             bazel test //... \
               --build_tag_filters="didc" \
