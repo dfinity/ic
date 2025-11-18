@@ -520,32 +520,8 @@ fn monitor_process_with_logs(
     Ok((status, all_logs))
 }
 
-/// Extracts errors from stdout/stderr (tries explicit errors, then fallback to last N lines)
+/// Extracts errors from stdout/stderr
 fn extract_errors_from_logs(stdout_lines: &[String], stderr_lines: &[String]) -> Vec<String> {
-    // Try explicit errors first
-    let explicit_errors: Vec<String> = stdout_lines
-        .iter()
-        .chain(stderr_lines.iter())
-        .filter(|line| is_error_line(line))
-        .cloned()
-        .collect();
-
-    if !explicit_errors.is_empty() {
-        // Include debug context with explicit errors
-        let mut messages: Vec<String> = stdout_lines
-            .iter()
-            .filter(|line| {
-                (line.contains("Received") && line.contains("arguments"))
-                    || line.contains("Parsed VERSION")
-                    || line.contains("Parsed VERSION_HASH")
-            })
-            .cloned()
-            .collect();
-        messages.extend(explicit_errors);
-        return messages;
-    }
-
-    // Fallback: last N lines from stderr or stdout
     if !stderr_lines.is_empty() {
         let start = stderr_lines.len().saturating_sub(MAX_ERROR_LINES);
         stderr_lines[start..].to_vec()
