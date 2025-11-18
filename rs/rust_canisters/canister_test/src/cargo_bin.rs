@@ -79,11 +79,25 @@ impl Project {
             .unwrap_or_else(|| Self::new().cargo_bin(bin_name, features))
     }
 
-    /// this is largely equivalent to running
+    /// Compiles the given canister binary into a Wasm module and returns it. The
+    /// `bin_name` may be qualified with a package name using the syntax
+    /// `<package_name>:<bin_name>`.
+    ///
+    /// If installing the resulting Wasm module fails with "Module imports function
+    /// '__wbindgen_describe'", consider using the fully qualified canister name,
+    /// including the package name (i.e. "<package_name>:<bin_name>"). Without the
+    /// package name, `cargo` will build all dependencies with a superset of all
+    /// features used anywhere in the workspace.
+    ///
+    /// This is largely equivalent to running
     /// ```bash
-    /// cargo build --target wasm32-unknown-unknown --release \
-    ///   --manifest-path <cargo_manifest_dir>/Cargo.toml
-    ///   --target-dir <repo_root>/rs/target/wasm-cargo-bin
+    /// cargo build --target wasm32-unknown-unknown \
+    ///   --target-dir <repo_root>/target/wasm-cargo-bin \
+    ///   --profile canister-release \
+    ///   --manifest-path <cargo_manifest_dir>/Cargo.toml \
+    ///   [--package <package_name>] \
+    ///   --bin <bin_name> \
+    ///   [--features <features>]
     /// ```
     /// then finding the wasm file outputted by cargo and running
     /// ```ignore
@@ -96,6 +110,13 @@ impl Project {
     /// because they generally don't play well with the WASM
     /// linker
     pub fn cargo_bin(&self, bin_name: &str, features: &[&str]) -> Wasm {
+        let (package, bin_name) = if bin_name.contains(':') {
+            let (package, bin_name) = bin_name.rsplit_once(':').unwrap();
+            (Some(package), bin_name)
+        } else {
+            (None, bin_name)
+        };
+
         if let Some(wasm) = Wasm::from_location_specified_by_env_var(bin_name, features) {
             return wasm;
         }
@@ -130,6 +151,9 @@ impl Project {
             .arg("canister-release")
             .manifest_path(cargo_toml_path)
             .target_dir(wasm_target_dir);
+        if let Some(pkg) = package {
+            cargo_build = cargo_build.package(pkg);
+        }
 
         if !features.is_empty() {
             cargo_build = cargo_build.features(features.join(" "));

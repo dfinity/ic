@@ -25944,6 +25944,7 @@ dependencies = [
  "candid",
  "futures",
  "ic-cdk",
+ "ic-dummy-getrandom-for-wasm",
  "ic-management-canister-types",
  "rand 0.8.5",
  "rand_pcg 0.3.1",
