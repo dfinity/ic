@@ -300,9 +300,8 @@ fn build_success_text(success_message: &Option<String>, width: u16) -> Vec<Line<
 
 /// Builds the text content for the failure completion screen
 fn build_failure_text<'a>(
-    output: &'a std::process::Output,
-    stdout_lines: &'a [String],
-    stderr_lines: &'a [String],
+    exit_code: Option<i32>,
+    log_lines: &'a [String],
     error_messages: &'a [String],
     params: &'a RecoveryParams,
     size: Rect,
@@ -311,7 +310,7 @@ fn build_failure_text<'a>(
     text.push(Line::from(""));
     text.push(create_error_line(format!(
         "✗ Recovery failed with exit code: {:?}",
-        output.status.code()
+        exit_code
     )));
     text.push(Line::from(""));
     let separator = create_separator(size.width);
@@ -334,27 +333,16 @@ fn build_failure_text<'a>(
     )]));
     text.push(Line::from(""));
 
-    // Combine stdout and stderr, avoiding duplicates
-    let mut all_log_lines = Vec::new();
-    for line in stdout_lines {
-        all_log_lines.push(line.clone());
-    }
-    for line in stderr_lines {
-        if !stdout_lines.contains(line) {
-            all_log_lines.push(line.clone());
-        }
-    }
-
     // Add error logs or error messages
-    if !all_log_lines.is_empty() {
+    if !log_lines.is_empty() {
         text.push(create_error_line("Error logs:"));
         text.push(Line::from(""));
 
         let available_height = size.height.saturating_sub(COMPLETION_SCREEN_OVERHEAD) as usize;
-        let (start_idx, _) = calculate_log_viewport(all_log_lines.len(), available_height);
+        let (start_idx, _) = calculate_log_viewport(log_lines.len(), available_height);
 
         let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
-        let formatted_lines: Vec<Line> = all_log_lines[start_idx..]
+        let formatted_lines: Vec<Line> = log_lines[start_idx..]
             .iter()
             .map(|line| Line::from(format!("  {}", truncate_line(line, max_width))))
             .collect();
@@ -380,9 +368,8 @@ pub(crate) fn draw_completion_screen(
     f: &mut Frame,
     success: bool,
     success_message: &Option<String>,
-    output: &std::process::Output,
-    stdout_lines: &[String],
-    stderr_lines: &[String],
+    exit_code: Option<i32>,
+    log_lines: &[String],
     error_messages: &[String],
     params: &RecoveryParams,
 ) {
@@ -402,14 +389,7 @@ pub(crate) fn draw_completion_screen(
     let mut text = if success {
         build_success_text(success_message, size.width)
     } else {
-        build_failure_text(
-            output,
-            stdout_lines,
-            stderr_lines,
-            error_messages,
-            params,
-            size,
-        )
+        build_failure_text(exit_code, log_lines, error_messages, params, size)
     };
 
     text.push(Line::from(""));

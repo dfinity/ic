@@ -428,16 +428,7 @@ impl App {
 // Process and Log Monitoring
 // ============================================================================
 
-/// Parses log lines from bytes, filtering out empty lines
-fn parse_log_lines(bytes: &[u8]) -> Vec<String> {
-    String::from_utf8_lossy(bytes)
-        .lines()
-        .map(|s| s.to_string())
-        .filter(|s| !s.trim().is_empty())
-        .collect()
-}
-
-/// Spawns a thread to read lines from a stream and append them to a shared log buffer
+/// Spawns a thread to read lines from stdout and append them to a shared log buffer
 fn spawn_log_reader_thread<R>(
     stream: R,
     log_lines: Arc<Mutex<Vec<String>>>,
@@ -459,10 +450,10 @@ where
     })
 }
 
-/// Detects success message in stdout
-fn detect_success_message(stdout_lines: &[String]) -> Option<String> {
+/// Detects success message in log lines
+fn detect_success_message(log_lines: &[String]) -> Option<String> {
     const SUCCESS_INDICATOR: &str = "Recovery Upgrader completed successfully";
-    stdout_lines
+    log_lines
         .iter()
         .find(|line| line.contains(SUCCESS_INDICATOR))
         .map(|_| SUCCESS_INDICATOR.to_string())
@@ -473,7 +464,6 @@ fn detect_success_message(stdout_lines: &[String]) -> Option<String> {
 fn monitor_process_with_logs(
     mut child: std::process::Child,
     stdout_handle: thread::JoinHandle<()>,
-    stderr_handle: thread::JoinHandle<()>,
     log_lines: Arc<Mutex<Vec<String>>>,
     terminal_guard: &mut TerminalGuard,
     params: &RecoveryParams,
@@ -483,7 +473,6 @@ fn monitor_process_with_logs(
         match child.try_wait() {
             Ok(Some(status)) => {
                 stdout_handle.join().ok();
-                stderr_handle.join().ok();
                 break status;
             }
             Ok(None) => {
@@ -519,17 +508,13 @@ fn monitor_process_with_logs(
     Ok((status, all_logs))
 }
 
-/// Extracts errors from stdout/stderr
-fn extract_errors_from_logs(stdout_lines: &[String], stderr_lines: &[String]) -> Vec<String> {
-    if !stderr_lines.is_empty() {
-        let start = stderr_lines.len().saturating_sub(MAX_ERROR_LINES);
-        stderr_lines[start..].to_vec()
-    } else if !stdout_lines.is_empty() {
-        let start = stdout_lines.len().saturating_sub(MAX_ERROR_LINES);
-        stdout_lines[start..].to_vec()
-    } else {
-        Vec::new()
+/// Extracts the last N error lines from log output
+fn extract_errors_from_logs(log_lines: &[String]) -> Vec<String> {
+    if log_lines.is_empty() {
+        return Vec::new();
     }
+    let start = log_lines.len().saturating_sub(MAX_ERROR_LINES);
+    log_lines[start..].to_vec()
 }
 
 // ============================================================================
@@ -552,7 +537,8 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
 
     let mut cmd = build_upgrader_command(params);
     cmd.stdout(Stdio::piped());
-    cmd.stderr(Stdio::piped());
+    // Explicitly discard stderr - dd's status=progress output to stderr would clutter the display
+    cmd.stderr(Stdio::null());
 
     let mut child = cmd.spawn().context("Failed to spawn recovery upgrader")?;
 
@@ -562,69 +548,49 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         .stdout
         .take()
         .ok_or_else(|| anyhow::anyhow!("Failed to get stdout handle"))?;
-    let stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| anyhow::anyhow!("Failed to get stderr handle"))?;
 
     let stdout_handle = spawn_log_reader_thread(stdout, Arc::clone(&log_lines));
-    let stderr_handle = spawn_log_reader_thread(stderr, Arc::clone(&log_lines));
 
-    let (status, all_logs) = monitor_process_with_logs(
-        child,
-        stdout_handle,
-        stderr_handle,
-        log_lines,
-        &mut terminal_guard,
-        params,
-    )?;
+    let (status, all_logs) =
+        monitor_process_with_logs(child, stdout_handle, log_lines, &mut terminal_guard, params)?;
 
-    let output = std::process::Output {
-        status,
-        stdout: all_logs.join("\n").into_bytes(),
-        stderr: vec![],
-    };
-
-    let stdout_lines = parse_log_lines(&output.stdout);
-    let stderr_lines = parse_log_lines(&output.stderr);
-
-    let success_message = detect_success_message(&stdout_lines);
-    let error_messages = if output.status.success() {
+    let success_message = detect_success_message(&all_logs);
+    let error_messages = if status.success() {
         Vec::new()
     } else {
-        extract_errors_from_logs(&stdout_lines, &stderr_lines)
+        extract_errors_from_logs(&all_logs)
     };
 
-    let success = output.status.success();
+    let success = status.success();
     terminal_guard.get_mut().draw(|f| {
         ui::draw_completion_screen(
             f,
             success,
             &success_message,
-            &output,
-            &stdout_lines,
-            &stderr_lines,
+            status.code(),
+            &all_logs,
             &error_messages,
             params,
         );
     })?;
 
+    // Wait for user to press any key before exiting
     if let Event::Key(_) = event::read()? {}
 
     let mut terminal = terminal_guard.terminal.take().unwrap();
     let _ = terminal.clear();
     teardown_terminal(&mut terminal)?;
 
-    if !output.status.success() {
+    if !status.success() {
         anyhow::bail!(
             "Recovery upgrader failed with exit code: {:?}",
-            output.status.code()
+            status.code()
         );
     }
 
     if let Some(ref msg) = success_message {
         eprintln!("{}", msg);
-    } else if output.status.success() {
+    } else if status.success() {
         eprintln!("Recovery completed successfully!");
     }
 
