@@ -395,25 +395,77 @@ fn parse_response(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
     use crate::fetch_stripped_artifact::test_utils::{
-        fake_block_proposal_with_ingresses, fake_summary_block_proposal,
+        fake_block_proposal_with_ingresses, fake_block_proposal_with_ingresses_and_idkg,
+        fake_summary_block_proposal,
     };
 
     use super::*;
 
     use http_body_util::Full;
     use ic_canister_client_sender::Sender;
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_idkg_dealing_for_tests;
     use ic_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_p2p_test_utils::mocks::{MockPeers, MockTransport, MockValidatedPoolReader};
+    use ic_test_utilities_consensus::fake::{FakeContent, FakeContentSigner};
     use ic_test_utilities_types::messages::SignedIngressBuilder;
-    use ic_types::{artifact::IngressMessageId, time::UNIX_EPOCH};
-    use ic_types_test_utils::ids::NODE_1;
+    use ic_types::{
+        Height, RegistryVersion,
+        artifact::IngressMessageId,
+        consensus::{
+            Finalization, FinalizationContent,
+            idkg::{IDkgArtifactIdDataOf, IDkgPayload, IDkgPrefixOf},
+        },
+        crypto::{
+            AlgorithmId, CryptoHash, CryptoHashOf, Signed,
+            canister_threshold_sig::idkg::{
+                IDkgReceivers, IDkgTranscript, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin,
+            },
+        },
+        signature::BasicSignatureBatch,
+        time::UNIX_EPOCH,
+    };
+    use ic_types_test_utils::ids::{NODE_1, SUBNET_0};
     use tower::ServiceExt;
 
     enum PoolMessage {
+        /// We expect an access atempt to the ingress pool, with an optional message being returned.
         Ingress(Option<SignedIngress>),
+        /// We expect an access atempt to the IDKG pool, with an optional message being returned.
         IDkgDealing(Option<SignedIDkgDealing>),
+        /// We don't expect any access to the pools.
+        None,
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    enum GetStrippedMessageRequest {
+        Ingress(GetIngressMessageInBlockRequest),
+        IDkgDealing(GetIDkgDealingInBlockRequest),
+    }
+
+    #[derive(Debug, PartialEq)]
+    enum GetStrippedMessageResponse {
+        Ingress(GetIngressMessageInBlockResponse),
+        IDkgDealing(GetIDkgDealingInBlockResponse),
+    }
+
+    impl GetStrippedMessageResponse {
+        fn unwrap_ingress(self) -> GetIngressMessageInBlockResponse {
+            match self {
+                GetStrippedMessageResponse::Ingress(response) => response,
+                _ => panic!("Expected Ingress response"),
+            }
+        }
+
+        fn unwrap_idkg_dealing(self) -> GetIDkgDealingInBlockResponse {
+            match self {
+                GetStrippedMessageResponse::IDkgDealing(response) => response,
+                _ => panic!("Expected IDkgDealing response"),
+            }
+        }
     }
 
     fn mock_pools(
@@ -451,6 +503,10 @@ mod tests {
                     idkg_pool.expect_get().once().return_const(None);
                 }
             }
+            PoolMessage::None => {
+                ingress_pool.expect_get().never();
+                idkg_pool.expect_get().never();
+            }
         }
 
         let mut consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
@@ -464,6 +520,8 @@ mod tests {
                 .return_const(consensus_message.clone());
         } else if expect_consensus_pool_access {
             consensus_pool.expect_get().once().return_const(None);
+        } else {
+            consensus_pool.expect_get().never();
         }
 
         Pools {
@@ -476,15 +534,22 @@ mod tests {
 
     async fn send_request(
         router: Router,
-        bytes: Bytes,
-    ) -> Result<GetIngressMessageInBlockResponse, StatusCode> {
-        let request = Request::builder()
-            .uri(INGRESS_URI)
-            .body(Full::new(bytes))
-            .unwrap();
+        request: GetStrippedMessageRequest,
+    ) -> Result<GetStrippedMessageResponse, StatusCode> {
+        let (bytes, uri) = match request.clone() {
+            GetStrippedMessageRequest::Ingress(req) => (
+                Bytes::from(pb::GetIngressMessageInBlockRequest::proxy_encode(req)),
+                INGRESS_URI,
+            ),
+            GetStrippedMessageRequest::IDkgDealing(req) => (
+                Bytes::from(pb::GetIDkgDealingInBlockRequest::proxy_encode(req)),
+                IDKG_DEALING_URI,
+            ),
+        };
 
+        let request_bytes = Request::builder().uri(uri).body(Full::new(bytes)).unwrap();
         let rpc_response = router
-            .oneshot(request)
+            .oneshot(request_bytes)
             .await
             .expect("Should successfully handler the request");
         let (parts, body) = rpc_response.into_parts();
@@ -493,13 +558,24 @@ mod tests {
         }
 
         let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
-        let response = pb::GetIngressMessageInBlockResponse::proxy_decode(&bytes)
-            .and_then(|proto: pb::GetIngressMessageInBlockResponse| {
-                GetIngressMessageInBlockResponse::try_from(proto)
-            })
-            .expect("Should return a valid proto");
-
-        Ok(response)
+        match request {
+            GetStrippedMessageRequest::Ingress(_) => {
+                let response = pb::GetIngressMessageInBlockResponse::proxy_decode(&bytes)
+                    .and_then(|proto: pb::GetIngressMessageInBlockResponse| {
+                        GetIngressMessageInBlockResponse::try_from(proto)
+                    })
+                    .expect("Should return a valid proto");
+                Ok(GetStrippedMessageResponse::Ingress(response))
+            }
+            GetStrippedMessageRequest::IDkgDealing(_) => {
+                let response = pb::GetIDkgDealingInBlockResponse::proxy_decode(&bytes)
+                    .and_then(|proto: pb::GetIDkgDealingInBlockResponse| {
+                        GetIDkgDealingInBlockResponse::try_from(proto)
+                    })
+                    .expect("Should return a valid proto");
+                Ok(GetStrippedMessageResponse::IDkgDealing(response))
+            }
+        }
     }
 
     #[tokio::test]
@@ -515,13 +591,14 @@ mod tests {
 
         let response = send_request(
             router,
-            request(
+            ingress_request(
                 ConsensusMessageId::from(&block),
                 SignedIngressId::from(&ingress_message),
             ),
         )
         .await
-        .expect("Should return a valid response");
+        .expect("Should return a valid response")
+        .unwrap_ingress();
 
         assert_eq!(
             &response.serialized_ingress_message,
@@ -530,7 +607,29 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rpc_get_from_consensus_pool_test() {
+    async fn rpc_get_from_idkg_pool_test() {
+        let dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let block = fake_block_proposal(vec![]);
+        let pools = mock_pools(
+            PoolMessage::IDkgDealing(Some(dealing.clone())),
+            None,
+            /*expect_consensus_pool_access=*/ false,
+        );
+        let router = build_axum_router(pools);
+
+        let response = send_request(
+            router,
+            idkg_dealing_request(ConsensusMessageId::from(&block), dealing.message_id(), 1),
+        )
+        .await
+        .expect("Should return a valid response")
+        .unwrap_idkg_dealing();
+
+        assert_eq!(response.signed_dealing, dealing);
+    }
+
+    #[tokio::test]
+    async fn rpc_get_ingress_from_consensus_pool_test() {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let block = fake_block_proposal(vec![ingress_message.clone()]);
         let pools = mock_pools(
@@ -542,13 +641,14 @@ mod tests {
 
         let response = send_request(
             router,
-            request(
+            ingress_request(
                 ConsensusMessageId::from(&block),
                 SignedIngressId::from(&ingress_message),
             ),
         )
         .await
-        .expect("Should return a valid response");
+        .expect("Should return a valid response")
+        .unwrap_ingress();
 
         assert_eq!(
             &response.serialized_ingress_message,
@@ -557,7 +657,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rpc_get_not_found_test() {
+    async fn rpc_get_idkg_dealing_from_consensus_pool_test() {
+        let node_index = 1;
+        let dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let data_block = fake_block_proposal_with_idkg_dealing(dealing.clone(), node_index, false);
+        let summary_block =
+            fake_block_proposal_with_idkg_dealing(dealing.clone(), node_index, true);
+        for block in [data_block, summary_block] {
+            let pools = mock_pools(
+                PoolMessage::IDkgDealing(None),
+                Some(block.clone()),
+                /*expect_consensus_pool_access=*/ true,
+            );
+            let router = build_axum_router(pools);
+
+            let response = send_request(
+                router,
+                idkg_dealing_request(
+                    ConsensusMessageId::from(&block),
+                    dealing.message_id(),
+                    node_index,
+                ),
+            )
+            .await
+            .expect("Should return a valid response")
+            .unwrap_idkg_dealing();
+
+            assert_eq!(response.signed_dealing, dealing);
+        }
+    }
+
+    #[tokio::test]
+    async fn rpc_get_ingress_not_found_test() {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let block = fake_block_proposal(vec![]);
         let pools = mock_pools(
@@ -569,7 +700,7 @@ mod tests {
 
         let response = send_request(
             router,
-            request(
+            ingress_request(
                 ConsensusMessageId::from(&block),
                 SignedIngressId::from(&ingress_message),
             ),
@@ -580,7 +711,142 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rpc_get_not_found_mismatched_hash_test() {
+    async fn rpc_get_idkg_dealing_from_consensus_pool_block_not_found_test() {
+        let node_index = 1;
+        let dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let block = fake_block_proposal_with_idkg_dealing(dealing.clone(), node_index, false);
+        let pools = mock_pools(
+            PoolMessage::IDkgDealing(None),
+            None,
+            /*expect_consensus_pool_access=*/ true,
+        );
+        let router = build_axum_router(pools);
+
+        let response = send_request(
+            router,
+            idkg_dealing_request(
+                ConsensusMessageId::from(&block),
+                dealing.message_id(),
+                node_index,
+            ),
+        )
+        .await;
+
+        assert_eq!(response, Err(StatusCode::NOT_FOUND));
+    }
+
+    #[tokio::test]
+    async fn rpc_get_idkg_dealing_from_consensus_pool_wrong_consensus_id_test() {
+        let node_index = 1;
+        let dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let finalization = ConsensusMessage::Finalization(Finalization::fake(
+            FinalizationContent::new(Height::new(100), CryptoHashOf::from(CryptoHash(vec![]))),
+        ));
+        let pools = mock_pools(
+            PoolMessage::None,
+            None,
+            /*expect_consensus_pool_access=*/ false,
+        );
+        let router = build_axum_router(pools);
+
+        let response = send_request(
+            router,
+            idkg_dealing_request(
+                ConsensusMessageId::from(&finalization),
+                dealing.message_id(),
+                node_index,
+            ),
+        )
+        .await;
+
+        assert_eq!(response, Err(StatusCode::BAD_REQUEST));
+    }
+
+    #[tokio::test]
+    async fn rpc_get_idkg_dealing_from_consensus_no_idkg_payload_test() {
+        let node_index = 1;
+        let dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let block = fake_block_proposal(vec![]);
+        let pools = mock_pools(
+            PoolMessage::IDkgDealing(None),
+            Some(block.clone()),
+            /*expect_consensus_pool_access=*/ true,
+        );
+        let router = build_axum_router(pools);
+
+        let response = send_request(
+            router,
+            idkg_dealing_request(
+                ConsensusMessageId::from(&block),
+                dealing.message_id(),
+                node_index,
+            ),
+        )
+        .await;
+
+        assert_eq!(response, Err(StatusCode::NOT_FOUND));
+    }
+
+    #[tokio::test]
+    async fn rpc_get_idkg_dealing_from_consensus_pool_wrong_idkg_artifact_id_test() {
+        let node_index = 1;
+        let dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let block = fake_block_proposal_with_idkg_dealing(dealing.clone(), node_index, false);
+        let pools = mock_pools(
+            PoolMessage::None,
+            None,
+            /*expect_consensus_pool_access=*/ false,
+        );
+        let router = build_axum_router(pools);
+
+        let IDkgArtifactId::Dealing(prefix, data) = dealing.message_id() else {
+            panic!("Expected dealing artifact id");
+        };
+        let response = send_request(
+            router,
+            idkg_dealing_request(
+                ConsensusMessageId::from(&block),
+                IDkgArtifactId::DealingSupport(
+                    IDkgPrefixOf::from(prefix.get()),
+                    IDkgArtifactIdDataOf::from(data.get()),
+                ),
+                node_index,
+            ),
+        )
+        .await;
+
+        assert_eq!(response, Err(StatusCode::BAD_REQUEST));
+    }
+
+    #[tokio::test]
+    async fn rpc_get_idkg_dealing_from_consensus_pool_node_index_not_found_test() {
+        let node_index_in_block = 1;
+        let node_index_in_request = 2;
+        let dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let block =
+            fake_block_proposal_with_idkg_dealing(dealing.clone(), node_index_in_block, false);
+        let pools = mock_pools(
+            PoolMessage::IDkgDealing(None),
+            Some(block.clone()),
+            /*expect_consensus_pool_access=*/ true,
+        );
+        let router = build_axum_router(pools);
+
+        let response = send_request(
+            router,
+            idkg_dealing_request(
+                ConsensusMessageId::from(&block),
+                dealing.message_id(),
+                node_index_in_request,
+            ),
+        )
+        .await;
+
+        assert_eq!(response, Err(StatusCode::NOT_FOUND));
+    }
+
+    #[tokio::test]
+    async fn rpc_get_ingress_not_found_mismatched_hash_test() {
         let ingress_message = |signature: Vec<u8>| {
             SignedIngressBuilder::new()
                 .nonce(1)
@@ -615,7 +881,7 @@ mod tests {
 
         let response = send_request(
             router,
-            request(
+            ingress_request(
                 ConsensusMessageId::from(&block),
                 SignedIngressId::from(&ingress_message_3),
             ),
@@ -626,7 +892,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rpc_get_summary_block_returns_bad_request_test() {
+    async fn rpc_get_ingress_summary_block_returns_bad_request_test() {
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
         let block = fake_summary_block_proposal();
         let pools = mock_pools(
@@ -638,7 +904,7 @@ mod tests {
 
         let response = send_request(
             router,
-            request(
+            ingress_request(
                 ConsensusMessageId::from(&block),
                 SignedIngressId::from(&ingress_message),
             ),
@@ -680,16 +946,75 @@ mod tests {
         ConsensusMessage::BlockProposal(block_proposal)
     }
 
-    fn request(
-        consensus_message_id: ConsensusMessageId,
-        signed_ingress_id: SignedIngressId,
-    ) -> Bytes {
-        let request = GetIngressMessageInBlockRequest {
-            signed_ingress_id,
-            block_proposal_id: consensus_message_id,
+    fn fake_block_proposal_with_idkg_dealing(
+        dealing: SignedIDkgDealing,
+        node_index: NodeIndex,
+        is_summary: bool,
+    ) -> ConsensusMessage {
+        let IDkgArtifactId::Dealing(prefix, data) = dealing.message_id() else {
+            panic!("Expected dealing artifact id");
         };
 
-        Bytes::from(pb::GetIngressMessageInBlockRequest::proxy_encode(request))
+        let transcript_id = IDkgTranscriptId::new(
+            data.get_ref().subnet_id,
+            prefix.get_ref().group_tag(),
+            data.get_ref().height,
+        );
+
+        let mut verified_dealings = BTreeMap::new();
+        verified_dealings.insert(
+            node_index,
+            Signed {
+                content: dealing,
+                signature: BasicSignatureBatch {
+                    signatures_map: BTreeMap::new(),
+                },
+            },
+        );
+
+        let transcript = IDkgTranscript {
+            transcript_id,
+            receivers: IDkgReceivers::new(BTreeSet::from_iter([NODE_1])).unwrap(),
+            registry_version: RegistryVersion::from(1),
+            verified_dealings: Arc::new(verified_dealings),
+            transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        };
+
+        let mut idkg_transcripts = BTreeMap::new();
+        idkg_transcripts.insert(transcript_id, transcript);
+
+        let mut idkg_payload = IDkgPayload::empty(Height::new(100), SUBNET_0, vec![]);
+        idkg_payload.idkg_transcripts = idkg_transcripts;
+
+        ConsensusMessage::BlockProposal(fake_block_proposal_with_ingresses_and_idkg(
+            vec![],
+            Some(idkg_payload),
+            is_summary,
+        ))
+    }
+
+    fn ingress_request(
+        consensus_message_id: ConsensusMessageId,
+        signed_ingress_id: SignedIngressId,
+    ) -> GetStrippedMessageRequest {
+        GetStrippedMessageRequest::Ingress(GetIngressMessageInBlockRequest {
+            signed_ingress_id,
+            block_proposal_id: consensus_message_id,
+        })
+    }
+
+    fn idkg_dealing_request(
+        consensus_message_id: ConsensusMessageId,
+        dealing_id: IDkgArtifactId,
+        node_index: NodeIndex,
+    ) -> GetStrippedMessageRequest {
+        GetStrippedMessageRequest::IDkgDealing(GetIDkgDealingInBlockRequest {
+            block_proposal_id: consensus_message_id,
+            node_index,
+            dealing_id,
+        })
     }
 
     fn response(ingress_message: SignedIngress) -> axum::response::Response<Bytes> {
