@@ -13,12 +13,12 @@ use ic_system_test_driver::systest;
 use ic_system_test_driver::util::{
     UniversalCanister, block_on, expiry_time, sign_query, sign_read_state, sign_update,
 };
-use ic_universal_canister::wasm;
 use ic_types::messages::{
     Blob, Delegation, HttpCallContent, HttpCanisterUpdate, HttpQueryContent, HttpReadState,
-    HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, SignedDelegation,
+    HttpReadStateContent, HttpRequestEnvelope, HttpUserQuery, MessageId, SignedDelegation,
 };
 use ic_types::{CanisterId, PrincipalId, Time};
+use ic_universal_canister::wasm;
 use rand::{CryptoRng, Rng};
 use reqwest::{StatusCode, Url};
 use slog::{debug, info};
@@ -27,16 +27,15 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_parallel(
-            SystemTestSubGroup::new()
-                .add_test(systest!(requests_with_delegations_with_targets; 2)),
+            SystemTestSubGroup::new().add_test(systest!(requests_with_delegations_with_targets; 2)),
             /*
-            SystemTestSubGroup::new().add_test(systest!(requests_with_delegations; 2)),
-.add_test(systest!(requests_with_delegations; 3))
-            .add_test(systest!(requests_with_delegations_with_targets; 3))
-            .add_test(systest!(requests_with_delegation_loop; 2))
-            .add_test(systest!(requests_with_delegation_loop; 3))
-            .add_test(systest!(requests_with_invalid_expiry)),
-            */
+                        SystemTestSubGroup::new().add_test(systest!(requests_with_delegations; 2)),
+            .add_test(systest!(requests_with_delegations; 3))
+                        .add_test(systest!(requests_with_delegations_with_targets; 3))
+                        .add_test(systest!(requests_with_delegation_loop; 2))
+                        .add_test(systest!(requests_with_delegation_loop; 3))
+                        .add_test(systest!(requests_with_invalid_expiry)),
+                        */
         )
         .execute_from_args()?;
     Ok(())
@@ -387,9 +386,14 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                 let query_result =
                     perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
                         .await;
-                let read_state_result =
-                    perform_read_state_with_delegations(&test_info, sender, signer, &delegations, &canister)
-                        .await;
+                let read_state_result = perform_read_state_with_delegations(
+                    &test_info,
+                    sender,
+                    signer,
+                    &delegations,
+                    &canister,
+                )
+                .await;
                 let update_result =
                     perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
                         .await;
@@ -410,7 +414,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                     assert_eq!(update_result, expected_update_result);
                 } else {
                     assert_eq!(query_result, 400);
-                    //assert_eq!(read_state_result, 400);
+                    assert_eq!(read_state_result, 400);
                     assert_eq!(update_result, 400);
                 }
             }
@@ -682,7 +686,7 @@ async fn perform_query_call_with_delegations(
         Some(delegations.to_vec()),
         signature,
     )
-        .await;
+    .await;
 
     let status = response.status();
     //println!("Xyzzy Response = {:?}", response);
@@ -728,38 +732,41 @@ async fn perform_read_state_with_delegations(
     delegations: &[SignedDelegation],
     canister: &UniversalCanister<'_>,
 ) -> StatusCode {
-
     println!("READ STATE TEST");
     /*
-     * In order to properly test read state requiests we must have another
+     * In order to properly test read state request we must have another
      * call to check the status of.
      */
     let request_id = {
-        let content = HttpQueryContent::Query {
-            query: HttpUserQuery {
+        let content = HttpCallContent::Call {
+            update: HttpCanisterUpdate {
                 canister_id: Blob(test.canister_id.get().as_slice().to_vec()),
-                method_name: "query".to_string(),
-                arg: Blob(wasm().reply_data(b"read state test response bytes").build()),
+                method_name: "update".to_string(),
+                arg: Blob(wasm().reply_data(b"read state test").build()),
                 sender: Blob(sender.principal().as_slice().to_vec()),
                 ingress_expiry: expiry_time().as_nanos() as u64,
                 nonce: None,
-            }
+            },
         };
 
-        let request_id = content.id();
-        let signature = sender.sign_query(&content);
+        let signature = sender.sign_update(&content);
+        let request_id = MessageId::from(content.representation_independent_hash());
+
         let response = send_request(
             test,
-            "query",
+            "call",
             content,
             sender.public_key_der(),
             None,
             signature,
         )
-            .await;
+        .await;
 
         println!("Stub status {}", response.status());
-        println!("Stub resp {:?}", hex::encode(response.bytes().await.unwrap()));
+        println!(
+            "Stub resp {:?}",
+            hex::encode(response.bytes().await.unwrap())
+        );
 
         request_id
     };
@@ -785,11 +792,13 @@ async fn perform_read_state_with_delegations(
         Some(delegations.to_vec()),
         signature,
     )
-        .await;
-
+    .await;
 
     let status = response.status();
-    println!("Read state resp {:?}", hex::encode(response.bytes().await.unwrap()));
+    println!(
+        "Read state resp {:?}",
+        hex::encode(response.bytes().await.unwrap())
+    );
     status
 }
 
