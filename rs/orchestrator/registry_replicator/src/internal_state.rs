@@ -385,12 +385,10 @@ pub async fn write_certified_changes_to_local_store(
     local_store: &dyn LocalStore,
     from_version: RegistryVersion,
 ) -> Result<RegistryVersion, String> {
-    let (mut records, _, _) = registry_canister
+    let (records, _, _) = registry_canister
         .get_certified_changes_since(from_version.get(), nns_pub_key)
         .await
         .map_err(|e| e.to_string())?;
-
-    records.sort_by_key(|tr| tr.version);
 
     let mut changelog: BTreeMap<RegistryVersion, ChangelogEntry> = BTreeMap::new();
     for record in records {
