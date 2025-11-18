@@ -290,7 +290,7 @@ pub struct DownloadIcDataStep {
 
 impl Step for DownloadIcDataStep {
     fn descr(&self) -> String {
-        let data_src = format!("[{}]:{}", self.ssh_helper.ip, IC_DATA_PATH);
+        let data_src = self.ssh_helper.remote_path(IC_DATA_PATH);
         let mut descr = format!(
             "Download node data {} from {}",
             self.data_includes
@@ -302,7 +302,7 @@ impl Step for DownloadIcDataStep {
         );
 
         if self.include_config {
-            let config_src = format!("[{}]:{}", self.ssh_helper.ip, IC_JSON5_PATH);
+            let config_src = self.ssh_helper.remote_path(IC_JSON5_PATH);
             descr.push_str(&format!(" and config from {}", config_src));
         }
         if self.keep_downloaded_data {
