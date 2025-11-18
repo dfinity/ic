@@ -62,7 +62,7 @@ fn render_terminal_too_small_error(f: &mut Frame, size: Rect) -> bool {
     render_text_block(
         f,
         error_text,
-        create_bordered_block("Error", None),
+        create_error_block("Error"),
         size,
         Alignment::Center,
     );
@@ -180,13 +180,7 @@ pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
         let error_area = Rect::new(start_x, vertical_area.y, box_width, BOX_HEIGHT);
 
         let error_para = Paragraph::new(error.as_str())
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .fg(Color::Red)
-                    .bg(Color::Black)
-                    .title("Error"),
-            )
+            .block(create_error_block("Error"))
             .wrap(Wrap { trim: true });
         f.render_widget(Clear, error_area);
         f.render_widget(error_para, error_area);
@@ -315,13 +309,10 @@ fn build_failure_text<'a>(
 ) -> Vec<Line<'a>> {
     let mut text = Vec::new();
     text.push(Line::from(""));
-    text.push(Line::from(vec![Span::styled(
-        format!(
-            "✗ Recovery failed with exit code: {:?}",
-            output.status.code()
-        ),
-        Style::default().fg(Color::Red).bold(),
-    )]));
+    text.push(create_error_line(format!(
+        "✗ Recovery failed with exit code: {:?}",
+        output.status.code()
+    )));
     text.push(Line::from(""));
     let separator = create_separator(size.width);
     text.push(Line::from(vec![Span::styled(
@@ -356,10 +347,7 @@ fn build_failure_text<'a>(
 
     // Add error logs or error messages
     if !all_log_lines.is_empty() {
-        text.push(Line::from(vec![Span::styled(
-            "Error logs:",
-            Style::default().fg(Color::Red).bold(),
-        )]));
+        text.push(create_error_line("Error logs:"));
         text.push(Line::from(""));
 
         let available_height = size.height.saturating_sub(COMPLETION_SCREEN_OVERHEAD) as usize;
@@ -372,10 +360,7 @@ fn build_failure_text<'a>(
             .collect();
         text.extend(formatted_lines);
     } else if !error_messages.is_empty() {
-        text.push(Line::from(vec![Span::styled(
-            "Error details:",
-            Style::default().fg(Color::Red).bold(),
-        )]));
+        text.push(create_error_line("Error details:"));
         text.push(Line::from(""));
         let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
         text.extend(format_log_lines(error_messages, max_width));
@@ -486,6 +471,23 @@ fn create_bordered_block(title: &str, style: Option<Style>) -> Block {
         block = block.style(s);
     }
     block
+}
+
+/// Creates a styled error block with consistent red styling.
+fn create_error_block(title: &str) -> Block<'_> {
+    Block::default()
+        .borders(Borders::ALL)
+        .fg(Color::Red)
+        .bg(Color::Black)
+        .title(title)
+}
+
+/// Creates a styled error line with red bold text.
+fn create_error_line(text: impl Into<String>) -> Line<'static> {
+    Line::from(vec![Span::styled(
+        text.into(),
+        Style::default().fg(Color::Red).bold(),
+    )])
 }
 
 /// Renders a text block (paragraph) with a block border, alignment, and text wrapping.
