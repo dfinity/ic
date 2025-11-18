@@ -9,56 +9,12 @@ use tokio::fs;
 
 use partition_tools::{Partition, ext::ExtPartition};
 
-const SERVICE_NAME: &str = "setupos-disable-checks";
-
 #[derive(Parser)]
-#[command(name = SERVICE_NAME)]
+#[command(name = "setupos-disable-checks")]
 struct Cli {
     #[arg(long, default_value = "disk.img")]
     /// Path to SetupOS disk image; its GRUB boot partition will be modified.
     image_path: PathBuf,
-}
-
-/// Munge the kernel command line:
-fn munge(input: &str) -> String {
-    let boot_args_re = Regex::new(r"(^|\n)BOOT_ARGS=(.*)(\s+#|\n|$)").unwrap();
-    let (left, prevmatch, mut boot_args, postmatch, right) = match boot_args_re.captures(input) {
-        Some(captures) => {
-            let wholematch = captures.get(0).unwrap();
-            let prevmatch = captures.get(1).unwrap();
-            let thematch = captures.get(2).unwrap();
-            let postmatch = captures.get(3).unwrap();
-            (
-                wholematch.start(),
-                prevmatch.as_str().to_string(),
-                thematch.as_str().trim().trim_matches('"').to_string(),
-                postmatch.as_str().to_string(),
-                wholematch.end(),
-            )
-        }
-        None => (
-            input.len(),
-            "".to_string(),
-            "".to_string(),
-            "\n".to_string(),
-            input.len(),
-        ),
-    };
-
-    let requires_space = !boot_args.is_empty();
-    boot_args.push_str(&format!(
-        "{sep}ic.setupos.run_checks=0",
-        sep = if requires_space { " " } else { "" }
-    ));
-
-    format!(
-        "# This file has been modified by setupos-disable-checks.\n{}{}BOOT_ARGS=\"{}\"{}{}",
-        &input[..left],
-        prevmatch,
-        boot_args,
-        postmatch,
-        &input[right..],
-    )
 }
 
 #[tokio::main]
@@ -76,7 +32,7 @@ async fn main() -> Result<(), Error> {
     let temp_boot_args = NamedTempFile::new()?;
     fs::write(
         temp_boot_args.path(),
-        munge(std::str::from_utf8(
+        process_cmdline(std::str::from_utf8(
             &bootfs.read_file(boot_args_path).await?,
         )?),
     )
@@ -94,60 +50,110 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
+/// Disable checks from the kernel command line
+fn process_cmdline(input: &str) -> String {
+    let boot_args_re = Regex::new(r"(^|\n)BOOT_ARGS=(.*)(\s+#|\n|$)").unwrap();
+
+    let left;
+    let indent;
+    let boot_args;
+    let tail;
+    let right;
+    match boot_args_re.captures(input) {
+        Some(captures) => {
+            let whole_match = captures.get(0).unwrap();
+
+            left = whole_match.start();
+            indent = captures.get(1).unwrap().as_str();
+            boot_args = captures.get(2).unwrap().as_str().trim().trim_matches('"');
+            tail = captures.get(3).unwrap().as_str();
+            right = whole_match.end();
+        }
+        None => {
+            left = input.len();
+            indent = "";
+            boot_args = "";
+            tail = "\n";
+            right = input.len();
+        }
+    };
+
+    let requires_space = !boot_args.is_empty();
+    let boot_args = format!(
+        "{boot_args}{sep}ic.setupos.run_checks=0",
+        sep = if requires_space { " " } else { "" }
+    );
+
+    format!(
+        "# This file has been modified by setupos-disable-checks.\n{file_start}{indent}BOOT_ARGS=\"{boot_args}\"{tail}{file_end}",
+        file_start = &input[..left],
+        file_end = &input[right..],
+    )
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::munge;
+    use super::*;
+
+    fn test(input: &str, expected: &str) {
+        let result = process_cmdline(input);
+
+        assert_eq!(
+            expected,
+            result,
+            "Result does not match expected, given input:\n input: \"{}\"",
+            input.escape_debug(),
+        );
+    }
 
     #[test]
-    fn test_munge() {
-        let table = [
-            (
-                "variable gets added when the file does not contain the variable",
-                r#"# This file contains nothing.
-"#,
-                r#"# This file has been modified by setupos-disable-checks.
-# This file contains nothing.
-BOOT_ARGS="ic.setupos.run_checks=0"
-"#,
-            ),
-            (
-                "munges the variable successfully when present",
-                r#"# Hello hello.
-BOOT_ARGS="security=selinux selinux=1 enforcing=0"
-# Postfix.
-"#,
-                r#"# This file has been modified by setupos-disable-checks.
-# Hello hello.
-BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks=0"
-# Postfix.
-"#,
-            ),
-            (
-                "munges the variable even at the beginning of the file",
-                r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0"
-"#,
-                r#"# This file has been modified by setupos-disable-checks.
-BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks=0"
-"#,
-            ),
-        ];
-        for (test_name, input, expected) in table.into_iter() {
-            let result = munge(input);
-            if result != expected {
-                panic!(
-                    "During test {test_name}:
+    /// Variable gets added when the file does not contain the variable
+    fn cmdline_created_when_empty() {
+        test(
+            "# This file contains nothing.\n",
+            indoc::indoc! {
+                r#"
+                    # This file has been modified by setupos-disable-checks.
+                    # This file contains nothing.
+                    BOOT_ARGS="ic.setupos.run_checks=0"
+                "#,
+            },
+        )
+    }
 
-Input:
-[[[{input}]]]
+    #[test]
+    /// Adds the variable even at the beginning of the file
+    fn simple_append() {
+        test(
+            "BOOT_ARGS=\"security=selinux selinux=1 enforcing=0\"\n",
+            indoc::indoc! {
+                r#"
+                    # This file has been modified by setupos-disable-checks.
+                    BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks=0"
+                "#
+            },
+        )
+    }
 
-Expected:
-[[[{expected}]]]
-
-Actual:
-[[[{result}]]]
-"
-                );
-            }
-        }
+    #[test]
+    /// Adds the variable successfully with contents
+    fn append_with_contents() {
+        test(
+            indoc::indoc! {
+                r#"
+                    # Hello hello.
+                    BOOT_ARGS="security=selinux selinux=1 enforcing=0"
+                    # Postfix.
+                "#
+            },
+            indoc::indoc! {
+                r#"
+                    # This file has been modified by setupos-disable-checks.
+                    # Hello hello.
+                    BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks=0"
+                    # Postfix.
+                "#,
+            },
+        )
     }
 }
