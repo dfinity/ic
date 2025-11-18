@@ -39,7 +39,6 @@ pin-project-lite.workspace = true
 tokio-rustls.workspace = true
 simple_logger.workspace = true
 rand.workspace = true
-opentelemetry-prometheus.workspace = true
 opentelemetry_sdk.workspace = true
 opentelemetry-otlp.workspace = true
 
