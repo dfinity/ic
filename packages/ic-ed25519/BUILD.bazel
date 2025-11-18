@@ -35,7 +35,7 @@ rust_library(
     crate_features = ["rand"],
     crate_name = "ic_ed25519",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    version = "0.4.0",
+    version = "0.5.0",
     deps = DEPENDENCIES,
 )
 

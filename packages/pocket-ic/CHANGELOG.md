@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The function `PocketIcBuilder::with_initial_time` to specify the initial timestamp of the newly created PocketIC instance.
 - The parameter `ttl` to `StartServerParams` to specify the TTL of the PocketIC server.
 - The constant `LATEST_SERVER_VERSION` to facilitate downloading the PocketIC server.
+- The function `PocketIcBuilder::with_dogecoind_addrs` to specify a list of addresses at which a `dogecoind` process is listening
+  for Dogecoin support in PocketIC.
 
 ### Changed
 - Deprecated `PocketIcBuilder::with_initial_timestamp`, use `PocketIcBuilder::with_initial_time` instead.
