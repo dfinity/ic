@@ -1,0 +1,31 @@
+name: External Contributor Slack Notification
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+jobs:
+  notify-slack:
+    name: Notify Slack for External Contributors
+    runs-on: ubuntu-latest
+ #   if: github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - name: Sanitize PR title
+        id: sanitize
+        env:
+          RAW_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          ESCAPED_TITLE=$(echo "$RAW_TITLE" \
+            | sed 's/&/\&amp;/g' \
+            | sed 's/</\&lt;/g' \
+            | sed 's/>/\&gt;/g')
+          echo "safe_title=$ESCAPED_TITLE" >> "$GITHUB_OUTPUT"
+
+      - name: Post to a Slack channel
+        id: slack
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        with:
+          channel-id: eng-idx
+          slack-message: "<${{ github.event.pull_request.html_url }}|${{ steps.sanitize.outputs.safe_title }}>"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
