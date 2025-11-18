@@ -552,7 +552,6 @@ pub enum IngressFilterError {
 }
 
 /// The response type to a `call()` request in [`IngressFilterService`].
-/// An Ok response contains the response from the cani
 pub type IngressFilterResponse = Result<Result<(), UserError>, IngressFilterError>;
 
 /// The input type to a `call()` request in [`IngressFilterService`].
