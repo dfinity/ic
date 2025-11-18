@@ -77,13 +77,13 @@ type NodeProvidersRewards = record {
     principal;
     nat64;
   };
-  rewards_calculation_version: RewardsCalculationVersion;
+  algorithm_version: RewardsCalculationVersion;
 };
 
 type GetNodeProvidersRewardsRequest = record {
   from_day: DateUtc;
   to_day: DateUtc;
-  rewards_calculation_version: opt RewardsCalculationVersion;
+  algorithm_version: opt RewardsCalculationVersion;
 };
 
 type GetNodeProvidersRewardsResponse = variant { Ok: NodeProvidersRewards; Err: text };
