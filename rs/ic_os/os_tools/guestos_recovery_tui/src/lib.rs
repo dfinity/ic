@@ -16,11 +16,11 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 // Terminal size constants
-const MIN_TERMINAL_WIDTH: u16 = 10;
-const MIN_TERMINAL_HEIGHT: u16 = 15;
+pub(crate) const MIN_TERMINAL_WIDTH: u16 = 10;
+pub(crate) const MIN_TERMINAL_HEIGHT: u16 = 15;
 
 /// Checks if the terminal size is too small for the UI
-fn is_terminal_too_small(size: Rect) -> bool {
+pub(crate) fn is_terminal_too_small(size: Rect) -> bool {
     size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT
 }
 

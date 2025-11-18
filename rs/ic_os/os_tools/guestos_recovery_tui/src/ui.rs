@@ -6,7 +6,9 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
-use crate::{App, Field, RecoveryParams};
+use crate::{
+    App, Field, MIN_TERMINAL_HEIGHT, MIN_TERMINAL_WIDTH, RecoveryParams, is_terminal_too_small,
+};
 
 // UI layout constants
 pub(crate) const TEXT_PADDING: u16 = 4; // Padding for text display
@@ -15,15 +17,6 @@ const BOX_HEIGHT: u16 = 5;
 const BORDER_PADDING: u16 = 4;
 const STATUS_SCREEN_OVERHEAD: u16 = 10;
 const COMPLETION_SCREEN_OVERHEAD: u16 = 16;
-
-// Terminal size constants (needed for UI rendering)
-const MIN_TERMINAL_WIDTH: u16 = 10;
-const MIN_TERMINAL_HEIGHT: u16 = 15;
-
-/// Checks if the terminal size is too small for the UI
-fn is_terminal_too_small(size: Rect) -> bool {
-    size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT
-}
 
 /// Renders the main UI for the App
 pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
@@ -38,10 +31,13 @@ pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
             )),
             Line::from("Please resize your terminal"),
         ];
-        let para = Paragraph::new(error_text)
-            .block(create_bordered_block("Error", None))
-            .alignment(Alignment::Center);
-        f.render_widget(para, size);
+        render_text_block(
+            f,
+            error_text,
+            create_bordered_block("Error", None),
+            size,
+            Alignment::Center,
+        );
         return;
     }
 
@@ -221,12 +217,20 @@ pub(crate) fn truncate_line(line: &str, max_width: usize) -> String {
     }
 }
 
+/// Formats log lines with indentation and truncation for display.
+#[allow(mismatched_lifetime_syntaxes)]
+fn format_log_lines(lines: &[String], max_width: usize) -> Vec<Line> {
+    lines
+        .iter()
+        .map(|line| Line::from(format!("  {}", truncate_line(line, max_width))))
+        .collect()
+}
+
 fn create_separator(width: u16) -> String {
     "─".repeat((width.saturating_sub(TEXT_PADDING)).max(10) as usize)
 }
 
 /// Creates a bordered block with a title and optional styling.
-/// This is a helper to reduce duplication in block creation.
 #[allow(mismatched_lifetime_syntaxes)]
 fn create_bordered_block(title: &str, style: Option<Style>) -> Block {
     let mut block = Block::default().borders(Borders::ALL).title(title);
@@ -234,6 +238,21 @@ fn create_bordered_block(title: &str, style: Option<Style>) -> Block {
         block = block.style(s);
     }
     block
+}
+
+/// Renders a text block (paragraph) with a block border, alignment, and text wrapping.
+fn render_text_block(
+    f: &mut Frame,
+    text: Vec<Line>,
+    block: Block,
+    area: Rect,
+    alignment: Alignment,
+) {
+    let para = Paragraph::new(text)
+        .block(block)
+        .alignment(alignment)
+        .wrap(Wrap { trim: true });
+    f.render_widget(para, area);
 }
 
 /// Draws the initial status screen showing parameters and "Starting recovery..." message
@@ -249,11 +268,7 @@ pub(crate) fn draw_status_screen(f: &mut Frame, params: &RecoveryParams) {
     text.push(Line::from("Starting recovery process..."));
     text.push(Line::from("This may take several minutes. Please wait..."));
 
-    let para = Paragraph::new(text)
-        .block(block)
-        .alignment(Alignment::Left)
-        .wrap(Wrap { trim: true });
-    f.render_widget(para, size);
+    render_text_block(f, text, block, size, Alignment::Left);
 }
 
 /// Draws the real-time logs screen during recovery process
@@ -273,9 +288,7 @@ pub(crate) fn draw_logs_screen(f: &mut Frame, params: &RecoveryParams, logs: &[S
     let (start_idx, lines_to_show) = calculate_log_viewport(logs.len(), available_height);
 
     let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
-    for line in &logs[start_idx..] {
-        text.push(Line::from(format!("  {}", truncate_line(line, max_width))));
-    }
+    text.extend(format_log_lines(&logs[start_idx..], max_width));
 
     if logs.len() > lines_to_show {
         text.push(Line::from(""));
@@ -286,11 +299,7 @@ pub(crate) fn draw_logs_screen(f: &mut Frame, params: &RecoveryParams, logs: &[S
         )));
     }
 
-    let para = Paragraph::new(text)
-        .block(block)
-        .alignment(Alignment::Left)
-        .wrap(Wrap { trim: true });
-    f.render_widget(para, size);
+    render_text_block(f, text, block, size, Alignment::Left);
 }
 
 /// Draws the completion screen showing success or failure with details
@@ -392,9 +401,11 @@ pub(crate) fn draw_completion_screen(
             let (start_idx, _) = calculate_log_viewport(all_log_lines.len(), available_height);
 
             let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
-            for line in &all_log_lines[start_idx..] {
-                text.push(Line::from(format!("  {}", truncate_line(line, max_width))));
-            }
+            let formatted_lines: Vec<Line> = all_log_lines[start_idx..]
+                .iter()
+                .map(|line| Line::from(format!("  {}", truncate_line(line, max_width))))
+                .collect();
+            text.extend(formatted_lines);
         } else if !error_messages.is_empty() {
             text.push(Line::from(vec![Span::styled(
                 "Error details:",
@@ -402,9 +413,7 @@ pub(crate) fn draw_completion_screen(
             )]));
             text.push(Line::from(""));
             let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
-            for error in error_messages {
-                text.push(Line::from(format!("  {}", truncate_line(error, max_width))));
-            }
+            text.extend(format_log_lines(error_messages, max_width));
         } else {
             text.push(Line::from(""));
             text.push(Line::from(
@@ -417,9 +426,5 @@ pub(crate) fn draw_completion_screen(
     text.push(Line::from(""));
     text.push(Line::from("Press any key to continue..."));
 
-    let para = Paragraph::new(text)
-        .block(block)
-        .alignment(Alignment::Left)
-        .wrap(Wrap { trim: true });
-    f.render_widget(para, size);
+    render_text_block(f, text, block, size, Alignment::Left);
 }
