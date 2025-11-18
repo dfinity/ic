@@ -472,6 +472,57 @@ fn detect_success_message(stdout_lines: &[String]) -> Option<String> {
         .map(|_| SUCCESS_INDICATOR.to_string())
 }
 
+/// Monitors a child process, displaying real-time logs in the terminal.
+/// Returns the process exit status and all collected logs.
+fn monitor_process_with_logs(
+    mut child: std::process::Child,
+    stdout_handle: thread::JoinHandle<()>,
+    stderr_handle: thread::JoinHandle<()>,
+    log_lines: Arc<Mutex<Vec<String>>>,
+    terminal_guard: &mut TerminalGuard,
+    params: &RecoveryParams,
+) -> Result<(std::process::ExitStatus, Vec<String>)> {
+    let mut last_log_count = 0;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                stdout_handle.join().ok();
+                stderr_handle.join().ok();
+                break status;
+            }
+            Ok(None) => {
+                let logs = log_lines.lock().unwrap();
+                let current_count = logs.len();
+                // Only redraw if we have new logs
+                if current_count > last_log_count {
+                    let current_logs: Vec<String> = logs.clone();
+                    drop(logs);
+
+                    terminal_guard
+                        .get_mut()
+                        .draw(|f| ui::draw_logs_screen(f, params, &current_logs))
+                        .ok();
+
+                    last_log_count = current_count;
+                } else {
+                    drop(logs);
+                }
+
+                thread::sleep(std::time::Duration::from_millis(PROCESS_POLL_INTERVAL_MS));
+            }
+            Err(e) => {
+                return Err(anyhow::anyhow!("Error waiting for process: {}", e));
+            }
+        }
+    };
+
+    let logs = log_lines.lock().unwrap();
+    let all_logs: Vec<String> = logs.clone();
+    drop(logs);
+
+    Ok((status, all_logs))
+}
+
 /// Extracts errors from stdout/stderr (tries explicit errors, then fallback to last N lines)
 fn extract_errors_from_logs(stdout_lines: &[String], stderr_lines: &[String]) -> Vec<String> {
     // Try explicit errors first
@@ -543,43 +594,14 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     let stdout_handle = spawn_log_reader_thread(stdout, Arc::clone(&log_lines));
     let stderr_handle = spawn_log_reader_thread(stderr, Arc::clone(&log_lines));
 
-    let mut last_log_count = 0;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                stdout_handle.join().ok();
-                stderr_handle.join().ok();
-                break status;
-            }
-            Ok(None) => {
-                let logs = log_lines.lock().unwrap();
-                let current_count = logs.len();
-                // Only redraw if we have new logs
-                if current_count > last_log_count {
-                    let current_logs: Vec<String> = logs.clone();
-                    drop(logs);
-
-                    terminal_guard
-                        .get_mut()
-                        .draw(|f| ui::draw_logs_screen(f, params, &current_logs))
-                        .ok();
-
-                    last_log_count = current_count;
-                } else {
-                    drop(logs);
-                }
-
-                thread::sleep(std::time::Duration::from_millis(PROCESS_POLL_INTERVAL_MS));
-            }
-            Err(e) => {
-                return Err(anyhow::anyhow!("Error waiting for process: {}", e));
-            }
-        }
-    };
-
-    let logs = log_lines.lock().unwrap();
-    let all_logs: Vec<String> = logs.clone();
-    drop(logs);
+    let (status, all_logs) = monitor_process_with_logs(
+        child,
+        stdout_handle,
+        stderr_handle,
+        log_lines,
+        &mut terminal_guard,
+        params,
+    )?;
 
     let output = std::process::Output {
         status,
