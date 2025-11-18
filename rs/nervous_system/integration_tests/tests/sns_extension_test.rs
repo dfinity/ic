@@ -104,7 +104,9 @@ async fn test_clean_up_failed_register_extension() {
     // proposal. That way, we can trigger clean_up_failed_register_extension,
     // the code under test.
     let mut smallest_wasm_file = NamedTempFile::new().unwrap();
-    smallest_wasm_file.write(SMALLEST_VALID_WASM_BYTES).unwrap();
+    smallest_wasm_file
+        .write_all(SMALLEST_VALID_WASM_BYTES)
+        .unwrap();
 
     let icp = Tokens::from_tokens(10).unwrap();
     cycles_ledger::mint_icp_and_convert_to_cycles(&pocket_ic, sender, icp).await;
@@ -178,7 +180,11 @@ async fn test_clean_up_failed_register_extension() {
         .await
         .unwrap();
     assert_eq!(
-        list_sns_canisters_response.extensions.clone().unwrap().extension_canister_ids,
+        list_sns_canisters_response
+            .extensions
+            .clone()
+            .unwrap()
+            .extension_canister_ids,
         vec![],
         "{list_sns_canisters_response:#?}",
     );
