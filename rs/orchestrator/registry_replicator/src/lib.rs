@@ -225,8 +225,11 @@ impl RegistryReplicator {
             Some(string) => string
                 .split(',')
                 .flat_map(|s| match Url::parse(s) {
-                    Err(_) => {
-                        info!(logger, "Could not parse registration NNS url from config.");
+                    Err(e) => {
+                        info!(
+                            logger,
+                            "Could not parse registration NNS url from config: {}", e
+                        );
                         None
                     }
                     Ok(url) => Some(url),
