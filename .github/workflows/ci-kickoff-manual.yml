@@ -8,14 +8,14 @@ on:
         required: true
         default: ''
       pr-number:
-        description: 'This is required to post comments on the PR. Leave empty if not applicable.'
-        required: false
+        description: 'The PR number' # this is used for posting comments with the CI link
+        required: true
         default: ''
 
 jobs:
   ci-main:
     name: CI Main
-    uses: ./.github/workflows/ci_main.yml
+    uses: ./.github/workflows/ci-main.yml
     secrets: inherit
     with:
       commit-sha: ${{ inputs.commit-sha }}
