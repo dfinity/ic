@@ -84,13 +84,16 @@ Usage:
       The update is written to the partitions, but the bootloader is
       not changed yet; see upgrade-commit command.
 
-    upgrade-commit
+    upgrade-commit [--no-reboot]
       Commits a previously installed upgrade by writing instructions to the
       bootloader to switch to the new system after reboot, and also triggers
-      reboot immediately.
+      reboot immediately (unless --no-reboot is specified).
       This must be called after the upgrade-install command above finished
       successfully. Calling it under any other circumstances is illegal and
       will result in a wrong (possibly failing) boot.
+
+      Options:
+        --no-reboot  Skip the automatic reboot after committing the upgrade.
 
     confirm
       Confirm that the current system booted fine (required after first
@@ -268,6 +271,12 @@ case "${ACTION}" in
             exit 1
         fi
 
+        NO_REBOOT=0
+        if [ "$1" == "--no-reboot" ]; then
+            NO_REBOOT=1
+            write_log "${SYSTEM_TYPE} upgrade-commit called with --no-reboot flag"
+        fi
+
         # Tell boot loader to switch partitions on next boot.
         write_log "${SYSTEM_TYPE} upgrade-commit proceeding - switching from ${boot_alternative} to ${TARGET_ALTERNATIVE}"
         write_log "Setting boot_alternative to ${TARGET_ALTERNATIVE} and boot_cycle to first_boot"
@@ -287,11 +296,15 @@ case "${ACTION}" in
             "${SYSTEM_TYPE} is boot stable" \
             "gauge"
 
-        write_log "${SYSTEM_TYPE} upgrade rebooting now, next slot ${TARGET_ALTERNATIVE}"
-        # Ignore termination signals from the following reboot, so that
-        # the script exits without error.
-        trap -- '' SIGTERM
-        reboot
+        if [ "${NO_REBOOT}" == 1 ]; then
+            write_log "${SYSTEM_TYPE} upgrade committed to slot ${TARGET_ALTERNATIVE}, skipping reboot"
+        else
+            write_log "${SYSTEM_TYPE} upgrade rebooting now, next slot ${TARGET_ALTERNATIVE}"
+            # Ignore termination signals from the following reboot, so that
+            # the script exits without error.
+            trap 'write_log "upgrade-commit received SIGTERM"; exit 0' SIGTERM
+            reboot
+        fi
         ;;
     confirm)
         write_log "${SYSTEM_TYPE} confirm action called - current boot_cycle: ${boot_cycle}, boot_alternative: ${boot_alternative}, IS_STABLE: ${IS_STABLE}"

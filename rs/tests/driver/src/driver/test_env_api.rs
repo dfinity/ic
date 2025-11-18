@@ -1478,13 +1478,18 @@ pub trait SshSession: HasTestEnv {
             .context("Failed to get SSH session")
     }
 
-    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    /// Convenience wrapper for `block_on_ssh_session_with_timeout` with a default timeout.
     fn block_on_ssh_session(&self) -> Result<Session> {
+        self.block_on_ssh_session_with_timeout(SSH_RETRY_TIMEOUT)
+    }
+
+    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    fn block_on_ssh_session_with_timeout(&self, timeout: Duration) -> Result<Session> {
         let ip = self.get_host_ip()?;
         retry_with_msg!(
             format!("get_ssh_session to {ip}"),
             self.test_env().logger(),
-            SSH_RETRY_TIMEOUT,
+            timeout,
             RETRY_BACKOFF,
             || { self.get_ssh_session() }
         )
@@ -2389,13 +2394,22 @@ pub async fn install_nns_canisters(
             builder.push_init_mutate_request(mutation);
         }
 
-        if registry_canister_init_payload.is_swapping_feature_enabled {
+        if registry_canister_init_payload
+            .is_swapping_feature_enabled
+            .unwrap_or_default()
+        {
             builder.enable_swapping_feature_globally();
         }
-        for caller in registry_canister_init_payload.swapping_whitelisted_callers {
+        for caller in registry_canister_init_payload
+            .swapping_whitelisted_callers
+            .unwrap_or_default()
+        {
             builder.whitelist_swapping_feature_caller(caller);
         }
-        for subnet in registry_canister_init_payload.swapping_enabled_subnets {
+        for subnet in registry_canister_init_payload
+            .swapping_enabled_subnets
+            .unwrap_or_default()
+        {
             builder.enable_swapping_feature_for_subnet(subnet);
         }
 

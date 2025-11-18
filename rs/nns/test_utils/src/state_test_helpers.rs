@@ -42,7 +42,7 @@ use ic_nns_governance_api::{
     self as nns_governance_pb, Empty, ExecuteNnsFunction, GetNeuronsFundAuditInfoRequest,
     GetNeuronsFundAuditInfoResponse, Governance, GovernanceError, InstallCodeRequest,
     ListNeuronVotesRequest, ListNeuronVotesResponse, ListNeurons, ListNeuronsResponse,
-    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfo,
+    ListNodeProviderRewardsRequest, ListNodeProviderRewardsResponse, ListProposalInfoRequest,
     ListProposalInfoResponse, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
     ManageNeuronResponse, MonthlyNodeProviderRewards, NetworkEconomics, NnsFunction,
     ProposalActionRequest, ProposalInfo, RewardNodeProviders, Vote,
@@ -1496,7 +1496,7 @@ pub fn nns_set_auto_stake_maturity(
 
 pub fn nns_list_proposals(
     state_machine: &StateMachine,
-    request: ListProposalInfo,
+    request: ListProposalInfoRequest,
 ) -> ListProposalInfoResponse {
     let result = state_machine
         .execute_ingress(

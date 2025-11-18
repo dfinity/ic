@@ -13,7 +13,6 @@ futures = { workspace = true }
 hyper-util = { workspace = true }
 ic-adapter-metrics-client = { path = "../../monitoring/adapter_metrics/client" }
 ic-http-endpoints-async-utils = { path = "../../http_endpoints/async_utils" }
-ic-nns-delegation-manager = { path = "../../http_endpoints/nns_delegation_manager" }
 ic-config = { path = "../../config" }
 ic-error-types = { path = "../../../packages/ic-error-types" }
 ic-https-outcalls-service = { path = "../service" }

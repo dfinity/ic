@@ -430,9 +430,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "convert_case": crate.spec(
                 version = "^0.6.0",
             ),
-            "raw-cpuid": crate.spec(
-                version = "11.5",
-            ),
             "crc32fast": crate.spec(
                 version = "^1.2.0",
             ),
@@ -490,7 +487,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.0.14",
             ),
             "ed25519-dalek": crate.spec(
-                version = "^2.1.1",
+                version = "^2.2.0",
                 features = ["std", "zeroize", "digest", "batch", "pkcs8", "pem", "hazmat"],
             ),
             "educe": crate.spec(
@@ -513,8 +510,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.3.2",
                 features = ["serde"],
             ),
+            "evm_rpc_client": crate.spec(
+                version = "^0.2.0",
+            ),
             "evm_rpc_types": crate.spec(
-                version = "^2.0.0",
+                version = "^3.0.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
@@ -669,6 +669,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "ic-certificate-verification": crate.spec(
                 version = "3.0.3",
+            ),
+            "ic-doge-interface": crate.spec(
+                git = "https://github.com/dfinity/dogecoin-canister",
+                rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f",
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
@@ -861,6 +865,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "maxminddb": crate.spec(
                 version = "^0.24",
             ),
+            "memchr": crate.spec(
+                version = "2.7",
+            ),
             "metrics-proxy": crate.spec(
                 git = "https://github.com/dfinity/metrics-proxy.git",
                 rev = "b6933ed79ac07baee7f3fbc0793bed95e614d27c",
@@ -993,7 +1000,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.2.6",
             ),
             "pem": crate.spec(
-                version = "^1.0.1",
+                version = "^3",
+                features = ["std"],
                 default_features = False,
             ),
             "pin-project-lite": crate.spec(
@@ -1264,7 +1272,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.9.33",
             ),
             "sev": crate.spec(
-                version = "6.2",
+                version = "7.1",
                 default_features = False,
                 features = [
                     "crypto_nossl",
