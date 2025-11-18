@@ -25,7 +25,6 @@ DEPENDENCIES = [
     "@crate_index//:url",
     "@crate_index//:prometheus",
     "@crate_index//:lazy_static",
-    "@crate_index//:axum-otel-metrics",
     "@crate_index//:opentelemetry",
     "@crate_index//:http",
     "@crate_index//:futures-util",
@@ -37,6 +36,7 @@ DEPENDENCIES = [
     "@crate_index//:tokio-rustls",
     "@crate_index//:simple_logger",
     "@crate_index//:rand",
+    "@crate_index//:axum-prometheus",
 ]
 
 DEV_DEPENDENCIES = [

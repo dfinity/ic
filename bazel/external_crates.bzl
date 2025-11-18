@@ -252,8 +252,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.10.1",
                 features = ["typed-header"],
             ),
-            "axum-otel-metrics": crate.spec(
-                version = "0.12.0"
+            "axum-prometheus": crate.spec(
+                version = "0.9.0"
             ),
             "axum-server": crate.spec(
                 version = "^0.7.2",
