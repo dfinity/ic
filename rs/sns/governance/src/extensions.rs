@@ -58,6 +58,51 @@ thread_local! {
     }});
 }
 
+#[cfg(any(test, feature = "test"))]
+lazy_static! {
+    static ref TEST_HASH_TO_EXTENSION_SPEC: BTreeMap<[u8; 32], ExtensionSpec> = {
+        // KongSwap v1 hash from integration test
+        let v1_hash: [u8; 32] = [
+            103, 45, 67, 136, 153, 129, 99, 42, 252, 137, 234, 215, 249, 199, 209, 167,
+            144, 31, 212, 229, 137, 163, 153, 11, 118, 34, 52, 243, 17, 86, 97, 209,
+        ];
+
+        // KongSwap v2 hash from integration test
+        let v2_hash: [u8; 32] = [
+            128, 15, 128, 73, 49, 167, 207, 220, 204, 215, 20, 218, 174, 6, 171, 203,
+            196, 247, 243, 160, 84, 98, 133, 2, 3, 47, 184, 165, 191, 94, 123, 231,
+        ];
+
+        let smallest_valid_wasm_hash: [u8; 32] = [
+            147, 164, 75, 187, 150, 199, 81, 33, 142, 76, 0, 212, 121, 228, 193, 67,
+            88, 18, 42, 56, 154, 204, 161, 98, 5, 177, 228, 208, 220, 95, 148, 118,
+        ];
+
+        btreemap! {
+            v1_hash => ExtensionSpec {
+                name: "My Test Extension".to_string(),
+                version: ExtensionVersion(1),
+                topic: Topic::TreasuryAssetManagement,
+                extension_type: ExtensionType::TreasuryManager,
+            },
+
+            v2_hash => ExtensionSpec {
+                name: "My Test Extension".to_string(),
+                version: ExtensionVersion(2),
+                topic: Topic::TreasuryAssetManagement,
+                extension_type: ExtensionType::TreasuryManager,
+            },
+
+            smallest_valid_wasm_hash => ExtensionSpec {
+                name: "Does Nothing Except Explode in Tests".to_string(),
+                version: ExtensionVersion(123),
+                topic: Topic::TreasuryAssetManagement,
+                extension_type: ExtensionType::TreasuryManager,
+            },
+        }
+    };
+}
+
 #[cfg(feature = "test")]
 pub fn add_allowed_extension_spec(hash: [u8; 32], spec: ExtensionSpec) {
     ALLOWED_EXTENSIONS.with_borrow_mut(|allowed| allowed.insert(hash, spec));
@@ -511,7 +556,19 @@ impl ValidatedRegisterExtension {
                 )
                 .await?;
 
+            let extension_name = spec.name.clone();
             cache_registered_extension(extension_canister_id, spec);
+
+            // Inject fault, i.e. when there is a test that tries to force us to
+            // explode, return Err.
+            if cfg!(any(test, feature = "test")) && extension_name.contains("Explode in Test") {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::External,
+                    "Something has gone terribly terribly wrong. Actually, this is just \
+                     an injected fault. This would only appear in tests."
+                        .to_string(),
+                ));
+            }
 
             Ok(())
         };
@@ -863,15 +920,13 @@ pub fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec,
         ));
     }
 
-    if cfg!(test) {
-        let test_allowed = create_test_allowed_extensions();
-        validate_extension_wasm_with_allowed(wasm_module_hash, &test_allowed)
-    } else {
-        validate_extension_wasm_with_allowed(
-            wasm_module_hash,
-            &ALLOWED_EXTENSIONS.with_borrow(|map| map.clone()),
-        )
-    }
+    validate_extension_wasm_with_allowed(
+        wasm_module_hash,
+        #[cfg(any(test, feature = "test"))]
+        &*TEST_HASH_TO_EXTENSION_SPEC,
+        #[cfg(not(any(test, feature = "test")))]
+        &ALLOWED_EXTENSIONS.with_borrow(|map| map.clone()),
+    )
 }
 
 /// Validates an extension WASM against a provided set of allowed extensions.
@@ -1725,36 +1780,6 @@ pub async fn get_sns_token_symbol(
         })??;
 
     Ok(symbol)
-}
-
-fn create_test_allowed_extensions() -> BTreeMap<[u8; 32], ExtensionSpec> {
-    // KongSwap v1 hash from integration test
-    let v1_hash: [u8; 32] = [
-        103, 45, 67, 136, 153, 129, 99, 42, 252, 137, 234, 215, 249, 199, 209, 167, 144, 31, 212,
-        229, 137, 163, 153, 11, 118, 34, 52, 243, 17, 86, 97, 209,
-    ];
-
-    // KongSwap v2 hash from integration test
-    let v2_hash: [u8; 32] = [
-        128, 15, 128, 73, 49, 167, 207, 220, 204, 215, 20, 218, 174, 6, 171, 203, 196, 247, 243,
-        160, 84, 98, 133, 2, 3, 47, 184, 165, 191, 94, 123, 231,
-    ];
-
-    btreemap! {
-
-        v1_hash => ExtensionSpec {
-            name: "My Test Extension".to_string(),
-            version: ExtensionVersion(1),
-            topic: Topic::TreasuryAssetManagement,
-            extension_type: ExtensionType::TreasuryManager,
-        },
-        v2_hash => ExtensionSpec {
-            name: "My Test Extension".to_string(),
-            version: ExtensionVersion(2),
-            topic: Topic::TreasuryAssetManagement,
-            extension_type: ExtensionType::TreasuryManager,
-        }
-    }
 }
 
 // ============================================================================
