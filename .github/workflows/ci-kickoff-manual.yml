@@ -62,7 +62,7 @@ jobs:
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           script: |
-            let message = 'Run URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
+            let message = 'Run on \`${{ inputs.commit-sha }}\` URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
 
             github.rest.issues.createComment({
               issue_number: ${{ inputs.pr-number }},
