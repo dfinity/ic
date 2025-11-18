@@ -11,6 +11,17 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-11-14: Proposal 139405
+
+http://dashboard.internetcomputer.org/proposal/139405
+
+## Added
+
+### Node Swaps
+
+DFINITY's node operators can now swap nodes on non-system subnets; later, swapping nodes will gradually become available to all node operators.
+
+
 # 2025-11-07: Proposal 139312
 
 http://dashboard.internetcomputer.org/proposal/139312

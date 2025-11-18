@@ -583,7 +583,7 @@ pub mod proposal {
         /// key can be destroyed so that the neuron can only be controlled
         /// by its followees, although this makes it impossible to
         /// subsequently unlock the balance.
-        ManageNeuron(Box<super::ManageNeuron>),
+        ManageNeuron(Box<super::ManageNeuronProposal>),
         /// Propose a change to some network parameters of network
         /// economics.
         ManageNetworkEconomics(super::NetworkEconomics),
@@ -646,12 +646,12 @@ pub struct Empty {}
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
-pub struct ManageNeuron {
+pub struct ManageNeuronProposal {
     /// This is the legacy way to specify neuron IDs that is now discouraged.
     pub id: Option<NeuronId>,
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     pub neuron_id_or_subaccount: Option<manage_neuron::NeuronIdOrSubaccount>,
-    pub command: Option<manage_neuron::Command>,
+    pub command: Option<manage_neuron::ManageNeuronProposalCommand>,
 }
 /// Nested message and enum types in `ManageNeuron`.
 pub mod manage_neuron {
@@ -1009,7 +1009,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug,
     )]
-    pub enum Command {
+    pub enum ManageNeuronProposalCommand {
         Configure(Configure),
         Disburse(Disburse),
         Spawn(Spawn),
