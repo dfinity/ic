@@ -822,6 +822,9 @@ fn message_in_size_range<R: Rng + CryptoRng>(
 // Copy of ic_crypto_test_utils_canister_threshold_sigs::ThresholdEcdsaSigInputsOwned.
 // The latter cannot be used here because ic-types (this crate here) has a dev-dependency on
 // ic_crypto_test_utils_canister_threshold_sigs, which has a dependency on ic-types.
+// This [quasi-circular dependency](https://mmapped.blog/posts/03-rust-packages-crates-modules#quasi-circular)
+// (and thus the code duplication) could be worked around by turning the unit tests
+// into integration tests.
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct ThresholdEcdsaSigInputsOwned {
     pub caller: PrincipalId,
@@ -883,6 +886,9 @@ fn valid_tecdsa_inputs_with_receivers(
 // Copy of ic_crypto_test_utils_canister_threshold_sigs::ThresholdSchnorrSigInputsOwned.
 // The latter cannot be used here because ic-types (this crate here) has a dev-dependency on
 // ic_crypto_test_utils_canister_threshold_sigs, which has a dependency on ic-types.
+// This [quasi-circular dependency](https://mmapped.blog/posts/03-rust-packages-crates-modules#quasi-circular)
+// (and thus the code duplication) could be worked around by turning the unit tests
+// into integration tests.
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct ThresholdSchnorrSigInputsOwned {
     pub caller: PrincipalId,
