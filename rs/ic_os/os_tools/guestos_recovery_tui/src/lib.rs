@@ -9,7 +9,7 @@ use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use ratatui::{Frame, Terminal, backend::CrosstermBackend};
+use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::Rect};
 use std::io::{self, BufRead, BufReader, Read};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -304,7 +304,8 @@ impl App {
         let terminal = setup_terminal()?;
         let mut terminal_guard = TerminalGuard::new(terminal);
 
-        let test_size = terminal_guard.get_mut().size()?;
+        let terminal_size = terminal_guard.get_mut().size()?;
+        let test_size = Rect::new(0, 0, terminal_size.width, terminal_size.height);
         if let Err(e) = ui::validate_terminal_size(test_size) {
             return Self::teardown_and_error(terminal_guard, e, || {
                 "Terminal size validation failed".to_string()

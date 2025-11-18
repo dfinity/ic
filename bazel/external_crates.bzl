@@ -444,7 +444,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 ],
             ),
             "crossterm": crate.spec(
-                version = "^0.28",
+                version = "^0.29",
             ),
             "crossbeam": crate.spec(
                 version = "^0.8.4",
@@ -1117,7 +1117,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.9.1",
             ),
             "ratatui": crate.spec(
-                version = "^0.27",
+                version = "^0.29",
             ),
             "rayon": crate.spec(
                 version = "^1.10.0",

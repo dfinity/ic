@@ -75,7 +75,7 @@ fn render_terminal_too_small_error(f: &mut Frame, size: Rect) -> bool {
 
 /// Renders the main UI for the App
 pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
-    let size = f.size();
+    let size = f.area();
 
     if render_terminal_too_small_error(f, size) {
         return;
@@ -234,7 +234,7 @@ fn render_button(app: &App, f: &mut Frame, text: &str, field: Field, area: Rect)
 
 /// Draws the initial status screen showing parameters and "Starting recovery..." message
 pub(crate) fn draw_status_screen(f: &mut Frame, params: &RecoveryParams) {
-    let size = f.size();
+    let size = f.area();
     let block = create_bordered_block("GuestOS Recovery Upgrader", Some(Style::default().bold()));
 
     let mut text = create_parameter_lines(params);
@@ -247,7 +247,7 @@ pub(crate) fn draw_status_screen(f: &mut Frame, params: &RecoveryParams) {
 
 /// Draws the real-time logs screen during recovery process
 pub(crate) fn draw_logs_screen(f: &mut Frame, params: &RecoveryParams, logs: &[String]) {
-    let size = f.size();
+    let size = f.area();
     if render_terminal_too_small_error(f, size) {
         return;
     }
@@ -386,7 +386,7 @@ pub(crate) fn draw_completion_screen(
     error_messages: &[String],
     params: &RecoveryParams,
 ) {
-    let size = f.size();
+    let size = f.area();
     let title = if success {
         "Recovery Completed"
     } else {

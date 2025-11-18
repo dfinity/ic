@@ -7,7 +7,6 @@ DEPENDENCIES = [
     "@crate_index//:atty",
     "@crate_index//:crossterm",
     "@crate_index//:ratatui",
-    "@crate_index//:regex",
 ]
 
 rust_library(
