@@ -43,6 +43,14 @@ fn test_canister_snapshot_download() {
         output_dir.clone(),
     );
 
+    // We skip the rest of the test on Windows
+    // since there's no Windows build of dfx
+    // and we don't want to use WSL here
+    // for the sake of simplicity.
+    if cfg!(target_os = "windows") {
+        return;
+    }
+
     // We need to make the PocketIC instance live for dfx to work.
     let url = pic.make_live(None);
 
