@@ -53,13 +53,18 @@ impl Header {
     }
 
     pub fn is_alive(&self, position: MemoryPosition) -> bool {
+        let capacity_position = MemoryPosition::new(self.data_capacity.get());
+        if position >= capacity_position {
+            return false;
+        }
+
         if self.data_head == self.data_tail {
             // If head==tail and size==0, the buffer is empty.
             if self.data_size.get() == 0 {
                 return false;
             }
             // if head==tail but size==capacity, the buffer is full.
-            if self.data_size.get() == self.data_capacity.get() {
+            if self.data_size == self.data_capacity {
                 return true;
             }
         }
@@ -69,8 +74,109 @@ impl Header {
         } else {
             // Wraps around, position is in [0, tail) or [head, capacity)
             position < self.data_tail
-                || (self.data_head <= position
-                    && position < MemoryPosition::new(self.data_capacity.get()))
+                || (self.data_head <= position && position < capacity_position)
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_header_sets_defaults() {
+        let capacity = MemorySize::new(1024);
+        let h = Header::new(capacity);
+        assert_eq!(h.magic, *b"LMS");
+        assert_eq!(h.version, 1);
+        assert_eq!(h.index_table_pages, 1);
+        assert_eq!(h.index_entries_count, 0);
+        assert_eq!(h.data_capacity, capacity);
+        assert_eq!(h.data_head, MemoryPosition::new(0));
+        assert_eq!(h.data_tail, MemoryPosition::new(0));
+        assert_eq!(h.data_size, MemorySize::new(0));
+        assert_eq!(h.next_idx, 0);
+    }
+
+    #[test]
+    fn advance_position_wraps_correctly() {
+        // With capacity 100, advancing 20 from position 90 wraps to 10.
+        let capacity = MemorySize::new(100);
+        let h = Header::new(capacity);
+        let next = h.advance_position(MemoryPosition::new(90), MemorySize::new(20));
+        assert_eq!(next, MemoryPosition::new(10));
+    }
+
+    #[test]
+    fn is_alive_returns_false_when_outside_capacity() {
+        // Positions >= capacity are always not alive.
+        let mut h = Header::new(MemorySize::new(64));
+        h.data_head = MemoryPosition::new(0);
+        h.data_tail = MemoryPosition::new(0);
+        h.data_size = MemorySize::new(64);
+        assert!(!h.is_alive(MemoryPosition::new(64)));
+        assert!(!h.is_alive(MemoryPosition::new(65)));
+    }
+
+    #[test]
+    fn is_alive_returns_false_when_empty() {
+        // When head==tail and size==0, buffer is empty, no positions are alive.
+        let mut h = Header::new(MemorySize::new(64));
+        h.data_head = MemoryPosition::new(0);
+        h.data_tail = MemoryPosition::new(0);
+        h.data_size = MemorySize::new(0);
+        assert!(!h.is_alive(MemoryPosition::new(0)));
+        assert!(!h.is_alive(MemoryPosition::new(1)));
+    }
+
+    #[test]
+    fn is_alive_returns_true_when_full() {
+        // When head==tail and size==capacity, buffer is full, all positions are alive.
+        let mut h = Header::new(MemorySize::new(16));
+        h.data_head = MemoryPosition::new(0);
+        h.data_tail = MemoryPosition::new(0);
+        h.data_size = MemorySize::new(16);
+        assert!(h.is_alive(MemoryPosition::new(0)));
+        assert!(h.is_alive(MemoryPosition::new(10)));
+        assert!(h.is_alive(MemoryPosition::new(15)));
+    }
+
+    #[test]
+    fn is_alive_no_wrap_range() {
+        // Capacity 100, no wrap, live bytes span [10..50).
+        let mut h = Header::new(MemorySize::new(100));
+        h.data_head = MemoryPosition::new(10);
+        h.data_tail = MemoryPosition::new(50);
+        h.data_size = MemorySize::new(40);
+        // [10..50)
+        assert!(!h.is_alive(MemoryPosition::new(9)));
+        assert!(h.is_alive(MemoryPosition::new(10)));
+        assert!(h.is_alive(MemoryPosition::new(49)));
+        assert!(!h.is_alive(MemoryPosition::new(50)));
+    }
+
+    #[test]
+    fn is_alive_wraps_around() {
+        // Capacity 100, wraps around, live bytes span [80..100) and [0..20).
+        let mut h = Header::new(MemorySize::new(100));
+        h.data_head = MemoryPosition::new(80);
+        h.data_tail = MemoryPosition::new(20);
+        h.data_size = MemorySize::new(40);
+        // [80..100)
+        assert!(!h.is_alive(MemoryPosition::new(79)));
+        assert!(h.is_alive(MemoryPosition::new(80)));
+        assert!(h.is_alive(MemoryPosition::new(99)));
+        assert!(!h.is_alive(MemoryPosition::new(100)));
+        // [0..20)
+        assert!(h.is_alive(MemoryPosition::new(0)));
+        assert!(h.is_alive(MemoryPosition::new(19)));
+        assert!(!h.is_alive(MemoryPosition::new(20)));
+    }
+}
+
+/*
+bazel test //rs/replicated_state:replicated_state_test \
+  --test_output=streamed \
+  --test_arg=--nocapture \
+  --test_arg=header
+*/
