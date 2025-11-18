@@ -392,6 +392,7 @@ members = [
     "rs/rust_canisters/ecdsa",
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
+    "rs/rust_canisters/messaging_test",
     "rs/rust_canisters/on_wire",
     "rs/rust_canisters/proxy_canister",
     "rs/rust_canisters/random_traffic_test",
@@ -682,6 +683,7 @@ ic-cdk = "0.18.7"
 ic-cdk-timers = "0.12.2"
 ic-certificate-verification = "3"
 ic-certification = "3"
+ic-doge-interface = { git = "https://github.com/dfinity/dogecoin-canister", rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f" }
 ic-ed25519 = "0.4.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
 ic-http-certification = "3.0.3"
@@ -755,7 +757,7 @@ p384 = "0.13"
 pairing = "0.23"
 parking_lot = "0.12.3"
 paste = "1.0.15"
-pem = { version = "^1.0.1", default-features = false }
+pem = { version = "^3", default-features = false, features = ["std"] }
 ping = "0.5.0"
 pkcs8 = "0.10.2"
 pprof = { version = "0.14.0", default-features = false, features = [

@@ -1,8 +1,15 @@
+load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 load("//rs/tests:common.bzl", "IC_GATEWAY_RUNTIME_DEPS")
 load("//rs/tests:system_tests.bzl", "system_test", "system_test_nns")
 
 package(default_visibility = ["//rs:system-tests-pkg"])
+
+# Just for testing if the Motoko code is correct.
+motoko_binary(
+    name = "counter_canister",
+    entry = "canisters/counter.mo",
+)
 
 rust_library(
     name = "sdk-system-tests",
