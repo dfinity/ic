@@ -10,7 +10,6 @@ use ic_crypto_test_utils_crypto_returning_ok::CryptoReturningOk;
 use ic_crypto_tls_interfaces::TlsConfig;
 use ic_crypto_tls_interfaces_mocks::MockTlsConfig;
 use ic_crypto_tree_hash::{LabeledTree, MatchPatternPath, MixedHashTree};
-use ic_error_types::UserError;
 use ic_http_endpoints_public::start_server;
 use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
@@ -78,7 +77,7 @@ use tokio_util::sync::CancellationToken;
 use tower::{Service, ServiceExt, util::BoxCloneService};
 use tower_test::mock::Handle;
 
-pub type IngressFilterHandle = Handle<IngressFilterInput, Result<(), UserError>>;
+pub type IngressFilterHandle = Handle<IngressFilterInput, IngressFilterResponse>;
 pub type QueryExecutionHandle = Handle<QueryExecutionInput, QueryExecutionResponse>;
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
@@ -103,12 +102,12 @@ fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle)
 
 #[allow(clippy::type_complexity)]
 pub fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle) {
-    let (service, handle) = tower_test::mock::pair::<IngressFilterInput, Result<(), UserError>>();
+    let (service, handle) = tower_test::mock::pair::<IngressFilterInput, IngressFilterResponse>();
 
     let infallible_service = tower::service_fn(move |request: IngressFilterInput| {
         let mut service_clone = service.clone();
         async move {
-            Ok::<IngressFilterResponse, Infallible>(Ok({
+            Ok::<IngressFilterResponse, Infallible>({
                 service_clone
                     .ready()
                     .await
@@ -116,7 +115,7 @@ pub fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle
                     .call(request)
                     .await
                     .expect("Mocking Infallible service and can therefore not return an error.")
-            }))
+            })
         }
     });
     (BoxCloneService::new(infallible_service), handle)

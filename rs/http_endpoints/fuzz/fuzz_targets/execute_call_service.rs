@@ -86,12 +86,12 @@ fuzz_target!(|call_impls: Vec<CallServiceImpl>| {
             for flag in filter_flags {
                 while let Some((_, resp)) = ingress_filter_handle.next_request().await {
                     if flag {
-                        resp.send_response(Ok(()))
+                        resp.send_response(Ok(Ok(())))
                     } else {
-                        resp.send_response(Err(UserError::new(
+                        resp.send_response(Ok(Err(UserError::new(
                             ErrorCode::CanisterNotFound,
                             "Fuzzing ingress filter error",
-                        )))
+                        ))))
                     }
                 }
             }
