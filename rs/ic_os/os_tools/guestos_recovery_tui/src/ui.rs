@@ -282,6 +282,114 @@ pub(crate) fn draw_logs_screen(f: &mut Frame, params: &RecoveryParams, logs: &[S
     render_text_block(f, text, block, size, Alignment::Left);
 }
 
+/// Builds the text content for the success completion screen
+fn build_success_text(success_message: &Option<String>, width: u16) -> Vec<Line<'static>> {
+    let mut text = Vec::new();
+    text.push(Line::from(""));
+    let success_msg = match success_message {
+        Some(msg) => format!("✓ {}", msg),
+        None => "✓ Recovery completed successfully!".to_string(),
+    };
+    text.push(Line::from(vec![Span::styled(
+        success_msg,
+        Style::default().fg(Color::Green).bold(),
+    )]));
+    text.push(Line::from(""));
+    let separator = create_separator(width);
+    text.push(Line::from(vec![Span::styled(
+        separator,
+        Style::default().fg(Color::DarkGray),
+    )]));
+    text.push(Line::from(""));
+    text
+}
+
+/// Builds the text content for the failure completion screen
+fn build_failure_text<'a>(
+    output: &'a std::process::Output,
+    stdout_lines: &'a [String],
+    stderr_lines: &'a [String],
+    error_messages: &'a [String],
+    params: &'a RecoveryParams,
+    size: Rect,
+) -> Vec<Line<'a>> {
+    let mut text = Vec::new();
+    text.push(Line::from(""));
+    text.push(Line::from(vec![Span::styled(
+        format!(
+            "✗ Recovery failed with exit code: {:?}",
+            output.status.code()
+        ),
+        Style::default().fg(Color::Red).bold(),
+    )]));
+    text.push(Line::from(""));
+    let separator = create_separator(size.width);
+    text.push(Line::from(vec![Span::styled(
+        separator,
+        Style::default().fg(Color::DarkGray),
+    )]));
+    text.push(Line::from(""));
+
+    // Add recovery parameters
+    text.push(Line::from(vec![Span::styled(
+        "Recovery Parameters:",
+        Style::default().fg(Color::Yellow).bold(),
+    )]));
+    text.extend(create_parameter_lines(params));
+    text.push(Line::from(""));
+    text.push(Line::from(vec![Span::styled(
+        create_separator(size.width),
+        Style::default().fg(Color::DarkGray),
+    )]));
+    text.push(Line::from(""));
+
+    // Combine stdout and stderr, avoiding duplicates
+    let mut all_log_lines = Vec::new();
+    for line in stdout_lines {
+        all_log_lines.push(line.clone());
+    }
+    for line in stderr_lines {
+        if !stdout_lines.contains(line) {
+            all_log_lines.push(line.clone());
+        }
+    }
+
+    // Add error logs or error messages
+    if !all_log_lines.is_empty() {
+        text.push(Line::from(vec![Span::styled(
+            "Error logs:",
+            Style::default().fg(Color::Red).bold(),
+        )]));
+        text.push(Line::from(""));
+
+        let available_height = size.height.saturating_sub(COMPLETION_SCREEN_OVERHEAD) as usize;
+        let (start_idx, _) = calculate_log_viewport(all_log_lines.len(), available_height);
+
+        let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
+        let formatted_lines: Vec<Line> = all_log_lines[start_idx..]
+            .iter()
+            .map(|line| Line::from(format!("  {}", truncate_line(line, max_width))))
+            .collect();
+        text.extend(formatted_lines);
+    } else if !error_messages.is_empty() {
+        text.push(Line::from(vec![Span::styled(
+            "Error details:",
+            Style::default().fg(Color::Red).bold(),
+        )]));
+        text.push(Line::from(""));
+        let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
+        text.extend(format_log_lines(error_messages, max_width));
+    } else {
+        text.push(Line::from(""));
+        text.push(Line::from(
+            "No error logs captured. Check system logs for details:",
+        ));
+        text.push(Line::from("  journalctl -t guestos-recovery-upgrader"));
+    }
+
+    text
+}
+
 /// Draws the completion screen showing success or failure with details
 pub(crate) fn draw_completion_screen(
     f: &mut Frame,
@@ -306,99 +414,18 @@ pub(crate) fn draw_completion_screen(
     };
     let block = create_bordered_block(title, Some(style));
 
-    let mut text = Vec::new();
-
-    if success {
-        text.push(Line::from(""));
-        let success_msg = match success_message {
-            Some(msg) => format!("✓ {}", msg),
-            None => "✓ Recovery completed successfully!".to_string(),
-        };
-        text.push(Line::from(vec![Span::styled(
-            success_msg,
-            Style::default().fg(Color::Green).bold(),
-        )]));
-        text.push(Line::from(""));
-        let separator = create_separator(size.width);
-        text.push(Line::from(vec![Span::styled(
-            separator,
-            Style::default().fg(Color::DarkGray),
-        )]));
-        text.push(Line::from(""));
+    let mut text = if success {
+        build_success_text(success_message, size.width)
     } else {
-        text.push(Line::from(""));
-        text.push(Line::from(vec![Span::styled(
-            format!(
-                "✗ Recovery failed with exit code: {:?}",
-                output.status.code()
-            ),
-            Style::default().fg(Color::Red).bold(),
-        )]));
-        text.push(Line::from(""));
-        let separator = create_separator(size.width);
-        text.push(Line::from(vec![Span::styled(
-            separator,
-            Style::default().fg(Color::DarkGray),
-        )]));
-        text.push(Line::from(""));
-
-        // Add recovery parameters
-        text.push(Line::from(vec![Span::styled(
-            "Recovery Parameters:",
-            Style::default().fg(Color::Yellow).bold(),
-        )]));
-        text.extend(create_parameter_lines(params));
-        text.push(Line::from(""));
-        text.push(Line::from(vec![Span::styled(
-            create_separator(size.width),
-            Style::default().fg(Color::DarkGray),
-        )]));
-        text.push(Line::from(""));
-
-        let mut all_log_lines = Vec::new();
-
-        for line in stdout_lines {
-            all_log_lines.push(line.clone());
-        }
-
-        for line in stderr_lines {
-            if !stdout_lines.contains(line) {
-                all_log_lines.push(line.clone());
-            }
-        }
-
-        if !all_log_lines.is_empty() {
-            text.push(Line::from(vec![Span::styled(
-                "Error logs:",
-                Style::default().fg(Color::Red).bold(),
-            )]));
-            text.push(Line::from(""));
-
-            let available_height = size.height.saturating_sub(COMPLETION_SCREEN_OVERHEAD) as usize;
-            let (start_idx, _) = calculate_log_viewport(all_log_lines.len(), available_height);
-
-            let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
-            let formatted_lines: Vec<Line> = all_log_lines[start_idx..]
-                .iter()
-                .map(|line| Line::from(format!("  {}", truncate_line(line, max_width))))
-                .collect();
-            text.extend(formatted_lines);
-        } else if !error_messages.is_empty() {
-            text.push(Line::from(vec![Span::styled(
-                "Error details:",
-                Style::default().fg(Color::Red).bold(),
-            )]));
-            text.push(Line::from(""));
-            let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
-            text.extend(format_log_lines(error_messages, max_width));
-        } else {
-            text.push(Line::from(""));
-            text.push(Line::from(
-                "No error logs captured. Check system logs for details:",
-            ));
-            text.push(Line::from("  journalctl -t guestos-recovery-upgrader"));
-        }
-    }
+        build_failure_text(
+            output,
+            stdout_lines,
+            stderr_lines,
+            error_messages,
+            params,
+            size,
+        )
+    };
 
     text.push(Line::from(""));
     text.push(Line::from("Press any key to continue..."));
