@@ -27,7 +27,6 @@ cfg_if::cfg_if! {
 pub use call::{
     IngressValidatorBuilder, IngressWatcher, IngressWatcherHandle, call_async, call_sync,
 };
-
 use common::CONTENT_TYPE_CBOR;
 pub use common::{cors_layer, make_plaintext_response};
 use ic_http_endpoints_async_utils::start_tcp_listener;
