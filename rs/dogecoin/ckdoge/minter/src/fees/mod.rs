@@ -1,3 +1,6 @@
+#[cfg(test)]
+mod tests;
+
 use crate::lifecycle::init::Network;
 use crate::tx::UnsignedTransaction;
 use ic_ckbtc_minter::{MillisatoshiPerByte, Satoshi, fees::FeeEstimator};
@@ -13,11 +16,18 @@ pub struct DogecoinFeeEstimator {
 }
 
 impl DogecoinFeeEstimator {
-    pub fn from_state(state: &ic_ckbtc_minter::state::CkBtcMinterState) -> Self {
+    pub fn new(network: Network, retrieve_doge_min_amount: u64) -> Self {
         Self {
-            network: Network::from(state.btc_network),
-            retrieve_doge_min_amount: state.retrieve_btc_min_amount,
+            network,
+            retrieve_doge_min_amount,
         }
+    }
+
+    pub fn from_state(state: &ic_ckbtc_minter::state::CkBtcMinterState) -> Self {
+        Self::new(
+            Network::from(state.btc_network),
+            state.retrieve_btc_min_amount,
+        )
     }
 }
 
