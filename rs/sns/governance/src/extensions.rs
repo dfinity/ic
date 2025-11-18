@@ -73,6 +73,12 @@ lazy_static! {
             196, 247, 243, 160, 84, 98, 133, 2, 3, 47, 184, 165, 191, 94, 123, 231,
         ];
 
+        // This is the SHA-256 has of SMALLEST_VALID_WASM_BYTES in
+        // ic_nervous_system_common_test_utils::wasm_helpers. Depending on that
+        // crate creates problems (namely, that it makes the resulting WASM
+        // assume that bindgen is available, which only happens in browsers, not
+        // the ICP). To work around that, we copy the value of
+        // SMALLEST_VALID_WASM_HASH here.
         let smallest_valid_wasm_hash: [u8; 32] = [
             147, 164, 75, 187, 150, 199, 81, 33, 142, 76, 0, 212, 121, 228, 193, 67,
             88, 18, 42, 56, 154, 204, 161, 98, 5, 177, 228, 208, 220, 95, 148, 118,
