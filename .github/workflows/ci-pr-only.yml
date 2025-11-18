@@ -37,7 +37,7 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
-            export DID_CHECK_REV='${{ github.event.pull_request.base.ref }}'
+            export DID_CHECK_REV="$(git rev-parse '${{ github.event.pull_request.base.ref }}')"
             echo "DID_CHECK_REV=$DID_CHECK_REV"
             bazel test //... \
               --build_tag_filters="didc" \
