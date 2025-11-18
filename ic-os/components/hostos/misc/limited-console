@@ -107,6 +107,12 @@ while true; do
     # Parse command and arguments safely using array to prevent command injection
     # This safely splits the input while preserving quoted arguments
     read -ra cmd_array <<< "$command"
+
+    # If parsing produced no tokens, skip
+    if [ "${#cmd_array[@]}" -eq 0 ]; then
+        continue
+    fi
+
     cmd="${cmd_array[0]}"
     # Pass remaining arguments as separate array elements to prevent injection
     execute_command "$cmd" "${cmd_array[@]:1}"
