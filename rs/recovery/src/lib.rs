@@ -339,8 +339,8 @@ impl Recovery {
         )
     }
 
-    /// Return the list of paths to include when downloading a node's "production" state with
-    /// rsync.
+    /// Return the list of paths to include when downloading a node's "production" state (i.e. at
+    /// /var/lib/ic/data) with rsync.
     /// One of them is the latest checkpoint, which is looked up remotely via ssh if an `ssh_helper`
     /// is given, or locally on disk otherwise.
     pub fn get_ic_state_includes(ssh_helper: Option<&SshHelper>) -> RecoveryResult<Vec<PathBuf>> {
@@ -395,8 +395,8 @@ impl Recovery {
         )
     }
 
-    /// Return a [DownloadIcDataStep] downloading some data of the given
-    /// node to the recovery data directory using the given account.
+    /// Return a [DownloadIcDataStep] downloading some data of the given node to the recovery data
+    /// directory using the given account, or with admin access if the latter cannot connect.
     pub fn get_download_data_step(
         &self,
         mut ssh_helper: SshHelper,
@@ -746,7 +746,7 @@ impl Recovery {
         })
     }
 
-    /// Return an [WaitForCUPStep] to wait until the recovery CUP is present on the given node.
+    /// Return a [WaitForCUPStep] to wait until the recovery CUP is present on the given node.
     pub fn get_wait_for_cup_step(&self, node_ip: IpAddr) -> impl Step + use<> {
         WaitForCUPStep {
             logger: self.logger.clone(),
