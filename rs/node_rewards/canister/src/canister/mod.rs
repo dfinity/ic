@@ -26,6 +26,7 @@ use ic_registry_keys::{
 use ic_registry_node_provider_rewards::{RewardsPerNodeProvider, calculate_rewards_v0};
 use ic_stable_structures::StableCell;
 use ic_types::{RegistryVersion, Time};
+use rewards_calculation::AlgorithmVersion;
 use rewards_calculation::performance_based_algorithm::PerformanceBasedAlgorithm;
 use rewards_calculation::performance_based_algorithm::results::RewardsCalculatorResults;
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
@@ -171,11 +172,13 @@ impl NodeRewardsCanister {
         let rewards_calculator_version = request.rewards_calculation_version.unwrap_or_default();
 
         match rewards_calculator_version.version {
-            1 => RewardsCalculationV1::calculate_rewards(start_day, end_day, self)
-                .map_err(|e| format!("Could not calculate rewards: {e:?}"))
-                .map(|r| (r, rewards_calculator_version)),
+            RewardsCalculationV1::VERSION => {
+                RewardsCalculationV1::calculate_rewards(start_day, end_day, self)
+                    .map_err(|e| format!("Could not calculate rewards: {e:?}"))
+                    .map(|r| (r, rewards_calculator_version))
+            }
             _ => Err(format!(
-                "Could not calculate rewards: {rewards_calculator_version:?}"
+                "Rewards Calculation Version: {rewards_calculator_version:?} is not supported"
             )),
         }
     }
