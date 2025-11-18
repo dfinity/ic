@@ -432,9 +432,9 @@ mod tests {
     use tower::ServiceExt;
 
     enum PoolMessage {
-        /// We expect an access atempt to the ingress pool, with an optional message being returned.
+        /// We expect an access attempt to the ingress pool, with an optional message being returned.
         Ingress(Option<SignedIngress>),
-        /// We expect an access atempt to the IDKG pool, with an optional message being returned.
+        /// We expect an access attempt to the IDKG pool, with an optional message being returned.
         IDkgDealing(Option<SignedIDkgDealing>),
         /// We don't expect any access to the pools.
         None,
