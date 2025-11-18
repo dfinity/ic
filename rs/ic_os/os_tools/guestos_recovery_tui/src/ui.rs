@@ -39,7 +39,7 @@ pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
             Line::from("Please resize your terminal"),
         ];
         let para = Paragraph::new(error_text)
-            .block(Block::default().borders(Borders::ALL).title("Error"))
+            .block(create_bordered_block("Error", None))
             .alignment(Alignment::Center);
         f.render_widget(para, size);
         return;
@@ -225,16 +225,24 @@ fn create_separator(width: u16) -> String {
     "─".repeat((width.saturating_sub(TEXT_PADDING)).max(10) as usize)
 }
 
+/// Creates a bordered block with a title and optional styling.
+/// This is a helper to reduce duplication in block creation.
+#[allow(mismatched_lifetime_syntaxes)]
+fn create_bordered_block(title: &str, style: Option<Style>) -> Block {
+    let mut block = Block::default().borders(Borders::ALL).title(title);
+    if let Some(s) = style {
+        block = block.style(s);
+    }
+    block
+}
+
 /// Draws the initial status screen showing parameters and "Starting recovery..." message
 pub(crate) fn draw_status_screen(f: &mut Frame, params: &RecoveryParams) {
     let size = f.size();
     if is_terminal_too_small(size) {
         return;
     }
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title("GuestOS Recovery Upgrader")
-        .style(Style::default().bold());
+    let block = create_bordered_block("GuestOS Recovery Upgrader", Some(Style::default().bold()));
 
     let mut text = create_parameter_lines(params);
     text.push(Line::from(""));
@@ -254,10 +262,7 @@ pub(crate) fn draw_logs_screen(f: &mut Frame, params: &RecoveryParams, logs: &[S
     if is_terminal_too_small(size) {
         return;
     }
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title("GuestOS Recovery Upgrader")
-        .style(Style::default().bold());
+    let block = create_bordered_block("GuestOS Recovery Upgrader", Some(Style::default().bold()));
 
     let mut text = create_parameter_lines(params);
     text.push(Line::from(""));
@@ -303,18 +308,17 @@ pub(crate) fn draw_completion_screen(
     if is_terminal_too_small(size) {
         return;
     }
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(if success {
-            "Recovery Completed"
-        } else {
-            "Recovery Failed"
-        })
-        .style(if success {
-            Style::default().fg(Color::Green).bold()
-        } else {
-            Style::default().fg(Color::Red).bold()
-        });
+    let title = if success {
+        "Recovery Completed"
+    } else {
+        "Recovery Failed"
+    };
+    let style = if success {
+        Style::default().fg(Color::Green).bold()
+    } else {
+        Style::default().fg(Color::Red).bold()
+    };
+    let block = create_bordered_block(title, Some(style));
 
     let mut text = Vec::new();
 
