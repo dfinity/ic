@@ -8,7 +8,7 @@ jobs:
   notify-slack:
     name: Notify Slack for External Contributors
     runs-on: ubuntu-latest
- #   if: github.event.pull_request.head.repo.full_name != github.repository
+    if: github.event.pull_request.head.repo.full_name != github.repository
     steps:
       - name: Sanitize PR title
         id: sanitize
