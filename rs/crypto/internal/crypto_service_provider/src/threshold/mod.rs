@@ -4,7 +4,7 @@ use crate::api::{CspThresholdSignError, ThresholdSignatureCspClient};
 use crate::key_id::{KeyId, KeyIdInstantiationError};
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
 use ic_crypto_internal_threshold_sig_bls12381 as clib;
-use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_pub_coeff_bytes;
+use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::try_number_of_nodes_from_pub_coeff_bytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;

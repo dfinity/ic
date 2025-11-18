@@ -7,7 +7,7 @@ use crate::vault::api::CspVault;
 use crate::{Csp, LocalCspVault};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::test_utils::select_n;
-use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_csp_pub_coeffs;
+use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::try_number_of_nodes_from_csp_pub_coeffs;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
 use rand::CryptoRng;

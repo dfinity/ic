@@ -34,11 +34,6 @@ use domain_separator::DomainSeparator;
 #[cfg(test)]
 mod tests;
 
-/// The domain separator to be used when calculating the sender signature for a
-/// request to the Internet Computer according to the
-/// [interface specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
-pub const DOMAIN_IC_REQUEST: &[u8; 11] = b"\x0Aic-request";
-
 /// A type that specifies a domain for a cryptographic hash.
 ///
 /// This trait is sealed and can only be implemented by types that are

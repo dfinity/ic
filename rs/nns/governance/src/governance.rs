@@ -29,14 +29,14 @@ use crate::{
     },
     pb,
     pb::{
-        proposal_conversions::{convert_proposal, proposal_data_to_info},
+        proposal_conversions::proposal_data_to_info,
         v1::{
             ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem,
             ExecuteNnsFunction, Followees, FulfillSubnetRentalRequest,
             GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
             Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
-            ListKnownNeuronsResponse, ListProposalInfo, ManageNeuron, MonthlyNodeProviderRewards,
-            Motion, NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+            ListKnownNeuronsResponse, ManageNeuron, MonthlyNodeProviderRewards, Motion,
+            NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
@@ -103,10 +103,12 @@ use ic_nns_constants::{
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
     GetNeuronIndexRequest, ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse,
-    ListProposalInfoResponse, ManageNeuronResponse, NeuronIndexData, NeuronInfo, NeuronVote,
-    NeuronVotes, ProposalInfo,
+    ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronResponse, NeuronIndexData,
+    NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
-    proposal_validation,
+    proposal_validation::{
+        validate_proposal_summary, validate_proposal_title, validate_proposal_url,
+    },
     subnet_rental::SubnetRentalRequest,
 };
 use ic_node_rewards_canister_api::DateUtc;
@@ -3794,10 +3796,10 @@ impl Governance {
     /// proposal. This can be used to paginate through proposals, as follows:
     ///
     /// `
-    /// let mut lst = gov.list_proposals(ListProposalInfo {});
+    /// let mut lst = gov.list_proposals(ListProposalInfoRequest {});
     /// while !lst.empty() {
     ///   /* do stuff with lst */
-    ///   lst = gov.list_proposals(ListProposalInfo {
+    ///   lst = gov.list_proposals(ListProposalInfoRequest {
     ///     before_proposal: lst.last().and_then(|x|x.id)
     ///   });
     /// }
@@ -3824,7 +3826,7 @@ impl Governance {
     pub fn list_proposals(
         &self,
         caller: &PrincipalId,
-        req: &ListProposalInfo,
+        req: ListProposalInfoRequest,
     ) -> ListProposalInfoResponse {
         let exclude_topic: HashSet<i32> = req.exclude_topic.iter().cloned().collect();
         let include_reward_status: HashSet<i32> =
@@ -3880,7 +3882,7 @@ impl Governance {
                 proposal_data_to_info(
                     proposal_data,
                     true,
-                    req.omit_large_fields(),
+                    req.omit_large_fields.unwrap_or_default(),
                     &caller_neurons,
                     now,
                     self.voting_period_seconds(),
@@ -5136,9 +5138,9 @@ impl Governance {
             }
         }
 
-        proposal_validation::validate_user_submitted_proposal_fields(&convert_proposal(
-            proposal, true,
-        ))?;
+        validate_proposal_title(&proposal.title)?;
+        validate_proposal_summary(&proposal.summary)?;
+        validate_proposal_url(&proposal.url)?;
 
         if !proposal.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
