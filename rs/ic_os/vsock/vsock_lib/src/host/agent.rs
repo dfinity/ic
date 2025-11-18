@@ -51,7 +51,6 @@ fn get_hostos_vsock_version() -> Response {
 }
 
 fn is_manual_recovery_running() -> bool {
-    // Check if hostos_tool is running with manual-recovery argument
     std::process::Command::new("pgrep")
         .arg("-f")
         .arg("hostos_tool.*manual-recovery")
@@ -61,7 +60,7 @@ fn is_manual_recovery_running() -> bool {
 }
 
 fn notify(notify_data: &NotifyData) -> Response {
-    // Skip logging if recovery TUI is running to avoid interfering with the display
+    // Skip logging if manual recovery TUI is running to avoid interfering with the display
     if is_manual_recovery_running() {
         return Ok(Payload::NoPayload);
     }

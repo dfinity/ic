@@ -42,7 +42,7 @@ parse_args() {
     done
 }
 
-# Helper function to log messages to logger, and stdout/stderr
+# Helper function to log messages to logger and stdout/stderr
 log_message() {
     local message="$1"
     # Write to system logger
@@ -271,13 +271,12 @@ guestos_upgrade_cleanup() {
 
 main() {
     log_message "Starting GuestOS Recovery Upgrader"
-    # Parse command line arguments
+
     VERSION=""
     VERSION_HASH=""
     RECOVERY_HASH=""
     parse_args "$@"
 
-    # Debug: Log parsed values
     log_message "Parsed VERSION='$VERSION' VERSION_HASH='$VERSION_HASH' RECOVERY_HASH='$RECOVERY_HASH'"
 
     if [ -z "$VERSION" ] || [ -z "$VERSION_HASH" ]; then
