@@ -281,8 +281,8 @@ pub fn verify_sharing(
     // Thread 2
     {
         // Second verification equation
-        // Verify: product [A_k ^ sum [i^k * x^i | i <- [1..n]] | k <- [0..t-1]]^x' * A
-        // == g_2^z_alpha
+        //   ( ∏_{k=0}^{t-1} A_k^{ Σ_{i=1}^n (i^k * x^i) } )^{x'} * A
+        //     == g_2^{z_α}
 
         // We initialize ik with x_challenge (A) to avoid the point/scalar multiplication later
         let mut ik = vec![x_challenge.clone(); instance.public_keys.len()];
@@ -310,8 +310,13 @@ pub fn verify_sharing(
     // Thread 3
     {
         // Third verification equation
-        // LHS = product [C_i ^ x^i | i <- [1..n]]^x' * Y
-        // RHS = product [y_i ^ x^i | i <- 1..n]^z_r * g_1^z_alpha
+        // Original relation:
+        //   (∏_{i=1}^n C_i^{x^i})^{x'} * Y  ==  (∏_{i=1}^n y_i^{x^i})^{z_r} * g_1^{z_α}
+        //
+        // Equivalently, we can rewrite it by moving terms to opposite sides:
+        //
+        //   lhs = (∏_{i=1}^n C_i^{x^i})^{x'} * (∏_{i=1}^n y_i^{x^i})^{-z_r}
+        //   rhs = g_1^{z_α} * Y^{-1}
 
         // The two expressions are re-arranged so that it becomes possible to compute
         // everything with a single multi scalar multiplication.
