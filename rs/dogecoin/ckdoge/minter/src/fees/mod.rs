@@ -86,7 +86,13 @@ impl FeeEstimator for DogecoinFeeEstimator {
             Network::Regtest => self.retrieve_doge_min_amount,
         }
     }
-    fn evaluate_transaction_fee(&self, _: &UnsignedTransaction, _: u64) -> u64 {
-        todo!()
+
+    fn evaluate_transaction_fee(
+        &self,
+        unsigned_tx: &UnsignedTransaction,
+        fee_per_byte: u64,
+    ) -> u64 {
+        let tx_size = ic_ckbtc_minter::fake_sign(unsigned_tx).serialized_len();
+        (tx_size as u64 * fee_per_byte) / 1000
     }
 }
