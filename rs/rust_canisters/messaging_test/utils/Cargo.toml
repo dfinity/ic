@@ -1,0 +1,10 @@
+[package]
+name = "messaging-test-utils"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+candid = { workspace = true }
+ic-types = { path = "../../../types/types" }
+messaging-test = { path = ".." }
+proptest = { workspace = true }

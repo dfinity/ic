@@ -7,6 +7,7 @@ use crate::driver::{
     context::GroupContext,
     dsl::SubprocessFn,
     event::TaskId,
+    logger::new_discard_logger,
     process::{KillFn, Process},
     subprocess_ipc::{LogReceiver, ReportOrFailure, log_panic_event},
     task::{Task, TaskHandle},
@@ -33,6 +34,7 @@ pub struct SubprocessTask {
     f: Arc<Mutex<Option<Box<dyn SubprocessFn>>>>,
     spawned: AtomicBool,
     group_ctx: GroupContext,
+    quiet: bool,
 }
 
 impl SubprocessTask {
@@ -41,6 +43,7 @@ impl SubprocessTask {
         rt: RtHandle,
         f: F,
         group_ctx: GroupContext,
+        quiet: bool,
     ) -> Self {
         Self {
             task_id,
@@ -48,6 +51,7 @@ impl SubprocessTask {
             f: shared_mutex(Some(Box::new(f))),
             spawned: Default::default(),
             group_ctx,
+            quiet,
         }
     }
 }
@@ -85,7 +89,15 @@ impl Task for SubprocessTask {
 
         info!(self.group_ctx.log(), "Spawning {:?} ...", child_cmd);
 
-        let log = self.group_ctx.logger();
+        // When this subtask is `quiet`, have the receiver discard logs.
+        // NOTE: We discard on the receiver rather than the sender, so that no
+        // information is lost. Eventually, we may want to split the logfile
+        // and stdout, and will leave this to the receiver.
+        let log = if !self.quiet {
+            self.group_ctx.logger()
+        } else {
+            new_discard_logger()
+        };
         let log_rcvr = self
             .rt
             .block_on(LogReceiver::new(sock_path, log.clone()))
