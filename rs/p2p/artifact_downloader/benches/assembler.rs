@@ -22,6 +22,7 @@ use ic_types::{
     consensus::{
         Block, BlockPayload, BlockProposal, ConsensusMessage, DataPayload, Payload, Rank,
         dkg::{DkgDataPayload, DkgSummary},
+        idkg::IDkgMessage,
     },
     messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
     time::UNIX_EPOCH,
@@ -58,6 +59,7 @@ fn set_up_assembler(
 ) -> FetchStrippedConsensusArtifact {
     let mock_transport = MockTransport::new();
     let consensus_pool = MockValidatedPoolReader::<ConsensusMessage>::default();
+    let idkg_pool = MockValidatedPoolReader::<IDkgMessage>::default();
     let ingress_pool = FakeIngressPool {
         ingresses: ingress_messages
             .into_iter()
@@ -73,6 +75,7 @@ fn set_up_assembler(
         handle,
         Arc::new(RwLock::new(consensus_pool)),
         Arc::new(RwLock::new(ingress_pool)),
+        Arc::new(RwLock::new(idkg_pool)),
         Arc::new(mock_bouncer_factory),
         MetricsRegistry::new(),
         NODE_1,
