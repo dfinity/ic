@@ -58,7 +58,7 @@ pub(super) struct Pools {
 }
 
 #[derive(Debug)]
-enum IngressPoolsAccessError {
+enum IngressPoolAccessError {
     /// The consensus pool doesn't have a block proposal with the given [`ConsensusMessageId`].
     BlockNotFound,
     /// Neither ingress pool nor consensus pool has the requested ingress message.
@@ -70,7 +70,7 @@ enum IngressPoolsAccessError {
 }
 
 #[derive(Debug)]
-enum IDkgPoolsAccessError {
+enum IDkgPoolAccessError {
     /// The consensus pool doesn't have a block proposal with the given [`ConsensusMessageId`].
     BlockNotFound,
     /// Neither IDkg pool nor consensus pool has the requested IDkg dealing.
@@ -91,7 +91,7 @@ impl Pools {
         &self,
         signed_ingress_id: &SignedIngressId,
         block_proposal_id: &ConsensusMessageId,
-    ) -> Result<SignedRequestBytes, IngressPoolsAccessError> {
+    ) -> Result<SignedRequestBytes, IngressPoolAccessError> {
         let ingress_message_id = &signed_ingress_id.ingress_message_id;
 
         // First check if the requested ingress message exists in the Ingress Pool.
@@ -114,16 +114,16 @@ impl Pools {
                 .stripped_messages_not_found
                 .with_label_values(&[INGRESS_LABEL])
                 .inc();
-            return Err(IngressPoolsAccessError::BlockNotFound);
+            return Err(IngressPoolAccessError::BlockNotFound);
         };
 
         // Double check it is indeed a Block Proposal
         let ConsensusMessage::BlockProposal(block_proposal) = consensus_artifact else {
-            return Err(IngressPoolsAccessError::NotABlockProposal);
+            return Err(IngressPoolAccessError::NotABlockProposal);
         };
 
         let BlockPayload::Data(data_payload) = block_proposal.as_ref().payload.as_ref() else {
-            return Err(IngressPoolsAccessError::SummaryBlock);
+            return Err(IngressPoolAccessError::SummaryBlock);
         };
 
         match data_payload
@@ -143,7 +143,7 @@ impl Pools {
             }
             _ => {
                 self.metrics.stripped_messages_not_found.with_label_values(&[INGRESS_LABEL]).inc();
-                Err(IngressPoolsAccessError::IngressMessageNotFound)
+                Err(IngressPoolAccessError::IngressMessageNotFound)
             }
         }
     }
@@ -153,7 +153,7 @@ impl Pools {
         node_index: NodeIndex,
         dealing_id: &IDkgArtifactId,
         block_proposal_id: &ConsensusMessageId,
-    ) -> Result<SignedIDkgDealing, IDkgPoolsAccessError> {
+    ) -> Result<SignedIDkgDealing, IDkgPoolAccessError> {
         // First check if the requested dealing exists in the IDkg Pool.
         if let Some(IDkgMessage::Dealing(signed_dealing)) =
             self.idkg_pool.read().unwrap().get(dealing_id)
@@ -172,12 +172,12 @@ impl Pools {
                 .stripped_messages_not_found
                 .with_label_values(&[IDKG_DEALING_LABEL])
                 .inc();
-            return Err(IDkgPoolsAccessError::BlockNotFound);
+            return Err(IDkgPoolAccessError::BlockNotFound);
         };
 
         // Double check it is indeed a Block Proposal
         let ConsensusMessage::BlockProposal(block_proposal) = consensus_artifact else {
-            return Err(IDkgPoolsAccessError::NotABlockProposal);
+            return Err(IDkgPoolAccessError::NotABlockProposal);
         };
 
         let Some(idkg) = block_proposal.as_ref().payload.as_ref().as_idkg() else {
@@ -185,11 +185,11 @@ impl Pools {
                 .stripped_messages_not_found
                 .with_label_values(&[IDKG_DEALING_LABEL])
                 .inc();
-            return Err(IDkgPoolsAccessError::IDkgPayloadNotFound);
+            return Err(IDkgPoolAccessError::IDkgPayloadNotFound);
         };
 
         let IDkgArtifactId::Dealing(prefix, data) = &dealing_id else {
-            return Err(IDkgPoolsAccessError::NotADealing);
+            return Err(IDkgPoolAccessError::NotADealing);
         };
 
         let transcript_id = IDkgTranscriptId::new(
@@ -202,7 +202,7 @@ impl Pools {
                 .stripped_messages_not_found
                 .with_label_values(&[IDKG_DEALING_LABEL])
                 .inc();
-            return Err(IDkgPoolsAccessError::TranscriptNotFound);
+            return Err(IDkgPoolAccessError::TranscriptNotFound);
         };
 
         let Some(batch_signed_dealing) = transcript
@@ -214,7 +214,7 @@ impl Pools {
                 .stripped_messages_not_found
                 .with_label_values(&[IDKG_DEALING_LABEL])
                 .inc();
-            return Err(IDkgPoolsAccessError::DealingNotFound);
+            return Err(IDkgPoolAccessError::DealingNotFound);
         };
 
         self.metrics
@@ -254,11 +254,11 @@ async fn ingress_rpc_handler(
                 ),
             )),
             Err(
-                IngressPoolsAccessError::IngressMessageNotFound
-                | IngressPoolsAccessError::BlockNotFound,
+                IngressPoolAccessError::IngressMessageNotFound
+                | IngressPoolAccessError::BlockNotFound,
             ) => Err(StatusCode::NOT_FOUND),
             Err(
-                IngressPoolsAccessError::NotABlockProposal | IngressPoolsAccessError::SummaryBlock,
+                IngressPoolAccessError::NotABlockProposal | IngressPoolAccessError::SummaryBlock,
             ) => Err(StatusCode::BAD_REQUEST),
         }
     });
@@ -292,12 +292,12 @@ async fn idkg_dealing_rpc_handler(
                 }),
             )),
             Err(
-                IDkgPoolsAccessError::IDkgPayloadNotFound
-                | IDkgPoolsAccessError::BlockNotFound
-                | IDkgPoolsAccessError::TranscriptNotFound
-                | IDkgPoolsAccessError::DealingNotFound,
+                IDkgPoolAccessError::IDkgPayloadNotFound
+                | IDkgPoolAccessError::BlockNotFound
+                | IDkgPoolAccessError::TranscriptNotFound
+                | IDkgPoolAccessError::DealingNotFound,
             ) => Err(StatusCode::NOT_FOUND),
-            Err(IDkgPoolsAccessError::NotABlockProposal | IDkgPoolsAccessError::NotADealing) => {
+            Err(IDkgPoolAccessError::NotABlockProposal | IDkgPoolAccessError::NotADealing) => {
                 Err(StatusCode::BAD_REQUEST)
             }
         }
