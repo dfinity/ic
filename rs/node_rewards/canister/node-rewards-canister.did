@@ -6,9 +6,9 @@ type DateUtc = record {
   year: opt nat32;
 };
 
-pub struct RewardsCalculationVersion {
-    pub version: u32,
-}
+type RewardsCalculationVersion = record {
+  version: nat32;
+};
 
 type NodeMetricsDaily = record {
   subnet_assigned: opt principal;
