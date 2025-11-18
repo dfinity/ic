@@ -35,7 +35,12 @@ execute_command() {
             ;;
         "service-status")
             if [ -n "${2:-}" ]; then
-                systemctl status "$2"
+                # Only allow sane unit names, e.g. letters, digits, `-_.@`
+                if [[ "$2" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
+                    systemctl status "$2"
+                else
+                    echo "Invalid service name"
+                fi
             else
                 echo "Usage: service-status <service-name>"
                 echo "Example: service-status guestos"
@@ -43,7 +48,12 @@ execute_command() {
             ;;
         "view-logs")
             if [ -n "${2:-}" ]; then
-                journalctl -u "$2" --no-pager -n 50
+                # Only allow sane unit names, e.g. letters, digits, `-_.@`
+                if [[ "$2" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
+                    journalctl -u "$2" --no-pager -n 50
+                else
+                    echo "Invalid service name"
+                fi
             else
                 echo "Usage: view-logs <service-name>"
                 echo "Example: view-logs guestos"
