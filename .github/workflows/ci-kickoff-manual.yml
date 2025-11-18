@@ -11,7 +11,7 @@ on:
 jobs:
   ci-main:
     name: CI Main
-    uses: ./.github/workflows/ci_main.yml
+    uses: ./.github/workflows/ci-main.yml
     secrets: inherit
     with:
       commit-sha: ${{ inputs.commit-sha }}
