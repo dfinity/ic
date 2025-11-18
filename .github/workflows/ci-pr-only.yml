@@ -34,9 +34,10 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
+            set -euo pipefail
+            git fetch origin '${{ github.event.pull_request.base.sha }}'
             export DID_CHECK_REV="$(git merge-base '${{ github.event.pull_request.base.sha }}' HEAD)"
             echo "DID_CHECK_REV=$DID_CHECK_REV"
-            git fetch origin "$DID_CHECK_REV"
             bazel test //... \
               --build_tag_filters="didc" \
               --test_tag_filters="didc"
