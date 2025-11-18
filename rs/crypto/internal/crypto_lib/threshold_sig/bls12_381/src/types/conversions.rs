@@ -40,7 +40,7 @@ impl PublicKey {
     pub fn from_trusted_bytes(
         bytes: &PublicKeyBytes,
     ) -> Result<Self, ThresholdSigPublicKeyBytesConversionError> {
-        G2Affine::deserialize_public_key(&bytes.0)
+        G2Affine::deserialize_cached(&bytes.0)
             .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
                 key_bytes: Some(bytes.0.to_vec()),
                 internal_error: "Invalid public key".to_string(),
@@ -53,7 +53,7 @@ impl PublicKey {
 impl TryFrom<&PublicKeyBytes> for PublicKey {
     type Error = ThresholdSigPublicKeyBytesConversionError;
     fn try_from(bytes: &PublicKeyBytes) -> Result<Self, Self::Error> {
-        G2Affine::deserialize_public_key(&bytes.0)
+        G2Affine::deserialize_cached(&bytes.0)
             .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
                 key_bytes: Some(bytes.0.to_vec()),
                 internal_error: "Invalid public key".to_string(),

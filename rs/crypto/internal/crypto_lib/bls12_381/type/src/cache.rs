@@ -26,7 +26,25 @@ static GLOBAL_G2PK_CACHE: LazyLock<G2PublicKeyCache> =
 
 impl G2PublicKeyCache {
     /// Specify the size of the global cache used for public keys
-    pub const SIZE_OF_GLOBAL_CACHE: usize = 1000;
+    ///
+    /// The logic for this number proceeds as follows:
+    ///
+    /// - [u8; G2Affine::BYTES] is 96 bytes
+    /// - G2Affine is 208 bytes
+    /// - ([u8; G2Affine::BYTES], G2Affine) is 304 bytes
+    /// - cached's `ListEntry<T>` contains a T plus two usize elements
+    /// - Due to structure padding `ListEntry::<([u8; G2Affine::BYTES], G2Affine)>
+    ///   is 328 bytes rather than 304+2*8=320
+    /// - The other overhead of `SizedCache` is a `hashbrown::RawTable<usize>`, 
+    ///   which is estimated to consume 9 bytes per element.
+    /// - This leads to an estimate of 329 bytes per element, plus some
+    ///   fixed overhead.
+    ///
+    /// The above numbers are for x86-64 and may vary slightly on different machines
+    /// due to different structure layout rules.
+    ///
+    /// The current size leads to an estimated usage of 3.1 MB of memory for the cache
+    pub const SIZE_OF_GLOBAL_CACHE: usize = 10000;
 
     /// Create a new signature cache with the specified maximum size
     fn new(max_size: usize) -> Self {
@@ -48,8 +66,8 @@ impl G2PublicKeyCache {
     }
 
     /// Insert a new G2 public key into the cache
-    pub(crate) fn insert(&self, key: G2Affine) {
-        let bytes = key.serialize();
+    pub(crate) fn insert(&self, bytes: [u8; G2Affine::BYTES], key: G2Affine) {
+        debug_assert_eq!(bytes, key.serialize());
         let mut cache = self.cache.lock();
         cache.cache_set(bytes, key);
     }

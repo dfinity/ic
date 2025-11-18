@@ -1989,15 +1989,16 @@ impl_debug_using_serialize_for!(G2Affine);
 impl_debug_using_serialize_for!(G2Projective);
 
 impl G2Affine {
-    /// Deserialize a public key (compressed format only)
+    /// Deserialize a G2 element using a cache
     ///
     /// This function verifies that the decoded point is within the prime order
     /// subgroup, and is safe to call on untrusted inputs.
     ///
-    /// This function is equivalent to `deserialize` but assumes that public keys
-    /// are seen many times and so makes use of a cache to skip the expensive
-    /// checks when keys are seen again
-    pub fn deserialize_public_key<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
+    /// This function is equivalent to `deserialize` but additionally caches
+    /// that it has seen the key before; repeated deserializations will be much
+    /// faster. This is mostly useful when deserializing public keys, which are
+    /// potentially seen many times over the process lifetime.
+    pub fn deserialize_cached<B: AsRef<[u8]>>(bytes: &B) -> Result<Self, PairingInvalidPoint> {
         let bytes: &[u8; Self::BYTES] = bytes
             .as_ref()
             .try_into()
@@ -2008,15 +2009,15 @@ impl G2Affine {
 
         if let Some(pt) = ic_bls12_381::G2Affine::from_compressed(bytes).into_option() {
             let pt = Self::new(pt);
-            crate::cache::G2PublicKeyCache::global().insert(pt.clone());
+            crate::cache::G2PublicKeyCache::global().insert(*bytes, pt.clone());
             Ok(pt)
         } else {
             Err(PairingInvalidPoint::InvalidPoint)
         }
     }
 
-    /// Return statistics related to the deserialize_public_key cache
-    pub fn deserialize_public_key_cache_statistics() -> crate::cache::G2PublicKeyCacheStatistics {
+    /// Return statistics related to the deserialize_cached cache
+    pub fn deserialize_cached_cache_statistics() -> crate::cache::G2PublicKeyCacheStatistics {
         crate::cache::G2PublicKeyCache::global().cache_statistics()
     }
 }

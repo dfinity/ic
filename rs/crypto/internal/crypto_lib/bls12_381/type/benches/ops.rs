@@ -431,8 +431,6 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         )
     });
 
-    let g2_bytes = random_g2(rng).serialize();
-
     group.bench_function("deserialize", |b| {
         b.iter_batched_ref(
             || random_g2(rng).serialize(),
@@ -441,10 +439,12 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         )
     });
 
-    group.bench_function("deserialize_public_key", |b| {
+    let cached_key = random_g2(rng).serialize();
+
+    group.bench_function("deserialize_cached", |b| {
         b.iter_batched_ref(
-            || g2_bytes,
-            |bytes| G2Affine::deserialize_public_key(bytes),
+            || cached_key,
+            |bytes| G2Affine::deserialize_cached(bytes),
             BatchSize::SmallInput,
         )
     });
