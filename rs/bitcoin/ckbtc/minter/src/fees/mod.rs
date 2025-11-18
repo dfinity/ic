@@ -13,10 +13,11 @@ pub trait FeeEstimator {
     /// Evaluate the fee necessary to cover the minter's cycles consumption.
     fn evaluate_minter_fee(&self, num_inputs: u64, num_outputs: u64) -> Satoshi;
 
+    /// Evaluate transaction fee with the given fee rate (in milli base unit per vbyte/byte)
     fn evaluate_transaction_fee(&self, tx: &UnsignedTransaction, fee_rate: u64) -> u64;
 
-    // move to CanisterRuntime
-    fn minimum_withrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi;
+    /// Compute a new minimum withdrawal amount based on the current fee rate
+    fn fee_based_minimum_withrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi;
 }
 
 pub struct BitcoinFeeEstimator {
@@ -90,7 +91,7 @@ impl FeeEstimator for BitcoinFeeEstimator {
 
     /// Returns the minimum withdrawal amount based on the current median fee rate (in millisatoshi per byte).
     /// The returned amount is in satoshi.
-    fn minimum_withrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi {
+    fn fee_based_minimum_withrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi {
         match self.network {
             Network::Mainnet | Network::Testnet => {
                 const PER_REQUEST_RBF_BOUND: u64 = 22_100;

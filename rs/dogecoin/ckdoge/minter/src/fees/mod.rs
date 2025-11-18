@@ -75,7 +75,7 @@ impl FeeEstimator for DogecoinFeeEstimator {
         )
     }
 
-    fn minimum_withrawal_amount(&self, median_fee: u64) -> u64 {
+    fn fee_based_minimum_withrawal_amount(&self, median_fee: u64) -> u64 {
         match self.network {
             Network::Mainnet | Network::Testnet => {
                 //in Koinu
