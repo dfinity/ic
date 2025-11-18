@@ -439,20 +439,26 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         )
     });
 
-    let cached_key = random_g2(rng).serialize();
+    group.bench_function("deserialize_unchecked", |b| {
+        b.iter_batched_ref(
+            || random_g2(rng).serialize(),
+            |bytes| G2Projective::deserialize_unchecked(bytes),
+            BatchSize::SmallInput,
+        )
+    });
 
     group.bench_function("deserialize_cached", |b| {
         b.iter_batched_ref(
-            || cached_key,
+            || (G2Affine::generator() * Scalar::from_u32(rng.r#gen::<u32>() % 100)).serialize(),
             |bytes| G2Affine::deserialize_cached(bytes),
             BatchSize::SmallInput,
         )
     });
 
-    group.bench_function("deserialize_unchecked", |b| {
+    group.bench_function("deserialize_cached_miss", |b| {
         b.iter_batched_ref(
             || random_g2(rng).serialize(),
-            |bytes| G2Projective::deserialize_unchecked(bytes),
+            |bytes| G2Affine::deserialize_cached(bytes),
             BatchSize::SmallInput,
         )
     });
