@@ -1,5 +1,5 @@
 {
-  "checksum": "3b0b87ff4ae90bb2b2e662532781f6b255794159cf607b132aaabdbe0a1bbafb",
+  "checksum": "e3080585270d7caef4b5147ea694f042e7274b39b5c68e7aff2e62b97f17e38c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -21240,6 +21240,10 @@
               "target": "ic_certified_map"
             },
             {
+              "id": "ic-doge-interface 0.1.0",
+              "target": "ic_doge_interface"
+            },
+            {
               "id": "ic-gateway 0.2.0",
               "target": "ic_gateway"
             },
@@ -21561,7 +21565,7 @@
               "target": "pcre2"
             },
             {
-              "id": "pem 1.1.1",
+              "id": "pem 3.0.3",
               "target": "pem"
             },
             {
@@ -34798,6 +34802,68 @@
         "Apache-2.0"
       ],
       "license_file": "LICENSE"
+    },
+    "ic-doge-interface 0.1.0": {
+      "name": "ic-doge-interface",
+      "version": "0.1.0",
+      "package_url": "https://github.com/dfinity/dogecoin-canister",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/dogecoin-canister",
+          "commitish": {
+            "Rev": "74e6dc9a10ba64d2dbad013282c26d74cd49863f"
+          },
+          "strip_prefix": "interface"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_doge_interface",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_doge_interface",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.17",
+              "target": "candid"
+            },
+            {
+              "id": "datasize 0.2.15",
+              "target": "datasize"
+            },
+            {
+              "id": "serde 1.0.219",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
     },
     "ic-error-types 0.2.0": {
       "name": "ic-error-types",
@@ -53738,53 +53804,6 @@
         "MIT"
       ],
       "license_file": "LICENSE-APACHE"
-    },
-    "pem 1.1.1": {
-      "name": "pem",
-      "version": "1.1.1",
-      "package_url": "https://github.com/jcreekmore/pem-rs.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/pem/1.1.1/download",
-          "sha256": "a8835c273a76a90455d7344889b0964598e3316e2a79ede8e36f16bdcf2228b8"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "pem",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "pem",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "base64 0.13.1",
-              "target": "base64"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "1.1.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE.md"
     },
     "pem 3.0.3": {
       "name": "pem",
@@ -94785,6 +94804,7 @@
     "ic-certificate-verification 3.0.3",
     "ic-certification 3.0.3",
     "ic-certified-map 0.3.4",
+    "ic-doge-interface 0.1.0",
     "ic-gateway 0.2.0",
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.3.0",
@@ -94868,7 +94888,7 @@
     "parking_lot 0.12.1",
     "paste 1.0.15",
     "pcre2 0.2.6",
-    "pem 1.1.1",
+    "pem 3.0.3",
     "pin-project-lite 0.2.16",
     "ping 0.5.0",
     "pkcs8 0.10.2",
