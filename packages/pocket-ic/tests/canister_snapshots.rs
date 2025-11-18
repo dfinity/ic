@@ -50,7 +50,7 @@ fn test_canister_snapshot_download() {
     // and an output directory for the snapshot downloaded using dfx.
     let dfx_temp_dir = tempfile::tempdir().unwrap();
     let dfx_home_dir = dfx_temp_dir.path().to_path_buf();
-    let dfx_output_dir = dfx_home_dir.join("aux");
+    let dfx_output_dir = dfx_home_dir.join("snapshot");
 
     // We need to turn off telemetry explicitly,
     // otherwise dfx panics.
