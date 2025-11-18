@@ -355,6 +355,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
         Some(fee) => fee,
         None => return,
     };
+    let fee_estimator = read_state(|s| runtime.fee_estimator(s));
 
     let maybe_sign_request = state::mutate_state(|s| {
         let batch = s.build_batch(MAX_REQUESTS_PER_BATCH);
@@ -373,6 +374,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             outputs,
             main_address,
             fee_millisatoshi_per_vbyte,
+            &fee_estimator,
         ) {
             Ok((unsigned_tx, change_output, total_fee, utxos)) => {
                 for req in batch.iter() {
@@ -791,6 +793,7 @@ pub async fn resubmit_transactions<
     replace_transaction: G,
     runtime: &R,
 ) {
+    let fee_estimator = read_state(|s| runtime.fee_estimator(s));
     for (old_txid, submitted_tx) in transactions {
         let tx_fee_per_vbyte = match submitted_tx.fee_per_vbyte {
             Some(prev_fee) => {
@@ -819,6 +822,7 @@ pub async fn resubmit_transactions<
             outputs,
             main_address.clone(),
             tx_fee_per_vbyte,
+            &fee_estimator,
         ) {
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
@@ -851,6 +855,7 @@ pub async fn resubmit_transactions<
                     outputs,
                     main_address.clone(),
                     fee_per_vbyte, // Use normal fee
+                    &fee_estimator,
                 )
             }
             result => result,
@@ -1148,11 +1153,12 @@ pub enum BuildTxError {
 /// result.is_err() => minter_utxos' == minter_utxos
 /// ```
 ///
-pub fn build_unsigned_transaction(
+pub fn build_unsigned_transaction<F: FeeEstimator>(
     available_utxos: &mut BTreeSet<Utxo>,
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
+    fee_estimator: &F,
 ) -> Result<
     (
         tx::UnsignedTransaction,
@@ -1165,7 +1171,13 @@ pub fn build_unsigned_transaction(
     assert!(!outputs.is_empty());
     let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
     let inputs = utxos_selection(amount, available_utxos, outputs.len());
-    match build_unsigned_transaction_from_inputs(&inputs, outputs, main_address, fee_per_vbyte) {
+    match build_unsigned_transaction_from_inputs(
+        &inputs,
+        outputs,
+        main_address,
+        fee_per_vbyte,
+        fee_estimator,
+    ) {
         Ok((tx, change, total_fee)) => Ok((tx, change, total_fee, inputs)),
         Err(err) => {
             // Undo mutation to available_utxos in the error case
@@ -1177,11 +1189,12 @@ pub fn build_unsigned_transaction(
     }
 }
 
-pub fn build_unsigned_transaction_from_inputs(
+pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     input_utxos: &[Utxo],
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
+    fee_estimator: &F,
 ) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, WithdrawalFee), BuildTxError> {
     assert!(!outputs.is_empty());
     /// Having a sequence number lower than (0xffffffff - 1) signals the use of replacement by fee.
@@ -1209,7 +1222,8 @@ pub fn build_unsigned_transaction_from_inputs(
 
     debug_assert!(inputs_value >= amount);
 
-    let minter_fee = evaluate_minter_fee(input_utxos.len() as u64, (outputs.len() + 1) as u64);
+    let minter_fee =
+        fee_estimator.evaluate_minter_fee(input_utxos.len() as u64, (outputs.len() + 1) as u64);
 
     let change = inputs_value - amount;
     let change_output = state::ChangeOutput {
@@ -1248,8 +1262,7 @@ pub fn build_unsigned_transaction_from_inputs(
         lock_time: 0,
     };
 
-    let tx_vsize = fake_sign(&unsigned_tx).vsize();
-    let fee = (tx_vsize as u64 * fee_per_vbyte) / 1000;
+    let fee = fee_estimator.evaluate_transaction_fee(&unsigned_tx, fee_per_vbyte);
 
     if fee + minter_fee > amount {
         return Err(BuildTxError::AmountTooLow);

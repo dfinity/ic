@@ -26,12 +26,20 @@ pub struct BitcoinFeeEstimator {
 }
 
 impl BitcoinFeeEstimator {
-    pub fn from_state(state: &CkBtcMinterState) -> Self {
+    pub fn new(network: Network, retrieve_btc_min_amount: u64, check_fee: u64) -> Self {
         Self {
-            network: state.btc_network,
-            retrieve_btc_min_amount: state.retrieve_btc_min_amount,
-            check_fee: state.check_fee,
+            network,
+            retrieve_btc_min_amount,
+            check_fee,
         }
+    }
+
+    pub fn from_state(state: &CkBtcMinterState) -> Self {
+        Self::new(
+            state.btc_network,
+            state.retrieve_btc_min_amount,
+            state.check_fee,
+        )
     }
 
     /// An estimated fee per vbyte of 142 millistatoshis per vbyte was selected around 2025.06.21 01:09:50 UTC

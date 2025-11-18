@@ -1,9 +1,16 @@
+use crate::address::BitcoinAddress;
+use crate::fees::{BitcoinFeeEstimator, FeeEstimator};
 use crate::lifecycle::init::InitArgs;
-use crate::{ECDSAPublicKey, GetUtxosResponse, IC_CANISTER_RUNTIME, Network, Timestamp, lifecycle};
+use crate::queries::WithdrawalFee;
+use crate::{
+    BuildTxError, ECDSAPublicKey, GetUtxosResponse, IC_CANISTER_RUNTIME, Network, Timestamp,
+    lifecycle, state, tx,
+};
 use candid::Principal;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{OutPoint, Utxo};
+use ic_btc_interface::{OutPoint, Satoshi, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 pub const NOW: Timestamp = Timestamp::new(1733145560 * 1_000_000_000);
@@ -131,6 +138,30 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
         panic_message.contains(expected_message),
         "Expected panic message to contain: {expected_message}, but got: {panic_message}"
     );
+}
+
+pub fn build_unsigned_transaction(
+    available_utxos: &mut BTreeSet<Utxo>,
+    outputs: Vec<(BitcoinAddress, Satoshi)>,
+    main_address: BitcoinAddress,
+    fee_per_vbyte: u64,
+) -> Result<
+    (
+        tx::UnsignedTransaction,
+        state::ChangeOutput,
+        WithdrawalFee,
+        Vec<Utxo>,
+    ),
+    BuildTxError,
+> {
+    let bitcoin_fee_estimator = BitcoinFeeEstimator::new(Network::Mainnet, 50_000, 100);
+    crate::build_unsigned_transaction(
+        available_utxos,
+        outputs,
+        main_address,
+        fee_per_vbyte,
+        &bitcoin_fee_estimator,
+    )
 }
 
 pub mod mock {

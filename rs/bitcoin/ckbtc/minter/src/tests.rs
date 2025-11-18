@@ -1,7 +1,8 @@
+use crate::test_fixtures::build_unsigned_transaction;
 use crate::{
     BuildTxError, CacheWithExpiration, MINTER_ADDRESS_DUST_LIMIT, Network,
     address::BitcoinAddress,
-    build_unsigned_transaction, estimate_retrieve_btc_fee, evaluate_minter_fee, fake_sign, greedy,
+    estimate_retrieve_btc_fee, evaluate_minter_fee, fake_sign, greedy,
     lifecycle::init::InitArgs,
     state::invariants::CheckInvariantsImpl,
     state::{
