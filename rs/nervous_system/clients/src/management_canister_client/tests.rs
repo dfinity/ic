@@ -73,14 +73,14 @@ async fn test_limit_outstanding_calls() {
 
             async fn stop_canister(
                 &self,
-                canister_id_record: CanisterIdRecord,
+                _canister_id_record: CanisterIdRecord,
             ) -> Result<(), (i32, String)> {
                 unimplemented!();
             }
 
             async fn delete_canister(
                 &self,
-                canister_id_record: CanisterIdRecord,
+                _canister_id_record: CanisterIdRecord,
             ) -> Result<(), (i32, String)> {
                 unimplemented!();
             }
