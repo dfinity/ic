@@ -29,6 +29,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          fetch-depth: 2
           ref: ${{ inputs.commit-sha }}
       - name: Run candid compatibility checks
         uses: ./.github/actions/bazel
