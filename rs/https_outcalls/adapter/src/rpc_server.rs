@@ -5,6 +5,7 @@ use crate::metrics::{
     LABEL_UPLOAD, LABEL_URL_PARSE,
 };
 use core::convert::TryFrom;
+use futures::TryFutureExt;
 use http::{HeaderName, HeaderValue, Uri, header::USER_AGENT};
 use http_body_util::{BodyExt, Full};
 use hyper::body::Incoming;
@@ -315,43 +316,37 @@ impl HttpsOutcallsService for CanisterHttp {
             .map(|(name, value)| name.as_str().len() + value.len())
             .sum::<usize>();
 
-        let http_resp = {
-            // Http request does not implement clone. So we have to manually construct a clone.
-            let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
-            *http_req.headers_mut() = headers;
-            *http_req.method_mut() = method;
-            *http_req.uri_mut() = uri.clone();
-            let http_req_clone = http_req.clone();
+        // Http request does not implement clone. So we have to manually construct a clone.
+        let mut http_req = hyper::Request::new(Full::new(Bytes::from(req.body)));
+        *http_req.headers_mut() = headers;
+        *http_req.method_mut() = method;
+        *http_req.uri_mut() = uri.clone();
+        let http_req_clone = http_req.clone();
 
-            match self.client.request(http_req).await {
+        let http_resp = self.client.request(http_req).or_else(|direct_err| async move {
                 // If we fail, we try with the socks proxy. For destinations that are ipv4 only this should
-                // fail fast because our interface does not have an ipv4 assigned.
-                Err(direct_err) => {
-                    self.metrics.requests_socks.inc();
-                    info!(
-                        self.logger,
-                        "Direct connection failed, trying via socks proxies with addsrs: {:?}",
-                        req.socks_proxy_addrs
-                    );
-                    self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
-                        .await
-                        .map_err(|socks_err| {
-                            self.metrics
-                                .request_errors
-                                .with_label_values(&[LABEL_CONNECT])
-                                .inc();
-                            Status::new(
-                                tonic::Code::Unavailable,
-                                format!(
-                                    "Connecting to {:.50} failed: direct connect {direct_err:?} and connect through socks {socks_err:?}",
-                                    uri.host().unwrap_or(""), 
-                                ),
-                            )
-                        })
-                }
-                Ok(resp) => Ok(resp),
-            }
-        }?;
+                self.metrics.requests_socks.inc();
+                info!(
+                    self.logger,
+                    "Direct connection failed, trying via socks proxies with addsrs: {:?}",
+                    req.socks_proxy_addrs
+                );
+                self.do_https_outcall_socks_proxy(req.socks_proxy_addrs, http_req_clone)
+                    .await
+                    .map_err(|socks_err| {
+                        self.metrics
+                            .request_errors
+                            .with_label_values(&[LABEL_CONNECT])
+                            .inc();
+                        Status::new(
+                            tonic::Code::Unavailable,
+                            format!(
+                                "Connecting to {:.50} failed: direct connect {direct_err:?} and connect through socks {socks_err:?}",
+                                uri.host().unwrap_or(""),
+                            ),
+                        )
+                    })
+            }).await?;
         self.metrics
             .network_traffic
             .with_label_values(&[LABEL_UPLOAD])
