@@ -258,12 +258,12 @@ pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
             let fee_estimator = state::read_state(|s| runtime.fee_estimator(s));
             match fee_estimator.estimate_median_fee(&fees) {
                 Some(median_fee) => {
-                    log!(
-                        Priority::Debug,
-                        "[estimate_fee_per_vbyte]: update median fee per vbyte to {median_fee} with {fees:?}"
-                    );
                     let fee_based_retrieve_btc_min_amount =
                         fee_estimator.minimum_withrawal_amount(median_fee);
+                    log!(
+                        Priority::Debug,
+                        "[estimate_fee_per_vbyte]: update median fee per vbyte to {median_fee} and fee-based minimum retrieve amount to {fee_based_retrieve_btc_min_amount} with {fees:?}"
+                    );
                     mutate_state(|s| {
                         s.last_fee_per_vbyte = fees;
                         s.last_median_fee_per_vbyte = Some(median_fee);

@@ -102,7 +102,7 @@ impl FeeEstimator for BitcoinFeeEstimator {
                     + PER_REQUEST_VSIZE_BOUND * median_fee_rate
                     + PER_REQUEST_MINTER_FEE_BOUND
                     + self.check_fee)
-                    / 50_000)
+                    / 50_000) //TODO DEFI-2187: adjust increment of minimum withdrawal amount to be a multiple of retrieve_btc_min_amount/2
                     * 50_000
                     + self.retrieve_btc_min_amount
             }

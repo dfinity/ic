@@ -75,12 +75,13 @@ impl FeeEstimator for DogecoinFeeEstimator {
                 //in Koinu
                 const PER_REQUEST_MINTER_FEE_BOUND: u64 = 326_000;
 
+                let min_withdrawal_amount_increment = self.retrieve_doge_min_amount >> 1;
                 let median_fee_rate = median_fee / 1_000;
                 ((PER_REQUEST_RBF_BOUND
                     + PER_REQUEST_SIZE_BOUND * median_fee_rate
                     + PER_REQUEST_MINTER_FEE_BOUND)
-                    / 50_000)
-                    * 50_000
+                    / min_withdrawal_amount_increment)
+                    * min_withdrawal_amount_increment
                     + self.retrieve_doge_min_amount
             }
             Network::Regtest => self.retrieve_doge_min_amount,
