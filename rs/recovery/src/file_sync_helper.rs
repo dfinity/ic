@@ -141,19 +141,19 @@ where
             //
             // Example if `includes` is vec!["file1", "dir1/dir2"]:
             // The naive command
-            // `rsync src/file1 src/dir1/dir2 target/`
+            // `rsync src/file1 src/dir1/dir2 target`
             // would copy `file1` into `target/file1`, but `dir2` (and its contents)
             // into `target/dir2`, losing the `dir1` parent directory.
             //
             // Instead, we add `--relative` and add a `./` prefix to each include path:
-            // `rsync --relative src/./file1 src/./dir1/dir2 target/`
+            // `rsync --relative src/./file1 src/./dir1/dir2 target`
             // This way, rsync preserves the paths relative to the `./` marker:
             //     - `file1` into `target/file1`,
             //     - `dir2` into `target/dir1/dir2`.
             //
             // See rsync manual at --relative for more details.
             .map(|include| src.as_ref().join(".").join(include.as_ref())),
-        target.as_ref().join(""),
+        target,
         key_file,
     );
     rsync_cmd.arg("--relative");

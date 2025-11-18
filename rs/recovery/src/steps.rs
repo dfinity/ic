@@ -328,7 +328,7 @@ impl Step for DownloadIcDataStep {
         self.ssh_helper.rsync_includes(
             &self.data_includes,
             self.ssh_helper.remote_path(PathBuf::from(IC_DATA_PATH)),
-            target.join("data"),
+            target.join("data").join(""),
         )?;
 
         if self.keep_downloaded_data {
@@ -336,7 +336,7 @@ impl Step for DownloadIcDataStep {
                 &self.logger,
                 &self.data_includes,
                 target.join("data"),
-                self.working_dir.join("data"),
+                self.working_dir.join("data").join(""),
                 false,
                 None,
             )?;
@@ -659,7 +659,7 @@ impl Step for UploadStateAndRestartStep {
             ssh_helper.rsync_includes(
                 &includes,
                 &self.data_src,
-                &ssh_helper.remote_path(&upload_dir),
+                &ssh_helper.remote_path(upload_dir.join("")),
             )?;
 
             let cmd_set_permissions = Self::cmd_set_permissions(&ic_state_path, &upload_dir);

@@ -52,7 +52,7 @@ impl Step for CopyWorkDirStep {
             &self.logger,
             &self.data_includes,
             self.layout.work_dir(TargetSubnet::Source),
-            self.layout.work_dir(TargetSubnet::Destination),
+            self.layout.work_dir(TargetSubnet::Destination).join(""),
             /*require_confirmation=*/ false,
             /*key_file=*/ None,
         )
