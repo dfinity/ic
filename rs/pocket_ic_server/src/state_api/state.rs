@@ -264,6 +264,8 @@ pub enum PocketIcError {
     Forbidden(String),
     BlockmakerNotFound(NodeId),
     BlockmakerContainedInFailed(NodeId),
+    InvalidCanisterSnapshotDirectory(String),
+    CanisterSnapshotError(String),
 }
 
 impl std::fmt::Debug for OpOut {
@@ -328,6 +330,12 @@ impl std::fmt::Debug for OpOut {
             }
             OpOut::Error(PocketIcError::Forbidden(msg)) => {
                 write!(f, "Forbidden({msg})")
+            }
+            OpOut::Error(PocketIcError::InvalidCanisterSnapshotDirectory(msg)) => {
+                write!(f, "InvalidSnapshotDirectory({msg})")
+            }
+            OpOut::Error(PocketIcError::CanisterSnapshotError(msg)) => {
+                write!(f, "CanisterSnapshotError({msg})")
             }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
