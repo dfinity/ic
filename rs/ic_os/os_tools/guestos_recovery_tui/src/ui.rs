@@ -46,6 +46,29 @@ pub(crate) fn validate_terminal_size(size: Rect) -> Result<()> {
     Ok(())
 }
 
+/// Renders an error message when the terminal is too small.
+fn render_terminal_too_small_error(f: &mut Frame, size: Rect) -> bool {
+    if !is_terminal_too_small(size) {
+        return false;
+    }
+    let error_text = vec![
+        Line::from("Terminal too small"),
+        Line::from(format!(
+            "Minimum size: {}x{}, current: {}x{}",
+            MIN_TERMINAL_WIDTH, MIN_TERMINAL_HEIGHT, size.width, size.height
+        )),
+        Line::from("Please resize your terminal"),
+    ];
+    render_text_block(
+        f,
+        error_text,
+        create_bordered_block("Error", None),
+        size,
+        Alignment::Center,
+    );
+    true
+}
+
 // ============================================================================
 // Main UI Rendering
 // ============================================================================
@@ -54,22 +77,7 @@ pub(crate) fn validate_terminal_size(size: Rect) -> Result<()> {
 pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
     let size = f.size();
 
-    if is_terminal_too_small(size) {
-        let error_text = vec![
-            Line::from("Terminal too small"),
-            Line::from(format!(
-                "Minimum size: {}x{}, current: {}x{}",
-                MIN_TERMINAL_WIDTH, MIN_TERMINAL_HEIGHT, size.width, size.height
-            )),
-            Line::from("Please resize your terminal"),
-        ];
-        render_text_block(
-            f,
-            error_text,
-            create_bordered_block("Error", None),
-            size,
-            Alignment::Center,
-        );
+    if render_terminal_too_small_error(f, size) {
         return;
     }
 
@@ -233,9 +241,6 @@ fn render_button(app: &App, f: &mut Frame, text: &str, field: Field, area: Rect)
 /// Draws the initial status screen showing parameters and "Starting recovery..." message
 pub(crate) fn draw_status_screen(f: &mut Frame, params: &RecoveryParams) {
     let size = f.size();
-    if is_terminal_too_small(size) {
-        return;
-    }
     let block = create_bordered_block("GuestOS Recovery Upgrader", Some(Style::default().bold()));
 
     let mut text = create_parameter_lines(params);
@@ -249,7 +254,7 @@ pub(crate) fn draw_status_screen(f: &mut Frame, params: &RecoveryParams) {
 /// Draws the real-time logs screen during recovery process
 pub(crate) fn draw_logs_screen(f: &mut Frame, params: &RecoveryParams, logs: &[String]) {
     let size = f.size();
-    if is_terminal_too_small(size) {
+    if render_terminal_too_small_error(f, size) {
         return;
     }
     let block = create_bordered_block("GuestOS Recovery Upgrader", Some(Style::default().bold()));
@@ -289,9 +294,6 @@ pub(crate) fn draw_completion_screen(
     params: &RecoveryParams,
 ) {
     let size = f.size();
-    if is_terminal_too_small(size) {
-        return;
-    }
     let title = if success {
         "Recovery Completed"
     } else {
