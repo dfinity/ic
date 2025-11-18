@@ -35,20 +35,6 @@ impl PerformanceBasedAlgorithm for RewardsCalculationV1 {
     const MAX_REWARDS_REDUCTION: Decimal = dec!(0.8);
 }
 
-impl RewardsCalculationV1 {
-    pub fn calculate_rewards(
-        from_date: NaiveDate,
-        to_date: NaiveDate,
-        input_provider: impl PerformanceBasedAlgorithmInputProvider,
-    ) -> Result<RewardsCalculatorResults, String> {
-        <RewardsCalculationV1 as PerformanceBasedAlgorithm>::calculate_rewards(
-            from_date,
-            to_date,
-            input_provider,
-        )
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::performance_based_algorithm::test_utils::{

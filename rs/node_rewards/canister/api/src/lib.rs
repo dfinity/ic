@@ -5,7 +5,23 @@ pub mod providers_rewards;
 mod api_native_conversion;
 
 use chrono::{DateTime, Datelike, NaiveDate};
+use rewards_calculation::performance_based_algorithm::PerformanceBasedAlgorithm;
+use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
 use std::fmt::Display;
+
+// Rewards Calculator Version used
+#[derive(candid::CandidType, candid::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RewardsCalculatorVersion {
+    V1,
+}
+
+impl RewardsCalculatorVersion {
+    pub fn algorithm(&self) -> &'static dyn PerformanceBasedAlgorithm {
+        match self {
+            RewardsCalculatorVersion::V1 => &RewardsCalculationV1,
+        }
+    }
+}
 
 // These are API-facing types with all fields wrapped in `Option`
 // to ensure deserialization always works

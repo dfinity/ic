@@ -318,11 +318,13 @@ fn test_get_node_providers_rewards() {
     let request = GetNodeProvidersRewardsRequest {
         from_day: from.into(),
         to_day: to.into(),
+        rewards_calculator_version: None,
     };
     let result_endpoint =
         NodeRewardsCanister::get_node_providers_rewards(&CANISTER_TEST, request.clone());
 
     let expected = NodeProvidersRewards {
+        rewards_calculator_version,
         rewards_xdr_permyriad: btreemap! {
             test_provider_id(1).0 => 137200,
             test_provider_id(2).0 => 10000,
