@@ -253,6 +253,11 @@ impl App {
         self.error_message = None;
     }
 
+    fn continue_without_error(&mut self) -> InputResult {
+        self.clear_error();
+        InputResult::Continue
+    }
+
     fn teardown_and_error(
         mut terminal_guard: TerminalGuard,
         e: impl Into<anyhow::Error>,
@@ -368,27 +373,24 @@ impl App {
             KeyCode::Enter => {
                 if self.current_field.is_input_field() {
                     self.current_field = self.current_field.next();
-                    self.clear_error();
-                    Ok(InputResult::Continue)
+                    Ok(self.continue_without_error())
                 } else {
-                    match self.current_field {
-                        Field::ExitButton => Ok(InputResult::Exit),
-                        Field::CheckArtifactsButton => Ok(InputResult::Proceed),
-                        _ => Ok(InputResult::Continue),
-                    }
+                    Ok(match self.current_field {
+                        Field::ExitButton => InputResult::Exit,
+                        Field::CheckArtifactsButton => InputResult::Proceed,
+                        _ => InputResult::Continue,
+                    })
                 }
             }
 
             KeyCode::Tab | KeyCode::Down => {
                 self.current_field = self.current_field.next();
-                self.clear_error();
-                Ok(InputResult::Continue)
+                Ok(self.continue_without_error())
             }
 
             KeyCode::Up => {
                 self.current_field = self.current_field.previous();
-                self.clear_error();
-                Ok(InputResult::Continue)
+                Ok(self.continue_without_error())
             }
 
             KeyCode::Left | KeyCode::Right => {
@@ -396,10 +398,10 @@ impl App {
                     self.current_field,
                     Field::CheckArtifactsButton | Field::ExitButton
                 ) {
-                    self.current_field = if self.current_field == Field::CheckArtifactsButton {
-                        Field::ExitButton
-                    } else {
-                        Field::CheckArtifactsButton
+                    self.current_field = match self.current_field {
+                        Field::CheckArtifactsButton => Field::ExitButton,
+                        Field::ExitButton => Field::CheckArtifactsButton,
+                        _ => unreachable!(),
                     };
                     self.clear_error();
                 }
@@ -454,10 +456,6 @@ where
             }
         }
     })
-}
-
-fn is_error_line(line: &str) -> bool {
-    line.contains("ERROR:") || line.contains("error:") || line.contains("Error:")
 }
 
 /// Detects success message in stdout
