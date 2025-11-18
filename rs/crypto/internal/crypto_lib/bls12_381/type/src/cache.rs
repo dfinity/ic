@@ -35,7 +35,7 @@ impl G2PublicKeyCache {
     /// - cached's `ListEntry<T>` contains a T plus two usize elements
     /// - Due to structure padding `ListEntry::<([u8; G2Affine::BYTES], G2Affine)>
     ///   is 328 bytes rather than 304+2*8=320
-    /// - The other overhead of `SizedCache` is a `hashbrown::RawTable<usize>`, 
+    /// - The other overhead of `SizedCache` is a `hashbrown::RawTable<usize>`,
     ///   which is estimated to consume 9 bytes per element.
     /// - This leads to an estimate of 329 bytes per element, plus some
     ///   fixed overhead.
