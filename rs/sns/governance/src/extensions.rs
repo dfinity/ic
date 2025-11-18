@@ -929,7 +929,7 @@ pub fn validate_extension_wasm(wasm_module_hash: &[u8]) -> Result<ExtensionSpec,
     validate_extension_wasm_with_allowed(
         wasm_module_hash,
         #[cfg(any(test, feature = "test"))]
-        &*TEST_HASH_TO_EXTENSION_SPEC,
+        &TEST_HASH_TO_EXTENSION_SPEC,
         #[cfg(not(any(test, feature = "test")))]
         &ALLOWED_EXTENSIONS.with_borrow(|map| map.clone()),
     )
