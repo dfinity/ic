@@ -8,7 +8,7 @@ Canister migration involves several crossnet calls, which makes the process high
 
 ### Lifecycle of a request
 
-A user calls `migrate_canister`, providing source and target canister IDs. The request is validated using various calls to the registry and management canister. If validation fails, the user receives an error response. If validation suceeds, the result is a `Request` which uniquely identifies a migration request. This data is wrapped in a `RequestState` enum (in the `Accepted` variant) and saved in a stable set `REQUESTS`. A timed function picks up all items in `REQUESTS` that are in state `Accepted` and attempts to make progress into the next state. 
+A user calls `migrate_canister`, providing the canister ID to migrate and the canister ID to replace. The request is validated using various calls to the registry and management canister. If validation fails, the user receives an error response. If validation suceeds, the result is a `Request` which uniquely identifies a migration request. This data is wrapped in a `RequestState` enum (in the `Accepted` variant) and saved in a stable set `REQUESTS`. A timed function picks up all items in `REQUESTS` that are in state `Accepted` and attempts to make progress into the next state.
 
 As a `Request` progresses through the states, the corresponding `RequestState` variants accumulate data that is necessary to perform some future steps. E.g., `RequestState::StoppedAndReady` contains a `stopped_since` timestamp which will be necessary for a later transition to `RequestState::RestoredControllers`, which may only happen once 5 minutes since `stopped_since` have passed. 
 

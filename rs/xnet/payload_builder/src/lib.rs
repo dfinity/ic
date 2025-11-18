@@ -326,7 +326,7 @@ impl XNetPayloadBuilderImpl {
     pub fn new(
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         certified_stream_store: Arc<dyn CertifiedStreamStore>,
-        tls_handshake: Arc<dyn TlsConfig + Send + Sync>,
+        tls_handshake: Arc<dyn TlsConfig>,
         registry: Arc<dyn RegistryClient>,
         runtime_handle: runtime::Handle,
         node_id: NodeId,
@@ -1684,7 +1684,7 @@ impl XNetClientImpl {
     /// most 1 idle connection per host.
     fn new(
         metrics_registry: &MetricsRegistry,
-        tls: Arc<dyn TlsConfig + Send + Sync>,
+        tls: Arc<dyn TlsConfig>,
         proximity_map: Arc<ProximityMap>,
     ) -> XNetClientImpl {
         #[cfg(not(test))]

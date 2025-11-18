@@ -29,7 +29,7 @@ use crate::{
     },
     pb,
     pb::{
-        proposal_conversions::{convert_proposal, proposal_data_to_info},
+        proposal_conversions::proposal_data_to_info,
         v1::{
             ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem,
             ExecuteNnsFunction, Followees, FulfillSubnetRentalRequest,
@@ -106,7 +106,9 @@ use ic_nns_governance_api::{
     ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronResponse, NeuronIndexData,
     NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
-    proposal_validation,
+    proposal_validation::{
+        validate_proposal_summary, validate_proposal_title, validate_proposal_url,
+    },
     subnet_rental::SubnetRentalRequest,
 };
 use ic_node_rewards_canister_api::DateUtc;
@@ -5136,9 +5138,9 @@ impl Governance {
             }
         }
 
-        proposal_validation::validate_user_submitted_proposal_fields(&convert_proposal(
-            proposal, true,
-        ))?;
+        validate_proposal_title(&proposal.title)?;
+        validate_proposal_summary(&proposal.summary)?;
+        validate_proposal_url(&proposal.url)?;
 
         if !proposal.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
