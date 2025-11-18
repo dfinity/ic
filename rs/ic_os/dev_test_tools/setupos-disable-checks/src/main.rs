@@ -1,11 +1,9 @@
 use anyhow::{Context, Error};
 use clap::Parser;
-use linux_kernel_command_line::{ImproperlyQuotedValue, KernelCommandLine};
 use regex::Regex;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
 use tempfile::NamedTempFile;
 use tokio::fs;
 
@@ -22,11 +20,7 @@ struct Cli {
 }
 
 /// Munge the kernel command line:
-/// defeat_setup_checks: if true, defeat the checks; if false, ensure they are active
-fn munge(
-    input: &str,
-    defeat_setup_checks: bool,
-) -> Result<String, ImproperlyQuotedValue> {
+fn munge(input: &str) -> String {
     let boot_args_re = Regex::new(r"(^|\n)BOOT_ARGS=(.*)(\s+#|\n|$)").unwrap();
     let (left, prevmatch, mut boot_args, postmatch, right) = match boot_args_re.captures(input) {
         Some(captures) => {
@@ -37,7 +31,7 @@ fn munge(
             (
                 wholematch.start(),
                 prevmatch.as_str().to_string(),
-                KernelCommandLine::from_str(thematch.as_str().trim().trim_matches('"'))?,
+                thematch.as_str().trim().trim_matches('"').to_string(),
                 postmatch.as_str().to_string(),
                 wholematch.end(),
             )
@@ -45,26 +39,26 @@ fn munge(
         None => (
             input.len(),
             "".to_string(),
-            KernelCommandLine::default(),
+            "".to_string(),
             "\n".to_string(),
             input.len(),
         ),
     };
 
-    boot_args
-        .ensure_single_argument("ic.setupos.run_checks", defeat_setup_checks.then_some("0"))
-        .unwrap();
+    let requires_space = !boot_args.is_empty();
+    boot_args.push_str(&format!(
+        "{sep}ic.setupos.run_checks=0",
+        sep = if requires_space { " " } else { "" }
+    ));
 
-    let boot_args_str: String = boot_args.into();
-
-    Ok(format!(
+    format!(
         "# This file has been modified by setupos-disable-checks.\n{}{}BOOT_ARGS=\"{}\"{}{}",
         &input[..left],
         prevmatch,
-        boot_args_str,
+        boot_args,
         postmatch,
         &input[right..],
-    ))
+    )
 }
 
 #[tokio::main]
@@ -82,11 +76,9 @@ async fn main() -> Result<(), Error> {
     let temp_boot_args = NamedTempFile::new()?;
     fs::write(
         temp_boot_args.path(),
-        munge(
-            std::str::from_utf8(&bootfs.read_file(boot_args_path).await?)?,
-            true,
-        )
-        .context("Could not parse the BOOT_ARGS variable in the existing boot_args file")?,
+        munge(std::str::from_utf8(
+            &bootfs.read_file(boot_args_path).await?,
+        )?),
     )
     .await
     .context("failed to write temporary boot args")?;
@@ -113,7 +105,6 @@ mod tests {
                 "variable gets added when the file does not contain the variable",
                 r#"# This file contains nothing.
 "#,
-                true,
                 r#"# This file has been modified by setupos-disable-checks.
 # This file contains nothing.
 BOOT_ARGS="ic.setupos.run_checks=0"
@@ -125,7 +116,6 @@ BOOT_ARGS="ic.setupos.run_checks=0"
 BOOT_ARGS="security=selinux selinux=1 enforcing=0"
 # Postfix.
 "#,
-                true,
                 r#"# This file has been modified by setupos-disable-checks.
 # Hello hello.
 BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks=0"
@@ -136,32 +126,13 @@ BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks=0"
                 "munges the variable even at the beginning of the file",
                 r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0"
 "#,
-                true,
-                r#"# This file has been modified by setupos-disable-checks.
-BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks=0"
-"#,
-            ),
-            (
-                "checks are prevented from being defeated",
-                r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks=0"
-"#,
-                false,
-                r#"# This file has been modified by setupos-disable-checks.
-BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks"
-"#,
-            ),
-            (
-                "variables for defeat checks are set",
-                r#"BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks"
-"#,
-                true,
                 r#"# This file has been modified by setupos-disable-checks.
 BOOT_ARGS="security=selinux selinux=1 enforcing=0 ic.setupos.run_checks=0"
 "#,
             ),
         ];
-        for (test_name, input, defeat_checks, expected) in table.into_iter() {
-            let result = munge(input, defeat_checks).unwrap();
+        for (test_name, input, expected) in table.into_iter() {
+            let result = munge(input);
             if result != expected {
                 panic!(
                     "During test {test_name}:
