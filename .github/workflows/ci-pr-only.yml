@@ -46,7 +46,7 @@ jobs:
             set -x
             if [[ '${{ github.event_name }}' == 'pull_request' ]]; then
               # In case this run is triggered by a PR,
-              export DID_CHECK_REV="$(git rev-parse 'origin/${{ github.event.pull_request.base.ref }}')"
+              export DID_CHECK_REV="$(git rev-parse '${{ github.event.pull_request.base.ref }}')"
             else
               # In case this run was triggered from ci-kickoff-manual,
               # HEAD will a commit on the PR branch.
