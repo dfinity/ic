@@ -127,8 +127,9 @@ fn test_list_node_provider_rewards() {
     // Set the average conversion rate
     set_average_icp_xdr_conversion_rate(&state_machine, 155_000);
 
-    for _ in 0..5 {
-        state_machine.advance_time(Duration::from_secs(60 * 60 * 24));
+    for _ in 0..24 * 5 {
+        state_machine.advance_time(Duration::from_secs(60 * 60));
+        state_machine.tick();
         state_machine.tick();
     }
 
