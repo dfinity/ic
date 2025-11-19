@@ -1705,6 +1705,10 @@ impl PocketIc {
         output_dir: PathBuf,
     ) {
         let endpoint = "update/canister_snapshot_download";
+        #[cfg(not(windows))]
+        let output_dir = output_dir;
+        #[cfg(windows)]
+        let output_dir = wsl_path(&output_dir, "snapshot directory").into();
         let raw_canister_snapshot_download = RawCanisterSnapshotDownload {
             sender: sender.into(),
             canister_id: canister_id.into(),
