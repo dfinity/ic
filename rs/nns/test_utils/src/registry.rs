@@ -311,7 +311,6 @@ pub fn initial_routing_table_mutations(rt: &RoutingTable) -> Vec<RegistryMutatio
 /// unique within this registry instance.
 pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
     let subnet_pid = subnet_test_id(TEST_ID);
-    println!("subnet_pid={}", subnet_pid);
     invariant_compliant_mutation_with_subnet_id(mutation_id, subnet_pid, None)
 }
 

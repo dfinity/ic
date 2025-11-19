@@ -1,5 +1,6 @@
 use candid::{Decode, Encode};
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
+use ic_base_types::NodeId;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
 use ic_nervous_system_common_test_keys::{
@@ -8,7 +9,9 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER7_PRINCIPAL,
 };
 use ic_nns_common::{pb::v1::NeuronId as ProtoNeuronId, types::UpdateIcpXdrConversionRatePayload};
-use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_constants::{
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, REGISTRY_CANISTER_ID,
+};
 use ic_nns_governance_api::{
     AddOrRemoveNodeProvider, DateRangeFilter, ExecuteNnsFunction, GovernanceError,
     ListNodeProviderRewardsRequest, MakeProposalRequest, MonthlyNodeProviderRewards,
@@ -19,7 +22,7 @@ use ic_nns_governance_api::{
     reward_node_provider::{RewardMode, RewardToAccount},
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
-use ic_nns_test_utils::registry::TEST_ID;
+use ic_nns_test_utils::registry::{TEST_ID, prepare_add_node_payload};
 use ic_nns_test_utils::state_test_helpers::setup_nns_canisters_with_features;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -32,12 +35,15 @@ use ic_nns_test_utils::{
         update_with_sender,
     },
 };
+use ic_protobuf::registry::node::v1::NodeRewardType;
 use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     node_rewards::v2::{NodeRewardRate, NodeRewardRates, UpdateNodeRewardsTableProposalPayload},
 };
-use ic_state_machine_tests::StateMachine;
+use ic_registry_canister_api::AddNodePayload;
+use ic_state_machine_tests::{PayloadBuilder, StateMachine};
 use ic_types::PrincipalId;
+use ic_types::batch::BlockmakerMetrics;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, TOKEN_SUBDIVIDABLE_BY, Tokens};
 use maplit::btreemap;
@@ -129,13 +135,29 @@ fn test_list_node_provider_rewards() {
         "0:0:0:0:0:0:0:0",
     );
 
+    // Add Nodes
+    let (add_node_payload, _) = prepare_add_node_payload(1, NodeRewardType::Type1);
+    let node_id: NodeId = state_machine
+        .execute_ingress_as(
+            node_info_1.operator_id,
+            REGISTRY_CANISTER_ID,
+            "add_node",
+            Encode!(&add_node_payload).unwrap(),
+        )
+        .map(|result| Decode!(&result.bytes(), NodeId).unwrap())
+        .unwrap();
+
     // Set the average conversion rate
     set_average_icp_xdr_conversion_rate(&state_machine, 155_000);
 
     for _ in 0..24 * 5 {
+        let blockmaker_metrics = BlockmakerMetrics {
+            blockmaker: node_id,
+            failed_blockmakers: vec![],
+        };
+        let payload = PayloadBuilder::default().with_blockmaker_metrics(blockmaker_metrics);
         state_machine.advance_time(Duration::from_secs(60 * 60));
-        state_machine.tick();
-        state_machine.tick();
+        state_machine.tick_with_config(payload);
     }
 
     // Call get_monthly_node_provider_rewards assert the value is as expected
