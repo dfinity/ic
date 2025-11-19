@@ -114,6 +114,7 @@ impl RecurringSyncTask for GetNodeProvidersRewardsInstructionsExporter {
         let request = GetNodeProvidersRewardsRequest {
             from_day: DateUtc::from(from_day),
             to_day: DateUtc::from(to_day),
+            algorithm_version: None,
         };
 
         let instruction_counter = telemetry::InstructionCounter::default();
