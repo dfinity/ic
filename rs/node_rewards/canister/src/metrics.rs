@@ -126,6 +126,11 @@ where
                             .last()
                             .map(|metrics| metrics.timestamp_nanos)
                             .expect("Not empty");
+
+                        println!(
+                            "Last timestamp for subnet {}: {}",
+                            subnet_id, last_timestamp
+                        );
                         self.last_timestamp_per_subnet
                             .borrow_mut()
                             .insert(subnet_id.into(), last_timestamp);
