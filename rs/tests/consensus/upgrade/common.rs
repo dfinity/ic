@@ -25,7 +25,7 @@ use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::util::create_agent;
+use ic_system_test_driver::util::{LogStream, create_agent};
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
     util::{MessageCanister, block_on},
@@ -256,6 +256,10 @@ async fn upgrade_to(
 ) {
     const CUP_PATH: &str = "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb";
 
+    let log_stream = LogStream::open(std::iter::once(subnet_node.clone()))
+        .await
+        .unwrap();
+
     info!(
         logger,
         "Upgrading subnet {} to {}", subnet_id, target_version
@@ -269,8 +273,18 @@ async fn upgrade_to(
         subnet_node.get_ip_addr(),
     );
 
-    let state_hash_from_logs =
-        fetch_computed_root_hash_from_logs_until_graceful_exit(subnet_node).await;
+    // Concurrently fetch the latest computed root hash from logs and assert that the orchestrator
+    // shut down gracefully
+
+    let h1 = tokio::spawn(fetch_latest_computed_root_hash_from_logs(log_stream));
+    let subnet_node_cl = subnet_node.clone();
+    let h2 = tokio::spawn(async move {
+        assert_orchestrator_stopped_gracefully(&subnet_node_cl).await;
+    });
+
+    let (r1, r2) = tokio::join!(h1, h2);
+    let state_hash_from_logs = r1.unwrap();
+    let _ = r2.unwrap();
 
     info!(logger, "The orchestrator shut down the tasks gracefully");
     info!(
@@ -302,6 +316,11 @@ async fn upgrade_to(
         state_hash_from_logs,
         "State hash from local CUP does not match the one extracted from logs before reboot"
     );
+
+    info!(
+        logger,
+        "State hash from local CUP matches the one extracted from logs before reboot"
+    );
 }
 
 // Stops the node and makes sure it becomes unreachable
@@ -330,57 +349,48 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
     info!(logger, "Node started: {}", app_node.get_ip_addr());
 }
 
-/// Fetch the latest computed state root hash from the node logs by continously searching for
-/// matching log entries until detecting that the orchestrator gracefully shut down (which indicates
-/// an upcoming reboot).
+/// Fetches the latest computed state root hash from the node logs by continously searching for
+/// matching log entries until the log stream ends (which indicates the node rebooted).
+/// Returns the last computed root hash found in the logs, or panics if no such log entry is found
+/// before the log stream ends.
 ///
-/// This function will thus loop indefinitely if an upgrade is not scheduled.
-async fn fetch_computed_root_hash_from_logs_until_graceful_exit(node: &IcNodeSnapshot) -> String {
-    let computed_root_hash_regex = r#"Computed root hash CryptoHash\(0x([a-f0-9]{64})\)"#;
-    let orchestrator_shutdown = "Orchestrator shut down gracefully";
+/// This function will thus never return if an upgrade is not scheduled.
+async fn fetch_latest_computed_root_hash_from_logs(mut log_stream: LogStream) -> String {
+    let computed_root_hash_regex =
+        regex::Regex::new(r#"Computed root hash CryptoHash\(0x([a-f0-9]{64})\)"#).unwrap();
 
-    let script = format!(
-        r#"
-        set -euo pipefail
+    let mut computed_root_hash_entry = None;
+    while let Ok((_, entry)) = log_stream
+        .find(|_, line| computed_root_hash_regex.is_match(line))
+        .await
+    {
+        computed_root_hash_entry = Some(
+            computed_root_hash_regex
+                .captures(&entry)
+                .and_then(|caps| caps.get(1))
+                .map(|m| m.as_str().to_string())
+                .expect("Failed to extract computed root hash from log entry"),
+        );
+    }
 
-        computed_root_hash_regex='{computed_root_hash_regex}'
-        orchestrator_shutdown='{orchestrator_shutdown}'
+    computed_root_hash_entry.expect("Log displaying computed root hash not found")
+}
 
-        last_state_hash=""
+/// Asserts that the orchestrator has shut down gracefully by searching for a specific log entry.
+/// Panics if the log entry is not found but the log stream ends (which indicates the node
+/// rebooted).
+///
+/// We use a bash script instead of connecting to the log stream endpoint because as the
+/// orchestrator is shutting down, the endpoint might close right away without letting us the
+/// chance to read the relevant log entry. In constrast, the SSH connection remains open longer.
+///
+/// This function will thus never return if an upgrade is not scheduled.
+async fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
+    const MESSAGE: &str = r"Orchestrator shut down gracefully";
 
-        # Stream log entries until detecting that the orchestrator has shut down gracefully, while
-        # always keeping track of the latest log entry matching the computed_root_hash_regex.
-        # If the logs end without logging the shutdown message, exit with an error.
-        while IFS='' read -r line; do
-            # If orchestrator shutdown is logged, output the last found computed root hash and exit
-            if echo "$line" | grep -q "$orchestrator_shutdown"; then
-                echo -n "$last_state_hash"
-                exit 0
-            fi
+    let script = format!("journalctl -f | grep -q \"{MESSAGE}\"");
 
-            # Update last occurrence of computed root hash
-            # =~ is Bash's regex-matching operator
-            if [[ $line =~ $computed_root_hash_regex ]]; then
-                # BASH_REMATCH is a special Bash array variable containing captured groups
-                last_state_hash="${{BASH_REMATCH[1]}}"
-            fi
-        done < <(journalctl -f -o cat)
-
-        echo -n "Journal ended without detecting orchestrator shutdown" >&2
-        exit 1
-        "#
-    );
-
-    let computed_root_hash_entry = node
-        .block_on_bash_script(&script)
+    node.block_on_bash_script_async(&script)
+        .await
         .expect("Orchestrator did not shut down gracefully");
-
-    // As of the `.unwrap()` above, the script must have exited with code 0, meaning that if its
-    // output is empty, then no computed root hash log entry was found before the shutdown message.
-    assert!(
-        !computed_root_hash_entry.is_empty(),
-        "Log displaying computed root hash not found"
-    );
-
-    computed_root_hash_entry
 }
