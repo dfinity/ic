@@ -118,7 +118,7 @@ impl RingBuffer {
 
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         let index = self.io.load_index();
-        let (start_inclusive, end_inclusive) = match index.get_coarse_range(filter.clone()) {
+        let (start_inclusive, end_inclusive) = match index.bounded_scan_range(filter.clone()) {
             Some(range) => range,
             None => return vec![],
         };

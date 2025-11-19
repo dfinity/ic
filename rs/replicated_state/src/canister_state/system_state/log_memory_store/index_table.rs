@@ -157,9 +157,20 @@ impl IndexTable {
         entries
     }
 
-    /// Compute a coarse `[start, end]` inclusive entry range that bounds the query
-    /// described by `filter`, minimizing how much of the ring must be scanned.
-    pub fn get_coarse_range(
+    /// Returns a [start, end] index entry pair that defines a safe, scannable range of log records
+    /// while respecting the maximum allowed result size.
+    ///
+    /// Behavior:
+    /// - **No filter**: returns the most recent records (tail), trimming older ones from the start.
+    ///   The range size is ≤ `result_max_size + segment_size`.
+    ///
+    /// - **With filter**: starts at the earliest record matching the filter and includes as many
+    ///   subsequent records as possible without exceeding the size limit. May trim the end.
+    ///   The range size is ≤ `result_max_size + 2 * segment_size`.
+    ///
+    /// The extra segment allowance ensures correctness in the presence of ring-buffer segmentation
+    /// and guarantees the actual scanned range remains bounded and efficient.
+    pub fn bounded_scan_range(
         &self,
         filter: Option<FetchCanisterLogsFilter>,
     ) -> Option<(IndexEntry, IndexEntry)> {
@@ -206,7 +217,7 @@ impl IndexTable {
         let clamp_end_by_size = |entries: &Vec<IndexEntry>, size_limit: MemorySize| -> IndexEntry {
             let start = entries.first().unwrap();
             for entry in entries {
-                if self.distance(start, entry) >= size_limit {
+                if self.range_size(start, entry) >= size_limit {
                     return *entry;
                 }
             }
@@ -239,7 +250,7 @@ impl IndexTable {
                 let end = entries.last().unwrap();
                 let mut new_start = end;
                 for entry in entries.iter().rev() {
-                    if self.distance(entry, end) >= size_limit {
+                    if self.range_size(entry, end) >= size_limit {
                         break;
                     }
                     new_start = entry;
@@ -257,15 +268,16 @@ impl IndexTable {
         (position + distance) % self.data_capacity
     }
 
-    /// Calculates forward distance between two positions in the ring, handles wraparound.
-    fn distance(&self, e_from: &IndexEntry, e_to: &IndexEntry) -> MemorySize {
-        let from = e_from.position;
-        let to = self.advance(e_to.position, MemorySize::new(e_to.bytes_len as u64));
-        if to >= from {
-            to - from // no wrap
+    /// Returns the total byte size of the range from the start of `from`
+    /// to the end of `to` (both inclusive), correctly handling ring-buffer wraparound.
+    fn range_size(&self, from: &IndexEntry, to: &IndexEntry) -> MemorySize {
+        let from_pos = from.position;
+        let to_pos = self.advance(to.position, MemorySize::new(to.bytes_len as u64));
+        if to_pos >= from_pos {
+            to_pos - from_pos // no wrap
         } else {
             debug_assert!(self.data_capacity.get() > 0);
-            (self.data_capacity + to) - from // wrap
+            (self.data_capacity + to_pos) - from_pos // wrap
         }
     }
 
@@ -382,7 +394,7 @@ mod tests {
             TEST_RESULT_MAX_SIZE,
             vec![],
         );
-        assert!(table.get_coarse_range(None).is_none());
+        assert!(table.bounded_scan_range(None).is_none());
     }
 
     #[test]
@@ -398,7 +410,7 @@ mod tests {
                 start_position,
                 start_idx,
             );
-            let (start, end) = table.get_coarse_range(None).expect("range present");
+            let (start, end) = table.bounded_scan_range(None).expect("range present");
             // Assert start and end point to the same single record at start_idx.
             assert_eq!(start.idx, start_idx);
             assert_eq!(start, end);
@@ -419,7 +431,7 @@ mod tests {
                 start_position,
                 start_idx,
             );
-            let (start, end) = table.get_coarse_range(None).expect("range present");
+            let (start, end) = table.bounded_scan_range(None).expect("range present");
             assert_eq!(start.idx, start_idx); // Beginning is not trimmed.
             assert_eq!(records_count(&start, &end), TEST_SMALL_LOG_RECORDS_COUNT);
         }
@@ -438,15 +450,16 @@ mod tests {
                 0,
             );
             let (no_filter_start, no_filter_end) =
-                table.get_coarse_range(None).expect("range present");
+                table.bounded_scan_range(None).expect("range present");
             let (start, end) = table
-                .get_coarse_range(filter_by_idx(10, 20))
+                .bounded_scan_range(filter_by_idx(10, 20))
                 .expect("range present");
             // Assert filtered range is within no-filter range.
             assert!(no_filter_start.idx <= start.idx);
             assert!(end.idx <= no_filter_end.idx);
             assert!(
-                table.distance(&start, &end) <= table.distance(&no_filter_start, &no_filter_end)
+                table.range_size(&start, &end)
+                    <= table.range_size(&no_filter_start, &no_filter_end)
             );
             assert!(records_count(&start, &end) <= TEST_SMALL_LOG_RECORDS_COUNT);
         }
@@ -465,15 +478,16 @@ mod tests {
                 0,
             );
             let (no_filter_start, no_filter_end) =
-                table.get_coarse_range(None).expect("range present");
+                table.bounded_scan_range(None).expect("range present");
             let (start, end) = table
-                .get_coarse_range(filter_by_timestamp(10_000_000, 20_000_000))
+                .bounded_scan_range(filter_by_timestamp(10_000_000, 20_000_000))
                 .expect("range present");
             // Assert filtered range is within no-filter range.
             assert!(no_filter_start.idx <= start.idx);
             assert!(end.idx <= no_filter_end.idx);
             assert!(
-                table.distance(&start, &end) <= table.distance(&no_filter_start, &no_filter_end)
+                table.range_size(&start, &end)
+                    <= table.range_size(&no_filter_start, &no_filter_end)
             );
             assert!(records_count(&start, &end) <= TEST_SMALL_LOG_RECORDS_COUNT);
         }
@@ -492,11 +506,11 @@ mod tests {
                 start_position,
                 start_idx,
             );
-            let (start, end) = table.get_coarse_range(None).expect("range present");
+            let (start, end) = table.bounded_scan_range(None).expect("range present");
             assert_ne!(start.idx, start_idx); // Beginning is trimmed.
             assert!(start.idx < end.idx);
             // Assert distance is above max result size but within one segment size.
-            let distance = table.distance(&start, &end);
+            let distance = table.range_size(&start, &end);
             assert!(distance >= table.result_max_size());
             assert!(distance <= table.result_max_size() + table.segment_size());
             assert!(records_count(&start, &end) < TEST_BIG_LOG_RECORDS_COUNT);
@@ -519,18 +533,18 @@ mod tests {
 
             // Short range query within max result size.
             let (start, end) = table
-                .get_coarse_range(filter_by_idx(10, 190))
+                .bounded_scan_range(filter_by_idx(10, 190))
                 .expect("range present");
             assert!(start.idx < end.idx);
-            let distance = table.distance(&start, &end);
+            let distance = table.range_size(&start, &end);
             assert!(distance <= table.result_max_size());
 
             // Long range query exceeding max result size.
             let (start, end) = table
-                .get_coarse_range(filter_by_idx(10, 230)) // 230 records * 10 KB > 2 MB limit
+                .bounded_scan_range(filter_by_idx(10, 230)) // 230 records * 10 KB > 2 MB limit
                 .expect("range present");
             assert!(start.idx < end.idx);
-            let distance = table.distance(&start, &end);
+            let distance = table.range_size(&start, &end);
             assert!(distance >= table.result_max_size());
             assert!(distance <= table.result_max_size() + 2 * table.segment_size());
             assert!(records_count(&start, &end) < TEST_BIG_LOG_RECORDS_COUNT);
