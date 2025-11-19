@@ -209,10 +209,8 @@ mod tests {
     #[test]
     fn test_whitelist_allow_some() {
         let user_1 = PrincipalId::new_user_test_id(1);
-        let policy = WhitelistFeatureAccessPolicy::Only(vec![
-            user_1.clone(),
-            PrincipalId::new_user_test_id(2),
-        ]);
+        let policy =
+            WhitelistFeatureAccessPolicy::Only(vec![user_1, PrincipalId::new_user_test_id(2)]);
 
         assert!(policy.is_allowed(&user_1));
         assert!(!policy.is_allowed(&PrincipalId::new_user_test_id(999)));
