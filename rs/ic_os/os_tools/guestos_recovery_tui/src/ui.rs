@@ -291,28 +291,6 @@ pub(crate) fn draw_logs_screen(f: &mut Frame, params: &RecoveryParams, logs: &[S
     render_text_block(f, text, block, size, Alignment::Left);
 }
 
-/// Builds the text content for the success completion screen
-fn build_success_text(success_message: &Option<String>, width: u16) -> Vec<Line<'static>> {
-    let mut text = Vec::new();
-    text.push(Line::from(""));
-    let success_msg = match success_message {
-        Some(msg) => format!("✓ {}", msg),
-        None => "✓ Recovery completed successfully!".to_string(),
-    };
-    text.push(Line::from(vec![Span::styled(
-        success_msg,
-        Style::default().fg(Color::Green).bold(),
-    )]));
-    text.push(Line::from(""));
-    let separator = create_separator(width);
-    text.push(Line::from(vec![Span::styled(
-        separator,
-        Style::default().fg(Color::DarkGray),
-    )]));
-    text.push(Line::from(""));
-    text
-}
-
 /// Builds the text content for the failure completion screen
 fn build_failure_text<'a>(
     exit_code: Option<i32>,
@@ -378,34 +356,21 @@ fn build_failure_text<'a>(
     text
 }
 
-/// Draws the completion screen showing success or failure with details
-pub(crate) fn draw_completion_screen(
+/// Draws the failure completion screen with error details
+pub(crate) fn draw_failure_screen(
     f: &mut Frame,
-    success: bool,
-    success_message: &Option<String>,
     exit_code: Option<i32>,
     log_lines: &[String],
     error_messages: &[String],
     params: &RecoveryParams,
 ) {
     let size = f.area();
-    let title = if success {
-        "Recovery Completed"
-    } else {
-        "Recovery Failed"
-    };
-    let style = if success {
-        Style::default().fg(Color::Green).bold()
-    } else {
-        Style::default().fg(Color::Red).bold()
-    };
-    let block = create_bordered_block(title, Some(style));
+    let block = create_bordered_block(
+        "Recovery Failed",
+        Some(Style::default().fg(Color::Red).bold()),
+    );
 
-    let mut text = if success {
-        build_success_text(success_message, size.width)
-    } else {
-        build_failure_text(exit_code, log_lines, error_messages, params, size)
-    };
+    let mut text = build_failure_text(exit_code, log_lines, error_messages, params, size);
 
     text.push(Line::from(""));
     text.push(Line::from("Press any key to continue..."));

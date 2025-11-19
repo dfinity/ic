@@ -7,7 +7,7 @@ use crossterm::event::{
 };
 use crossterm::execute;
 use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode, size,
 };
 use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::Rect};
 use std::io::{self, BufRead, BufReader, Read};
@@ -550,6 +550,40 @@ fn extract_errors_from_logs(log_lines: &[String]) -> Vec<String> {
 }
 
 // ============================================================================
+// Success Message Printing
+// ============================================================================
+
+/// Prints a prominent success message to stderr (outside the TUI).
+/// This message is designed to be highly visible and will appear in the normal
+/// terminal after the TUI exits, before any subsequent service logs.
+/// The message uses prominent formatting with borders and colors to stand out.
+fn print_prominent_success_message(message: &str) {
+    use std::io::Write;
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+
+    // ANSI color codes
+    const GREEN: &str = "\x1b[32m";
+    const BOLD: &str = "\x1b[1m";
+    const RESET: &str = "\x1b[0m";
+    const SEPARATOR_CHAR: &str = "═";
+
+    // Get terminal width, defaulting to 80 if unavailable
+    let width = size().map(|(w, _)| w as usize).unwrap_or(80).min(100); // Cap at 100 for readability
+
+    let separator = SEPARATOR_CHAR.repeat(width);
+
+    // Print prominent success message with borders, styling, and extra spacing
+    // The extra blank lines help separate it from subsequent service logs
+    let _ = writeln!(
+        handle,
+        "\n\n{}{}{}\n{}{}✓ {}{}{}\n{}{}{}\n\n",
+        GREEN, separator, RESET, GREEN, BOLD, message, RESET, RESET, GREEN, separator, RESET
+    );
+    let _ = handle.flush();
+}
+
+// ============================================================================
 // Main Execution
 // ============================================================================
 
@@ -593,41 +627,40 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
         extract_errors_from_logs(&all_logs)
     };
 
-    let success = status.success();
-    terminal_guard.get_mut().draw(|f| {
-        ui::draw_completion_screen(
-            f,
-            success,
-            &success_message,
-            status.code(),
-            &all_logs,
-            &error_messages,
-            params,
-        );
-    })?;
+    if status.success() {
+        // For success: immediately exit TUI and print prominent success message.
+        // Exiting TUI immediately prevents guestos service logs from cluttering the TUI screen.
+        let mut terminal = terminal_guard
+            .terminal
+            .take()
+            .expect("TerminalGuard: terminal was already taken.");
+        teardown_terminal(&mut terminal)?;
 
-    // Wait for user to press any key before exiting
-    if let Event::Key(_) = event::read()? {}
+        let message = success_message
+            .as_deref()
+            .unwrap_or("Recovery completed successfully!");
+        print_prominent_success_message(message);
 
-    let mut terminal = terminal_guard
-        .terminal
-        .take()
-        .expect("TerminalGuard: terminal was already taken.");
-    let _ = terminal.clear();
-    teardown_terminal(&mut terminal)?;
+        Ok(())
+    } else {
+        // For failure: show completion screen and wait for user to press any key
+        terminal_guard.get_mut().draw(|f| {
+            ui::draw_failure_screen(f, status.code(), &all_logs, &error_messages, params);
+        })?;
 
-    if !status.success() {
+        // Wait for user to press any key before exiting
+        if let Event::Key(_) = event::read()? {}
+
+        let mut terminal = terminal_guard
+            .terminal
+            .take()
+            .expect("TerminalGuard: terminal was already taken.");
+        let _ = terminal.clear();
+        teardown_terminal(&mut terminal)?;
+
         anyhow::bail!(
             "Recovery upgrader failed with exit code: {:?}",
             status.code()
         );
     }
-
-    if let Some(ref msg) = success_message {
-        eprintln!("{}", msg);
-    } else if status.success() {
-        eprintln!("Recovery completed successfully!");
-    }
-
-    Ok(())
 }
