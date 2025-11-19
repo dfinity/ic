@@ -1602,7 +1602,7 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
             heap_delta_initial_reserve.into();
 
         StateMachineBuilder::new()
-            .with_checkpoint_interval_length(9)
+            .with_checkpoint_interval_length(11)
             .with_config(Some(StateMachineConfig::new(
                 subnet_config,
                 HypervisorConfig::default(),
@@ -1628,13 +1628,15 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
 
     // With minimal subnet heap delta capacity we should start
     // the round execution anyway, so the canister installation should succeed.
-    // Round 1 and 2.
+    // One empty round is always performed when creating a `StateMachine`
+    // (to have a certified state) and canister install takes 2 rounds
+    // => we are now at Round 3.
     let canister_id = install_canister(&env).unwrap();
     // Assert the canister install does not touch the heap.
     assert_eq!(env.heap_delta_estimate_bytes(), 0);
 
     // The heap delta estimate is still zero, so the ingress execution should succeed.
-    // Round 3.
+    // Round 4.
     let msg_id = send_ingress(&env, &canister_id);
     let status = env.ingress_status(&msg_id);
     assert_matches!(
@@ -1650,24 +1652,22 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
 
     // As the subnet capacity is at minimum, any other message execution
     // should be postponed after the next checkpoint.
-    // Round 4.
-    let msg_id = send_ingress(&env, &canister_id);
     // Round 5.
-    env.tick();
-    let status = env.ingress_status(&msg_id);
-    assert_matches!(
-        status,
-        IngressStatus::Known {
-            // Received, but not completed.
-            state: IngressState::Received,
-            ..
-        }
-    );
+    let msg_id = send_ingress(&env, &canister_id);
 
     // The ingress should be executed after the checkpoint.
-    // Round 6-10.
-    for _ in 6..=10 {
+    // Round 6-12.
+    for _ in 6..=12 {
         env.tick();
+        let status = env.ingress_status(&msg_id);
+        assert_matches!(
+            status,
+            IngressStatus::Known {
+                // Received, but not completed.
+                state: IngressState::Received,
+                ..
+            }
+        );
     }
     let status = env.ingress_status(&msg_id);
     assert_matches!(
@@ -1679,8 +1679,8 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
         }
     );
     // The `heap_delta_estimate` is reset after the checkpoint round, so the message
-    // will be executed in round 11.
-    // Round 11.
+    // will be executed in round 12.
+    // Round 12.
     env.tick();
     let status = env.ingress_status(&msg_id);
     assert_matches!(
@@ -1698,17 +1698,19 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
     // Using previous estimates, set the heap delta capacity enough
     // to execute three ingress messages.
     // The initial reserve is just enough to execute one message.
-    // The checkpoint interval length is 10 rounds.
+    // The checkpoint interval length is 12 rounds.
     let env = setup(ingress_heap_delta_estimate * 3, ingress_heap_delta_estimate);
 
     // Install canister.
-    // Round 1 and 2.
+    // One empty round is always performed when creating a `StateMachine`
+    // (to have a certified state) and canister install takes 2 rounds
+    // => we are now at Round 3.
     let canister_id = install_canister(&env).unwrap();
     // Assert the canister install does not touch the heap.
     assert_eq!(env.heap_delta_estimate_bytes(), 0);
 
     // First ingress message should take `ingress_heap_delta_estimate`.
-    // Round 3.
+    // Round 4.
     let msg_id = send_ingress(&env, &canister_id);
     let status = env.ingress_status(&msg_id);
     assert_matches!(
@@ -1721,7 +1723,7 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
 
     // As there are a few rounds has passed, the second ingress message
     // execution should also succeed now.
-    // Round 4.
+    // Round 5.
     let msg_id = send_ingress(&env, &canister_id);
     let status = env.ingress_status(&msg_id);
     assert_matches!(
@@ -1732,9 +1734,15 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
         }
     );
 
-    // The third message execution should be postponed to the last third
-    // of the checkpoint interval (10 * 2 / 3 = 6).
-    // Round 5.
+    // The third message execution should be postponed to the second half
+    // of the checkpoint interval (12 / 2 = 6):
+    // - subnet heap delta capacity: 3 * ingress_heap_delta_estimate;
+    // - heap delta initial reserve: ingress_heap_delta_estimate;
+    // - remaining heap delta: capacity - reserve = 2 * ingress_heap_delta_estimate;
+    // - scaled remaining heap delta: remaining heap delta / 2 = ingress_heap_delta_estimate;
+    // - heap delta limit: capacity - scaled remaining heap delta = 2 * ingress_heap_delta_estimate;
+    // - current heap delta: 2 * ingress_heap_delta_estimate.
+    // Round 6 (message execution still skipped because of equality between heap delta limit and current heap delta).
     let msg_id = send_ingress(&env, &canister_id);
     let status = env.ingress_status(&msg_id);
     assert_matches!(
@@ -1745,11 +1753,10 @@ fn heap_delta_initial_reserve_allows_round_executions_right_after_checkpoint() {
         }
     );
 
-    // Skip a round.
-    // Round 6.
+    // Round 7.
     env.tick();
 
-    // The third message must be executed now.
+    // The third message must be executed now that current heap delta is less than heap delta limit.
     let status = env.ingress_status(&msg_id);
     assert_matches!(
         status,
@@ -1778,8 +1785,10 @@ fn current_interval_length_works_on_app_subnets() {
         .install_canister_with_cycles(wasm, vec![], None, Cycles::new(301 * B))
         .unwrap();
 
-    // Canister install takes 2 rounds.
-    for _ in 2..500 {
+    // One empty round is always performed when creating a `StateMachine`
+    // (to have a certified state) and canister install takes 2 rounds
+    // => we are now at Round 3.
+    for _ in 3..500 {
         // Assert there is a dirty page.
         assert!(env.heap_delta_estimate_bytes() > 0);
         env.tick();
@@ -1799,8 +1808,10 @@ fn current_interval_length_works_on_system_subnets() {
         .install_canister_with_cycles(wasm, vec![], None, Cycles::new(100_000_000_000))
         .unwrap();
 
-    // Canister install takes 2 rounds.
-    for _ in 2..200 {
+    // One empty round is always performed when creating a `StateMachine`
+    // (to have a certified state) and canister install takes 2 rounds
+    // => we are now at Round 3.
+    for _ in 3..200 {
         // Assert there is a dirty page.
         assert!(env.heap_delta_estimate_bytes() > 0);
         env.tick();
