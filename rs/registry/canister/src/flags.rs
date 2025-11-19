@@ -21,7 +21,7 @@ thread_local! {
     // These are needed for the phased rollout approach in order
     // allow granular rolling out of the feature to specific subnets
     // to specific subset of callers.
-    static NODE_SWAPPING_CALLERS_POLICY: RefCell<FeaturePolicy<PrincipalId>> = RefCell::new(FeaturePolicy::AllowOnly(
+    static NODE_SWAPPING_CALLERS_WHITELIST_POLICY: RefCell<WhitelistFeatureAccessPolicy<PrincipalId>> = RefCell::new(WhitelistFeatureAccessPolicy::Only(
         [
             "xph6u-z3z2t-s7hh7-gtlxh-bbgbx-aatlm-eab4o-bsank-nqruh-3ub4q-sae",
             "lgp6d-brhlv-35izu-khc6p-rfszo-zdwng-xbtkh-xyvjg-y3due-7ha7t-uae",
@@ -46,7 +46,7 @@ thread_local! {
         .collect(),
     ));
 
-    static NODE_SWAPPING_SUBNETS_POLICY: RefCell<FeaturePolicy<SubnetId>> = RefCell::new(FeaturePolicy::AllowOnly(
+    static NODE_SWAPPING_SUBNETS_WHITELIST_POLICY: RefCell<WhitelistFeatureAccessPolicy<SubnetId>> = RefCell::new(WhitelistFeatureAccessPolicy::Only(
         [
             "2fq7c-slacv-26cgz-vzbx2-2jrcs-5edph-i5s2j-tck77-c3rlz-iobzx-mqe",
             "2zs4v-uoqha-xsuun-lveyr-i4ktc-5y3ju-aysud-niobd-gxnqa-ctqem-hae",
@@ -142,45 +142,44 @@ pub mod temporary_overrides {
     }
 
     pub fn test_set_swapping_whitelisted_callers(override_callers: Vec<PrincipalId>) {
-        let policy = FeaturePolicy::AllowOnly(override_callers);
-        NODE_SWAPPING_CALLERS_POLICY.replace(policy);
+        let policy = WhitelistFeatureAccessPolicy::Only(override_callers);
+        NODE_SWAPPING_CALLERS_WHITELIST_POLICY.replace(policy);
     }
 
     pub fn test_set_swapping_enabled_subnets(override_subnets: Vec<SubnetId>) {
-        let policy = FeaturePolicy::AllowOnly(override_subnets);
-        NODE_SWAPPING_SUBNETS_POLICY.replace(policy);
+        let policy = WhitelistFeatureAccessPolicy::Only(override_subnets);
+        NODE_SWAPPING_SUBNETS_WHITELIST_POLICY.replace(policy);
     }
 }
 
 pub(crate) fn is_node_swapping_enabled_on_subnet(subnet_id: SubnetId) -> bool {
-    NODE_SWAPPING_SUBNETS_POLICY.with_borrow(|subnet_policy| subnet_policy.is_allowed(&subnet_id))
+    NODE_SWAPPING_SUBNETS_WHITELIST_POLICY
+        .with_borrow(|subnet_policy| subnet_policy.is_allowed(&subnet_id))
 }
 
 pub(crate) fn is_node_swapping_enabled_for_caller(caller: PrincipalId) -> bool {
-    NODE_SWAPPING_CALLERS_POLICY.with_borrow(|caller_policy| caller_policy.is_allowed(&caller))
+    NODE_SWAPPING_CALLERS_WHITELIST_POLICY
+        .with_borrow(|caller_policy| caller_policy.is_allowed(&caller))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum FeaturePolicy<T>
+#[allow(dead_code)]
+enum WhitelistFeatureAccessPolicy<T>
 where
     T: Clone + Eq,
 {
-    AllowOnly(Vec<T>),
-    AllowAll,
-    DenyOnly(Vec<T>),
-    DenyAll,
+    Only(Vec<T>),
+    All,
 }
 
-impl<T> FeaturePolicy<T>
+impl<T> WhitelistFeatureAccessPolicy<T>
 where
     T: Clone + Eq,
 {
     fn is_allowed(&self, item: &T) -> bool {
         match &self {
-            FeaturePolicy::AllowOnly(items) => items.contains(item),
-            FeaturePolicy::AllowAll => true,
-            FeaturePolicy::DenyOnly(items) => !items.contains(item),
-            FeaturePolicy::DenyAll => false,
+            WhitelistFeatureAccessPolicy::Only(items) => items.contains(item),
+            WhitelistFeatureAccessPolicy::All => true,
         }
     }
 }
@@ -189,43 +188,34 @@ where
 mod tests {
     use ic_types::PrincipalId;
 
-    use crate::flags::FeaturePolicy;
+    use crate::flags::WhitelistFeatureAccessPolicy;
 
     #[test]
-    fn test_allow_all() {
-        let policy = FeaturePolicy::AllowAll;
+    fn test_whitelist_allow_all() {
+        let policy = WhitelistFeatureAccessPolicy::All;
 
         assert!(policy.is_allowed(&PrincipalId::new_user_test_id(1)));
         assert!(policy.is_allowed(&PrincipalId::new_anonymous()));
     }
 
     #[test]
-    fn test_deny_all() {
-        let policy = FeaturePolicy::DenyAll;
+    fn test_whitelist_deny_all() {
+        let policy = WhitelistFeatureAccessPolicy::Only(vec![]);
 
         assert!(!policy.is_allowed(&PrincipalId::new_user_test_id(1)));
         assert!(!policy.is_allowed(&PrincipalId::new_anonymous()));
     }
 
     #[test]
-    fn test_allow_some() {
+    fn test_whitelist_allow_some() {
         let user_1 = PrincipalId::new_user_test_id(1);
-        let policy =
-            FeaturePolicy::AllowOnly(vec![user_1.clone(), PrincipalId::new_user_test_id(2)]);
+        let policy = WhitelistFeatureAccessPolicy::Only(vec![
+            user_1.clone(),
+            PrincipalId::new_user_test_id(2),
+        ]);
 
         assert!(policy.is_allowed(&user_1));
         assert!(!policy.is_allowed(&PrincipalId::new_user_test_id(999)));
         assert!(!policy.is_allowed(&PrincipalId::new_anonymous()));
-    }
-
-    #[test]
-    fn test_deny_some() {
-        let user_1 = PrincipalId::new_user_test_id(1);
-        let policy =
-            FeaturePolicy::DenyOnly(vec![user_1.clone(), PrincipalId::new_user_test_id(2)]);
-
-        assert!(!policy.is_allowed(&user_1));
-        assert!(policy.is_allowed(&PrincipalId::new_user_test_id(999)));
-        assert!(policy.is_allowed(&PrincipalId::new_anonymous()));
     }
 }
