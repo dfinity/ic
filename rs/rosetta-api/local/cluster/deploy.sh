@@ -174,7 +174,7 @@ command -v helm &>/dev/null || {
 
     # Uninstall the Helm chart
     helm uninstall local-rosetta --kube-context="$MINIKUBE_PROFILE" 2>/dev/null || true
-    
+
     # If --purge is set, also delete persistent volumes
     if [[ "$PURGE" == true ]]; then
         echo "Purging persistent volumes..."
