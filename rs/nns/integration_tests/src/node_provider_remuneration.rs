@@ -40,7 +40,6 @@ use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     node_rewards::v2::{NodeRewardRate, NodeRewardRates, UpdateNodeRewardsTableProposalPayload},
 };
-use ic_registry_canister_api::AddNodePayload;
 use ic_state_machine_tests::{PayloadBuilder, StateMachine};
 use ic_types::PrincipalId;
 use ic_types::batch::BlockmakerMetrics;
