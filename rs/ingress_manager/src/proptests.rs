@@ -94,14 +94,15 @@ proptest! {
                 );
 
                 // Also in this test the payload must contain some ingress messages
-                assert!(!payload.is_empty());
+                assert!(!payload.payload.is_empty());
 
                 // Check the size explicitly
-                assert!((payload.count_bytes() as u64) < MAX_BLOCK_SIZE);
+                assert!((payload.payload.count_bytes() as u64) < MAX_BLOCK_SIZE);
+                assert!(payload.wire_size_estimate.get() < MAX_BLOCK_SIZE);
 
                 // Any payload generated should pass verification.
                 // If not, we have an issue with the payload builder
-                assert!(ingress_manager.validate_ingress_payload(&payload, &HashSet::new(), &validation_context).is_ok());
+                assert!(ingress_manager.validate_ingress_payload(&payload.payload, &HashSet::new(), &validation_context).is_ok());
             },
         )
     }
