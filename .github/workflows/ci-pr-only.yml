@@ -55,7 +55,7 @@ jobs:
               git fetch --depth=1 origin "$DID_CHECK_REV"
             else
               # In case this run was triggered from ci-kickoff-manual,
-              # HEAD will be the head of the PR branch.
+              # HEAD will a commit on the PR branch.
               # Then we need to compare the did file of HEAD
               # with the did file of the merge-base of HEAD with the base branch.
               git fetch origin "${{ inputs.commit-sha }}" "${{ inputs.base-ref }}"
