@@ -160,9 +160,6 @@ pub enum CspTlsSignError {
     MalformedSecretKey {
         error: String,
     },
-    SigningFailed {
-        error: String,
-    },
     TransientInternalError {
         internal_error: String,
     },
