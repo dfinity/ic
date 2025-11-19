@@ -39,6 +39,7 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
+            set -x
             if [[ '${{ github.event_name }}' == 'pull_request' ]]; then
               # In case this run is triggered by a PR,
               # we know HEAD is a merge of the head of the PR branch (github.event.pull_request.head.sha)
