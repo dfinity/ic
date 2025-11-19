@@ -9,6 +9,8 @@ use rewards_calculation::AlgorithmVersion;
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
 use std::fmt::Display;
 
+// This is the version of the rewards calculation algorithm that is used to calculate rewards.
+// Currently, RewardsCalculationV1::VERSION is the only algorithm version supported.
 #[derive(candid::CandidType, candid::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RewardsCalculationAlgorithmVersion {
     pub version: u32,
