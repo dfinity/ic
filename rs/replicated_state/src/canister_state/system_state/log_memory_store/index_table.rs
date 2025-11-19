@@ -85,10 +85,6 @@ impl IndexTable {
         let entry_size = INDEX_ENTRY_SIZE.get() as usize;
         debug_assert!(entry_size > 0);
         let entries_count = total_size_max / entry_size;
-        println!(
-            "ABC total_size_max: {} entry_size: {} entries_count: {}",
-            total_size_max, entry_size, entries_count
-        );
         debug_assert!(entries_count > 0);
         let segment_size = data_capacity.get() as usize / entries_count;
         debug_assert!(entries_count * entry_size <= total_size_max);
@@ -564,10 +560,3 @@ mod tests {
         }
     }
 }
-
-/*
-bazel test //rs/replicated_state:replicated_state_test \
-  --test_output=streamed \
-  --test_arg=--nocapture \
-  --test_arg=index_table
-*/

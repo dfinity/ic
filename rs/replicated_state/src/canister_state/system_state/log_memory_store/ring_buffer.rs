@@ -1,5 +1,3 @@
-#![allow(dead_code)] // TODO: don't forget to cleanup.
-
 use crate::canister_state::system_state::log_memory_store::{
     header::Header,
     log_record::LogRecord,
@@ -110,7 +108,7 @@ impl RingBuffer {
     }
 
     fn update_index(&mut self, position: MemoryPosition, record: &LogRecord) {
-        // TODO: optimize for loading lots of records in a row.
+        // TODO: maybe optimize for loading lots of records in a row.
         let mut index = self.io.load_index();
         index.update(position, record);
         self.io.save_index(&index);
@@ -228,28 +226,28 @@ mod tests {
         let page_map = PageMap::new_for_testing();
         let data_capacity = TEST_DATA_CAPACITY;
 
-        let ring_buffer = RingBuffer::new(page_map, data_capacity);
+        let rb = RingBuffer::new(page_map, data_capacity);
 
-        assert_eq!(ring_buffer.capacity(), data_capacity.get() as usize);
-        assert_eq!(ring_buffer.used_space(), 0);
-        assert_eq!(ring_buffer.next_id(), 0);
+        assert_eq!(rb.capacity(), data_capacity.get() as usize);
+        assert_eq!(rb.used_space(), 0);
+        assert_eq!(rb.next_id(), 0);
     }
 
     #[test]
     fn test_push_and_pop_order_preserved() {
         let page_map = PageMap::new_for_testing();
         let data_capacity = TEST_DATA_CAPACITY;
-        let mut ring_buffer = RingBuffer::new(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
 
         let a = log_record(0, 100, "a");
         let b = log_record(1, 200, "bb");
-        ring_buffer.append(&a);
-        ring_buffer.append(&b);
+        rb.append(&a);
+        rb.append(&b);
 
-        assert_eq!(ring_buffer.used_space(), a.bytes_len() + b.bytes_len());
-        assert_eq!(ring_buffer.pop_front().unwrap(), a);
-        assert_eq!(ring_buffer.pop_front().unwrap(), b);
-        assert!(ring_buffer.pop_front().is_none());
+        assert_eq!(rb.used_space(), a.bytes_len() + b.bytes_len());
+        assert_eq!(rb.pop_front().unwrap(), a);
+        assert_eq!(rb.pop_front().unwrap(), b);
+        assert!(rb.pop_front().is_none());
     }
 
     #[test]
@@ -310,7 +308,7 @@ mod tests {
     fn test_wraps_without_eviction() {
         let page_map = PageMap::new_for_testing();
         let data_capacity = MemorySize::new(137);
-        let mut ring_buffer = RingBuffer::new(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
 
         // Push many records to cause wrap-around without eviction.
         let mut pushed: Vec<LogRecord> = vec![];
@@ -318,13 +316,13 @@ mod tests {
         for i in 0..1_000 {
             let record = log_record(i, i * 100, "12345");
             // Free space until the new record fits, popped records are collected.
-            while ring_buffer.used_space() + record.bytes_len() > ring_buffer.capacity() {
-                popped.push(ring_buffer.pop_front().expect("expected record to pop"));
+            while rb.used_space() + record.bytes_len() > rb.capacity() {
+                popped.push(rb.pop_front().expect("expected record to pop"));
             }
-            ring_buffer.append(&record);
+            rb.append(&record);
             pushed.push(record);
         }
-        while let Some(r) = ring_buffer.pop_front() {
+        while let Some(r) = rb.pop_front() {
             popped.push(r);
         }
 
@@ -337,16 +335,16 @@ mod tests {
     fn test_lookup_table_and_records_filtering() {
         let page_map = PageMap::new_for_testing();
         let data_capacity = TEST_DATA_CAPACITY;
-        let mut ring_buffer = RingBuffer::new(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
         let r0 = log_record(0, 1000, "alpha");
         let r1 = log_record(1, 2000, "beta");
         let r2 = log_record(2, 3000, "gamma");
-        ring_buffer.append(&r0);
-        ring_buffer.append(&r1);
-        ring_buffer.append(&r2);
+        rb.append(&r0);
+        rb.append(&r1);
+        rb.append(&r2);
 
         // No filter.
-        let res = ring_buffer.records(None);
+        let res = rb.records(None);
         assert_eq!(
             res,
             vec![
@@ -357,13 +355,13 @@ mod tests {
         );
 
         // Filter by idx range [1, 2).
-        let res = ring_buffer.records(Some(FetchCanisterLogsFilter::ByIdx(
+        let res = rb.records(Some(FetchCanisterLogsFilter::ByIdx(
             FetchCanisterLogsRange { start: 1, end: 2 },
         )));
         assert_eq!(res, vec![canister_log_record(1, 2000, "beta"),]);
 
         // Filter by timestamp range [1500, 3500).
-        let res = ring_buffer.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
+        let res = rb.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
             FetchCanisterLogsRange {
                 start: 1500,
                 end: 3500,

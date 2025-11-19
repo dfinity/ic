@@ -173,10 +173,3 @@ mod tests {
         assert!(!h.is_alive(MemoryPosition::new(20)));
     }
 }
-
-/*
-bazel test //rs/replicated_state:replicated_state_test \
-  --test_output=streamed \
-  --test_arg=--nocapture \
-  --test_arg=header
-*/

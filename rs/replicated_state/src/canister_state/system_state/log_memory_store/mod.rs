@@ -1,5 +1,3 @@
-#![allow(dead_code)] // TODO: don't forget to cleanup.
-
 pub(crate) mod header;
 pub(crate) mod index_table;
 pub(crate) mod log_record;

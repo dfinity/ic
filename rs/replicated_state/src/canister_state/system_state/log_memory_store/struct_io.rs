@@ -477,10 +477,3 @@ mod tests {
         }
     }
 }
-
-/*
-bazel test //rs/replicated_state:replicated_state_test \
-  --test_output=streamed \
-  --test_arg=--nocapture \
-  --test_arg=struct_io
-*/
