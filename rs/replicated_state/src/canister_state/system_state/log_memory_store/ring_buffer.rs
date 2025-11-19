@@ -84,6 +84,10 @@ impl RingBuffer {
         let added_size = MemorySize::new(record.bytes_len() as u64);
         let capacity = MemorySize::new(self.capacity() as u64);
         if added_size > capacity {
+            debug_assert!(
+                false,
+                "log record size {added_size:?} exceeds ring buffer capacity {capacity:?}",
+            );
             return;
         }
         // Free space by popping old records if needed.
@@ -172,7 +176,7 @@ impl RingBuffer {
 
 /// Keep a prefix or a suffix of `records` whose total serialized size does not
 /// exceed `limit` bytes — prefix keeps oldest-first; suffix keeps newest-first.
-/// Returns a Vec<LogRecord> in chronological order (oldest-first).
+/// Returns records in chronological order (oldest-first).
 pub fn take_by_size(records: &[LogRecord], limit: MemorySize, take_prefix: bool) -> Vec<LogRecord> {
     let limit = limit.get() as usize;
     if limit == 0 || records.is_empty() {
@@ -387,5 +391,45 @@ mod tests {
                 canister_log_record(2, 3000, "gamma")
             ]
         );
+    }
+
+    /*
+    bazel test //rs/replicated_state:replicated_state_test \
+      --test_output=streamed \
+      --test_arg=--nocapture \
+      --test_arg=tmp_test_performance
+
+      100 KB
+    */
+    #[test]
+    fn tmp_test_performance() {
+        // TODO: remove this test.
+        let page_map = PageMap::new_for_testing();
+        let data_capacity = MemorySize::new(51_000_000);
+        let data_size = MemorySize::new(50_000_000);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
+        let msg = "a".repeat(32_000);
+
+        let start = std::time::Instant::now();
+        let mut i = 0;
+        while rb.used_space() < data_size.get() as usize {
+            rb.append(&log_record(i, i * 1000, &msg));
+            i += 1;
+        }
+        println!("ABC populate time: {:.3?}", start.elapsed().as_secs_f64());
+
+        let collatz = |x| if x % 2 == 0 { x / 2 } else { 3 * x + 1 };
+
+        let start = std::time::Instant::now();
+        for j in 0..1_000 {
+            let a = collatz(j);
+            let b = collatz(a);
+            let start = a.min(b) % (i as u64);
+            let end = a.max(b) % (i as u64);
+            let _res = rb.records(Some(FetchCanisterLogsFilter::ByIdx(
+                FetchCanisterLogsRange { start, end },
+            )));
+        }
+        println!("ABC records time: {:.3?}", start.elapsed().as_secs_f64());
     }
 }
