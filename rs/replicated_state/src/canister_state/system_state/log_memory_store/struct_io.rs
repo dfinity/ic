@@ -395,4 +395,92 @@ mod tests {
 
         assert_eq!(original, loaded);
     }
+
+    #[test]
+    fn test_index_default_load() {
+        let mut io = StructIO::new(PageMap::new_for_testing());
+        let data_capacity = MemorySize::new(10_000_000);
+        io.save_header(&Header::new(data_capacity));
+        let loaded_index = io.load_index();
+        let loaded = loaded_index.raw_entries();
+
+        // For 10 MB data capacity, 28 bytes per entry = 146 entries
+        assert_eq!(loaded.len(), 146);
+        // All loaded entries are invalid.
+        for entry in loaded {
+            assert!(!entry.is_valid());
+        }
+    }
+
+    #[test]
+    fn test_index_roundtrip_serialization() {
+        let original = vec![
+            IndexEntry {
+                position: MemoryPosition::new(10),
+                idx: 1,
+                timestamp: 100,
+                bytes_len: 12,
+            },
+            IndexEntry {
+                position: MemoryPosition::new(20),
+                idx: 2,
+                timestamp: 200,
+                bytes_len: 34,
+            },
+        ];
+
+        let mut io = StructIO::new(PageMap::new_for_testing());
+        let data_capacity = MemorySize::new(10_000_000);
+        io.save_header(&Header::new(data_capacity));
+        io.save_index(&IndexTable::new(
+            None,
+            data_capacity,
+            1,
+            RESULT_MAX_SIZE,
+            original.clone(),
+        ));
+        let loaded_index = io.load_index();
+        let loaded = loaded_index.raw_entries();
+
+        assert_eq!(loaded.len(), original.len());
+        for (a, b) in original.iter().zip(loaded.iter()) {
+            assert_eq!(a, b)
+        }
+    }
+
+    #[test]
+    fn test_record_roundtrip_serialization() {
+        let data_capacity = MemorySize::new(1_000_000);
+        let no_wrap_position = MemoryPosition::new(100);
+        let wrap_position = MemoryPosition::new(1_000_000 - 2);
+        for position in [no_wrap_position, wrap_position] {
+            let content = b"hello world".to_vec();
+            let original = LogRecord {
+                idx: 42,
+                timestamp: 1_234_567,
+                len: content.len() as u32,
+                content: content.clone(),
+            };
+
+            let mut io = StructIO::new(PageMap::new_for_testing());
+            let mut header = Header::new(data_capacity);
+            header.data_head = position;
+            let size = MemorySize::new(original.bytes_len() as u64);
+            header.data_tail = header.advance_position(position, size);
+            header.data_size = size;
+            io.save_header(&header);
+
+            io.save_record(position, &original);
+            let loaded = io.load_record(position).expect("record should be present");
+
+            assert_eq!(original, loaded);
+        }
+    }
 }
+
+/*
+bazel test //rs/replicated_state:replicated_state_test \
+  --test_output=streamed \
+  --test_arg=--nocapture \
+  --test_arg=struct_io
+*/
