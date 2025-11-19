@@ -8,6 +8,11 @@ on:
         description: The commit sha to run the CI on
         required: true
         type: string
+      base-ref:
+        description: The base branch of the PR. Only used when called from ci-kickoff-manual.
+        required: false
+        default: ${{ github.event.pull_request.base.ref }}
+        type: string
 
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
@@ -29,13 +34,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
           ref: ${{ inputs.commit-sha }}
       - name: Run candid compatibility checks
         uses: ./.github/actions/bazel
         with:
           run: |
-            export DID_CHECK_REV="$(git rev-list HEAD ^${{ github.event.pull_request.head.sha }} --skip=1 -1)"
+            git fetch origin --depth=1 'origin/${{ inputs.base-ref }}'
+            export DID_CHECK_REV="$(git rev-parse 'origin/${{ inputs.base-ref }}')"
             echo "DID_CHECK_REV=$DID_CHECK_REV"
             bazel test //... \
               --build_tag_filters="didc" \
