@@ -58,6 +58,24 @@ Remove_Argument(f, x) == Remove_Arguments(f, {x})
 
 Empty_Fun == [ x \in {} |-> {} ]
 
+(*
+@typeAlias: principal = Str;
+@typeAlias: btc_address = Str;
+@typeAlias: subaccount = Str;
+@typeAlias: pid = Str;
+@typeAlias: txid = Seq(Int);
+@typeAlias: amount = Int;
+@typeAlias: utxo = {id: %txid, owner: $btc_address, amount: $amount};
+@typeAlias: withdrawal_req = {request_id: Int, address: $btc_address, amount: $amount};
+@typeAlias: submission = {consumed_utxos: Set($utxo), outputs: Seq({owner: $btc_address, amount: $amount}), other_data: Int};
+@typeAlias: ckbtck_address = ($principal, $subaccount);
+@typeAlias: address_state = {discovered_utxos: Set($utxo), processed_utxos: Set($utxo), spent_utxos: Set($utxo)};
+@typeAlias: output_entry = {owner: $btc_address, amount: $amount};
+@typeAlias: heartbeat_request = {request_id: Int, address: $btc_address, amount: $amount};
+@typeAlias: submitted_tx = {requests: Seq(Int), txid: $txid, used_utxos: Set($utxo), change_output: {vout: Int, vamount: $amount}};
+*)
+_type_alias_dummy == TRUE
+
 \**********************************************************************************************
 (* Constants of the model *)
 \**********************************************************************************************
@@ -66,61 +84,61 @@ CONSTANTS
     \* Constants determining the model size
     \**********************************************************************************************
     \* Principals that hold ckBTC
-    \* @type: Set(PRINCIPAL)
+    \* @type: Set($principal);
     PRINCIPALS,
     \* Subaccounts for the ck_btc_addresses
-    \* @type: Set(SUBACCOUNT)
+    \* @type: Set($subaccount);
     SUBACCOUNTS,
     \* Every BTC transfer allocates a new UTXO id. Allowing an infinite number of transfers
     \* would thus require infinite state. So we bound the number of BTC transfers a user is
     \* allowed to make.
     \* Minter principal
+    \* @type: $principal;
     MINTER_PRINCIPAL,
     \* Minter change subaccount
+    \* @type: $subaccount;
     MINTER_SUBACCOUNT,
     \* @type: Int;
     MAX_USER_BTC_TRANSFERS,
     \* Initial "supply" of BTC (all allocated to the user account initially)
-    \* @type: Int;
+    \* @type: $amount;
     BTC_SUPPLY,
     \* Initial BTCs controlled by the minter; this is needed to guarantee the existence of change
-    \* @type: Int;
+    \* @type: $amount;
     MINTER_INITIAL_SUPPLY,
     \* The set of process IDs for the update balance processes.
     \* The cardinality of the set effectively determines the number of concurrent calls
     \* to the update_balance method on the minter canister.
-    \* @type: Set(PID);
+    \* @type: Set($pid);
     UPDATE_BALANCE_PROCESS_IDS,
     \* The set of process IDs for Retrieve_BTC process.
     \* This roughly, corresponding to the set of call contexts for the retrieve_btc method,
     \* and limits the number of times that retrieve_btc can be called.
-    \* @type: Set(PID);
+    \* @type: Set($pid);
     RETRIEVE_BTC_PROCESS_IDS,
     \* Same as for retrieve_btc, just for the resubmit_retrieve_btc minter method.
-    \* @type: Set(PID);
+    \* @type: Set($pid);
     RESUBMIT_RETRIEVE_BTC_PROCESS_IDS,
     \**********************************************************************************************
     \* Other constants
     \**********************************************************************************************
     \* The "user-controlled" BTC address; we assume just one such address in this model.
-    \* @type: BTC_ADDRESS;
+    \* @type: $btc_address;
     USER_BTC_ADDRESS,
-    \* The special minter BTC address (for collecting retrieval change).
-    \* @type: BTC_ADDRESS;
     \* The ID of the PlusCal process simulating the BTC network
-    \* @type: PID;
+    \* @type: $pid;
     BTC_PROCESS_ID,
     \* The ID of the PlusCal process simulating the ckBTC Ledger
-    \* @type: PID;
+    \* @type: $pid;
     LEDGER_PROCESS_ID,
     \* The ID of the PlusCal process simulating the BTC canister
-    \* @type: PID;
+    \* @type: $pid;
     BTC_CANISTER_PROCESS_ID,
     \* The ID of the PlusCal process simulating the heartbeat of the ckBTC Ledger
-    \* @type: PID;
+    \* @type: $pid;
     HEARTBEAT_PROCESS_ID,
     \* Converts a user CK_BTC address to a ckBTC ledger withdrawal address
-    \* @type: BTC_ADDRESS -> WITHDRAWAL_ADDR;
+    \* @type: $btc_address => $ckbtc_address;
     BTC_TO_WITHDRAWAL(_)
 
 \**********************************************************************************************
