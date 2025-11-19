@@ -352,6 +352,8 @@ async fn test_request_with_empty_signature_fails<T: Identity + 'static>(
     identity: T,
     canister_id: Principal,
 ) {
+    let client = reqwest::Client::new();
+
     // Try a query.
     let content = HttpQueryContent::Query {
         query: HttpUserQuery {
@@ -363,9 +365,7 @@ async fn test_request_with_empty_signature_fails<T: Identity + 'static>(
             nonce: None,
         },
     };
-
     let signature = sign_query(&content, &identity);
-
     // Add the public key but not the signature to the envelope. Should fail.
     let envelope = HttpRequestEnvelope {
         content: content.clone(),
@@ -373,306 +373,6 @@ async fn test_request_with_empty_signature_fails<T: Identity + 'static>(
         sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
         sender_sig: None,
     };
-    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-    let client = reqwest::Client::new();
-    let res = client
-        .post(format!("{url}api/v2/canister/{canister_id}/query"))
-        .header("Content-Type", "application/cbor")
-        .body(body)
-        .send()
-        .await
-        .unwrap();
-
-    assert_eq!(res.status(), 400);
-
-    // Now try an update.
-    let content = HttpCallContent::Call {
-        update: HttpCanisterUpdate {
-            canister_id: Blob(canister_id.as_slice().to_vec()),
-            method_name: "update".to_string(),
-            arg: Blob(wasm().caller().reply_data_append().reply().build()),
-            sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
-            ingress_expiry: expiry_time().as_nanos() as u64,
-            nonce: None,
-        },
-    };
-
-    let signature = sign_update(&content, &identity);
-
-    // Add the public key but not the signature to the envelope. Should fail.
-    let envelope = HttpRequestEnvelope {
-        content: content.clone(),
-        sender_delegation: None,
-        sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
-        sender_sig: None,
-    };
-    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-    let client = reqwest::Client::new();
-    let res = client
-        .post(format!("{url}api/v2/canister/{canister_id}/call"))
-        .header("Content-Type", "application/cbor")
-        .body(body)
-        .send()
-        .await
-        .unwrap();
-
-    assert_eq!(res.status(), 400);
-}
-
-async fn test_request_signed_by_another_identity_fails<
-    I1: Identity + 'static,
-    I2: Identity + 'static,
->(
-    url: &str,
-    identity1: I1,
-    identity2: I2,
-    canister_id: Principal,
-) {
-    // Test a query
-    let content = HttpQueryContent::Query {
-        query: HttpUserQuery {
-            canister_id: Blob(canister_id.as_slice().to_vec()),
-            method_name: "query".to_string(),
-            arg: Blob(wasm().caller().reply_data_append().reply().build()),
-            sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
-            ingress_expiry: expiry_time().as_nanos() as u64,
-            nonce: None,
-        },
-    };
-
-    let signature1 = sign_query(&content, &identity1);
-    let signature2 = sign_query(&content, &identity2);
-
-    // Use the public key of identity1 but the signature of identity2. Should fail.
-    let envelope = HttpRequestEnvelope {
-        content: content.clone(),
-        sender_delegation: None,
-        sender_pubkey: Some(Blob(signature1.public_key.clone().unwrap())),
-        sender_sig: Some(Blob(signature2.signature.unwrap())),
-    };
-    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-    let client = reqwest::Client::new();
-    let res = client
-        .post(format!("{url}api/v2/canister/{canister_id}/query"))
-        .header("Content-Type", "application/cbor")
-        .body(body)
-        .send()
-        .await
-        .unwrap();
-
-    assert_eq!(res.status(), 400);
-
-    // Test an update.
-    let content = HttpCallContent::Call {
-        update: HttpCanisterUpdate {
-            canister_id: Blob(canister_id.as_slice().to_vec()),
-            method_name: "update".to_string(),
-            arg: Blob(wasm().caller().reply_data_append().reply().build()),
-            sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
-            ingress_expiry: expiry_time().as_nanos() as u64,
-            nonce: None,
-        },
-    };
-
-    let signature1 = sign_update(&content, &identity1);
-    let signature2 = sign_update(&content, &identity2);
-
-    // Use the public key of identity1 but the signature of identity2. Should fail.
-    let envelope = HttpRequestEnvelope {
-        content: content.clone(),
-        sender_delegation: None,
-        sender_pubkey: Some(Blob(signature1.public_key.clone().unwrap())),
-        sender_sig: Some(Blob(signature2.signature.unwrap())),
-    };
-    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-    let client = reqwest::Client::new();
-    let res = client
-        .post(format!("{url}api/v2/canister/{canister_id}/call"))
-        .header("Content-Type", "application/cbor")
-        .body(body)
-        .send()
-        .await
-        .unwrap();
-
-    assert_eq!(res.status(), 400);
-}
-
-async fn test_request_with_valid_signature_but_wrong_sender_fails<
-    I1: Identity + 'static,
-    I2: Identity + 'static,
->(
-    url: &str,
-    identity1: I1,
-    identity2: I2,
-    canister_id: Principal,
-) {
-    let content = HttpQueryContent::Query {
-        query: HttpUserQuery {
-            canister_id: Blob(canister_id.as_slice().to_vec()),
-            method_name: "query".to_string(),
-            arg: Blob(wasm().caller().reply_data_append().reply().build()),
-            sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
-            ingress_expiry: expiry_time().as_nanos() as u64,
-            nonce: None,
-        },
-    };
-
-    let signature2 = sign_query(&content, &identity2);
-
-    // Envelope with signature from `identity2` but sender is `identity1`. Should
-    // fail.
-    let envelope = HttpRequestEnvelope {
-        content: content.clone(),
-        sender_delegation: None,
-        sender_pubkey: Some(Blob(signature2.public_key.clone().unwrap())),
-        sender_sig: Some(Blob(signature2.signature.unwrap())),
-    };
-    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-    let client = reqwest::Client::new();
-    let res = client
-        .post(format!("{url}api/v2/canister/{canister_id}/query"))
-        .header("Content-Type", "application/cbor")
-        .body(body)
-        .send()
-        .await
-        .unwrap();
-
-    assert_eq!(res.status(), 400);
-
-    let content = HttpCallContent::Call {
-        update: HttpCanisterUpdate {
-            canister_id: Blob(canister_id.as_slice().to_vec()),
-            method_name: "update".to_string(),
-            arg: Blob(wasm().caller().reply_data_append().reply().build()),
-            sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
-            ingress_expiry: expiry_time().as_nanos() as u64,
-            nonce: None,
-        },
-    };
-
-    let signature2 = sign_update(&content, &identity2);
-
-    // Envelope with signature from `identity2` but sender is `identity1`. Should
-    // fail.
-    let envelope = HttpRequestEnvelope {
-        content: content.clone(),
-        sender_delegation: None,
-        sender_pubkey: Some(Blob(signature2.public_key.clone().unwrap())),
-        sender_sig: Some(Blob(signature2.signature.unwrap())),
-    };
-    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-    let client = reqwest::Client::new();
-    let res = client
-        .post(format!("{url}api/v2/canister/{canister_id}/call"))
-        .header("Content-Type", "application/cbor")
-        .body(body)
-        .send()
-        .await
-        .unwrap();
-
-    assert_eq!(res.status(), 400);
-}
-
-async fn test_request_with_empty_domain_separator_fails<T: Identity + 'static>(
-    url: &str,
-    identity: T,
-    canister_id: Principal,
-) {
-    // Try a query.
-    let content = HttpQueryContent::Query {
-        query: HttpUserQuery {
-            canister_id: Blob(canister_id.as_slice().to_vec()),
-            method_name: "query".to_string(),
-            arg: Blob(wasm().caller().reply_data_append().reply().build()),
-            sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
-            ingress_expiry: expiry_time().as_nanos() as u64,
-            nonce: None,
-        },
-    };
-
-    let signature = sign_query_with_empty_domain_separator(&content, &identity);
-
-    let envelope = HttpRequestEnvelope {
-        content: content.clone(),
-        sender_delegation: None,
-        sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
-        sender_sig: Some(Blob(signature.signature.unwrap())),
-    };
-    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-    let client = reqwest::Client::new();
-    let res = client
-        .post(format!("{url}api/v2/canister/{canister_id}/query"))
-        .header("Content-Type", "application/cbor")
-        .body(body)
-        .send()
-        .await
-        .unwrap();
-
-    assert_eq!(res.status(), 400);
-
-    // Now try an update.
-    let content = HttpCallContent::Call {
-        update: HttpCanisterUpdate {
-            canister_id: Blob(canister_id.as_slice().to_vec()),
-            method_name: "update".to_string(),
-            arg: Blob(wasm().caller().reply_data_append().reply().build()),
-            sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
-            ingress_expiry: expiry_time().as_nanos() as u64,
-            nonce: None,
-        },
-    };
-
-    let signature = sign_update_with_empty_domain_separator(&content, &identity);
-
-    let envelope = HttpRequestEnvelope {
-        content: content.clone(),
-        sender_delegation: None,
-        sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
-        sender_sig: Some(Blob(signature.signature.unwrap())),
-    };
-    let body = serde_cbor::ser::to_vec(&envelope).unwrap();
-    let client = reqwest::Client::new();
-    let res = client
-        .post(format!("{url}api/v2/canister/{canister_id}/call"))
-        .header("Content-Type", "application/cbor")
-        .body(body)
-        .send()
-        .await
-        .unwrap();
-
-    assert_eq!(res.status(), 400);
-}
-
-async fn test_request_with_invalid_signature_fails<T: Identity + 'static>(
-    url: &str,
-    identity: T,
-    canister_id: Principal,
-) {
-    let client = reqwest::Client::new();
-
-    // Try a query.
-    let content = HttpQueryContent::Query {
-        query: HttpUserQuery {
-            canister_id: Blob(canister_id.as_slice().to_vec()),
-            method_name: "query".to_string(),
-            arg: Blob(wasm().caller().reply_data_append().reply().build()),
-            sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
-            ingress_expiry: expiry_time().as_nanos() as u64,
-            nonce: None,
-        },
-    };
-
-    let signature = sign_query(&content, &identity);
-    let signature_all_42s = clone_signature_with_all_bytes_replaced(&signature, 42);
-
-    // Add the public key with an invalid. Should fail.
-    let envelope = HttpRequestEnvelope {
-        content: content.clone(),
-        sender_delegation: None,
-        sender_pubkey: Some(Blob(signature_all_42s.public_key.clone().unwrap())),
-        sender_sig: Some(Blob(signature_all_42s.signature.unwrap())),
-    };
-
     for api_version in ALL_QUERY_API_VERSIONS {
         let res = client
             .post(format!(
@@ -698,17 +398,452 @@ async fn test_request_with_invalid_signature_fails<T: Identity + 'static>(
             nonce: None,
         },
     };
-
     let signature = sign_update(&content, &identity);
-    let signature_all_42s = clone_signature_with_all_bytes_replaced(&signature, 42);
+    // Add the public key but not the signature to the envelope. Should fail.
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
+        sender_sig: None,
+    };
+    for api_version in ALL_UPDATE_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/call"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .unwrap();
 
+        assert_eq!(res.status(), 400);
+    }
+
+    // Now try a read_state request.
+    let content = HttpReadStateContent::ReadState {
+        read_state: HttpReadState {
+            sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
+            paths: vec![],
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+    let signature = sign_read_state(&content, &identity);
+    // Add the public key but not the signature to the envelope. Should fail.
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
+        sender_sig: None,
+    };
+    for api_version in ALL_READ_STATE_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/read_state"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), 400);
+    }
+}
+
+async fn test_request_signed_by_another_identity_fails<
+    I1: Identity + 'static,
+    I2: Identity + 'static,
+>(
+    url: &str,
+    identity1: I1,
+    identity2: I2,
+    canister_id: Principal,
+) {
+    let client = reqwest::Client::new();
+
+    // Test a query
+    let content = HttpQueryContent::Query {
+        query: HttpUserQuery {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "query".to_string(),
+            arg: Blob(wasm().caller().reply_data_append().reply().build()),
+            sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+    let signature1 = sign_query(&content, &identity1);
+    let signature2 = sign_query(&content, &identity2);
+    // Use the public key of identity1 but the signature of identity2. Should fail.
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature1.public_key.clone().unwrap())),
+        sender_sig: Some(Blob(signature2.signature.unwrap())),
+    };
+    for api_version in ALL_QUERY_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/query"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), 400);
+    }
+
+    // Test an update.
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "update".to_string(),
+            arg: Blob(wasm().caller().reply_data_append().reply().build()),
+            sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+    let signature1 = sign_update(&content, &identity1);
+    let signature2 = sign_update(&content, &identity2);
+    // Use the public key of identity1 but the signature of identity2. Should fail.
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature1.public_key.clone().unwrap())),
+        sender_sig: Some(Blob(signature2.signature.unwrap())),
+    };
+    for api_version in ALL_UPDATE_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/call"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), 400);
+    }
+
+    // Now try a read_state request.
+    let content = HttpReadStateContent::ReadState {
+        read_state: HttpReadState {
+            sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
+            paths: vec![],
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+    let signature1 = sign_read_state(&content, &identity1);
+    let signature2 = sign_read_state(&content, &identity2);
+    // Use the public key of identity1 but the signature of identity2. Should fail.
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature1.public_key.clone().unwrap())),
+        sender_sig: Some(Blob(signature2.signature.unwrap())),
+    };
+    for api_version in ALL_READ_STATE_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/read_state"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), 400);
+    }
+}
+
+async fn test_request_with_valid_signature_but_wrong_sender_fails<
+    I1: Identity + 'static,
+    I2: Identity + 'static,
+>(
+    url: &str,
+    identity1: I1,
+    identity2: I2,
+    canister_id: Principal,
+) {
+    let client = reqwest::Client::new();
+
+    // Test a query.
+    let content = HttpQueryContent::Query {
+        query: HttpUserQuery {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "query".to_string(),
+            arg: Blob(wasm().caller().reply_data_append().reply().build()),
+            sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+    let signature2 = sign_query(&content, &identity2);
+    // Envelope with signature from `identity2` but sender is `identity1`. Should
+    // fail.
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature2.public_key.clone().unwrap())),
+        sender_sig: Some(Blob(signature2.signature.unwrap())),
+    };
+    for api_version in ALL_QUERY_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/query"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), 400);
+    }
+
+    // Test an update.
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "update".to_string(),
+            arg: Blob(wasm().caller().reply_data_append().reply().build()),
+            sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+    let signature2 = sign_update(&content, &identity2);
+    // Envelope with signature from `identity2` but sender is `identity1`. Should
+    // fail.
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature2.public_key.clone().unwrap())),
+        sender_sig: Some(Blob(signature2.signature.unwrap())),
+    };
+    for api_version in ALL_UPDATE_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/call"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), 400);
+    }
+
+    // Test a read_state request.
+    let content = HttpReadStateContent::ReadState {
+        read_state: HttpReadState {
+            sender: Blob(identity1.sender().unwrap().as_slice().to_vec()),
+            paths: vec![],
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+    let signature2 = sign_read_state(&content, &identity2);
+    // Envelope with signature from `identity2` but sender is `identity1`. Should
+    // fail.
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature2.public_key.clone().unwrap())),
+        sender_sig: Some(Blob(signature2.signature.unwrap())),
+    };
+    for api_version in ALL_READ_STATE_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/read_state"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), 400);
+    }
+}
+
+async fn test_request_with_empty_domain_separator_fails<T: Identity + 'static>(
+    url: &str,
+    identity: T,
+    canister_id: Principal,
+) {
+    let client = reqwest::Client::new();
+
+    // Try a query.
+    let content = HttpQueryContent::Query {
+        query: HttpUserQuery {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "query".to_string(),
+            arg: Blob(wasm().caller().reply_data_append().reply().build()),
+            sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+    let signature = sign_query_with_empty_domain_separator(&content, &identity);
+    // Envelope with signature from `identity` but empty domain separator. Should
+    // fail.
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
+        sender_sig: Some(Blob(signature.signature.unwrap())),
+    };
+    for api_version in ALL_QUERY_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/query"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), 400);
+    }
+
+    // Try an update.
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "update".to_string(),
+            arg: Blob(wasm().caller().reply_data_append().reply().build()),
+            sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+    let signature = sign_update_with_empty_domain_separator(&content, &identity);
+    // Envelope with signature from `identity` but empty domain separator. Should
+    // fail.
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
+        sender_sig: Some(Blob(signature.signature.unwrap())),
+    };
+    for api_version in ALL_UPDATE_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/call"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), 400);
+    }
+
+    // Try a read_state request.
+    let content = HttpReadStateContent::ReadState {
+        read_state: HttpReadState {
+            sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
+            paths: vec![],
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+    let signature = sign_read_state_with_empty_domain_separator(&content, &identity);
+    // Envelope with signature from `identity` but empty domain separator. Should
+    // fail.
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature.public_key.clone().unwrap())),
+        sender_sig: Some(Blob(signature.signature.unwrap())),
+    };
+    for api_version in ALL_READ_STATE_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/read_state"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .unwrap();
+
+        assert_eq!(res.status(), 400);
+    }
+}
+
+async fn test_request_with_invalid_signature_fails<T: Identity + 'static>(
+    url: &str,
+    identity: T,
+    canister_id: Principal,
+) {
+    let client = reqwest::Client::new();
+
+    // Try a query.
+    let content = HttpQueryContent::Query {
+        query: HttpUserQuery {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "query".to_string(),
+            arg: Blob(wasm().caller().reply_data_append().reply().build()),
+            sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+    let signature = sign_query(&content, &identity);
+    let signature_all_42s = clone_signature_with_all_bytes_replaced(&signature, 42);
+    // Add the public key with an invalid. Should fail.
     let envelope = HttpRequestEnvelope {
         content: content.clone(),
         sender_delegation: None,
         sender_pubkey: Some(Blob(signature_all_42s.public_key.clone().unwrap())),
         sender_sig: Some(Blob(signature_all_42s.signature.unwrap())),
     };
+    for api_version in ALL_QUERY_API_VERSIONS {
+        let res = client
+            .post(format!(
+                "{url}api/v{api_version}/canister/{canister_id}/query"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+            .send()
+            .await
+            .unwrap();
 
+        assert_eq!(res.status(), 400);
+    }
+
+    // Now try an update.
+    let content = HttpCallContent::Call {
+        update: HttpCanisterUpdate {
+            canister_id: Blob(canister_id.as_slice().to_vec()),
+            method_name: "update".to_string(),
+            arg: Blob(wasm().caller().reply_data_append().reply().build()),
+            sender: Blob(identity.sender().unwrap().as_slice().to_vec()),
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+    let signature = sign_update(&content, &identity);
+    let signature_all_42s = clone_signature_with_all_bytes_replaced(&signature, 42);
+    let envelope = HttpRequestEnvelope {
+        content: content.clone(),
+        sender_delegation: None,
+        sender_pubkey: Some(Blob(signature_all_42s.public_key.clone().unwrap())),
+        sender_sig: Some(Blob(signature_all_42s.signature.unwrap())),
+    };
     for api_version in ALL_UPDATE_API_VERSIONS {
         let res = client
             .post(format!(
@@ -734,14 +869,12 @@ async fn test_request_with_invalid_signature_fails<T: Identity + 'static>(
     };
     let signature = sign_read_state(&content, &identity);
     let signature_all_42s = clone_signature_with_all_bytes_replaced(&signature, 42);
-
     let envelope = HttpRequestEnvelope {
         content: content.clone(),
         sender_delegation: None,
         sender_pubkey: Some(Blob(signature_all_42s.public_key.clone().unwrap())),
         sender_sig: Some(Blob(signature_all_42s.signature.unwrap())),
     };
-
     for api_version in ALL_READ_STATE_API_VERSIONS {
         let res = client
             .post(format!(
@@ -788,6 +921,36 @@ pub fn sign_update_with_empty_domain_separator(
         method_name: content.method_name.clone(),
         arg: content.arg.0.clone(),
         nonce: content.nonce.clone().map(|blob| blob.0),
+    };
+    let signable = msg.to_request_id().signable();
+    identity
+        .sign_arbitrary(truncate_domain_separator(&signable))
+        .unwrap()
+}
+
+pub fn sign_read_state_with_empty_domain_separator(
+    content: &HttpReadStateContent,
+    identity: &impl Identity,
+) -> ic_agent::identity::Signature {
+    use ic_agent::hash_tree::Label;
+    use std::ops::Deref;
+
+    let HttpReadStateContent::ReadState {
+        read_state: content,
+    } = content;
+    let msg = ic_agent::agent::EnvelopeContent::ReadState {
+        paths: content
+            .paths
+            .iter()
+            .map(|path| {
+                path.deref()
+                    .iter()
+                    .map(|label| Label::from_bytes(label.as_bytes()))
+                    .collect::<Vec<_>>()
+            })
+            .collect(),
+        sender: Principal::from_slice(&content.sender),
+        ingress_expiry: content.ingress_expiry,
     };
     let signable = msg.to_request_id().signable();
     identity
