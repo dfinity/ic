@@ -3,7 +3,6 @@ use crate::metrics::MetricsManager;
 use crate::registry_querier::RegistryQuerier;
 use crate::storage::{NaiveDateStorable, VM};
 use chrono::{DateTime, NaiveDate};
-use futures_util::SinkExt;
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
