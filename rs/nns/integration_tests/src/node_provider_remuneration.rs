@@ -40,6 +40,7 @@ use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     node_rewards::v2::{NodeRewardRate, NodeRewardRates, UpdateNodeRewardsTableProposalPayload},
 };
+use ic_registry_canister_api::AddNodePayload;
 use ic_state_machine_tests::{PayloadBuilder, StateMachine};
 use ic_types::PrincipalId;
 use ic_types::batch::BlockmakerMetrics;
@@ -124,7 +125,7 @@ fn test_list_node_provider_rewards() {
     add_node_provider(&state_machine, node_info_1.provider.clone());
 
     // Add Node Operator 1
-    let rewardable_nodes_1 = btreemap! { "default".to_string() => 10 };
+    let rewardable_nodes_1 = btreemap! { NodeRewardType::Type1.to_string() => 5 };
     add_node_operator(
         &state_machine,
         &node_info_1.operator_id,
@@ -975,7 +976,7 @@ fn add_node_operator(
     no_id: &PrincipalId,
     np_id: &PrincipalId,
     dc_id: &str,
-    rewardable_nodes: BTreeMap<String, u32>,
+    max_rewardable_nodes: BTreeMap<String, u32>,
     ipv6: &str,
 ) {
     let payload = AddNodeOperatorPayload {
@@ -983,9 +984,9 @@ fn add_node_operator(
         node_allowance: 5,
         node_provider_principal_id: Some(*np_id),
         dc_id: dc_id.into(),
-        rewardable_nodes,
+        rewardable_nodes: max_rewardable_nodes.clone(),
         ipv6: Some(ipv6.into()),
-        max_rewardable_nodes: None,
+        max_rewardable_nodes: Some(max_rewardable_nodes),
     };
 
     submit_nns_proposal(
