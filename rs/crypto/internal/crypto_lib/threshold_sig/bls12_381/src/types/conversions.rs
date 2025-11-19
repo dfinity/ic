@@ -45,6 +45,21 @@ impl PublicKey {
             })
             .map(PublicKey)
     }
+
+    /// Deserializes a `PublicKey` with caching
+    ///
+    /// This is useful if it is expected that the same point will
+    /// be seen again, for example a peer's public key
+    pub fn from_bytes_with_caching(
+        bytes: &PublicKeyBytes,
+    ) -> Result<Self, ThresholdSigPublicKeyBytesConversionError> {
+        G2Projective::deserialize_unchecked(&bytes.0)
+            .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
+                key_bytes: Some(bytes.0.to_vec()),
+                internal_error: "Invalid public key".to_string(),
+            })
+            .map(PublicKey)
+    }
 }
 
 impl TryFrom<&PublicKeyBytes> for PublicKey {

@@ -107,7 +107,15 @@ pub fn verify_individual(
     public_key_bytes: &PublicKeyBytes,
 ) -> Result<(), CryptoError> {
     let signature = IndividualSignature::try_from(signature_bytes)?;
-    let public_key = PublicKey::try_from(public_key_bytes)?;
+
+    let public_key = G2Affine::deserialize_cached(&public_key_bytes.0)
+        .map_err(|_| CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::MultiBls12_381,
+            key_bytes: Some(public_key_bytes.0.to_vec()),
+            internal_error: "Point decoding failed".to_string(),
+        })
+        .map(|pt| pt.into());
+
     if crypto::verify_individual_message_signature(message, &signature, &public_key) {
         Ok(())
     } else {
