@@ -6,7 +6,7 @@ use ic_agent::{
     Identity,
     identity::{AnonymousIdentity, Prime256v1Identity, Secp256k1Identity},
 };
-use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, reproducible_rng};
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
@@ -304,6 +304,7 @@ pub fn request_signature_test(env: TestEnv) {
                 node_url.as_str(),
                 random_ecdsa_secp256k1_identity(rng),
                 canister.canister_id(),
+                rng,
             )
             .await;
         }
@@ -788,6 +789,7 @@ async fn test_request_with_invalid_signature_fails<T: Identity + 'static>(
     url: &str,
     identity: T,
     canister_id: Principal,
+    rng: &mut ReproducibleRng,
 ) {
     let client = reqwest::Client::new();
 
@@ -803,26 +805,31 @@ async fn test_request_with_invalid_signature_fails<T: Identity + 'static>(
         },
     };
     let signature = sign_query(&content, &identity);
-    let signature_all_42s = clone_signature_with_all_bytes_replaced(&signature, 42);
-    // Add the public key with an invalid. Should fail.
-    let envelope = HttpRequestEnvelope {
-        content: content.clone(),
-        sender_delegation: None,
-        sender_pubkey: Some(Blob(signature_all_42s.public_key.clone().unwrap())),
-        sender_sig: Some(Blob(signature_all_42s.signature.unwrap())),
-    };
-    for api_version in ALL_QUERY_API_VERSIONS {
-        let res = client
-            .post(format!(
-                "{url}api/v{api_version}/canister/{canister_id}/query"
-            ))
-            .header("Content-Type", "application/cbor")
-            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
-            .send()
-            .await
-            .unwrap();
+    for invalid_signature in [
+        clong_signature_with_random_bit_flipped(&signature, rng),
+        clone_signature_with_all_bytes_replaced(&signature, 42),
+        clone_signature_with_all_bytes_replaced(&signature, 0),
+    ] {
+        // Add the public key with an invalid. Should fail.
+        let envelope = HttpRequestEnvelope {
+            content: content.clone(),
+            sender_delegation: None,
+            sender_pubkey: Some(Blob(invalid_signature.public_key.clone().unwrap())),
+            sender_sig: Some(Blob(invalid_signature.signature.unwrap())),
+        };
+        for api_version in ALL_QUERY_API_VERSIONS {
+            let res = client
+                .post(format!(
+                    "{url}api/v{api_version}/canister/{canister_id}/query"
+                ))
+                .header("Content-Type", "application/cbor")
+                .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+                .send()
+                .await
+                .unwrap();
 
-        assert_eq!(res.status(), 400);
+            assert_eq!(res.status(), 400);
+        }
     }
 
     // Now try an update.
@@ -837,25 +844,30 @@ async fn test_request_with_invalid_signature_fails<T: Identity + 'static>(
         },
     };
     let signature = sign_update(&content, &identity);
-    let signature_all_42s = clone_signature_with_all_bytes_replaced(&signature, 42);
-    let envelope = HttpRequestEnvelope {
-        content: content.clone(),
-        sender_delegation: None,
-        sender_pubkey: Some(Blob(signature_all_42s.public_key.clone().unwrap())),
-        sender_sig: Some(Blob(signature_all_42s.signature.unwrap())),
-    };
-    for api_version in ALL_UPDATE_API_VERSIONS {
-        let res = client
-            .post(format!(
-                "{url}api/v{api_version}/canister/{canister_id}/call"
-            ))
-            .header("Content-Type", "application/cbor")
-            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
-            .send()
-            .await
-            .unwrap();
+    for invalid_signature in [
+        clong_signature_with_random_bit_flipped(&signature, rng),
+        clone_signature_with_all_bytes_replaced(&signature, 42),
+        clone_signature_with_all_bytes_replaced(&signature, 0),
+    ] {
+        let envelope = HttpRequestEnvelope {
+            content: content.clone(),
+            sender_delegation: None,
+            sender_pubkey: Some(Blob(invalid_signature.public_key.clone().unwrap())),
+            sender_sig: Some(Blob(invalid_signature.signature.unwrap())),
+        };
+        for api_version in ALL_UPDATE_API_VERSIONS {
+            let res = client
+                .post(format!(
+                    "{url}api/v{api_version}/canister/{canister_id}/call"
+                ))
+                .header("Content-Type", "application/cbor")
+                .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+                .send()
+                .await
+                .unwrap();
 
-        assert_eq!(res.status(), 400);
+            assert_eq!(res.status(), 400);
+        }
     }
 
     // Try a read_state request. This should fail.
@@ -868,25 +880,30 @@ async fn test_request_with_invalid_signature_fails<T: Identity + 'static>(
         },
     };
     let signature = sign_read_state(&content, &identity);
-    let signature_all_42s = clone_signature_with_all_bytes_replaced(&signature, 42);
-    let envelope = HttpRequestEnvelope {
-        content: content.clone(),
-        sender_delegation: None,
-        sender_pubkey: Some(Blob(signature_all_42s.public_key.clone().unwrap())),
-        sender_sig: Some(Blob(signature_all_42s.signature.unwrap())),
-    };
-    for api_version in ALL_READ_STATE_API_VERSIONS {
-        let res = client
-            .post(format!(
-                "{url}api/v{api_version}/canister/{canister_id}/read_state"
-            ))
-            .header("Content-Type", "application/cbor")
-            .body(serde_cbor::ser::to_vec(&envelope).unwrap())
-            .send()
-            .await
-            .unwrap();
+    for invalid_signature in [
+        clong_signature_with_random_bit_flipped(&signature, rng),
+        clone_signature_with_all_bytes_replaced(&signature, 42),
+        clone_signature_with_all_bytes_replaced(&signature, 0),
+    ] {
+        let envelope = HttpRequestEnvelope {
+            content: content.clone(),
+            sender_delegation: None,
+            sender_pubkey: Some(Blob(invalid_signature.public_key.clone().unwrap())),
+            sender_sig: Some(Blob(invalid_signature.signature.unwrap())),
+        };
+        for api_version in ALL_READ_STATE_API_VERSIONS {
+            let res = client
+                .post(format!(
+                    "{url}api/v{api_version}/canister/{canister_id}/read_state"
+                ))
+                .header("Content-Type", "application/cbor")
+                .body(serde_cbor::ser::to_vec(&envelope).unwrap())
+                .send()
+                .await
+                .unwrap();
 
-        assert_eq!(res.status(), 400);
+            assert_eq!(res.status(), 400);
+        }
     }
 }
 
@@ -980,4 +997,18 @@ fn clone_signature_with_all_bytes_replaced(
         .iter_mut()
         .for_each(|b| *b = byte);
     clone
+}
+
+fn clong_signature_with_random_bit_flipped(
+    signature: &ic_agent::identity::Signature,
+    rng: &mut ReproducibleRng,
+) -> ic_agent::identity::Signature {
+    let mut clone = signature.clone();
+    if let Some(sig) = clone.signature.as_mut() {
+        let idx = rng.gen_range(0..sig.len());
+        sig[idx] ^= 1 << (rng.gen_range(0..8));
+        clone
+    } else {
+        panic!("cannot flip bit: missing signature");
+    }
 }
