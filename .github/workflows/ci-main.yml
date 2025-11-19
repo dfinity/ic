@@ -96,6 +96,12 @@ jobs:
               release_build="false"
               diff_only="false"
               skip_long_tests="true"
+          elif [[ '${{ github.event_name }}' == "workflow_dispatch" ]]; then
+              # on a merge group, we don't upload the artifacts (i.e. no release
+              # build) but we ensure all targets are built (no diff)
+              release_build="false"
+              diff_only="false"
+              skip_long_tests="true"
           else
               # default behavior is to not release, only build targets with modified inputs and skip long_tests.
               release_build="false"
