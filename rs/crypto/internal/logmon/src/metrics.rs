@@ -1,7 +1,7 @@
 //! Metrics exported by crypto
 
-mod bls12_381_sig_cache;
 mod bls12_381_point_cache;
+mod bls12_381_sig_cache;
 
 use ic_metrics::MetricsRegistry;
 use prometheus::{
