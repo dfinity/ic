@@ -26,7 +26,7 @@ pub use ic_ckbtc_minter::{
     address::BitcoinAddress,
     logs::Priority,
     memo::{BurnMemo, MintMemo, encode as memo_encode},
-    queries::WithdrawalFee,
+    queries::EstimateFeeArg,
     reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
     state::eventlog::{Event, EventType, GetEventsArg},
     state::{ChangeOutput, RetrieveBtcRequest},

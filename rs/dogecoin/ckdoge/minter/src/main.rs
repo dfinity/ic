@@ -1,11 +1,11 @@
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
 use ic_ckdoge_minter::{
-    DOGECOIN_CANISTER_RUNTIME, Event, EventType, GetEventsArg, UpdateBalanceArgs,
+    DOGECOIN_CANISTER_RUNTIME, EstimateFeeArg, Event, EventType, GetEventsArg, UpdateBalanceArgs,
     UpdateBalanceError, Utxo, UtxoStatus,
     candid_api::{
         GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
-        RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
+        RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
     },
     lifecycle::init::MinterArg,
     updates,
@@ -70,6 +70,14 @@ async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, Upda
         ic_ckbtc_minter::updates::update_balance::update_balance(args, &DOGECOIN_CANISTER_RUNTIME)
             .await,
     )
+}
+
+#[query]
+fn estimate_withdrawal_fee(_arg: EstimateFeeArg) -> WithdrawalFee {
+    WithdrawalFee {
+        minter_fee: 0,
+        dogecoin_fee: 0,
+    }
 }
 
 #[update]

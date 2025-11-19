@@ -233,6 +233,10 @@ service : (minter_arg : MinterArg) -> {
     // * The owner deposited some DOGE to the address that the
     //   [get_doge_address] endpoint returns.
     update_balance : (record { owner: opt principal; subaccount : opt blob }) -> (variant { Ok : vec UtxoStatus; Err : UpdateBalanceError });
+    
+    /// Returns an estimate of the user's fee (in Koinu) for a
+    /// retrieve_doge_with_approval request based on the current status of the Dogecoin network.
+    estimate_withdrawal_fee : (record { amount : opt nat64 }) -> (record { dogecoin_fee : nat64; minter_fee : nat64 }) query;
 
     // Submits a request to convert ckDOGE to DOGE.
     //

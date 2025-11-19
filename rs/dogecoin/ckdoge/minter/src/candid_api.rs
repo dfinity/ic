@@ -99,3 +99,9 @@ pub struct RetrieveDogeStatusRequest {
 }
 
 pub type RetrieveDogeStatus = ic_ckbtc_minter::state::RetrieveBtcStatusV2;
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize, Default)]
+pub struct WithdrawalFee {
+    pub minter_fee: u64,
+    pub dogecoin_fee: u64,
+}

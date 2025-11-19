@@ -15,6 +15,7 @@ pub struct RetrieveBtcStatusRequest {
 
 #[derive(CandidType, Deserialize)]
 pub struct EstimateFeeArg {
+    /// Withdrawal amount in base unit.
     pub amount: Option<u64>,
 }
 
