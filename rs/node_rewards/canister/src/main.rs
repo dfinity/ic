@@ -47,6 +47,8 @@ thread_local! {
 
 #[init]
 fn canister_init() {
+    ic_cdk::println!("NRC init executed");
+
     schedule_timers();
 }
 
