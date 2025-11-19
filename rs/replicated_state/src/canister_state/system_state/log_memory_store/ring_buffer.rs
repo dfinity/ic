@@ -424,8 +424,8 @@ mod tests {
         for j in 0..1_000 {
             let a = collatz(j);
             let b = collatz(a);
-            let start = a.min(b) % (i as u64);
-            let end = a.max(b) % (i as u64);
+            let start = a.min(b) % i;
+            let end = a.max(b) % i;
             let _res = rb.records(Some(FetchCanisterLogsFilter::ByIdx(
                 FetchCanisterLogsRange { start, end },
             )));
