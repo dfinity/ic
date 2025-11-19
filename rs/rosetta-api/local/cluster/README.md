@@ -163,23 +163,64 @@ Example cleaning up while preserving data:
 ./deploy.sh --clean --use-persistent-volumes
 ```
 
-### Cleaning up
+### Updating a Single Local Instance
 
-You can add the `--clean` flag to any usage of `./deploy.sh`. That will wipe out the current cluster and install it from scratch. If you're using persistent volumes with `--use-persistent-volumes`, the `--clean` flag will preserve the volumes and their data.
-
-For example, the following command installs all prod and local images in a clean cluster:
+When you make changes to your local code and rebuild the Docker image, you can redeploy just that instance while keeping all other services running:
 
 ```bash
-./deploy.sh --local-icp-image-tar /tmp/rosetta_image.tar --local-icrc1-image-tar /tmp/icrc_rosetta_image.tar --clean
+# Rebuild your ICRC Rosetta image
+bazel build //rs/rosetta-api/icrc1:icrc_rosetta_image.tar
+
+# Redeploy only the ICRC local instance (other instances keep running)
+./deploy.sh --use-persistent-volumes \
+  --local-icrc1-image-tar bazel-bin/rs/rosetta-api/icrc1/icrc_rosetta_image.tar
 ```
 
-To completely remove all data including persistent volumes, use the `--purge` flag instead:
+The script will:
+1. Load the new image into Minikube
+2. Automatically restart the `icrc-rosetta-local` deployment
+3. Preserve the existing persistent volume with all synced data
+4. Leave all other services (ICP Rosetta latest/local, ICRC Rosetta latest) running unaffected
+5. Keep all metrics in Prometheus/Grafana
+
+**Important Notes**:
+- You must continue passing `--use-persistent-volumes` on subsequent deployments to maintain the persistent volumes
+- The script automatically detects when a local image is loaded and triggers a pod restart to pick up the new image
+- **Limitation**: If you previously deployed both ICP and ICRC local images, you must continue providing both `--local-icp-image-tar` and `--local-icrc1-image-tar` flags on subsequent deployments. Omitting one will cause Helm to remove that deployment. You can reuse the old tar path for the image you're not updating.
+
+### Cleaning up
+
+The script provides two cleanup options:
+
+#### `--clean` flag
+
+Uninstalls the Helm chart and redeploys from scratch. Behavior depends on whether you're using persistent volumes:
+
+- **Without persistent volumes**: Deletes the entire Minikube cluster (old behavior for backward compatibility)
+- **With persistent volumes**: Only uninstalls the Helm chart, preserving the cluster and all persistent volumes
+
+Example with persistent volumes (data is preserved):
+```bash
+./deploy.sh --clean --use-persistent-volumes
+```
+
+Example without persistent volumes (cluster is deleted):
+```bash
+./deploy.sh --clean
+```
+
+#### `--purge` flag
+
+Performs a complete cleanup including:
+- Uninstalls the Helm chart
+- Deletes all persistent volumes
+- Deletes the entire Minikube cluster
 
 ```bash
 ./deploy.sh --purge
 ```
 
-The `--purge` flag will delete the cluster, Helm releases, and all persistent volumes.
+Use `--purge` when you want to start completely fresh, removing all data.
 
 ## Monitoring with Grafana
 
