@@ -489,19 +489,7 @@ async fn simulate_node_provider_action(
         .await
         .expect("Failed to spoof HostOS DNS");
 
-    // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
-    let guest = host.get_guest_ssh().unwrap();
-    info!(
-        logger,
-        "Spoofing GuestOS {} DNS to point the upstreams to the UVM at {}",
-        host.vm_name(),
-        server_ipv6
-    );
-    impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
-        .await
-        .expect("Failed to spoof GuestOS DNS");
-
-    // Run guestos-recovery-upgrader
+    // Run guestos-recovery-upgrader directly, bypassing the limited-console manual recovery TUI
     info!(
         logger,
         "Running guestos-recovery-upgrader on GuestOS {} with version={}, version-hash={}, recovery-hash={}",
@@ -552,6 +540,18 @@ async fn simulate_node_provider_action(
     )
     .await
     .expect("GuestOS did not reboot on the upgrade version");
+
+    // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
+    let guest = host.get_guest_ssh().unwrap();
+    info!(
+        logger,
+        "Spoofing GuestOS {} DNS to point the upstreams to the UVM at {}",
+        host.vm_name(),
+        server_ipv6
+    );
+    impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
+        .await
+        .expect("Failed to spoof GuestOS DNS");
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, logger: &Logger) {
