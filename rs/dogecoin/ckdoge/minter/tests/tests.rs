@@ -1,7 +1,9 @@
 use candid::Principal;
-use ic_ckdoge_minter::candid_api::{RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError};
+use ic_ckdoge_minter::candid_api::{
+    RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
+};
 use ic_ckdoge_minter_test_utils::{
-    DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
+    DOGE, DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
     assert_trap, utxo_with_value,
 };
 use std::array;
@@ -433,6 +435,14 @@ fn should_refresh_fee_percentiles() {
     minter
         .assert_that_metrics()
         .assert_contains_metric_matching(format!("ckbtc_minter_median_fee_per_vbyte {median_fee}"));
+
+    assert_eq!(
+        minter.estimate_withdrawal_fee(DOGE),
+        WithdrawalFee {
+            dogecoin_fee: 0,
+            minter_fee: 0
+        }
+    );
 }
 
 #[test]
