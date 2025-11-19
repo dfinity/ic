@@ -38,7 +38,9 @@ jobs:
           # On PRs inputs.commit-sha is a merge between the PR and its base.
           # We need to set DID_CHECK_REV to that base. To make sure base is fetched
           # we need to fetch with depth 2 to fetch the parents of inputs.commit-sha.
-          fetch-depth: 2
+          # When called from ci-kickoff-manual, we need to calculate the merge-base
+          # between inputs.commit-sha and the base branch so we fetch all history.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
       - name: Run candid compatibility checks
         uses: ./.github/actions/bazel
         with:
@@ -53,17 +55,16 @@ jobs:
               # such that we end up with the commit on the base branch.
               parents=($(git show --no-patch --pretty=%P HEAD))
               export DID_CHECK_REV="$(
-                for p in "${parents[@]}"; do
-                  [[ $p != "${{ github.event.pull_request.head.sha }}" ]] && { echo -n "$p"; break; };
+                for parent in "${parents[@]}"; do
+                  [[ "$parent" != '${{ github.event.pull_request.head.sha }}' ]] && { echo -n "$parent"; break; };
                 done
               )"
             else
               # In case this run was triggered from ci-kickoff-manual,
-              # HEAD will a commit on the PR branch.
+              # HEAD will be a commit on the PR branch.
               # Then we need to compare the did file of HEAD
               # with the did file of the merge-base of HEAD with the base branch.
-              git fetch origin "${{ inputs.commit-sha }}" "${{ inputs.base-ref }}"
-              export DID_CHECK_REV=$(git merge-base HEAD origin/"${{ inputs.base-ref }}")
+              export DID_CHECK_REV="$(git merge-base HEAD 'origin/${{ inputs.base-ref }}')"
             fi
             echo "DID_CHECK_REV=$DID_CHECK_REV"
             bazel test //... \
