@@ -48,7 +48,7 @@ use ic_types::{
     NodeIndex, NumberOfNodes,
     crypto::{CryptoError, CryptoResult},
 };
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 
 pub mod dkg_errors;
 pub mod ni_dkg_errors;

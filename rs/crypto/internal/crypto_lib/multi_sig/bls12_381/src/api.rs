@@ -92,8 +92,8 @@ pub fn combine(
 }
 
 fn bytes_to_key_with_cache(public_key_bytes: &PublicKeyBytes) -> Result<PublicKey, CryptoError> {
-    // This can't be defined on PublicKey because that's just a typedef for G2Projective
-    G2Affine::deserialize_cached(&public_key_bytes.0)
+    // This can't be defined on PublicKey because it is just a typedef for G2Projective at the moment
+    ic_crypto_internal_bls12_381_type::G2Affine::deserialize_cached(&public_key_bytes.0)
         .map_err(|_| CryptoError::MalformedPublicKey {
             algorithm: AlgorithmId::MultiBls12_381,
             key_bytes: Some(public_key_bytes.0.to_vec()),

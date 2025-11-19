@@ -2017,7 +2017,7 @@ impl G2Affine {
     }
 
     /// Return statistics related to the deserialize_cached cache
-    pub fn deserialize_cached_cache_statistics() -> crate::cache::G2PublicKeyCacheStatistics {
+    pub fn deserialize_cached_statistics() -> crate::cache::G2PublicKeyCacheStatistics {
         crate::cache::G2PublicKeyCache::global().cache_statistics()
     }
 }
