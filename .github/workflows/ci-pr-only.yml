@@ -52,7 +52,7 @@ jobs:
                   [[ $p != "${{ github.event.pull_request.head.sha }}" ]] && { echo -n "$p"; break; };
                 done
               )"
-              git fetch origin "$DID_CHECK_REV"
+              git fetch --depth=1 origin "$DID_CHECK_REV"
             else
               echo TODO
             fi
