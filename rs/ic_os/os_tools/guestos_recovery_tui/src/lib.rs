@@ -65,7 +65,9 @@ impl TerminalGuard {
     }
 
     fn get_mut(&mut self) -> &mut Terminal<CrosstermBackend<io::Stdout>> {
-        self.terminal.as_mut().unwrap()
+        self.terminal
+            .as_mut()
+            .expect("TerminalGuard: terminal was already taken.")
     }
 }
 
@@ -276,7 +278,10 @@ impl App {
         e: impl Into<anyhow::Error>,
         context: impl FnOnce() -> String,
     ) -> Result<Option<RecoveryParams>> {
-        let mut term = terminal_guard.terminal.take().unwrap();
+        let mut term = terminal_guard
+            .terminal
+            .take()
+            .expect("TerminalGuard: terminal was already taken.");
         teardown_terminal(&mut term)?;
         Err(e.into()).with_context(context)
     }
@@ -598,7 +603,10 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     // Wait for user to press any key before exiting
     if let Event::Key(_) = event::read()? {}
 
-    let mut terminal = terminal_guard.terminal.take().unwrap();
+    let mut terminal = terminal_guard
+        .terminal
+        .take()
+        .expect("TerminalGuard: terminal was already taken.");
     let _ = terminal.clear();
     teardown_terminal(&mut terminal)?;
 
