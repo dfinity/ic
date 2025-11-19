@@ -1,7 +1,7 @@
 use crate::canister_state::system_state::log_memory_store::{
     log_record::LogRecord,
     memory::{MemoryPosition, MemorySize},
-    ring_buffer::{INDEX_ENTRY_SIZE, RESULT_MAX_SIZE},
+    ring_buffer::INDEX_ENTRY_SIZE,
 };
 use crate::page_map::PAGE_SIZE;
 use ic_management_canister_types_private::FetchCanisterLogsFilter;
@@ -12,30 +12,33 @@ const INVALID_INDEX_ENTRY: u64 = u64::MAX;
 /// Lightweight pointer to a single log record used by the index table.
 /// Holds the record `idx` (unique increasing id), its `timestamp` and the
 /// `position` inside the data region where the record header begins.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct IndexEntry {
+    pub position: MemoryPosition,
     pub idx: u64,
     pub timestamp: u64,
-    pub position: MemoryPosition,
+    pub bytes_len: u32,
 }
-const _: () = assert!(std::mem::size_of::<IndexEntry>() == INDEX_ENTRY_SIZE.get() as usize);
+const _: () = assert!(INDEX_ENTRY_SIZE.get() as usize == 8 + 8 + 8 + 4);
 
 impl IndexEntry {
     /// Creates an `IndexEntry` pointing to `position` for `record`.
     pub fn new(position: MemoryPosition, record: &LogRecord) -> Self {
         Self {
+            position,
             idx: record.idx,
             timestamp: record.timestamp,
-            position,
+            bytes_len: record.bytes_len() as u32,
         }
     }
 
     /// Creates an explicitly invalid entry, used to initialize empty slots.
     fn invalid() -> Self {
         Self {
+            position: MemoryPosition::new(INVALID_INDEX_ENTRY),
             idx: INVALID_INDEX_ENTRY,
             timestamp: INVALID_INDEX_ENTRY,
-            position: MemoryPosition::new(INVALID_INDEX_ENTRY),
+            bytes_len: 0,
         }
     }
 
@@ -61,10 +64,11 @@ impl IndexEntry {
 /// that must be read during large or targeted searches.
 #[derive(Debug)]
 pub struct IndexTable {
-    pub front: Option<IndexEntry>, // Position of the oldest live log record.
-    pub entries: Vec<IndexEntry>,  // Array of entries covering all data region segments.
-    pub segment_size: MemorySize,  // Size of each data region segment in bytes.
-    pub data_capacity: MemorySize, // Total capacity of the data region.
+    front: Option<IndexEntry>,   // Position of the oldest live log record.
+    entries: Vec<IndexEntry>,    // Array of entries covering all data region segments.
+    segment_size: MemorySize,    // Size of each data region segment in bytes.
+    result_max_size: MemorySize, // Maximum size of results to return.
+    data_capacity: MemorySize,   // Total capacity of the data region.
 }
 
 impl IndexTable {
@@ -74,6 +78,7 @@ impl IndexTable {
         front: Option<IndexEntry>, // front might be empty if there are no log records yet.
         data_capacity: MemorySize,
         index_table_pages: u16,
+        result_max_size: MemorySize,
         entries: Vec<IndexEntry>,
     ) -> Self {
         let total_size_max = index_table_pages as usize * PAGE_SIZE;
@@ -93,6 +98,7 @@ impl IndexTable {
             front,
             entries,
             segment_size: MemorySize::new(segment_size as u64),
+            result_max_size,
             data_capacity,
         }
     }
@@ -106,6 +112,10 @@ impl IndexTable {
     ///
     /// IMPORTANT: callers must guarantee monotonic `idx` progression.
     pub fn update(&mut self, position: MemoryPosition, record: &LogRecord) {
+        if self.front.is_none() {
+            // First record being added, initialize front.
+            self.front = Some(IndexEntry::new(position, record));
+        }
         if let Some(index) = self.segment_index(position) {
             self.entries[index] = IndexEntry::new(position, record);
         }
@@ -122,6 +132,11 @@ impl IndexTable {
         (idx < self.entries.len()).then_some(idx)
     }
 
+    /// Return all raw entries, including invalid ones.
+    pub fn raw_entries(&self) -> &Vec<IndexEntry> {
+        &self.entries
+    }
+
     /// Return all valid entries at or after `front`, sorted by increasing idx.
     /// Used to narrow down searches without scanning the entire region.
     pub fn valid_sorted_entries(&self) -> Vec<IndexEntry> {
@@ -129,7 +144,7 @@ impl IndexTable {
             None => return vec![], // No entries if front is None.
             Some(entry) => entry,
         };
-        // Collect entries with idx after front.idx, those are valid buckets.
+        // Collect entries with idx after front.idx, those are valid log entries.
         let mut entries: Vec<_> = self
             .entries
             .iter()
@@ -189,16 +204,16 @@ impl IndexTable {
             };
 
         let clamp_end_by_size = |entries: &Vec<IndexEntry>, size_limit: MemorySize| -> IndexEntry {
-            let start_position = entries.first().unwrap().position;
+            let start = entries.first().unwrap();
             for entry in entries {
-                if self.distance(start_position, entry.position) >= size_limit {
+                if self.distance(start, entry) >= size_limit {
                     return *entry;
                 }
             }
             *entries.last().unwrap()
         };
 
-        let size_limit = RESULT_MAX_SIZE + self.segment_size;
+        let size_limit = self.result_max_size + self.segment_size;
         let (start, end) = match filter {
             Some(FetchCanisterLogsFilter::ByIdx(range)) => {
                 let start = find_start_by_key(range.start, |e| e.idx);
@@ -221,23 +236,31 @@ impl IndexTable {
                 }
             }
             None => {
-                let mut start = entries.first().unwrap();
                 let end = entries.last().unwrap();
+                let mut new_start = end;
                 for entry in entries.iter().rev() {
-                    start = entry;
-                    if self.distance(entry.position, end.position) >= size_limit {
+                    if self.distance(entry, end) >= size_limit {
                         break;
                     }
+                    new_start = entry;
                 }
-                (*start, *end)
+                (*new_start, *end)
             }
         };
 
         Some((start, end))
     }
 
+    pub fn advance(&self, position: MemoryPosition, distance: MemorySize) -> MemoryPosition {
+        debug_assert!(self.data_capacity.get() > 0);
+        debug_assert!(distance.get() > 0);
+        (position + distance) % self.data_capacity
+    }
+
     /// Calculates forward distance between two positions in the ring, handles wraparound.
-    fn distance(&self, from: MemoryPosition, to: MemoryPosition) -> MemorySize {
+    fn distance(&self, e_from: &IndexEntry, e_to: &IndexEntry) -> MemorySize {
+        let from = e_from.position;
+        let to = self.advance(e_to.position, MemorySize::new(e_to.bytes_len as u64));
         if to >= from {
             to - from // no wrap
         } else {
@@ -245,11 +268,371 @@ impl IndexTable {
             (self.data_capacity + to) - from // wrap
         }
     }
+
+    fn segment_size(&self) -> MemorySize {
+        self.segment_size
+    }
+
+    fn result_max_size(&self) -> MemorySize {
+        self.result_max_size
+    }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_management_canister_types_private::FetchCanisterLogsRange;
+
+    const KB: u64 = 1000;
+    const MB: u64 = 1000 * KB;
+
+    const TEST_DATA_CAPACITY: MemorySize = MemorySize::new(10 * MB);
+    const TEST_RESULT_MAX_SIZE: MemorySize = MemorySize::new(2 * MB);
+    const TEST_INDEX_TABLE_PAGES: u16 = 1;
+    // Index table of 1 page holds 4096 / 28 bytes per entry = 146 entries max
+    // Average segment size: 10 MB / 146 = ~70 KB
+    // Individual test record size: 10 KB
+    const TEST_RECORD_SIZE: MemorySize = MemorySize::new(10 * KB);
+    // Safety margin to keep “small” and “big” cases clearly separated from the 2 MB limit
+    const MARGIN: MemorySize = MemorySize::new(4 * 70 * KB);
+
+    // Small log – comfortably below the max result limit
+    const TEST_LOG_SIZE_SMALL: MemorySize = MemorySize::new(1_500 * KB); // 1.5 MB or ~150 records
+    const _: () = assert!(TEST_LOG_SIZE_SMALL.get() < TEST_RESULT_MAX_SIZE.get() - MARGIN.get());
+
+    // Big log – comfortably above the max result limit
+    const TEST_LOG_SIZE_BIG: MemorySize = MemorySize::new(2_500 * KB); // 2.5 MB or ~250 records
+    const _: () = assert!(TEST_LOG_SIZE_BIG.get() > TEST_RESULT_MAX_SIZE.get() + MARGIN.get());
+
+    fn make_log_record(idx: u64, ts: u64, len: u64) -> LogRecord {
+        LogRecord {
+            idx,
+            timestamp: ts,
+            len: len as u32,
+            content: vec![], // Not needed for tests.
+        }
+    }
+
+    fn advance(
+        position: MemoryPosition,
+        distance: u64,
+        data_capacity: MemorySize,
+    ) -> MemoryPosition {
+        debug_assert!(data_capacity.get() > 0);
+        debug_assert!(distance > 0);
+        (position + MemorySize::new(distance)) % data_capacity
+    }
+
+    fn make_table_with_config(
+        data_capacity: MemorySize,
+        index_table_pages: u16,
+        result_max_size: MemorySize,
+        record_size: MemorySize,
+        log_size: MemorySize,
+        start_pos: MemoryPosition,
+        start_idx: u64,
+    ) -> IndexTable {
+        let mut table = IndexTable::new(
+            None,
+            data_capacity,
+            index_table_pages,
+            result_max_size,
+            vec![],
+        );
+        let mut pos = start_pos;
+        let mut idx = start_idx;
+        let count = log_size.get() / record_size.get();
+        for _ in 0..count {
+            let rec = make_log_record(idx, idx * 1_000_000, record_size.get());
+            table.update(pos, &rec);
+            pos = advance(pos, rec.bytes_len() as u64, data_capacity);
+            idx += 1;
+        }
+        table
+    }
+
+    fn filter_by_idx(start: u64, end: u64) -> Option<FetchCanisterLogsFilter> {
+        Some(FetchCanisterLogsFilter::ByIdx(FetchCanisterLogsRange {
+            start,
+            end,
+        }))
+    }
+
+    fn filter_by_timestamp(start: u64, end: u64) -> Option<FetchCanisterLogsFilter> {
+        Some(FetchCanisterLogsFilter::ByTimestampNanos(
+            FetchCanisterLogsRange { start, end },
+        ))
+    }
+
+    #[test]
+    fn empty_table_returns_none() {
+        let table = IndexTable::new(
+            None,
+            TEST_DATA_CAPACITY,
+            TEST_INDEX_TABLE_PAGES,
+            TEST_RESULT_MAX_SIZE,
+            vec![],
+        );
+        assert!(table.get_coarse_range(None).is_none());
+    }
+
+    #[test]
+    fn single_record_returns_same_start_and_end() {
+        let start_idx = 0;
+        let table = make_table_with_config(
+            TEST_DATA_CAPACITY,
+            TEST_INDEX_TABLE_PAGES,
+            TEST_RESULT_MAX_SIZE,
+            TEST_RECORD_SIZE,
+            TEST_RECORD_SIZE, // log size of a single record.
+            MemoryPosition::new(0),
+            start_idx,
+        );
+        let (start, end) = table.get_coarse_range(None).expect("range present");
+        // Assert start and end point to the same single record at start_idx.
+        assert_eq!(start.idx, start_idx);
+        assert_eq!(start, end);
+    }
+
+    #[test]
+    fn small_log_no_filter_returns_all() {
+        let start_idx = 0;
+        let table = make_table_with_config(
+            TEST_DATA_CAPACITY,
+            TEST_INDEX_TABLE_PAGES,
+            TEST_RESULT_MAX_SIZE,
+            TEST_RECORD_SIZE,
+            TEST_LOG_SIZE_SMALL,
+            MemoryPosition::new(0),
+            start_idx,
+        );
+        let (start, end) = table.get_coarse_range(None).expect("range present");
+        assert_eq!(start.idx, start_idx); // Beginning is not trimmed.
+        assert!(start.idx < end.idx); // More than one record.
+        // TODO: assert all records are included?
+    }
+
+    #[test]
+    fn small_log_filter_by_idx() {
+        let table = make_table_with_config(
+            TEST_DATA_CAPACITY,
+            TEST_INDEX_TABLE_PAGES,
+            TEST_RESULT_MAX_SIZE,
+            TEST_RECORD_SIZE,
+            TEST_LOG_SIZE_SMALL,
+            MemoryPosition::new(0),
+            0,
+        );
+        let (no_filter_start, no_filter_end) = table.get_coarse_range(None).expect("range present");
+        let (start, end) = table
+            .get_coarse_range(filter_by_idx(10, 20))
+            .expect("range present");
+        // Assert filtered range is within no-filter range.
+        assert!(no_filter_start.idx <= start.idx);
+        assert!(end.idx <= no_filter_end.idx);
+        assert!(table.distance(&start, &end) <= table.distance(&no_filter_start, &no_filter_end));
+    }
+
+    #[test]
+    fn small_log_filter_by_timestamp() {
+        let table = make_table_with_config(
+            TEST_DATA_CAPACITY,
+            TEST_INDEX_TABLE_PAGES,
+            TEST_RESULT_MAX_SIZE,
+            TEST_RECORD_SIZE,
+            TEST_LOG_SIZE_SMALL,
+            MemoryPosition::new(0),
+            0,
+        );
+        let (no_filter_start, no_filter_end) = table.get_coarse_range(None).expect("range present");
+        let (start, end) = table
+            .get_coarse_range(filter_by_timestamp(10_000_000, 20_000_000))
+            .expect("range present");
+        // Assert filtered range is within no-filter range.
+        assert!(no_filter_start.idx <= start.idx);
+        assert!(end.idx <= no_filter_end.idx);
+        assert!(table.distance(&start, &end) <= table.distance(&no_filter_start, &no_filter_end));
+    }
+
+    #[test]
+    fn big_log_no_filter_returns_tail() {
+        let start_idx = 0;
+        let table = make_table_with_config(
+            TEST_DATA_CAPACITY,
+            TEST_INDEX_TABLE_PAGES,
+            TEST_RESULT_MAX_SIZE,
+            TEST_RECORD_SIZE,
+            TEST_LOG_SIZE_BIG,
+            MemoryPosition::new(0),
+            start_idx,
+        );
+        let (start, end) = table.get_coarse_range(None).expect("range present");
+        assert_ne!(start.idx, start_idx); // Beginning is trimmed.
+        assert!(start.idx < end.idx);
+        // Assert distance is above max result size but within one segment size.
+        let distance = table.distance(&start, &end);
+        assert!(distance >= table.result_max_size());
+        assert!(distance <= table.result_max_size() + table.segment_size());
+    }
+
+    #[test]
+    fn big_log_filter_by_idx() {
+        let start_idx = 0;
+        let table = make_table_with_config(
+            TEST_DATA_CAPACITY,
+            TEST_INDEX_TABLE_PAGES,
+            TEST_RESULT_MAX_SIZE,
+            TEST_RECORD_SIZE,
+            TEST_LOG_SIZE_BIG,
+            MemoryPosition::new(0),
+            start_idx,
+        );
+
+        // Short range query within max result size.
+        let (start, end) = table
+            .get_coarse_range(filter_by_idx(10, 190))
+            .expect("range present");
+        assert!(start.idx < end.idx);
+        let distance = table.distance(&start, &end);
+        assert!(distance <= table.result_max_size());
+
+        // Long range query exceeding max result size.
+        let (start, end) = table
+            .get_coarse_range(filter_by_idx(10, 230)) // 230 records * 10 KB > 2 MB limit
+            .expect("range present");
+        assert!(start.idx < end.idx);
+        let distance = table.distance(&start, &end);
+        assert!(distance >= table.result_max_size());
+        assert!(distance <= table.result_max_size() + 2 * table.segment_size());
+    }
+
+    // #[test]
+    // fn big_log_filter_by_idx_middle() {
+    //     let table = make_table_with_config(
+    //         TEST_DATA_CAPACITY,
+    //         TEST_INDEX_TABLE_PAGES,
+    //         TEST_RESULT_MAX_SIZE,
+    //         TEST_RECORD_SIZE,
+    //         TEST_LOG_SIZE_BIG,
+    //         MemoryPosition::new(0),
+    //     );
+    //     let (start, end) = table
+    //         .get_coarse_range(filter_by_idx(25, 35))
+    //         .expect("range present");
+    //     assert!(start.idx <= 25);
+    //     assert!(end.idx >= 25);
+    //     assert!(start.idx < end.idx);
+    //     let distance = table.distance(start.position, end.position);
+    //     let size_limit = table.result_max_size() + MemorySize::new(2) * table.segment_size();
+    //     assert!(distance <= size_limit);
+    // }
+
+    // #[test]
+    // fn big_log_filter_by_timestamp_beginning() {
+    //     let table = make_table_with_config(
+    //         TEST_DATA_CAPACITY,
+    //         TEST_INDEX_TABLE_PAGES,
+    //         TEST_RESULT_MAX_SIZE,
+    //         TEST_RECORD_SIZE,
+    //         TEST_LOG_SIZE_BIG,
+    //         MemoryPosition::new(0),
+    //     );
+    //     let (start, end) = table
+    //         .get_coarse_range(filter_by_timestamp(5_000_000, 15_000_000))
+    //         .expect("range present");
+    //     assert!(start.timestamp <= 5_000_000);
+    //     assert!(end.timestamp >= 5_000_000);
+    //     assert!(start.idx < end.idx);
+    //     let distance = table.distance(start.position, end.position);
+    //     let size_limit = table.result_max_size() + MemorySize::new(2) * table.segment_size();
+    //     assert!(distance <= size_limit);
+    // }
+
+    // #[test]
+    // fn big_log_filter_by_timestamp_middle() {
+    //     let table = make_table_with_config(
+    //         TEST_DATA_CAPACITY,
+    //         TEST_INDEX_TABLE_PAGES,
+    //         TEST_RESULT_MAX_SIZE,
+    //         TEST_RECORD_SIZE,
+    //         TEST_LOG_SIZE_BIG,
+    //         MemoryPosition::new(0),
+    //     );
+    //     let (start, end) = table
+    //         .get_coarse_range(filter_by_timestamp(25_000_000, 35_000_000))
+    //         .expect("range present");
+    //     assert!(start.timestamp <= 25_000_000);
+    //     assert!(end.timestamp >= 25_000_000);
+    //     assert!(start.idx < end.idx);
+    //     let distance = table.distance(start.position, end.position);
+    //     let size_limit = table.result_max_size() + MemorySize::new(2) * table.segment_size();
+    //     assert!(distance <= size_limit);
+    // }
+
+    // #[test]
+    // fn big_log_with_wraparound_no_filter() {
+    //     let table = make_table_with_config(
+    //         TEST_DATA_CAPACITY,
+    //         TEST_INDEX_TABLE_PAGES,
+    //         TEST_RESULT_MAX_SIZE,
+    //         TEST_RECORD_SIZE,
+    //         TEST_LOG_SIZE_BIG,
+    //         MemoryPosition::new(8 * MiB), // Start near end to force wraparound
+    //     );
+    //     let (start, end) = table.get_coarse_range(None).expect("range present");
+    //     assert!(start.idx < end.idx);
+    //     let distance = table.distance(start.position, end.position);
+    //     let size_limit = table.result_max_size() + MemorySize::new(2) * table.segment_size();
+    //     assert!(distance <= size_limit);
+    // }
+}
+
+/*
+I don't like how tests are written at the moment.
+The main goas is to make sure that get_coarse_range works as expected.
+and those expectations also need to be easy to understand and verify by humans.
+
+in real application this index table will be used with ring buffer that holds log records,
+and it can be big.
+we don't want to allocate big buffers in tests.
+instead I think it makes sense to generate only log record entries that would represent
+the data in ring buffer. those entries are valid, meaning they do not exceed data capacity,
+and indexes and timestamps are strictly increasing, and positions are correctly
+advanced according to record sizes and wrapping around data capacity.
+
+for simplicity we can assume that all records have the same size in tests.
+
+so for each test I would like to specify data capacity (default 10 MiB),
+max result size (default 2 MB), head position, number of records to generate and their size.
+
+then we generate index table and make assertions on get_coarse_range results.
+
+get_coarse_range results must be:
+- non if there are no valid entries
+- start and end entries are the same if there is only one valid entry
+if there are more than 2 valid entries:
+- start.idx <= end.idx
+- distance between start.position and end.position <= max result size + segment size
+actually I am not sure about that, should it be (1) max result size + segment size
+or (2) max result size + 2 * segment size ?
+because if filter range start is not a perfect match to the segment and falls back to the left,
+and filter range end is not a perfect match to the segment and falls back to the right,
+then the distance can be up to max result size + 2 * segment size.
+yes, I guess it should be (2).
+if the filter is not specified then we should return the most recent records that fit into max results size,
+so there should be a few tests: total size < max result size so we return all the records, or significantly more
+but we return max result size + 2 * segment size from the end.
+if the filter is specified by idx or timestamp, then it's the same idea but the size is limited
+from the beginning of the range.
+
+based on everything above please write down requirements to the tests that we need to implement.
+and list the number of tests needed to cover all those requirements.
+
+*/
 
 /*
 bazel test //rs/replicated_state:replicated_state_test \
   --test_output=streamed \
   --test_arg=--nocapture \
-  --test_arg=get_range_returns_valid_range_when_records_provided
+  --test_arg=index_table
 */

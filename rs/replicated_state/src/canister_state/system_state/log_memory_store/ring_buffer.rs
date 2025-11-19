@@ -20,7 +20,7 @@ pub const MAGIC: &[u8; 3] = b"LMS";
 pub const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_RESERVED_SIZE);
 pub const INDEX_TABLE_PAGES: usize = 1;
 pub const INDEX_TABLE_SIZE: MemorySize = MemorySize::new((INDEX_TABLE_PAGES * PAGE_SIZE) as u64);
-pub const INDEX_ENTRY_SIZE: MemorySize = MemorySize::new(24);
+pub const INDEX_ENTRY_SIZE: MemorySize = MemorySize::new(28);
 // Data region layout constants.
 pub const DATA_REGION_OFFSET: MemoryAddress = INDEX_TABLE_OFFSET.add_size(INDEX_TABLE_SIZE);
 

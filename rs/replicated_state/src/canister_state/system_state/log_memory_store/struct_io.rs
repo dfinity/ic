@@ -3,7 +3,7 @@ use crate::canister_state::system_state::log_memory_store::{
     index_table::{IndexEntry, IndexTable},
     log_record::LogRecord,
     memory::{MemoryAddress, MemoryPosition, MemorySize},
-    ring_buffer::{DATA_REGION_OFFSET, HEADER_OFFSET, INDEX_TABLE_OFFSET},
+    ring_buffer::{DATA_REGION_OFFSET, HEADER_OFFSET, INDEX_TABLE_OFFSET, RESULT_MAX_SIZE},
 };
 use crate::page_map::{Buffer, PageIndex, PageMap};
 use ic_sys::PageBytes;
@@ -84,39 +84,48 @@ impl StructIO {
             }
             entries
         };
-        IndexTable::new(front, h.data_capacity, h.index_table_pages, entries)
+        IndexTable::new(
+            front,
+            h.data_capacity,
+            h.index_table_pages,
+            RESULT_MAX_SIZE,
+            entries,
+        )
     }
 
     pub fn save_index(&mut self, index: IndexTable) {
         // Save entries.
         let mut addr = INDEX_TABLE_OFFSET;
-        for entry in index.entries.iter() {
+        for entry in index.raw_entries() {
             addr = self.write_index_entry(addr, entry)
         }
         // Update header with the entries count.
         let mut header = self.load_header();
-        header.index_entries_count = index.entries.len() as u16;
+        header.index_entries_count = index.raw_entries().len() as u16;
         self.save_header(&header);
     }
 
     fn read_index_entry(&self, addr: MemoryAddress) -> (IndexEntry, MemoryAddress) {
+        let (position, addr) = self.read_raw_u64(addr);
         let (idx, addr) = self.read_raw_u64(addr);
         let (timestamp, addr) = self.read_raw_u64(addr);
-        let (position, addr) = self.read_raw_u64(addr);
+        let (bytes_len, addr) = self.read_raw_u32(addr);
         (
             IndexEntry {
+                position: MemoryPosition::new(position),
                 idx,
                 timestamp,
-                position: MemoryPosition::new(position),
+                bytes_len,
             },
             addr,
         )
     }
 
     fn write_index_entry(&mut self, addr: MemoryAddress, entry: &IndexEntry) -> MemoryAddress {
+        let addr = self.write_raw_u64(addr, entry.position.get());
         let addr = self.write_raw_u64(addr, entry.idx);
         let addr = self.write_raw_u64(addr, entry.timestamp);
-        self.write_raw_u64(addr, entry.position.get())
+        self.write_raw_u32(addr, entry.bytes_len)
     }
 
     fn load_record_header(

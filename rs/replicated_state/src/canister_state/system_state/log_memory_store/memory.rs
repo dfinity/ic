@@ -1,8 +1,9 @@
-use std::ops::{Add, Rem, Sub};
+use std::ops::{Add, Mul, Rem, Sub};
 
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 pub struct MemoryAddress(u64);
+const _: () = assert!(std::mem::size_of::<MemoryAddress>() == 8);
 
 impl MemoryAddress {
     pub const fn new(v: u64) -> Self {
@@ -37,6 +38,7 @@ impl Add<MemorySize> for MemoryAddress {
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 pub struct MemoryPosition(u64);
+const _: () = assert!(std::mem::size_of::<MemoryAddress>() == 8);
 
 impl MemoryPosition {
     pub const fn new(v: u64) -> Self {
@@ -75,6 +77,7 @@ impl Sub<MemoryPosition> for MemoryPosition {
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
 pub struct MemorySize(u64);
+const _: () = assert!(std::mem::size_of::<MemoryAddress>() == 8);
 
 impl MemorySize {
     pub const fn new(v: u64) -> Self {
@@ -123,5 +126,13 @@ impl Sub<MemoryPosition> for MemorySize {
     type Output = Self;
     fn sub(self, rhs: MemoryPosition) -> Self {
         Self(self.0 - rhs.0)
+    }
+}
+
+// k * size = size
+impl Mul<MemorySize> for u64 {
+    type Output = MemorySize;
+    fn mul(self, rhs: MemorySize) -> MemorySize {
+        MemorySize(self * rhs.0)
     }
 }
