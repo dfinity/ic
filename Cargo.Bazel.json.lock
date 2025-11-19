@@ -1,5 +1,5 @@
 {
-  "checksum": "963d5646cd0edbdd328080c06133651225be3da0fff159ffd1861afe23077d4c",
+  "checksum": "e3080585270d7caef4b5147ea694f042e7274b39b5c68e7aff2e62b97f17e38c",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -213,11 +213,11 @@
               "target": "memchr"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -373,7 +373,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -389,7 +389,7 @@
               "target": "smallvec"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -601,7 +601,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -696,7 +696,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -752,7 +752,7 @@
               "target": "futures_core"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -813,7 +813,7 @@
               "target": "local_waker"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -961,7 +961,7 @@
               "target": "once_cell"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -1140,7 +1140,7 @@
               "target": "log"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -4004,7 +4004,7 @@
               "target": "futures_core"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -4081,11 +4081,11 @@
               "target": "memchr"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -4312,7 +4312,7 @@
               "target": "event_listener_strategy"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -4476,7 +4476,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -4528,7 +4528,7 @@
               "target": "futures_core"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -5195,7 +5195,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -5219,7 +5219,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -5376,7 +5376,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -5404,7 +5404,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -5514,7 +5514,7 @@
               "target": "mime"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -5620,7 +5620,7 @@
               "target": "mime"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -5736,7 +5736,7 @@
               "target": "mime"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -5964,7 +5964,7 @@
               "target": "opentelemetry_sdk"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -5986,6 +5986,105 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "axum-prometheus 0.9.0": {
+      "name": "axum-prometheus",
+      "version": "0.9.0",
+      "package_url": "https://github.com/Ptrskay3/axum-prometheus",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/axum-prometheus/0.9.0/download",
+          "sha256": "fb15221c30bbb32e99873d348d89d7bc2138d6199520aa473a1bdb0d8e5721e8"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "axum_prometheus",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "axum_prometheus",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "default",
+            "metrics-exporter-prometheus",
+            "prometheus"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "axum 0.8.4",
+              "target": "axum"
+            },
+            {
+              "id": "bytes 1.10.1",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-core 0.3.31",
+              "target": "futures_core"
+            },
+            {
+              "id": "http 1.3.1",
+              "target": "http"
+            },
+            {
+              "id": "http-body 1.0.1",
+              "target": "http_body"
+            },
+            {
+              "id": "matchit 0.8.4",
+              "target": "matchit"
+            },
+            {
+              "id": "metrics 0.24.2",
+              "target": "metrics"
+            },
+            {
+              "id": "metrics-exporter-prometheus 0.17.2",
+              "target": "metrics_exporter_prometheus"
+            },
+            {
+              "id": "pin-project-lite 0.2.16",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "tokio 1.48.0",
+              "target": "tokio"
+            },
+            {
+              "id": "tower 0.5.2",
+              "target": "tower"
+            },
+            {
+              "id": "tower-http 0.6.6",
+              "target": "tower_http"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.9.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
     },
     "axum-server 0.7.2": {
       "name": "axum-server",
@@ -6059,7 +6158,7 @@
               "target": "hyper_util"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -6075,7 +6174,7 @@
               "target": "rustls_pki_types"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -6153,7 +6252,7 @@
               "target": "instant"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -6161,7 +6260,7 @@
               "target": "rand"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio",
               "alias": "tokio_1"
             }
@@ -6222,7 +6321,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -16741,7 +16840,7 @@
               "target": "tinytemplate"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -20715,6 +20814,10 @@
               "target": "axum_extra"
             },
             {
+              "id": "axum-prometheus 0.9.0",
+              "target": "axum_prometheus"
+            },
+            {
               "id": "axum-server 0.7.2",
               "target": "axum_server"
             },
@@ -20929,6 +21032,10 @@
               "target": "dfx_core"
             },
             {
+              "id": "duration-string 0.3.0",
+              "target": "duration_string"
+            },
+            {
               "id": "dyn-clone 1.0.14",
               "target": "dyn_clone"
             },
@@ -20967,6 +21074,10 @@
             {
               "id": "exec 0.3.1",
               "target": "exec"
+            },
+            {
+              "id": "exitcode 1.1.2",
+              "target": "exitcode"
             },
             {
               "id": "eyre 0.6.8",
@@ -21322,6 +21433,10 @@
               "target": "local_ip_address"
             },
             {
+              "id": "log 0.4.27",
+              "target": "log"
+            },
+            {
               "id": "loopdev-3 0.5.1",
               "target": "loopdev"
             },
@@ -21454,7 +21569,7 @@
               "target": "pem"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -21743,6 +21858,10 @@
               "target": "simple_asn1"
             },
             {
+              "id": "simple_logger 4.3.3",
+              "target": "simple_logger"
+            },
+            {
               "id": "simple_moving_average 1.0.2",
               "target": "simple_moving_average"
             },
@@ -21872,7 +21991,7 @@
               "target": "time"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -25565,7 +25684,7 @@
               "target": "concurrent_queue"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -25650,7 +25769,7 @@
               "target": "concurrent_queue"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -25733,7 +25852,7 @@
               "target": "event_listener"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -25791,7 +25910,7 @@
               "target": "event_listener"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -27629,7 +27748,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -28196,7 +28315,7 @@
               "target": "parking"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -28543,7 +28662,7 @@
               "target": "memchr"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -29851,7 +29970,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -29944,7 +30063,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -30228,6 +30347,7 @@
         "crate_features": {
           "common": [
             "default-hasher",
+            "raw-entry",
             "serde"
           ],
           "selects": {}
@@ -31274,7 +31394,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -31410,7 +31530,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -32080,7 +32200,7 @@
               "target": "http"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -32200,7 +32320,7 @@
               "target": "http_body"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -32558,7 +32678,7 @@
               "target": "itoa"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -32566,7 +32686,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -32672,7 +32792,7 @@
               "target": "itoa"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -32680,7 +32800,7 @@
               "target": "smallvec"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -32769,7 +32889,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -32879,7 +32999,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -32981,7 +33101,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -33041,11 +33161,11 @@
               "target": "hyper_util"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -33159,7 +33279,7 @@
               "target": "libc"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -33167,7 +33287,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -33615,7 +33735,7 @@
           "selects": {
             "cfg(not(target_family = \"wasm\"))": [
               {
-                "id": "tokio 1.45.0",
+                "id": "tokio 1.48.0",
                 "target": "tokio"
               }
             ]
@@ -33840,7 +33960,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -35003,7 +35123,7 @@
               "target": "time"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -36069,7 +36189,7 @@
               "target": "time"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -43643,7 +43763,7 @@
         "deps": {
           "common": [
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -45925,6 +46045,127 @@
       ],
       "license_file": "LICENSE.txt"
     },
+    "metrics 0.24.2": {
+      "name": "metrics",
+      "version": "0.24.2",
+      "package_url": "https://github.com/metrics-rs/metrics",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/metrics/0.24.2/download",
+          "sha256": "25dea7ac8057892855ec285c440160265225438c3c45072613c25a4b26e98ef5"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "metrics",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "metrics",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "ahash 0.8.11",
+              "target": "ahash"
+            }
+          ],
+          "selects": {
+            "cfg(target_pointer_width = \"32\")": [
+              {
+                "id": "portable-atomic 1.11.0",
+                "target": "portable_atomic"
+              }
+            ]
+          }
+        },
+        "edition": "2018",
+        "version": "0.24.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
+    "metrics-exporter-prometheus 0.17.2": {
+      "name": "metrics-exporter-prometheus",
+      "version": "0.17.2",
+      "package_url": "https://github.com/metrics-rs/metrics",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/metrics-exporter-prometheus/0.17.2/download",
+          "sha256": "2b166dea96003ee2531cf14833efedced545751d800f03535801d833313f8c15"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "metrics_exporter_prometheus",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "metrics_exporter_prometheus",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "base64 0.22.1",
+              "target": "base64"
+            },
+            {
+              "id": "indexmap 2.7.1",
+              "target": "indexmap"
+            },
+            {
+              "id": "metrics 0.24.2",
+              "target": "metrics"
+            },
+            {
+              "id": "metrics-util 0.20.0",
+              "target": "metrics_util"
+            },
+            {
+              "id": "quanta 0.12.3",
+              "target": "quanta"
+            },
+            {
+              "id": "thiserror 2.0.12",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.17.2"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE"
+    },
     "metrics-proxy 0.1.0": {
       "name": "metrics-proxy",
       "version": "0.1.0",
@@ -46041,7 +46282,7 @@
               "target": "opentelemetry"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -46089,7 +46330,7 @@
               "target": "simple_logger"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -46116,6 +46357,96 @@
       },
       "license": null,
       "license_ids": [],
+      "license_file": "LICENSE"
+    },
+    "metrics-util 0.20.0": {
+      "name": "metrics-util",
+      "version": "0.20.0",
+      "package_url": "https://github.com/metrics-rs/metrics",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/metrics-util/0.20.0/download",
+          "sha256": "fe8db7a05415d0f919ffb905afa37784f71901c9a773188876984b4f769ab986"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "metrics_util",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "metrics_util",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "crossbeam-epoch",
+            "crossbeam-utils",
+            "hashbrown",
+            "quanta",
+            "rand",
+            "rand_xoshiro",
+            "recency",
+            "registry",
+            "sketches-ddsketch",
+            "storage"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "crossbeam-epoch 0.9.18",
+              "target": "crossbeam_epoch"
+            },
+            {
+              "id": "crossbeam-utils 0.8.19",
+              "target": "crossbeam_utils"
+            },
+            {
+              "id": "hashbrown 0.15.2",
+              "target": "hashbrown"
+            },
+            {
+              "id": "metrics 0.24.2",
+              "target": "metrics"
+            },
+            {
+              "id": "quanta 0.12.3",
+              "target": "quanta"
+            },
+            {
+              "id": "rand 0.9.0",
+              "target": "rand"
+            },
+            {
+              "id": "rand_xoshiro 0.7.0",
+              "target": "rand_xoshiro"
+            },
+            {
+              "id": "sketches-ddsketch 0.3.0",
+              "target": "sketches_ddsketch"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.20.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
       "license_file": "LICENSE"
     },
     "mime 0.3.17": {
@@ -47026,7 +47357,7 @@
               "target": "similar"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -49860,7 +50191,7 @@
               "target": "sha1"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -50913,7 +51244,7 @@
               "target": "once_cell"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -50997,7 +51328,7 @@
               "target": "once_cell"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -51099,7 +51430,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -51437,7 +51768,7 @@
               "target": "once_cell"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -51520,7 +51851,7 @@
               "target": "once_cell"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -51833,7 +52164,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -51948,7 +52279,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -54720,14 +55051,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "pin-project-lite 0.2.13": {
+    "pin-project-lite 0.2.16": {
       "name": "pin-project-lite",
-      "version": "0.2.13",
+      "version": "0.2.16",
       "package_url": "https://github.com/taiki-e/pin-project-lite",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/pin-project-lite/0.2.13/download",
-          "sha256": "8afb450f006bf6385ca15ef45d71d2288452bc3683ce2e2cacc0d18e4be60b58"
+          "url": "https://static.crates.io/crates/pin-project-lite/0.2.16/download",
+          "sha256": "3b3cff922bd51709b605d9ead9aa71031d81447142d828eb4a6eba76fe619f9b"
         }
       },
       "targets": [
@@ -54750,7 +55081,7 @@
           "**"
         ],
         "edition": "2018",
-        "version": "0.2.13"
+        "version": "0.2.16"
       },
       "license": "Apache-2.0 OR MIT",
       "license_ids": [
@@ -55460,7 +55791,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -55562,7 +55893,7 @@
                 "target": "concurrent_queue"
               },
               {
-                "id": "pin-project-lite 0.2.13",
+                "id": "pin-project-lite 0.2.16",
                 "target": "pin_project_lite"
               },
               {
@@ -59680,7 +60011,7 @@
               "target": "bytes"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -59710,7 +60041,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -61237,6 +61568,54 @@
         },
         "edition": "2018",
         "version": "0.3.0"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "rand_xoshiro 0.7.0": {
+      "name": "rand_xoshiro",
+      "version": "0.7.0",
+      "package_url": "https://github.com/rust-random/rngs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/rand_xoshiro/0.7.0/download",
+          "sha256": "f703f4665700daf5512dcca5f43afa6af89f09db47fb56be587f80636bda2d41"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "rand_xoshiro",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "rand_xoshiro",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "rand_core 0.9.3",
+              "target": "rand_core"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.7.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -63120,11 +63499,11 @@
                 "target": "percent_encoding"
               },
               {
-                "id": "pin-project-lite 0.2.13",
+                "id": "pin-project-lite 0.2.16",
                 "target": "pin_project_lite"
               },
               {
-                "id": "tokio 1.45.0",
+                "id": "tokio 1.48.0",
                 "target": "tokio"
               }
             ],
@@ -63469,11 +63848,11 @@
                 "target": "percent_encoding"
               },
               {
-                "id": "pin-project-lite 0.2.13",
+                "id": "pin-project-lite 0.2.16",
                 "target": "pin_project_lite"
               },
               {
-                "id": "tokio 1.45.0",
+                "id": "tokio 1.48.0",
                 "target": "tokio"
               },
               {
@@ -70676,7 +71055,7 @@
               "target": "sha2"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -71714,6 +72093,44 @@
         "MIT"
       ],
       "license_file": null
+    },
+    "sketches-ddsketch 0.3.0": {
+      "name": "sketches-ddsketch",
+      "version": "0.3.0",
+      "package_url": "https://github.com/mheffner/rust-sketches-ddsketch",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/sketches-ddsketch/0.3.0/download",
+          "sha256": "c1e9a774a6c28142ac54bb25d25562e6bcf957493a184f15ad4eebccb23e410a"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "sketches_ddsketch",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "sketches_ddsketch",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.3.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
     },
     "slab 0.4.8": {
       "name": "slab",
@@ -72895,6 +73312,68 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "socket2 0.6.1": {
+      "name": "socket2",
+      "version": "0.6.1",
+      "package_url": "https://github.com/rust-lang/socket2",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/socket2/0.6.1/download",
+          "sha256": "17129e116933cf371d018bb80ae557e889637989d8638274fb25622827b03881"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "socket2",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "socket2",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "all"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [],
+          "selects": {
+            "cfg(unix)": [
+              {
+                "id": "libc 0.2.172",
+                "target": "libc"
+              }
+            ],
+            "cfg(windows)": [
+              {
+                "id": "windows-sys 0.60.2",
+                "target": "windows_sys"
+              }
+            ]
+          }
+        },
+        "edition": "2021",
+        "version": "0.6.1"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
     "socks5-impl 0.6.1": {
       "name": "socks5-impl",
       "version": "0.6.1",
@@ -72953,7 +73432,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -73514,7 +73993,7 @@
               "target": "futures_core"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -74352,7 +74831,7 @@
               "target": "rand"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -76048,7 +76527,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -78347,14 +78826,14 @@
       ],
       "license_file": null
     },
-    "tokio 1.45.0": {
+    "tokio 1.48.0": {
       "name": "tokio",
-      "version": "1.45.0",
+      "version": "1.48.0",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio/1.45.0/download",
-          "sha256": "2513ca694ef9ede0fb23fe71a4ee4107cb102b9dc1930f6d0fd77aae068ae165"
+          "url": "https://static.crates.io/crates/tokio/1.48.0/download",
+          "sha256": "ff360e02eab121e0bc37a2d3b4d4dc622e6eda3a8e5253d5435ecf5bd4c68408"
         }
       },
       "targets": [
@@ -78418,7 +78897,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             }
           ],
@@ -78433,7 +78912,7 @@
                 "target": "signal_hook_registry"
               },
               {
-                "id": "socket2 0.5.9",
+                "id": "socket2 0.6.1",
                 "target": "socket2"
               }
             ],
@@ -78447,14 +78926,8 @@
                 "target": "signal_hook_registry"
               },
               {
-                "id": "socket2 0.5.9",
+                "id": "socket2 0.6.1",
                 "target": "socket2"
-              }
-            ],
-            "cfg(tokio_taskdump)": [
-              {
-                "id": "backtrace 0.3.68",
-                "target": "backtrace"
               }
             ],
             "x86_64-apple-darwin": [
@@ -78467,7 +78940,7 @@
                 "target": "signal_hook_registry"
               },
               {
-                "id": "socket2 0.5.9",
+                "id": "socket2 0.6.1",
                 "target": "socket2"
               }
             ],
@@ -78481,7 +78954,7 @@
                 "target": "signal_hook_registry"
               },
               {
-                "id": "socket2 0.5.9",
+                "id": "socket2 0.6.1",
                 "target": "socket2"
               }
             ]
@@ -78491,13 +78964,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "tokio-macros 2.5.0",
+              "id": "tokio-macros 2.6.0",
               "target": "tokio_macros"
             }
           ],
           "selects": {}
         },
-        "version": "1.45.0"
+        "version": "1.48.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -78537,11 +79010,11 @@
         "deps": {
           "common": [
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -78557,14 +79030,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "tokio-macros 2.5.0": {
+    "tokio-macros 2.6.0": {
       "name": "tokio-macros",
-      "version": "2.5.0",
+      "version": "2.6.0",
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tokio-macros/2.5.0/download",
-          "sha256": "6e06d43f1345a3bcd39f6a56dbb7dcab2ba47e68e8ac134855e7e2bdbaf8cab8"
+          "url": "https://static.crates.io/crates/tokio-macros/2.6.0/download",
+          "sha256": "af407857209536a95c8e56f8231ef2c2e2aff839b22e07a1ffcbc617e9db9fa5"
         }
       },
       "targets": [
@@ -78604,7 +79077,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.5.0"
+        "version": "2.6.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -78656,11 +79129,11 @@
               "target": "futures_util"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -78723,7 +79196,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -78789,7 +79262,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -78855,7 +79328,7 @@
               "alias": "pki_types"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -79015,7 +79488,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -79074,11 +79547,11 @@
               "target": "futures_core"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -79137,7 +79610,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -79205,7 +79678,7 @@
               "target": "log"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -79273,7 +79746,7 @@
               "target": "log"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -79362,7 +79835,7 @@
               "target": "futures_util"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -79370,7 +79843,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             }
           ],
@@ -79708,7 +80181,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -79903,7 +80376,7 @@
               "target": "pin_project"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -79915,7 +80388,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -80028,7 +80501,7 @@
               "target": "indexmap"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -80040,7 +80513,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -80133,11 +80606,11 @@
               "target": "http_body_util"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -80207,6 +80680,7 @@
             "futures-core",
             "limit",
             "request-id",
+            "timeout",
             "tokio",
             "tokio-util",
             "tower",
@@ -80269,11 +80743,11 @@
               "target": "http_body_util"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -80528,7 +81002,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -80684,7 +81158,7 @@
               "target": "log"
             },
             {
-              "id": "pin-project-lite 0.2.13",
+              "id": "pin-project-lite 0.2.16",
               "target": "pin_project_lite"
             },
             {
@@ -81632,7 +82106,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -81744,7 +82218,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -82057,7 +82531,7 @@
               "target": "scoped_tls"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -84755,7 +85229,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.45.0",
+              "id": "tokio 1.48.0",
               "target": "tokio"
             },
             {
@@ -89111,6 +89585,54 @@
         },
         "edition": "2021",
         "version": "0.60.2"
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "license-apache-2.0"
+    },
+    "windows-sys 0.61.2": {
+      "name": "windows-sys",
+      "version": "0.61.2",
+      "package_url": "https://github.com/microsoft/windows-rs",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/windows-sys/0.61.2/download",
+          "sha256": "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "windows_sys",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "windows_sys",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "windows-link 0.2.1",
+              "target": "windows_link"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.61.2"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -94123,7 +94645,9 @@
     "cfg(target_os = \"vxworks\")": [],
     "cfg(target_os = \"wasi\")": [],
     "cfg(target_os = \"windows\")": [],
-    "cfg(tokio_taskdump)": [],
+    "cfg(target_pointer_width = \"32\")": [
+      "wasm32-unknown-unknown"
+    ],
     "cfg(unix)": [
       "aarch64-apple-darwin",
       "aarch64-unknown-linux-gnu",
@@ -94171,6 +94695,7 @@
     "async-trait 0.1.89",
     "axum 0.8.4",
     "axum-extra 0.10.1",
+    "axum-prometheus 0.9.0",
     "axum-server 0.7.2",
     "backoff 0.4.0",
     "backon 0.4.1",
@@ -94226,6 +94751,7 @@
     "derive-new 0.7.0",
     "devicemapper 0.34.4",
     "dfx-core 0.1.4",
+    "duration-string 0.3.0",
     "dyn-clone 1.0.14",
     "ed25519-dalek 2.2.0",
     "educe 0.4.22",
@@ -94237,6 +94763,7 @@
     "evm_rpc_client 0.2.0",
     "evm_rpc_types 3.0.0",
     "exec 0.3.1",
+    "exitcode 1.1.2",
     "eyre 0.6.8",
     "ff 0.12.1",
     "flate2 1.1.2",
@@ -94326,6 +94853,7 @@
     "lmdb-rkv 0.14.99",
     "lmdb-rkv-sys 0.11.99",
     "local-ip-address 0.5.6",
+    "log 0.4.27",
     "loopdev-3 0.5.1",
     "lru 0.7.8",
     "macaddr 1.0.1",
@@ -94361,7 +94889,7 @@
     "paste 1.0.15",
     "pcre2 0.2.6",
     "pem 3.0.3",
-    "pin-project-lite 0.2.13",
+    "pin-project-lite 0.2.16",
     "ping 0.5.0",
     "pkcs8 0.10.2",
     "pkg-config 0.3.32",
@@ -94436,6 +94964,7 @@
     "signal-hook 0.3.17",
     "signature 2.2.0",
     "simple_asn1 0.6.2",
+    "simple_logger 4.3.3",
     "simple_moving_average 1.0.2",
     "slog 2.7.0",
     "slog-async 2.8.0",
@@ -94470,7 +94999,7 @@
     "tikv-jemalloc-ctl 0.6.0",
     "tikv-jemallocator 0.6.0",
     "time 0.3.36",
-    "tokio 1.45.0",
+    "tokio 1.48.0",
     "tokio-io-timeout 1.2.0",
     "tokio-metrics 0.4.0",
     "tokio-rustls 0.26.0",
