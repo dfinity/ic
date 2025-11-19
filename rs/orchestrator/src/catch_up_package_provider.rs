@@ -66,7 +66,7 @@ pub(crate) struct CatchUpPackageProvider {
     registry: Arc<RegistryHelper>,
     cup_dir: PathBuf,
     crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
-    crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
+    crypto_tls_config: Arc<dyn TlsConfig>,
     logger: ReplicaLogger,
     node_id: NodeId,
     #[allow(clippy::disallowed_types)]
@@ -82,7 +82,7 @@ impl CatchUpPackageProvider {
         registry: Arc<RegistryHelper>,
         cup_dir: PathBuf,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
-        crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
+        crypto_tls_config: Arc<dyn TlsConfig>,
         logger: ReplicaLogger,
         node_id: NodeId,
     ) -> Self {
@@ -101,7 +101,7 @@ impl CatchUpPackageProvider {
         registry: Arc<RegistryHelper>,
         cup_dir: PathBuf,
         crypto: Arc<dyn ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> + Send + Sync>,
-        crypto_tls_config: Arc<dyn TlsConfig + Send + Sync>,
+        crypto_tls_config: Arc<dyn TlsConfig>,
         logger: ReplicaLogger,
         node_id: NodeId,
         initial_backoff: Duration,

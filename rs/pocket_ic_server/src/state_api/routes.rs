@@ -1400,6 +1400,8 @@ pub async fn create_instance(
             nns_ui,
             /* `nns_ui` does not depend on `bitcoin` */
             bitcoin: _,
+            /* `nns_ui` does not depend on `dogecoin` */
+            dogecoin: _,
             /* `nns_ui` does not depend on `canister_migration` */
             canister_migration: _,
         } = icp_features;
@@ -1444,6 +1446,7 @@ pub async fn create_instance(
                     instance_config.icp_config.unwrap_or(IcpConfig::default()),
                     log_level,
                     instance_config.bitcoind_addr,
+                    instance_config.dogecoind_addr,
                     instance_config.icp_features,
                     instance_config.incomplete_state,
                     initial_time,

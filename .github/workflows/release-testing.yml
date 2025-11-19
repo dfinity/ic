@@ -24,40 +24,24 @@ env:
   CI_RUN_ID: ${{ github.run_id }}
 
 jobs:
-  # This job is not run, but just used to set anchor references for other jobs
-  anchor-setup:
-    if: false
-    name: Anchor Setup
+  # Run some extra system tests that are skipped on CI Main.
+  # Those test suites would overwhelm a runner, so each is run
+  # as a separate job.
+  release-system-tests:
+    name: Release System Tests
     runs-on: &dind-large-setup
       labels: dind-large
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:da93235247c6651bae459e4e8cc987fccb37f0d53294b30f7e1ae57c0b553557
+      image: ghcr.io/dfinity/ic-build@sha256:86c24b5b717519527920d3b720906f91723514d63acddcbaeb27ecf4144aeb37
       options: >-
          -e NODE_NAME --privileged --cgroupns host
+    timeout-minutes: 180
     steps:
       - &checkout
         name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
-
-  ci-main:
-    name: CI Main
-    uses: ./.github/workflows/ci-main.yml
-    secrets: inherit
-    with:
-      commit-sha: ${{ github.sha }}
-
-  # Run some extra system tests that are skipped on CI Main.
-  # Those test suites would overwhelm a runner, so each is run
-  # as a separate job.
-  release-system-tests:
-    name: Release System Tests
-    runs-on: *dind-large-setup
-    container: *container-setup
-    timeout-minutes: 180
-    steps:
-      - *checkout
       - name: Run Bazel System Tests
         uses: ./.github/actions/bazel
         with:
@@ -69,6 +53,13 @@ jobs:
               //rs/tests/... \
               --keep_going
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  ci-main:
+    name: CI Main
+    uses: ./.github/workflows/ci-main.yml
+    secrets: inherit
+    with:
+      commit-sha: ${{ github.sha }}
 
   dependency-scan-release-cut:
     name: Dependency Scan for Release

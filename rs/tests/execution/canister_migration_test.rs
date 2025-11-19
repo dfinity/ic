@@ -3,7 +3,7 @@ use std::iter::zip;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
-use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use candid::{CandidType, Decode, Deserialize, Encode, Principal, Reserved};
 use canister_test::Canister;
 use futures::future::join_all;
 use ic_agent::Agent;
@@ -64,24 +64,25 @@ fn test(env: TestEnv) {
 
 #[derive(Clone, Debug, CandidType)]
 struct MigrateCanisterArgs {
-    pub source: Principal,
-    pub target: Principal,
+    pub canister_id: Principal,
+    pub replace_canister_id: Principal,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
 pub enum ValidationError {
-    MigrationsDisabled,
-    RateLimited,
+    MigrationsDisabled(Reserved),
+    RateLimited(Reserved),
+    ValidationInProgress { canister: Principal },
     MigrationInProgress { canister: Principal },
     CanisterNotFound { canister: Principal },
-    SameSubnet,
+    SameSubnet(Reserved),
     CallerNotController { canister: Principal },
     NotController { canister: Principal },
-    SourceNotStopped,
-    SourceNotReady,
-    TargetNotStopped,
-    TargetHasSnapshots,
-    SourceInsufficientCycles,
+    SourceNotStopped(Reserved),
+    SourceNotReady(Reserved),
+    TargetNotStopped(Reserved),
+    TargetHasSnapshots(Reserved),
+    SourceInsufficientCycles(Reserved),
     CallFailed { reason: String },
 }
 
@@ -378,13 +379,13 @@ async fn test_async(env: TestEnv) {
     pause_canister_migrations(&governance_canister).await;
 
     let args = Encode!(&MigrateCanisterArgs {
-        source: source_canister.canister_id(),
-        target: target_canister.canister_id(),
+        canister_id: source_canister.canister_id(),
+        replace_canister_id: target_canister.canister_id(),
     })
     .unwrap();
     let args2 = Encode!(&MigrateCanisterArgs {
-        source: source_canister2.canister_id(),
-        target: target_canister2.canister_id(),
+        canister_id: source_canister2.canister_id(),
+        replace_canister_id: target_canister2.canister_id(),
     })
     .unwrap();
 
@@ -397,10 +398,13 @@ async fn test_async(env: TestEnv) {
         .await
         .expect("Failed to call migrate_canister.");
 
-    let decoded_result = Decode!(&result, Result<(), ValidationError>)
+    let decoded_result = Decode!(&result, Result<(), Option<ValidationError>>)
         .expect("Failed to decode reponse from migrate_canister.");
 
-    assert_eq!(decoded_result, Err(ValidationError::MigrationsDisabled));
+    assert_eq!(
+        decoded_result,
+        Err(Some(ValidationError::MigrationsDisabled(Reserved)))
+    );
 
     info!(logger, "Unpausing migrations");
 
@@ -422,7 +426,7 @@ async fn test_async(env: TestEnv) {
         .await
         .expect("Failed to call migrate_canister.");
 
-    let decoded_result = Decode!(&result, Result<(), ValidationError>)
+    let decoded_result = Decode!(&result, Result<(), Option<ValidationError>>)
         .expect("Failed to decode reponse from migrate_canister.");
 
     assert_eq!(decoded_result, Ok(()));

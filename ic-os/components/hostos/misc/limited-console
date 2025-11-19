@@ -1,0 +1,130 @@
+#!/bin/bash
+# Limited Console Shell provides restricted access to select commands
+
+source /opt/ic/bin/config.sh
+
+# Restricted PATH for rbash commands
+# IMPORTANT: /opt/ic/bin/rbash must come FIRST so 'bash' resolves to /opt/ic/bin/rbash/bash (rbash)
+# instead of /bin/bash, preventing shell escape. Standard commands still work via /bin.
+RESTRICTED_PATH="/opt/ic/bin/rbash:/opt/ic/bin:/bin:/usr/bin"
+
+# Show available commands
+show_menu() {
+    echo "=== HostOS Limited Console ==="
+    echo "Available commands:"
+    echo "  system-status           - Show system status"
+    echo "  service-status          - Show service status (usage: service-status <service-name>)" 
+    echo "  view-logs               - View service logs (usage: view-logs <service-name>)"
+    echo "  config-json             - Show /boot/config/config.json"
+    echo "  network-config-settings - Show network settings from config"
+    echo "  rbash-console           - Drop into restricted bash console"
+    echo "  clear                   - Clear the console"
+    echo "  exit                    - Exit console"
+    echo ""
+}
+
+# Command dispatcher
+execute_command() {
+    case "$1" in
+        "system-status")
+            echo "=== System Status ==="
+            echo "Hostname: $(hostname)"
+            echo "Uptime: $(uptime)"
+            echo "Memory: $(free -h | grep '^Mem')"
+            echo "Disk Usage: $(df -h / | tail -1)"
+            ;;
+        "service-status")
+            if [ -n "${2:-}" ]; then
+                # Only allow sane unit names, e.g. letters, digits, `-_.@`
+                if [[ "$2" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
+                    systemctl status "$2"
+                else
+                    echo "Invalid service name"
+                fi
+            else
+                echo "Usage: service-status <service-name>"
+                echo "Example: service-status guestos"
+            fi
+            ;;
+        "view-logs")
+            if [ -n "${2:-}" ]; then
+                # Only allow sane unit names, e.g. letters, digits, `-_.@`
+                if [[ "$2" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
+                    journalctl -u "$2" --no-pager -n 50
+                else
+                    echo "Invalid service name"
+                fi
+            else
+                echo "Usage: view-logs <service-name>"
+                echo "Example: view-logs guestos"
+            fi
+            ;;
+        "config-json")
+            echo "=== /boot/config/config.json ==="
+            env -i \
+                TERM="$TERM" \
+                LESSSECURE=1 \
+                PATH="$RESTRICTED_PATH" \
+                /usr/bin/less /boot/config/config.json
+            ;;
+        "network-config-settings")
+            echo "=== Network Settings from Config ==="
+            local network_settings=$(get_config_value '.network_settings' 2>/dev/null)
+            if [ -n "$network_settings" ]; then
+                echo "$network_settings" | jq . 2>/dev/null || echo "$network_settings"
+            else
+                echo "No network settings found in config"
+            fi
+            ;;
+        "rbash-console")
+            echo "=== Dropping into Restricted Bash Console ==="
+            echo "You are now in a restricted bash shell with limited commands."
+            echo "Type 'exit' to return to the limited console menu."
+            echo ""
+            # Start rbash with restricted environment and PATH
+            PATH="$RESTRICTED_PATH" /bin/rbash
+            ;;
+        "clear")
+            clear
+            ;;
+        "exit")
+            echo "Exiting limited console..."
+            exit 0
+            ;;
+        "help")
+            show_menu
+            ;;
+        *)
+            echo "Unknown command: $1"
+            show_menu
+            ;;
+    esac
+}
+
+echo "Welcome to HostOS Limited Console"
+echo "Type 'help' for available commands or 'exit' to quit"
+echo ""
+
+while true; do
+    echo -n "limited-console> "
+    read -r command
+
+    # Skip empty input
+    if [ -z "$command" ]; then
+        continue
+    fi
+
+    # Parse command and arguments safely using array to prevent command injection
+    # This safely splits the input while preserving quoted arguments
+    read -ra cmd_array <<< "$command"
+
+    # If parsing produced no tokens, skip
+    if [ "${#cmd_array[@]}" -eq 0 ]; then
+        continue
+    fi
+
+    cmd="${cmd_array[0]}"
+    # Pass remaining arguments as separate array elements to prevent injection
+    execute_command "$cmd" "${cmd_array[@]:1}"
+
+done

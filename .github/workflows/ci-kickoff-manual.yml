@@ -7,11 +7,15 @@ on:
         description: 'The commit SHA to run the workflow on'
         required: true
         default: ''
+      pr-number:
+        description: 'The PR number' # this is used for posting comments with the CI link
+        required: true
+        default: ''
 
 jobs:
   ci-main:
     name: CI Main
-    uses: ./.github/workflows/ci_main.yml
+    uses: ./.github/workflows/ci-main.yml
     secrets: inherit
     with:
       commit-sha: ${{ inputs.commit-sha }}
@@ -46,3 +50,23 @@ jobs:
         with:
           commit-sha: ${{ inputs.commit-sha }}
           run-result: ${{ needs.ci-main.result }}
+
+  post-comment-with-ci-link:
+    name: Post Comment with CI Link
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Add PR Comment
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            let message = 'Run on ${{ inputs.commit-sha }} URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\n\n'
+
+            github.rest.issues.createComment({
+              issue_number: ${{ inputs.pr-number }},
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: message
+            })
