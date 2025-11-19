@@ -97,8 +97,7 @@ jobs:
               diff_only="false"
               skip_long_tests="true"
           elif [[ '${{ github.event_name }}' == "workflow_dispatch" ]]; then
-              # on a merge group, we don't upload the artifacts (i.e. no release
-              # build) but we ensure all targets are built (no diff)
+              # if a workflow is manually dispatched, we cannot easily find the file changes, therefore build all
               release_build="false"
               diff_only="false"
               skip_long_tests="true"
