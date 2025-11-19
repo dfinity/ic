@@ -16,11 +16,12 @@ use ic_ledger_core::{
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use ic_ledger_hash_of::HashOf;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{storable::Bound, Storable};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
+use ic_stable_structures::{Storable, storable::Bound};
 use icp_ledger::{
-    AccountIdentifier, Block, FeatureFlags, LedgerAllowances, LedgerBalances, Memo, Operation,
-    PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, Allowance as Allowance103, Allowances, Block, DEFAULT_TRANSFER_FEE,
+    FeatureFlags, LedgerAllowances, LedgerBalances, MAX_TAKE_ALLOWANCES, Memo, Operation,
+    PaymentError, Transaction, TransferError, TransferFee, UpgradeArgs,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
@@ -31,6 +32,7 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::RwLock;
+use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 
 #[cfg(test)]
@@ -40,6 +42,8 @@ lazy_static! {
     pub static ref LEDGER: RwLock<Ledger> = RwLock::new(Ledger::default());
     // Maximum inter-canister message size in bytes.
     pub static ref MAX_MESSAGE_SIZE_BYTES: RwLock<usize> = RwLock::new(1024 * 1024);
+
+    static ref ARCHIVING_FAILURES: AtomicU64 = AtomicU64::new(0);
 }
 
 // Wasm bytecode of an Archive Node.
@@ -68,10 +72,6 @@ fn unknown_token() -> String {
     "???".to_string()
 }
 
-fn default_ledger_version() -> u64 {
-    LEDGER_VERSION
-}
-
 const UPGRADES_MEMORY_ID: MemoryId = MemoryId::new(0);
 const ALLOWANCES_MEMORY_ID: MemoryId = MemoryId::new(1);
 const ALLOWANCES_EXPIRATIONS_MEMORY_ID: MemoryId = MemoryId::new(2);
@@ -87,7 +87,7 @@ struct StorableAllowance {
 }
 
 impl Storable for StorableAllowance {
-    fn to_bytes(&self) -> Cow<[u8]> {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
         let mut buf = vec![];
         minicbor::encode(self, &mut buf).expect("StorableAllowance encoding should always succeed");
         Cow::Owned(buf)
@@ -133,8 +133,6 @@ thread_local! {
     pub static UPGRADES_MEMORY: RefCell<VirtualMemory<DefaultMemoryImpl>> = MEMORY_MANAGER.with(|memory_manager|
         RefCell::new(memory_manager.borrow().get(UPGRADES_MEMORY_ID)));
 
-    pub static LEDGER_STATE: RefCell<LedgerState> = const { RefCell::new(LedgerState::Ready) };
-
     // (from, spender) -> allowance - map storing ledger allowances.
     #[allow(clippy::type_complexity)]
     pub static ALLOWANCES_MEMORY: RefCell<StableBTreeMap<(AccountIdentifier, AccountIdentifier), StorableAllowance, VirtualMemory<DefaultMemoryImpl>>> =
@@ -162,31 +160,24 @@ pub enum LedgerField {
     Blocks,
 }
 
-#[derive(Copy, Clone, Serialize, Deserialize, Debug)]
-pub enum LedgerState {
-    Migrating(LedgerField),
-    Ready,
-}
-
-impl Default for LedgerState {
-    fn default() -> Self {
-        Self::Ready
-    }
-}
-
 /// The ledger versions represent backwards incompatible versions of the ledger.
 /// Downgrading to a lower ledger version is never suppported.
-/// Upgrading from version N to version N+1 should always be possible.
 /// We have the following ledger versions:
 ///   * 0 - the whole ledger state is stored on the heap.
 ///   * 1 - the allowances are stored in stable structures.
 ///   * 2 - the balances are stored in stable structures.
 ///   * 3 - the blocks are stored in stable structures.
-#[cfg(not(feature = "next-ledger-version"))]
+#[cfg(not(any(feature = "next-ledger-version", feature = "prev-ledger-version")))]
 pub const LEDGER_VERSION: u64 = 3;
 
-#[cfg(feature = "next-ledger-version")]
+#[cfg(any(
+    feature = "next-ledger-version",
+    all(feature = "next-ledger-version", feature = "prev-ledger-version")
+))]
 pub const LEDGER_VERSION: u64 = 4;
+
+#[cfg(all(feature = "prev-ledger-version", not(feature = "next-ledger-version")))]
+pub const LEDGER_VERSION: u64 = 2;
 
 type StableLedgerBalances = Balances<StableBalances>;
 
@@ -239,7 +230,7 @@ pub struct Ledger {
     #[serde(default)]
     pub feature_flags: FeatureFlags,
 
-    #[serde(default = "default_ledger_version")]
+    #[serde(default)]
     pub ledger_version: u64,
 }
 
@@ -250,22 +241,18 @@ impl LedgerContext for Ledger {
     type Tokens = Tokens;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
-        panic_if_not_ready();
         &self.stable_balances
     }
 
     fn balances_mut(&mut self) -> &mut Balances<Self::BalancesStore> {
-        panic_if_not_ready();
         &mut self.stable_balances
     }
 
     fn approvals(&self) -> &AllowanceTable<Self::AllowancesData> {
-        panic_if_not_ready();
         &self.stable_approvals
     }
 
     fn approvals_mut(&mut self) -> &mut AllowanceTable<Self::AllowancesData> {
-        panic_if_not_ready();
         &mut self.stable_approvals
     }
 
@@ -337,6 +324,14 @@ impl LedgerData for Ledger {
         &mut self,
     ) -> Option<&mut ic_ledger_core::block::FeeCollector<Self::AccountId>> {
         None
+    }
+
+    fn increment_archiving_failure_metric(&mut self) {
+        ARCHIVING_FAILURES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn get_archiving_failure_metric(&self) -> u64 {
+        ARCHIVING_FAILURES.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
@@ -414,9 +409,9 @@ impl Ledger {
             effective_fee,
         )
         .map_err(|e| {
-            use ic_ledger_canister_core::ledger::TransferError as CTE;
             use PaymentError::TransferError as PTE;
             use TransferError as TE;
+            use ic_ledger_canister_core::ledger::TransferError as CTE;
 
             match e {
                 CTE::BadFee { expected_fee } => PTE(TE::BadFee { expected_fee }),
@@ -438,7 +433,7 @@ impl Ledger {
                     .to_string(),
                 ),
                 CTE::AllowanceChanged { .. } => todo!(),
-                CTE::SelfApproval { .. } => todo!(),
+                CTE::SelfApproval => todo!(),
                 CTE::BadBurn { .. } => todo!(),
             }
         })
@@ -448,7 +443,7 @@ impl Ledger {
     /// during canister migration or upgrade.
     pub fn add_block(&mut self, block: Block) -> Result<BlockIndex, String> {
         icp_ledger::apply_operation(self, &block.transaction.operation, block.timestamp)
-            .map_err(|e| format!("failed to execute transfer {:?}: {:?}", block, e))?;
+            .map_err(|e| format!("failed to execute transfer {block:?}: {e:?}"))?;
         self.blockchain.add_block(block)
     }
 
@@ -482,7 +477,7 @@ impl Ledger {
                 None,
                 timestamp,
             )
-            .expect(&format!("Creating account {:?} failed", to)[..]);
+            .unwrap_or_else(|_| panic!("Creating account {to:?} failed"));
         }
 
         self.send_whitelist = send_whitelist;
@@ -512,7 +507,7 @@ impl Ledger {
 
         match (is_notified, new_state) {
             (true, true) | (false, false) => {
-                Err(format!("The notification state is already {}", is_notified))
+                Err(format!("The notification state is already {is_notified}"))
             }
             (true, false) => {
                 self.blocks_notified.remove(height);
@@ -538,10 +533,8 @@ impl Ledger {
             .get_blocks_for_archiving(trigger_threshold, num_blocks)
     }
 
-    pub fn can_send(&self, principal_id: &PrincipalId) -> bool {
-        // If we include more principals here, we need to update the trap message
-        // in `icrc1_transfer` and similar functions.
-        !principal_id.is_anonymous()
+    pub fn can_send(&self, _principal_id: &PrincipalId) -> bool {
+        true
     }
 
     /// Check if it's allowed to notify this canister.
@@ -578,50 +571,8 @@ impl Ledger {
         }
     }
 
-    pub fn migrate_one_allowance(&mut self) -> bool {
-        match self.approvals.allowances_data.pop_first_allowance() {
-            Some((account_spender, allowance)) => {
-                self.stable_approvals
-                    .allowances_data
-                    .set_allowance(account_spender, allowance);
-                true
-            }
-            None => false,
-        }
-    }
-
-    pub fn migrate_one_expiration(&mut self) -> bool {
-        match self.approvals.allowances_data.pop_first_expiry() {
-            Some((timestamp, account_spender)) => {
-                self.stable_approvals
-                    .allowances_data
-                    .insert_expiry(timestamp, account_spender);
-                true
-            }
-            None => false,
-        }
-    }
-
-    pub fn migrate_one_balance(&mut self) -> bool {
-        match self.balances.store.pop_first() {
-            Some((account, tokens)) => {
-                self.stable_balances.credit(&account, tokens);
-                true
-            }
-            None => false,
-        }
-    }
-
-    pub fn migrate_one_block(&mut self) -> bool {
-        self.blockchain.migrate_one_block()
-    }
-
-    pub fn clear_arrivals(&mut self) {
-        self.approvals.allowances_data.clear_arrivals();
-    }
-
-    pub fn copy_token_pool(&mut self) {
-        self.stable_balances.token_pool = self.balances.token_pool;
+    pub fn max_take_allowances(&self) -> u64 {
+        MAX_TAKE_ALLOWANCES
     }
 }
 
@@ -650,47 +601,44 @@ pub fn change_notification_state(
     )
 }
 
-pub fn is_ready() -> bool {
-    LEDGER_STATE.with(|s| matches!(*s.borrow(), LedgerState::Ready))
-}
-
-pub fn panic_if_not_ready() {
-    if !is_ready() {
-        ic_cdk::trap("The Ledger is not ready");
-    }
-}
-
-pub fn ledger_state() -> LedgerState {
-    LEDGER_STATE.with(|s| *s.borrow())
-}
-
-pub fn set_ledger_state(ledger_state: LedgerState) {
-    LEDGER_STATE.with(|s| *s.borrow_mut() = ledger_state);
-}
-
-pub fn clear_stable_allowance_data() {
-    ALLOWANCES_MEMORY.with_borrow_mut(|allowances| {
-        allowances.clear_new();
-    });
-    ALLOWANCES_EXPIRATIONS_MEMORY.with_borrow_mut(|expirations| {
-        expirations.clear_new();
-    });
-}
-
-pub fn clear_stable_balances_data() {
-    BALANCES_MEMORY.with_borrow_mut(|balances| {
-        balances.clear_new();
-    });
-}
-
-pub fn clear_stable_blocks_data() {
-    BLOCKS_MEMORY.with_borrow_mut(|blocks| {
-        blocks.clear_new();
-    });
-}
-
 pub fn balances_len() -> u64 {
     BALANCES_MEMORY.with_borrow(|balances| balances.len())
+}
+
+pub fn get_allowances_list(
+    from: AccountIdentifier,
+    spender: Option<AccountIdentifier>,
+    max_results: u64,
+    now: u64,
+) -> Allowances {
+    let mut result = vec![];
+    let start_spender = spender.unwrap_or(AccountIdentifier { hash: [0u8; 28] });
+    ALLOWANCES_MEMORY.with_borrow(|allowances| {
+        for ((from_account_id, to_spender_id), storable_allowance) in
+            allowances.range((from, start_spender)..)
+        {
+            if spender.is_some() && start_spender == to_spender_id {
+                continue;
+            }
+            if result.len() >= max_results as usize || from_account_id != from {
+                break;
+            }
+            if let Some(expires_at) = storable_allowance.expires_at
+                && expires_at.as_nanos_since_unix_epoch() <= now
+            {
+                continue;
+            }
+            result.push(Allowance103 {
+                from_account_id,
+                to_spender_id,
+                allowance: storable_allowance.amount,
+                expires_at: storable_allowance
+                    .expires_at
+                    .map(|t| t.as_nanos_since_unix_epoch()),
+            });
+        }
+    });
+    result
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]

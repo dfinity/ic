@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:num-traits",
     "@crate_index//:prometheus",
+    "@crate_index//:rayon",
     "@crate_index//:slog",
 ]
 

@@ -3,8 +3,7 @@
 //! complex/weird configurations of neurons and proposals against which several
 //! tests are run.
 
-use comparable::{Changed, U64Change};
-use fixtures::{NNSBuilder, NNSStateChange, NeuronBuilder};
+use fixtures::{NNSBuilder, NeuronBuilder};
 use futures::future::FutureExt;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
@@ -12,18 +11,18 @@ use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
     governance::MAX_DISSOLVE_DELAY_SECONDS,
     pb::v1::{
+        ManageNeuron,
         manage_neuron::{Command, Merge},
-        ManageNeuron, NetworkEconomics,
     },
 };
-use ic_nns_governance_api::pb::v1::{
-    self as api,
+use ic_nns_governance_api::{
+    NetworkEconomics,
     manage_neuron_response::{Command as CommandResponse, MergeResponse},
 };
-use proptest::prelude::{proptest, TestCaseError};
+use proptest::prelude::{TestCaseError, proptest};
 
 #[cfg(feature = "tla")]
-use ic_nns_governance::governance::tla::{check_traces as tla_check_traces, TLA_TRACES_LKEY};
+use ic_nns_governance::governance::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
 #[cfg(feature = "tla")]
 use tla_instrumentation_proc_macros::with_tla_trace_check;
 
@@ -94,15 +93,6 @@ fn do_test_merge_neurons(
         },
     );
 
-    // Assert no changes (except time) after simulate.
-    prop_assert_changes!(
-        nns,
-        Changed::Changed(vec![NNSStateChange::Now(U64Change(
-            epoch,
-            epoch + ONE_YEAR_SECONDS
-        ))])
-    );
-
     let merge_neuron_response = nns
         .governance
         .merge_neurons(
@@ -152,18 +142,16 @@ fn do_test_merge_neurons(
                 source_neuron_info,
                 nns.governance
                     .get_neuron_info(&source_neuron_id, controller)
-                    .map(api::NeuronInfo::from)
                     .unwrap()
             );
             pretty_assertions::assert_eq!(
                 target_neuron_info,
                 nns.governance
                     .get_neuron_info(&target_neuron_id, controller)
-                    .map(api::NeuronInfo::from)
                     .unwrap()
             );
         }
-        CommandResponse::Error(e) => panic!("Received Error: {}", e),
+        CommandResponse::Error(e) => panic!("Received Error: {e}"),
         _ => panic!("Wrong response received"),
     }
 

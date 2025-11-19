@@ -1,0 +1,36 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//rs/registry/canister:__pkg__"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/nervous_system/chunks",
+    "//rs/registry/transport",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-stable-structures",
+    "@crate_index//:prost",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:lazy_static",
+]
+
+LIB_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = ["**/*tests*/**"],
+)
+
+rust_library(
+    name = "chunkify",
+    srcs = LIB_SRCS,
+    crate_name = "ic_registry_canister_chunkify",
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "chunkify_test",
+    srcs = glob(["src/**"]),
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

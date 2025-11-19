@@ -1,31 +1,31 @@
 use crate::{
+    NNS_GOVERNANCE_CANISTER_ID, SWAP_CANISTER_ID,
     common::doubles::{LedgerExpect, MockLedger},
-    now_fn, NNS_GOVERNANCE_CANISTER_ID, SWAP_CANISTER_ID,
+    now_fn,
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
-    ledger::compute_neuron_staking_subaccount_bytes, DEFAULT_TRANSFER_FEE, E8, ONE_MONTH_SECONDS,
+    DEFAULT_TRANSFER_FEE, E8, ONE_MONTH_SECONDS, ledger::compute_neuron_staking_subaccount_bytes,
 };
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_sns_governance::pb::v1::{
-    claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
     ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, NeuronId,
+    claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
 };
 use ic_sns_swap::{
     memory,
     pb::v1::{
-        error_refund_icp_response,
-        set_mode_call_result::SetModeResult,
-        sns_neuron_recipe::{ClaimedStatus, Investor, Investor::Direct, NeuronAttributes},
         CfNeuron, CfParticipant, DirectInvestment, ErrorRefundIcpRequest, ErrorRefundIcpResponse,
         ListDirectParticipantsRequest, Participant, SetDappControllersCallResult,
         SetDappControllersResponse, SetModeCallResult, SnsNeuronRecipe, Swap, SweepResult,
-        TransferableAmount,
+        TransferableAmount, error_refund_icp_response,
+        set_mode_call_result::SetModeResult,
+        sns_neuron_recipe::{ClaimedStatus, Investor, Investor::Direct, NeuronAttributes},
     },
     swap::{
-        principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE, NEURON_BASKET_MEMO_RANGE_START,
+        CLAIM_SWAP_NEURONS_BATCH_SIZE, NEURON_BASKET_MEMO_RANGE_START, principal_to_subaccount,
     },
 };
 use icrc_ledger_types::icrc1::account::Account;
@@ -56,7 +56,7 @@ pub fn select_direct_investment_neurons<'a>(
         }
     }
     if neurons.is_empty() {
-        panic!("Cannot find principal {}", buyer_principal);
+        panic!("Cannot find principal {buyer_principal}");
     }
 
     neurons
@@ -249,15 +249,17 @@ pub fn create_generic_cf_participants(count: u64) -> Vec<CfParticipant> {
                     "hotkey_principal",
                     Some("controller"),
                 ),
-                cf_neurons: vec![CfNeuron::try_new(
-                    i,
-                    E8,
-                    vec![
-                        PrincipalId::new_user_test_id(i + 1),
-                        PrincipalId::new_user_test_id(i + 2),
-                    ],
-                )
-                .unwrap()],
+                cf_neurons: vec![
+                    CfNeuron::try_new(
+                        i,
+                        E8,
+                        vec![
+                            PrincipalId::new_user_test_id(i + 1),
+                            PrincipalId::new_user_test_id(i + 2),
+                        ],
+                    )
+                    .unwrap(),
+                ],
             }
         })
         .collect()
@@ -296,10 +298,11 @@ pub fn get_snapshot_of_buyers_index_list() -> Vec<PrincipalId> {
 }
 
 pub async fn buy_token(swap: &mut Swap, user: &PrincipalId, amount: &u64, ledger: &MockLedger) {
-    assert!(swap
-        .refresh_buyer_token_e8s(*user, None, SWAP_CANISTER_ID, ledger)
-        .await
-        .is_ok());
+    assert!(
+        swap.refresh_buyer_token_e8s(*user, None, SWAP_CANISTER_ID, ledger)
+            .await
+            .is_ok()
+    );
     assert_eq!(
         swap.buyers
             .get(&user.clone().to_string())

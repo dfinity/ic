@@ -3,20 +3,22 @@
 use super::hash::domain_separator::DomainSeparator;
 use crate::canister_http::CanisterHttpResponseMetadata;
 use crate::consensus::{
+    BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent,
     certification::CertificationContent,
     dkg::DealingContent,
     idkg::{IDkgComplaintContent, IDkgOpeningContent},
-    BlockMetadata, CatchUpContent, CatchUpContentProtobufBytes, FinalizationContent,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
+use crate::crypto::SignedBytesWithoutDomainSeparator;
 use crate::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
 use crate::crypto::vetkd::VetKdEncryptedKeyShareContent;
-use crate::crypto::SignedBytesWithoutDomainSeparator;
 use crate::messages::{Delegation, MessageId, QueryResponseHash, WebAuthnEnvelope};
 use std::convert::TryFrom;
 
-const SIG_DOMAIN_IC_REQUEST_AUTH_DELEGATION: &str = "ic-request-auth-delegation";
-const SIG_DOMAIN_IC_REQUEST: &str = "ic-request";
+/// The domain separator to be used when calculating the sender signature for a
+/// request to the Internet Computer according to the
+/// [interface specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
+pub const DOMAIN_IC_REQUEST: &[u8; 11] = b"\x0Aic-request";
 
 /// `Signable` represents an object whose byte-vector representation
 /// can be signed using a digital signature scheme.
@@ -143,13 +145,13 @@ impl SignatureDomain for WebAuthnEnvelope {
 
 impl SignatureDomain for Delegation {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(SIG_DOMAIN_IC_REQUEST_AUTH_DELEGATION)
+        domain_with_prepended_length(DomainSeparator::IcRequestAuthDelegation.as_str())
     }
 }
 
 impl SignatureDomain for MessageId {
     fn domain(&self) -> Vec<u8> {
-        domain_with_prepended_length(SIG_DOMAIN_IC_REQUEST)
+        domain_with_prepended_length(DomainSeparator::IcRequest.as_str())
     }
 }
 

@@ -1,46 +1,46 @@
-use crate::{
-    routing, scheduling,
-    state_machine::{StateMachine, StateMachineImpl},
-};
-use ic_config::embedders::BestEffortResponsesFeature;
+use crate::state_machine::{StateMachine, StateMachineImpl};
+use crate::{routing, scheduling};
 use ic_config::execution_environment::{BitcoinConfig, Config as HypervisorConfig};
 use ic_config::message_routing::{MAX_STREAM_MESSAGES, TARGET_STREAM_SIZE_BYTES};
 use ic_cycles_account_manager::CyclesAccountManager;
-use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKeySettings};
-use ic_interfaces::{
-    execution_environment::{IngressHistoryWriter, RegistryExecutionSettings, Scheduler},
-    messaging::{MessageRouting, MessageRoutingError},
+use ic_interfaces::execution_environment::{
+    IngressHistoryWriter, RegistryExecutionSettings, Scheduler,
 };
+use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
+use ic_interfaces::{crypto::ErrorReproducibility, execution_environment::ChainKeySettings};
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{CertificationScope, StateManager, StateManagerError};
+use ic_interfaces_state_manager::{CertificationScope, StateManager};
 use ic_limits::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_logger::{debug, fatal, info, warn, ReplicaLogger};
-use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
+use ic_logger::{ReplicaLogger, debug, fatal, info, warn};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_metrics::buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
+use ic_protobuf::registry::subnet::v1::CanisterCyclesCostSchedule as CanisterCyclesCostScheduleProto;
 use ic_query_stats::QueryStatsAggregatorMetrics;
-use ic_registry_client_helpers::{
-    api_boundary_node::ApiBoundaryNodeRegistry,
-    chain_keys::ChainKeysRegistry,
-    crypto::CryptoRegistry,
-    node::NodeRegistry,
-    provisional_whitelist::ProvisionalWhitelistRegistry,
-    routing_table::RoutingTableRegistry,
-    subnet::{get_node_ids_from_subnet_record, SubnetListRegistry, SubnetRegistry},
+use ic_registry_client_helpers::api_boundary_node::ApiBoundaryNodeRegistry;
+use ic_registry_client_helpers::chain_keys::ChainKeysRegistry;
+use ic_registry_client_helpers::crypto::CryptoRegistry;
+use ic_registry_client_helpers::node::NodeRegistry;
+use ic_registry_client_helpers::provisional_whitelist::ProvisionalWhitelistRegistry;
+use ic_registry_client_helpers::routing_table::RoutingTableRegistry;
+use ic_registry_client_helpers::subnet::{
+    SubnetListRegistry, SubnetRegistry, get_node_ids_from_subnet_record,
 };
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::{ChainKeyConfig, SubnetFeatures};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::metadata_state::ApiBoundaryNodeEntry;
 use ic_replicated_state::{
-    metadata_state::ApiBoundaryNodeEntry, NetworkTopology, ReplicatedState, SubnetTopology,
+    DroppedMessageMetrics, NetworkTopology, ReplicatedState, SubnetTopology,
 };
+use ic_types::batch::{Batch, BatchSummary, CanisterCyclesCostSchedule};
+use ic_types::crypto::{KeyPurpose, threshold_sig::ThresholdSigPublicKey};
+use ic_types::malicious_flags::MaliciousFlags;
+use ic_types::registry::RegistryClientError;
+use ic_types::state_manager::StateManagerError;
+use ic_types::xnet::{StreamHeader, StreamIndex};
 use ic_types::{
-    batch::{Batch, BatchSummary},
-    crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
-    malicious_flags::MaliciousFlags,
-    registry::RegistryClientError,
-    xnet::{StreamHeader, StreamIndex},
     Height, NodeId, NumBytes, PrincipalIdBlobParseError, RegistryVersion, SubnetId, Time,
 };
 use ic_utils_thread::JoinOnDrop;
@@ -53,7 +53,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::convert::{AsRef, TryFrom};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::ops::Range;
-use std::sync::mpsc::{sync_channel, TrySendError};
+use std::sync::mpsc::{TrySendError, sync_channel};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread::sleep;
 use std::time::Instant;
@@ -81,6 +81,14 @@ const STATUS_SUCCESS: &str = "success";
 
 const PHASE_LOAD_STATE: &str = "load_state";
 const PHASE_COMMIT: &str = "commit";
+
+/// Label for message kind: "request" or "response".
+pub(crate) const LABEL_KIND: &str = "kind";
+/// Label for message context" "inbound" (in an input queue) or "outbound" (in
+/// an output queue).
+pub(crate) const LABEL_CONTEXT: &str = "context";
+/// Label for message class: "guaranteed response" or "best-effort".
+pub(crate) const LABEL_CLASS: &str = "class";
 
 const METRIC_RECEIVE_BATCH_LATENCY: &str = "mr_receive_batch_latency_seconds";
 const METRIC_INDUCT_BATCH_LATENCY: &str = "mr_induct_batch_latency_seconds";
@@ -290,13 +298,13 @@ pub(crate) struct MessageRoutingMetrics {
     /// Batch processing phase durations, by phase.
     pub(crate) process_batch_phase_duration: HistogramVec,
     /// Number of timed out messages.
-    pub(crate) timed_out_messages_total: IntCounter,
+    pub(crate) timed_out_messages_total: IntCounterVec,
     /// Number of timed out callbacks.
     pub(crate) timed_out_callbacks_total: IntCounter,
     /// Number of shed best-effort messages.
-    pub(crate) shed_messages_total: IntCounter,
+    pub(crate) shed_messages_total: IntCounterVec,
     /// Byte size of shed best-effort messages.
-    pub(crate) shed_message_bytes_total: IntCounter,
+    pub(crate) shed_message_bytes_total: IntCounterVec,
     /// Height at which the subnet last split (if during the lifetime of this
     /// replica process; otherwise zero).
     pub(crate) subnet_split_height: IntGaugeVec,
@@ -406,21 +414,24 @@ impl MessageRoutingMetrics {
                 "Most recently observed remote subnet certified heights.",
                 &[LABEL_REMOTE],
             ),
-            timed_out_messages_total: metrics_registry.int_counter(
+            timed_out_messages_total: metrics_registry.int_counter_vec(
                 METRIC_TIMED_OUT_MESSAGES_TOTAL,
-                "Count of timed out messages.",
+                "Count of timed out messages, by kind, context and class.",
+                &[LABEL_KIND, LABEL_CONTEXT, LABEL_CLASS],
             ),
             timed_out_callbacks_total: metrics_registry.int_counter(
                 METRIC_TIMED_OUT_CALLBACKS_TOTAL,
                 "Count of expired best-effort callbacks.",
             ),
-            shed_messages_total: metrics_registry.int_counter(
+            shed_messages_total: metrics_registry.int_counter_vec(
                 METRIC_SHED_MESSAGES_TOTAL,
-                "Count of shed messages.",
+                "Count of shed best-effort messages, by kind and context.",
+                &[LABEL_KIND, LABEL_CONTEXT],
             ),
-            shed_message_bytes_total: metrics_registry.int_counter(
+            shed_message_bytes_total: metrics_registry.int_counter_vec(
                 METRIC_SHED_MESSAGE_BYTES_TOTAL,
-                "Total byte size of shed messages.",
+                "Total byte size of shed best-effort messages, by kind and context.",
+                &[LABEL_KIND, LABEL_CONTEXT],
             ),
             subnet_split_height: metrics_registry.int_gauge_vec(
                 METRIC_SUBNET_SPLIT_HEIGHT,
@@ -534,6 +545,23 @@ impl MessageRoutingMetrics {
     }
 }
 
+impl DroppedMessageMetrics for MessageRoutingMetrics {
+    fn observe_timed_out_message(&self, kind: &str, context: &str, class: &str) {
+        self.timed_out_messages_total
+            .with_label_values(&[kind, context, class])
+            .inc();
+    }
+
+    fn observe_shed_message(&self, kind: &str, context: &str, size_bytes: usize) {
+        self.shed_messages_total
+            .with_label_values(&[kind, context])
+            .inc();
+        self.shed_message_bytes_total
+            .with_label_values(&[kind, context])
+            .inc_by(size_bytes as u64);
+    }
+}
+
 /// Implementation of the `MessageRouting` trait.
 pub struct MessageRoutingImpl {
     last_seen_batch: RwLock<Height>,
@@ -589,11 +617,8 @@ fn registry_error(
     err: RegistryClientError,
 ) -> ReadRegistryError {
     let errmsg = match subnet_id {
-        Some(subnet_id) => format!(
-            "'{} [for subnet {}]', RegistryClientError: {}",
-            what, subnet_id, err
-        ),
-        None => format!("'{}', RegistryClientError: {}", what, err),
+        Some(subnet_id) => format!("'{what} [for subnet {subnet_id}]', RegistryClientError: {err}"),
+        None => format!("'{what}', RegistryClientError: {err}"),
     };
     if err.is_reproducible() {
         ReadRegistryError::Persistent(errmsg)
@@ -606,8 +631,8 @@ fn registry_error(
 /// absent. This error is always considered persistent.
 fn not_found_error(what: &str, subnet_id: Option<SubnetId>) -> ReadRegistryError {
     let errmsg = match subnet_id {
-        Some(subnet_id) => format!("'{} for subnet {}' not found", what, subnet_id),
-        None => format!("'{}' not found", what),
+        Some(subnet_id) => format!("'{what} for subnet {subnet_id}' not found"),
+        None => format!("'{what}' not found"),
     };
     ReadRegistryError::Persistent(errmsg)
 }
@@ -652,7 +677,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             ingress_history_writer,
             cycles_account_manager,
             metrics_registry,
-            subnet_id,
             log.clone(),
         ));
         let demux = Box::new(routing::demux::DemuxImpl::new(
@@ -669,11 +693,6 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             metrics_registry,
             &metrics,
             time_in_stream_metrics,
-            hypervisor_config
-                .embedders_config
-                .feature_flags
-                .best_effort_responses
-                .clone(),
             log.clone(),
         ));
         let state_machine = Box::new(StateMachineImpl::new(
@@ -826,14 +845,13 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let nodes = get_node_ids_from_subnet_record(&subnet_record)
             .map_err(|err| {
                 ReadRegistryError::Persistent(format!(
-                    "'nodes from subnet record for subnet {}', err: {}",
-                    own_subnet_id, err
+                    "'nodes from subnet record for subnet {own_subnet_id}', err: {err}"
                 ))
             })?
             .into_iter()
             .collect::<BTreeSet<_>>();
 
-        let node_public_keys = self.try_to_populate_node_public_keys(nodes, registry_version)?;
+        let node_public_keys = self.try_to_populate_node_public_keys(&nodes, registry_version)?;
 
         let subnet_features = subnet_record.features.unwrap_or_default().into();
         let max_number_of_canisters = subnet_record.max_number_of_canisters;
@@ -841,8 +859,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
         let chain_key_settings = if let Some(chain_key_config) = subnet_record.chain_key_config {
             let chain_key_config = ChainKeyConfig::try_from(chain_key_config).map_err(|err| {
                 ReadRegistryError::Persistent(format!(
-                    "'failed to read chain key config', err: {:?}",
-                    err
+                    "'failed to read chain key config', err: {err:?}"
                 ))
             })?;
 
@@ -879,6 +896,10 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .collect::<BTreeSet<_>>()
                 .len()
         };
+        let canister_cycles_cost_schedule = CanisterCyclesCostSchedule::from(
+            CanisterCyclesCostScheduleProto::try_from(subnet_record.canister_cycles_cost_schedule)
+                .unwrap_or(CanisterCyclesCostScheduleProto::Normal),
+        );
 
         let own_subnet_type: SubnetType = subnet_record.subnet_type.try_into().unwrap_or_default();
         self.metrics
@@ -922,6 +943,9 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 provisional_whitelist,
                 chain_key_settings,
                 subnet_size,
+                node_ids: nodes,
+                registry_version,
+                canister_cycles_cost_schedule,
             },
             node_public_keys,
             api_boundary_nodes,
@@ -1019,7 +1043,17 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 })
                 .transpose()?
                 .unwrap_or_default();
-
+            let cost_schedule = CanisterCyclesCostSchedule::from(
+                CanisterCyclesCostScheduleProto::try_from(
+                    subnet_record.canister_cycles_cost_schedule,
+                )
+                .map_err(|err| {
+                    Persistent(format!(
+                        "'CanisterCyclesCostSchedule type from subnet record for subnet {}', err: {}",
+                        *subnet_id, err
+                    ))
+                })?,
+            );
             subnets.insert(
                 *subnet_id,
                 SubnetTopology {
@@ -1028,6 +1062,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     subnet_type,
                     subnet_features,
                     chain_keys_held,
+                    cost_schedule,
                 },
             );
         }
@@ -1051,7 +1086,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
 
         let chain_key_enabled_subnets = self
             .registry
-            .get_chain_key_signing_subnets(registry_version)
+            .get_chain_key_enabled_subnets(registry_version)
             .map_err(|err| registry_error("chain key signing subnets", None, err))?
             .unwrap_or_default();
 
@@ -1071,16 +1106,16 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
     /// This method skips missing or invalid node keys so that the `read_registry` method does not stall the subnet.
     fn try_to_populate_node_public_keys(
         &self,
-        nodes: BTreeSet<NodeId>,
+        nodes: &BTreeSet<NodeId>,
         registry_version: RegistryVersion,
     ) -> Result<NodePublicKeys, ReadRegistryError> {
         let mut node_public_keys: NodePublicKeys = BTreeMap::new();
         for node_id in nodes {
             let optional_public_key_proto = self
                 .registry
-                .get_crypto_key_for_node(node_id, KeyPurpose::NodeSigning, registry_version)
+                .get_crypto_key_for_node(*node_id, KeyPurpose::NodeSigning, registry_version)
                 .map_err(|err| {
-                    registry_error(&format!("public key of node {}", node_id), None, err)
+                    registry_error(&format!("public key of node {node_id}"), None, err)
                 })?;
 
             // If the public key is missing, we continue without stalling the subnet.
@@ -1089,7 +1124,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                     // If the public key protobuf is invalid, we continue without stalling the subnet.
                     match ic_ed25519::PublicKey::convert_raw_to_der(&public_key_proto.key_value) {
                         Ok(pk_der) => {
-                            node_public_keys.insert(node_id, pk_der);
+                            node_public_keys.insert(*node_id, pk_der);
                         }
                         Err(err) => {
                             self.metrics
@@ -1150,29 +1185,26 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
                 .registry
                 .get_node_record(api_bn_id, registry_version)
                 .map_err(|err| {
-                    registry_error(&format!("NodeRecord for node_id {}", api_bn_id), None, err)
+                    registry_error(&format!("NodeRecord for node_id {api_bn_id}"), None, err)
                 })?;
 
             let Some(node_record) = node_record else {
                 raise_critical_error_for_api_boundary_nodes(&format!(
-                    "NodeRecord for node_id {} is missing in registry.",
-                    api_bn_id,
+                    "NodeRecord for node_id {api_bn_id} is missing in registry.",
                 ));
                 continue;
             };
 
             let Some(domain) = node_record.domain else {
                 raise_critical_error_for_api_boundary_nodes(&format!(
-                    "domain field in NodeRecord for node_id {} is None.",
-                    api_bn_id,
+                    "domain field in NodeRecord for node_id {api_bn_id} is None.",
                 ));
                 continue;
             };
 
             let Some(http) = node_record.http else {
                 raise_critical_error_for_api_boundary_nodes(&format!(
-                    "http field in NodeRecord for node_id {} is None.",
-                    api_bn_id,
+                    "http field in NodeRecord for node_id {api_bn_id} is None.",
                 ));
                 continue;
             };
@@ -1189,13 +1221,13 @@ impl<RegistryClient_: RegistryClient> BatchProcessorImpl<RegistryClient_> {
             let ipv4_address = node_record
                 .public_ipv4_config
                 .map(|ipv4_config| ipv4_config.ip_addr);
-            if let Some(ref ipv4) = ipv4_address {
-                if ipv4.parse::<Ipv4Addr>().is_err() {
-                    raise_critical_error_for_api_boundary_nodes(&format!(
-                        "failed to parse ipv4 address of node {api_bn_id}",
-                    ));
-                    continue;
-                }
+            if let Some(ref ipv4) = ipv4_address
+                && ipv4.parse::<Ipv4Addr>().is_err()
+            {
+                raise_critical_error_for_api_boundary_nodes(&format!(
+                    "failed to parse ipv4 address of node {api_bn_id}",
+                ));
+                continue;
             }
 
             api_boundary_nodes.insert(
@@ -1533,7 +1565,6 @@ impl MessageRoutingImpl {
             Arc::new(Mutex::new(LatencyMetrics::new_time_in_stream(
                 metrics_registry,
             ))),
-            BestEffortResponsesFeature::Enabled,
             log.clone(),
         ));
 

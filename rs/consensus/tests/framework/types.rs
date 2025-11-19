@@ -4,7 +4,9 @@ use ic_artifact_pool::{
     consensus_pool::ConsensusPoolImpl, dkg_pool, idkg_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::consensus::{ConsensusBouncer, ConsensusImpl};
+use ic_consensus::consensus::{
+    ConsensusBouncer, ConsensusImpl, MAX_CONSENSUS_THREADS, build_thread_pool,
+};
 use ic_consensus_idkg::IDkgImpl;
 use ic_https_outcalls_consensus::test_utils::FakeCanisterHttpPayloadBuilder;
 use ic_interfaces::{
@@ -21,7 +23,7 @@ use ic_interfaces::{
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
-use ic_logger::{replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, replica_logger::no_op_logger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
@@ -30,18 +32,19 @@ use ic_test_utilities::{
     self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state_manager::FakeStateManager, xnet_payload_builder::FakeXNetPayloadBuilder,
 };
-use ic_test_utilities_consensus::{batch::MockBatchPayloadBuilder, IDkgStatsNoOp};
+use ic_test_utilities_consensus::{IDkgStatsNoOp, batch::MockBatchPayloadBuilder};
 use ic_types::{
+    NodeId, SubnetId,
     artifact::IdentifiableArtifact,
     consensus::{
-        certification::CertificationMessage, dkg::Message as DkgMessage, idkg::IDkgMessage,
-        CatchUpPackage, ConsensusMessage,
+        CatchUpPackage, ConsensusMessage, certification::CertificationMessage,
+        dkg::Message as DkgMessage, idkg::IDkgMessage,
     },
     replica_config::ReplicaConfig,
     time::{Time, UNIX_EPOCH},
-    NodeId, SubnetId,
 };
 use rand_chacha::ChaChaRng;
+use rayon::ThreadPool;
 use std::{
     cell::{RefCell, RefMut},
     cmp::Ordering,
@@ -68,6 +71,7 @@ pub const PRIORITY_FN_REFRESH_INTERVAL: Duration = Duration::from_secs(3);
 /// delivered to peers, or to a timer expired event that should trigger
 /// consensus on_state_change.
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Input {
     Message(Message),
     TimerExpired(Time),
@@ -108,6 +112,7 @@ impl Eq for Input {}
 pub type Output = Message;
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum InputMessage {
     Consensus(ConsensusMessage),
     Dkg(Box<DkgMessage>),
@@ -177,6 +182,7 @@ pub struct ConsensusDependencies {
     pub canister_http_pool: Arc<RwLock<canister_http_pool::CanisterHttpPoolImpl>>,
     pub message_routing: Arc<FakeMessageRouting>,
     pub state_manager: Arc<FakeStateManager>,
+    pub thread_pool: Arc<ThreadPool>,
     pub replica_config: ReplicaConfig,
     pub metrics_registry: MetricsRegistry,
     pub registry_client: Arc<dyn RegistryClient>,
@@ -231,6 +237,7 @@ impl ConsensusDependencies {
             query_stats_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             vetkd_payload_builder: Arc::new(MockBatchPayloadBuilder::new().expect_noop()),
             state_manager,
+            thread_pool: build_thread_pool(MAX_CONSENSUS_THREADS),
             metrics_registry,
             replica_config,
         }
@@ -425,7 +432,7 @@ impl fmt::Display for ConsensusRunnerConfig {
 
 /// Return a strategy's name using their derived Debug formatting.
 pub(crate) fn get_name<T: fmt::Debug>(value: T) -> String {
-    format!("{:?}", value)
+    format!("{value:?}")
         .split_whitespace()
         .collect::<Vec<_>>()
         .remove(0)

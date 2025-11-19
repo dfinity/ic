@@ -16,8 +16,8 @@ jobs:
         with:
           # The app used for this is actually PR_AUTOMATION_BOT_PRIVATE, but because the env
           # vars need to be the same across both repos, we use the same names as the public one
-          app-id: ${{ vars.PR_AUTOMATION_BOT_PUBLIC_APP_ID }}
-          private-key: ${{ secrets.PR_AUTOMATION_BOT_PUBLIC_PRIVATE_KEY }}
+          app-id: ${{ vars.PR_CREATION_BOT_APP_ID }}
+          private-key: ${{ secrets.PR_CREATION_BOT_PRIVATE_KEY }}
       - name: Checkout
         uses: actions/checkout@v4
         with:

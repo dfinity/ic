@@ -3,7 +3,7 @@ use clap::Parser;
 
 use std::fs::File;
 use std::io::{self, BufRead};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use ic_metrics_tool::{Metric, MetricsWriter};
 
@@ -22,7 +22,7 @@ struct MetricToolArgs {
     )]
     /// Filename to write the prometheus metrics for node_exporter generation.
     /// Fails badly if the directory doesn't exist.
-    metrics_filename: String,
+    metrics_filename: PathBuf,
 }
 
 fn get_sum_tlb_shootdowns() -> Result<u64> {
@@ -48,15 +48,14 @@ fn get_sum_tlb_shootdowns() -> Result<u64> {
 
 pub fn main() -> Result<()> {
     let opts = MetricToolArgs::parse();
-    let mpath = Path::new(&opts.metrics_filename);
     let tlb_shootdowns = get_sum_tlb_shootdowns()?;
 
     let metrics = vec![
         Metric::new(TLB_SHOOTDOWN_METRIC_NAME, tlb_shootdowns as f64)
             .add_annotation(TLB_SHOOTDOWN_METRIC_ANNOTATION),
     ];
-    let writer = MetricsWriter::new(mpath.to_str().unwrap());
-    writer.write_metrics(&metrics).unwrap();
+    let writer = MetricsWriter::new(opts.metrics_filename);
+    writer.write_metrics(&metrics)?;
 
     Ok(())
 }

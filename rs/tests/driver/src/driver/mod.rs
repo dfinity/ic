@@ -1,7 +1,6 @@
 pub mod action_graph;
 pub mod asset_canister;
 pub mod bootstrap;
-pub mod boundary_node;
 pub mod config;
 pub mod constants;
 pub mod context;
@@ -11,6 +10,9 @@ pub mod event;
 pub mod farm;
 pub mod group;
 pub mod ic;
+pub mod ic_gateway_vm;
+// Re-exported through test_env_api
+mod ic_images;
 pub mod log_events;
 pub mod logger;
 pub mod nested;
@@ -32,3 +34,4 @@ pub mod test_env_api;
 pub mod test_setup;
 pub mod timeout;
 pub mod universal_vm;
+pub mod vector_vm;

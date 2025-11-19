@@ -1,6 +1,6 @@
 use candid::Deserialize;
 use ic_canister_log::{declare_log_buffer, export as export_logs};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use std::str::FromStr;
 
 // High-priority messages.
@@ -37,7 +37,7 @@ pub fn export_logs_as_http_response(request: HttpRequest) -> HttpResponse {
             Err(_) => {
                 return HttpResponseBuilder::bad_request()
                     .with_body_and_content_length("failed to parse the 'time' parameter")
-                    .build()
+                    .build();
             }
         },
         None => 0,

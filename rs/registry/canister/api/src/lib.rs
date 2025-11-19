@@ -4,6 +4,8 @@ use serde::Serialize;
 use std::{collections::HashSet, fmt, net::Ipv4Addr, str::FromStr};
 use thiserror::Error;
 
+pub mod mutate_test_high_capacity_records;
+
 #[derive(Debug, Error)]
 pub enum IPv4ConfigError {
     #[error("Invalid IPv4 address")]
@@ -63,7 +65,7 @@ fn are_in_the_same_subnet(ipv4_addresses: Vec<String>, prefix_length: u32) -> bo
 // Helper function to extract the IPv4 subnet bytes of the given IP address
 fn extract_subnet_bytes(ipv4_address: &str, subnet_mask: Ipv4Addr) -> Vec<u8> {
     Ipv4Addr::from_str(ipv4_address)
-        .unwrap_or_else(|_| panic!("Failed to parse IP address: {}", ipv4_address))
+        .unwrap_or_else(|_| panic!("Failed to parse IP address: {ipv4_address}"))
         .octets()
         .iter()
         .zip(subnet_mask.octets().iter())
@@ -158,6 +160,11 @@ impl fmt::Display for IPv4Config {
             self.ip_addr, self.prefix_length, self.gateway_ip_addr
         )
     }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug, Default, CandidType, Deserialize)]
+pub struct GetNodeProvidersMonthlyXdrRewardsRequest {
+    pub registry_version: Option<u64>,
 }
 
 /// The payload of an update request to add a new node.

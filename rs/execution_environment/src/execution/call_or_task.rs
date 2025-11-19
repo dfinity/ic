@@ -20,11 +20,10 @@ use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, WasmExecutionOutput,
 };
-use ic_logger::{info, ReplicaLogger};
-use ic_management_canister_types_private::IC_00;
+use ic_logger::{ReplicaLogger, info};
 use ic_replicated_state::{
-    canister_state::execution_state::WasmExecutionMode, num_bytes_try_from, CallContextAction,
-    CallOrigin, CanisterState,
+    CallContextAction, CallOrigin, CanisterState,
+    canister_state::execution_state::WasmExecutionMode, num_bytes_try_from,
 };
 use ic_types::messages::{
     CallContextId, CanisterCall, CanisterCallOrTask, CanisterMessage, CanisterMessageOrTask,
@@ -80,6 +79,7 @@ pub fn execute_call_or_task(
                         execution_parameters.compute_allocation,
                         execution_parameters.instruction_limits.message(),
                         subnet_size,
+                        round.cost_schedule,
                         reveal_top_up,
                         wasm_execution_mode,
                     ) {
@@ -87,7 +87,7 @@ pub fn execute_call_or_task(
                     Err(err) => {
                         if call_or_task == CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) {
                             //`OnLowWasmMemoryHook` is taken from task_queue (i.e. `OnLowWasmMemoryHookStatus` is `Executed`),
-                            // but its was not executed due to the freezing of the canister. To ensure that the hook is executed
+                            // but it was not executed due to the freezing of the canister. To ensure that the hook is executed
                             // when the canister is unfrozen we need to set `OnLowWasmMemoryHookStatus` to `Ready`. Because of
                             // the way `OnLowWasmMemoryHookStatus::update` is implemented we first need to remove it from the
                             // task_queue (which calls `OnLowWasmMemoryHookStatus::update(false)`) followed with `enqueue`
@@ -123,6 +123,7 @@ pub fn execute_call_or_task(
         clean_canister.message_memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
+        round.cost_schedule,
         clean_canister.system_state.reserved_balance(),
     );
 
@@ -159,7 +160,7 @@ pub fn execute_call_or_task(
                 err,
                 original,
                 round,
-            )
+            );
         }
     };
 
@@ -178,19 +179,16 @@ pub fn execute_call_or_task(
             helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::Heartbeat) => ApiType::system_task(
-            IC_00.get(),
             SystemMethod::CanisterHeartbeat,
             time,
             helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::GlobalTimer) => ApiType::system_task(
-            IC_00.get(),
             SystemMethod::CanisterGlobalTimer,
             time,
             helper.call_context_id(),
         ),
         CanisterCallOrTask::Task(CanisterTask::OnLowWasmMemory) => ApiType::system_task(
-            IC_00.get(),
             SystemMethod::CanisterOnLowWasmMemory,
             time,
             helper.call_context_id(),
@@ -210,6 +208,7 @@ pub fn execute_call_or_task(
         original.request_metadata.clone(),
         round_limits,
         round.network_topology,
+        round.cost_schedule,
     );
     match result {
         WasmExecutionResult::Paused(slice, paused_wasm_execution) => {
@@ -294,6 +293,7 @@ fn finish_err(
         original.prepaid_execution_cycles,
         round.counters.execution_refund_error,
         original.subnet_size,
+        round.cost_schedule,
         wasm_execution_mode,
         round.log,
     );
@@ -498,11 +498,31 @@ impl CallOrTaskHelper {
         let requested = canister_state_changes
             .system_state_modifications
             .removed_cycles();
+        let new_memory_usage = output
+            .new_memory_usage
+            .unwrap_or_else(|| clean_canister.memory_usage());
+        let new_message_memory_usage = output
+            .new_message_memory_usage
+            .unwrap_or_else(|| clean_canister.message_memory_usage());
+        let new_reserved_balance = clean_canister.system_state.reserved_balance()
+            + canister_state_changes
+                .system_state_modifications
+                .reserved_cycles();
+        let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
+            clean_canister.system_state.freeze_threshold,
+            clean_canister.system_state.memory_allocation,
+            new_memory_usage,
+            new_message_memory_usage,
+            clean_canister.compute_allocation(),
+            original.subnet_size,
+            round.cost_schedule,
+            new_reserved_balance,
+        );
         let reveal_top_up = self
             .canister
             .controllers()
             .contains(&original.call_origin.get_principal());
-        if old_balance < requested + original.freezing_threshold {
+        if old_balance < requested + freezing_threshold {
             let err = CanisterOutOfCyclesError {
                 canister_id: self.canister.canister_id(),
                 available: old_balance,
@@ -529,6 +549,7 @@ impl CallOrTaskHelper {
             );
         }
 
+        let is_composite_query = matches!(original.method, WasmMethod::CompositeQuery(_));
         let heap_delta = match original.call_or_task {
             // Update methods and tasks can persist changes to the canister's state.
             CanisterCallOrTask::Update(_) | CanisterCallOrTask::Task(_) => {
@@ -545,6 +566,7 @@ impl CallOrTaskHelper {
                     round.counters.state_changes_error,
                     call_tree_metrics,
                     original.time,
+                    is_composite_query,
                     &|system_state| self.deallocation_sender.send(Box::new(system_state)),
                 );
 
@@ -563,6 +585,7 @@ impl CallOrTaskHelper {
                         &mut self.canister.system_state,
                         round.network_topology,
                         round.hypervisor.subnet_id(),
+                        is_composite_query,
                         round.log,
                     )
                 {
@@ -645,6 +668,7 @@ impl CallOrTaskHelper {
             original.prepaid_execution_cycles,
             round.counters.execution_refund_error,
             original.subnet_size,
+            round.cost_schedule,
             wasm_execution_mode,
             round.log,
         );

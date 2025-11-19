@@ -21,10 +21,9 @@ path = "src/lib.rs"
 build-info = { workspace = true }
 candid = { workspace = true }
 ic-base-types = { path = "../../../../types/base_types" }
-ic-canisters-http-types = { path = "../../../../rust_canisters/http_types" }
 ic-cdk = { workspace = true }
-ic-cdk-macros = { workspace = true }
 ic-crypto-sha2 = { path = "../../../../crypto/sha2" }
+ic-http-types = { path = "../../../../../packages/ic-http-types" }
 ic-management-canister-types-private = { path = "../../../../types/management_canister_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-clients = { path = "../../../../nervous_system/clients" }
@@ -44,6 +43,7 @@ lazy_static = { workspace = true }
 maplit = "1.0.2"
 on_wire = { path = "../../../../rust_canisters/on_wire" }
 prost = { workspace = true }
+registry-canister = { path = "../../../../registry/canister" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 
@@ -58,7 +58,6 @@ ic-test-utilities = { path = "../../../../test_utilities" }
 ic-test-utilities-compare-dirs = { path = "../../../../test_utilities/compare_dirs" }
 ic-types = { path = "../../../../types/types" }
 on_wire = { path = "../../../../rust_canisters/on_wire" }
-registry-canister = { path = "../../../../registry/canister" }
 tempfile = { workspace = true }
 
 [build-dependencies]

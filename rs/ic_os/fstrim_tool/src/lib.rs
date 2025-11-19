@@ -1,4 +1,4 @@
-use anyhow::{format_err, Context, Result};
+use anyhow::{Context, Result, format_err};
 use ic_sys::fs::write_string_using_tmp_file;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
@@ -47,7 +47,7 @@ fn parse_existing_metrics_from_file(metrics_filename: &str) -> Result<Option<FsT
                 Ok(None)
             } else {
                 Err(format_err!("failed to open {}: {}", metrics_filename, e))
-            }
+            };
         }
     };
     let reader = BufReader::new(file);
@@ -69,7 +69,7 @@ fn update_metrics(
 ) -> Result<()> {
     let mut metrics = parse_existing_metrics_from_file(metrics_filename)
         .unwrap_or_else(|e| {
-            eprintln!("error parsing existing metrics: {}", e);
+            eprintln!("error parsing existing metrics: {e}");
             Some(FsTrimMetrics::default())
         })
         .unwrap_or_else(|| {
@@ -89,7 +89,7 @@ fn update_metrics(
 fn write_initialized_metrics_if_not_exist(metrics_filename: &str) -> Result<()> {
     let metrics = parse_existing_metrics_from_file(metrics_filename)
         .unwrap_or_else(|e| {
-            eprintln!("error parsing existing metrics: {}", e);
+            eprintln!("error parsing existing metrics: {e}");
             Some(FsTrimMetrics::default())
         })
         .unwrap_or_default();

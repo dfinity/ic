@@ -4,6 +4,9 @@ use crate::canister_http::{
     CanisterHttpResponse, CanisterHttpResponseMetadata, CanisterHttpResponseShare,
 };
 use crate::consensus::{
+    Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
+    CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
+    NotarizationContent, RandomBeaconContent, RandomTapeContent,
     certification::{
         Certification, CertificationContent, CertificationMessage, CertificationShare,
     },
@@ -12,9 +15,6 @@ use crate::consensus::{
         EcdsaSigShare, IDkgComplaintContent, IDkgMessage, IDkgOpeningContent, SchnorrSigShare,
         VetKdKeyShare,
     },
-    Block, BlockMetadata, BlockPayload, CatchUpContent, CatchUpContentProtobufBytes,
-    CatchUpShareContent, ConsensusMessage, EquivocationProof, FinalizationContent, HashedBlock,
-    NotarizationContent, RandomBeaconContent, RandomTapeContent,
 };
 use crate::crypto::canister_threshold_sig::idkg::{
     IDkgDealing, IDkgDealingSupport, IDkgTranscript, SignedIDkgDealing,
@@ -33,11 +33,6 @@ use domain_separator::DomainSeparator;
 
 #[cfg(test)]
 mod tests;
-
-/// The domain separator to be used when calculating the sender signature for a
-/// request to the Internet Computer according to the
-/// [interface specification](https://internetcomputer.org/docs/current/references/ic-interface-spec).
-pub const DOMAIN_IC_REQUEST: &[u8; 11] = b"\x0Aic-request";
 
 /// A type that specifies a domain for a cryptographic hash.
 ///

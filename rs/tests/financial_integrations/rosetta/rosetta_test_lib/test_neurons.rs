@@ -1,7 +1,7 @@
 use crate::utils::create_custom_neuron;
-use crate::utils::{create_neuron, NeuronDetails};
+use crate::utils::{NeuronDetails, create_neuron};
 use ic_ledger_core::Tokens;
-use ic_nns_governance_api::pb::v1::Neuron;
+use ic_nns_governance_api::Neuron;
 use ic_rosetta_test_utils::EdKeypair;
 use icp_ledger::AccountIdentifier;
 use std::collections::{BTreeMap, HashMap};
@@ -13,7 +13,10 @@ pub struct TestNeurons<'a> {
 }
 
 impl TestNeurons<'_> {
-    pub fn new(seed: u64, ledger_balances: &mut HashMap<AccountIdentifier, Tokens>) -> TestNeurons {
+    pub fn new(
+        seed: u64,
+        ledger_balances: &mut HashMap<AccountIdentifier, Tokens>,
+    ) -> TestNeurons<'_> {
         TestNeurons {
             neurons: BTreeMap::default(),
             seed: seed * 100_000,

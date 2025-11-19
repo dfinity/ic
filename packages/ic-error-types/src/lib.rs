@@ -1,6 +1,7 @@
 //! A crate that groups user-facing and internal error types and codes produced
 //! by the Internet Computer.
 
+use ic_heap_bytes::DeterministicHeapBytes;
 use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt};
 use str_traits::StrEllipsize;
@@ -29,12 +30,12 @@ pub enum RejectCode {
 
 impl std::fmt::Display for RejectCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_str())
+        write!(f, "{}", self.as_str())
     }
 }
 
 impl RejectCode {
-    fn to_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             RejectCode::SysFatal => "SYS_FATAL",
             RejectCode::SysTransient => "SYS_TRANSIENT",
@@ -91,6 +92,7 @@ impl From<ErrorCode> for RejectCode {
             UnknownManagementMessage => CanisterReject,
             InvalidManagementPayload => CanisterReject,
             CanisterNotHostedBySubnet => CanisterReject,
+            CanisterSnapshotImmutable => CanisterReject,
             // Canister errors.
             CanisterInvalidController => CanisterError,
             CanisterFunctionNotFound => CanisterError,
@@ -140,7 +142,18 @@ impl From<ErrorCode> for RejectCode {
 /// code and the rest is just a sequentially assigned two-digit
 /// number.
 #[derive(
-    Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, EnumIter, Serialize,
+    Copy,
+    Clone,
+    Eq,
+    DeterministicHeapBytes,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    Deserialize,
+    EnumIter,
+    Serialize,
 )]
 pub enum ErrorCode {
     // 1xx -- `RejectCode::SysFatal`
@@ -169,6 +182,7 @@ pub enum ErrorCode {
     CanisterRejectedMessage = 406,
     UnknownManagementMessage = 407,
     InvalidManagementPayload = 408,
+    CanisterSnapshotImmutable = 409,
     // 5xx -- `RejectCode::CanisterError`
     CanisterTrapped = 502,
     CanisterCalledTrap = 503,
@@ -215,7 +229,18 @@ const MAX_USER_ERROR_DESCRIPTION_LEN_BYTES: usize = 8 * 1024;
 /// The error that is sent back to users of IC if something goes
 /// wrong. It's designed to be copyable and serializable so that we
 /// can persist it in ingress history.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Deserialize, Serialize)]
+#[derive(
+    Clone,
+    Eq,
+    DeterministicHeapBytes,
+    PartialEq,
+    Ord,
+    PartialOrd,
+    Hash,
+    Debug,
+    Deserialize,
+    Serialize,
+)]
 pub struct UserError {
     code: ErrorCode,
     description: String,
@@ -324,6 +349,7 @@ impl UserError {
             | ErrorCode::ReservedCyclesLimitIsTooLow
             | ErrorCode::InsufficientCyclesInMessageMemoryGrow
             | ErrorCode::CanisterSnapshotNotFound
+            | ErrorCode::CanisterSnapshotImmutable
             | ErrorCode::CanisterHeapDeltaRateLimited
             | ErrorCode::CanisterWasmMemoryLimitExceeded
             | ErrorCode::DeadlineExpired
@@ -338,7 +364,10 @@ impl UserError {
     /// Panics if the error doesn't have the expected code and description.
     /// Useful for tests to avoid matching exact error messages.
     pub fn assert_contains(&self, code: ErrorCode, description: &str) {
-        assert_eq!(self.code, code);
+        assert_eq!(
+            self.code, code,
+            "Failed to match actual error \"{self:?}\" with expected \"{code}, {description}\""
+        );
         assert!(
             self.description.contains(description),
             "Error matching description \"{}\" with \"{}\"",
@@ -384,7 +413,7 @@ mod tests {
                 101, 102,
                 201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
                 301, 305,
-                402, 403, 404, 405, 406, 407, 408,
+                402, 403, 404, 405, 406, 407, 408, 409,
                 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 512, 513, 514,
                 517, 520, 521, 522, 524, 525, 526, 527, 528, 529, 530, 531, 532,
                 533, 534, 535, 536, 537, 538, 539, 540,

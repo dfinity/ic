@@ -2,7 +2,7 @@ use crate::{
     neuron::{DecomposedNeuron, Neuron},
     neuron_store::NeuronStoreError,
     pb::v1::{
-        neuron::Followees, AbridgedNeuron, BallotInfo, KnownNeuronData, MaturityDisbursement,
+        AbridgedNeuron, BallotInfo, Followees, KnownNeuronData, MaturityDisbursement,
         NeuronStakeTransfer, Topic,
     },
     storage::validate_stable_btree_map,
@@ -10,14 +10,13 @@ use crate::{
 use candid::Principal;
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_stable_structures::{storable::Bound, StableBTreeMap, Storable};
+use ic_stable_structures::{StableBTreeMap, Storable, storable::Bound};
 use itertools::Itertools;
-use lazy_static::lazy_static;
 use maplit::hashmap;
 use prost::Message;
 use std::{
     borrow::Cow,
-    collections::{btree_map::Entry, BTreeMap as HeapBTreeMap, HashMap},
+    collections::{BTreeMap as HeapBTreeMap, HashMap, btree_map::Entry},
     iter::Peekable,
     ops::{Bound as RangeBound, RangeBounds},
 };
@@ -579,6 +578,7 @@ where
             hot_keys: self.hot_keys_map.len(),
             followees: self.followees_map.len(),
             known_neuron_data: self.known_neuron_data_map.len(),
+            maturity_disbursements: self.maturity_disbursements_map.len(),
         }
     }
 
@@ -744,6 +744,10 @@ where
 
         update_range(new_entries, range, &mut self.followees_map);
     }
+
+    pub fn is_known_neuron(&self, neuron_id: NeuronId) -> bool {
+        self.known_neuron_data_map.contains_key(&neuron_id)
+    }
 }
 
 /// Number of entries for each section of the neuron storage. Only the ones needed are defined.
@@ -751,6 +755,7 @@ pub struct NeuronStorageLens {
     pub hot_keys: u64,
     pub followees: u64,
     pub known_neuron_data: u64,
+    pub maturity_disbursements: u64,
 }
 
 use crate::{governance::MAX_NEURON_RECENT_BALLOTS, pb::v1::Vote};
@@ -790,14 +795,7 @@ impl Storable for AbridgedNeuron {
             .expect("Unable to deserialize Neuron.")
     }
 
-    const BOUND: Bound = Bound::Bounded {
-        // How this number was chosen: we constructed the largest abridged Neuron
-        // possible, and found that its serialized size was 190 bytes. This is 2x
-        // that, which seems to strike a good balance between comfortable room for
-        // growth vs. excessive wasted space.
-        max_size: 380,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for BallotInfo {
@@ -809,11 +807,7 @@ impl Storable for BallotInfo {
         Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
     }
 
-    const BOUND: Bound = Bound::Bounded {
-        // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
-        max_size: 48,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for MaturityDisbursement {
@@ -837,11 +831,7 @@ impl Storable for KnownNeuronData {
         Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
     }
 
-    const BOUND: Bound = Bound::Bounded {
-        // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
-        max_size: 6412,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 impl Storable for NeuronStakeTransfer {
@@ -853,11 +843,7 @@ impl Storable for NeuronStakeTransfer {
         Self::decode(&bytes[..]).expect("Unable to deserialize Neuron.")
     }
 
-    const BOUND: Bound = Bound::Bounded {
-        // How this number was chosen: Similar to how MAX_SIZE was chosen for Neuron.
-        max_size: 290,
-        is_fixed_size: false,
-    };
+    const BOUND: Bound = Bound::Unbounded;
 }
 
 // Private Helpers
@@ -911,20 +897,6 @@ where
     }
 
     result
-}
-
-// This is copied from candid/src. Seems like their definition should be public,
-// but it's not. Seems to be an oversight.
-const PRINCIPAL_MAX_LENGTH_IN_BYTES: usize = 29;
-
-// For range scanning.
-lazy_static! {
-    static ref MIN_PRINCIPAL_ID: PrincipalId =
-        PrincipalId(Principal::try_from(vec![]).expect("Unable to construct MIN_PRINCIPAL_ID."));
-    static ref MAX_PRINCIPAL_ID: PrincipalId = PrincipalId(
-        Principal::try_from(vec![0xFF_u8; PRINCIPAL_MAX_LENGTH_IN_BYTES])
-            .expect("Unable to construct MAX_PRINCIPAL_ID.")
-    );
 }
 
 /// Replaces values in a StableBTreeMap corresponding to a repeated field in a Neuron.
@@ -1052,10 +1024,7 @@ fn validate_recent_ballots(recent_ballots: &[BallotInfo]) -> Result<(), NeuronSt
     }
 
     Err(NeuronStoreError::InvalidData {
-        reason: format!(
-            "Some elements in Neuron.recent_ballots are invalid: {:?}",
-            defects
-        ),
+        reason: format!("Some elements in Neuron.recent_ballots are invalid: {defects:?}"),
     })
 }
 

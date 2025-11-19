@@ -6,21 +6,21 @@ use crate::{
     errors,
     errors::ApiError,
     models::{
-        self,
+        self, AccountIdentifier, BlockIdentifier, Operation,
         amount::{from_amount, ledgeramount_from_amount},
         operation::OperationType,
-        AccountIdentifier, BlockIdentifier, Operation,
     },
     request::{
-        request_result::RequestResult, transaction_operation_results::TransactionOperationResults,
-        transaction_results::TransactionResults, Request,
+        Request, request_result::RequestResult,
+        transaction_operation_results::TransactionOperationResults,
+        transaction_results::TransactionResults,
     },
     request_types::{
-        ChangeAutoStakeMaturityMetadata, DisburseMetadata, FollowMetadata, KeyMetadata,
-        ListNeuronsMetadata, MergeMaturityMetadata, NeuronIdentifierMetadata, NeuronInfoMetadata,
-        PublicKeyOrPrincipal, RegisterVoteMetadata, RequestResultMetadata,
-        SetDissolveTimestampMetadata, SpawnMetadata, StakeMaturityMetadata, Status,
-        STATUS_COMPLETED,
+        ChangeAutoStakeMaturityMetadata, DisburseMaturityMetadata, DisburseMetadata,
+        FollowMetadata, KeyMetadata, ListNeuronsMetadata, NeuronIdentifierMetadata,
+        NeuronInfoMetadata, PublicKeyOrPrincipal, RegisterVoteMetadata, RequestResultMetadata,
+        STATUS_COMPLETED, SetDissolveTimestampMetadata, SpawnMetadata, StakeMaturityMetadata,
+        Status,
     },
     transaction_id::TransactionIdentifier,
 };
@@ -30,16 +30,17 @@ use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_hash_of::HashOf;
 use ic_types::{
-    messages::{HttpCanisterUpdate, HttpReadState},
     CanisterId, PrincipalId,
+    messages::{HttpCanisterUpdate, HttpReadState},
 };
 use icp_ledger::{
     Block, BlockIndex, Operation as LedgerOperation, SendArgs, Subaccount, TimeStamp, Tokens,
     Transaction,
 };
+use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use rosetta_core::convert::principal_id_from_public_key;
-use serde_json::{from_value, map::Map, Number, Value};
+use serde_json::{Number, Value, from_value, map::Map};
 use std::convert::{TryFrom, TryInto};
 
 /// This module converts from ledger_canister data structures to Rosetta data
@@ -85,7 +86,7 @@ pub fn hashed_block_to_rosetta_core_transaction(
     token_symbol: &str,
 ) -> Result<models::Transaction, ApiError> {
     let block = Block::decode(hb.block.clone())
-        .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {:?}", err)))?;
+        .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {err:?}")))?;
     let transaction = block.transaction;
     to_rosetta_core_transaction(hb.index, transaction, block.timestamp, token_symbol)
 }
@@ -97,7 +98,7 @@ pub fn operations_to_requests(
     token_name: &str,
 ) -> Result<Vec<Request>, ApiError> {
     let op_error = |op: &Operation, e| {
-        let msg = format!("In operation '{:?}': {}", op, e);
+        let msg = format!("In operation '{op:?}': {e}");
         ApiError::InvalidTransaction(false, msg.into())
     };
 
@@ -148,7 +149,7 @@ pub fn operations_to_requests(
                 return Err(ApiError::InvalidRequest(
                     false,
                     "OperationType Approve is not supported for Requests".into(),
-                ))
+                ));
             }
             OperationType::Fee => {
                 let amount = o
@@ -215,12 +216,26 @@ pub fn operations_to_requests(
                 validate_neuron_management_op()?;
                 let amount = if let Some(ref amount) = o.amount {
                     Some(ledgeramount_from_amount(amount, token_name).map_err(|e| {
-                        ApiError::internal_error(format!("Could not convert Amount {:?}", e))
+                        ApiError::internal_error(format!("Could not convert Amount {e:?}"))
                     })?)
                 } else {
                     None
                 };
                 state.disburse(account, neuron_index, amount, recipient)?;
+            }
+            OperationType::DisburseMaturity => {
+                let DisburseMaturityMetadata {
+                    neuron_index,
+                    recipient,
+                    percentage_to_disburse,
+                } = o.metadata.clone().try_into()?;
+                validate_neuron_management_op()?;
+                state.disburse_maturity(
+                    account,
+                    neuron_index,
+                    percentage_to_disburse,
+                    recipient,
+                )?;
             }
             OperationType::Spawn => {
                 let SpawnMetadata {
@@ -239,14 +254,6 @@ pub fn operations_to_requests(
                         .map(principal_id_from_public_key_or_principal)
                         .transpose()?,
                 )?;
-            }
-            OperationType::MergeMaturity => {
-                let MergeMaturityMetadata {
-                    neuron_index,
-                    percentage_to_merge,
-                } = o.metadata.clone().try_into()?;
-                validate_neuron_management_op()?;
-                state.merge_maturity(account, neuron_index, percentage_to_merge)?;
             }
             OperationType::RegisterVote => {
                 let RegisterVoteMetadata {
@@ -366,7 +373,7 @@ pub fn from_public_key(pk: &models::PublicKey) -> Result<Vec<u8>, ApiError> {
 
 pub fn from_hex(hex: &str) -> Result<Vec<u8>, ApiError> {
     hex::decode(hex)
-        .map_err(|e| ApiError::invalid_request(format!("Hex could not be decoded {:?}", e)))
+        .map_err(|e| ApiError::invalid_request(format!("Hex could not be decoded {e:?}")))
 }
 
 pub fn to_hex(v: &[u8]) -> String {
@@ -497,7 +504,7 @@ pub fn from_transaction_operation_results(
             (_, []) => {
                 return Err(ApiError::internal_error(
                     "Too few Operations, could not match Operations with Requests",
-                ))
+                ));
             }
         };
 
@@ -529,6 +536,47 @@ pub fn from_transaction_operation_results(
 
 pub fn transaction_results_to_api_error(tr: TransactionResults, token_name: &str) -> ApiError {
     ApiError::OperationsErrors(tr, token_name.to_string())
+}
+
+pub fn from_account_or_account_identifier(
+    account: Option<ic_nns_governance_api::Account>,
+    account_identifier: Option<icp_ledger::protobuf::AccountIdentifier>,
+) -> Result<Option<icp_ledger::AccountIdentifier>, ApiError> {
+    let result = match (account, account_identifier) {
+        (None, None) => None,
+        (Some(account), None) => {
+            let owner = match account.owner {
+                None => {
+                    return Err(ApiError::invalid_request(
+                        "Invalid Account, the owner needs to be specified",
+                    ));
+                }
+                Some(owner) => owner.0,
+            };
+            let account = Account {
+                owner,
+                subaccount: match account.subaccount {
+                    None => None,
+                    Some(subaccount) => Some(subaccount.try_into().map_err(|v: Vec<u8>| {
+                        ApiError::invalid_request(format!(
+                            "Invalid subaccount length: {}, should be 32",
+                            v.len()
+                        ))
+                    })?),
+                },
+            };
+            Some(icp_ledger::AccountIdentifier::from(account))
+        }
+        (None, Some(a)) => Some((&a).try_into().map_err(|e| {
+            ApiError::invalid_request(format!("Could not parse recipient account identifier: {e}"))
+        })?),
+        (Some(_), Some(_)) => {
+            return Err(ApiError::invalid_request(
+                "Cannot specify both account and account_identifier",
+            ));
+        }
+    };
+    Ok(result)
 }
 
 #[cfg(test)]

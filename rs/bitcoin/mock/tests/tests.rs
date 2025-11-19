@@ -1,9 +1,10 @@
-use bitcoin::consensus::deserialize;
+#![allow(deprecated)]
 use bitcoin::Transaction;
+use bitcoin::consensus::deserialize;
 use candid::{Decode, Encode};
 use hex::FromHex;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_bitcoin_canister_mock::PushUtxoToAddress;
+use ic_bitcoin_canister_mock::PushUtxosToAddress;
 use ic_btc_interface::{
     GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse, MillisatoshiPerByte,
     Network, NetworkInRequest, OutPoint, Txid, Utxo,
@@ -12,8 +13,8 @@ use ic_cdk::api::management_canister::bitcoin::{BitcoinNetwork, SendTransactionR
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_test_utilities_load_wasm::load_wasm;
 use ic_types::Cycles;
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use rand::{thread_rng, Rng};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
+use rand::{Rng, thread_rng};
 use std::str::FromStr;
 
 fn generate_tx_id() -> Txid {
@@ -80,17 +81,17 @@ fn test_install_bitcoin_mock_canister() {
 
     let _ = env.execute_ingress(
         mock_id,
-        "push_utxo_to_address",
-        Encode!(&PushUtxoToAddress {
+        "push_utxos_to_address",
+        Encode!(&PushUtxosToAddress {
             address: btc_address0.to_string(),
-            utxo: Utxo {
+            utxos: vec![Utxo {
                 height: 0,
                 outpoint: OutPoint {
                     txid: generate_tx_id(),
                     vout: 1_u32,
                 },
                 value,
-            },
+            }],
         })
         .unwrap(),
     );

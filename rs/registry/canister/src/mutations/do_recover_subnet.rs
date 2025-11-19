@@ -11,7 +11,7 @@ use crate::{
     registry::{Registry, Version},
 };
 use candid::{CandidType, Deserialize, Encode};
-use dfn_core::api::{call, CanisterId};
+use dfn_core::api::{CanisterId, call};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
@@ -25,7 +25,7 @@ use ic_registry_keys::{
 };
 use ic_registry_subnet_features::KeyConfig as KeyConfigInternal;
 use ic_registry_transport::{
-    pb::v1::{registry_mutation, RegistryMutation},
+    pb::v1::{RegistryMutation, registry_mutation},
     upsert,
 };
 use on_wire::bytes;
@@ -36,7 +36,7 @@ use std::convert::TryFrom;
 impl Registry {
     /// Recover a subnet
     pub async fn do_recover_subnet(&mut self, payload: RecoverSubnetPayload) {
-        println!("{}do_recover_subnet: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_recover_subnet: {payload:?}");
 
         self.validate_recover_subnet_payload(&payload);
 
@@ -97,15 +97,6 @@ impl Registry {
                 RegistryVersion::new(pre_call_registry_version),
             );
 
-            let response_bytes = call(
-                CanisterId::ic_00(),
-                "setup_initial_dkg",
-                bytes,
-                Encode!(&request).unwrap(),
-            )
-            .await
-            .unwrap();
-
             let initial_chain_key_config =
                 payload
                     .chain_key_config
@@ -115,21 +106,29 @@ impl Registry {
                             .expect("Invalid InitialChainKeyConfig")
                     });
 
-            let chain_key_initializations = self
-                .get_all_initial_i_dkg_dealings_from_ic00(&initial_chain_key_config, dkg_nodes)
-                .await;
+            // Call setup_initial_dkg and reshare_chain_key in parallel.
+            // Since both calls may take up to 2 DKG intervals to complete, this speeds up generation of a recovery cup.
+            let (response_bytes, chain_key_initializations) = futures::join!(
+                call(
+                    CanisterId::ic_00(),
+                    "setup_initial_dkg",
+                    bytes,
+                    Encode!(&request).unwrap(),
+                ),
+                self.get_all_chain_key_reshares_from_ic00(&initial_chain_key_config, dkg_nodes)
+            );
+            let response_bytes = response_bytes.unwrap();
 
             if let Some(initial_chain_key_config) = initial_chain_key_config {
                 // If chain key config is set, we must both update the subnet's chain_key_config
-                // and make sure the subnet is not listed as signing_subnet for keys it no longer
+                // and make sure the subnet is not listed as chain-key-enabled subnet for keys it no longer
                 // holds.
-                let chain_key_signing_disable = {
+                let chain_key_disable = {
                     let new_keys = initial_chain_key_config.key_ids();
                     self.get_keys_that_will_be_removed_from_subnet(subnet_id, new_keys)
                 };
                 mutations.append(
-                    &mut self
-                        .mutations_to_disable_subnet_signing(subnet_id, &chain_key_signing_disable),
+                    &mut self.mutations_to_disable_subnet_chain_key(subnet_id, &chain_key_disable),
                 );
 
                 // Update chain key configuration on subnet record to reflect new holdings.
@@ -154,8 +153,7 @@ impl Registry {
                 pre_call_registry_version,
                 post_call_registry_version,
                 format!(
-                    "Subnet with ID {} was updated during the `setup_initial_dkg` call",
-                    subnet_id
+                    "Subnet with ID {subnet_id} was updated during the `setup_initial_dkg` call"
                 ),
             );
 
@@ -165,8 +163,7 @@ impl Registry {
                 pre_call_registry_version,
                 post_call_registry_version,
                 format!(
-                    "Threshold Signing Pubkey for Subnet {} was updated during the `setup_initial_dkg` call",
-                    subnet_id
+                    "Threshold Signing Pubkey for Subnet {subnet_id} was updated during the `setup_initial_dkg` call"
                 ),
             );
 
@@ -176,8 +173,7 @@ impl Registry {
                 pre_call_registry_version,
                 post_call_registry_version,
                 format!(
-                    "CUP for Subnet {} was updated during the `setup_initial_dkg` call",
-                    subnet_id
+                    "CUP for Subnet {subnet_id} was updated during the `setup_initial_dkg` call"
                 ),
             );
 
@@ -217,8 +213,8 @@ impl Registry {
         self.maybe_apply_mutation_internal(mutations)
     }
 
-    /// Ensures the requested ECDSA keys exist somewhere.
-    /// Ensures that a subnet_id is specified for EcdsaKeyRequests.
+    /// Ensures the requested Chain keys exist somewhere.
+    /// Ensures that a subnet_id is specified for ChainKeyRequests.
     /// Ensures that the requested key exists outside of the subnet being recovered.
     /// Ensures that the requested key exists on the specified subnet.
     /// This is similar to validation in do_create_subnet except for constraints to avoid requesting
@@ -231,10 +227,7 @@ impl Registry {
         let initial_chain_key_config =
             InitialChainKeyConfigInternal::try_from(initial_chain_key_config.clone())
                 .unwrap_or_else(|err| {
-                    panic!(
-                        "{}Invalid RecoverSubnetPayload.chain_key_config: {}",
-                        LOG_PREFIX, err
-                    );
+                    panic!("{LOG_PREFIX}Invalid RecoverSubnetPayload.chain_key_config: {err}");
                 });
 
         let own_subnet_id = Some(payload.subnet_id);
@@ -277,6 +270,7 @@ pub struct InitialChainKeyConfig {
     pub key_configs: Vec<KeyConfigRequest>,
     pub signature_request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
+    pub max_parallel_pre_signature_transcripts_in_creation: Option<u32>,
 }
 
 impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
@@ -285,6 +279,7 @@ impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let key_configs = key_configs
@@ -296,6 +291,7 @@ impl From<InitialChainKeyConfigInternal> for InitialChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         }
     }
 }
@@ -308,6 +304,7 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let mut key_config_validation_errors = vec![];
@@ -325,8 +322,7 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
         if !key_config_validation_errors.is_empty() {
             let key_config_validation_errors = key_config_validation_errors.join(", ");
             return Err(format!(
-                "Invalid InitialChainKeyConfig.key_configs: {}",
-                key_config_validation_errors
+                "Invalid InitialChainKeyConfig.key_configs: {key_config_validation_errors}"
             ));
         }
 
@@ -334,6 +330,7 @@ impl TryFrom<InitialChainKeyConfig> for InitialChainKeyConfigInternal {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         })
     }
 }
@@ -433,7 +430,7 @@ impl TryFrom<KeyConfigRequest> for KeyConfigRequestInternal {
         };
 
         let key_config = KeyConfigInternal::try_from(key_config)
-            .map_err(|err| format!("Invalid KeyConfigRequest.key_config: {}", err))?;
+            .map_err(|err| format!("Invalid KeyConfigRequest.key_config: {err}"))?;
 
         Ok(Self {
             key_config,
@@ -468,10 +465,7 @@ fn get_record_version_as_of_registry_version(
         .get(record_key.as_bytes(), version)
         .map(|record| record.version)
         .unwrap_or_else(|| {
-            panic!(
-                "{}Record for {} not found in registry",
-                LOG_PREFIX, record_key
-            );
+            panic!("{LOG_PREFIX}Record for {record_key} not found in registry");
         })
 }
 
@@ -484,7 +478,7 @@ mod test {
             prepare_registry_with_nodes,
         },
         mutations::do_recover_subnet::{
-            panic_if_record_changed_across_versions, RecoverSubnetPayload,
+            RecoverSubnetPayload, panic_if_record_changed_across_versions,
         },
         registry::Registry,
     };
@@ -528,6 +522,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         };
 
         let chain_key_config_pb = ChainKeyConfigPb::from(chain_key_config);
@@ -650,6 +645,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -683,6 +679,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -719,6 +716,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -752,6 +750,7 @@ mod test {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));
@@ -788,6 +787,7 @@ mod test {
             key_configs: vec![chain_key_request; 2],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         futures::executor::block_on(registry.do_recover_subnet(payload));

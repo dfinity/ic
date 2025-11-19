@@ -1,0 +1,95 @@
+# What?
+# This file specifies which additional bazel targets to test for which specific file changes.
+#
+# Why?
+# On PRs not tagged with CI_ALL_BAZEL_TARGETS, which is the default,
+# CI only tests bazel targets which have modified inputs
+# and excludes tests tagged as 'long_test'.
+#
+# This is problematic for targets that don't explicitly depend
+# on modified inputs like the shell format check //pre-commit:shfmt-check
+# for example which implicitly depends on the whole workspace.
+#
+# Furthermore, from experience we know that modifications to certain
+# files or directories have a high risk of breaking certain long_tests.
+# In those cases folks have traditionally labelled their PRs with CI_ALL_BAZEL_TARGETS
+# to run *all* long_tests. This however is often overkill and often forgotten.
+#
+# To address both issues this file can specify which bazel
+# targets to explicitly test based on which files were modified
+# disregarding whether they're long_tests.
+#
+# How?
+# The syntax is similar but not the same as gitignore
+# (https://git-scm.com/docs/gitignore#_pattern_format):
+# * A blank line matches no files, so it can serve as a separator for readability.
+# * A line starting with # serves as a comment.
+#   Put a backslash ("\") in front of the first hash for patterns that begin with a hash.
+# * A pattern is separated by whitespace from its set of targets which are whitespace separated.
+# * Patterns and targets don't support spaces in them. This might be added later if desired.
+# * Targets can span multiple lines for readability.
+#   So the targets on a line starting with whitespace
+#   are considered part of the previous set of targets.
+# * Unlike gitignore, patterns use simple globbing semantics:
+#   https://docs.python.org/3/library/fnmatch.html
+#   So there's no negation of patterns or special directory handling
+#   like gitignore wildmatch patterns.
+#
+# Tip: to test which files matches <PATTERN> you can use the following:
+# git ls-files | python -c 'import sys, fnmatch; print("\n".join(fnmatch.filter(sys.stdin.read().splitlines(),"<PATTERN>")))'
+#
+# Run `ci/scripts/targets.py check` to see the matches for every pattern
+# and to check the correctness of this file. This is also run automatically by
+# the check-pull-request-bazel-targets job on CI.
+
+*.sh        //pre-commit:shfmt-check
+*.py        //pre-commit:ruff-lint
+*.proto     //pre-commit:protobuf-format-check
+            //pre-commit:buf-breaking
+
+mainnet-icos-revisions.json
+  //rs/tests/consensus/backup:backup_manager_downgrade_test_colocate
+  //rs/tests/consensus/backup:backup_manager_upgrade_test_colocate
+  //rs/tests/consensus/upgrade:upgrade_downgrade_app_subnet_test_colocate
+
+ic-os/guestos/context/docker-base.* //rs/tests/node:kill_start_long_test
+
+# Run most nested tests for any ic-os/ or rs/ic_os/ changes:
+*ic[-_]os/* //rs/tests/nested:guestos_upgrade_smoke_test
+            //rs/tests/nested:guestos_upgrade_from_latest_release_to_current
+            //rs/tests/nested:hostos_upgrade_smoke_test
+            //rs/tests/nested:hostos_upgrade_from_latest_release_to_current
+            //rs/tests/nested:registration
+
+# Full rejoin test for state sync changes:
+*state_sync* //rs/tests/message_routing:rejoin_test
+
+# XNet compatibility test for changes to certifications
+*canonical_state/* //rs/tests/message_routing/xnet:xnet_compatibility
+
+rs/nns/cmc/*.rs //rs/tests/nns:nns_cycles_minting_test
+
+*nns_delegation* //rs/tests/networking:nns_delegation_branch_nns_version_test
+# TODO(NET-1784): add this back
+# //rs/tests/networking:nns_delegation_mainnet_nns_version_test
+
+rs/backup/*.rs //rs/tests/consensus/backup/...
+
+rs/orchestrator/*.rs //rs/tests/consensus/orchestrator/...
+
+*guestos-recovery-engine* //rs/tests/consensus:guestos_recovery_engine_smoke_test
+                          //rs/tests/nested/nns_recovery/...
+
+*guestos-recovery-upgrader* //rs/tests/nested/nns_recovery/...
+
+rs/recovery/src/*.rs //rs/tests/consensus/subnet_recovery/...
+                     //rs/tests/consensus:subnet_splitting_test_colocate
+                     //rs/tests/nested/nns_recovery/...
+
+rs/recovery/subnet_splitting/*.rs //rs/tests/consensus:subnet_splitting_test_colocate
+
+rs/bitcoin/* //rs/tests/ckbtc:btc_adapter_basics_test
+             //rs/tests/ckbtc:doge_adapter_basics_test
+             //rs/tests/execution:btc_get_balance_test_colocate
+
+rs/boundary_node/rate_limits/* //rs/tests/boundary_nodes:rate_limit_canister_test

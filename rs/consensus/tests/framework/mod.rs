@@ -15,7 +15,7 @@ pub use types::{
 };
 
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent, TempCryptoComponentGeneric};
-use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
+use ic_crypto_test_utils_ni_dkg::{InitialNiDkgConfig, initial_dkg_transcript};
 use ic_interfaces_registry::RegistryClient;
 use ic_management_canister_types_private::{
     EcdsaCurve, EcdsaKeyId, MasterPublicKeyId, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
@@ -29,12 +29,13 @@ use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
 use ic_test_utilities_consensus::make_genesis;
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
+    NodeId, RegistryVersion, SubnetId,
     consensus::CatchUpPackage,
     crypto::{
-        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId},
         KeyPurpose,
+        threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetId},
     },
-    subnet_id_into_protobuf, NodeId, RegistryVersion, SubnetId,
+    subnet_id_into_protobuf,
 };
 use rand::{CryptoRng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -70,7 +71,11 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
                 .iter()
                 .map(|key_id| KeyConfig {
                     key_id: key_id.clone(),
-                    pre_signatures_to_create_in_advance: 4,
+                    pre_signatures_to_create_in_advance: if key_id.requires_pre_signatures() {
+                        4
+                    } else {
+                        0
+                    },
                     max_queue_size: 40,
                 })
                 .collect(),
@@ -91,7 +96,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
                 .with_node_id(*node_id)
                 .with_registry_client_and_data(registry_client.clone(), data_provider.clone())
                 .with_keys(NodeKeysToGenerate::all())
-                .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+                .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
                 .build_arc()
         })
         .collect();
@@ -122,7 +127,7 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
             )
         })
         .collect();
-    let random_ni_dkg_target_id = NiDkgTargetId::new(rng.gen());
+    let random_ni_dkg_target_id = NiDkgTargetId::new(rng.r#gen());
     let node_ids = node_ids.iter().copied().collect::<BTreeSet<_>>();
     let ni_dkg_transcript_low_threshold = initial_dkg_transcript(
         InitialNiDkgConfig::new(
@@ -182,19 +187,19 @@ pub fn setup_subnet<R: Rng + CryptoRng>(
         )
         .expect("Could not add node record.");
 
-    // Add threshold signing subnet to registry
+    // Add chain-key enabled subnet to registry
     for key_id in test_master_public_key_ids() {
         data_provider
             .add(
-                &ic_registry_keys::make_chain_key_signing_subnet_list_key(&key_id),
+                &ic_registry_keys::make_chain_key_enabled_subnet_list_key(&key_id),
                 registry_version,
                 Some(
-                    ic_protobuf::registry::crypto::v1::ChainKeySigningSubnetList {
+                    ic_protobuf::registry::crypto::v1::ChainKeyEnabledSubnetList {
                         subnets: vec![subnet_id_into_protobuf(subnet_id)],
                     },
                 ),
             )
-            .expect("Could not add chain key signing subnet list");
+            .expect("Could not add chain-key enabled subnet list");
     }
     registry_client.reload();
     registry_client.update_to_latest_version();

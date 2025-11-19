@@ -2,13 +2,9 @@ use candid::{Decode, Encode, Principal};
 use ic_agent::Agent;
 use ic_base_types::PrincipalId;
 use ic_nns_common::{pb::v1::ProposalId, types::NeuronId};
-use ic_nns_governance_api::pb::v1::Motion;
-use ic_nns_governance_api::pb::v1::ProposalActionRequest;
 use ic_nns_governance_api::{
-    pb::v1::{
-        manage_neuron_response, manage_neuron_response::MakeProposalResponse, MakeProposalRequest,
-        ManageNeuronResponse, ProposalInfo,
-    },
+    MakeProposalRequest, ManageNeuronResponse, Motion, ProposalActionRequest, ProposalInfo,
+    manage_neuron_response, manage_neuron_response::MakeProposalResponse,
     proposal_submission_helpers::create_make_proposal_payload,
 };
 
@@ -32,7 +28,7 @@ impl GovernanceClient {
         title: &str,
         summary: &str,
         motion_text: &str,
-    ) -> ProposalId {
+    ) -> Result<ProposalId, String> {
         let proposal = MakeProposalRequest {
             title: Some(title.to_string()),
             summary: summary.to_string(),
@@ -76,12 +72,11 @@ impl GovernanceClient {
                 .call()
                 .await
                 .expect("Error while calling endpoint.");
-            proposal_id.unwrap()
+            Ok(proposal_id.unwrap())
         } else {
-            panic!(
-                "Making Proposal was unsuccessful --> Response : {:?}",
-                manage_neuron_res
-            )
+            Err(format!(
+                "Making Proposal was unsuccessful --> Response : {manage_neuron_res:?}"
+            ))
         }
     }
 

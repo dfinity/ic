@@ -95,10 +95,9 @@ fn ed25519_rejects_non_canonical_points_search() {
      */
 
     fn is_rejected_or_canonical(bytes: &[u8; 32]) -> bool {
-        if let Ok(pt) = EccPoint::deserialize(EccCurveType::Ed25519, bytes) {
-            pt.serialize() == bytes
-        } else {
-            true
+        match EccPoint::deserialize(EccCurveType::Ed25519, bytes) {
+            Ok(pt) => pt.serialize() == bytes,
+            _ => true,
         }
     }
 
@@ -231,7 +230,7 @@ fn generator_h_has_expected_value() -> CanisterThresholdResult<()> {
             "idkg"
         };
 
-        let dst = format!("ic-crypto-{}-{}-generator-h", proto_name, curve_type);
+        let dst = format!("ic-crypto-{proto_name}-{curve_type}-generator-h");
 
         let h2p = EccPoint::hash_to_point(curve_type, input.as_bytes(), dst.as_bytes())?;
 
@@ -392,7 +391,7 @@ fn test_point_mul_by_node_index() -> CanisterThresholdResult<()> {
         node_indices.push(u32::MAX - 1);
         node_indices.push(u32::MAX);
         for _ in 0..100 {
-            node_indices.push(rng.gen());
+            node_indices.push(rng.r#gen());
         }
 
         for node_index in node_indices {
@@ -567,7 +566,7 @@ fn test_mul_n_ct_pippenger_is_correct() -> CanisterThresholdResult<()> {
         for num_terms in 2..20 {
             // generate point-scalar pairs
             let pairs: Vec<_> = (0..num_terms)
-                .map(|_| (random_point_and_scalar(curve_type)))
+                .map(|_| random_point_and_scalar(curve_type))
                 .collect::<Result<Vec<_>, _>>()?;
 
             // create "deep" refs of pairs
@@ -647,5 +646,49 @@ fn test_mul_n_vartime_naf() -> CanisterThresholdResult<()> {
         }
     }
 
+    Ok(())
+}
+
+#[test]
+fn test_scalar_inversion() -> CanisterThresholdResult<()> {
+    let rng = &mut reproducible_rng();
+
+    for curve in EccCurveType::all() {
+        let zero = EccScalar::zero(curve);
+        assert!(zero.invert().is_none());
+        assert!(zero.invert_vartime().is_none());
+
+        let hex_one = hex::encode(EccScalar::one(curve).serialize());
+
+        for _trial in 0..1024 {
+            let s = EccScalar::random(curve, rng);
+
+            match (s.invert(), s.invert_vartime()) {
+                (Some(si), Some(siv)) => {
+                    assert_eq!(hex::encode(si.serialize()), hex::encode(siv.serialize()));
+                    assert_eq!(hex::encode(s.mul(&si)?.serialize()), hex_one);
+                }
+                (None, None) => {
+                    assert!(s.is_zero());
+                }
+                (Some(_), None) => panic!("Invert and invert vartime disagreed"),
+                (None, Some(_)) => panic!("Invert and invert vartime disagreed"),
+            }
+        }
+
+        for n in 0..64 {
+            let scalars = (0..n)
+                .map(|_i| EccScalar::random(curve, rng))
+                .collect::<Vec<_>>();
+
+            if let Ok(inverses) = EccScalar::batch_invert_vartime(&scalars) {
+                assert_eq!(inverses.len(), scalars.len());
+
+                for (s, i) in scalars.iter().zip(&inverses) {
+                    assert_eq!(hex::encode(s.mul(i)?.serialize()), hex_one);
+                }
+            }
+        }
+    }
     Ok(())
 }

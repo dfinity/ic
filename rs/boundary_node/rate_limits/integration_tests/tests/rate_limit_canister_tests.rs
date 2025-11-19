@@ -89,8 +89,11 @@ async fn main() {
     .await;
 
     let err_msg = response.unwrap_err();
-    assert!(err_msg
-        .contains("message_inspection_failed: method call is prohibited in the current context"));
+    assert!(
+        err_msg.contains(
+            "message_inspection_failed: method call is prohibited in the current context"
+        )
+    );
 
     // 2. As an authorized principal, execute the `add_config()` update call (add config with two rate-limit rules with different incident_ids)
     let response: AddConfigResponse = canister_call(

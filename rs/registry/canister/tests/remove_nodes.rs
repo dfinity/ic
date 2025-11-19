@@ -18,7 +18,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::{get_value_or_panic, prepare_registry, TEST_ID},
+    registry::{TEST_ID, get_value_or_panic, prepare_registry},
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::{
@@ -32,8 +32,8 @@ use ic_registry_keys::{
 };
 use ic_registry_transport::{insert, pb::v1::RegistryAtomicMutateRequest};
 use ic_test_utilities_types::ids::{node_test_id, user_test_id};
-use ic_types::crypto::KeyPurpose;
 use ic_types::NodeId;
+use ic_types::crypto::KeyPurpose;
 use prost::Message;
 use registry_canister::init::RegistryCanisterInitPayloadBuilder;
 use registry_canister::mutations::node_management::common::make_add_node_registry_mutations;

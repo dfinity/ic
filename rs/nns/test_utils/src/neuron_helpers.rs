@@ -6,9 +6,9 @@ use ic_nervous_system_common_test_keys::{
 };
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::{
-    install_code::CanisterInstallMode, manage_neuron_response::Command, InstallCodeRequest,
-    MakeProposalRequest, Neuron, ProposalActionRequest,
+use ic_nns_governance_api::{
+    InstallCodeRequest, MakeProposalRequest, Neuron, ProposalActionRequest,
+    install_code::CanisterInstallMode, manage_neuron_response::Command,
 };
 use ic_state_machine_tests::StateMachine;
 use std::collections::HashMap;

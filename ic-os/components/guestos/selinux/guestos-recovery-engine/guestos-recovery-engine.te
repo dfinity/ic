@@ -1,0 +1,8 @@
+policy_module(guestos-recovery-engine, 1.0.0)
+
+type ic_guestos_recovery_engine_t;
+type ic_guestos_recovery_engine_exec_t;
+init_daemon_domain(ic_guestos_recovery_engine_t, ic_guestos_recovery_engine_exec_t)
+
+# Recovery operations need broad system access - make it unconfined
+unconfined_domain(ic_guestos_recovery_engine_t) 

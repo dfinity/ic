@@ -7,13 +7,13 @@ use std::{
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_protobuf::registry::{
-    api_boundary_node::v1::ApiBoundaryNodeRecord, crypto::v1::ChainKeySigningSubnetList,
+    api_boundary_node::v1::ApiBoundaryNodeRecord, crypto::v1::ChainKeyEnabledSubnetList,
     hostos_version::v1::HostosVersionRecord, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
+    CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX, HOSTOS_VERSION_KEY_PREFIX, NODE_RECORD_KEY_PREFIX,
     get_api_boundary_node_record_node_id, get_node_record_node_id, make_node_record_key,
-    make_subnet_list_record_key, CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX,
-    HOSTOS_VERSION_KEY_PREFIX,
+    make_subnet_list_record_key,
 };
 use prost::Message;
 use url::Url;
@@ -45,6 +45,18 @@ impl error::Error for InvariantCheckError {
     }
 }
 
+/// Returns all node records in the snapshot.
+pub(crate) fn get_all_node_records(snapshot: &RegistrySnapshot) -> Vec<NodeRecord> {
+    let mut nodes: Vec<NodeRecord> = Vec::new();
+    for (k, v) in snapshot {
+        if k.starts_with(NODE_RECORD_KEY_PREFIX.as_bytes()) {
+            let record = NodeRecord::decode(v.as_slice()).unwrap();
+            nodes.push(record);
+        }
+    }
+    nodes
+}
+
 pub(crate) fn get_value_from_snapshot<T: Message + Default>(
     snapshot: &RegistrySnapshot,
     key: String,
@@ -58,13 +70,13 @@ pub(crate) fn get_value_from_snapshot<T: Message + Default>(
 #[allow(dead_code)]
 pub(crate) fn get_all_chain_key_signing_subnet_list_records(
     snapshot: &RegistrySnapshot,
-) -> BTreeMap<String, ChainKeySigningSubnetList> {
-    let mut result = BTreeMap::<String, ChainKeySigningSubnetList>::new();
+) -> BTreeMap<String, ChainKeyEnabledSubnetList> {
+    let mut result = BTreeMap::<String, ChainKeyEnabledSubnetList>::new();
     for key in snapshot.keys() {
         let signing_subnet_list_key = String::from_utf8(key.clone()).unwrap();
-        if signing_subnet_list_key.starts_with(CHAIN_KEY_SIGNING_SUBNET_LIST_KEY_PREFIX) {
+        if signing_subnet_list_key.starts_with(CHAIN_KEY_ENABLED_SUBNET_LIST_KEY_PREFIX) {
             let chain_key_signing_subnet_list_record = match snapshot.get(key) {
-                Some(chain_key_signing_subnet_list_record) => ChainKeySigningSubnetList::decode(
+                Some(chain_key_signing_subnet_list_record) => ChainKeyEnabledSubnetList::decode(
                     chain_key_signing_subnet_list_record.as_slice(),
                 )
                 .unwrap(),
@@ -174,7 +186,7 @@ pub(crate) fn get_node_record_from_snapshot(
     value
         .map(|bytes| {
             NodeRecord::decode(bytes.as_slice()).map_err(|err| InvariantCheckError {
-                msg: format!("Deserialize registry value failed with {}", err),
+                msg: format!("Deserialize registry value failed with {err}"),
                 source: None,
             })
         })
@@ -233,7 +245,7 @@ mod tests {
     use prost::Message;
 
     use super::{
-        get_api_boundary_node_records_from_snapshot, get_value_from_snapshot, RegistrySnapshot,
+        RegistrySnapshot, get_api_boundary_node_records_from_snapshot, get_value_from_snapshot,
     };
 
     #[test]

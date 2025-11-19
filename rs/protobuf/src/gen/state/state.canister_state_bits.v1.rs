@@ -13,7 +13,7 @@ pub struct CallContext {
     pub instructions_executed: u64,
     #[prost(message, optional, tag = "11")]
     pub metadata: ::core::option::Option<super::super::queues::v1::RequestMetadata>,
-    #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 3, 4, 7")]
+    #[prost(oneof = "call_context::CallOrigin", tags = "1, 2, 4, 7, 12")]
     pub call_origin: ::core::option::Option<call_context::CallOrigin>,
 }
 /// Nested message and enum types in `CallContext`.
@@ -24,6 +24,15 @@ pub mod call_context {
         pub user_id: ::core::option::Option<super::super::super::super::types::v1::UserId>,
         #[prost(bytes = "vec", tag = "2")]
         pub message_id: ::prost::alloc::vec::Vec<u8>,
+        #[prost(string, tag = "3")]
+        pub method_name: ::prost::alloc::string::String,
+    }
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    pub struct Query {
+        #[prost(message, optional, tag = "1")]
+        pub user_id: ::core::option::Option<super::super::super::super::types::v1::UserId>,
+        #[prost(string, tag = "2")]
+        pub method_name: ::prost::alloc::string::String,
     }
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct CanisterUpdateOrQuery {
@@ -34,6 +43,8 @@ pub mod call_context {
         /// If non-zero, this originates from a best-effort canister update call.
         #[prost(uint32, tag = "3")]
         pub deadline_seconds: u32,
+        #[prost(string, tag = "4")]
+        pub method_name: ::prost::alloc::string::String,
     }
     /// System task is either a Heartbeat or a GlobalTimer.
     #[derive(Clone, Copy, PartialEq, ::prost::Message)]
@@ -44,12 +55,12 @@ pub mod call_context {
         Ingress(Ingress),
         #[prost(message, tag = "2")]
         CanisterUpdate(CanisterUpdateOrQuery),
-        #[prost(message, tag = "3")]
-        Query(super::super::super::super::types::v1::UserId),
         #[prost(message, tag = "4")]
         CanisterQuery(CanisterUpdateOrQuery),
         #[prost(message, tag = "7")]
         SystemTask(SystemTask),
+        #[prost(message, tag = "12")]
+        UserQuery(Query),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -232,8 +243,8 @@ pub struct ExecutionStateBits {
     pub last_executed_round: u64,
     #[prost(message, optional, tag = "5")]
     pub metadata: ::core::option::Option<WasmMetadata>,
-    #[prost(bytes = "vec", optional, tag = "6")]
-    pub binary_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(bytes = "vec", tag = "6")]
+    pub binary_hash: ::prost::alloc::vec::Vec<u8>,
     #[prost(enumeration = "NextScheduledMethod", optional, tag = "7")]
     pub next_scheduled_method: ::core::option::Option<i32>,
     #[prost(bool, tag = "8")]
@@ -409,6 +420,8 @@ pub struct CanisterChangeFromCanister {
 pub struct CanisterCreation {
     #[prost(message, repeated, tag = "1")]
     pub controllers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub environment_variables_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
 }
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct CanisterCodeUninstall {}
@@ -435,6 +448,42 @@ pub struct CanisterLoadSnapshot {
     pub taken_at_timestamp: u64,
     #[prost(bytes = "vec", tag = "3")]
     pub snapshot_id: ::prost::alloc::vec::Vec<u8>,
+    #[prost(enumeration = "SnapshotSource", tag = "4")]
+    pub source: i32,
+    #[prost(message, optional, tag = "5")]
+    pub from_canister_id: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterControllers {
+    #[prost(message, repeated, tag = "1")]
+    pub controllers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterSettingsChange {
+    #[prost(message, optional, tag = "1")]
+    pub controllers: ::core::option::Option<CanisterControllers>,
+    #[prost(bytes = "vec", optional, tag = "2")]
+    pub environment_variables_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CanisterRename {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
+    #[prost(uint64, tag = "2")]
+    pub total_num_changes: u64,
+    #[prost(message, optional, tag = "3")]
+    pub rename_to: ::core::option::Option<RenameTo>,
+    #[prost(message, optional, tag = "4")]
+    pub requested_by: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RenameTo {
+    #[prost(message, optional, tag = "1")]
+    pub canister_id: ::core::option::Option<super::super::super::types::v1::PrincipalId>,
+    #[prost(uint64, tag = "2")]
+    pub version: u64,
+    #[prost(uint64, tag = "3")]
+    pub total_num_changes: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterChange {
@@ -444,7 +493,10 @@ pub struct CanisterChange {
     pub canister_version: u64,
     #[prost(oneof = "canister_change::ChangeOrigin", tags = "3, 4")]
     pub change_origin: ::core::option::Option<canister_change::ChangeOrigin>,
-    #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8, 9")]
+    #[prost(
+        oneof = "canister_change::ChangeDetails",
+        tags = "5, 6, 7, 8, 9, 10, 11"
+    )]
     pub change_details: ::core::option::Option<canister_change::ChangeDetails>,
 }
 /// Nested message and enum types in `CanisterChange`.
@@ -468,6 +520,10 @@ pub mod canister_change {
         CanisterControllersChange(super::CanisterControllersChange),
         #[prost(message, tag = "9")]
         CanisterLoadSnapshot(super::CanisterLoadSnapshot),
+        #[prost(message, tag = "10")]
+        CanisterSettingsChange(super::CanisterSettingsChange),
+        #[prost(message, tag = "11")]
+        CanisterRename(super::CanisterRename),
     }
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -558,12 +614,11 @@ pub struct TaskQueue {
     #[prost(message, repeated, tag = "3")]
     pub queue: ::prost::alloc::vec::Vec<ExecutionTask>,
 }
+/// Next ID: 57
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
-    #[prost(message, optional, tag = "3")]
-    pub call_context_manager: ::core::option::Option<CallContextManager>,
     #[prost(uint64, tag = "4")]
     pub compute_allocation: u64,
     #[prost(int64, tag = "5")]
@@ -633,6 +688,9 @@ pub struct CanisterStateBits {
     /// Log visibility for the canister.
     #[prost(message, optional, tag = "51")]
     pub log_visibility_v2: ::core::option::Option<LogVisibilityV2>,
+    /// The capacity of the canister log in bytes.
+    #[prost(uint64, tag = "56")]
+    pub log_memory_limit: u64,
     /// Log records of the canister.
     #[prost(message, repeated, tag = "43")]
     pub canister_log_records: ::prost::alloc::vec::Vec<CanisterLogRecord>,
@@ -661,6 +719,12 @@ pub struct CanisterStateBits {
     /// canister.
     #[prost(message, optional, tag = "54")]
     pub tasks: ::core::option::Option<TaskQueue>,
+    /// A map of environment variable names to their values
+    #[prost(btree_map = "string, string", tag = "55")]
+    pub environment_variables: ::prost::alloc::collections::BTreeMap<
+        ::prost::alloc::string::String,
+        ::prost::alloc::string::String,
+    >,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
@@ -674,6 +738,35 @@ pub mod canister_state_bits {
         Stopping(super::CanisterStatusStopping),
         #[prost(message, tag = "13")]
         Stopped(super::CanisterStatusStopped),
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum SnapshotSource {
+    Unspecified = 0,
+    TakenFromCanister = 1,
+    UploadedManually = 2,
+}
+impl SnapshotSource {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            Self::Unspecified => "SNAPSHOT_SOURCE_UNSPECIFIED",
+            Self::TakenFromCanister => "SNAPSHOT_SOURCE_TAKEN_FROM_CANISTER",
+            Self::UploadedManually => "SNAPSHOT_SOURCE_UPLOADED_MANUALLY",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "SNAPSHOT_SOURCE_UNSPECIFIED" => Some(Self::Unspecified),
+            "SNAPSHOT_SOURCE_TAKEN_FROM_CANISTER" => Some(Self::TakenFromCanister),
+            "SNAPSHOT_SOURCE_UPLOADED_MANUALLY" => Some(Self::UploadedManually),
+            _ => None,
+        }
     }
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]

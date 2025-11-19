@@ -1,7 +1,7 @@
 use crate::runtime::Runtime;
 use ic_base_types::CanisterId;
 use ic_management_canister_types_private::{
-    CanisterIdRecord, CanisterInstallMode, InstallCodeArgs, IC_00,
+    CanisterIdRecord, CanisterInstallMode, IC_00, InstallCodeArgs,
 };
 
 pub async fn install_code<Rt>(
@@ -19,8 +19,6 @@ where
         canister_id: canister_id.get(),
         wasm_module,
         arg,
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -36,8 +34,7 @@ where
     Rt: Runtime,
 {
     Rt::print(format!(
-        "[spawn] create_canister(cycles_for_canister_creation={})",
-        cycles_for_canister_creation
+        "[spawn] create_canister(cycles_for_canister_creation={cycles_for_canister_creation})"
     ));
 
     let result = Rt::call(
@@ -49,6 +46,6 @@ where
     .await
     .map(|(record,): (CanisterIdRecord,)| record);
 
-    Rt::print(format!("[spawn] create_canister() = {:?}", result));
+    Rt::print(format!("[spawn] create_canister() = {result:?}"));
     result.map(|r| r.get_canister_id())
 }

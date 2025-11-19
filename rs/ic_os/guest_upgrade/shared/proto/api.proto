@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package guest_upgrade.api;
+
+import "attestation.proto";
+
+message GetDiskEncryptionKeyRequest {
+  // The SEV attestation package of the client which proves that the client
+  // is running a genuine GuestOS version.
+  optional attestation.SevAttestationPackage sev_attestation_package = 1;
+}
+
+message GetDiskEncryptionKeyResponse {
+  // The disk encryption key
+  optional bytes key = 1;
+
+  // The SEV attestation package of the server which proves that the server
+  // is running a genuine GuestOS version.
+  optional attestation.SevAttestationPackage sev_attestation_package = 2;
+}
+
+message SignalStatusRequest {
+  // Whether the key exchange was successful.
+  optional bool success = 1;
+
+  // Additional debug information.
+  optional string debug_info = 2;
+}
+
+message SignalStatusResponse {
+}
+
+service DiskEncryptionKeyExchangeService {
+  // Retrieve the disk encryption key from the server. This is currently the
+  // disk encryption key of the data partition (/dev/vda10).
+  rpc GetDiskEncryptionKey(GetDiskEncryptionKeyRequest)
+    returns (GetDiskEncryptionKeyResponse) {
+  }
+
+  // Signal the server about the status of the key exchange.
+  // This is invoked after retrieving the key and can be used to signal the
+  // server whether the client was able to successfully retrieve the key.
+  rpc SignalStatus(SignalStatusRequest) returns (SignalStatusResponse) {
+  }
+}

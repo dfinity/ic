@@ -12,7 +12,7 @@
 # What is a system test of the Internet Computer
 A system test is a test, which is conducted on a complete instance of the [Internet Computer](https://internetcomputer.org/how-it-works) (IC). IC under test may be comprised of multiple System- and/or Application-subnets. The subnet is formed by a collection of nodes, which replicate each others state and realize a four-layered architecture of the [Internet Computer Protocol](https://internetcomputer.org/how-it-works) (ICP). System-subnet is primarily aimed at hosting [NNS canisters](https://wiki.internetcomputer.org/wiki/NNS_Canisters), but can also host any other canisters, such as [Bitcoin](https://github.com/dfinity/bitcoin-canister) canister or [Internet Identity](https://github.com/dfinity/internet-identity) canister. The objective of the Application-subnets is to host users canisters, which can range from simple [counter](https://github.com/dfinity/examples/tree/master/wasm/counter) canisters to arbitrary complex ones.
 
-An IC system test might include other components, such as unassigned nodes, boundary nodes, or nodes with some customized behavior. Customized nodes can, e.g., implement [workloads](https://github.com/dfinity/ic/blob/master/rs/tests/src/workload.rs), which dispatch query/update calls to canisters at desired rates.
+An IC system test might include other components, such as unassigned nodes, API boundary nodes, or nodes with some customized behavior. Customized nodes can, e.g., implement [workloads](https://github.com/dfinity/ic/blob/master/rs/tests/src/workload.rs), which dispatch query/update calls to canisters at desired rates.
 
 System tests are primarily aimed at realizing *functional testing* of the system requirements. These functional requirements (behaviors) are expressed in the forms of assertions in the test function. Non-functional testing, for example, performance testing can also be realized as a system test. This, however, should be done with a great deal of caution, as such tests are especially prone to flakiness in the distributed systems.
 
@@ -28,7 +28,7 @@ this container provides all the necessary environment setup for building and run
 ### Via native Bazel commands
 Within the docker execute:
 ```
-devenv-container$ bazel test --config=systest //rs/tests/idx:basic_health_test
+devenv-container$ bazel test --test_output=streamed //rs/tests/idx:basic_health_test
 ```
 You can provide additional [flags](https://bazel.build/reference/command-line-reference#test) to the Bazel [test](https://bazel.build/reference/command-line-reference#test) command. For example, *--test_tmpdir* would be useful, if you want to keep test artifacts (logs, ssh keys, etc.) after the test execution has finished.
 ### Via `ict` command line tool
@@ -39,7 +39,7 @@ devenv-container$ ict test //rs/tests/idx:basic_health_test
 Upon this invocation `ict` launches the test and also displays the raw Bazel command, which is called under the hood:
 ```
 Raw Bazel command to be invoked:
-$ bazel test //rs/tests/idx:basic_health_test --config=systest --cache_test_results=no
+$ bazel test //rs/tests/idx:basic_health_test --test_output=streamed --cache_test_results=no
 ```
 You can explore the functionality of the continuously developed `ict` tool by:
 ```

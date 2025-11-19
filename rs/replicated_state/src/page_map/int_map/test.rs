@@ -10,8 +10,7 @@ fn test_int_map_consecutive_inserts() {
         assert_eq!(
             m.get(&i).cloned(),
             Some(i + 100),
-            "failed to find inserted values, map: {:?}",
-            m
+            "failed to find inserted values, map: {m:?}"
         );
     }
 }
@@ -43,7 +42,7 @@ fn test_int_map_union() {
         assert_eq!(m.get(&i).cloned(), Some(i));
     }
     for i in 50..150u64 {
-        assert_eq!(m.get(&i).cloned(), Some(i + 100), "Map: {:?}", m);
+        assert_eq!(m.get(&i).cloned(), Some(i + 100), "Map: {m:?}");
     }
     assert!(m.get(&150).is_none());
 }
@@ -63,7 +62,7 @@ fn test_int_map_bounds() {
         let (start, end) = m.bounds(&i);
         if (70..=700).contains(&i) {
             assert_eq!(start, Some((&((i / 7) * 7), &0)));
-            assert_eq!(end, Some((&(((i + 6) / 7) * 7), &0)));
+            assert_eq!(end, Some((&(i.div_ceil(7) * 7), &0)));
         } else if i < 70 {
             assert_eq!(start, None);
             assert_eq!(end, Some((&70, &0)));
@@ -316,7 +315,7 @@ fn test_eq(#[strategy(proptest::collection::vec(0u64..20u64, 0..10))] keys: Vec<
     impl ValidateEq for Foo {
         fn validate_eq(&self, rhs: &Self) -> Result<(), String> {
             if self.0 != rhs.0 {
-                return Err(format!("lhs = {:#?}, rhs = {:#?}", self, rhs));
+                return Err(format!("lhs = {self:#?}, rhs = {rhs:#?}"));
             }
             Ok(())
         }
@@ -400,7 +399,7 @@ fn test_u128_values(
 
         #[inline]
         fn as_int(&self) -> u128 {
-            (self.0 as u128) << 64 | self.1 as u128
+            ((self.0 as u128) << 64) | self.1 as u128
         }
     }
 

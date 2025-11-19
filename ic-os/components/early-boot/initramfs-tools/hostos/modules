@@ -1,3 +1,5 @@
 virtio_blk
 nvme
 ahci
+msr
+megaraid_sas

@@ -103,7 +103,7 @@ impl Project {
             let s = SystemTime::now();
             move || (SystemTime::now().duration_since(s).unwrap()).as_secs_f32()
         };
-        eprintln!("Compiling {}...", bin_name);
+        eprintln!("Compiling {bin_name}...");
 
         let cargo_toml_path = self.cargo_manifest_dir.join("Cargo.toml");
         let target_dir = MetadataCommand::new()

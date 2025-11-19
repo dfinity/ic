@@ -1,9 +1,9 @@
 use crate::pb::v1::{
+    Proposal,
     manage_neuron::{
         ClaimOrRefresh, Command, Configure, Disburse, DisburseToNeuron, Follow, Merge,
         MergeMaturity, RegisterVote, Spawn, Split, StakeMaturity,
     },
-    Proposal,
 };
 
 mod configure;

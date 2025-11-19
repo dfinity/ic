@@ -1,12 +1,12 @@
 use super::RawHttpRequestVal;
-use crate::{crypto::SignedBytesWithoutDomainSeparator, CountBytes};
+use crate::{CountBytes, crypto::SignedBytesWithoutDomainSeparator};
+use ic_base_types::hash_of_map;
 use ic_crypto_sha2::Sha256;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_protobuf::proxy::ProxyDecodeError;
-use serde::{de::Deserializer, ser::Serializer, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Deserializer, ser::Serializer};
 use std::{
-    collections::BTreeMap,
     convert::{AsRef, TryFrom},
     error::Error,
     fmt,
@@ -38,8 +38,7 @@ impl<'a> Deserialize<'a> for MessageId {
             fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
                 write!(
                     formatter,
-                    "a message id: a blob with with {} bytes",
-                    EXPECTED_MESSAGE_ID_LENGTH
+                    "a message id: a blob with with {EXPECTED_MESSAGE_ID_LENGTH} bytes"
                 )
             }
 
@@ -158,36 +157,17 @@ fn hash_val(val: &RawHttpRequestVal) -> Vec<u8> {
         RawHttpRequestVal::Bytes(bytes) => hash_bytes(bytes),
         RawHttpRequestVal::U64(integer) => hash_u64(*integer),
         RawHttpRequestVal::Array(elements) => hash_array(elements),
-        RawHttpRequestVal::Map(map) => hash_of_map(map).to_vec(),
+        RawHttpRequestVal::Map(map) => {
+            hash_of_map(map, |key, value| hash_key_val(key.as_str(), value)).to_vec()
+        }
     }
 }
 
-fn hash_key_val(key: String, val: &RawHttpRequestVal) -> Vec<u8> {
-    let mut key_hash = hash_string(&key);
+pub(crate) fn hash_key_val(key: &str, val: &RawHttpRequestVal) -> Vec<u8> {
+    let mut key_hash = hash_string(key);
     let mut val_hash = hash_val(val);
     key_hash.append(&mut val_hash);
     key_hash
-}
-
-/// Describes `hash_of_map` as specified in the public spec.
-pub(crate) fn hash_of_map<S: ToString>(map: &BTreeMap<S, RawHttpRequestVal>) -> [u8; 32] {
-    let mut hashes: Vec<Vec<u8>> = Vec::new();
-    for (key, val) in map.iter() {
-        hashes.push(hash_key_val(key.to_string(), val));
-    }
-
-    // Computes hash by first sorting by "field name" hash, which is the
-    // same as sorting by concatenation of H(field name) · H(field value)
-    // (although in practice it's actually more stable in the presence of
-    // duplicated field names).  Then concatenate all the hashes.
-    hashes.sort();
-
-    let mut hasher = Sha256::new();
-    for hash in hashes {
-        hasher.write(&hash);
-    }
-
-    hasher.finish()
 }
 
 impl From<&MessageId> for u32 {
@@ -218,8 +198,7 @@ impl fmt::Display for MessageIdError {
                 expected_length,
             } => write!(
                 f,
-                "Expected a message id of length {} bytes, but got {} bytes instead.",
-                expected_length, given_length
+                "Expected a message id of length {expected_length} bytes, but got {given_length} bytes instead."
             ),
         }
     }
@@ -248,15 +227,15 @@ mod tests {
         SignedIngress,
     };
     use super::*;
-    use crate::{time::expiry_time_from_now, CanisterId, PrincipalId, Time};
+    use crate::{CanisterId, PrincipalId, Time, time::expiry_time_from_now};
     use hex_literal::hex;
 
     #[test]
     /// The test covers all the supported values of `RawHttpRequestVal` and calculates the `hash_of_map` for a nested map.
     /// The expected hash serves as a guard against any future changes to the `hash_of_map` function, ensuring its stability.
     fn test_hash_of_map() {
-        use maplit::btreemap;
         use RawHttpRequestVal::*;
+        use maplit::btreemap;
 
         let inner_map_0 = btreemap! {
             "key_string_0".to_string() => String("test_string_0".to_string()),
@@ -277,7 +256,7 @@ mod tests {
         };
 
         assert_eq!(
-            hash_of_map(&outer_map),
+            hash_of_map(&outer_map, |key, value| { hash_key_val(key, value) }),
             hex!("ace3c6e84b170c6235faff2ee1152d831c332a7e3c932fb7d129f973d6913ff2")
         );
     }
@@ -286,7 +265,7 @@ mod tests {
     fn message_id_icf_key_val_reference_1() {
         assert_eq!(
             hash_key_val(
-                "request_type".to_string(),
+                "request_type",
                 &RawHttpRequestVal::String("call".to_string())
             ),
             hex!(

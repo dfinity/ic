@@ -1,20 +1,19 @@
 use crate::message_routing::{
-    ApiBoundaryNodes, MessageRoutingMetrics, NodePublicKeys, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED,
+    ApiBoundaryNodes, CRITICAL_ERROR_INDUCT_RESPONSE_FAILED, MessageRoutingMetrics, NodePublicKeys,
 };
 use crate::routing::demux::Demux;
 use crate::routing::stream_builder::StreamBuilder;
 use ic_config::execution_environment::Config as HypervisorConfig;
 use ic_interfaces::execution_environment::{
-    ChainKeyData, ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
+    ExecutionRoundSummary, ExecutionRoundType, RegistryExecutionSettings, Scheduler,
 };
 use ic_interfaces::time_source::system_time_now;
-use ic_logger::{error, fatal, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, fatal};
 use ic_query_stats::deliver_query_stats;
 use ic_registry_subnet_features::SubnetFeatures;
-use ic_replicated_state::canister_state::system_state::CyclesUseCase::DroppedMessages;
 use ic_replicated_state::{NetworkTopology, ReplicatedState};
 use ic_types::batch::Batch;
-use ic_types::{ExecutionRound, NumBytes};
+use ic_types::{Cycles, ExecutionRound, NumBytes};
 use std::time::Instant;
 
 #[cfg(test)]
@@ -123,14 +122,15 @@ impl StateMachine for StateMachineImpl {
         }
 
         // Time out expired messages.
-        let (timed_out_messages, lost_cycles) = state.time_out_messages();
-        self.metrics
-            .timed_out_messages_total
-            .inc_by(timed_out_messages as u64);
-        state
-            .metadata
-            .subnet_metrics
-            .observe_consumed_cycles_with_use_case(DroppedMessages, lost_cycles.into());
+        //
+        // Preservation of cycles is validated (in debug builds) here for timing out and
+        // below for routing + shedding. Validation for induction is only done for each
+        // inducted message separately, as doing it for induction as a whole would
+        // require detailed accounting of GC-ed and rejected messages.
+        #[cfg(debug_assertions)]
+        let balance_before_time_out = state.balance_with_messages();
+
+        state.time_out_messages(&self.metrics);
         self.observe_phase_duration(PHASE_TIME_OUT_MESSAGES, &since);
 
         // Time out expired callbacks.
@@ -149,6 +149,9 @@ impl StateMachine for StateMachineImpl {
             );
             self.metrics.critical_error_induct_response_failed.inc();
         }
+        #[cfg(debug_assertions)]
+        state.assert_balance_with_messages(balance_before_time_out);
+
         self.observe_phase_duration(PHASE_TIME_OUT_CALLBACKS, &since);
 
         // Preprocess messages and add messages to the induction pool through the Demux.
@@ -169,13 +172,13 @@ impl StateMachine for StateMachineImpl {
 
         self.observe_phase_duration(PHASE_INDUCTION, &since);
 
+        let since = Instant::now();
         let execution_round_type = if batch.requires_full_state_hash {
             ExecutionRoundType::CheckpointRound
         } else {
             ExecutionRoundType::OrdinaryRound
         };
 
-        let since = Instant::now();
         // Process messages from the induction pool through the Scheduler.
         let round_summary = batch.batch_summary.map(|b| ExecutionRoundSummary {
             next_checkpoint_round: ExecutionRound::from(b.next_checkpoint_height.get()),
@@ -184,11 +187,7 @@ impl StateMachine for StateMachineImpl {
         let state_after_execution = self.scheduler.execute_round(
             state_with_messages,
             batch.randomness,
-            ChainKeyData {
-                master_public_keys: batch.chain_key_subnet_public_keys,
-                idkg_pre_signature_ids: batch.idkg_pre_signature_ids,
-                nidkg_ids: batch.ni_dkg_ids,
-            },
+            batch.chain_key_data,
             &batch.replica_version,
             ExecutionRound::from(batch.batch_number.get()),
             round_summary,
@@ -207,6 +206,8 @@ impl StateMachine for StateMachineImpl {
         self.observe_phase_duration(PHASE_EXECUTION, &since);
 
         let since = Instant::now();
+        #[cfg(debug_assertions)]
+        let balance_before_routing = state_after_execution.balance_with_messages();
         // Postprocess the state: route messages into streams.
         let mut state_after_stream_builder =
             self.stream_builder.build_streams(state_after_execution);
@@ -214,17 +215,27 @@ impl StateMachine for StateMachineImpl {
 
         let since = Instant::now();
         // Shed enough messages to stay below the best-effort message memory limit.
-        let (shed_messages, shed_message_bytes, lost_cycles) = state_after_stream_builder
-            .enforce_best_effort_message_limit(self.best_effort_message_memory_capacity);
-        self.metrics.shed_messages_total.inc_by(shed_messages);
-        self.metrics
-            .shed_message_bytes_total
-            .inc_by(shed_message_bytes.get());
-        state_after_stream_builder
-            .metadata
-            .subnet_metrics
-            .observe_consumed_cycles_with_use_case(DroppedMessages, lost_cycles.into());
+        state_after_stream_builder.enforce_best_effort_message_limit(
+            self.best_effort_message_memory_capacity,
+            &self.metrics,
+        );
+        #[cfg(debug_assertions)]
+        state_after_stream_builder.assert_balance_with_messages(balance_before_routing);
         self.observe_phase_duration(PHASE_SHED_MESSAGES, &since);
+
+        // Take out all refunds from the refund pool and observe them as lost cycles.
+        //
+        // Refunds are currently not routed to streams (this will be implemented in a
+        // follow-up change). Therefore, we "lose" them here, so they don't accumulate
+        // forever.
+        if !state_after_stream_builder.refunds().is_empty() {
+            let mut lost_cycles = Cycles::new(0);
+            state_after_stream_builder.take_refunds(|refund| {
+                lost_cycles += refund.amount();
+                true
+            });
+            state_after_stream_builder.observe_lost_cycles_due_to_dropped_messages(lost_cycles);
+        }
 
         state_after_stream_builder
     }

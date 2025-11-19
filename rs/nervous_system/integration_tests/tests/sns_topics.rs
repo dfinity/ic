@@ -6,7 +6,7 @@ use ic_nervous_system_agent::pocketic_impl::PocketIcAgent;
 use ic_nervous_system_agent::sns::governance::{GovernanceCanister, SubmittedProposal};
 use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    install_canister_on_subnet, nns, sns, universal_canister, NnsInstaller,
+    NnsInstaller, install_canister_on_subnet, nns, sns, universal_canister,
 };
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
@@ -207,14 +207,15 @@ async fn set_custom_sns_topics_test() {
             .await
             .unwrap();
 
-        let proposal_id = SubmittedProposal::try_from(response)
-            .unwrap()
-            .proposal_id
-            .id;
+        let proposal_id = SubmittedProposal::try_from(response).unwrap().proposal_id;
 
-        nns::governance::wait_for_proposal_execution(&pocket_ic, proposal_id)
-            .await
-            .unwrap();
+        sns::governance::wait_for_proposal_execution(
+            &pocket_ic,
+            sns.governance.canister_id,
+            proposal_id,
+        )
+        .await
+        .unwrap();
     }
 
     // Assert that the proposal is originally under the `CriticalDappOperations` topic.
@@ -240,7 +241,7 @@ async fn set_custom_sns_topics_test() {
     assert_eq!(
         custom_proposal_topics,
         vec![
-            ("DAO community settings".to_string(), Some(vec![]), false),
+            ("DAO community settings".to_string(), Some(vec![]), true),
             ("SNS framework management".to_string(), Some(vec![]), false),
             ("Dapp canister management".to_string(), Some(vec![]), false),
             (
@@ -308,14 +309,15 @@ async fn set_custom_sns_topics_test() {
             .await
             .unwrap();
 
-        let proposal_id = SubmittedProposal::try_from(response)
-            .unwrap()
-            .proposal_id
-            .id;
+        let proposal_id = SubmittedProposal::try_from(response).unwrap().proposal_id;
 
-        nns::governance::wait_for_proposal_execution(&pocket_ic, proposal_id)
-            .await
-            .unwrap();
+        sns::governance::wait_for_proposal_execution(
+            &pocket_ic,
+            sns.governance.canister_id,
+            proposal_id,
+        )
+        .await
+        .unwrap();
     }
 
     // Assert that the intended changes took place in the list of topics.
@@ -341,7 +343,7 @@ async fn set_custom_sns_topics_test() {
     assert_eq!(
         custom_proposal_topics,
         vec![
-            ("DAO community settings".to_string(), Some(vec![]), false),
+            ("DAO community settings".to_string(), Some(vec![]), true),
             ("SNS framework management".to_string(), Some(vec![]), false),
             ("Dapp canister management".to_string(), Some(vec![]), false),
             (

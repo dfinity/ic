@@ -4,23 +4,23 @@ use ic_test_utilities_consensus::{
     make_genesis,
 };
 use ic_types::{
+    Height,
     artifact::ConsensusMessageId,
     batch::{BatchPayload, IngressPayload},
     consensus::{
-        dkg::{DkgDataPayload, Summary},
         Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHash, DataPayload,
         Payload, Rank,
+        dkg::{DkgDataPayload, DkgSummary},
     },
     crypto::{CryptoHash, CryptoHashOf},
     messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
     time::UNIX_EPOCH,
-    Height,
 };
 use ic_types_test_utils::ids::node_test_id;
 
 use super::types::{
-    stripped::{StrippedBlockProposal, StrippedIngressPayload},
     SignedIngressId,
+    stripped::{StrippedBlockProposal, StrippedIngressPayload},
 };
 
 pub(crate) fn fake_ingress_message(method_name: &str) -> (SignedIngress, SignedIngressId) {
@@ -74,7 +74,7 @@ pub(crate) fn fake_ingress_message_with_arg_size_and_sig(
 pub(crate) fn fake_block_proposal_with_ingresses(
     ingress_messages: Vec<SignedIngress>,
 ) -> BlockProposal {
-    let parent = make_genesis(Summary::fake()).content.block;
+    let parent = make_genesis(DkgSummary::fake()).content.block;
     let block = Block::new(
         ic_types::crypto::crypto_hash(parent.as_ref()),
         Payload::new(
@@ -106,10 +106,7 @@ pub(crate) fn fake_stripped_block_proposal_with_ingresses(
 }
 
 pub(crate) fn fake_summary_block_proposal() -> ConsensusMessage {
-    let block = make_genesis(ic_types::consensus::dkg::Summary::fake())
-        .content
-        .block
-        .into_inner();
+    let block = make_genesis(DkgSummary::fake()).content.block.into_inner();
 
     ConsensusMessage::BlockProposal(BlockProposal::fake(block, node_test_id(0)))
 }

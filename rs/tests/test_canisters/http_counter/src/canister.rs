@@ -1,8 +1,8 @@
-use candid::types::Serializer;
-use candid::types::Type;
 use candid::CandidType;
 use candid::Deserialize;
 use candid::Func;
+use candid::types::Serializer;
+use candid::types::Type;
 use std::cell::RefCell;
 
 thread_local! {
@@ -81,7 +81,7 @@ pub struct Callback(Func);
 impl From<&str> for Callback {
     fn from(method: &str) -> Self {
         Callback(Func {
-            principal: ic_cdk::api::id(),
+            principal: ic_cdk::api::canister_self(),
             method: method.into(),
         })
     }
@@ -109,7 +109,7 @@ pub enum TokenState {
     Last,
 }
 
-#[ic_cdk_macros::query]
+#[ic_cdk::query]
 fn http_request(req: HttpRequest) -> HttpResponse {
     let counter = STATE.with(|v| v.borrow().counter);
 
@@ -182,7 +182,7 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     }
 }
 
-#[ic_cdk_macros::update]
+#[ic_cdk::update]
 fn http_request_update(req: HttpRequest) -> HttpResponse {
     STATE.with(|v| {
         let counter = &mut v.borrow_mut().counter;
@@ -226,7 +226,7 @@ fn http_request_update(req: HttpRequest) -> HttpResponse {
     })
 }
 
-#[ic_cdk_macros::query]
+#[ic_cdk::query]
 fn http_streaming(token: Token) -> StreamingCallbackHttpResponse {
     let counter = STATE.with(|v| v.borrow().counter);
 

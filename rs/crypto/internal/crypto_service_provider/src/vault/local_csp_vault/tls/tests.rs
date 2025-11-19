@@ -1,7 +1,7 @@
+use crate::LocalCspVault;
 use crate::vault::local_csp_vault::tls::SecretKeyStoreInsertionError;
 use crate::vault::test_utils::sks::secret_key_store_containing_key_with_invalid_encoding;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
-use crate::LocalCspVault;
 use assert_matches::assert_matches;
 use ic_test_utilities_time::FastForwardTimeSource;
 use ic_types_test_utils::ids::node_test_id;
@@ -11,15 +11,15 @@ const NODE_1: u64 = 4241;
 mod keygen {
     use super::*;
     use crate::key_id::KeyId;
-    use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::public_key_store::PublicKeySetOnceError;
+    use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
     use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
     use crate::vault::api::CspTlsKeygenError;
     use crate::vault::api::PublicKeyStoreCspVault;
     use crate::vault::api::SecretKeyStoreCspVault;
     use crate::vault::api::TlsHandshakeCspVault;
-    use crate::vault::local_csp_vault::tls::RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE;
     use crate::vault::local_csp_vault::LocalCspVault;
+    use crate::vault::local_csp_vault::tls::RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE;
     use ic_crypto_tls_interfaces::TlsPublicKeyCert;
     use ic_interfaces::time_source::TimeSource;
     use mockall::Sequence;
@@ -29,9 +29,9 @@ mod keygen {
     use std::collections::BTreeSet;
     use std::sync::Arc;
     use std::time::Duration;
+    use time::PrimitiveDateTime;
     use time::macros::datetime;
     use time::macros::format_description;
-    use time::PrimitiveDateTime;
     use x509_parser::num_bigint;
     use x509_parser::{certificate::X509Certificate, prelude::FromDer, x509::X509Name}; // re-export of num_bigint
 
@@ -150,7 +150,7 @@ mod keygen {
             .expect("Generation of TLS keys failed.");
 
         let cert_serial = &x509(&cert).serial;
-        let expected_randomness = csprng_seeded_with(FIXED_SEED).gen::<[u8; 19]>();
+        let expected_randomness = csprng_seeded_with(FIXED_SEED).r#gen::<[u8; 19]>();
         let expected_serial = &num_bigint::BigUint::from_bytes_be(&expected_randomness);
         assert_eq!(expected_serial, cert_serial);
     }
@@ -313,7 +313,7 @@ mod keygen {
     #[test]
     fn should_fail_with_transient_internal_error_if_tls_keygen_persistence_fails() {
         let mut pks_returning_io_error = MockPublicKeyStore::new();
-        let io_error = std::io::Error::new(std::io::ErrorKind::Other, "oh no!");
+        let io_error = std::io::Error::other("oh no!");
         pks_returning_io_error
             .expect_set_once_tls_certificate()
             .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
@@ -329,8 +329,8 @@ mod keygen {
     }
 
     #[test]
-    fn should_fail_with_transient_internal_error_if_node_signing_secret_key_persistence_fails_due_to_io_error(
-    ) {
+    fn should_fail_with_transient_internal_error_if_node_signing_secret_key_persistence_fails_due_to_io_error()
+     {
         let mut sks_returning_io_error = MockSecretKeyStore::new();
         let expected_io_error = "cannot write to file".to_string();
         sks_returning_io_error
@@ -353,8 +353,8 @@ mod keygen {
     }
 
     #[test]
-    fn should_fail_with_internal_error_if_node_signing_secret_key_persistence_fails_due_to_serialization_error(
-    ) {
+    fn should_fail_with_internal_error_if_node_signing_secret_key_persistence_fails_due_to_serialization_error()
+     {
         let mut sks_returning_serialization_error = MockSecretKeyStore::new();
         let expected_serialization_error = "cannot serialize keys".to_string();
         sks_returning_serialization_error
@@ -402,7 +402,7 @@ mod keygen {
         x509(cert).serial.clone()
     }
 
-    fn x509(tls_cert: &TlsPublicKeyCert) -> X509Certificate {
+    fn x509(tls_cert: &TlsPublicKeyCert) -> X509Certificate<'_> {
         let (remainder, x509_cert) =
             X509Certificate::from_der(tls_cert.as_der()).expect("Error parsing DER");
         assert!(remainder.is_empty());
@@ -423,6 +423,7 @@ mod keygen {
 
 mod sign {
     use super::*;
+    use crate::Csp;
     use crate::api::CspSigner;
     use crate::key_id::KeyId;
     use crate::vault::api::BasicSignatureCspVault;
@@ -430,7 +431,6 @@ mod sign {
     use crate::vault::api::SecretKeyStoreCspVault;
     use crate::vault::api::TlsHandshakeCspVault;
     use crate::vault::test_utils::ed25519_csp_pubkey_from_tls_pubkey_cert;
-    use crate::Csp;
     use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_types::crypto::AlgorithmId;
     use rand::{CryptoRng, Rng, SeedableRng};
@@ -440,22 +440,24 @@ mod sign {
     fn should_sign_with_valid_key() {
         let rng = &mut reproducible_rng();
         let csp_vault = LocalCspVault::builder_for_test()
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
             .build();
         let public_key_cert = csp_vault
             .gen_tls_key_pair(node_test_id(NODE_1))
             .expect("Generation of TLS keys failed.");
 
-        assert!(csp_vault
-            .tls_sign(random_message(rng), KeyId::from(&public_key_cert))
-            .is_ok());
+        assert!(
+            csp_vault
+                .tls_sign(random_message(rng), KeyId::from(&public_key_cert))
+                .is_ok()
+        );
     }
 
     #[test]
     fn should_sign_verifiably() {
         let rng = &mut reproducible_rng();
         let csp_vault = LocalCspVault::builder_for_test()
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
             .build();
         let verifier = Csp::builder_for_test().build();
         let public_key_cert = csp_vault
@@ -468,9 +470,11 @@ mod sign {
             .expect("failed to generate signature");
 
         let csp_pub_key = ed25519_csp_pubkey_from_tls_pubkey_cert(&public_key_cert);
-        assert!(verifier
-            .verify(&sig, &msg, AlgorithmId::Ed25519, csp_pub_key)
-            .is_ok());
+        assert!(
+            verifier
+                .verify(&sig, &msg, AlgorithmId::Ed25519, csp_pub_key)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -492,7 +496,7 @@ mod sign {
     fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
         let rng = &mut reproducible_rng();
         let csp_vault = LocalCspVault::builder_for_test()
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
             .build();
         let wrong_csp_pub_key = csp_vault
             .gen_node_signing_key_pair()
@@ -517,7 +521,7 @@ mod sign {
         let key_store = secret_key_store_containing_key_with_invalid_encoding(key_id);
         let csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
             .build();
 
         assert!(csp_vault.sks_contains(key_id).expect("SKS call failed"));
@@ -536,7 +540,7 @@ mod sign {
         let key_store = secret_key_store_containing_key_with_invalid_length(key_id);
         let csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
-            .with_rng(ChaCha20Rng::from_seed(rng.gen()))
+            .with_rng(ChaCha20Rng::from_seed(rng.r#gen()))
             .build();
 
         let result = csp_vault.tls_sign(random_message(rng), key_id);
@@ -547,6 +551,6 @@ mod sign {
 
     fn random_message<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
         let msg_len: usize = rng.gen_range(0..1024);
-        (0..msg_len).map(|_| rng.gen::<u8>()).collect()
+        (0..msg_len).map(|_| rng.r#gen::<u8>()).collect()
     }
 }

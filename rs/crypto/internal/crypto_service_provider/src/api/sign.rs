@@ -60,8 +60,8 @@ pub trait CspSigner {
     /// * `public_key` the public key of the signer
     /// # Errors
     /// * `CryptoError::PopVerification` if the algorithm used is not supported
-    ///    by the trait implementation, or if the signature was checked and found
-    ///    to be invalid.
+    ///   by the trait implementation, or if the signature was checked and found
+    ///   to be invalid.
     /// # Returns
     /// `Ok(())` if the PoP is valid or an `Err` otherwise
     fn verify_pop(

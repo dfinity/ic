@@ -1,7 +1,7 @@
 #![allow(clippy::disallowed_types)]
 use std::ops::Range;
-use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 use core::ops::Deref;
 use std::time::Instant;
@@ -14,9 +14,9 @@ use tokio::time::Duration;
 use tracing::{debug, error, info, trace};
 
 use crate::blocks::BlockStoreError;
-use crate::blocks::{Blocks, HashedBlock};
+use crate::blocks::{Blocks, HashedBlock, RosettaDbConfig};
 use crate::blocks_access::BlocksAccess;
-use crate::certification::{verify_block_hash, VerificationInfo};
+use crate::certification::{VerificationInfo, verify_block_hash};
 use crate::errors::Error;
 use rosetta_core::metrics::RosettaMetrics;
 
@@ -48,6 +48,7 @@ where
     blocks_access: Option<Arc<B>>,
     store_max_blocks: Option<u64>,
     verification_info: Option<VerificationInfo>,
+    rosetta_metrics: RosettaMetrics,
 }
 
 impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
@@ -56,11 +57,13 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         store_location: Option<&std::path::Path>,
         store_max_blocks: Option<u64>,
         verification_info: Option<VerificationInfo>,
-        enable_rosetta_blocks: bool,
+        config: RosettaDbConfig,
     ) -> Result<LedgerBlocksSynchronizer<B>, Error> {
+        let rosetta_metrics =
+            RosettaMetrics::new("ICP".to_string(), "ryjl3-tyaaa-aaaaa-aaaba-cai".to_string());
         let mut blocks = match store_location {
-            Some(loc) => Blocks::new_persistent(loc, enable_rosetta_blocks)?,
-            None => Blocks::new_in_memory(enable_rosetta_blocks)?,
+            Some(loc) => Blocks::new_persistent(loc, config)?,
+            None => Blocks::new_in_memory(config)?,
         };
 
         if let Some(blocks_access) = &blocks_access {
@@ -90,10 +93,10 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         }
 
         if let Ok(x) = last_block {
-            RosettaMetrics::set_synced_height(x.index);
+            rosetta_metrics.set_synced_height(x.index);
         }
         if let Ok(x) = blocks.get_latest_verified_hashed_block() {
-            RosettaMetrics::set_verified_height(x.index);
+            rosetta_metrics.set_verified_height(x.index);
         }
 
         blocks.try_prune(&store_max_blocks, PRUNE_DELAY)?;
@@ -103,6 +106,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             blocks_access,
             store_max_blocks,
             verification_info,
+            rosetta_metrics,
         })
     }
 
@@ -136,7 +140,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 }
             }
             Err(e) => {
-                let msg = format!("Error loading genesis block: {:?}", e);
+                let msg = format!("Error loading genesis block: {e:?}");
                 error!("{}", msg);
                 return Err(Error::InternalError(msg));
             }
@@ -225,8 +229,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
             if retry == MAX_RETRIES_QUERY_TIP_BLOCK {
                 break Err(format!(
-                    "Failed to retrieve tip block after {} retries",
-                    MAX_RETRIES_QUERY_TIP_BLOCK
+                    "Failed to retrieve tip block after {MAX_RETRIES_QUERY_TIP_BLOCK} retries"
                 ));
             }
             retry += 1;
@@ -265,7 +268,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 "Received tip_index == u64::MAX".to_string(),
             ));
         }
-        RosettaMetrics::set_target_height(tip.index);
+        self.rosetta_metrics.set_target_height(tip.index);
 
         let mut blockchain = self.blockchain.write().await;
 
@@ -371,10 +374,13 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                     .await
                     .map_err(Error::InternalError);
                 if batch.is_ok() || retry == MAX_RETRY {
-                    RosettaMetrics::add_blocks_fetched(batch.as_ref().unwrap().len() as u64);
+                    if let Ok(encoded_blocks) = &batch {
+                        self.rosetta_metrics
+                            .add_blocks_fetched(encoded_blocks.len() as u64);
+                    }
                     break batch;
                 }
-                RosettaMetrics::inc_fetch_retries();
+                self.rosetta_metrics.inc_fetch_retries();
                 retry += 1;
             }
             .map_err(|e| {
@@ -394,7 +400,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
             }
             for raw_block in batch {
                 let block = Block::decode(raw_block.clone())
-                    .map_err(|err| Error::InternalError(format!("Cannot decode block: {}", err)))?;
+                    .map_err(|err| Error::InternalError(format!("Cannot decode block: {err}")))?;
                 if block.parent_hash != last_block_hash {
                     let err_msg = format!(
                         "Block at {}: parent hash mismatch. Expected: {:?}, got: {:?}",
@@ -411,8 +417,8 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
                 block_batch.push(hb);
                 i += 1;
             }
-            RosettaMetrics::set_synced_height(i - 1);
-            if (i - range.start) % DATABASE_WRITE_BLOCKS_BATCH_SIZE == 0 {
+            self.rosetta_metrics.set_synced_height(i - 1);
+            if (i - range.start).is_multiple_of(DATABASE_WRITE_BLOCKS_BATCH_SIZE) {
                 blockchain.push_batch(block_batch)?;
                 if print_progress {
                     info!("Synced up to {}", i - 1);
@@ -423,7 +429,7 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
         blockchain.push_batch(block_batch)?;
         info!("Synced took {} seconds", t_total.elapsed().as_secs_f64());
         blockchain.set_hashed_block_to_verified(&(range.end - 1))?;
-        RosettaMetrics::set_verified_height(range.end - 1);
+        self.rosetta_metrics.set_verified_height(range.end - 1);
         Ok(())
     }
 }
@@ -432,19 +438,20 @@ impl<B: BlocksAccess> LedgerBlocksSynchronizer<B> {
 mod test {
 
     use std::ops::Range;
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
 
     use async_trait::async_trait;
+    use ic_ledger_core::Tokens;
     use ic_ledger_core::block::{BlockType, EncodedBlock};
     use ic_ledger_core::timestamp::TimeStamp;
-    use ic_ledger_core::Tokens;
     use ic_ledger_hash_of::HashOf;
     use ic_types::PrincipalId;
     use icp_ledger::{
-        AccountIdentifier, Block, BlockIndex, Memo, TipOfChainRes, DEFAULT_TRANSFER_FEE,
+        AccountIdentifier, Block, BlockIndex, DEFAULT_TRANSFER_FEE, Memo, TipOfChainRes,
     };
 
+    use crate::blocks::RosettaDbConfig;
     use crate::blocks_access::BlocksAccess;
     use crate::ledger_blocks_sync::LedgerBlocksSynchronizer;
 
@@ -494,7 +501,7 @@ mod test {
             /* store_location = */ None,
             /* store_max_blocks = */ None,
             /* verification_info = */ None,
-            false,
+            RosettaDbConfig::default_disabled(),
         )
         .await
         .unwrap()

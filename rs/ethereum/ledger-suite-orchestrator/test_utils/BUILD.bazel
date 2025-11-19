@@ -16,11 +16,11 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
+        "//packages/ic-http-types",
         "//packages/ic-metrics-assert",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/ethereum/ledger-suite-orchestrator:ledger_suite_orchestrator",
         "//rs/ledger_suite/icrc1/ledger",
-        "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
@@ -30,6 +30,7 @@ rust_library(
         "@crate_index//:assert_matches",
         "@crate_index//:candid",
         "@crate_index//:ic-cdk",
+        "@crate_index//:ic-management-canister-types",
         "@crate_index//:proptest",
     ],
 )

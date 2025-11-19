@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
     "//rs/crypto/utils/threshold_sig_der",
+    "//rs/http_endpoints/async_utils",
     "//rs/http_endpoints/metrics",
     "//rs/interfaces/registry",
     "//rs/monitoring/logger",
@@ -24,7 +25,14 @@ DEPENDENCIES = [
     "@crate_index//:slog",
     "@crate_index//:tempfile",
     "@crate_index//:tokio",
+    "@crate_index//:tokio-util",
     "@crate_index//:url",
+]
+
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/registry/fake",
+    "//rs/registry/proto_data_provider",
 ]
 
 MACRO_DEPENDENCIES = []
@@ -45,4 +53,10 @@ rust_binary(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":registry_replicator"],
+)
+
+rust_test(
+    name = "registry_replicator_test",
+    crate = ":registry_replicator",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )

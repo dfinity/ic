@@ -2,7 +2,7 @@ use crate::test_utils::MockRandomness;
 use crate::{
     governance::Governance,
     node_provider_rewards::DateRangeFilter,
-    pb::v1::{Governance as GovernanceProto, MonthlyNodeProviderRewards},
+    pb::v1::MonthlyNodeProviderRewards,
     test_utils::{MockEnvironment, StubCMC, StubIcpLedger},
 };
 use std::sync::Arc;
@@ -17,6 +17,8 @@ fn test_node_provider_rewards_read_from_correct_sources() {
         maximum_node_provider_rewards_e8s: None,
         registry_version: None,
         node_providers: vec![],
+        start_date: None,
+        end_date: None,
     };
 
     let rewards_2 = MonthlyNodeProviderRewards {
@@ -27,17 +29,20 @@ fn test_node_provider_rewards_read_from_correct_sources() {
         maximum_node_provider_rewards_e8s: None,
         registry_version: None,
         node_providers: vec![],
+        start_date: None,
+        end_date: None,
     };
     let mut governance = Governance::new(
-        GovernanceProto {
-            most_recent_monthly_node_provider_rewards: Some(rewards_1.clone()),
-            ..Default::default()
-        },
+        Default::default(),
         Arc::new(MockEnvironment::new(vec![], 100)),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
         Box::new(MockRandomness::new()),
     );
+
+    governance
+        .heap_data
+        .most_recent_monthly_node_provider_rewards = Some(rewards_1.clone());
 
     let result_1 = governance.get_most_recent_monthly_node_provider_rewards();
 
@@ -66,6 +71,8 @@ fn test_list_node_provider_rewards_api() {
         maximum_node_provider_rewards_e8s: None,
         registry_version: None,
         node_providers: vec![],
+        start_date: None,
+        end_date: None,
     };
 
     let rewards_2 = MonthlyNodeProviderRewards {
@@ -76,12 +83,12 @@ fn test_list_node_provider_rewards_api() {
         maximum_node_provider_rewards_e8s: None,
         registry_version: None,
         node_providers: vec![],
+        start_date: None,
+        end_date: None,
     };
 
     let mut governance = Governance::new(
-        GovernanceProto {
-            ..Default::default()
-        },
+        Default::default(),
         Arc::new(MockEnvironment::new(vec![], 100)),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
@@ -100,9 +107,7 @@ fn test_list_node_provider_rewards_api() {
 #[test]
 fn test_list_node_provider_rewards_api_with_paging_and_filters() {
     let mut governance = Governance::new(
-        GovernanceProto {
-            ..Default::default()
-        },
+        Default::default(),
         Arc::new(MockEnvironment::new(vec![], 100)),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
@@ -120,6 +125,8 @@ fn test_list_node_provider_rewards_api_with_paging_and_filters() {
             maximum_node_provider_rewards_e8s: None,
             registry_version: None,
             node_providers: vec![],
+            start_date: None,
+            end_date: None,
         };
         governance.update_most_recent_monthly_node_provider_rewards(rewards.clone());
         rewards_minted.push(rewards);

@@ -1,9 +1,9 @@
 use crate::governance::{Governance, MAX_UPGRADE_JOURNAL_ENTRIES_PER_REQUEST};
 use crate::pb::v1::{
-    governance::{Version, Versions},
-    upgrade_journal_entry::{self, upgrade_outcome, upgrade_started},
     Empty, GetUpgradeJournalRequest, GetUpgradeJournalResponse, ProposalId, UpgradeJournal,
     UpgradeJournalEntry,
+    governance::{Version, Versions},
+    upgrade_journal_entry::{self, upgrade_outcome, upgrade_started},
 };
 use ic_sns_governance_api::serialize_journal_entries;
 
@@ -217,14 +217,14 @@ impl From<upgrade_journal_entry::TargetVersionReset> for upgrade_journal_entry::
     }
 }
 
-pub fn serve_journal(journal: UpgradeJournal) -> ic_canisters_http_types::HttpResponse {
-    use ic_canisters_http_types::HttpResponseBuilder;
+pub fn serve_journal(journal: UpgradeJournal) -> ic_http_types::HttpResponse {
+    use ic_http_types::HttpResponseBuilder;
 
     let journal = ic_sns_governance_api::pb::v1::UpgradeJournal::from(journal);
 
     match serialize_journal_entries(&journal) {
         Err(err) => {
-            HttpResponseBuilder::server_error(format!("Failed to encode journal: {}", err)).build()
+            HttpResponseBuilder::server_error(format!("Failed to encode journal: {err}")).build()
         }
         Ok(body) => HttpResponseBuilder::ok()
             .header("Content-Type", "application/json")

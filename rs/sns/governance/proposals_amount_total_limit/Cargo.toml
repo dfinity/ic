@@ -1,7 +1,7 @@
 [package]
 name = "ic-sns-governance-proposals-amount-total-limit"
 version = "0.0.1"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 ic-sns-governance-token-valuation = { path = "../token_valuation" }

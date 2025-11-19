@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 use crate::flow::{AddErc20TokenFlow, ManagedCanistersAssert};
 use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat, Principal};
@@ -10,10 +11,8 @@ use ic_ledger_suite_orchestrator::candid::{
 use ic_ledger_suite_orchestrator::state::{
     ArchiveWasm, IndexWasm, LedgerSuiteVersion, LedgerWasm, Wasm, WasmHash,
 };
-use ic_management_canister_types_private::{
-    CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType, InstallCodeArgs, Method,
-    Payload,
-};
+use ic_management_canister_types::{CanisterInstallMode, InstallCodeArgs};
+use ic_management_canister_types_private::{CanisterStatusResultV2, CanisterStatusType};
 use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, UserError, WasmResult};
 use ic_types::Cycles;
@@ -164,7 +163,7 @@ impl LedgerSuiteOrchestrator {
     pub fn assert_managed_canisters(self, contract: &Erc20Contract) -> ManagedCanistersAssert {
         let canister_ids = self
             .call_orchestrator_canister_ids(contract)
-            .unwrap_or_else(|| panic!("No managed canister IDs found for contract {:?}", contract));
+            .unwrap_or_else(|| panic!("No managed canister IDs found for contract {contract:?}"));
 
         assert_ne!(
             canister_ids.ledger, canister_ids.index,
@@ -322,10 +321,7 @@ impl LedgerSuiteOrchestrator {
                 }
             }
         }
-        panic!(
-            "Failed to get result after {} ticks: {:?}",
-            MAX_TICKS, last_error
-        );
+        panic!("Failed to get result after {MAX_TICKS} ticks: {last_error:?}");
     }
 
     pub fn wait_for_canister_to_be_installed_and_running(&self, canister_id: Principal) {
@@ -338,8 +334,7 @@ impl LedgerSuiteOrchestrator {
                 Ok(())
             } else {
                 Err(format!(
-                    "Canister {} is not ready {:?}",
-                    canister_id, ledger_status
+                    "Canister {canister_id} is not ready {ledger_status:?}"
                 ))
             }
         });
@@ -496,7 +491,7 @@ pub fn assert_reply(result: WasmResult) -> Vec<u8> {
     match result {
         WasmResult::Reply(bytes) => bytes,
         WasmResult::Reject(reject) => {
-            panic!("Expected a successful reply, got a reject: {}", reject)
+            panic!("Expected a successful reply, got a reject: {reject}")
         }
     }
 }
@@ -511,16 +506,15 @@ pub fn out_of_band_upgrade<T: AsRef<StateMachine>>(
         .execute_ingress_as(
             controller,
             CanisterId::ic_00(),
-            Method::InstallCode,
-            InstallCodeArgs::new(
-                CanisterInstallMode::Upgrade,
-                target,
-                wasm,
-                Encode!(&()).unwrap(),
-                None,
-                None,
-            )
-            .encode(),
+            "install_code",
+            Encode!(&InstallCodeArgs {
+                mode: CanisterInstallMode::Upgrade(None),
+                canister_id: target.into(),
+                wasm_module: wasm,
+                arg: Encode!(&()).unwrap(),
+                sender_canister_version: None,
+            })
+            .unwrap(),
         )
         .map(|_| ())
 }

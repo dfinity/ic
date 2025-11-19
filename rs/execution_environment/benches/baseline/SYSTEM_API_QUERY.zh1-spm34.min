@@ -1,0 +1,6 @@
+test execution_environment:query/wasm32/ic0_data_certificate_size() ... bench:    59527000 ns/iter (+/- 2071841)
+test execution_environment:query/wasm64/ic0_data_certificate_size() ... bench:    60036312 ns/iter (+/- 1574382)
+test execution_environment:query/wasm32/ic0_data_certificate_copy()/1B ... bench:   141124066 ns/iter (+/- 3715586)
+test execution_environment:query/wasm64/ic0_data_certificate_copy()/1B ... bench:   136442810 ns/iter (+/- 2747148)
+test execution_environment:query/wasm32/ic0_data_certificate_copy()/64B ... bench:   141751559 ns/iter (+/- 3312295)
+test execution_environment:query/wasm64/ic0_data_certificate_copy()/64B ... bench:   136434504 ns/iter (+/- 1457614)

@@ -1,6 +1,6 @@
 use assert_matches::assert_matches;
 use candid::Encode;
-use ic_base_types::{CanisterId, PrincipalId, SubnetId};
+use ic_base_types::{PrincipalId, SubnetId};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_ID,
     TEST_NEURON_2_OWNER_PRINCIPAL,
@@ -8,28 +8,18 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::pb::v1::{self as nns_common_pb, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::governance::test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
-use ic_nns_governance_api::pb::v1::{
-    governance_error::ErrorType,
-    manage_neuron::{self, RegisterVote},
-    manage_neuron_response,
-    proposal::Action,
-    ListProposalInfo,
-    MakeProposalRequest,
-    // Perhaps surprisingly, CreateServiceNervousSystem is not needed by
-    // this file, because we simply use a constant of that type
-    ManageNeuron,
-    ManageNeuronResponse,
-    ProposalActionRequest,
-    ProposalStatus,
-    Vote,
+use ic_nns_governance_api::{
+    ListProposalInfoRequest, MakeProposalRequest, ManageNeuronCommandRequest, ManageNeuronRequest,
+    ManageNeuronResponse, ProposalActionRequest, ProposalStatus, Vote, governance_error::ErrorType,
+    manage_neuron::RegisterVote, manage_neuron_response, proposal::Action,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     sns_wasm::add_real_wasms_to_sns_wasms,
     state_test_helpers::{
-        list_deployed_snses, nns_governance_make_proposal, nns_list_proposals,
-        nns_wait_for_proposal_execution, set_controllers, setup_nns_canisters_with_features,
-        state_machine_builder_for_nns_tests,
+        SPECIFIED_CANISTER_ID, list_deployed_snses, nns_governance_make_proposal,
+        nns_list_proposals, nns_wait_for_proposal_execution, set_controllers,
+        setup_nns_canisters_with_features, state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
@@ -65,7 +55,7 @@ fn test_several_proposals() {
     setup_nns_canisters_with_features(&state_machine, nns_init_payload, /* features */ &[]);
     add_real_wasms_to_sns_wasms(&state_machine);
     let dapp_canister = state_machine.create_canister_with_cycles(
-        Some(CanisterId::from_u64(1000).get()),
+        Some(SPECIFIED_CANISTER_ID.get()),
         Cycles::zero(),
         None,
     );
@@ -87,15 +77,12 @@ fn test_several_proposals() {
     let response_1 = make_proposal(&state_machine, /* sns_number = */ 1, false);
     let response_1 = match response_1.command {
         Some(manage_neuron_response::Command::MakeProposal(resp)) => resp,
-        _ => panic!("First proposal failed to be submitted: {:#?}", response_1),
+        _ => panic!("First proposal failed to be submitted: {response_1:#?}"),
     };
     let proposal_id_1 = response_1
         .proposal_id
         .unwrap_or_else(|| {
-            panic!(
-                "First proposal response did not contain a proposal_id: {:#?}",
-                response_1
-            )
+            panic!("First proposal response did not contain a proposal_id: {response_1:#?}")
         })
         .id;
 
@@ -105,14 +92,13 @@ fn test_several_proposals() {
     match response_2.command {
         Some(manage_neuron_response::Command::Error(err)) => {
             assert_eq!(
-                ErrorType::try_from(err.error_type).ok(),
-                Some(ErrorType::PreconditionFailed),
-                "{:#?}",
-                err,
+                err.error_type,
+                ErrorType::PreconditionFailed as i32,
+                "{err:#?}",
             );
-            assert!(err.error_message.contains("another open"), "{:?}", err,);
+            assert!(err.error_message.contains("another open"), "{err:?}",);
         }
-        _ => panic!("Second proposal should be invalid: {:#?}", response_2),
+        _ => panic!("Second proposal should be invalid: {response_2:#?}"),
     }
 
     // Step 2.3: This unblocks more proposals from being made.
@@ -125,15 +111,12 @@ fn test_several_proposals() {
     let response_3 = make_proposal(&state_machine, 3, false);
     let response_3 = match response_3.command {
         Some(manage_neuron_response::Command::MakeProposal(response_3)) => response_3,
-        _ => panic!("Third proposal failed to be submitted: {:#?}", response_3),
+        _ => panic!("Third proposal failed to be submitted: {response_3:#?}"),
     };
     let proposal_id_3 = response_3
         .proposal_id
         .unwrap_or_else(|| {
-            panic!(
-                "Third proposal response did not contain a proposal_id: {:#?}",
-                response_1
-            )
+            panic!("Third proposal response did not contain a proposal_id: {response_1:#?}")
         })
         .id;
 
@@ -142,7 +125,7 @@ fn test_several_proposals() {
     // Step 3.1: Inspect proposals.
 
     // There should only be two proposals of type CreateServiceNervousSystem.
-    let final_proposals = nns_list_proposals(&state_machine, ListProposalInfo::default())
+    let final_proposals = nns_list_proposals(&state_machine, ListProposalInfoRequest::default())
         .proposal_info
         .into_iter()
         .filter_map(
@@ -158,30 +141,27 @@ fn test_several_proposals() {
     assert_eq!(
         final_proposals.keys().copied().collect::<HashSet<u64>>(),
         hashset! { proposal_id_1, proposal_id_3 },
-        "{:#?}",
-        final_proposals,
+        "{final_proposals:#?}",
     );
 
     let proposal_1 = final_proposals.get(&proposal_id_1).unwrap();
     let proposal_3 = final_proposals.get(&proposal_id_3).unwrap();
 
     assert_eq!(
-        ProposalStatus::try_from(proposal_1.status).unwrap(),
-        ProposalStatus::Executed,
-        "{:#?}",
-        proposal_1,
+        proposal_1.status,
+        ProposalStatus::Executed as i32,
+        "{proposal_1:#?}",
     );
     assert_eq!(
-        ProposalStatus::try_from(proposal_3.status).unwrap(),
-        ProposalStatus::Open,
-        "{:#?}",
-        proposal_1,
+        proposal_3.status,
+        ProposalStatus::Open as i32,
+        "{proposal_1:#?}",
     );
 
     // Step 3.2: Inspect SNS(s).
 
     let snses = list_deployed_snses(&state_machine).instances;
-    assert_eq!(snses.len(), 1, "{:#?}", snses);
+    assert_eq!(snses.len(), 1, "{snses:#?}");
 }
 
 #[test]
@@ -201,7 +181,7 @@ fn test_nf_is_not_permitted() {
     setup_nns_canisters_with_features(&state_machine, nns_init_payload, /* features */ &[]);
     add_real_wasms_to_sns_wasms(&state_machine);
     let dapp_canister = state_machine.create_canister_with_cycles(
-        Some(CanisterId::from_u64(1000).get()),
+        Some(SPECIFIED_CANISTER_ID.get()),
         Cycles::zero(),
         None,
     );
@@ -246,7 +226,7 @@ fn test_nf_is_permitted_with_test_flag() {
     );
     add_real_wasms_to_sns_wasms(&state_machine);
     let dapp_canister = state_machine.create_canister_with_cycles(
-        Some(CanisterId::from_u64(1000).get()),
+        Some(SPECIFIED_CANISTER_ID.get()),
         Cycles::zero(),
         None,
     );
@@ -266,13 +246,10 @@ fn test_nf_is_permitted_with_test_flag() {
     let response = make_proposal(&state_machine, /* sns_number = */ 1, false);
     let response = match response.command {
         Some(manage_neuron_response::Command::MakeProposal(make_proposal)) => make_proposal,
-        _ => panic!("Proposal failed to be submitted: {:#?}", response),
+        _ => panic!("Proposal failed to be submitted: {response:#?}"),
     };
     response.proposal_id.unwrap_or_else(|| {
-        panic!(
-            "Proposal response did not contain a proposal_id: {:#?}",
-            response
-        )
+        panic!("Proposal response did not contain a proposal_id: {response:#?}")
     });
 }
 
@@ -296,7 +273,7 @@ fn make_proposal(
         *TEST_NEURON_2_OWNER_PRINCIPAL,
         neuron_id,
         &MakeProposalRequest {
-            title: Some(format!("Create SNS #{}", sns_number)),
+            title: Some(format!("Create SNS #{sns_number}")),
             summary: "".to_string(),
             url: "".to_string(),
             action: Some(ProposalActionRequest::CreateServiceNervousSystem(
@@ -314,11 +291,11 @@ fn execute_proposal(state_machine: &StateMachine, proposal_id: ProposalId) {
             *TEST_NEURON_1_OWNER_PRINCIPAL,
             GOVERNANCE_CANISTER_ID,
             "manage_neuron",
-            Encode!(&ManageNeuron {
+            Encode!(&ManageNeuronRequest {
                 id: Some(nns_common_pb::NeuronId {
                     id: TEST_NEURON_1_ID
                 }),
-                command: Some(manage_neuron::Command::RegisterVote(RegisterVote {
+                command: Some(ManageNeuronCommandRequest::RegisterVote(RegisterVote {
                     proposal: Some(proposal_id),
                     vote: Vote::Yes as i32,
                 })),

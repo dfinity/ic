@@ -1,6 +1,6 @@
 #![allow(clippy::disallowed_types)]
 
-use anyhow::{bail, Context};
+use anyhow::{Context, bail};
 use common::storage::storage_client::StorageClient;
 use common::storage::types::MetadataEntry;
 use ic_base_types::CanisterId;
@@ -15,6 +15,7 @@ use std::{
 };
 use tokio::sync::Mutex as AsyncMutex;
 pub mod common;
+pub mod config;
 pub mod construction_api;
 pub mod data_api;
 pub mod ledger_blocks_synchronization;
@@ -34,16 +35,7 @@ pub struct AppState {
 impl AppState {
     // The ledger_display_name is the token symbol followed by the first 5 characters of the ledger_id.
     pub fn ledger_display_name(&self) -> String {
-        format!(
-            "{}-{}",
-            self.metadata.symbol.clone(),
-            self.ledger_id
-                .to_string()
-                .as_str()
-                .chars()
-                .take(5)
-                .collect::<String>()
-        )
+        self.storage.get_token_display_name()
     }
 }
 

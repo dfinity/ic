@@ -2,8 +2,8 @@ use std::{
     net::IpAddr,
     path::PathBuf,
     sync::{
-        atomic::{AtomicU32, Ordering},
         Arc,
+        atomic::{AtomicU32, Ordering},
     },
     time::{Duration, Instant},
 };
@@ -19,19 +19,20 @@ use axum::{
     response::IntoResponse,
 };
 use candid::Principal;
-use ic_bn_lib::http::ConnInfo;
-use ic_canister_client::Agent;
+use ic_agent::Agent;
+use ic_bn_lib::prometheus::{
+    IntCounterVec, IntGauge, Registry, register_int_counter_vec_with_registry,
+    register_int_gauge_with_registry,
+};
+use ic_bn_lib::{http::ConnInfo, tasks::Run};
 use ic_types::CanisterId;
 use ipnet::IpNet;
-use prometheus::{
-    register_int_counter_vec_with_registry, register_int_gauge_with_registry, IntCounterVec,
-    IntGauge, Registry,
-};
 use rate_limits_api::v1::{Action, IpPrefixes, RateLimitRule, RequestType as RequestTypeRule};
 use ratelimit::Ratelimiter;
 use strum::{Display, IntoStaticStr};
 #[allow(clippy::disallowed_types)]
-use tokio::sync::{watch, Mutex};
+use tokio::sync::{Mutex, watch};
+use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use super::{
@@ -39,25 +40,29 @@ use super::{
         CanisterConfigFetcherQuery, CanisterConfigFetcherUpdate, CanisterFetcher, FetchesConfig,
         FetchesRules, FileFetcher,
     },
-    sharded::{create_ratelimiter, ShardedRatelimiter},
+    sharded::{ShardedRatelimiter, create_ratelimiter},
 };
 
 use crate::{
-    core::Run,
-    persist::RouteSubnet,
-    routes::{ErrorCause, RateLimitCause, RequestContext, RequestType},
-    snapshot::RegistrySnapshot,
+    errors::{ErrorCause, RateLimitCause},
+    http::RequestType,
+    routes::RequestContext,
+    snapshot::{RegistrySnapshot, Subnet},
 };
 
 // Converts between different request types
 // We can't use a single one because Ratelimit API crate needs to build on WASM and ic-bn-lib does not
 fn convert_request_type(rt: RequestType) -> RequestTypeRule {
     match rt {
-        RequestType::Query => RequestTypeRule::Query,
-        RequestType::Call => RequestTypeRule::Call,
-        RequestType::SyncCall => RequestTypeRule::SyncCall,
-        RequestType::ReadState => RequestTypeRule::ReadState,
-        RequestType::ReadStateSubnet => RequestTypeRule::ReadStateSubnet,
+        RequestType::QueryV2 => RequestTypeRule::QueryV2,
+        RequestType::QueryV3 => RequestTypeRule::QueryV3,
+        RequestType::CallV2 => RequestTypeRule::CallV2,
+        RequestType::CallV3 => RequestTypeRule::CallV3,
+        RequestType::CallV4 => RequestTypeRule::CallV4,
+        RequestType::ReadStateV2 => RequestTypeRule::ReadStateV2,
+        RequestType::ReadStateV3 => RequestTypeRule::ReadStateV3,
+        RequestType::ReadStateSubnetV2 => RequestTypeRule::ReadStateSubnetV2,
+        RequestType::ReadStateSubnetV3 => RequestTypeRule::ReadStateSubnetV3,
         _ => RequestTypeRule::Unknown,
     }
 }
@@ -98,24 +103,23 @@ impl Eq for Bucket {}
 
 impl Bucket {
     fn evaluate(&self, ctx: &Context) -> Option<Decision> {
-        if let Some(v) = self.rule.subnet_id {
-            if ctx.subnet_id != v {
-                return None;
-            }
+        if let Some(v) = self.rule.subnet_id
+            && ctx.subnet_id != v
+        {
+            return None;
         }
 
-        if let Some(v) = self.rule.canister_id {
-            if let Some(x) = ctx.canister_id {
-                if x != v {
-                    return None;
-                }
-            }
+        if let Some(v) = self.rule.canister_id
+            && let Some(x) = ctx.canister_id
+            && x != v
+        {
+            return None;
         }
 
-        if let Some(v) = &self.rule.request_types {
-            if !v.contains(&convert_request_type(ctx.request_type)) {
-                return None;
-            }
+        if let Some(v) = &self.rule.request_types
+            && !v.contains(&convert_request_type(ctx.request_type))
+        {
+            return None;
         }
 
         if let Some(rgx) = &self.rule.methods_regex {
@@ -128,10 +132,10 @@ impl Bucket {
             }
         }
 
-        if let Some(v) = self.rule.ip {
-            if !v.contains(&ctx.ip) {
-                return None;
-            }
+        if let Some(v) = self.rule.ip
+            && !v.contains(&ctx.ip)
+        {
+            return None;
         }
 
         if self.rule.limit == Action::Pass {
@@ -315,10 +319,10 @@ impl GenericLimiter {
 
                 // Check if the same rule exists in the same position.
                 // If yes, then copy over the old limiter to avoid resetting it.
-                if let Some(v) = old.get(idx) {
-                    if v.rule == rule {
-                        return v.clone();
-                    }
+                if let Some(v) = old.get(idx)
+                    && v.rule == rule
+                {
+                    return v.clone();
                 }
 
                 let limiter = if let Action::Limit(limit, duration) = &rule.limit {
@@ -418,8 +422,8 @@ impl GenericLimiter {
 }
 
 #[async_trait]
-impl Run for Arc<GenericLimiter> {
-    async fn run(&mut self) -> Result<(), Error> {
+impl Run for GenericLimiter {
+    async fn run(&self, token: CancellationToken) -> Result<(), Error> {
         let mut interval = tokio::time::interval(self.opts.poll_interval);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
@@ -428,6 +432,10 @@ impl Run for Arc<GenericLimiter> {
         loop {
             tokio::select! {
                 biased;
+
+                _ = token.cancelled() => {
+                    return Ok(());
+                }
 
                 Ok(()) = channel.changed(), if self.opts.autoscale => {
                     let snapshot = channel.borrow_and_update().clone();
@@ -463,7 +471,7 @@ impl Run for Arc<GenericLimiter> {
 pub async fn middleware(
     State(state): State<Arc<GenericLimiter>>,
     Extension(ctx): Extension<Arc<RequestContext>>,
-    Extension(subnet): Extension<Arc<RouteSubnet>>,
+    Extension(subnet): Extension<Arc<Subnet>>,
     Extension(conn_info): Extension<Arc<ConnInfo>>,
     request: Request<Body>,
     next: Next,
@@ -497,20 +505,19 @@ pub async fn middleware(
 #[cfg(test)]
 mod test {
     use super::*;
+    use anyhow::bail;
+    use ic_bn_lib::principal;
     use indoc::indoc;
     use std::str::FromStr;
 
-    use crate::{
-        principal,
-        snapshot::{generate_stub_snapshot, ApiBoundaryNode},
-    };
+    use crate::snapshot::{ApiBoundaryNode, generate_stub_snapshot};
 
     struct BrokenFetcher;
 
     #[async_trait]
     impl FetchesRules for BrokenFetcher {
         async fn fetch_rules(&self) -> Result<Vec<RateLimitRule>, Error> {
-            Err(anyhow::anyhow!("boo"))
+            bail!("boo")
         }
     }
 
@@ -560,11 +567,11 @@ mod test {
 
         - canister_id: qoctq-giaaa-aaaaa-aaaea-cai
           ip: 10.0.0.0/8
-          request_types: [call]
+          request_types: [call_v2]
           limit: 10/1h
 
         - canister_id: qoctq-giaaa-aaaaa-aaaea-cai
-          request_types: [read_state]
+          request_types: [read_state_v2]
           ip_prefix_group:
             v4: 24
             v6: 64
@@ -602,7 +609,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id1),
                     method: Some("foo"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Pass
@@ -616,7 +623,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id1),
                     method: Some("bar"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Limit
@@ -632,9 +639,9 @@ mod test {
             &Registry::new(),
         ));
 
-        let mut runner = limiter.clone();
+        let limiter_clone = limiter.clone();
         tokio::spawn(async move {
-            let _ = runner.run().await;
+            let _ = limiter_clone.run(CancellationToken::new()).await;
         });
 
         limiter.apply_rules(rules.clone(), 1);
@@ -660,7 +667,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id0),
                     method: None,
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip_local4,
                 }),
                 Decision::Pass
@@ -672,7 +679,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id0),
                     method: None,
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip_local6,
                 }),
                 Decision::Pass
@@ -687,7 +694,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id1),
                     method: Some("foo"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Pass
@@ -701,7 +708,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id1),
                     method: Some("bar"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Limit
@@ -717,7 +724,7 @@ mod test {
                     subnet_id: subnet_id2,
                     canister_id: Some(id2),
                     method: Some("foo"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Pass
@@ -731,7 +738,7 @@ mod test {
                     subnet_id: subnet_id2,
                     canister_id: Some(id2),
                     method: Some("bar"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Limit
@@ -744,7 +751,7 @@ mod test {
                     subnet_id: subnet_id2,
                     canister_id: Some(id2),
                     method: Some("lol"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Pass
@@ -756,7 +763,7 @@ mod test {
                     subnet_id: subnet_id2,
                     canister_id: Some(id2),
                     method: Some("rofl"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Pass
@@ -770,7 +777,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id2),
                     method: Some("baz"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Block
@@ -785,7 +792,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id3),
                     method: Some("rofl"),
-                    request_type: RequestType::Call,
+                    request_type: RequestType::CallV2,
                     ip: ip1,
                 }),
                 Decision::Pass
@@ -798,7 +805,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id3),
                     method: Some("bar"),
-                    request_type: RequestType::Call,
+                    request_type: RequestType::CallV2,
                     ip: ip1,
                 }),
                 Decision::Limit
@@ -813,7 +820,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id3),
                     method: Some("baz"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Pass
@@ -826,7 +833,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id3),
                     method: Some("zob"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Limit
@@ -842,7 +849,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id3),
                     method: None,
-                    request_type: RequestType::ReadState,
+                    request_type: RequestType::ReadStateV2,
                     ip: ip1,
                 }),
                 Decision::Pass
@@ -855,7 +862,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id3),
                     method: None,
-                    request_type: RequestType::ReadState,
+                    request_type: RequestType::ReadStateV2,
                     ip: ip1,
                 }),
                 Decision::Limit
@@ -869,7 +876,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id3),
                     method: None,
-                    request_type: RequestType::ReadState,
+                    request_type: RequestType::ReadStateV2,
                     ip: ip2,
                 }),
                 Decision::Pass
@@ -882,7 +889,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id3),
                     method: None,
-                    request_type: RequestType::ReadState,
+                    request_type: RequestType::ReadStateV2,
                     ip: ip2,
                 }),
                 Decision::Limit
@@ -899,7 +906,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id1),
                     method: Some("foo"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Pass
@@ -913,7 +920,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id1),
                     method: Some("bar"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Limit
@@ -930,7 +937,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id1),
                     method: Some("foo"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Pass
@@ -944,7 +951,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id1),
                     method: Some("bar"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Limit
@@ -960,7 +967,7 @@ mod test {
                 subnet_id,
                 canister_id: Some(id1),
                 method: Some("foo"),
-                request_type: RequestType::Query,
+                request_type: RequestType::QueryV2,
                 ip: ip1,
             }),
             Decision::Pass
@@ -973,7 +980,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id1),
                     method: Some("bar"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Limit
@@ -992,7 +999,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id1),
                     method: Some("foo"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Pass
@@ -1006,7 +1013,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id1),
                     method: Some("bar"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Limit
@@ -1025,7 +1032,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id1),
                     method: Some("foo"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Pass
@@ -1039,7 +1046,7 @@ mod test {
                     subnet_id,
                     canister_id: Some(id1),
                     method: Some("bar"),
-                    request_type: RequestType::Query,
+                    request_type: RequestType::QueryV2,
                     ip: ip1,
                 }),
                 Decision::Limit

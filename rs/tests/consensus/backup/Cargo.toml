@@ -27,9 +27,5 @@ name = "ic_consensus_system_test_backup_common"
 path = "common.rs"
 
 [[bin]]
-name = "ic-systest-backup-upgrade"
-path = "backup_manager_upgrade_test.rs"
-
-[[bin]]
-name = "ic-systest-backup-downgrade"
-path = "backup_manager_downgrade_test.rs"
+name = "ic-systest-backup"
+path = "backup_manager_test.rs"

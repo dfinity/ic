@@ -68,8 +68,7 @@ pub(crate) fn check_replica_version_is_blessed(registry: &Registry, replica_vers
         }
         Err(_) => {
             panic!(
-                "Error while fetching the list of blessed replica versions record: {}",
-                replica_version_id
+                "Error while fetching the list of blessed replica versions record: {replica_version_id}"
             )
         }
     }

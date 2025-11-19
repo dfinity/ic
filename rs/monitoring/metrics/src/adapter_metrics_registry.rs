@@ -1,9 +1,9 @@
 use crate::buckets::{add_bucket, decimal_buckets};
-use futures::future::join_all;
 use futures::future::FutureExt;
+use futures::future::join_all;
 use ic_adapter_metrics_client::AdapterMetrics;
 use parking_lot::RwLock;
-use prometheus::{proto::MetricFamily, Error, HistogramOpts, HistogramVec, Registry};
+use prometheus::{Error, HistogramOpts, HistogramVec, Registry, proto::MetricFamily};
 use std::{sync::Arc, time::Duration};
 
 /// Registry for remote process adapters.

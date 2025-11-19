@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -124,8 +125,15 @@ func make_fully_qualified_target(target string) (string, error) {
 	if err != nil {
 		return "", nil
 	}
-	target_prefix := strings.Split(all_targets[0], ":")
-	return target_prefix[0] + ":" + target, nil
+
+	target_suffix := ":" + target
+	for _, s := range all_targets {
+		if strings.HasSuffix(s, target_suffix) {
+			return s, nil
+		}
+	}
+
+	return "", errors.New("No testnet targets ends with: \"" + target_suffix + "\"")
 }
 
 func get_all_testnets() ([]string, error) {

@@ -5,7 +5,7 @@ use rand::Rng;
 
 // Returns a random element of Gt
 fn gt_rand<R: Rng>(rng: &mut R) -> Gt {
-    let g1 = G1Affine::hash(b"ic-crypto-test-gt-random", &rng.gen::<[u8; 32]>());
+    let g1 = G1Affine::hash(b"ic-crypto-test-gt-random", &rng.r#gen::<[u8; 32]>());
     let g2 = G2Affine::generator();
     Gt::pairing(&g1, g2)
 }
@@ -60,7 +60,7 @@ fn baby_giant_1000() {
         accum += &base;
     }
 
-    // Test that we can solve in the postive range:
+    // Test that we can solve in the positive range:
     let mut accum = Gt::identity();
     for x in 0..1000 {
         assert_eq!(baby_giant.solve(&accum), Some(Scalar::from_usize(x)));
@@ -100,7 +100,7 @@ fn baby_giant_negative() {
 
         match baby_giant.solve(&tgt) {
             Some(dlog) => assert_eq!(dlog, x),
-            None => assert!(out_of_range, "{:?}", x),
+            None => assert!(out_of_range, "{x:?}"),
         }
     }
 }
@@ -119,7 +119,8 @@ fn baby_giant_big_range() {
     let baby_giant = BabyStepGiantStep::new(&base, lower_bound, upper_bound, 2048, 3);
 
     for _trial in 0..30 {
-        let x = Scalar::from_isize((rng.gen::<u64>() % upper_bound as u64) as isize + lower_bound);
+        let x =
+            Scalar::from_isize((rng.r#gen::<u64>() % upper_bound as u64) as isize + lower_bound);
         let tgt = &base * &x;
         assert_eq!(baby_giant.solve(&tgt), Some(x));
     }
@@ -159,7 +160,7 @@ fn honest_dealer_search_works_randomized_test() {
 
     let rng = &mut reproducible_rng();
 
-    let mut dlogs = (0..500).map(|_| rng.gen::<u16>()).collect::<Vec<_>>();
+    let mut dlogs = (0..500).map(|_| rng.r#gen::<u16>()).collect::<Vec<_>>();
 
     // also explicitly test the very begin and end elements
     dlogs.push(0);

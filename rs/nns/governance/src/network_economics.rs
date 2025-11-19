@@ -85,15 +85,15 @@ impl NetworkEconomics {
         }
 
         // Validate substructs (according to their type).
-        if let Some(neurons_fund_economics) = self.neurons_fund_economics.as_ref() {
-            if let Err(mut neurons_fund_defects) = neurons_fund_economics.validate() {
-                defects.append(&mut neurons_fund_defects)
-            }
+        if let Some(neurons_fund_economics) = self.neurons_fund_economics.as_ref()
+            && let Err(mut neurons_fund_defects) = neurons_fund_economics.validate()
+        {
+            defects.append(&mut neurons_fund_defects)
         };
-        if let Some(voting_power_economics) = self.voting_power_economics.as_ref() {
-            if let Err(mut voting_power_defects) = voting_power_economics.validate() {
-                defects.append(&mut voting_power_defects)
-            }
+        if let Some(voting_power_economics) = self.voting_power_economics.as_ref()
+            && let Err(mut voting_power_defects) = voting_power_economics.validate()
+        {
+            defects.append(&mut voting_power_defects)
         }
 
         if !defects.is_empty() {
@@ -145,25 +145,21 @@ impl NeuronsFundEconomics {
         // Validate that max >= min.
         if let (Some(maximum_icp_xdr_rate), Some(minimum_icp_xdr_rate)) =
             (maximum_icp_xdr_rate, minimum_icp_xdr_rate)
+            && maximum_icp_xdr_rate < minimum_icp_xdr_rate
         {
-            if maximum_icp_xdr_rate < minimum_icp_xdr_rate {
-                defects.push(format!(
-                    "maximum_icp_xdr_rate ({}) must be greater than or equal to minimum_icp_xdr_rate ({}).",
-                    maximum_icp_xdr_rate, minimum_icp_xdr_rate,
+            defects.push(format!(
+                    "maximum_icp_xdr_rate ({maximum_icp_xdr_rate}) must be greater than or equal to minimum_icp_xdr_rate ({minimum_icp_xdr_rate}).",
                 ));
-            }
         }
 
         // Validate substruct(s) (according to their type).
         if let Some(neurons_fund_matched_funding_curve_coefficients) = self
             .neurons_fund_matched_funding_curve_coefficients
             .as_ref()
-        {
-            if let Err(mut neurons_fund_matched_funding_curve_coefficients_defects) =
+            && let Err(mut neurons_fund_matched_funding_curve_coefficients_defects) =
                 neurons_fund_matched_funding_curve_coefficients.validate()
-            {
-                defects.append(&mut neurons_fund_matched_funding_curve_coefficients_defects);
-            }
+        {
+            defects.append(&mut neurons_fund_matched_funding_curve_coefficients_defects);
         }
 
         if !defects.is_empty() {
@@ -227,22 +223,19 @@ impl NeuronsFundMatchedFundingCurveCoefficients {
         let _contribution_threshold_xdr = try_convert_decimal(contribution_threshold_xdr)
             .inspect_err(|original| {
                 defects.push(format!(
-                    "contribution_threshold_xdr ({}) is not a Decimal.",
-                    original
+                    "contribution_threshold_xdr ({original}) is not a Decimal."
                 ));
             });
         let one_third_participation_milestone_xdr =
             try_convert_decimal(one_third_participation_milestone_xdr).inspect_err(|original| {
                 defects.push(format!(
-                    "one_third_participation_milestone_xdr ({}) is not a Decimal.",
-                    original
+                    "one_third_participation_milestone_xdr ({original}) is not a Decimal."
                 ));
             });
         let full_participation_milestone_xdr =
             try_convert_decimal(full_participation_milestone_xdr).inspect_err(|original| {
                 defects.push(format!(
-                    "full_participation_milestone_xdr ({}) is not a Decimal.",
-                    original
+                    "full_participation_milestone_xdr ({original}) is not a Decimal."
                 ));
             });
 
@@ -250,14 +243,11 @@ impl NeuronsFundMatchedFundingCurveCoefficients {
         if let (Ok(one_third_participation_milestone_xdr), Ok(full_participation_milestone_xdr)) = (
             one_third_participation_milestone_xdr,
             full_participation_milestone_xdr,
-        ) {
-            if one_third_participation_milestone_xdr >= full_participation_milestone_xdr {
-                defects.push(format!(
-                    "one_third_participation_milestone_xdr ({}) must be less than full_participation_milestone_xdr ({}).",
-                    one_third_participation_milestone_xdr,
-                    full_participation_milestone_xdr,
+        ) && one_third_participation_milestone_xdr >= full_participation_milestone_xdr
+        {
+            defects.push(format!(
+                    "one_third_participation_milestone_xdr ({one_third_participation_milestone_xdr}) must be less than full_participation_milestone_xdr ({full_participation_milestone_xdr}).",
                 ));
-            }
         }
 
         if !defects.is_empty() {
@@ -287,7 +277,13 @@ impl VotingPowerEconomics {
     pub const DEFAULT_NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS: u64 = 6 * ONE_MONTH_SECONDS;
 
     /// A proposal to set `VotingPowerEconomics.min_dissolve_delay_seconds` must specify a value
-    /// for this field that falls within this range.
+    /// for this field that falls within this range. Changing the lower bound of this parameter
+    /// requires manually checking how it might interact with other aspects of the NNS.
+    /// In particular, it is not currently possible for a dissolved neuron to cast a vote, as
+    /// the minimal dissolve delay to be eligible for voting exceeds the maximal voting period.
+    /// Thus, there may be implicit dependencies of the NNS itself or its clients on this aspect,
+    /// which originate from the time when the minimum dissolve delay to vote was an internal NNS
+    /// constant.
     pub const NEURON_MINIMUM_DISSOLVE_DELAY_TO_VOTE_SECONDS_BOUNDS: RangeInclusive<u64> =
         (3 * ONE_MONTH_SECONDS)..=(6 * ONE_MONTH_SECONDS);
 
@@ -322,7 +318,7 @@ impl VotingPowerEconomics {
     fn deciding_voting_power_adjustment_factor_function(&self) -> LinearMap {
         let from_range = {
             let begin = self.get_start_reducing_voting_power_after_seconds();
-            let end = begin + self.get_clear_following_after_seconds();
+            let end = begin.saturating_add(self.get_clear_following_after_seconds());
 
             begin..end
         };

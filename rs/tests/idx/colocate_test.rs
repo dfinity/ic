@@ -4,24 +4,29 @@ use ic_system_test_driver::driver::driver_setup::{
     SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR,
 };
 use ic_system_test_driver::driver::farm::HostFeature;
-use ic_system_test_driver::driver::group::{SystemTestGroup, COLOCATE_CONTAINER_NAME};
+use ic_system_test_driver::driver::group::{
+    COLOCATE_CONTAINER_NAME, CliArguments, SystemTestGroup,
+};
 use ic_system_test_driver::driver::ic::VmResources;
 use ic_system_test_driver::driver::test_env::RequiredHostFeaturesFromCmdLine;
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
-use ic_system_test_driver::driver::test_env_api::{get_dependency_path, FarmBaseUrl, SshSession};
+use ic_system_test_driver::driver::test_env_api::{
+    FarmBaseUrl, SshSession, get_dependency_path, scp_recv_from, scp_send_to,
+};
 use ic_system_test_driver::driver::test_setup::GroupSetup;
 use ic_system_test_driver::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
-use slog::{error, info, Logger};
+use itertools::Itertools;
+use slog::{error, info};
 use ssh2::Session;
+use std::env;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::str;
 use std::time::Duration;
-use std::{env, fs};
 
-const UVM_NAME: &str = "test-driver";
+const UVM_NAME: &str = "colocated-test-driver";
 const COLOCATED_TEST: &str = "COLOCATED_TEST";
 const COLOCATED_TEST_BIN: &str = "COLOCATED_TEST_BIN";
 const EXTRA_TIME_LOG_COLLECTION: Duration = Duration::from_secs(10);
@@ -30,8 +35,6 @@ pub const RUNFILES_TAR_ZST: &str = "runfiles.tar.zst";
 pub const ENV_TAR_ZST: &str = "env.tar.zst";
 const DASHBOARDS_TAR_ZST: &str = "dashboards.tar.zst";
 
-pub const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
-pub const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 pub const TEST_STATUS_CHECK_RETRY: Duration = Duration::from_secs(5);
 type ExitCode = i32;
 
@@ -93,7 +96,7 @@ fn setup(env: TestEnv) {
     let output = Command::new("tar")
         .arg("--create")
         .arg("--file")
-        .arg(runfiles_tar_path.clone())
+        .arg(&runfiles_tar_path)
         .arg("--auto-compress")
         .arg("--directory")
         .arg(runfiles)
@@ -120,7 +123,7 @@ fn setup(env: TestEnv) {
     let output = Command::new("tar")
         .arg("--create")
         .arg("--file")
-        .arg(env_tar_path.clone())
+        .arg(&env_tar_path)
         .arg("--auto-compress")
         .arg("--directory")
         .arg(env.base_path())
@@ -143,17 +146,19 @@ fn setup(env: TestEnv) {
         .block_on_ssh_session()
         .unwrap_or_else(|e| panic!("Failed to setup SSH session to {UVM_NAME} because: {e}"));
 
-    scp(
+    scp_send_to(
         log.clone(),
         &session,
-        runfiles_tar_path,
-        Path::new("/home/admin").join(RUNFILES_TAR_ZST),
+        &runfiles_tar_path,
+        &Path::new("/home/admin").join(RUNFILES_TAR_ZST),
+        0o644,
     );
-    scp(
+    scp_send_to(
         log.clone(),
         &session,
-        env_tar_path,
-        Path::new("/home/admin").join(ENV_TAR_ZST),
+        &env_tar_path,
+        &Path::new("/home/admin").join(ENV_TAR_ZST),
+        0o644,
     );
 
     // Create a temporary environment file that we SCP into the UVM. These environment
@@ -174,11 +179,12 @@ fn setup(env: TestEnv) {
 
         file.write_all(&output.stdout).expect("Could not write env");
 
-        scp(
+        scp_send_to(
             log.clone(),
             &session,
-            filepath,
-            Path::new("/home/admin/env_vars").to_path_buf(),
+            &filepath,
+            Path::new("/home/admin/env_vars"),
+            0o644,
         );
     };
 
@@ -189,7 +195,7 @@ fn setup(env: TestEnv) {
                 .map(|hf| serde_json::to_string(hf).unwrap())
                 .collect::<Vec<String>>()
                 .join(",");
-            format!("--set-required-host-features={}", features)
+            format!("--set-required-host-features={features}")
         } else {
             "".to_owned()
         }
@@ -218,12 +224,12 @@ fn setup(env: TestEnv) {
                 panic!("Tarring the dashboards directory failed with error: {err}");
             }
 
-            let source = Path::new(&DASHBOARDS_TAR_ZST).to_path_buf();
-            scp(
+            scp_send_to(
                 log.clone(),
                 &session,
-                source,
-                Path::new(&dashboards_uvm_host_path).to_path_buf(),
+                Path::new(&DASHBOARDS_TAR_ZST),
+                Path::new(&dashboards_uvm_host_path),
+                0o644,
             );
             provided_path
         }
@@ -237,30 +243,36 @@ fn setup(env: TestEnv) {
     let forward_ssh_agent =
         env::var("COLOCATED_TEST_DRIVER_VM_FORWARD_SSH_AGENT").unwrap_or("".to_string());
 
+    let logs_flag = if env::var("VECTOR_VM_PATH").is_err() {
+        "--no-logs".to_string()
+    } else {
+        "".to_string()
+    };
+
+    let cli_arguments = CliArguments::read_attribute(&env);
+    let exclude_logs_args = cli_arguments
+        .exclude_logs
+        .iter()
+        .flat_map(|pattern| ["--exclude-logs", pattern.as_str()])
+        .join(" ");
+
     let prepare_docker_script = &format!(
         r#"
 set -e
-cd /home/admin
 
-tar -xf /home/admin/{RUNFILES_TAR_ZST} --one-top-level=runfiles
-tar -xf /home/admin/{ENV_TAR_ZST} --one-top-level=root_env
+# Unpack uploaded tarballs under /home/admin/test which will become the test's working directory:
+mkdir -p /home/admin/test
+tar -xf /home/admin/{RUNFILES_TAR_ZST} --one-top-level="/home/admin/runfiles"
+tar -xf /home/admin/{ENV_TAR_ZST} --one-top-level="/home/admin/test/root_env"
+chmod 700 /home/admin/test/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}
+chmod 600 /home/admin/test/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}/*
 if [ -e "/home/admin/{DASHBOARDS_TAR_ZST}" ]; then
-    tar -xf /home/admin/{DASHBOARDS_TAR_ZST} --one-top-level=dashboards
+    tar -xf /home/admin/{DASHBOARDS_TAR_ZST} --one-top-level=/home/admin/dashboards
 else
     mkdir -p /home/admin/dashboards
 fi
 
 docker load -i /config/ubuntu_test_runtime.tar
-
-cat <<EOF > /home/admin/Dockerfile
-FROM ubuntu_test_runtime:image
-COPY runfiles /home/root/runfiles
-COPY root_env /home/root/root_env
-COPY dashboards {dashboards_path_in_docker}
-RUN chmod 700 /home/root/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}
-RUN chmod 600 /home/root/root_env/{SSH_AUTHORIZED_PRIV_KEYS_DIR}/*
-EOF
-docker build --tag final .
 
 cat <<'EOF' > /home/admin/run
 #!/bin/sh
@@ -272,15 +284,23 @@ if [ "{forward_ssh_agent}" ] && [ -n "${{SSH_AUTH_SOCK:-}}" ] && [ -e "${{SSH_AU
 else
     echo "No ssh-agent to forward."
 fi
-docker run --name {COLOCATE_CONTAINER_NAME} --network host \
-  --env-file /home/admin/env_vars --env RUNFILES=/home/root/runfiles \
+docker run \
+  --name {COLOCATE_CONTAINER_NAME} \
+  --network host \
+  -v /home/admin/test:/home/root/test \
+  -v /home/admin/runfiles:/home/root/runfiles \
+  -v /home/admin/dashboards:{dashboards_path_in_docker}:ro \
+  --env-file /home/admin/env_vars \
+  --env RUNFILES=/home/root/runfiles \
   "${{DOCKER_RUN_ARGS[@]}}" \
-  final \
+  ubuntu_test_runtime:image \
   /home/root/runfiles/{colocated_test_bin} \
-    --working-dir /home/root \
+    --working-dir /home/root/test \
     --no-delete-farm-group --no-farm-keepalive \
     {required_host_features} \
     --group-base-name {colocated_test} \
+    {logs_flag} \
+    {exclude_logs_args} \
     run
 EOF
 chmod +x /home/admin/run
@@ -289,14 +309,17 @@ chmod +x /home/admin/run
     uvm.block_on_bash_script_from_session(&session, prepare_docker_script)
         .unwrap_or_else(|e| panic!("Failed to create final docker image on UVM because: {e}"));
     info!(log, "Starting test remotely ...");
-    start_test(env, uvm);
+    start_test(env.clone(), &uvm);
     let test_result_handle = {
         info!(log, "Waiting for test results asynchronously ...");
-        receive_test_exit_code_async(session, log.clone())
+        receive_test_exit_code_async(session.clone(), log.clone())
     };
     let test_exit_code = test_result_handle
         .join()
         .expect("test execution thread failed");
+
+    fetch_test_dir(env.clone(), &uvm, &session);
+
     info!(
         log,
         "Wait extra {} sec to collect last uvm logs",
@@ -307,7 +330,7 @@ chmod +x /home/admin/run
     info!(log, "test execution has finished successfully");
 }
 
-fn start_test(env: TestEnv, uvm: DeployedUniversalVm) {
+fn start_test(env: TestEnv, uvm: &DeployedUniversalVm) {
     let run_test_script = r#"
     set -E
     nohup sh -c '/home/admin/run > /dev/null 2>&1; echo $? > test_exit_code' &
@@ -350,24 +373,45 @@ fn start_test(env: TestEnv, uvm: DeployedUniversalVm) {
     }
 }
 
-fn scp(log: Logger, session: &Session, from: std::path::PathBuf, to: std::path::PathBuf) {
-    let size = fs::metadata(from.clone()).unwrap().len();
-    ic_system_test_driver::retry_with_msg!(
-        format!("scp-ing {:?} of {:?} B to {UVM_NAME}:{to:?}", from, size,),
-        log.clone(),
-        SCP_RETRY_TIMEOUT,
-        SCP_RETRY_BACKOFF,
-        || {
-            let mut remote_file = session.scp_send(&to, 0o644, size, None)?;
-            let mut from_file = File::open(from.clone())?;
-            std::io::copy(&mut from_file, &mut remote_file)?;
-            Ok(())
-        }
-    )
-    .unwrap_or_else(|e| panic!("Failed to scp {:?} to {UVM_NAME}:{to:?} because: {e}", from));
+fn fetch_test_dir(env: TestEnv, uvm: &DeployedUniversalVm, session: &Session) {
+    let log = env.logger();
+    let test_dir_tar = Path::new("/home/admin/test.tar");
     info!(
         log,
-        "scp-ed {:?} of {:?} B to {UVM_NAME}:{to:?} .", from, size,
+        "Tarring the test directory on the {UVM_NAME} to {test_dir_tar:?}..."
+    );
+    uvm.block_on_bash_script_from_session(
+        session,
+        &format!("sudo tar -cf {test_dir_tar:?} -C /home/admin/test ."),
+    )
+    .unwrap_or_else(|e| panic!("Failed to tar the test directory on {UVM_NAME} because: {e}"));
+    let local_test_dir_tar = env.get_path("test.tar");
+    info!(
+        log,
+        "Copying {test_dir_tar:?} from the {UVM_NAME} to the local test-driver at {local_test_dir_tar:?}..."
+    );
+    scp_recv_from(log.clone(), session, test_dir_tar, &local_test_dir_tar);
+    let colocated_test_dir = env.get_path("colocated_test");
+    info!(
+        log,
+        "Untarring the test directory from the {UVM_NAME} to {colocated_test_dir:?} ..."
+    );
+    let colocated_test_dir_str = colocated_test_dir.display();
+    let mut cmd = Command::new("tar");
+    cmd.arg("-x")
+        .arg("-f")
+        .arg(&local_test_dir_tar)
+        .arg(format!("--one-top-level={colocated_test_dir_str}"));
+    let output = cmd.output().unwrap_or_else(|e| {
+        panic!("Failed to untar {local_test_dir_tar:?} directory because: {e}")
+    });
+    if !output.status.success() {
+        let err = str::from_utf8(&output.stderr).unwrap_or("");
+        panic!("Untarring {local_test_dir_tar:?} failed with error: {err}");
+    }
+    info!(
+        log,
+        "Untarred the test directory from the {UVM_NAME} to {colocated_test_dir:?}."
     );
 }
 
@@ -375,21 +419,26 @@ fn receive_test_exit_code_async(
     session: Session,
     log: slog::Logger,
 ) -> std::thread::JoinHandle<i32> {
-    std::thread::spawn(move || loop {
-        match check_test_exit_code(&session) {
-            Ok(result) => {
-                if let Some(exit_code) = result {
-                    info!(log, "Test execution finished with exit code {exit_code}.");
-                    return exit_code;
-                } else {
-                    // Test execution hasn't finished yet, wait a bit and retry.
+    std::thread::spawn(move || {
+        loop {
+            match check_test_exit_code(&session) {
+                Ok(result) => {
+                    if let Some(exit_code) = result {
+                        info!(log, "Test execution finished with exit code {exit_code}.");
+                        return exit_code;
+                    } else {
+                        // Test execution hasn't finished yet, wait a bit and retry.
+                        std::thread::sleep(TEST_STATUS_CHECK_RETRY);
+                    }
+                }
+                Err(err) => {
+                    error!(
+                        log,
+                        "Reading test exit code failed unexpectedly with err={err:?}. Retrying in {} sec",
+                        TEST_STATUS_CHECK_RETRY.as_secs()
+                    );
                     std::thread::sleep(TEST_STATUS_CHECK_RETRY);
                 }
-            }
-            Err(err) => {
-                error!(log, "Reading test exit code failed unexpectedly with err={err:?}. Retrying in {} sec",
-                TEST_STATUS_CHECK_RETRY.as_secs());
-                std::thread::sleep(TEST_STATUS_CHECK_RETRY);
             }
         }
     })

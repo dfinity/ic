@@ -27,7 +27,7 @@ end::catalog[] */
 
 use anyhow::Result;
 use candid::CandidType;
-use ic_nns_governance_api::pb::v1::NnsFunction;
+use ic_nns_governance_api::NnsFunction;
 use ic_protobuf::registry::firewall::v1::{FirewallAction, FirewallRule, FirewallRuleDirection};
 use ic_registry_keys::FirewallRulesScope;
 use ic_registry_subnet_type::SubnetType;
@@ -49,10 +49,10 @@ use ic_system_test_driver::{
     util::{self, block_on},
 };
 use registry_canister::mutations::firewall::{
-    compute_firewall_ruleset_hash, AddFirewallRulesPayload, RemoveFirewallRulesPayload,
-    UpdateFirewallRulesPayload,
+    AddFirewallRulesPayload, RemoveFirewallRulesPayload, UpdateFirewallRulesPayload,
+    compute_firewall_ruleset_hash,
 };
-use slog::{info, Logger};
+use slog::{Logger, info};
 use std::time::Duration;
 use url::Url;
 const INITIAL_WAIT: Duration = Duration::from_secs(10);

@@ -1,8 +1,8 @@
+use ic_logger::{ReplicaLogger, debug, info, warn};
 use nix::{
     sys::signal::{self, Signal},
     unistd::Pid,
 };
-use slog::{debug, info, warn};
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -43,16 +43,16 @@ pub(crate) trait Process {
 pub(crate) struct ProcessManager<P: Process> {
     process: Option<P>,
     pid_cell: PIDCell,
-    log: slog::Logger,
+    log: ReplicaLogger,
     join_handle: Option<std::thread::JoinHandle<()>>,
 }
 
 impl<P: Process> ProcessManager<P> {
-    pub(crate) fn new(logger: slog::Logger) -> Self {
+    pub(crate) fn new(logger: ReplicaLogger) -> Self {
         Self {
             process: None,
             pid_cell: Default::default(),
-            log: logger.clone(),
+            log: logger,
             join_handle: None,
         }
     }
@@ -100,7 +100,7 @@ impl<P: Process> ProcessManager<P> {
         self.kill()
     }
 
-    pub fn kill(&mut self) -> Result<()> {
+    fn kill(&mut self) -> Result<()> {
         let pid = self.pid_cell.lock().unwrap();
         if let Some(pid) = *pid {
             let mut gpid = pid;
@@ -110,8 +110,12 @@ impl<P: Process> ProcessManager<P> {
                 let t_gpid = -t_gpid;
                 gpid = Pid::from_raw(t_gpid);
             }
-            return signal::kill(gpid, Signal::SIGTERM)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("{:?}", e)));
+            return signal::kill(gpid, Signal::SIGTERM).map_err(|err| {
+                std::io::Error::other(format!(
+                    "Failed to kill {} process with gpid {gpid}: {err}",
+                    P::NAME
+                ))
+            });
         }
         info!(self.log, "no {} process running", P::NAME);
         Ok(())
@@ -119,15 +123,16 @@ impl<P: Process> ProcessManager<P> {
 
     pub(crate) fn start(&mut self, process: P) -> Result<()> {
         // Do nothing if we're already running a process with the requested version
-        if let Some(current_version) = self.process.as_ref().map(|p| p.get_version()) {
-            if self.get_pid().is_some() && process.get_version() == current_version {
-                debug!(
-                    self.log,
-                    "{} process already running with correct version",
-                    P::NAME
-                );
-                return Ok(());
-            }
+        if let Some(current_version) = self.process.as_ref().map(|p| p.get_version())
+            && self.get_pid().is_some()
+            && process.get_version() == current_version
+        {
+            debug!(
+                self.log,
+                "{} process already running with correct version",
+                P::NAME
+            );
+            return Ok(());
         }
 
         debug!(
@@ -176,7 +181,7 @@ impl<P: Process> ProcessManager<P> {
 /// Wait for the child process to return, log the exit status and send.
 fn wait_on_exit(
     name: &'static str,
-    log: slog::Logger,
+    log: ReplicaLogger,
     mut process: std::process::Child,
     pid_cell: PIDCell,
 ) -> impl FnOnce() {

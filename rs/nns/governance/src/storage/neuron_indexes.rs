@@ -1,6 +1,7 @@
 use crate::{
     account_id_index::NeuronAccountIdIndex,
     known_neuron_index::{AddKnownNeuronError, KnownNeuronIndex, RemoveKnownNeuronError},
+    maturity_disbursement_index::MaturityDisbursementIndex,
     neuron::Neuron,
     neuron_store::NeuronStoreError,
     pb::v1::Topic,
@@ -9,11 +10,11 @@ use crate::{
 use ic_base_types::PrincipalId;
 use ic_nervous_system_governance::index::{
     neuron_following::{
-        add_neuron_followees, remove_neuron_followees, HeapNeuronFollowingIndex,
-        NeuronFollowingIndex, StableNeuronFollowingIndex,
+        HeapNeuronFollowingIndex, NeuronFollowingIndex, StableNeuronFollowingIndex,
+        add_neuron_followees, remove_neuron_followees,
     },
     neuron_principal::{
-        add_neuron_id_principal_ids, remove_neuron_id_principal_ids, StableNeuronPrincipalIndex,
+        StableNeuronPrincipalIndex, add_neuron_id_principal_ids, remove_neuron_id_principal_ids,
     },
 };
 use ic_nns_common::pb::v1::NeuronId;
@@ -40,6 +41,7 @@ pub(crate) struct StableNeuronIndexesBuilder<Memory> {
     pub following: Memory,
     pub known_neuron: Memory,
     pub account_id: Memory,
+    pub maturity_disbursement: Memory,
 }
 
 impl<Memory> StableNeuronIndexesBuilder<Memory>
@@ -53,6 +55,7 @@ where
             following,
             known_neuron,
             account_id,
+            maturity_disbursement,
         } = self;
 
         StableNeuronIndexes {
@@ -61,6 +64,7 @@ where
             following: StableNeuronFollowingIndex::new(following),
             known_neuron: KnownNeuronIndex::new(known_neuron),
             account_id: NeuronAccountIdIndex::new(account_id),
+            maturity_disbursement: MaturityDisbursementIndex::new(maturity_disbursement),
         }
     }
 }
@@ -75,6 +79,7 @@ where
     following: StableNeuronFollowingIndex<NeuronId, Topic, Memory>,
     known_neuron: KnownNeuronIndex<Memory>,
     account_id: NeuronAccountIdIndex<Memory>,
+    maturity_disbursement: MaturityDisbursementIndex<Memory>,
 }
 
 #[cfg(feature = "test")]
@@ -114,25 +119,29 @@ pub enum NeuronIndexDefect {
     Following { reason: String },
     KnownNeuron { reason: String },
     AccountId { reason: String },
+    MaturityDisbursement { reason: String },
 }
 
 impl Display for NeuronIndexDefect {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match &self {
             Self::Subaccount { reason } => {
-                write!(f, "Neuron subaccount index is corrupted: {}", reason)
+                write!(f, "Neuron subaccount index is corrupted: {reason}")
             }
             Self::Principal { reason } => {
-                write!(f, "Neuron principal index is corrupted: {}", reason)
+                write!(f, "Neuron principal index is corrupted: {reason}")
             }
             Self::Following { reason } => {
-                write!(f, "Neuron following index is corrupted: {}", reason)
+                write!(f, "Neuron following index is corrupted: {reason}")
             }
             Self::KnownNeuron { reason } => {
-                write!(f, "Known neuron index is corrupted: {}", reason)
+                write!(f, "Known neuron index is corrupted: {reason}")
             }
             Self::AccountId { reason } => {
-                write!(f, "AccountId index is corrupted: {}", reason)
+                write!(f, "AccountId index is corrupted: {reason}")
+            }
+            Self::MaturityDisbursement { reason } => {
+                write!(f, "Maturity disbursement index is corrupted: {reason}")
             }
         }
     }
@@ -479,8 +488,7 @@ where
             .map_err(|error| match error {
                 RemoveKnownNeuronError::AlreadyAbsent => NeuronIndexDefect::KnownNeuron {
                     reason: format!(
-                        "Known neuron name {} cannot be removed as it does not exist",
-                        known_neuron_name
+                        "Known neuron name {known_neuron_name} cannot be removed as it does not exist"
                     ),
                 },
                 RemoveKnownNeuronError::NameExistsWithDifferentNeuronId(existing_neuron_id) => {
@@ -529,6 +537,116 @@ fn combine_index_defects(
         Ok(())
     } else {
         Err(defects)
+    }
+}
+
+fn maturity_disbursement_finalization_timestamps(neuron: &Neuron) -> BTreeSet<u64> {
+    neuron
+        .maturity_disbursements_in_progress()
+        .iter()
+        .map(|disbursement| disbursement.finalize_disbursement_timestamp_seconds)
+        .collect()
+}
+
+fn already_present_finalization_timestamps_to_result(
+    already_present_finalization_timestamps: Vec<u64>,
+    neuron_id: NeuronId,
+) -> Result<(), NeuronIndexDefect> {
+    if already_present_finalization_timestamps.is_empty() {
+        Ok(())
+    } else {
+        Err(NeuronIndexDefect::MaturityDisbursement {
+            reason: format!(
+                "Finalization timestamps {:?} already present for neuron {}",
+                already_present_finalization_timestamps, neuron_id.id
+            ),
+        })
+    }
+}
+
+fn already_absent_finalization_timestamps_to_result(
+    already_absent_finalization_timestamps: Vec<u64>,
+    neuron_id: NeuronId,
+) -> Result<(), NeuronIndexDefect> {
+    if already_absent_finalization_timestamps.is_empty() {
+        Ok(())
+    } else {
+        Err(NeuronIndexDefect::MaturityDisbursement {
+            reason: format!(
+                "Finalization timestamps {:?} already absent for neuron {}",
+                already_absent_finalization_timestamps, neuron_id.id
+            ),
+        })
+    }
+}
+
+impl<Memory> NeuronIndex for MaturityDisbursementIndex<Memory>
+where
+    Memory: ic_stable_structures::Memory,
+{
+    fn add_neuron(&mut self, new_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
+        let finalization_timestamps_to_add =
+            maturity_disbursement_finalization_timestamps(new_neuron);
+        let already_present_finalization_timestamps = self.add_neuron_id_finalization_timestamps(
+            new_neuron.id().id,
+            finalization_timestamps_to_add,
+        );
+        already_present_finalization_timestamps_to_result(
+            already_present_finalization_timestamps,
+            new_neuron.id(),
+        )
+    }
+
+    fn remove_neuron(&mut self, existing_neuron: &Neuron) -> Result<(), NeuronIndexDefect> {
+        let finalization_timestamps_to_remove =
+            maturity_disbursement_finalization_timestamps(existing_neuron);
+        let already_absent_finalization_timestamps = self.remove_neuron_id_finalization_timestamps(
+            existing_neuron.id().id,
+            finalization_timestamps_to_remove,
+        );
+        already_absent_finalization_timestamps_to_result(
+            already_absent_finalization_timestamps,
+            existing_neuron.id(),
+        )
+    }
+
+    fn update_neuron(
+        &mut self,
+        old_neuron: &Neuron,
+        new_neuron: &Neuron,
+    ) -> Result<(), Vec<NeuronIndexDefect>> {
+        let old_finalization_timestamps = maturity_disbursement_finalization_timestamps(old_neuron);
+        let new_finalization_timestamps = maturity_disbursement_finalization_timestamps(new_neuron);
+
+        // Set differences are used for preventing excessive stable storage writes, which are expensive especially when they are scattered.
+        let finalization_timestamps_to_remove = old_finalization_timestamps
+            .difference(&new_finalization_timestamps)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let finalization_timestamps_to_add = new_finalization_timestamps
+            .difference(&old_finalization_timestamps)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+
+        let already_absent_finalization_timestamps = self.remove_neuron_id_finalization_timestamps(
+            old_neuron.id().id,
+            finalization_timestamps_to_remove,
+        );
+        let already_present_finalization_timestamps = self.add_neuron_id_finalization_timestamps(
+            new_neuron.id().id,
+            finalization_timestamps_to_add,
+        );
+
+        let defect_remove = already_absent_finalization_timestamps_to_result(
+            already_absent_finalization_timestamps,
+            old_neuron.id(),
+        );
+        let defect_add = already_present_finalization_timestamps_to_result(
+            already_present_finalization_timestamps,
+            new_neuron.id(),
+        );
+
+        combine_index_defects(defect_remove, defect_add)
     }
 }
 
@@ -646,6 +764,7 @@ where
             &mut self.following,
             &mut self.known_neuron,
             &mut self.account_id,
+            &mut self.maturity_disbursement,
         ]
     }
 
@@ -670,6 +789,10 @@ where
         &self.account_id
     }
 
+    pub fn maturity_disbursement(&self) -> &MaturityDisbursementIndex<Memory> {
+        &self.maturity_disbursement
+    }
+
     /// Validates that some of the data in stable storage can be read, in order to prevent broken
     /// schema. Should only be called in post_upgrade.
     pub fn validate(&self) {
@@ -678,6 +801,7 @@ where
         self.following.validate();
         self.known_neuron.validate();
         self.account_id.validate();
+        self.maturity_disbursement.validate();
     }
 }
 
@@ -692,6 +816,7 @@ pub(crate) fn new_heap_based() -> StableNeuronIndexes<VectorMemory> {
         following: VectorMemory::default(),
         known_neuron: VectorMemory::default(),
         account_id: VectorMemory::default(),
+        maturity_disbursement: VectorMemory::default(),
     }
     .build()
 }

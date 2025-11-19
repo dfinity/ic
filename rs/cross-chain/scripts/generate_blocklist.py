@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 #
 # 2) Run this script as follows:
 #
-# python generate_blocklist.py [currency (BTC or ETH)] [path to the SDN.XML file]
+# python generate_blocklist.py --currency {BTC, ETH} --input [path to the SDN.XML file]
 #
 # The command will generate the file 'blocklist.rs' containing the retrieved addresses.
 #
@@ -75,7 +75,7 @@ mod tests;
 use ic_ethereum_types::Address;
 
 macro_rules! ethereum_address {
-    ($address:expr) => {
+    ($address:expr_2021) => {
         Address::new(hex_literal::hex!($address))
     };
 }
@@ -88,6 +88,8 @@ const ETH_ADDRESS_BLOCKLIST: &[Address] = &[\n"""
         return """pub fn is_blocked(address: &Address) -> bool {
     ETH_ADDRESS_BLOCKLIST.binary_search(address).is_ok()
 }
+
+pub const SAMPLE_BLOCKED_ADDRESS: Address = ETH_ADDRESS_BLOCKLIST[0];
 """
 
     def format_address(self, address):

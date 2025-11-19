@@ -1,35 +1,35 @@
 use assert_matches::assert_matches;
+use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{E8, ONE_MONTH_SECONDS};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{install_canister, nns};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
-use ic_nns_governance_api::pb::v1::{
+use ic_nns_governance_api::{
+    Neuron, Tally, Topic, Vote,
     governance_error::ErrorType,
     manage_neuron_response::{Command, FollowResponse},
     neuron::{DissolveState, Followees},
-    Neuron, Tally, Topic, Vote,
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::{
-    common::{build_test_governance_wasm, NnsInitPayloadsBuilder},
+    common::{NnsInitPayloadsBuilder, build_governance_wasm},
     neuron_helpers::{
-        get_neuron_1, get_neuron_2, get_neuron_3, get_nonexistent_neuron, get_unauthorized_neuron,
-        submit_proposal, TestNeuronOwner,
+        TestNeuronOwner, get_neuron_1, get_neuron_2, get_neuron_3, get_nonexistent_neuron,
+        get_unauthorized_neuron, submit_proposal,
     },
     state_test_helpers::{
-        get_neuron_ids, nns_cast_vote, nns_governance_get_full_neuron,
+        get_neuron_ids, nns_cast_vote_or_panic, nns_governance_get_full_neuron,
         nns_governance_get_proposal_info, nns_governance_get_proposal_info_as_anonymous,
-        nns_set_followees_for_neuron, nns_split_neuron, setup_nns_canisters,
-        state_machine_builder_for_nns_tests,
+        nns_make_neuron_public, nns_set_followees_for_neuron, nns_split_neuron,
+        setup_nns_canisters, state_machine_builder_for_nns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
 use itertools::Itertools;
 use maplit::hashmap;
-use pocket_ic::{nonblocking::PocketIc, PocketIcBuilder};
+use pocket_ic::{PocketIcBuilder, nonblocking::PocketIc};
 use pretty_assertions::assert_eq;
-use prost::Message;
 use std::time::{Duration, SystemTime};
 
 const VALID_TOPIC: i32 = Topic::ParticipantManagement as i32;
@@ -88,7 +88,7 @@ fn follow_on_invalid_topic() {
 
     assert_matches!(result,
         Command::Error(err)
-        if err.error_type() == ErrorType::InvalidCommand
+        if err.error_type == ErrorType::InvalidCommand as i32
         && err.error_message.contains("Not a known topic number."));
 }
 
@@ -112,7 +112,7 @@ fn unauthorized_neuron_cannot_follow_neuron() {
 
     assert_matches!(result,
         Command::Error(err)
-        if err.error_type() == ErrorType::NotAuthorized);
+        if err.error_type == ErrorType::NotAuthorized as i32);
 }
 
 #[test]
@@ -135,11 +135,12 @@ fn nonexistent_neuron_cannot_follow_neuron() {
 
     assert_matches!(result,
         Command::Error(err)
-        if err.error_type() == ErrorType::NotFound);
+        if err.error_type == ErrorType::NotFound as i32);
 }
 
 #[test]
-fn neuron_follow_nonexistent_neuron() {
+#[should_panic]
+fn neuron_follow_nonexistent_neuron_fails() {
     let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();
@@ -168,14 +169,15 @@ fn unfollow_all_in_a_topic() {
 }
 
 #[test]
-fn follow_existing_and_nonexistent_neurons() {
+#[should_panic]
+fn follow_existing_and_nonexistent_neurons_fails() {
     let state_machine = setup_state_machine_with_nns_canisters();
 
     let n1 = get_neuron_1();
     let n2 = get_neuron_2();
     let nonexistent_neuron = get_nonexistent_neuron();
 
-    // n1 can follow a mix of existent and nonexistent neurons
+    // Neuron cannot follow a non-existing neuron.
     set_followees_on_topic(
         &state_machine,
         &n1,
@@ -234,7 +236,7 @@ fn vote_propagation_with_following() {
     assert_eq!(ballot_n2, (VOTING_POWER_NEURON_2, Vote::Yes));
 
     // re-vote explicitly, still no change
-    nns_cast_vote(
+    nns_cast_vote_or_panic(
         &state_machine,
         n2.principal_id,
         n2.neuron_id,
@@ -245,7 +247,7 @@ fn vote_propagation_with_following() {
     assert_eq!(votes, VOTING_POWER_NEURON_2);
 
     // n1 needs to vote explicitly
-    nns_cast_vote(
+    nns_cast_vote_or_panic(
         &state_machine,
         n1.principal_id,
         n1.neuron_id,
@@ -297,6 +299,9 @@ fn vote_propagation_with_following() {
         neuron_id: n1a_id,
         principal_id: n1.principal_id,
     };
+
+    nns_make_neuron_public(&state_machine, n1.principal_id, n1a.neuron_id)
+        .expect("Failed to make neuron public");
 
     // make n2 follow n1a
     set_followees_on_topic(
@@ -406,9 +411,8 @@ async fn test_prune_some_following() {
 
     let pocket_ic = PocketIcBuilder::new().with_nns_subnet().build_async().await;
 
-    let now_seconds = pocket_ic
-        .get_time()
-        .await
+    let system_time: SystemTime = pocket_ic.get_time().await.try_into().unwrap();
+    let now_seconds = system_time
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs();
@@ -483,11 +487,8 @@ async fn test_prune_some_following() {
         &pocket_ic,
         "NNS Governance",
         GOVERNANCE_CANISTER_ID,
-        governance_proto.encode_to_vec(),
-        // TODO(NNS1-3446): Once following pruning is released, replace with
-        // vanilla build_governance_wasm(). For now, the feature is only enabled
-        // when built with feature = "test".
-        build_test_governance_wasm(),
+        Encode!(&governance_proto).unwrap(),
+        build_governance_wasm(),
         Some(ROOT_CANISTER_ID.get()),
     )
     .await;
@@ -556,7 +557,7 @@ fn check_ballots(
     let ballots = info.ballots;
     assert!(!ballots.is_empty());
     let ballot = &ballots[&(neuron.neuron_id).id];
-    (ballot.voting_power, Vote::try_from(ballot.vote).unwrap())
+    (ballot.voting_power, Vote::from_repr(ballot.vote).unwrap())
 }
 
 fn get_yes_votes(state_machine: &StateMachine, proposal_id: &ProposalId) -> u64 {

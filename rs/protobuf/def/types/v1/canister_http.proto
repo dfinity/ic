@@ -28,6 +28,7 @@ message CanisterHttpResponseMetadata {
   uint64 timeout = 2;
   bytes content_hash = 3;
   uint64 registry_version = 4;
+  string replica_version = 5;
 }
 
 message CanisterHttpResponseContent {
@@ -54,6 +55,7 @@ message CanisterHttpResponseWithConsensus {
   CanisterHttpResponse response = 1;
   bytes hash = 2;
   uint64 registry_version = 3;
+  string replica_version = 8;
   reserved 4;
   reserved 5;
   reserved 6;
@@ -75,4 +77,9 @@ message CanisterHttpResponseMessage {
     uint64 timeout = 2;
     CanisterHttpResponseDivergence divergence_response = 3;
   }
+}
+
+message CanisterHttpArtifact {
+  CanisterHttpShare share = 1;
+  optional CanisterHttpResponse response = 2;
 }

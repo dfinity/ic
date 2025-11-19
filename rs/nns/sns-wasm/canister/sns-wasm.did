@@ -1,6 +1,7 @@
 type AddWasmRequest = record {
   hash : blob;
   wasm : opt SnsWasm;
+  skip_update_latest_version : opt bool;
 };
 
 type AddWasmResponse = record {

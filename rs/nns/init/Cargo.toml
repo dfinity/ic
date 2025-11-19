@@ -31,9 +31,5 @@ url = { workspace = true }
 name = "ic-nns-init"
 path = "src/main.rs"
 
-[[bin]]
-name = "ic-get-neuron-ids"
-path = "src/get_neuron_ids.rs"
-
 [dev-dependencies]
 tempfile = { workspace = true }

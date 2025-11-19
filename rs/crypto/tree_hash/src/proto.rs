@@ -3,7 +3,7 @@
 
 use crate::{Digest, FlatMap, Label, LabeledTree, MixedHashTree, Witness};
 use ic_protobuf::messaging::xnet::v1 as pb;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError, ProxyDecodeError::*};
+use ic_protobuf::proxy::{ProxyDecodeError, ProxyDecodeError::*, try_from_option_field};
 use std::convert::{TryFrom, TryInto};
 
 type LabeledTreeOfBytes = LabeledTree<Vec<u8>>;
@@ -141,8 +141,8 @@ impl TryFrom<pb::Witness> for Witness {
 
 impl From<MixedHashTree> for pb::MixedHashTree {
     fn from(tree: MixedHashTree) -> Self {
-        use pb::mixed_hash_tree::{Fork, Labeled, TreeEnum};
         use MixedHashTree as T;
+        use pb::mixed_hash_tree::{Fork, Labeled, TreeEnum};
 
         let tree_enum = match tree {
             T::Empty => TreeEnum::Empty(()),

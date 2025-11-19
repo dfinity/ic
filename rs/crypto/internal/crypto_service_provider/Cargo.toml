@@ -33,6 +33,7 @@ ic-crypto-secrets-containers = { path = "../../secrets_containers" }
 ic-crypto-sha2 = { path = "../../sha2" }
 ic-crypto-standalone-sig-verifier = { path = "../../standalone-sig-verifier" }
 ic-crypto-tls-interfaces = { path = "../../tls_interfaces" }
+ic-ed25519 = { path = "../../../../packages/ic-ed25519" }
 ic-interfaces = { path = "../../../interfaces" }
 ic-logger = { path = "../../../monitoring/logger" }
 ic-metrics = { path = "../../../monitoring/metrics" }
@@ -82,7 +83,6 @@ ic-test-utilities-compare-dirs = { path = "../../../test_utilities/compare_dirs"
 ic-test-utilities-in-memory-logger = { path = "../../../test_utilities/in_memory_logger" }
 ic-test-utilities-time = { path = "../../../test_utilities/time" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
-lazy_static = { workspace = true }
 mockall = { workspace = true }
 num_cpus = { workspace = true }
 proptest = { workspace = true }

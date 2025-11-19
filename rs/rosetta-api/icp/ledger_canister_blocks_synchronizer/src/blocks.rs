@@ -5,7 +5,7 @@ use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::tokens::CheckedAdd;
 use ic_ledger_hash_of::HashOf;
 use icp_ledger::{AccountIdentifier, Block, TimeStamp, Tokens, Transaction};
-use rusqlite::{named_params, params, CachedStatement, OptionalExtension, Row};
+use rusqlite::{CachedStatement, OptionalExtension, Row, named_params, params};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
@@ -22,12 +22,12 @@ mod database_access {
     };
     use ic_ledger_canister_core::ledger::LedgerTransaction;
     use ic_ledger_core::{
-        block::{BlockType, EncodedBlock},
         Tokens,
+        block::{BlockType, EncodedBlock},
     };
     use ic_ledger_hash_of::HashOf;
     use icp_ledger::{AccountIdentifier, Block, Operation};
-    use rusqlite::{named_params, params, Connection, Params, Statement};
+    use rusqlite::{Connection, Params, Statement, named_params, params};
 
     pub fn get_blocks_by_custom_query<P>(
         connection: &Connection,
@@ -303,7 +303,7 @@ mod database_access {
         verified: Option<bool>,
     ) -> Result<HashedBlock, BlockStoreError> {
         let mut stmt = con.prepare_cached(&match verified {
-            Some(verified) => format!("SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks WHERE verified = {} ORDER BY block_idx ASC Limit 2",verified),
+            Some(verified) => format!("SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks WHERE verified = {verified} ORDER BY block_idx ASC Limit 2"),
             None => "SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks ORDER BY block_idx ASC Limit 2".to_string()
         }).map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut blocks = read_hashed_blocks(&mut stmt, params![])?.into_iter();
@@ -328,7 +328,7 @@ mod database_access {
         verified: Option<bool>,
     ) -> Result<HashedBlock, BlockStoreError> {
         let mut stmt = con.prepare_cached(&match verified {
-            Some(verified) => format!("SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks WHERE verified = {} ORDER BY block_idx DESC Limit 1",verified),
+            Some(verified) => format!("SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks WHERE verified = {verified} ORDER BY block_idx DESC Limit 1"),
             None => "SELECT block_hash, encoded_block, parent_hash, block_idx, timestamp from blocks ORDER BY block_idx DESC Limit 1".to_string()
         }).map_err(|e| BlockStoreError::Other(e.to_string()))?;
         let mut blocks = read_hashed_blocks(&mut stmt, params![])?.into_iter();
@@ -349,12 +349,15 @@ mod database_access {
             .unwrap();
         let amount = stmt
             .query_map(params![block_idx, account.to_hex()], |row| {
-                Ok(row.get(0).unwrap())
+                // Read as i64 and reinterpret as u64 to handle the full u64 range
+                let tokens_i64: i64 = row.get(0)?;
+                let tokens_u64 = tokens_i64 as u64;
+                Ok(tokens_u64)
             })
             .unwrap()
             .next();
         match amount {
-            Some(tokens) => Ok(tokens.unwrap()),
+            Some(tokens) => Ok(Some(tokens.unwrap())),
             None => Ok(None),
         }
     }
@@ -370,7 +373,11 @@ mod database_access {
             |account: AccountIdentifier| -> Result<Option<(String, u64)>, BlockStoreError> {
                 let account_balance_opt = stmt_select
                     .query_map(params![account.to_hex(), hb.index], |row| {
-                        Ok((row.get(1).map(|x: String| x as String)?, row.get(2)?))
+                        let account: String = row.get(1)?;
+                        // Read as i64 and reinterpret as u64 to handle the full u64 range
+                        let tokens_i64: i64 = row.get(2)?;
+                        let tokens_u64 = tokens_i64 as u64;
+                        Ok((account, tokens_u64))
                     })
                     .map_err(|e| BlockStoreError::Other(e.to_string()))?
                     .map(|x| x.unwrap())
@@ -386,7 +393,11 @@ mod database_access {
                             balance.1 -= amount.get_e8s();
                             new_balances.push(balance);
                         } else {
-                            return Err(BlockStoreError::Other(format!("Trying to brun tokens from an account that has not enough tokens. Current balance is {}, burn amount is {}.",balance.1,amount.get_e8s())));
+                            return Err(BlockStoreError::Other(format!(
+                                "Trying to brun tokens from an account that has not enough tokens. Current balance is {}, burn amount is {}.",
+                                balance.1,
+                                amount.get_e8s()
+                            )));
                         }
                     }
                     None => {
@@ -411,8 +422,7 @@ mod database_access {
 
                 let make_error = || {
                     Err(BlockStoreError::Other(format!(
-                        "Account {} does not have enough funds to pay for an approval",
-                        from
+                        "Account {from} does not have enough funds to pay for an approval"
                     )))
                 };
 
@@ -460,7 +470,10 @@ mod database_access {
                                 balance.1 -= payable;
                                 new_balances.push(balance);
                             } else {
-                                return Err(BlockStoreError::Other(format!("Trying to transfer tokens from an account that has not enough tokens. Current balance is {}, payable amount is {}.",balance.1,payable)));
+                                return Err(BlockStoreError::Other(format!(
+                                    "Trying to transfer tokens from an account that has not enough tokens. Current balance is {}, payable amount is {}.",
+                                    balance.1, payable
+                                )));
                             }
                         }
                         None => {
@@ -472,8 +485,10 @@ mod database_access {
         }
 
         for (account, tokens) in new_balances {
+            // Store u64 as i64 using bit-reinterpretation to handle the full u64 range
+            let tokens_i64 = tokens as i64;
             stmt_insert
-                .execute(params![hb.index, account, tokens])
+                .execute(params![hb.index, account, tokens_i64])
                 .map_err(|e| {
                     BlockStoreError::Other(
                         e.to_string()
@@ -569,20 +584,27 @@ mod database_access {
         let command = match max_block {
             Some(limit) => match first_idx {
                 0 => {
-                    format!( "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {} ORDER BY block_idx DESC",limit)
+                    format!(
+                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {limit} ORDER BY block_idx DESC"
+                    )
                 }
                 _ => {
-                    format!( "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {} AND block_idx > {} ORDER BY block_idx DESC",limit,first_idx)
+                    format!(
+                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx<= {limit} AND block_idx > {first_idx} ORDER BY block_idx DESC"
+                    )
                 }
             },
             None => match first_idx {
-                0 => {
-                    String::from("SELECT block_idx,tokens from account_balances where account = ? ORDER BY block_idx DESC")}
+                0 => String::from(
+                    "SELECT block_idx,tokens from account_balances where account = ? ORDER BY block_idx DESC",
+                ),
 
                 _ => {
-                    format!("SELECT block_idx,tokens from account_balances where account = ? AND block_idx > {} ORDER BY block_idx DESC",first_idx)
+                    format!(
+                        "SELECT block_idx,tokens from account_balances where account = ? AND block_idx > {first_idx} ORDER BY block_idx DESC"
+                    )
                 }
-                }
+            },
         };
         let account = acc.to_hex();
         let mut result = Vec::new();
@@ -592,7 +614,11 @@ mod database_access {
             .unwrap();
         let account_history = stmt
             .query_map(params![account], |row| {
-                Ok((row.get(0)?, row.get(1).map(Tokens::from_e8s)?))
+                let block_idx: u64 = row.get(0)?;
+                // Read as i64 and reinterpret as u64 to handle the full u64 range
+                let tokens_i64: i64 = row.get(1)?;
+                let tokens_u64 = tokens_i64 as u64;
+                Ok((block_idx, Tokens::from_e8s(tokens_u64)))
             })
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
         for tuple in account_history {
@@ -689,6 +715,49 @@ pub enum RosettaBlocksMode {
     Enabled { first_rosetta_block_index: u64 },
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum RosettaBlocksConfig {
+    Enabled,
+    Disabled,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum IndexOptimization {
+    Enabled,
+    Disabled,
+}
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub struct RosettaDbConfig {
+    pub rosetta_blocks: RosettaBlocksConfig,
+    pub index_optimization: IndexOptimization,
+}
+
+impl RosettaDbConfig {
+    pub fn new(rosetta_blocks: RosettaBlocksConfig, index_optimization: IndexOptimization) -> Self {
+        Self {
+            rosetta_blocks,
+            index_optimization,
+        }
+    }
+
+    pub fn with_rosetta_blocks_enabled(index_optimization: IndexOptimization) -> Self {
+        Self::new(RosettaBlocksConfig::Enabled, index_optimization)
+    }
+
+    pub fn with_rosetta_blocks_disabled(index_optimization: IndexOptimization) -> Self {
+        Self::new(RosettaBlocksConfig::Disabled, index_optimization)
+    }
+
+    pub fn default_enabled() -> Self {
+        Self::new(RosettaBlocksConfig::Enabled, IndexOptimization::Enabled)
+    }
+
+    pub fn default_disabled() -> Self {
+        Self::new(RosettaBlocksConfig::Disabled, IndexOptimization::Disabled)
+    }
+}
+
 pub struct Blocks {
     connection: Mutex<rusqlite::Connection>,
     pub rosetta_blocks_mode: RosettaBlocksMode,
@@ -697,26 +766,30 @@ pub struct Blocks {
 impl Blocks {
     pub fn new_persistent(
         location: &Path,
-        enable_rosetta_blocks: bool,
+        config: RosettaDbConfig,
     ) -> Result<Self, BlockStoreError> {
         std::fs::create_dir_all(location)
             .expect("Unable to create directory for SQLite on-disk store.");
         let path = location.join("db.sqlite");
         let connection =
-            rusqlite::Connection::open(path).expect("Unable to open SQLite database connection");
-        Self::new(connection, enable_rosetta_blocks)
+            rusqlite::Connection::open(path).map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        Self::new(connection, config)
     }
 
-    /// Constructs a new SQLite in-memory store.
-    pub fn new_in_memory(enable_rosetta_blocks: bool) -> Result<Self, BlockStoreError> {
-        let connection = rusqlite::Connection::open_in_memory()
-            .expect("Unable to open SQLite in-memory database connection");
-        Self::new(connection, enable_rosetta_blocks)
+    pub fn new_in_memory(config: RosettaDbConfig) -> Result<Self, BlockStoreError> {
+        // Use a unique in-memory database for each instance to avoid locks in parallel tests.
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let counter = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let connection =
+            rusqlite::Connection::open(format!("file:memdb{counter}?mode=memory&cache=private"))
+                .map_err(|e| BlockStoreError::Other(e.to_string()))?;
+        Self::new(connection, config)
     }
 
     fn new(
         connection: rusqlite::Connection,
-        enable_rosetta_blocks: bool,
+        config: RosettaDbConfig,
     ) -> Result<Self, BlockStoreError> {
         let mut store = Self {
             connection: Mutex::new(connection),
@@ -728,21 +801,18 @@ impl Blocks {
             .unwrap()
             .execute("PRAGMA foreign_keys = 1", [])
             .map_err(|e| BlockStoreError::Other(e.to_string()))?;
-        store.create_tables(enable_rosetta_blocks).map_err(|e| {
-            BlockStoreError::Other(format!("Failed to initialize SQLite database: {}", e))
+        store.create_tables(config).map_err(|e| {
+            BlockStoreError::Other(format!("Failed to initialize SQLite database: {e}"))
         })?;
         store.cache_rosetta_blocks_mode().map_err(|e| {
-            BlockStoreError::Other(format!(
-                "Failed to determine the Rosetta Blocks Mode: {}",
-                e
-            ))
+            BlockStoreError::Other(format!("Failed to determine the Rosetta Blocks Mode: {e}"))
         })?;
 
         store.check_table_coherence()?;
         Ok(store)
     }
 
-    fn create_tables(&self, enable_rosetta_blocks: bool) -> Result<(), rusqlite::Error> {
+    fn create_tables(&self, config: RosettaDbConfig) -> Result<(), rusqlite::Error> {
         let mut connection = self.connection.lock().unwrap();
         let tx = connection.transaction()?;
         tx.execute(
@@ -783,7 +853,7 @@ impl Blocks {
             "#,
             [],
         )?;
-        if enable_rosetta_blocks {
+        if config.rosetta_blocks == RosettaBlocksConfig::Enabled {
             // Use two tables for Rosetta Blocks. The first one contains
             // the metadata of the block while second one contains the
             // mapping Rosetta Block Index <-> Block Index
@@ -833,6 +903,45 @@ impl Blocks {
         "#,
             [],
         )?;
+
+        // Add account and operation type indexes if optimization is enabled
+        if config.index_optimization == IndexOptimization::Enabled {
+            // From account index
+            tx.execute(
+                r#"
+            CREATE INDEX IF NOT EXISTS from_account_index 
+            ON blocks(from_account)
+            "#,
+                [],
+            )?;
+
+            // To account index
+            tx.execute(
+                r#"
+            CREATE INDEX IF NOT EXISTS to_account_index 
+            ON blocks(to_account)
+            "#,
+                [],
+            )?;
+
+            // Spender account index
+            tx.execute(
+                r#"
+            CREATE INDEX IF NOT EXISTS spender_account_index 
+            ON blocks(spender_account)
+            "#,
+                [],
+            )?;
+
+            // Operation type index for searching by transaction type
+            tx.execute(
+                r#"
+            CREATE INDEX IF NOT EXISTS operation_type_index 
+            ON blocks(operation_type)
+            "#,
+                [],
+            )?;
+        }
 
         tx.commit()
     }
@@ -897,7 +1006,7 @@ impl Blocks {
         let mut connection = self.connection.lock().unwrap();
         connection
             .execute_batch("BEGIN TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
 
         database_access::prune_account_balances(&mut connection, &hb.index)?;
         connection
@@ -909,7 +1018,7 @@ impl Blocks {
 
         connection
             .execute_batch("COMMIT TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
 
         Ok(())
     }
@@ -1119,11 +1228,11 @@ impl Blocks {
     pub fn push(&mut self, hb: &HashedBlock) -> Result<(), BlockStoreError> {
         let mut con = self.connection.lock().unwrap();
         con.execute_batch("BEGIN TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
         database_access::push_hashed_block(&mut con, hb)?;
         database_access::update_balance_book(&mut con, hb)?;
         con.execute_batch("COMMIT TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
         drop(con);
         self.sanity_check(hb)?;
         Ok(())
@@ -1137,7 +1246,7 @@ impl Blocks {
         let connection = self.connection.lock().unwrap();
         connection
             .execute_batch("BEGIN TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
         let mut stmt_hb = connection.prepare("INSERT INTO blocks (block_hash, encoded_block, parent_hash, block_idx, verified, timestamp, tx_hash, operation_type, from_account, to_account, spender_account, amount, allowance, expected_allowance, fee, created_at_time, expires_at, memo, icrc1_memo) VALUES (
             :block_hash, :encoded_block, :parent_hash, :block_idx, FALSE, :timestamp, :tx_hash, :operation_type, :from_account, :to_account, :spender_account, :amount, :allowance, :expected_allowance, :fee, :created_at_time, :expires_at, :memo, :icrc1_memo
             )").map_err(|e| BlockStoreError::Other(e.to_string()))?;
@@ -1154,7 +1263,7 @@ impl Blocks {
                 Err(e) => {
                     connection
                         .execute_batch("ROLLBACK TRANSACTION;")
-                        .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+                        .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
                     return Err(e);
                 }
             };
@@ -1167,14 +1276,14 @@ impl Blocks {
                 Err(e) => {
                     connection
                         .execute_batch("ROLLBACK TRANSACTION;")
-                        .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+                        .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
                     return Err(e);
                 }
             }
         }
         connection
             .execute_batch("COMMIT TRANSACTION;")
-            .map_err(|e| BlockStoreError::Other(format!("{}", e)))?;
+            .map_err(|e| BlockStoreError::Other(format!("{e}")))?;
         Ok(())
     }
 
@@ -1444,7 +1553,11 @@ impl Blocks {
         sql_tx.commit().unwrap();
 
         tracing::debug!(
-           "Created {} Rosetta Blocks. Ledger blocks indices {:?} added to Rosetta Blocks. Last Rosetta Block was at index {}",num_rosetta_blocks_created.into_inner(), next_block_indices.first_block_index..=certified_tip_index,current_rosetta_block_index.into_inner().saturating_sub(1));
+            "Created {} Rosetta Blocks. Ledger blocks indices {:?} added to Rosetta Blocks. Last Rosetta Block was at index {}",
+            num_rosetta_blocks_created.into_inner(),
+            next_block_indices.first_block_index..=certified_tip_index,
+            current_rosetta_block_index.into_inner().saturating_sub(1)
+        );
 
         Ok(())
     }
@@ -1617,7 +1730,7 @@ struct RosettaBlockIndices {
 
 #[cfg(test)]
 mod tests {
-    use super::Blocks;
+    use super::{Blocks, IndexOptimization, RosettaDbConfig};
     use crate::rosetta_block::RosettaBlock;
     use candid::Principal;
     use ic_ledger_core::block::BlockType;
@@ -1675,7 +1788,7 @@ mod tests {
             transactions: [(0, transaction0), (1, transaction1)].into_iter().collect(),
         };
 
-        let mut blocks = Blocks::new_in_memory(true).unwrap();
+        let mut blocks = Blocks::new_in_memory(RosettaDbConfig::default_enabled()).unwrap();
         blocks.push(&hashed_block0).unwrap();
         blocks.push(&hashed_block1).unwrap();
         let mut connection = blocks.connection.lock().unwrap();
@@ -1684,7 +1797,7 @@ mod tests {
         let mut insert_rosetta_block_stmt = transaction
             .prepare_cached(
                 r#"INSERT INTO rosetta_blocks (rosetta_block_idx, hash, timestamp)
-        VALUES (:idx, :hash, :timestamp)"#,
+                VALUES (:idx, :hash, :timestamp)"#,
             )
             .unwrap();
         let mut insert_rosetta_block_transaction_stmt = transaction
@@ -1708,5 +1821,240 @@ VALUES (:idx, :block_idx)"#,
         drop(connection);
         let actual_rosetta_block = blocks.get_rosetta_block(0).unwrap();
         assert_eq!(rosetta_block, actual_rosetta_block);
+    }
+
+    #[test]
+    fn test_update_balance_book_with_large_values() {
+        let mut blocks = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
+
+        let account = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
+
+        // Create a mint transaction with a large amount
+        let large_amount = 10000000000000000000u64; // Exceeds i64::MAX
+        let transaction = Transaction {
+            operation: Operation::Mint {
+                to: account,
+                amount: Tokens::from_e8s(large_amount),
+            },
+            memo: Memo(0),
+            created_at_time: None,
+            icrc1_memo: None,
+        };
+
+        let block = Block {
+            parent_hash: None,
+            transaction,
+            timestamp: TimeStamp::from_nanos_since_unix_epoch(1),
+        };
+
+        let encoded_block = block.clone().encode();
+        let hashed_block = super::HashedBlock::hash_block(encoded_block, None, 0, block.timestamp);
+
+        // Push the block (this should handle the large value correctly with TEXT storage)
+        blocks.push(&hashed_block).unwrap();
+
+        // Set the block as verified so we can query the balance
+        blocks.set_hashed_block_to_verified(&0).unwrap();
+
+        // Verify the balance was stored and can be retrieved with full precision
+        let balance = blocks.get_account_balance(&account, &0).unwrap();
+        assert_eq!(balance, Tokens::from_e8s(large_amount));
+
+        // Verify the balance history
+        let history = blocks.get_account_balance_history(&account, None).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0], (0u64, Tokens::from_e8s(large_amount)));
+    }
+
+    #[test]
+    fn test_comprehensive_backwards_compatibility() {
+        use super::database_access;
+        use rusqlite::params;
+
+        let blocks = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
+        let mut connection = blocks.connection.lock().unwrap();
+
+        let account1 = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
+        let account2 = AccountIdentifier::new(
+            ic_types::PrincipalId(Principal::from_slice(&[1u8; 29])),
+            None,
+        );
+
+        // Scenario 1: Existing database with small INTEGER values (backwards compatible)
+        let small_value1 = 1000000u64; // 0.01 ICP
+        let small_value2 = 5000000000u64; // 50 ICP
+        connection
+            .execute(
+                "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
+                params![1u64, account1.to_hex(), small_value1 as i64],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
+                params![2u64, account2.to_hex(), small_value2 as i64],
+            )
+            .unwrap();
+
+        // Scenario 2: New large values using bit-reinterpretation
+        let large_value1 = 10000000000000000000u64; // The problematic value from the original error
+        let large_value2 = 18446744073709551615u64; // u64::MAX
+        connection
+            .execute(
+                "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
+                params![3u64, account1.to_hex(), large_value1 as i64], // Stored as negative i64
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
+                params![4u64, account2.to_hex(), large_value2 as i64], // Stored as -1
+            )
+            .unwrap();
+
+        // Test reading all values - should work seamlessly with bit-reinterpretation
+        let balance1 =
+            database_access::get_account_balance(&mut connection, &1u64, &account1).unwrap();
+        let balance2 =
+            database_access::get_account_balance(&mut connection, &2u64, &account2).unwrap();
+        let balance3 =
+            database_access::get_account_balance(&mut connection, &3u64, &account1).unwrap();
+        let balance4 =
+            database_access::get_account_balance(&mut connection, &4u64, &account2).unwrap();
+
+        // All values should be read correctly regardless of magnitude
+        assert_eq!(balance1, Some(small_value1));
+        assert_eq!(balance2, Some(small_value2));
+        assert_eq!(balance3, Some(large_value1));
+        assert_eq!(balance4, Some(large_value2));
+
+        // Test that the latest balance query works correctly (should return the large values)
+        let latest_balance1 =
+            database_access::get_account_balance(&mut connection, &10u64, &account1).unwrap();
+        let latest_balance2 =
+            database_access::get_account_balance(&mut connection, &10u64, &account2).unwrap();
+
+        assert_eq!(latest_balance1, Some(large_value1));
+        assert_eq!(latest_balance2, Some(large_value2));
+    }
+
+    #[test]
+    fn test_account_balance_bit_reinterpretation() {
+        use super::database_access;
+        use rusqlite::params;
+
+        let blocks = Blocks::new_in_memory(RosettaDbConfig::default_disabled()).unwrap();
+        let mut connection = blocks.connection.lock().unwrap();
+
+        let account = AccountIdentifier::new(ic_types::PrincipalId(Principal::anonymous()), None);
+
+        // Test 1: Small value (fits in i64) - stored as positive
+        let small_value = 1000000u64; // 0.01 ICP in e8s
+        connection
+            .execute(
+                "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
+                params![1u64, account.to_hex(), small_value as i64],
+            )
+            .unwrap();
+
+        let balance =
+            database_access::get_account_balance(&mut connection, &1u64, &account).unwrap();
+        assert_eq!(balance, Some(small_value));
+
+        // Test 2: Large value (exceeds i64::MAX) - stored as negative i64, reinterpreted as u64
+        let large_value = 10000000000000000000u64; // Exceeds i64::MAX
+        let large_value_as_i64 = large_value as i64; // This becomes negative
+        connection
+            .execute(
+                "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
+                params![2u64, account.to_hex(), large_value_as_i64],
+            )
+            .unwrap();
+
+        let balance =
+            database_access::get_account_balance(&mut connection, &2u64, &account).unwrap();
+        assert_eq!(balance, Some(large_value)); // Should recover the original value
+
+        // Test 3: u64::MAX value
+        let max_value = u64::MAX;
+        let max_value_as_i64 = max_value as i64; // This becomes -1
+        connection
+            .execute(
+                "INSERT INTO account_balances (block_idx, account, tokens) VALUES (?1, ?2, ?3)",
+                params![3u64, account.to_hex(), max_value_as_i64],
+            )
+            .unwrap();
+
+        let balance =
+            database_access::get_account_balance(&mut connection, &3u64, &account).unwrap();
+        assert_eq!(balance, Some(max_value)); // Should recover u64::MAX
+
+        // Verify that bit reinterpretation works correctly
+        assert_eq!(large_value_as_i64, -8446744073709551616i64);
+        assert_eq!(max_value_as_i64, -1i64);
+        assert_eq!((-8446744073709551616i64) as u64, 10000000000000000000u64);
+        assert_eq!((-1i64) as u64, u64::MAX);
+    }
+
+    #[test]
+    fn test_search_indexes_creation_when_enabled() {
+        let blocks = Blocks::new_in_memory(RosettaDbConfig::default_enabled()).unwrap();
+        let connection = blocks.connection.lock().unwrap();
+
+        // Check that indexes exist when optimization is enabled
+        let index_query =
+            "SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?, ?, ?)";
+        let mut stmt = connection.prepare(index_query).unwrap();
+        let index_names: Vec<String> = stmt
+            .query_map(
+                [
+                    "from_account_index",
+                    "to_account_index",
+                    "spender_account_index",
+                    "operation_type_index",
+                ],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert!(index_names.contains(&"from_account_index".to_string()));
+        assert!(index_names.contains(&"to_account_index".to_string()));
+        assert!(index_names.contains(&"spender_account_index".to_string()));
+        assert!(index_names.contains(&"operation_type_index".to_string()));
+    }
+
+    #[test]
+    fn test_search_indexes_not_created_when_disabled() {
+        let blocks = Blocks::new_in_memory(RosettaDbConfig::with_rosetta_blocks_enabled(
+            IndexOptimization::Disabled,
+        ))
+        .unwrap();
+        let connection = blocks.connection.lock().unwrap();
+
+        // Check that indexes don't exist when optimization is disabled
+        let index_query =
+            "SELECT name FROM sqlite_master WHERE type='index' AND name IN (?, ?, ?, ?)";
+        let mut stmt = connection.prepare(index_query).unwrap();
+        let index_names: Vec<String> = stmt
+            .query_map(
+                [
+                    "from_account_index",
+                    "to_account_index",
+                    "spender_account_index",
+                    "operation_type_index",
+                ],
+                |row| row.get::<_, String>(0),
+            )
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        // These specific indexes should not exist
+        assert!(!index_names.contains(&"from_account_index".to_string()));
+        assert!(!index_names.contains(&"to_account_index".to_string()));
+        assert!(!index_names.contains(&"spender_account_index".to_string()));
+        assert!(!index_names.contains(&"operation_type_index".to_string()));
     }
 }

@@ -6,14 +6,14 @@ use ic_error_types::RejectCode;
 use ic_interfaces::batch_payload::{BatchPayloadBuilder, PastPayload};
 use ic_test_utilities_types::ids::canister_test_id;
 use ic_types::{
+    Height, NumBytes, RegistryVersion, ReplicaVersion,
     canister_http::{
         CanisterHttpReject, CanisterHttpResponse, CanisterHttpResponseContent,
         CanisterHttpResponseMetadata, CanisterHttpResponseShare,
     },
-    crypto::{crypto_hash, CryptoHash, CryptoHashOf},
+    crypto::{CryptoHash, CryptoHashOf, crypto_hash},
     messages::CallbackId,
     time::UNIX_EPOCH,
-    Height, NumBytes, RegistryVersion,
 };
 use proptest::{arbitrary::any, prelude::*};
 use std::{ops::DerefMut, time::Duration};
@@ -161,6 +161,7 @@ fn prop_response_with_shares(
                 timeout: response.timeout,
                 content_hash: crypto_hash(&response),
                 registry_version: RegistryVersion::new(1),
+                replica_version: ReplicaVersion::default(),
             };
             let shares = metadata_to_shares(num_shares, &metadata);
             (response, shares)
@@ -207,6 +208,7 @@ fn prop_random_metadata(max_timeout: u64) -> impl Strategy<Value = CanisterHttpR
             timeout: UNIX_EPOCH + Duration::from_millis(timeout),
             content_hash: CryptoHashOf::new(CryptoHash(hash.to_vec())),
             registry_version: RegistryVersion::new(1),
+            replica_version: ReplicaVersion::default(),
         }
     })
 }

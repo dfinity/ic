@@ -9,12 +9,12 @@ use prometheus::{
 use reqwest::{Body, Client, Error, Method, Response, StatusCode};
 use std::net::SocketAddr;
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc,
+    atomic::{AtomicUsize, Ordering},
 };
 use tokio::{
     net::TcpSocket,
-    sync::mpsc::{channel, Sender},
+    sync::mpsc::{Sender, channel},
 };
 
 // Get a free port on this host to which we can connect transport to.
@@ -28,7 +28,7 @@ fn get_free_localhost_port() -> std::io::Result<SocketAddr> {
 
 async fn send_request(client: &Client, addr: SocketAddr) -> Result<Response, Error> {
     client
-        .request(Method::GET, format!("http://{}", addr))
+        .request(Method::GET, format!("http://{addr}"))
         .body(Body::from(""))
         .send()
         .await

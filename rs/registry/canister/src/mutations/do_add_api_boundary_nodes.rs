@@ -21,7 +21,7 @@ pub struct AddApiBoundaryNodesPayload {
 impl Registry {
     /// Adds an ApiBoundaryNodeRecord to the registry
     pub fn do_add_api_boundary_nodes(&mut self, payload: AddApiBoundaryNodesPayload) {
-        println!("{}do_add_api_boundary_nodes: {:?}", LOG_PREFIX, payload);
+        println!("{LOG_PREFIX}do_add_api_boundary_nodes: {payload:?}");
 
         // Ensure payload is valid
         self.validate_add_api_boundary_nodes_payload(&payload);
@@ -271,7 +271,7 @@ mod tests {
                 ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
-                    guest_launch_measurement_sha256_hex: None,
+                    guest_launch_measurements: None,
                 }
                 .encode_to_vec(),
             ),
@@ -336,7 +336,7 @@ mod tests {
                 ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
-                    guest_launch_measurement_sha256_hex: None,
+                    guest_launch_measurements: None,
                 }
                 .encode_to_vec(),
             ),
@@ -392,7 +392,7 @@ mod tests {
                 ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
-                    guest_launch_measurement_sha256_hex: None,
+                    guest_launch_measurements: None,
                 }
                 .encode_to_vec(),
             ),
@@ -445,7 +445,7 @@ mod tests {
                 ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
-                    guest_launch_measurement_sha256_hex: None,
+                    guest_launch_measurements: None,
                 }
                 .encode_to_vec(),
             ),
@@ -461,10 +461,9 @@ mod tests {
         let node_ids: Vec<_> = node_ids_and_dkg_pks.keys().cloned().collect();
 
         // Add subnet to registry and assign the node to it
-        let subnet_record = get_invariant_compliant_subnet_record(vec![node_ids
-            .first()
-            .cloned()
-            .expect("failed to get a node id")]);
+        let subnet_record = get_invariant_compliant_subnet_record(vec![
+            node_ids.first().cloned().expect("failed to get a node id"),
+        ]);
 
         registry.maybe_apply_mutation_internal(add_fake_subnet(
             SubnetId::from(*TEST_USER1_PRINCIPAL),  // signing_subnet
@@ -508,7 +507,7 @@ mod tests {
                 ReplicaVersionRecord {
                     release_package_sha256_hex: "".into(),
                     release_package_urls: vec![],
-                    guest_launch_measurement_sha256_hex: None,
+                    guest_launch_measurements: None,
                 }
                 .encode_to_vec(),
             ),

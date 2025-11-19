@@ -1,24 +1,19 @@
 //! Threshold Schnorr transcripts and references related definitions.
-use crate::crypto::canister_threshold_sig::{
-    SchnorrPreSignatureTranscript, ThresholdSchnorrSigInputs,
-};
-use crate::crypto::ExtendedDerivationPath;
-use crate::{Height, Randomness};
+use crate::Height;
+use crate::crypto::canister_threshold_sig::SchnorrPreSignatureTranscript;
 #[cfg(test)]
 use ic_exhaustive_derive::ExhaustiveSet;
 use ic_management_canister_types_private::SchnorrKeyId;
-use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
+use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
 use std::convert::{AsMut, AsRef, TryFrom, TryInto};
-use std::fmt;
 use std::hash::Hash;
-use std::sync::Arc;
 
 use super::{
     IDkgBlockReader, IDkgTranscriptParamsRef, RandomUnmaskedTranscriptParams,
-    ThresholdSchnorrPresignatureTranscriptCreationError, ThresholdSchnorrSigInputsCreationError,
-    TranscriptLookupError, TranscriptRef, UnmaskedTranscript,
+    ThresholdSchnorrPresignatureTranscriptCreationError, TranscriptLookupError, TranscriptRef,
+    UnmaskedTranscript,
 };
 
 /// Schnorr pre-signature in creation.
@@ -197,76 +192,5 @@ impl TryFrom<&pb::PreSignatureTranscriptRef> for PreSignatureTranscriptRef {
         )?;
 
         Ok(Self::new(key_id, blinder_unmasked_ref, key_unmasked_ref))
-    }
-}
-
-/// Counterpart of ThresholdSchnorrSigInputs that holds transcript references,
-/// instead of the transcripts.
-#[derive(Clone, Eq, PartialEq, Hash)]
-#[cfg_attr(test, derive(ExhaustiveSet))]
-pub struct ThresholdSchnorrSigInputsRef {
-    pub derivation_path: ExtendedDerivationPath,
-    pub message: Arc<Vec<u8>>,
-    pub nonce: Randomness,
-    pub presig_transcript_ref: PreSignatureTranscriptRef,
-    pub taproot_tree_root: Option<Arc<Vec<u8>>>,
-}
-
-impl fmt::Debug for ThresholdSchnorrSigInputsRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ThresholdSchnorrSigInputsRef")
-            .field("derivation_path", &self.derivation_path)
-            .field("message_length_in_bytes", &self.message.len())
-            .field("nonce", &hex::encode(self.nonce.as_ref()))
-            .field("presig_transcript_ref", &self.presig_transcript_ref)
-            .finish()
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum ThresholdSchnorrSigInputsError {
-    PreSignatureTranscript(PreSignatureTranscriptError),
-    KeyTranscript(TranscriptLookupError),
-    Failed(ThresholdSchnorrSigInputsCreationError),
-}
-
-impl ThresholdSchnorrSigInputsRef {
-    pub fn new(
-        derivation_path: ExtendedDerivationPath,
-        message: Arc<Vec<u8>>,
-        nonce: Randomness,
-        presig_transcript_ref: PreSignatureTranscriptRef,
-        taproot_tree_root: Option<Arc<Vec<u8>>>,
-    ) -> Self {
-        Self {
-            derivation_path,
-            message,
-            nonce,
-            presig_transcript_ref,
-            taproot_tree_root,
-        }
-    }
-
-    /// Resolves the refs to get the ThresholdSchnorrSigInputs.
-    pub fn translate(
-        &self,
-        resolver: &dyn IDkgBlockReader,
-    ) -> Result<ThresholdSchnorrSigInputs, ThresholdSchnorrSigInputsError> {
-        let presig_transcript = self
-            .presig_transcript_ref
-            .translate(resolver)
-            .map_err(ThresholdSchnorrSigInputsError::PreSignatureTranscript)?;
-        let key_transcript = resolver
-            .transcript(self.presig_transcript_ref.key_unmasked_ref.as_ref())
-            .map_err(ThresholdSchnorrSigInputsError::KeyTranscript)?;
-        ThresholdSchnorrSigInputs::new(
-            &self.derivation_path,
-            &self.message,
-            self.taproot_tree_root.as_ref().map(|v| &***v),
-            self.nonce,
-            presig_transcript,
-            key_transcript,
-        )
-        .map_err(ThresholdSchnorrSigInputsError::Failed)
     }
 }

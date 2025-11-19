@@ -3,7 +3,7 @@
 
 use crate::ni_dkg::fs_ni_dkg::forward_secure::{CHUNK_SIZE, NUM_CHUNKS};
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{
-    random_oracle, random_oracle_to_scalar, HashedMap, UniqueHash,
+    HashedMap, UniqueHash, random_oracle, random_oracle_to_scalar,
 };
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
 use ic_crypto_internal_types::curves::bls12_381::{FrBytes, G1Bytes};
@@ -27,10 +27,10 @@ pub const NUM_ZK_REPETITIONS: usize = 32;
 pub const CHALLENGE_BITS: usize = SECURITY_LEVEL.div_ceil(NUM_ZK_REPETITIONS);
 
 // The number of bytes needed to represent a challenge (which must fit in a usize)
-pub const CHALLENGE_BYTES: usize = (CHALLENGE_BITS + 7) / 8;
+pub const CHALLENGE_BYTES: usize = CHALLENGE_BITS.div_ceil(8);
 const _: () = assert!(CHALLENGE_BYTES < std::mem::size_of::<usize>());
 
-// A bitmask specifyng the size of a challenge
+// A bitmask specifying the size of a challenge
 pub const CHALLENGE_MASK: usize = (1 << CHALLENGE_BITS) - 1;
 
 /// Instance for a chunking relation.
@@ -214,7 +214,10 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
     let p_sub_s = Scalar::from_usize(ss).neg();
 
     // y0 <- getRandomG1
-    let y0 = G1Affine::hash(b"ic-crypto-nizk-chunking-proof-y0", &rng.gen::<[u8; 32]>());
+    let y0 = G1Affine::hash(
+        b"ic-crypto-nizk-chunking-proof-y0",
+        &rng.r#gen::<[u8; 32]>(),
+    );
 
     let g1 = &instance.g1_gen;
 
@@ -549,25 +552,24 @@ impl ProofChunking {
         let z_s = Scalar::batch_deserialize_array(&proof.response_z_s);
         let z_beta = Scalar::deserialize(proof.response_z_b.as_bytes());
 
-        if let (Ok(y0), Ok(bb), Ok(cc), Ok(dd), Ok(yy), Ok(z_r), Ok(z_s), Ok(z_beta)) =
-            (y0, bb, cc, dd, yy, z_r, z_s, z_beta)
-        {
-            if dd.len() != z_r.len() + 1 {
-                return None;
-            }
+        match (y0, bb, cc, dd, yy, z_r, z_s, z_beta) {
+            (Ok(y0), Ok(bb), Ok(cc), Ok(dd), Ok(yy), Ok(z_r), Ok(z_s), Ok(z_beta)) => {
+                if dd.len() != z_r.len() + 1 {
+                    return None;
+                }
 
-            Some(Self {
-                y0,
-                bb,
-                cc,
-                dd,
-                yy,
-                z_r,
-                z_s,
-                z_beta,
-            })
-        } else {
-            None
+                Some(Self {
+                    y0,
+                    bb,
+                    cc,
+                    dd,
+                    yy,
+                    z_r,
+                    z_s,
+                    z_beta,
+                })
+            }
+            _ => None,
         }
     }
 }

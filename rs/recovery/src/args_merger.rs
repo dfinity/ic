@@ -1,5 +1,5 @@
 use serde_json::Value;
-use slog::{warn, Logger};
+use slog::{Logger, warn};
 
 /// Merges two serializable objects ignoring all the None values of [new]. For each field where
 /// there is a difference between the old and the new value, will emit a warning with the
@@ -51,7 +51,7 @@ mod tests {
     use std::path::PathBuf;
     use url::Url;
 
-    use crate::{util, RecoveryArgs};
+    use crate::{RecoveryArgs, util};
 
     use super::*;
 
@@ -63,7 +63,7 @@ mod tests {
             dir: PathBuf::from("/dir1/"),
             nns_url: Url::parse("https://fake_nns_url.com/").unwrap(),
             replica_version: None,
-            key_file: Some(PathBuf::from("/dir1/key_file")),
+            admin_key_file: Some(PathBuf::from("/dir1/key_file")),
             test_mode: true,
             skip_prompts: true,
             use_local_binaries: false,
@@ -72,7 +72,7 @@ mod tests {
             dir: PathBuf::from("/dir2/"),
             nns_url: Url::parse("https://fake_nns_url.com/").unwrap(),
             replica_version: None,
-            key_file: None,
+            admin_key_file: None,
             test_mode: false,
             skip_prompts: true,
             use_local_binaries: false,
@@ -82,7 +82,7 @@ mod tests {
             dir: args2.dir.clone(),
             nns_url: args2.nns_url.clone(),
             replica_version: args2.replica_version.clone(),
-            key_file: args1.key_file.clone(),
+            admin_key_file: args1.admin_key_file.clone(),
             test_mode: args2.test_mode,
             skip_prompts: true,
             use_local_binaries: false,

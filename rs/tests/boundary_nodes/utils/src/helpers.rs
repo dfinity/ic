@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use anyhow::{anyhow, bail, Context, Error};
+use anyhow::{Context, Error, anyhow, bail};
 use futures::future::join_all;
-use ic_agent::{export::Principal, Agent};
+use ic_agent::{Agent, export::Principal};
 use ic_base_types::PrincipalId;
 use ic_system_test_driver::{
     driver::{
@@ -44,7 +44,7 @@ pub async fn create_canister(
         .with_effective_canister_id(effective_canister_id)
         .call_and_wait()
         .await
-        .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
+        .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))?
         .0;
 
     let mut install_code = mgr.install_code(&canister_id, canister_bytes);
@@ -55,41 +55,9 @@ pub async fn create_canister(
     install_code
         .call_and_wait()
         .await
-        .map_err(|err| format!("Couldn't install canister: {}", err))?;
+        .map_err(|err| format!("Couldn't install canister: {err}"))?;
 
     Ok::<_, String>(canister_id)
-}
-
-#[derive(Copy, Clone)]
-pub enum BoundaryNodeHttpsConfig {
-    /// Acquire a playnet certificate (or fail if all have been acquired already)
-    /// for the domain `ic{ix}.farm.dfinity.systems`
-    /// where `ix` is the index of the acquired playnet.
-    ///
-    /// Then create an AAAA record pointing
-    /// `ic{ix}.farm.dfinity.systems` to the IPv6 address of the BN.
-    ///
-    /// Also add CNAME records for
-    /// `*.ic{ix}.farm.dfinity.systems` and
-    /// `*.raw.ic{ix}.farm.dfinity.systems`
-    /// pointing to `ic{ix}.farm.dfinity.systems`.
-    ///
-    /// If IPv4 has been enabled for the BN (`has_ipv4`),
-    /// also add a corresponding A record pointing to the IPv4 address of the BN.
-    ///
-    /// Finally configure the BN with the playnet certificate.
-    ///
-    /// Note that if multiple BNs are created within the same
-    /// farm-group, they will share the same certificate and
-    /// domain name.
-    /// Also all their IPv6 addresses will be added to the AAAA record
-    /// and all their IPv4 addresses will be added to the A record.
-    UseRealCertsAndDns,
-
-    /// Don't create real certificates and DNS records,
-    /// instead dangerously accept self-signed certificates and
-    /// resolve domains on the client-side without querying DNS.
-    AcceptInvalidCertsAndResolveClientSide,
 }
 
 pub async fn install_canisters(
@@ -116,15 +84,13 @@ pub async fn install_canisters(
                     .with_effective_canister_id(effective_canister_id)
                     .call_and_wait()
                     .await
-                    .map_err(|err| {
-                        format!("Couldn't create canister with provisional API: {}", err)
-                    })
+                    .map_err(|err| format!("Couldn't create canister with provisional API: {err}"))
                     .unwrap();
                 let install_code = mgr.install_code(&canister_id, canister_bytes);
                 install_code
                     .call_and_wait()
                     .await
-                    .map_err(|err| format!("Couldn't install canister: {}", err))
+                    .map_err(|err| format!("Couldn't install canister: {err}"))
                     .unwrap();
                 canister_id
             });

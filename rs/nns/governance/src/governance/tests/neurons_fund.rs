@@ -6,7 +6,7 @@ use crate::{
 use assert_matches::assert_matches;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1 as pb;
-use ic_nns_governance_api::pb::v1 as pb_api;
+use ic_nns_governance_api as pb_api;
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use maplit::btreemap;
 use test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
@@ -15,17 +15,17 @@ use test_data::CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING;
 fn proposal_passes_if_not_too_many_nf_neurons_can_occur() {
     let proposal_id = ProposalId { id: 123 };
     let create_service_nervous_system = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
-    let mut governance_proto = GovernanceCanisterInitPayloadBuilder::new()
+    let mut governance_init = GovernanceCanisterInitPayloadBuilder::new()
         .with_test_neurons_fund_neurons(500_000 * E8)
         .build();
-    governance_proto.proposals = btreemap! {
+    governance_init.proposals = btreemap! {
         123_u64 => ProposalData {
             id: Some(proposal_id),
             ..ProposalData::default()
         }.into()
     };
     let mut governance = Governance::new(
-        governance_proto.into(),
+        governance_init,
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
@@ -61,7 +61,7 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
             ..create_service_nervous_system
         }
     };
-    let mut governance_proto = {
+    let mut governance_init = {
         let proto_neuron = GovernanceCanisterInitPayloadBuilder::new()
             .with_test_neurons_fund_neurons(maturity_equivalent_icp_e8s)
             .build()
@@ -85,14 +85,14 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
             .with_additional_neurons(neurons)
             .build()
     };
-    governance_proto.proposals = btreemap! {
+    governance_init.proposals = btreemap! {
         123_u64 => ProposalData {
             id: Some(proposal_id),
             ..ProposalData::default()
         }.into()
     };
     let mut governance = Governance::new(
-        governance_proto.into(),
+        governance_init,
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
@@ -104,9 +104,8 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
         .unwrap_err();
 
     let expected_error_sub_message = format!(
-        "The maximum number of Neurons' Fund participants ({}) \
-        must not exceed MAX_NEURONS_FUND_PARTICIPANTS ({}).",
-        num_neurons_fund_neurons, MAX_NEURONS_FUND_PARTICIPANTS,
+        "The maximum number of Neurons' Fund participants ({num_neurons_fund_neurons}) \
+        must not exceed MAX_NEURONS_FUND_PARTICIPANTS ({MAX_NEURONS_FUND_PARTICIPANTS}).",
     );
     assert_matches!(err, GovernanceError {
         error_type,
@@ -115,9 +114,7 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
         assert_eq!(ErrorType::try_from(error_type).unwrap(), ErrorType::InvalidProposal);
         assert!(
             error_message.contains(&expected_error_sub_message),
-            "Observed error:\n{}\ndoes not contain expected substring `{}`.",
-            error_message,
-            expected_error_sub_message
+            "Observed error:\n{error_message}\ndoes not contain expected substring `{expected_error_sub_message}`."
         );
     });
 }
@@ -126,15 +123,15 @@ fn proposal_fails_if_too_many_nf_neurons_can_occur() {
 fn proposal_fails_if_no_nf_neurons_exist() {
     let proposal_id = ProposalId { id: 123 };
     let create_service_nervous_system = CREATE_SERVICE_NERVOUS_SYSTEM_WITH_MATCHED_FUNDING.clone();
-    let mut governance_proto = GovernanceCanisterInitPayloadBuilder::new().build();
-    governance_proto.proposals = btreemap! {
+    let mut governance_init = GovernanceCanisterInitPayloadBuilder::new().build();
+    governance_init.proposals = btreemap! {
         123_u64 => ProposalData {
             id: Some(proposal_id),
             ..ProposalData::default()
         }.into()
     };
     let mut governance = Governance::new(
-        governance_proto.into(),
+        governance_init,
         Arc::<MockEnvironment>::default(),
         Arc::new(StubIcpLedger {}),
         Arc::new(StubCMC {}),
@@ -154,9 +151,7 @@ fn proposal_fails_if_no_nf_neurons_exist() {
         assert_eq!(ErrorType::try_from(error_type).unwrap(), ErrorType::InvalidProposal);
         assert!(
             error_message.contains(expected_error_sub_message),
-            "Observed error:\n{}\ndoes not contain expected substring `{}`.",
-            error_message,
-            expected_error_sub_message
+            "Observed error:\n{error_message}\ndoes not contain expected substring `{expected_error_sub_message}`."
         );
     });
 }

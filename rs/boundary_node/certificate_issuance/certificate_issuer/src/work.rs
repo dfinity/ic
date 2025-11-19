@@ -2,13 +2,13 @@ use std::{
     collections::HashSet,
     fmt,
     sync::{
-        atomic::{AtomicBool, Ordering},
         Arc,
+        atomic::{AtomicBool, Ordering},
     },
     time::Duration,
 };
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface as ifc;
@@ -17,14 +17,18 @@ use serde::Serialize;
 use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
 
 use crate::{
+    TASK_DELAY_SEC, TASK_ERROR_DELAY_SEC,
     acme::{self, FinalizeError},
     certificate::{self, GetCert, GetCertError, Pair},
     check::Check,
     decoder_config,
     dns::{self, Resolve},
     registration::{Id, Registration, State},
-    TASK_DELAY_SEC, TASK_ERROR_DELAY_SEC,
 };
+
+fn truncated(s: &str, n: usize) -> String {
+    s.chars().take(n).collect()
+}
 
 #[derive(Clone, Debug, Serialize)]
 pub enum Action {
@@ -104,8 +108,8 @@ pub enum ProcessError {
     #[error("awaiting propagation of challenge response dns txt record")]
     AwaitingDnsPropagation,
 
-    #[error("awaiting acme approval for certificate order")]
-    AwaitingAcmeOrderReady,
+    #[error("awaiting acme approval for certificate order: {0}")]
+    AwaitingAcmeOrderReady(String),
 
     #[error("user configured configuration")]
     FailedUserConfigurationCheck,
@@ -123,7 +127,7 @@ impl From<&ProcessError> for Duration {
             ProcessError::AwaitingDnsPropagation => {
                 Duration::from_secs(TASK_DELAY_SEC.load(Ordering::SeqCst))
             }
-            ProcessError::AwaitingAcmeOrderReady => {
+            ProcessError::AwaitingAcmeOrderReady(_) => {
                 Duration::from_secs(TASK_DELAY_SEC.load(Ordering::SeqCst))
             }
             ProcessError::FailedUserConfigurationCheck => {
@@ -380,7 +384,7 @@ impl Process for Processor {
                     .await
                     .context("failed to mark acme order as ready")?;
 
-                Err(ProcessError::AwaitingAcmeOrderReady)
+                Err(ProcessError::AwaitingAcmeOrderReady("ready".to_string()))
             }
 
             Action::Certificate => {
@@ -390,7 +394,9 @@ impl Process for Processor {
                     .finalize(&task.name)
                     .await
                     .map_err(|err| match err {
-                        FinalizeError::OrderNotReady(_) => ProcessError::AwaitingAcmeOrderReady,
+                        FinalizeError::OrderNotReady(err) => {
+                            ProcessError::AwaitingAcmeOrderReady(truncated(&err, 256))
+                        }
                         FinalizeError::UnexpectedError(err) => err.into(),
                     })?;
 
@@ -530,9 +536,9 @@ mod tests {
     use anyhow::Error;
     use mockall::predicate;
     use trust_dns_resolver::{
+        Name,
         lookup::Lookup,
         proto::{op::Query, rr::Record as TrustRecord},
-        Name,
     };
 
     use crate::{
@@ -675,7 +681,7 @@ mod tests {
         );
 
         match processor.process(&id, &task).await {
-            Err(ProcessError::AwaitingAcmeOrderReady) => Ok(()),
+            Err(ProcessError::AwaitingAcmeOrderReady(err)) if err == "ready" => Ok(()),
             other => Err(anyhow!(
                 "expected AwaitingAcmeOrderReady but got {:?}",
                 other

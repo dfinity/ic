@@ -4,11 +4,11 @@ use crate::common::utils::get_test_agent;
 use crate::common::utils::test_identity;
 use crate::common::utils::wait_for_rosetta_to_sync_up_to_block;
 use candid::Nat;
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_icrc1_test_utils::ArgWithCaller;
 use ic_icrc1_test_utils::LedgerEndpointArg;
-use ic_icrc1_test_utils::{minter_identity, valid_transactions_strategy, DEFAULT_TRANSFER_FEE};
+use ic_icrc1_test_utils::{DEFAULT_TRANSFER_FEE, minter_identity, valid_transactions_strategy};
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_rosetta_api::models::AccountBalanceRequest;
 use icrc_ledger_agent::CallMode;
@@ -107,6 +107,17 @@ fn test_account_balances() {
                                     subaccount: transfer_arg.from_subaccount,
                                 };
                                 (block_idx, from_account, transfer_arg.to)
+                            }
+                            LedgerEndpointArg::TransferFromArg(transfer_from_arg) => {
+                                let block_idx = caller_agent
+                                    .transfer_from(transfer_from_arg.clone())
+                                    .await
+                                    .unwrap()
+                                    .unwrap()
+                                    .0
+                                    .to_u64()
+                                    .unwrap();
+                                (block_idx, transfer_from_arg.from, transfer_from_arg.to)
                             }
                         };
 

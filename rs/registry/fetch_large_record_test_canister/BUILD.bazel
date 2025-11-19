@@ -1,0 +1,50 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = [
+    "//rs/nervous_system/agent:__pkg__",
+    "//rs/nervous_system/canisters:__pkg__",
+    "//rs/registry/admin:__pkg__",
+])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/crypto/sha2",
+    "//rs/nervous_system/canisters",
+    "//rs/registry/transport",
+    "//rs/types/types",
+    "@crate_index//:candid",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:serde",
+]
+
+MACRO_DEPENDENCIES = [
+    # Keep sorted.
+]
+
+LIBRARY_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = [
+        "src/main.rs",
+        "src/**/*tests.rs",
+    ],
+)
+
+rust_library(
+    name = "fetch_large_record_test_canister",
+    testonly = True,
+    srcs = LIBRARY_SRCS,
+    crate_name = "ic_registry_fetch_large_record_test_canister",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "canister",
+    testonly = True,
+    srcs = ["src/main.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = "interface.did",
+    deps = DEPENDENCIES + [":fetch_large_record_test_canister"],
+)

@@ -4,14 +4,12 @@ use ic_base_types::CanisterId;
 use ic_management_canister_types_private::CanisterInstallMode;
 use ic_nervous_system_agent::helpers::await_with_timeout;
 use ic_nervous_system_agent::management_canister::canister_status;
-use ic_nervous_system_agent::pocketic_impl::{
-    PocketIcAgent, PocketIcCallError::CanisterSubnetNotFound,
-};
+use ic_nervous_system_agent::pocketic_impl::{PocketIcAgent, PocketIcCallError::PocketIc};
 use ic_nervous_system_integration_tests::pocket_ic_helpers::sns::governance::{
     find_neuron_with_majority_voting_power, wait_for_proposal_execution,
 };
 use ic_nervous_system_integration_tests::pocket_ic_helpers::{
-    cycles_ledger, install_canister_on_subnet, load_registry_mutations, nns, sns, NnsInstaller,
+    NnsInstaller, cycles_ledger, install_canister_on_subnet, load_registry_mutations, nns, sns,
 };
 use ic_nervous_system_integration_tests::{
     create_service_nervous_system_builder::CreateServiceNervousSystemBuilder,
@@ -24,9 +22,10 @@ use ic_sns_cli::upgrade_sns_controlled_canister::{
     self, RefundAfterSnsControlledCanisterUpgradeArgs, UpgradeSnsControlledCanisterArgs,
     UpgradeSnsControlledCanisterInfo,
 };
-use ic_sns_governance_api::pb::v1::{proposal, ChunkedCanisterWasm, UpgradeSnsControlledCanister};
+use ic_sns_governance_api::pb::v1::{ChunkedCanisterWasm, UpgradeSnsControlledCanister, proposal};
 use ic_sns_swap::pb::v1::Lifecycle;
 use icp_ledger::Tokens;
+use pocket_ic::ErrorCode::CanisterNotFound;
 use pocket_ic::PocketIcBuilder;
 use std::path::PathBuf;
 use tempfile::TempDir;
@@ -197,7 +196,7 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         chunked_canister_wasm,
     }) = action
     else {
-        panic!("unexpected proposal action {:?}", action);
+        panic!("unexpected proposal action {action:?}");
     };
     assert_eq!(canister_id, Some(target_canister_id.into()));
     assert_eq!(new_canister_wasm, Vec::<u8>::new()); // Deprecated field, no longer in use.
@@ -238,12 +237,17 @@ async fn upgrade_sns_controlled_canister_with_large_wasm() {
         .await
         .unwrap();
 
-    // 7. Assert that store canister has zero cycles left on its balance.
+    // 7. Assert that store canister has been deleted.
     let err = canister_status(
         &pocket_ic_agent,
         CanisterId::unchecked_from_principal(store_canister_id),
     )
     .await
     .unwrap_err();
-    assert_matches!(err, CanisterSubnetNotFound { .. });
+    assert_matches!(err, PocketIc(pocket_ic::RejectResponse {
+        error_code,
+        ..
+    }) => {
+        assert_eq!(error_code, CanisterNotFound);
+    });
 }

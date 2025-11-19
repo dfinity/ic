@@ -13,6 +13,7 @@ axum = { workspace = true }
 clap = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
+rand = { workspace = true }
 rustls = { workspace = true }
 rustls-pemfile = "2.1.2"
 serde_json = { workspace = true }

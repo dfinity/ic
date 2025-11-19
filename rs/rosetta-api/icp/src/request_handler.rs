@@ -8,23 +8,24 @@ mod construction_preprocess;
 mod construction_submit;
 
 use crate::{
+    API_VERSION, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST, NODE_VERSION,
     convert::{self, neuron_account_from_public_key},
     errors::{ApiError, Details},
     ledger_client::{
-        list_known_neurons_response::ListKnownNeuronsResponse,
+        LedgerAccess, list_known_neurons_response::ListKnownNeuronsResponse,
+        minimum_dissolve_delay_response::MinimumDissolveDelayResponse,
         pending_proposals_response::PendingProposalsResponse,
-        proposal_info_response::ProposalInfoResponse, LedgerAccess,
+        proposal_info_response::ProposalInfoResponse,
     },
     models::{
-        self, amount::tokens_to_amount, AccountBalanceMetadata, AccountBalanceRequest,
-        AccountBalanceResponse, Allow, BalanceAccountType, BlockIdentifier, BlockResponse,
-        BlockTransaction, BlockTransactionResponse, CallResponse, Error, NetworkIdentifier,
-        NetworkOptionsResponse, NetworkStatusResponse, NeuronInfoResponse, NeuronState,
-        NeuronSubaccountComponents, OperationStatus, PartialBlockIdentifier,
-        QueryBlockRangeRequest, QueryBlockRangeResponse, SearchTransactionsResponse, Version,
+        self, AccountBalanceMetadata, AccountBalanceRequest, AccountBalanceResponse, Allow,
+        BalanceAccountType, BlockIdentifier, BlockResponse, BlockTransaction,
+        BlockTransactionResponse, CallResponse, Error, NetworkIdentifier, NetworkOptionsResponse,
+        NetworkStatusResponse, NeuronInfoResponse, NeuronState, NeuronSubaccountComponents,
+        OperationStatus, PartialBlockIdentifier, QueryBlockRangeRequest, QueryBlockRangeResponse,
+        SearchTransactionsResponse, Version, amount::tokens_to_amount,
     },
     request_types::{GetProposalInfo, STATUS_COMPLETED},
-    API_VERSION, MAX_BLOCKS_PER_QUERY_BLOCK_RANGE_REQUEST, NODE_VERSION,
 };
 use ic_ledger_canister_blocks_synchronizer::{
     blocks::{HashedBlock, RosettaBlocksMode},
@@ -32,8 +33,8 @@ use ic_ledger_canister_blocks_synchronizer::{
 };
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance_api::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-use ic_types::{crypto::DOMAIN_IC_REQUEST, messages::MessageId, CanisterId};
+use ic_nns_governance_api::manage_neuron::NeuronIdOrSubaccount;
+use ic_types::{CanisterId, crypto::DOMAIN_IC_REQUEST, messages::MessageId};
 use icp_ledger::{Block, BlockIndex};
 use rosetta_core::{
     objects::ObjectMap,
@@ -46,6 +47,8 @@ use std::{
 };
 use strum::IntoEnumIterator;
 
+use rosetta_core::metrics::RosettaMetrics;
+
 /// The maximum amount of blocks to retrieve in a single search.
 const MAX_SEARCH_LIMIT: usize = 10_000;
 
@@ -53,6 +56,7 @@ const MAX_SEARCH_LIMIT: usize = 10_000;
 pub struct RosettaRequestHandler {
     blockchain: String,
     ledger: Arc<dyn LedgerAccess + Send + Sync>,
+    rosetta_metrics: RosettaMetrics,
 }
 
 // construction requests are implemented in their own module.
@@ -60,20 +64,35 @@ impl RosettaRequestHandler {
     pub fn new<T: 'static + LedgerAccess + Send + Sync>(
         blockchain: String,
         ledger: Arc<T>,
+        rosetta_metrics: RosettaMetrics,
     ) -> Self {
-        Self { blockchain, ledger }
+        Self {
+            blockchain,
+            ledger,
+            rosetta_metrics,
+        }
     }
 
     pub fn new_with_default_blockchain<T: 'static + LedgerAccess + Send + Sync>(
         ledger: Arc<T>,
     ) -> Self {
-        Self::new(crate::DEFAULT_BLOCKCHAIN.to_string(), ledger)
+        let canister_id = ledger.ledger_canister_id();
+        let canister_id_str = hex::encode(canister_id.get().into_vec());
+        Self::new(
+            crate::DEFAULT_BLOCKCHAIN.to_string(),
+            ledger,
+            RosettaMetrics::new(crate::DEFAULT_TOKEN_SYMBOL.to_string(), canister_id_str),
+        )
     }
 
     pub fn network_id(&self) -> NetworkIdentifier {
         let canister_id = self.ledger.ledger_canister_id();
         let net_id = hex::encode(canister_id.get().into_vec());
         NetworkIdentifier::new(self.blockchain.clone(), net_id)
+    }
+
+    pub fn rosetta_metrics(&self) -> RosettaMetrics {
+        self.rosetta_metrics.clone()
     }
 
     /// Get an Account Balance
@@ -192,6 +211,16 @@ impl RosettaRequestHandler {
                     false,
                 ))
             }
+            "get_minimum_dissolve_delay" => {
+                let minimum_dissolve_delay = self.ledger.minimum_dissolve_delay().await?;
+                let minimum_dissolve_delay_response = MinimumDissolveDelayResponse {
+                    neuron_minimum_dissolve_delay_to_vote_seconds: minimum_dissolve_delay,
+                };
+                Ok(CallResponse::new(
+                    ObjectMap::try_from(minimum_dissolve_delay_response)?,
+                    false,
+                ))
+            }
             "list_known_neurons" => {
                 let known_neurons = self.ledger.list_known_neurons().await?;
                 let list_known_neurons_response = ListKnownNeuronsResponse { known_neurons };
@@ -202,7 +231,7 @@ impl RosettaRequestHandler {
             }
             "query_block_range" => {
                 let query_block_range = QueryBlockRangeRequest::try_from(msg.parameters)
-                    .map_err(|err| ApiError::internal_error(format!("{:?}", err)))?;
+                    .map_err(|err| ApiError::internal_error(format!("{err:?}")))?;
                 let mut blocks = vec![];
 
                 let storage = self.ledger.read_blocks().await;
@@ -214,9 +243,10 @@ impl RosettaRequestHandler {
                         )
                         .saturating_sub(1),
                     );
-                    if storage.contains_block(&lowest_index).map_err(|err| {
-                        ApiError::InvalidBlockId(false, format!("{:?}", err).into())
-                    })? {
+                    if storage
+                        .contains_block(&lowest_index)
+                        .map_err(|err| ApiError::InvalidBlockId(false, format!("{err:?}").into()))?
+                    {
                         // TODO: Use block range with rosetta blocks
                         for hb in storage
                             .get_hashed_block_range(
@@ -241,7 +271,7 @@ impl RosettaRequestHandler {
                 let block_range_response = QueryBlockRangeResponse { blocks };
                 Ok(CallResponse::new(
                     ObjectMap::try_from(block_range_response)
-                        .map_err(|err| ApiError::internal_error(format!("{:?}", err)))?,
+                        .map_err(|err| ApiError::internal_error(format!("{err:?}")))?,
                     idempotent,
                 ))
             }
@@ -587,7 +617,7 @@ impl RosettaRequestHandler {
                     .map_err(|err: TryFromIntError| {
                         ApiError::InternalError(
                             false,
-                            Details::from(format!("Cannot convert timestamp to u64: {}", err)),
+                            Details::from(format!("Cannot convert timestamp to u64: {err}")),
                         )
                     })?,
                     convert::block_id(&genesis_block)?,
@@ -640,6 +670,18 @@ impl RosettaRequestHandler {
         Ok(network_status)
     }
 
+    pub fn assert_has_indexed_field(
+        &self,
+        request: &models::SearchTransactionsRequest,
+    ) -> Result<(), ApiError> {
+        let has_indexed_field =
+            request.transaction_identifier.is_some() || request.account_identifier.is_some();
+        if !has_indexed_field {
+            return Err(ApiError::invalid_request("At least one of transaction_identifier, type_, or account_identifier must be provided to perform an efficient search".to_owned()));
+        }
+        Ok(())
+    }
+
     /// Search for a transaction given its hash
     pub async fn search_transactions(
         &self,
@@ -685,19 +727,18 @@ impl RosettaRequestHandler {
                 "Currency not supported in search/transactions endpoint".to_owned(),
             ));
         }
-
         let block_storage = self.ledger.read_blocks().await;
 
         let block_with_highest_block_index = block_storage
             .get_latest_verified_hashed_block()
-            .map_err(|e| ApiError::InvalidBlockId(false, format!("{:?}", e).into()))?;
+            .map_err(|e| ApiError::InvalidBlockId(false, format!("{e:?}").into()))?;
 
         let max_block: u64 = request
             .max_block
             .unwrap_or(block_with_highest_block_index.index as i64)
             .try_into()
             .map_err(|err| {
-                ApiError::invalid_request(format!("Max block has to be a valid u64: {}", err))
+                ApiError::invalid_request(format!("Max block has to be a valid u64: {err}"))
             })?;
 
         let limit: u64 = request
@@ -705,11 +746,11 @@ impl RosettaRequestHandler {
             .unwrap_or(MAX_SEARCH_LIMIT as i64)
             .try_into()
             .map_err(|err| {
-                ApiError::invalid_request(format!("Limit has to be a valid u64: {}", err))
+                ApiError::invalid_request(format!("Limit has to be a valid u64: {err}"))
             })?;
 
         let offset: u64 = request.offset.unwrap_or(0).try_into().map_err(|err| {
-            ApiError::invalid_request(format!("Offset has to be a valid u64: {}", err))
+            ApiError::invalid_request(format!("Offset has to be a valid u64: {err}"))
         })?;
 
         if max_block < offset {
@@ -725,8 +766,7 @@ impl RosettaRequestHandler {
             .map(|acc| {
                 icp_ledger::AccountIdentifier::try_from(acc).map_err(|err| {
                     ApiError::invalid_request(format!(
-                        "Account identifier has to be a valid AccountIdentifier: {}",
-                        err
+                        "Account identifier has to be a valid AccountIdentifier: {err}"
                     ))
                 })
             })
@@ -756,8 +796,7 @@ impl RosettaRequestHandler {
             let tx_hash = serde_bytes::ByteBuf::try_from(transaction_identifier)
                 .map_err(|err| {
                     ApiError::invalid_request(format!(
-                        "Transaction identifier hash has to be a valid ByteBuf: {}",
-                        err
+                        "Transaction identifier hash has to be a valid ByteBuf: {err}"
                     ))
                 })?
                 .as_slice()
@@ -792,7 +831,7 @@ impl RosettaRequestHandler {
                     .collect::<Vec<_>>()
                     .as_slice(),
             )
-            .map_err(|e| ApiError::invalid_block_id(format!("Error fetching blocks: {:?}", e)))?;
+            .map_err(|e| ApiError::invalid_block_id(format!("Error fetching blocks: {e:?}")))?;
 
         let mut transactions = vec![];
         for block in blocks.clone().into_iter() {
@@ -848,17 +887,17 @@ impl RosettaRequestHandler {
     ) -> Result<NeuronInfoResponse, ApiError> {
         let res = self.ledger.neuron_info(neuron_id, verified).await?;
 
-        use ic_nns_governance_api::pb::v1::NeuronState as PbNeuronState;
-        let state = match PbNeuronState::try_from(res.state).ok() {
-            Some(PbNeuronState::NotDissolving) => NeuronState::NotDissolving,
-            Some(PbNeuronState::Spawning) => NeuronState::Spawning,
-            Some(PbNeuronState::Dissolving) => NeuronState::Dissolving,
-            Some(PbNeuronState::Dissolved) => NeuronState::Dissolved,
-            Some(PbNeuronState::Unspecified) | None => {
+        use ic_nns_governance_api::NeuronState as GovernanceNeuronState;
+        let state = match GovernanceNeuronState::from_repr(res.state) {
+            Some(GovernanceNeuronState::NotDissolving) => NeuronState::NotDissolving,
+            Some(GovernanceNeuronState::Spawning) => NeuronState::Spawning,
+            Some(GovernanceNeuronState::Dissolving) => NeuronState::Dissolving,
+            Some(GovernanceNeuronState::Dissolved) => NeuronState::Dissolved,
+            Some(GovernanceNeuronState::Unspecified) | None => {
                 return Err(ApiError::internal_error(format!(
                     "unsupported neuron state code: {}",
                     res.state
-                )))
+                )));
             }
         };
 
@@ -883,7 +922,7 @@ fn verify_network_id(canister_id: &CanisterId, net_id: &NetworkIdentifier) -> Re
     verify_network_blockchain(net_id)?;
     let id: CanisterId = net_id
         .try_into()
-        .map_err(|err| ApiError::InvalidNetworkId(false, format!("{:?}", err).into()))?;
+        .map_err(|err| ApiError::InvalidNetworkId(false, format!("{err:?}").into()))?;
     if *canister_id != id {
         return Err(ApiError::InvalidNetworkId(false, "unknown network".into()));
     }
@@ -914,7 +953,7 @@ fn hashed_block_to_rosetta_core_block(
     token_symbol: &str,
 ) -> Result<rosetta_core::objects::Block, ApiError> {
     let block = Block::decode(hashed_block.block.clone())
-        .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {}", err)))?;
+        .map_err(|err| ApiError::internal_error(format!("Cannot decode block: {err}")))?;
     let block_id = convert::block_id(&hashed_block)?;
     let transactions = vec![convert::hashed_block_to_rosetta_core_transaction(
         &hashed_block,

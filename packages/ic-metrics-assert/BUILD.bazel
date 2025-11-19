@@ -8,10 +8,14 @@ package(default_visibility = ["//visibility:public"])
         srcs = glob(["src/**/*.rs"]),
         crate_features = features,
         crate_name = "ic_metrics_assert",
+        proc_macro_deps = [
+            # Keep sorted.
+            "@crate_index//:async-trait",
+        ],
         deps = [
             # Keep sorted.
+            "//packages/ic-http-types",
             "@crate_index//:candid",
-            "@crate_index//:ic-management-canister-types",
             "@crate_index//:regex",
             "@crate_index//:serde",
             "@crate_index//:serde_bytes",
@@ -26,7 +30,11 @@ package(default_visibility = ["//visibility:public"])
         [
             "_pocket_ic",
             ["pocket_ic"],
-            ["//packages/pocket-ic"],
+            [
+                # Keep sorted.
+                "//packages/pocket-ic",
+                "@crate_index//:ic-management-canister-types",
+            ],
         ],
     ]
 ]

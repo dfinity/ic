@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_from_der;
 use ic_registry_client::client::RegistryVersion;

@@ -1,15 +1,15 @@
 [package]
-name = "ic-btc-replica-types"
-version.workspace = true
 authors.workspace = true
-edition.workspace = true
 description.workspace = true
 documentation.workspace = true
+edition.workspace = true
+name = "ic-btc-replica-types"
+version.workspace = true
 
 [dependencies]
 candid = { workspace = true }
-ic-btc-interface = { workspace = true }
 ic-error-types = { path = "../../../packages/ic-error-types" }
+ic-interfaces-adapter-client = { path = "../../interfaces/adapter_client" }
 ic-protobuf = { path = "../../protobuf" }
 serde = { workspace = true }
 serde_bytes = { workspace = true }

@@ -24,21 +24,17 @@ pub fn read(input: &mut impl Read, output: impl Write) -> std::io::Result<u32> {
     buffered_writer.flush()?;
     match prefix.cmp(&piped_bytes) {
         Ordering::Equal => Ok(prefix),
-        Ordering::Less=>  Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!(
-                "This program piped through {} bytes, more than the expected {}. That's a bug. ",
-                piped_bytes, prefix
-            ),
-        )),
-        Ordering::Greater=>Err(std::io::Error::new(
+        Ordering::Less => Err(std::io::Error::other(format!(
+            "This program piped through {piped_bytes} bytes, more than the expected {prefix}. That's a bug. "
+        ))),
+        Ordering::Greater => Err(std::io::Error::new(
             std::io::ErrorKind::UnexpectedEof,
             format!(
-                "The length prefix instructed a payload of length {}, but we could only read {} bytes. \
+                "The length prefix instructed a payload of length {prefix}, \
+                but we could only read {piped_bytes} bytes. \
                 This could mean that input did not actual come from a stable memory file for \
-                a canister using that stable memory library.",
-                prefix, piped_bytes
+                a canister using that stable memory library."
             ),
-        ))
+        )),
     }
 }

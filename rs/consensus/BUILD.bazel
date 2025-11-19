@@ -33,6 +33,7 @@ DEPENDENCIES = [
     "@crate_index//:prometheus",
     "@crate_index//:rand",
     "@crate_index//:rand_chacha",
+    "@crate_index//:rayon",
     "@crate_index//:slog",
 ]
 
@@ -42,6 +43,7 @@ DEV_DEPENDENCIES = [
     "//rs/bitcoin/replica_types",
     "//rs/consensus/mocks",
     "//rs/crypto/temp_crypto",
+    "//rs/crypto/test_utils/crypto_returning_ok",
     "//rs/crypto/test_utils/ni-dkg",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
@@ -67,6 +69,7 @@ DEV_DEPENDENCIES = [
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
     "@crate_index//:criterion",
+    "@crate_index//:mockall",
     "@crate_index//:proptest",
     "@crate_index//:prost",
     "@crate_index//:rstest",
@@ -171,6 +174,7 @@ rust_ic_bench(
         "//rs/artifact_pool",
         "//rs/config",
         "//rs/consensus/utils",
+        "//rs/crypto/temp_crypto",
         "//rs/execution_environment",
         "//rs/https_outcalls/consensus",
         "//rs/ingress_manager",

@@ -1,6 +1,6 @@
 [package]
 name = "ic-ed25519"
-version = "0.2.0"
+version = "0.5.0"
 description = "A package created for the Internet Computer Protocol for creating and verifying Ed25519 signatures."
 license = "Apache-2.0"
 readme = "README.md"
@@ -13,9 +13,11 @@ documentation.workspace = true
 [dependencies]
 curve25519-dalek = { workspace = true }
 ed25519-dalek = { workspace = true }
+hex-literal = "0.4"
 hkdf = "0.12"
-pem = "1"
-rand = { workspace = true, optional = true, no-default-features = true }
+ic_principal = { version = "0.1.1", default-features = false }
+pem = { workspace = true }
+rand = { workspace = true, optional = true }
 thiserror = { workspace = true }
 zeroize = { workspace = true }
 
@@ -25,7 +27,7 @@ rand = ["dep:rand"]
 
 [dev-dependencies]
 hex = { workspace = true }
-hex-literal = "0.4"
+ic_principal = { version = "0.1.1", default-features = false, features = ["convert"] }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 wycheproof = { version = "0.6", default-features = false, features = ["eddsa"] }

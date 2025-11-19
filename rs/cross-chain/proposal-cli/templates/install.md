@@ -10,6 +10,10 @@ Install args hash: `{{install_args.args_sha256_hex()}}`
 
 Target canister: `{{canister_id}}`
 
+{% if !canister.forum_discussion().is_empty() -%}
+Forum discussion: {{canister.forum_discussion()}}
+
+{% endif -%}
 ---
 
 ## Motivation

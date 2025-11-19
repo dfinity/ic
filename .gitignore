@@ -55,12 +55,6 @@ tarpaulin-report.html
 *.swo
 .envrc
 
-### Haskell related ###
-
-dist-newstyle
-
-**/.stack-work
-
 ### Rust tags created by rusty-tags
 **/rusty-tags.vi
 **/rusty-tags.emacs
@@ -94,7 +88,6 @@ cpp/**/network_info.o
 **/build-out
 **/boot/version.txt
 **/bin/canister_sandbox
-**/bin/ic-btc-adapter
 **/bin/ic-https-outcalls-adapter
 **/bin/ic-consensus-pool-util
 **/bin/ic-crypto-csp

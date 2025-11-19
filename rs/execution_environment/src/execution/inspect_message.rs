@@ -1,16 +1,17 @@
 use crate::Hypervisor;
 use crate::{
-    execution_environment::{as_round_instructions, RoundLimits},
+    execution_environment::{RoundLimits, as_round_instructions},
     metrics::{CallTreeMetricsNoOp, IngressFilterMetrics},
 };
 use ic_embedders::wasmtime_embedder::system_api::{ApiType, ExecutionParameters};
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
-use ic_logger::{fatal, ReplicaLogger};
+use ic_logger::{ReplicaLogger, fatal};
 use ic_replicated_state::{CanisterState, NetworkTopology};
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::messages::SignedIngressContent;
 use ic_types::methods::{FuncRef, SystemMethod, WasmMethod};
-use ic_types::{NumInstructions, Time};
+use ic_types::{NumBytes, NumInstructions, Time};
 use prometheus::IntCounter;
 
 /// Executes the system method `canister_inspect_message`.
@@ -29,6 +30,7 @@ pub fn execute_inspect_message(
     logger: &ReplicaLogger,
     state_changes_error: &IntCounter,
     ingress_filter_metrics: &IngressFilterMetrics,
+    cost_schedule: CanisterCyclesCostSchedule,
 ) -> (NumInstructions, Result<(), UserError>) {
     let canister_id = canister.canister_id();
     let memory_usage = canister.memory_usage();
@@ -70,6 +72,7 @@ pub fn execute_inspect_message(
         subnet_available_callbacks: 0,
         // Ignore compute allocation
         compute_allocation_used: 0,
+        subnet_memory_reservation: NumBytes::from(0),
     };
     let inspect_message_timer = ingress_filter_metrics
         .inspect_message_duration_seconds
@@ -88,6 +91,7 @@ pub fn execute_inspect_message(
         state_changes_error,
         &CallTreeMetricsNoOp,
         time,
+        cost_schedule,
     );
     drop(inspect_message_timer);
     ingress_filter_metrics.inspect_message_count.inc();

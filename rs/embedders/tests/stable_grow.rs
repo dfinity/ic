@@ -4,9 +4,9 @@ use proptest::{
 };
 
 use canister_test::{CanisterInstallMode, InstallCodeArgs};
-use ic_test_utilities::universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, wasm};
 use ic_test_utilities_execution_environment::ExecutionTestBuilder;
-use ic_types::{ingress::WasmResult, Cycles};
+use ic_types::{Cycles, ingress::WasmResult};
 
 #[derive(Copy, Clone, Debug)]
 enum GrowCommand {
@@ -35,12 +35,10 @@ fn run_memory_grows(grows: &[GrowCommand]) {
         canister_id,
         UNIVERSAL_CANISTER_WASM.to_vec(),
         vec![],
-        None,
-        None,
     );
     let result = test.install_code(args).unwrap();
     if let WasmResult::Reject(s) = result {
-        panic!("Installation rejected: {}", s)
+        panic!("Installation rejected: {s}")
     }
 
     let mut wasm = wasm();

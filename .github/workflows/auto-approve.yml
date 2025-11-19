@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
-    if: github.actor == 'pr-creation-bot-dfinity[bot]'
+    if: github.actor == 'pr-creation-bot-dfinity-ic[bot]'
     steps:
       - name: Check file
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
-    if: github.actor == 'pr-creation-bot-dfinity[bot]'
+    if: github.actor == 'pr-creation-bot-dfinity-ic[bot]'
     steps:
       - name: Check file
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3

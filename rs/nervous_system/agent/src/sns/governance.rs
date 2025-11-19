@@ -1,15 +1,16 @@
-use crate::{null_request::NullRequest, CallCanisters};
+use crate::{CallCanisters, null_request::NullRequest};
 use ic_base_types::PrincipalId;
 use ic_sns_governance_api::pb::v1::{
-    governance::Version,
-    manage_neuron, manage_neuron_response,
-    topics::{ListTopicsRequest, ListTopicsResponse},
     AdvanceTargetVersionRequest, AdvanceTargetVersionResponse, GetMetadataRequest,
     GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal,
     GetProposalResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
     GetUpgradeJournalRequest, GetUpgradeJournalResponse, GovernanceError, ListNeurons,
     ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, NervousSystemParameters, NeuronId,
     Proposal, ProposalId,
+    governance::Version,
+    manage_neuron::{self, RegisterVote},
+    manage_neuron_response,
+    topics::{ListTopicsRequest, ListTopicsResponse},
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -21,11 +22,12 @@ pub struct GovernanceCanister {
     pub canister_id: PrincipalId,
 }
 
+#[derive(Debug)]
 pub struct SubmittedProposal {
     pub proposal_id: ProposalId,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum ProposalSubmissionError {
     #[error("SNS Governance returned an error: {0:?}")]
     GovernanceError(GovernanceError),
@@ -125,6 +127,20 @@ impl GovernanceCanister {
             .await
     }
 
+    pub async fn set_following<C: CallCanisters>(
+        &self,
+        agent: &C,
+        neuron_id: NeuronId,
+        set_following: manage_neuron::SetFollowing,
+    ) -> Result<ManageNeuronResponse, C::Error> {
+        self.manage_neuron(
+            agent,
+            neuron_id,
+            manage_neuron::Command::SetFollowing(set_following),
+        )
+        .await
+    }
+
     pub async fn increase_dissolve_delay<C: CallCanisters>(
         &self,
         agent: &C,
@@ -139,6 +155,24 @@ impl GovernanceCanister {
             )),
         });
         self.manage_neuron(agent, neuron_id, request).await
+    }
+
+    pub async fn register_vote<C: CallCanisters>(
+        &self,
+        agent: &C,
+        neuron_id: NeuronId,
+        proposal: ProposalId,
+        vote: i32,
+    ) -> Result<ManageNeuronResponse, C::Error> {
+        self.manage_neuron(
+            agent,
+            neuron_id,
+            manage_neuron::Command::RegisterVote(RegisterVote {
+                proposal: Some(proposal),
+                vote,
+            }),
+        )
+        .await
     }
 
     pub async fn get_proposal<C: CallCanisters>(

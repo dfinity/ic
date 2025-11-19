@@ -31,7 +31,7 @@ use ic_consensus_system_test_utils::{
     rw_message::install_nns_and_check_progress,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance_api::pb::v1::NnsFunction;
+use ic_nns_governance_api::NnsFunction;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::systest;
@@ -43,8 +43,8 @@ use ic_system_test_driver::{
     },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
     util::{
-        assert_create_agent, block_on, get_app_subnet_and_node, get_nns_node, runtime_from_url,
-        MessageCanister,
+        MessageCanister, assert_create_agent, block_on, get_app_subnet_and_node, get_nns_node,
+        runtime_from_url,
     },
 };
 use ic_types::Height;
@@ -206,7 +206,7 @@ fn test(env: TestEnv) {
         )
         .await
     }) {
-        panic!("expected the update to fail, got {:?}", result);
+        panic!("expected the update to fail, got {result:?}");
     };
 
     // Restart node to start consensus.

@@ -17,15 +17,15 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
 use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
-use slog::{error, info, o, Logger};
-use tokio::runtime::Handle;
+use slog::{Logger, error, info, o};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
-    backup_helper::{retrieve_replica_version_last_replayed, BackupHelper},
+    backup_helper::{BackupHelper, retrieve_replica_version_last_replayed},
     cmd::BackupArgs,
     config::{ColdStorage, Config, SubnetConfig},
     notification_client::NotificationClient,
-    util::{block_on, sleep_secs},
+    util::sleep_secs,
 };
 
 const DEFAULT_SYNC_NODES: usize = 5;
@@ -52,7 +52,7 @@ pub struct BackupManager {
 }
 
 impl BackupManager {
-    pub fn new(log: Logger, args: BackupArgs, rt: &Handle) -> Self {
+    pub async fn new(log: Logger, args: BackupArgs, cancellation_token: CancellationToken) -> Self {
         let config = Config::load_config(args.config_file).expect("Config file can't be loaded");
         // verification that all is initialized with the init command
         if config.subnets.is_empty() {
@@ -67,7 +67,7 @@ impl BackupManager {
         };
         let ssh_credentials_file = match config.ssh_private_key.into_os_string().into_string() {
             Ok(f) => f,
-            Err(e) => panic!("Bad file name for ssh credentials: {:?}", e),
+            Err(e) => panic!("Bad file name for ssh credentials: {e:?}"),
         };
         let local_store_dir = config.root_dir.join("ic_registry_local_store");
         let data_provider = Arc::new(LocalStoreImpl::new(local_store_dir.clone()));
@@ -85,25 +85,19 @@ impl BackupManager {
         let nns_public_key =
             parse_threshold_sig_key(&config.nns_pem).expect("Missing NNS public key");
         let nns_urls = vec![config.nns_url.expect("Missing NNS Url")];
-        let reg_replicator2 = registry_replicator.clone();
 
-        info!(log.clone(), "Starting the registry replicator");
-        block_on(async {
-            rt.spawn(async move {
-                reg_replicator2
-                    .start_polling(nns_urls, Some(nns_public_key))
-                    .await
-                    .expect("Failed to start registry replicator");
-            })
+        info!(log, "Starting the registry replicator");
+        let registry_replicator_future = registry_replicator
+            .start_polling(nns_urls, Some(nns_public_key), cancellation_token)
             .await
-            .expect("Task spawned in Tokio executor panicked")
-        });
-        info!(log.clone(), "Fetch and start polling");
+            .expect("Failed to start registry replicator");
+
+        info!(log, "Spawning the registry replicator background thread.");
+        tokio::spawn(registry_replicator_future);
+
+        info!(log, "Fetch and start polling");
         if let Err(err) = registry_client.fetch_and_start_polling() {
-            error!(
-                log.clone(),
-                "Error fetching registry by the client: {}", err
-            );
+            error!(log, "Error fetching registry by the client: {err}");
         }
 
         let mut backups = Vec::new();
@@ -148,7 +142,6 @@ impl BackupManager {
                 blacklisted_nodes: blacklisted.clone(),
                 log: subnet_log.clone(),
             };
-            backup_helper.notification_client.push_metrics_version();
 
             backups.push(SubnetBackup {
                 nodes_syncing: subnet_config.nodes_syncing,
@@ -170,10 +163,10 @@ impl BackupManager {
     pub fn get_version(log: Logger, config_file: PathBuf, subnet_id: SubnetId) {
         let config = Config::load_config(config_file).expect("Config file can't be loaded");
         let spool_dir = config.root_dir.join("spool").join(subnet_id.to_string());
-        let state_dir = config.root_dir.join(format!("data/{}/ic_state", subnet_id));
+        let state_dir = config.root_dir.join(format!("data/{subnet_id}/ic_state"));
         let replica_version = retrieve_replica_version_last_replayed(&log, spool_dir, state_dir)
             .expect("Proper replica version is expected");
-        println!("{}", replica_version)
+        println!("{replica_version}")
     }
 
     pub fn upgrade(log: Logger, config_file: PathBuf) {
@@ -209,7 +202,7 @@ impl BackupManager {
             let subnet_id = match PrincipalId::from_str(&subnet_id_str) {
                 Ok(principal) => SubnetId::from(principal),
                 Err(err) => {
-                    println!("Couldn't parse the subnet id: {}", err);
+                    println!("Couldn't parse the subnet id: {err}");
                     println!("Try again!");
                     continue;
                 }
@@ -222,15 +215,14 @@ impl BackupManager {
             {
                 Ok(version) => version,
                 Err(err) => {
-                    println!("Couldn't parse the replica version: {}", err);
+                    println!("Couldn't parse the replica version: {err}");
                     println!("Try again!");
                     continue;
                 }
             };
 
             println!(
-                "Enter from how many nodes you'd like to sync this subnet (default {}):",
-                DEFAULT_SYNC_NODES
+                "Enter from how many nodes you'd like to sync this subnet (default {DEFAULT_SYNC_NODES}):"
             );
             let mut nodes_syncing_str = String::new();
             let _ = reader.read_line(&mut nodes_syncing_str);
@@ -239,10 +231,7 @@ impl BackupManager {
                 .parse::<usize>()
                 .unwrap_or(DEFAULT_SYNC_NODES);
 
-            println!(
-                "Enter period of syncing in minutes (default {}):",
-                DEFAULT_SYNC_PERIOD
-            );
+            println!("Enter period of syncing in minutes (default {DEFAULT_SYNC_PERIOD}):");
             let mut sync_period_min = String::new();
             let _ = reader.read_line(&mut sync_period_min);
             let sync_period_secs = 60
@@ -250,10 +239,7 @@ impl BackupManager {
                     .trim()
                     .parse::<u64>()
                     .unwrap_or(DEFAULT_SYNC_PERIOD);
-            println!(
-                "Enter period of replaying in minutes (default {}):",
-                DEFAULT_REPLAY_PERIOD
-            );
+            println!("Enter period of replaying in minutes (default {DEFAULT_REPLAY_PERIOD}):");
             let mut replay_period_min = String::new();
             let _ = reader.read_line(&mut replay_period_min);
             let replay_period_secs = 60
@@ -291,8 +277,7 @@ impl BackupManager {
         };
         let versions_hot = loop {
             println!(
-                "How many replica versions to keep in the spool hot storage (default {}):",
-                DEFAULT_VERSIONS_HOT
+                "How many replica versions to keep in the spool hot storage (default {DEFAULT_VERSIONS_HOT}):"
             );
             let mut versions_hot_str = String::new();
             let _ = reader.read_line(&mut versions_hot_str);
@@ -300,10 +285,10 @@ impl BackupManager {
             if versions_hot_str.is_empty() {
                 break DEFAULT_VERSIONS_HOT;
             }
-            if let Ok(versions_num) = versions_hot_str.parse::<usize>() {
-                if versions_num > 0 {
-                    break versions_num;
-                }
+            if let Ok(versions_num) = versions_hot_str.parse::<usize>()
+                && versions_num > 0
+            {
+                break versions_num;
             }
             println!("Error: invalid number was entered!")
         };
@@ -333,19 +318,16 @@ impl BackupManager {
                     let _ = reader.read_line(&mut state_dir_str);
                     let mut old_state_dir = PathBuf::from(&state_dir_str.trim());
                     if !old_state_dir.exists() {
-                        println!("Error: directory {:?} doesn't exist!", old_state_dir);
+                        println!("Error: directory {old_state_dir:?} doesn't exist!");
                         continue;
                     }
                     old_state_dir = old_state_dir.join("ic_state");
                     if !old_state_dir.exists() {
-                        println!("Error: directory {:?} doesn't exist!", old_state_dir);
+                        println!("Error: directory {old_state_dir:?} doesn't exist!");
                         continue;
                     }
                     if !old_state_dir.join("checkpoints").exists() {
-                        println!(
-                            "Error: directory {:?} doesn't have checkpoints!",
-                            old_state_dir
-                        );
+                        println!("Error: directory {old_state_dir:?} doesn't have checkpoints!");
                         continue;
                     }
                     let mut cmd = Command::new("rsync");
@@ -361,8 +343,17 @@ impl BackupManager {
         }
     }
 
+    /// Note: this method does some blocking operations so be careful when running it
+    /// in an async context.
     pub fn do_backups(self: Arc<BackupManager>) {
         let size = self.subnet_backups.len();
+
+        if let Some(backup) = self.subnet_backups.first() {
+            backup
+                .backup_helper
+                .notification_client
+                .push_metrics_version();
+        }
 
         for i in 0..size {
             // should we sync the subnet
@@ -396,7 +387,7 @@ impl BackupManager {
                 let last_block = backup_helper.retrieve_spool_top_height();
                 let last_cp = backup_helper.last_state_checkpoint();
                 let subnet = &backup_helper.subnet_id.to_string()[..5];
-                progress.push(format!("{}: {}/{}", subnet, last_cp, last_block));
+                progress.push(format!("{subnet}: {last_cp}/{last_block}"));
 
                 backup_helper
                     .notification_client
@@ -479,10 +470,7 @@ fn cold_store(m: Arc<BackupManager>) {
                 }
             };
             if let Err(err) = b.backup_helper.do_move_cold_storage() {
-                let msg = format!(
-                    "Error moving to cold storage for subnet {}: {:?}",
-                    subnet_id, err
-                );
+                let msg = format!("Error moving to cold storage for subnet {subnet_id}: {err:?}");
                 error!(m.log, "{}", msg);
                 b.backup_helper
                     .notification_client
@@ -531,7 +519,7 @@ mod tests {
             );
 
         let mut f = File::create(&fake_config_path).unwrap();
-        write!(f, "{}", fake_input_config).unwrap();
+        write!(f, "{fake_input_config}").unwrap();
 
         let fake_cold_storage_path_str = fake_cold_storage_path.to_string_lossy();
         let fake_state_path_str = fake_state_path.to_string_lossy();

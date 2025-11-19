@@ -62,7 +62,10 @@ where
         }
     }
 
-    pub fn get(&self, key: &Key) -> Option<impl Iterator<Item = &'a Value>> {
+    pub fn get(
+        &self,
+        key: &Key,
+    ) -> Option<impl Iterator<Item = &'a Value> + use<'a, Map, Key, Value, ValuesIterator>> {
         let relevant_layers = self
             .layers
             .iter()

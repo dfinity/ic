@@ -53,7 +53,7 @@ pub struct MalformedFsEncryptionPublicKeyError {
 impl From<ifs::MalformedFsEncryptionPublicKeyError> for MalformedFsEncryptionPublicKeyError {
     fn from(internal_malformed_fs_enc_pubkey: ifs::MalformedFsEncryptionPublicKeyError) -> Self {
         Self {
-            internal_error: format!("{}", internal_malformed_fs_enc_pubkey),
+            internal_error: format!("{internal_malformed_fs_enc_pubkey}"),
         }
     }
 }

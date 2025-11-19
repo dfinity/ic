@@ -1,0 +1,32 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "test_utils",
+    testonly = True,
+    srcs = glob(
+        ["src/**/*.rs"],
+    ),
+    crate_name = "ic_ckdoge_minter_test_utils",
+    proc_macro_deps = [
+        # Keep sorted.
+    ],
+    version = "0.1.0",
+    deps = [
+        # Keep sorted.
+        "//packages/canlog",
+        "//packages/ic-http-types",
+        "//packages/ic-metrics-assert:ic-metrics-assert_pocket_ic",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
+        "//packages/pocket-ic",
+        "//rs/bitcoin/mock",
+        "//rs/dogecoin/ckdoge/minter:ckdoge_minter_lib",
+        "//rs/ledger_suite/icrc1/ledger",
+        "@crate_index//:assert_matches",
+        "@crate_index//:bitcoin",
+        "@crate_index//:candid",
+        "@crate_index//:ic-management-canister-types",
+        "@crate_index//:serde_json",
+    ],
+)

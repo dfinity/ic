@@ -2,7 +2,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use mockall::automock;
 use trust_dns_resolver::{
-    error::ResolveError, lookup::Lookup, proto::rr::RecordType, TokioAsyncResolver,
+    TokioAsyncResolver, error::ResolveError, lookup::Lookup, proto::rr::RecordType,
 };
 
 #[automock]

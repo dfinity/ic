@@ -1,7 +1,7 @@
 use crate::registry::Registry;
 
 use ic_protobuf::registry::provisional_whitelist::v1::{
-    provisional_whitelist, ProvisionalWhitelist,
+    ProvisionalWhitelist, provisional_whitelist,
 };
 use ic_registry_keys::make_provisional_whitelist_record_key;
 use ic_registry_transport::{pb::v1::RegistryValue, upsert};
@@ -20,6 +20,7 @@ impl Registry {
                 value,
                 version: _,
                 deletion_marker: _,
+                timestamp_nanoseconds: _,
             }) => ProvisionalWhitelist::decode(value.as_slice()).unwrap(),
             None => panic!("Provisional whitelist not found in the registry"),
         };

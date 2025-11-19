@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("//bazel:defs.bzl", "rust_ic_bench")
 
 package(default_visibility = [
     "//rs/p2p:__subpackages__",
@@ -32,7 +33,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities/consensus",
     "//rs/test_utilities/types",
     "//rs/types/types_test_utils",
-    "@crate_index//:anyhow",
     "@crate_index//:futures",
     "@crate_index//:http-body-util",
     "@crate_index//:mockall",
@@ -59,4 +59,23 @@ rust_test_suite(
     name = "artifact_downloader_integration",
     srcs = ["tests/test.rs"],
     deps = [":artifact_downloader"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_ic_bench(
+    name = "assembler_bench",
+    testonly = True,
+    srcs = ["benches/assembler.rs"],
+    deps = [
+        # Keep sorted.
+        ":artifact_downloader",
+        "//rs/interfaces",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/p2p/test_utils",
+        "//rs/test_utilities/consensus",
+        "//rs/types/types",
+        "//rs/types/types_test_utils",
+        "@crate_index//:criterion",
+        "@crate_index//:tokio",
+    ],
 )

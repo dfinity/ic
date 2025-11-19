@@ -2,12 +2,12 @@ use ic_embedders::wasmtime_embedder::system_api::sandbox_safe_system_state::Requ
 use ic_error_types::UserError;
 use ic_management_canister_types_private::QueryMethod;
 use ic_metrics::{
-    buckets::{decimal_buckets, decimal_buckets_with_zero},
     MetricsRegistry,
+    buckets::{decimal_buckets, decimal_buckets_with_zero},
 };
 use ic_types::{
-    NumInstructions, NumMessages, NumSlices, Time, MAX_STABLE_MEMORY_IN_BYTES,
-    MAX_WASM_MEMORY_IN_BYTES,
+    MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES, NumInstructions, NumMessages, NumSlices,
+    Time,
 };
 use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
 use std::{cell::RefCell, rc::Rc, time::Instant};
@@ -19,8 +19,8 @@ pub(crate) const SYSTEM_API_CANISTER_CYCLE_BALANCE128: &str = "canister_cycle_ba
 pub(crate) const SYSTEM_API_TIME: &str = "time";
 
 const LABEL_CLASS: &str = "class";
-const LABEL_VALUE_BEST_EFFORT: &str = "best_effort";
-const LABEL_VALUE_GUARANTEED_RESPONSE: &str = "guaranteed_response";
+const LABEL_VALUE_BEST_EFFORT: &str = "best-effort";
+const LABEL_VALUE_GUARANTEED_RESPONSE: &str = "guaranteed response";
 
 pub const SUCCESS_STATUS_LABEL: &str = "success";
 
@@ -299,7 +299,7 @@ impl QueryHandlerMetrics {
         duration: f64,
         result: &Result<T, UserError>,
     ) {
-        let method_name_label = &format!("query_ic00_{}", query_method);
+        let method_name_label = &format!("query_ic00_{query_method}");
         let status_label = match result {
             Ok(_) => SUCCESS_STATUS_LABEL,
             Err(user_error) => &format!("{:?}", user_error.code()),

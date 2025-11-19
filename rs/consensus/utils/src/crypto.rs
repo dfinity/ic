@@ -1,23 +1,22 @@
 use ic_interfaces::{crypto::*, validation::ValidationResult};
 use ic_types::{
+    NodeId, RegistryVersion,
     canister_http::CanisterHttpResponseMetadata,
     consensus::{
-        dkg,
+        BlockMetadata, CatchUpContent, FinalizationContent, NotarizationContent,
+        RandomBeaconContent, RandomTapeContent, dkg,
         hashed::Hashed,
         idkg::{IDkgComplaintContent, IDkgOpeningContent},
-        BlockMetadata, CatchUpContent, FinalizationContent, NotarizationContent,
-        RandomBeaconContent, RandomTapeContent,
     },
     crypto::{
+        CryptoError, CryptoHashOf, CryptoHashable, CryptoResult, Signable, Signed,
         canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
         threshold_sig::ni_dkg::NiDkgId,
-        CryptoError, CryptoHashOf, CryptoHashable, CryptoResult, Signable, Signed,
     },
     signature::{
         BasicSignature, BasicSignatureBatch, MultiSignature, MultiSignatureShare,
         ThresholdSignature, ThresholdSignatureShare,
     },
-    NodeId, RegistryVersion,
 };
 use std::collections::BTreeMap;
 
@@ -254,12 +253,8 @@ impl<Message: Signable, C: MultiSigner<Message> + MultiSigVerifier<Message>>
 {
     fn as_aggregate(
         &self,
-    ) -> &dyn Aggregate<
-        Message,
-        MultiSignatureShare<Message>,
-        RegistryVersion,
-        MultiSignature<Message>,
-    > {
+    ) -> &dyn Aggregate<Message, MultiSignatureShare<Message>, RegistryVersion, MultiSignature<Message>>
+    {
         self
     }
 
@@ -299,12 +294,8 @@ impl<Message: Signable, C: BasicSigVerifier<Message>>
 {
     fn as_aggregate(
         &self,
-    ) -> &dyn Aggregate<
-        Message,
-        BasicSignature<Message>,
-        RegistryVersion,
-        BasicSignatureBatch<Message>,
-    > {
+    ) -> &dyn Aggregate<Message, BasicSignature<Message>, RegistryVersion, BasicSignatureBatch<Message>>
+    {
         self
     }
 
@@ -387,12 +378,8 @@ impl<Message: Signable, C: ThresholdSigner<Message> + ThresholdSigVerifier<Messa
 {
     fn as_aggregate(
         &self,
-    ) -> &dyn Aggregate<
-        Message,
-        ThresholdSignatureShare<Message>,
-        NiDkgId,
-        ThresholdSignature<Message>,
-    > {
+    ) -> &dyn Aggregate<Message, ThresholdSignatureShare<Message>, NiDkgId, ThresholdSignature<Message>>
+    {
         self
     }
 
@@ -491,7 +478,7 @@ pub trait ConsensusCrypto:
 {
 }
 
-impl<C: Crypto + Send + Sync> ConsensusCrypto for C {}
+impl<C: Crypto> ConsensusCrypto for C {}
 
 #[cfg(test)]
 mod tests {

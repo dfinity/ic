@@ -1,6 +1,9 @@
+use regex::Regex;
 /// Utilities to manipulate a kernel command line reliably.
 use std::error::Error as StdError;
 use std::fmt;
+use std::str::FromStr;
+use std::sync::LazyLock;
 
 #[derive(Debug)]
 /// A kernel command line with improperly-quoted argument values.
@@ -114,6 +117,35 @@ impl KernelCommandLine {
         self.tokenized_arguments.push(to_add);
         Ok(())
     }
+
+    /// Returns the value of an argument (without leading/trailing quotes) if present in the
+    /// command line.
+    /// If the argument exists without a value, returns Some("").
+    /// If the argument doesn't exist, returns None.
+    pub fn get_argument(&self, argument_name: &str) -> Option<String> {
+        static REGEX: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r#"^(?<key>.+)=('(?<value1>.+)'|"(?<value2>.+)"|(?<value3>.+))$"#).unwrap()
+        });
+
+        self.tokenized_arguments.iter().find_map(|arg| {
+            if *arg == argument_name {
+                Some(String::new())
+            } else {
+                REGEX.captures(arg).and_then(|caps| {
+                    let key = caps.name("key")?;
+                    if key.as_str() == argument_name {
+                        let value = caps
+                            .name("value1")
+                            .or_else(|| caps.name("value2"))
+                            .or_else(|| caps.name("value3"))?;
+                        Some(value.as_str().replace(['\n', '\r'], ""))
+                    } else {
+                        None
+                    }
+                })
+            }
+        })
+    }
 }
 
 impl From<KernelCommandLine> for String {
@@ -122,10 +154,10 @@ impl From<KernelCommandLine> for String {
     }
 }
 
-impl TryFrom<&str> for KernelCommandLine {
-    type Error = ImproperlyQuotedValue;
+impl FromStr for KernelCommandLine {
+    type Err = ImproperlyQuotedValue;
 
-    fn try_from(cmdline: &str) -> Result<Self, ImproperlyQuotedValue> {
+    fn from_str(cmdline: &str) -> Result<Self, ImproperlyQuotedValue> {
         let mut res: Vec<String> = vec![];
         let mut curr: String = "".into();
         let mut is_quoted = false;
@@ -170,56 +202,50 @@ impl TryFrom<&str> for KernelCommandLine {
 #[cfg(test)]
 mod tests {
     use crate::KernelCommandLine;
+    use std::str::FromStr;
 
     #[test]
     fn test_remove_argument() {
         let table = [
             (
                 "remove argument without value at the beginning of command line succeeds",
-                "rd.debug rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.debug rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument without value in the middle of command line succeeds",
-                "rd.initrd=/bin/bash rd.debug rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.initrd=/bin/bash rd.debug rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument without value at the end of command line succeeds",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug"
-                    ,
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with value at the beginning of command line succeeds",
-                "rd.debug=0 rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.debug=0 rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with value in the middle of command line succeeds",
-                "rd.initrd=/bin/bash rd.debug=0 rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.initrd=/bin/bash rd.debug=0 rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with value at the end of command line succeeds",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=1"
-                    ,
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=1",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "remove argument with quoted value at the beginning of command line succeeds",
-                "rd.debug=\"i am quoted value\" rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.debug=\"i am quoted value\" rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
                 "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
@@ -231,24 +257,25 @@ mod tests {
             ),
             (
                 "remove argument with quoted value at the end of command line succeeds",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",                "rd.debug",
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",
+                "rd.debug",
                 "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "argument with substring does not get removed at end of string",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",                "rd.debu",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\""
-                    ,
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",
+                "rd.debu",
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",
             ),
             (
                 "argument removal chomps extra spaces after removal",
-                "rd.initrd=/bin/bash  rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",                "rd.debug",
-                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
-                    ,
+                "rd.initrd=/bin/bash  rd.escaped=\"this is a multiline argument\" rd.debug=\"i am quoted value\"",
+                "rd.debug",
+                "rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
         ];
         for (name, input, argument_to_remove, expected) in table.iter() {
-            let mut cmdline = KernelCommandLine::try_from(*input).unwrap();
+            let mut cmdline = KernelCommandLine::from_str(input).unwrap();
             cmdline.remove_argument(argument_to_remove);
             let result: String = cmdline.into();
             if result != *expected {
@@ -268,19 +295,19 @@ actual:   {result:?}",
         let table = [
             (
                 "misquoted argument at the beginning of command line succeeds",
-                "rd.debug=\"misquoted rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\""
+                "rd.debug=\"misquoted rd.initrd=/bin/bash rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "misquoted argument in the middle of command line succeeds",
-                "rd.initrd=/bin/bash rd.debug=\"misquoted rd.escaped=\"this is a multiline argument\""
+                "rd.initrd=/bin/bash rd.debug=\"misquoted rd.escaped=\"this is a multiline argument\"",
             ),
             (
                 "misquoted argument at the end of command line succeeds",
-                "rd.initrd=/bin/bash misquoted=\"true it's misquoted rd.escaped=\"this is a multiline argument\" rd.debug"
+                "rd.initrd=/bin/bash misquoted=\"true it's misquoted rd.escaped=\"this is a multiline argument\" rd.debug",
             ),
         ];
         for (name, input) in table.iter() {
-            if KernelCommandLine::try_from(*input).is_ok() {
+            if KernelCommandLine::from_str(input).is_ok() {
                 panic!(
                     "During test {name}: input {input:?} intentionally misquoted argument did not trigger error",
                 )
@@ -335,7 +362,7 @@ actual:   {result:?}",
             ),
         ];
         for (test_name, input, argument, value, expected) in table.into_iter() {
-            let mut cmdline = KernelCommandLine::try_from(input).unwrap();
+            let mut cmdline = KernelCommandLine::from_str(input).unwrap();
             cmdline.ensure_single_argument(argument, value).unwrap();
             let result: String = cmdline.into();
             if result != *expected {
@@ -352,6 +379,64 @@ Actual:
 "
                 );
             }
+        }
+    }
+
+    #[test]
+    fn test_get_argument() {
+        let table = [
+            (
+                "get existing argument without value",
+                "rd.debug rd.initrd=/bin/bash",
+                "rd.debug",
+                Some(String::new()),
+            ),
+            (
+                "get existing argument with value",
+                "rd.debug rd.initrd=/bin/bash",
+                "rd.initrd",
+                Some("/bin/bash".to_string()),
+            ),
+            (
+                "get existing argument with value",
+                "repeating=ab repeating=cd repeating=ef",
+                "repeating",
+                Some("ab".to_string()),
+            ),
+            (
+                "get existing argument with quoted value",
+                "rd.debug rd.initrd=\"/bin/bash with spaces\"",
+                "rd.initrd",
+                Some("/bin/bash with spaces".to_string()),
+            ),
+            (
+                "get non-existent argument",
+                "rd.debug rd.initrd=/bin/bash",
+                "nonexistent",
+                None,
+            ),
+            (
+                "get argument that is substring of another",
+                "rd.debug rd.debuglevel=1",
+                "rd.debug",
+                Some(String::new()),
+            ),
+            (
+                "get argument including ' character",
+                "rd.debug rd.debuglevel=\"'quoted'\"",
+                "rd.debuglevel",
+                Some("'quoted'".to_string()),
+            ),
+        ];
+
+        for (test_name, input, argument, expected) in table.iter() {
+            let cmdline = KernelCommandLine::from_str(input).unwrap();
+            let result = cmdline.get_argument(argument);
+            assert_eq!(
+                result, *expected,
+                "Test '{test_name}' failed:\nInput: {input}\nArgument: {argument}\n\
+                Expected: {expected:?}\nGot: {result:?}",
+            );
         }
     }
 }

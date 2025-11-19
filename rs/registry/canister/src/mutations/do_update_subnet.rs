@@ -1,12 +1,12 @@
 use crate::{common::LOG_PREFIX, mutations::common::has_duplicates, registry::Registry};
 use candid::{CandidType, Deserialize};
 use dfn_core::println;
-use ic_base_types::{subnet_id_into_protobuf, SubnetId};
+use ic_base_types::{SubnetId, subnet_id_into_protobuf};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::registry::subnet::v1::{
     SubnetFeatures as SubnetFeaturesPb, SubnetRecord as SubnetRecordPb,
 };
-use ic_registry_keys::{make_chain_key_signing_subnet_list_key, make_subnet_record_key};
+use ic_registry_keys::{make_chain_key_enabled_subnet_list_key, make_subnet_record_key};
 use ic_registry_subnet_features::{
     ChainKeyConfig as ChainKeyConfigInternal, KeyConfig as KeyConfigInternal, SubnetFeatures,
 };
@@ -41,7 +41,7 @@ impl Registry {
 
         if let Some(chain_key_signing_enable) = payload.chain_key_signing_enable {
             mutations.append(
-                &mut self.mutations_to_enable_subnet_signing(subnet_id, &chain_key_signing_enable),
+                &mut self.mutations_to_enable_chain_key(subnet_id, &chain_key_signing_enable),
             );
         }
 
@@ -50,7 +50,7 @@ impl Registry {
         if let Some(chain_key_signing_disable) = chain_key_signing_disable {
             mutations.append(
                 &mut self
-                    .mutations_to_disable_subnet_signing(subnet_id, &chain_key_signing_disable),
+                    .mutations_to_disable_subnet_chain_key(subnet_id, &chain_key_signing_disable),
             );
         }
 
@@ -66,10 +66,7 @@ impl Registry {
 
         let payload_chain_key_config = payload.chain_key_config.clone().map(|chain_key_config| {
             ChainKeyConfigInternal::try_from(chain_key_config).unwrap_or_else(|err| {
-                panic!(
-                    "{}Invalid UpdateSubnetPayload.chain_key_config: {}",
-                    LOG_PREFIX, err
-                );
+                panic!("{LOG_PREFIX}Invalid UpdateSubnetPayload.chain_key_config: {err}");
             })
         });
 
@@ -78,8 +75,7 @@ impl Registry {
 
             if has_duplicates(&payload_key_ids) {
                 panic!(
-                    "{}The requested chain key IDs {:?} have duplicates.",
-                    LOG_PREFIX, payload_key_ids
+                    "{LOG_PREFIX}The requested chain key IDs {payload_key_ids:?} have duplicates."
                 );
             }
 
@@ -94,9 +90,8 @@ impl Registry {
 
             if !deleted_keys.is_empty() {
                 panic!(
-                    "{}Chain keys cannot be deleted. Attempted to delete chain keys {:?} \
-                    for subnet: '{}'",
-                    LOG_PREFIX, deleted_keys, subnet_id
+                    "{LOG_PREFIX}Chain keys cannot be deleted. Attempted to delete chain keys {deleted_keys:?} \
+                    for subnet: '{subnet_id}'"
                 );
             }
 
@@ -109,8 +104,7 @@ impl Registry {
             new_keys.iter().for_each(|key_id| {
                 if keys_to_subnet_map.contains_key(key_id) {
                     panic!(
-                        "{}Chain key with id '{}' already exists. IDs must be globally unique.",
-                        LOG_PREFIX, key_id,
+                        "{LOG_PREFIX}Chain key with id '{key_id}' already exists. IDs must be globally unique.",
                     );
                 }
             });
@@ -122,10 +116,9 @@ impl Registry {
             for key_id in chain_key_signing_enable {
                 if !current_keys.contains(key_id) {
                     panic!(
-                        "{}Proposal attempts to enable signing for chain key '{}' on Subnet '{}', \
+                        "{LOG_PREFIX}Proposal attempts to enable signing for chain key '{key_id}' on Subnet '{subnet_id}', \
                         but the subnet does not hold the given key. A proposal to add that key to \
-                        the subnet must first be separately submitted.",
-                        LOG_PREFIX, key_id, subnet_id
+                        the subnet must first be separately submitted."
                     );
                 }
             }
@@ -142,9 +135,8 @@ impl Registry {
             let intersection = enable_set.intersection(&disable_set).collect::<Vec<_>>();
             if !intersection.is_empty() {
                 panic!(
-                    "{}update_subnet aborted: Proposal attempts to enable and disable signing for \
-                    the same chain keys: {:?}",
-                    LOG_PREFIX, intersection,
+                    "{LOG_PREFIX}update_subnet aborted: Proposal attempts to enable and disable signing for \
+                    the same chain keys: {intersection:?}",
                 )
             }
         }
@@ -166,41 +158,40 @@ impl Registry {
 
         if let Some(sev_enabled) = features.sev_enabled {
             panic!(
-                "{}Proposal attempts to change sev_enabled for Subnet '{}' to {}, \
+                "{LOG_PREFIX}Proposal attempts to change sev_enabled for Subnet '{subnet_id}' to {sev_enabled}, \
                  but sev_enabled can only be set during subnet creation.",
-                LOG_PREFIX, subnet_id, sev_enabled,
             );
         }
     }
 
-    /// Create the mutations that enable subnet signing for a single subnet and set of EcdsaKeyId's.
-    fn mutations_to_enable_subnet_signing(
+    /// Create the mutations that enable a set of chain keys for a single subnet.
+    fn mutations_to_enable_chain_key(
         &self,
         subnet_id: SubnetId,
-        chain_key_signing_enable: &Vec<MasterPublicKeyId>,
+        chain_key_enable: &Vec<MasterPublicKeyId>,
     ) -> Vec<RegistryMutation> {
         let mut mutations = vec![];
-        for master_public_key_id in chain_key_signing_enable {
-            let mut chain_key_signing_list_for_key = self
-                .get_chain_key_signing_subnet_list(master_public_key_id)
+        for chain_key_id in chain_key_enable {
+            let mut chain_key_enabled_list_for_key = self
+                .get_chain_key_enabled_subnet_list(chain_key_id)
                 .unwrap_or_default();
 
-            // If this subnet already signs for this key, do nothing.
-            if chain_key_signing_list_for_key
+            // If this subnet is already enabled for this key, do nothing.
+            if chain_key_enabled_list_for_key
                 .subnets
                 .contains(&subnet_id_into_protobuf(subnet_id))
             {
                 continue;
             }
 
-            // Preconditions are okay, so we add the subnet to our list of signing subnets.
-            chain_key_signing_list_for_key
+            // Preconditions are okay, so we add the subnet to our list of enabled subnets.
+            chain_key_enabled_list_for_key
                 .subnets
                 .push(subnet_id_into_protobuf(subnet_id));
 
             mutations.push(upsert(
-                make_chain_key_signing_subnet_list_key(master_public_key_id).into_bytes(),
-                chain_key_signing_list_for_key.encode_to_vec(),
+                make_chain_key_enabled_subnet_list_key(chain_key_id).into_bytes(),
+                chain_key_enabled_list_for_key.encode_to_vec(),
             ));
         }
         mutations
@@ -266,6 +257,7 @@ pub struct ChainKeyConfig {
     pub key_configs: Vec<KeyConfig>,
     pub signature_request_timeout_ns: Option<u64>,
     pub idkg_key_rotation_period_ms: Option<u64>,
+    pub max_parallel_pre_signature_transcripts_in_creation: Option<u32>,
 }
 
 impl From<ChainKeyConfigInternal> for ChainKeyConfig {
@@ -274,6 +266,7 @@ impl From<ChainKeyConfigInternal> for ChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let key_configs = key_configs
@@ -295,6 +288,7 @@ impl From<ChainKeyConfigInternal> for ChainKeyConfig {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         }
     }
 }
@@ -307,6 +301,7 @@ impl TryFrom<ChainKeyConfig> for ChainKeyConfigInternal {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         } = src;
 
         let mut errors = vec![];
@@ -332,6 +327,7 @@ impl TryFrom<ChainKeyConfig> for ChainKeyConfigInternal {
             key_configs,
             signature_request_timeout_ns,
             idkg_key_rotation_period_ms,
+            max_parallel_pre_signature_transcripts_in_creation,
         })
     }
 }
@@ -499,7 +495,7 @@ mod tests {
     };
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{
-        ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
+        CanisterCyclesCostSchedule, ChainKeyConfig as ChainKeyConfigPb, KeyConfig as KeyConfigPb,
         SubnetRecord as SubnetRecordPb,
     };
     use ic_protobuf::types::v1::MasterPublicKeyId as MasterPublicKeyIdPb;
@@ -565,6 +561,7 @@ mod tests {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         };
 
         let key_id = EcdsaKeyId {
@@ -579,6 +576,7 @@ mod tests {
             }],
             signature_request_timeout_ns: Some(333),
             idkg_key_rotation_period_ms: Some(444),
+            max_parallel_pre_signature_transcripts_in_creation: Some(555),
         };
 
         let payload = UpdateSubnetPayload {
@@ -655,6 +653,7 @@ mod tests {
                 max_number_of_canisters: 10,
                 ssh_readonly_access: vec!["pub_key_0".to_string()],
                 ssh_backup_access: vec!["pub_key_1".to_string()],
+                canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             }
         );
     }
@@ -680,6 +679,7 @@ mod tests {
             ssh_readonly_access: vec![],
             ssh_backup_access: vec![],
             chain_key_config: None,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         };
 
         let payload = UpdateSubnetPayload {
@@ -739,6 +739,7 @@ mod tests {
                 ssh_readonly_access: vec![],
                 ssh_backup_access: vec![],
                 chain_key_config: None,
+                canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
             }
         );
     }
@@ -788,6 +789,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key)]);
@@ -843,6 +845,7 @@ mod tests {
             ],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key)]);
@@ -890,6 +893,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         subnet_holding_key_record.chain_key_config = chain_key_config.map(|chain_key_config| {
@@ -933,6 +937,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         registry.do_update_subnet(payload);
@@ -1041,7 +1046,7 @@ mod tests {
     }
 
     #[test]
-    fn can_disable_signing_without_removing_keys() {
+    fn can_disable_chain_key_without_removing_keys() {
         let mut registry = invariant_compliant_registry(0);
 
         let (mutate_request, node_ids_and_dkg_pks) = prepare_registry_with_nodes(1, 2);
@@ -1072,6 +1077,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         subnet_holding_key_record.chain_key_config = chain_key_config.map(|chain_key_config| {
@@ -1097,53 +1103,62 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         payload.chain_key_signing_enable = Some(vec![master_public_key_held_by_subnet.clone()]);
 
         registry.do_update_subnet(payload);
 
-        // Make sure it's actually in the signing list.
-        assert!(registry
-            .get_chain_key_signing_subnet_list(&master_public_key_held_by_subnet)
-            .unwrap()
-            .subnets
-            .contains(&subnet_id_into_protobuf(subnet_id)));
+        // Make sure it's actually in the list of enabled chain keys.
+        assert!(
+            registry
+                .get_chain_key_enabled_subnet_list(&master_public_key_held_by_subnet)
+                .unwrap()
+                .subnets
+                .contains(&subnet_id_into_protobuf(subnet_id))
+        );
 
         // Make sure config contains the key.
-        assert!(registry
-            .get_subnet_or_panic(subnet_id)
-            .chain_key_config
-            .unwrap()
-            .key_configs
-            .iter()
-            .map(|key_config| key_config.key_id.clone().unwrap())
-            .collect::<Vec<_>>()
-            .contains(&(&master_public_key_held_by_subnet).into()));
+        assert!(
+            registry
+                .get_subnet_or_panic(subnet_id)
+                .chain_key_config
+                .unwrap()
+                .key_configs
+                .iter()
+                .map(|key_config| key_config.key_id.clone().unwrap())
+                .collect::<Vec<_>>()
+                .contains(&(&master_public_key_held_by_subnet).into())
+        );
 
-        // The next payload to disable signing with the key.
+        // The next payload to disable the chain key.
         let mut payload = make_empty_update_payload(subnet_id);
 
         payload.chain_key_signing_disable = Some(vec![master_public_key_held_by_subnet.clone()]);
 
         registry.do_update_subnet(payload);
 
-        // Ensure it's now removed from signing list.
-        assert!(!registry
-            .get_chain_key_signing_subnet_list(&master_public_key_held_by_subnet)
-            .unwrap()
-            .subnets
-            .contains(&subnet_id_into_protobuf(subnet_id)));
+        // Ensure it's now removed from list of enabled subnets.
+        assert!(
+            !registry
+                .get_chain_key_enabled_subnet_list(&master_public_key_held_by_subnet)
+                .unwrap()
+                .subnets
+                .contains(&subnet_id_into_protobuf(subnet_id))
+        );
         // Ensure the config still  has the key.
-        assert!(registry
-            .get_subnet_or_panic(subnet_id)
-            .chain_key_config
-            .unwrap()
-            .key_configs
-            .iter()
-            .map(|key_config| key_config.key_id.clone().unwrap())
-            .collect::<Vec<_>>()
-            .contains(&(&master_public_key_held_by_subnet).into()));
+        assert!(
+            registry
+                .get_subnet_or_panic(subnet_id)
+                .chain_key_config
+                .unwrap()
+                .key_configs
+                .iter()
+                .map(|key_config| key_config.key_id.clone().unwrap())
+                .collect::<Vec<_>>()
+                .contains(&(&master_public_key_held_by_subnet).into())
+        );
     }
 
     #[test]
@@ -1181,6 +1196,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         let subnet_id = subnet_test_id(1000);
@@ -1201,6 +1217,7 @@ mod tests {
             }],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         });
 
         payload.chain_key_signing_enable = Some(vec![MasterPublicKeyId::Ecdsa(key.clone())]);
@@ -1261,6 +1278,7 @@ mod tests {
             ],
             signature_request_timeout_ns: None,
             idkg_key_rotation_period_ms: None,
+            max_parallel_pre_signature_transcripts_in_creation: None,
         };
 
         let subnet_id = subnet_test_id(1000);

@@ -1,7 +1,7 @@
 /// Like [assert], but returns an error instead of panicking.
 #[macro_export]
 macro_rules! ensure {
-    ($cond:expr, $msg:expr $(, $args:expr)* $(,)*) => {
+    ($cond:expr_2021, $msg:expr_2021 $(, $args:expr_2021)* $(,)*) => {
         if !$cond {
             return Err(format!("Condition {} is false: {}",
                                std::stringify!($cond),
@@ -13,7 +13,7 @@ macro_rules! ensure {
 /// Like [assert_eq], but returns an error instead of panicking.
 #[macro_export]
 macro_rules! ensure_eq {
-    ($lhs:expr, $rhs:expr, $msg:expr $(, $args:expr)* $(,)*) => {
+    ($lhs:expr_2021, $rhs:expr_2021, $msg:expr_2021 $(, $args:expr_2021)* $(,)*) => {
         if $lhs != $rhs {
             return Err(format!("{} ({:?}) != {} ({:?}): {}",
                                std::stringify!($lhs), $lhs,
@@ -21,7 +21,7 @@ macro_rules! ensure_eq {
                                format!($msg $(,$args)*)));
         }
     };
-    ($lhs:expr, $rhs:expr $(,)*) => {
+    ($lhs:expr_2021, $rhs:expr_2021 $(,)*) => {
         if $lhs != $rhs {
             return Err(format!("{} ({:?}) != {} ({:?})",
                                std::stringify!($lhs), $lhs,

@@ -1,14 +1,14 @@
 // The Local Replica is running the binary of a replica of the IC locally and thus allows for local testing
 use candid::{Encode, Principal};
-use ic_agent::identity::BasicIdentity;
 use ic_agent::Agent;
 use ic_agent::Identity;
+use ic_agent::identity::BasicIdentity;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::FeatureFlags;
 use ic_icrc1_ledger::{InitArgs, InitArgsBuilder, LedgerArgument};
 use ic_icrc1_test_utils::minter_identity;
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use ic_ledger_suite_state_machine_tests::{
+use ic_ledger_suite_state_machine_tests_constants::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE,
     NAT_META_KEY, NAT_META_VALUE, NUM_BLOCKS_TO_ARCHIVE, TEXT_META_KEY, TEXT_META_VALUE,
     TOKEN_NAME, TOKEN_SYMBOL,
@@ -36,7 +36,7 @@ pub async fn get_testing_agent(port: u16) -> Agent {
 
 pub async fn get_custom_agent(basic_identity: Arc<dyn Identity>, port: u16) -> Agent {
     // The local replica will be running on the localhost
-    let replica_url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
+    let replica_url = Url::parse(&format!("http://localhost:{port}")).unwrap();
 
     // Setup the agent
     let agent = Agent::builder()
@@ -85,18 +85,6 @@ pub fn icrc_ledger_wasm() -> Vec<u8> {
             .join("icrc1")
             .join("ledger");
     ic_test_utilities_load_wasm::load_wasm(icrc_ledger_project_path, "ic-icrc1-ledger", &[])
-}
-
-pub fn icrc_ledger_old_certificate_wasm() -> Vec<u8> {
-    let ledger_wasm_path = std::env::var("IC_ICRC1_LEDGER_WASM_PATH_OLD_CERTIFICATE").expect(
-        "The Ledger wasm path must be set using the env variable IC_ICRC1_LEDGER_WASM_PATH_OLD_CERTIFICATE",
-    );
-    std::fs::read(&ledger_wasm_path).unwrap_or_else(|e| {
-        panic!(
-            "failed to load Wasm file from path {} (env var IC_ICRC1_LEDGER_WASM_PATH_OLD_CERTIFICATE): {}",
-            ledger_wasm_path, e
-        )
-    })
 }
 
 const STARTING_CYCLES_PER_CANISTER: u128 = 2_000_000_000_000_000;

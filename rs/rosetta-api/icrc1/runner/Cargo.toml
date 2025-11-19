@@ -3,7 +3,7 @@ name = "ic-icrc-rosetta-runner"
 version = "0.1.0"
 authors = ["The Internet Computer Project Developers"]
 description = "Build Once. Integrate Your Blockchain Everywhere. "
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }

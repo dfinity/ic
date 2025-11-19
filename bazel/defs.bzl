@@ -3,6 +3,8 @@ Utilities for building IC replica and canisters.
 """
 
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test", "rust_test_suite")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//publish:defs.bzl", "release_nostrip_binary")
 
 _COMPRESS_CONCURRENCY = 16
@@ -40,7 +42,6 @@ def _zstd_compress(ctx):
     """
     out = ctx.actions.declare_file(ctx.label.name)
 
-    # TODO: install zstd as dependency.
     ctx.actions.run(
         executable = "zstd",
         arguments = ["-q", "--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
@@ -63,7 +64,6 @@ def _untar(ctx):
     """
     out = ctx.actions.declare_directory(ctx.label.name)
 
-    # TODO: install tar as dependency.
     ctx.actions.run(
         executable = "tar",
         arguments = ["-xf", ctx.file.src.path, "-C", out.path],
@@ -88,7 +88,6 @@ def _mcopy(ctx):
     for src in ctx.files.srcs:
         command += "&& mcopy -mi {output} -sQ {src_path} ::/{filename} ".format(output = out.path, src_path = src.path, filename = ctx.attr.remap_paths.get(src.basename, src.basename))
 
-    # TODO: install mcopy as dependency.
     ctx.actions.run_shell(
         command = command,
         inputs = ctx.files.srcs + [ctx.file.fs],
@@ -204,7 +203,7 @@ def rust_ic_test(env = {}, data = [], **kwargs):
         **kwargs
     )
 
-def rust_bench(name, env = {}, data = [], pin_cpu = False, with_test = False, **kwargs):
+def rust_bench(name, env = {}, data = [], pin_cpu = False, test_name = None, test_timeout = None, **kwargs):
     """A rule for defining a rust benchmark.
 
     Args:
@@ -212,16 +211,22 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, with_test = False, **
       env: additional environment variables to pass to the benchmark binary.
       data: data dependencies required to run the benchmark.
       pin_cpu: pins the benchmark process to a single CPU if set `True`.
-      with_test: generates name + '_test' target to test that the benchmark work.
+      test_name: generates test with name 'test_name' to test that the benchmark work.
+      test_timeout: timeout to apply in the generated test (default: `moderate`).
       **kwargs: see docs for `rust_binary`.
     """
 
     kwargs.setdefault("testonly", True)
 
     # The initial binary is a regular rust_binary with rustc flags as in the
-    # current build configuration.
+    # current build configuration. It is marked as "manual" because it is not
+    # meant to be built.
     binary_name_initial = "_" + name + "_bin_default"
-    rust_binary(name = binary_name_initial, **kwargs)
+    kwargs_initial = dict(kwargs)
+    tags_initial = kwargs_initial.pop("tags", [])
+    if "manual" not in tags_initial:
+        tags_initial.append("manual")
+    rust_binary(name = binary_name_initial, tags = tags_initial, **kwargs_initial)
 
     # The "publish" binary has the same compiler flags applied as for production build.
     binary_name_publish = "_" + name + "_bin_publish"
@@ -235,7 +240,7 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, with_test = False, **
 
     # The benchmark binary is a shell script that runs the binary
     # (similar to how `cargo bench` runs the benchmark binary).
-    native.sh_binary(
+    sh_binary(
         srcs = ["//bazel:generic_rust_bench.sh"],
         name = name,
         # Allow benchmark targets to use test-only libraries.
@@ -248,10 +253,12 @@ def rust_bench(name, env = {}, data = [], pin_cpu = False, with_test = False, **
     )
 
     # To test that the benchmarks work.
-    if with_test:
-        native.sh_test(
-            name = name + "_test",
+    if test_name != None:
+        test_timeout = test_timeout or "moderate"
+        sh_test(
+            name = test_name,
             testonly = True,
+            timeout = test_timeout,
             env = env,
             srcs = [":" + binary_name_publish],
             data = data,
@@ -403,20 +410,25 @@ write_info_file_var = rule(
 
 def file_size_check(
         name,
-        max_file_size):
+        file,
+        max_file_size,
+        tags = []):
     """
     A check to make sure the given file is below the specified size.
 
     Args:
-      name: Name of the file.
+      name: Name of the test.
+      file: File to check (label).
       max_file_size: Max accepted size in bytes.
+      tags: See Bazel documentation
     """
-    native.sh_test(
-        name = "%s_size_test" % name,
+    sh_test(
+        name = name,
         srcs = ["//bazel:file_size_test.sh"],
-        data = [name],
+        data = [file],
         env = {
-            "FILE": "$(rootpath %s)" % name,
+            "FILE": "$(rootpath %s)" % file,
             "MAX_SIZE": str(max_file_size),
         },
+        tags = tags,
     )

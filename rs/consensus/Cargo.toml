@@ -22,7 +22,6 @@ ic-https-outcalls-consensus = { path = "../https_outcalls/consensus" }
 ic-interfaces = { path = "../interfaces" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
-ic-limits = { path = "../limits" }
 ic-logger = { path = "../monitoring/logger" }
 ic-management-canister-types-private = { path = "../types/management_canister_types" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -37,6 +36,7 @@ phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
+rayon = { workspace = true }
 slog = { workspace = true }
 strum_macros = { workspace = true }
 
@@ -48,8 +48,8 @@ ic-btc-replica-types = { path = "../bitcoin/replica_types" }
 ic-config = { path = "../config" }
 ic-consensus = { path = ".", features = ["malicious_code"] }
 ic-consensus-mocks = { path = "./mocks" }
-ic-limits = { path = "../limits" }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
+ic-crypto-test-utils-crypto-returning-ok = { path = "../crypto/test_utils/crypto_returning_ok" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
@@ -58,6 +58,7 @@ ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
 ic-interfaces-mocks = { path = "../interfaces/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
+ic-limits = { path = "../limits" }
 ic-messaging = { path = "../messaging" }
 ic-registry-client-fake = { path = "../registry/fake" }
 ic-registry-keys = { path = "../registry/keys" }
@@ -73,6 +74,7 @@ ic-test-utilities-state = { path = "../test_utilities/state" }
 ic-test-utilities-time = { path = "../test_utilities/time" }
 ic-test-utilities-types = { path = "../test_utilities/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
+mockall = { workspace = true }
 proptest = { workspace = true }
 prost = { workspace = true }
 rstest = { workspace = true }

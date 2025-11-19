@@ -3,10 +3,11 @@
 use crate::p2p::consensus::UnvalidatedArtifact;
 use ic_base_types::RegistryVersion;
 use ic_protobuf::{
-    proxy::{try_from_option_field, ProxyDecodeError},
+    proxy::{ProxyDecodeError, try_from_option_field},
     types::v1 as pb,
 };
 use ic_types::{
+    Height,
     artifact::ConsensusMessageId,
     consensus::{
         Block, BlockProposal, CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ContentEq,
@@ -15,7 +16,6 @@ use ic_types::{
     },
     crypto::CryptoHashOf,
     time::Time,
-    Height,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -84,26 +84,22 @@ pub trait ChangeSetOperation: Sized {
     /// Conditional composition when self is empty. Similar to Option::or_else.
     fn or_else<F: FnOnce() -> Self>(self, f: F) -> Self;
     /// Append a change action only when it is not a duplicate of what already
-    /// exists in the Mutations. Return the rejected action as error when it
+    /// exists in the Mutations. Return the rejected action when it
     /// is considered as duplicate.
-    fn dedup_push(&mut self, action: ChangeAction) -> Result<(), ChangeAction>;
+    fn dedup_push(&mut self, action: ChangeAction) -> Option<ChangeAction>;
 }
 
 impl ChangeSetOperation for Mutations {
     fn or_else<F: FnOnce() -> Mutations>(self, f: F) -> Mutations {
-        if self.is_empty() {
-            f()
-        } else {
-            self
-        }
+        if self.is_empty() { f() } else { self }
     }
 
-    fn dedup_push(&mut self, action: ChangeAction) -> Result<(), ChangeAction> {
+    fn dedup_push(&mut self, action: ChangeAction) -> Option<ChangeAction> {
         if !self.iter().any(|x| x.content_eq(&action)) {
             self.push(action);
-            Ok(())
+            None
         } else {
-            Err(action)
+            Some(action)
         }
     }
 }
@@ -250,10 +246,7 @@ pub trait PoolSection<T> {
         // this function on other things implementing PoolSection
         pb::CatchUpPackage::from(
             &self.catch_up_package().get_highest().unwrap_or_else(|err| {
-                panic!(
-                    "Error getting highest CatchUpPackage in the validated pool: {:?}",
-                    err
-                )
+                panic!("Error getting highest CatchUpPackage in the validated pool: {err:?}")
             }),
         )
     }
@@ -287,8 +280,8 @@ pub trait ConsensusPool {
     /// Return a reference to the consensus block cache (ConsensusBlockCache).
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache;
 
-    /// Return the block chain between the given start/end.
-    fn build_block_chain(&self, start: &Block, end: &Block) -> Arc<dyn ConsensusBlockChain>;
+    /// Return the block chain between the given start/end, ends inclusive.
+    fn build_block_chain(&self, start_height: Height, end: Block) -> Arc<dyn ConsensusBlockChain>;
 
     /// Return the first instant at which a block with the given hash was inserted
     /// into the validated pool. Returns None if no timestamp was found.
@@ -423,6 +416,9 @@ pub trait ConsensusBlockChain: Send + Sync {
 
     /// Returns the length of the chain.
     fn len(&self) -> usize;
+
+    /// Iterate over all Blocks above the given height.
+    fn iter_above(&self, height: Height) -> Box<dyn Iterator<Item = &Block> + '_>;
 }
 
 #[derive(Clone, Eq, PartialEq, Debug)]

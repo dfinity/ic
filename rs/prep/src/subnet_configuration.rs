@@ -13,26 +13,27 @@ use crate::{
 };
 use anyhow::Result;
 use ic_config::subnet_config::SchedulerConfig;
-use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};
+use ic_crypto_test_utils_ni_dkg::{InitialNiDkgConfig, initial_dkg_transcript};
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
     subnet::v1::{
-        CatchUpPackageContents, ChainKeyConfig, InitialNiDkgTranscriptRecord, SubnetRecord,
+        CanisterCyclesCostSchedule, CatchUpPackageContents, ChainKeyConfig,
+        InitialNiDkgTranscriptRecord, SubnetRecord,
     },
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::crypto::threshold_sig::ni_dkg::ThresholdSigPublicKeyError;
 use ic_types::{
-    crypto::{
-        threshold_sig::{
-            ni_dkg::{NiDkgTag, NiDkgTargetId},
-            ThresholdSigPublicKey, ThresholdSigPublicKeyBytesConversionError,
-        },
-        CryptoError,
-    },
     Height, NodeId, PrincipalId, ReplicaVersion, SubnetId,
+    crypto::{
+        CryptoError,
+        threshold_sig::{
+            ThresholdSigPublicKey, ThresholdSigPublicKeyBytesConversionError,
+            ni_dkg::{NiDkgTag, NiDkgTargetId},
+        },
+    },
 };
 use serde::Deserialize;
 use thiserror::Error;
@@ -315,6 +316,7 @@ impl SubnetConfig {
             ssh_readonly_access: self.ssh_readonly_access,
             ssh_backup_access: self.ssh_backup_access,
             chain_key_config: self.chain_key_config,
+            canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
         };
 
         let dkg_dealing_encryption_pubkeys: BTreeMap<_, _> = initialized_nodes

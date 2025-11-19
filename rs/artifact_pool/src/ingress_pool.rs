@@ -2,8 +2,8 @@
 /// Logically it can be viewed as part of the artifact pool
 /// But we keep it separated for code readability
 use crate::{
-    metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
     HasTimestamp,
+    metrics::{POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED, PoolMetrics},
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
@@ -16,12 +16,12 @@ use ic_interfaces::{
         ValidatedPoolReader,
     },
 };
-use ic_logger::{debug, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::IngressMessageId,
-    messages::{MessageId, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH},
     CountBytes, NodeId, Time,
+    artifact::IngressMessageId,
+    messages::{EXPECTED_MESSAGE_ID_LENGTH, MessageId, SignedIngress},
 };
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
@@ -446,10 +446,12 @@ mod tests {
 
                 // Ingress message not in the pool
                 let ingress_msg = SignedIngressBuilder::new().nonce(3).build();
-                assert!(!ingress_pool
-                    .validated
-                    .artifacts
-                    .contains_key(&IngressMessageId::from(&ingress_msg)));
+                assert!(
+                    !ingress_pool
+                        .validated
+                        .artifacts
+                        .contains_key(&IngressMessageId::from(&ingress_msg))
+                );
             })
         })
     }
@@ -605,7 +607,7 @@ mod tests {
                 let mut non_expired_count = 0;
                 for i in 0..initial_count {
                     let expiry = Duration::from_millis(
-                        rng.gen::<u64>() % (3 * (MAX_INGRESS_TTL.as_millis() as u64)),
+                        rng.r#gen::<u64>() % (3 * (MAX_INGRESS_TTL.as_millis() as u64)),
                     );
                     if now + expiry >= cutoff_time {
                         non_expired_count += 1;
@@ -626,10 +628,12 @@ mod tests {
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
                 let result = ingress_pool.apply(changeset);
-                assert!(!result
-                    .transmits
-                    .iter()
-                    .any(|x| matches!(x, ArtifactTransmit::Abort(_))));
+                assert!(
+                    !result
+                        .transmits
+                        .iter()
+                        .any(|x| matches!(x, ArtifactTransmit::Abort(_)))
+                );
 
                 // artifacts_with_opt are only created for own node id
                 assert_eq!(result.transmits.len(), initial_count / nodes);
@@ -639,10 +643,12 @@ mod tests {
 
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
                 let result = ingress_pool.apply(changeset);
-                assert!(!result
-                    .transmits
-                    .iter()
-                    .any(|x| matches!(x, ArtifactTransmit::Deliver(_))));
+                assert!(
+                    !result
+                        .transmits
+                        .iter()
+                        .any(|x| matches!(x, ArtifactTransmit::Deliver(_)))
+                );
                 assert_eq!(result.transmits.len(), initial_count - non_expired_count);
                 assert!(!result.poll_immediately);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);

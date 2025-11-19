@@ -1,10 +1,12 @@
 use crate::benches::{
-    assert_has_num_balances, emulate_archive_blocks, icrc_transfer, mint_tokens, test_account,
-    test_account_offset, upgrade, NUM_GET_BLOCKS, NUM_OPERATIONS,
+    MAX_LIST_ALLOWANCES, NUM_GET_BLOCKS, NUM_OPERATIONS, assert_has_num_balances,
+    emulate_archive_blocks, icrc_transfer, mint_tokens, test_account, test_account_offset, upgrade,
 };
-use crate::{icrc2_approve_not_async, icrc3_get_blocks, init_state, Access, LOG};
+use crate::{
+    Access, LOG, icrc2_approve_not_async, icrc3_get_blocks, icrc103_get_allowances, init_state,
+};
 use assert_matches::assert_matches;
-use canbench_rs::{bench, BenchResult};
+use canbench_rs::{BenchResult, bench};
 use candid::{Nat, Principal};
 use ic_icrc1_ledger::{FeatureFlags, InitArgs, InitArgsBuilder};
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -12,6 +14,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
 use icrc_ledger_types::icrc2::approve::ApproveArgs;
 use icrc_ledger_types::icrc3::blocks::GetBlocksRequest;
+use icrc_ledger_types::icrc103::get_allowances::GetAllowancesArgs;
 
 const MINTER_PRINCIPAL: Principal = Principal::from_slice(&[0_u8, 0, 0, 0, 2, 48, 0, 7, 1, 1]);
 
@@ -63,6 +66,16 @@ fn bench_icrc1_transfers() -> BenchResult {
                 assert_matches!(result, Ok(_));
                 emulate_archive_blocks::<Access>(&LOG);
             }
+        }
+        {
+            let _p = canbench_rs::bench_scope("icrc103_get_allowances");
+            let list_args = GetAllowancesArgs {
+                from_account: Some(account_with_tokens),
+                prev_spender: None,
+                take: None,
+            };
+            let allowances = icrc103_get_allowances(list_args).expect("failed to list allowances");
+            assert_eq!(allowances.len(), MAX_LIST_ALLOWANCES);
         }
         {
             let _p = canbench_rs::bench_scope("icrc2_transfer_from");

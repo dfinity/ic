@@ -1,8 +1,8 @@
 use super::get_log_id;
-use crate::sign::lazily_calculated_public_key_from_store;
 use crate::sign::BasicSigVerifierInternal;
 use crate::sign::BasicSignerInternal;
 use crate::sign::ThresholdSigDataStore;
+use crate::sign::lazily_calculated_public_key_from_store;
 use crate::{CryptoComponentImpl, LockableThresholdSigDataStore};
 use ic_crypto_internal_bls12_381_vetkd::{
     DerivationContext, EncryptedKeyCombinationError, EncryptedKeyShare,
@@ -13,14 +13,15 @@ use ic_crypto_internal_csp::api::CspSigner;
 use ic_crypto_internal_csp::api::ThresholdSignatureCspClient;
 use ic_crypto_internal_csp::key_id::KeyIdInstantiationError;
 use ic_crypto_internal_csp::vault::api::VetKdEncryptedKeyShareCreationVaultError;
-use ic_crypto_internal_csp::{key_id::KeyId, vault::api::CspVault, CryptoServiceProvider};
+use ic_crypto_internal_csp::{CryptoServiceProvider, key_id::KeyId, vault::api::CspVault};
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::PublicCoefficients;
-use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
+use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
 use ic_interfaces::crypto::VetKdProtocol;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{debug, info, new_logger, ReplicaLogger};
+use ic_logger::{ReplicaLogger, debug, info, new_logger};
+use ic_types::NodeId;
 use ic_types::crypto::threshold_sig::errors::threshold_sig_data_not_found_error::ThresholdSigDataNotFoundError;
 use ic_types::crypto::threshold_sig::ni_dkg::NiDkgId;
 use ic_types::crypto::vetkd::{
@@ -28,7 +29,6 @@ use ic_types::crypto::vetkd::{
     VetKdKeyShareCreationError, VetKdKeyShareVerificationError, VetKdKeyVerificationError,
 };
 use ic_types::crypto::{BasicSig, BasicSigOf};
-use ic_types::NodeId;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -376,14 +376,14 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
             Ok((node_id, *node_index, clib_share))
         })
         .collect::<Result<_, _>>()?;
-    let clib_shares_for_combine_all: Vec<(NodeIndex, EncryptedKeyShare)> = clib_shares
+    let clib_shares_for_combine_all: BTreeMap<NodeIndex, EncryptedKeyShare> = clib_shares
         .iter()
         .map(|(_node_id, node_index, clib_share)| (*node_index, clib_share.clone()))
         .collect();
     let context = DerivationContext::new(args.context.caller.as_slice(), &args.context.context);
 
     match ic_crypto_internal_bls12_381_vetkd::EncryptedKey::combine_all(
-        &clib_shares_for_combine_all[..],
+        &clib_shares_for_combine_all,
         reconstruction_threshold,
         &master_public_key,
         &transport_public_key,
@@ -402,14 +402,14 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                 falling back to EncryptedKey::combine_valid_shares"
             );
 
-            let clib_shares_for_combine_valid: Vec<(NodeIndex, G2Affine, EncryptedKeyShare)> = clib_shares
-                .iter()
+            let clib_shares_for_combine_valid: BTreeMap<NodeIndex, (G2Affine, EncryptedKeyShare)> = clib_shares
+                .into_iter()
                 .map(|(node_id, node_index, clib_share)| {
                     let node_public_key = lazily_calculated_public_key_from_store(
                         lockable_threshold_sig_data_store,
                         threshold_sig_csp_client,
                         &args.ni_dkg_id,
-                        *node_id,
+                        node_id,
                     )
                     .map_err(|e| {
                         VetKdKeyShareCombinationError::IndividualPublicKeyComputationError(e)
@@ -422,12 +422,12 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                             ))
                         }
                     }?;
-                    Ok((*node_index, node_public_key_g2affine, clib_share.clone()))
+                    Ok((node_index, (node_public_key_g2affine, clib_share.clone())))
                 })
                 .collect::<Result<_, _>>()?;
 
             ic_crypto_internal_bls12_381_vetkd::EncryptedKey::combine_valid_shares(
-                &clib_shares_for_combine_valid[..],
+                &clib_shares_for_combine_valid,
                 reconstruction_threshold,
                 &master_public_key,
                 &transport_public_key,
@@ -562,14 +562,14 @@ enum MasterPubkeyFromCoeffsError {
 
 fn log_err<T: fmt::Display>(error_option: Option<&T>) -> String {
     if let Some(error) = error_option {
-        return format!("{}", error);
+        return format!("{error}");
     }
     "none".to_string()
 }
 
 pub fn log_ok_content<T: fmt::Display, E>(result: &Result<T, E>) -> String {
     if let Ok(content) = result {
-        return format!("{}", content);
+        return format!("{content}");
     }
     "none".to_string()
 }

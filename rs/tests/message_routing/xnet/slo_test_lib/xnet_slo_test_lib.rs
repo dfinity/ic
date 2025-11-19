@@ -392,10 +392,7 @@ pub fn check_success(
                 i,
                 format!("Error ratio below {}%", config.error_percentage_threshold).as_str(),
                 "Failed calls",
-                &format!(
-                    "{}% ({}/{})",
-                    error_percentage, failed_calls, attempted_calls
-                ),
+                &format!("{error_percentage}% ({failed_calls}/{attempted_calls})"),
             );
         }
 
@@ -425,9 +422,10 @@ pub fn check_success(
             m.latency_distribution.buckets().last().unwrap().1 + m.reject_responses;
         // All messages sent more than `targeted_latency_seconds` before the end of the
         // test should have gotten a response.
+        let runtime_seconds = config.runtime.as_secs();
         let responses_expected = ((m.calls_attempted - m.call_errors) as f64
-            * (config.runtime.as_secs() - config.targeted_latency_seconds) as f64
-            / config.runtime.as_secs() as f64) as usize;
+            * runtime_seconds.saturating_sub(config.targeted_latency_seconds) as f64
+            / runtime_seconds as f64) as usize;
         // Account for requests enqueued this round (in case canister messages were
         // executed before ingress messages, i.e. the heartbeat was executed before
         // metrics collection) or uncounted responses (if ingress executed first).
@@ -438,7 +436,7 @@ pub fn check_success(
             config.subnet_to_subnet_rate,
             responses_received
         );
-        let responses_expected = responses_expected - config.subnet_to_subnet_rate;
+        let responses_expected = responses_expected.saturating_sub(config.subnet_to_subnet_rate);
         let actual = format!(
             "{}/{}",
             responses_received,
@@ -537,10 +535,9 @@ pub async fn stop_all_canister(canisters: &[Vec<Canister<'_>>]) {
             let _: String = canister
                 .update_("stop", candid, ())
                 .await
-                .unwrap_or_else(|_| {
+                .unwrap_or_else(|e| {
                     panic!(
-                        "Stopping canister_idx={} on subnet_idx={} failed.",
-                        canister_idx, subnet_idx
+                        "Stopping canister_idx={canister_idx} on subnet_idx={subnet_idx} failed with error: {e}"
                     )
                 });
         });
@@ -564,8 +561,7 @@ pub async fn collect_metrics(canisters: &[Vec<Canister<'_>>]) -> Vec<Vec<Metrics
                 .await
                 .unwrap_or_else(|_| {
                     panic!(
-                        "Collecting metrics for canister_idx={} on subnet_idx={} failed.",
-                        canister_idx, subnet_idx
+                        "Collecting metrics for canister_idx={canister_idx} on subnet_idx={subnet_idx} failed."
                     )
                 })
         });

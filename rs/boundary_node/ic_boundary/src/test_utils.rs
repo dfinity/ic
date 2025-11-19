@@ -1,5 +1,4 @@
-// Stuff here used in tests and benchmarks.
-// Since benchmarks use ic-boundary as an external library crate - this has to be public.
+// Stuff here used in tests
 
 use std::{sync::Arc, time::Duration};
 
@@ -7,9 +6,9 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::Router;
 use clap::Parser;
-use http;
 use ic_base_types::NodeId;
 use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
+use ic_bn_lib::prometheus::Registry;
 use ic_certification_test_utils::CertificateBuilder;
 use ic_certification_test_utils::CertificateData::*;
 use ic_crypto_tree_hash::Digest;
@@ -18,40 +17,30 @@ use ic_protobuf::registry::{
     crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, NodeRecord},
     routing_table::v1::RoutingTable as PbRoutingTable,
-    subnet::v1::{SubnetListRecord, SubnetRecord},
+    subnet::v1::{CanisterCyclesCostSchedule, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
-    make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key, make_node_record_key,
-    make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
-    ROOT_SUBNET_ID_KEY,
+    ROOT_SUBNET_ID_KEY, make_canister_ranges_key, make_crypto_threshold_signing_pubkey_key,
+    make_crypto_tls_cert_key, make_node_record_key, make_subnet_list_record_key,
+    make_subnet_record_key,
 };
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable as RoutingTableIC};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    crypto::threshold_sig::ThresholdSigPublicKey, replica_version::ReplicaVersion, time::Time,
-    CanisterId, RegistryVersion, SubnetId,
+    CanisterId, RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
+    replica_version::ReplicaVersion, time::Time,
 };
-use prometheus::Registry;
-use reqwest;
 
+use crate::routes::ProxyRouter;
 use crate::{
-    cache::Cache,
     cli::Cli,
     core::setup_router,
+    http::middleware::cache::CacheState,
     persist::{Persist, Persister, Routes},
-    snapshot::{node_test_id, subnet_test_id, RegistrySnapshot, Snapshot, Snapshotter, Subnet},
+    snapshot::{RegistrySnapshot, Snapshot, Snapshotter, Subnet, node_test_id, subnet_test_id},
 };
-
-#[macro_export]
-macro_rules! principal {
-    ($id:expr) => {{
-        candid::Principal::from_text($id).unwrap()
-    }};
-}
-
-pub use principal;
 
 #[derive(Debug)]
 pub struct TestHttpClient(pub usize);
@@ -132,6 +121,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],
         chain_key_config: None,
+        canister_cycles_cost_schedule: CanisterCyclesCostSchedule::Normal as i32,
     }
 }
 
@@ -245,9 +235,9 @@ pub fn create_fake_registry_client(
     // Add routing table
     data_provider
         .add(
-            &make_routing_table_record_key(),
+            &make_canister_ranges_key(CanisterId::from_u64(0)),
             reg_ver,
-            Some(PbRoutingTable::from(routing_table)),
+            Some(PbRoutingTable::from(routing_table.clone())),
         )
         .expect("could not add routing table");
 
@@ -282,6 +272,7 @@ pub fn setup_test_router(
         "--obs-log-null",
         "--retry-update-call",
     ];
+
     if !enable_logging {
         args.push("--obs-disable-request-logging");
     }
@@ -293,9 +284,11 @@ pub fn setup_test_router(
         args.push(rate_limit_subnet.as_str());
     }
 
-    #[cfg(not(feature = "tls"))]
-    let cli = Cli::parse_from(args);
-    #[cfg(feature = "tls")]
+    if enable_cache {
+        args.push("--cache-size");
+        args.push("104857600");
+    }
+
     let cli = Cli::parse_from({
         args.extend_from_slice(&["--tls-hostname", "foobar"]);
         args
@@ -309,7 +302,7 @@ pub fn setup_test_router(
 
     let (registry_client, _, _) = create_fake_registry_client(subnet_count, nodes_per_subnet, None);
     let (channel_send, _) = tokio::sync::watch::channel(None);
-    let mut snapshotter = Snapshotter::new(
+    let snapshotter = Snapshotter::new(
         registry_snapshot.clone(),
         channel_send,
         Arc::new(registry_client),
@@ -323,18 +316,23 @@ pub fn setup_test_router(
 
     let salt: Arc<ArcSwapOption<Vec<u8>>> = Arc::new(ArcSwapOption::empty());
 
-    let router = setup_router(
-        registry_snapshot,
-        routing_table,
+    // Proxy Router
+    let proxy_router = Arc::new(ProxyRouter::new(
         http_client,
+        routing_table,
+        registry_snapshot,
+        cli.health.health_subnets_alive_threshold,
+        cli.health.health_nodes_per_subnet_alive_threshold,
+    ));
+
+    let router = setup_router(
         None,
         None,
         &cli,
         &metrics_registry,
-        enable_cache.then_some(Arc::new(
-            Cache::new(10485760, 262144, Duration::from_secs(1), false).unwrap(),
-        )),
+        enable_cache.then(|| Arc::new(CacheState::new(&cli.cache, &Registry::new()).unwrap())),
         salt,
+        proxy_router,
     );
 
     let router = router.layer(axum::middleware::from_fn(add_conninfo));

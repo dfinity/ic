@@ -3,8 +3,9 @@ use chrono::Utc;
 use futures::future::join_all;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
+use ic_system_test_driver::driver::test_env_api::retry_async;
 use ic_system_test_driver::driver::test_env_api::{HasPublicApiUrl, HasVm, IcNodeSnapshot};
-use ic_system_test_driver::util::{runtime_from_url, MetricsFetcher, UniversalCanister};
+use ic_system_test_driver::util::{MetricsFetcher, UniversalCanister, runtime_from_url};
 use slog::info;
 use std::collections::BTreeMap;
 use std::env;
@@ -18,6 +19,12 @@ pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM: &str =
     "state_sync_duration_seconds_sum{status=\"ok\"}";
 pub const SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT: &str =
     "state_sync_duration_seconds_count{status=\"ok\"}";
+
+pub const STATE_SYNC_SIZE_BYTES_TOTAL_FETCH: &str = "state_sync_size_bytes_total{op=\"fetch\"}";
+pub const STATE_SYNC_SIZE_BYTES_TOTAL_HARDLINK_FILES: &str =
+    "state_sync_size_bytes_total{op=\"hardlink_files\"}";
+pub const STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS: &str =
+    "state_sync_size_bytes_total{op=\"copy_chunks\"}";
 
 const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
@@ -115,7 +122,7 @@ pub async fn rejoin_test_large_state(
         agent_node.get_public_url(),
         agent_node.effective_canister_id(),
     );
-    let canisters = install_statesync_test_canisters(env, &endpoint_runtime, num_canisters).await;
+    let canisters = install_statesync_test_canisters(&env, &endpoint_runtime, num_canisters).await;
 
     info!(
         logger,
@@ -204,13 +211,13 @@ pub async fn rejoin_test_large_state(
     assert_state_sync_has_happened(&logger, rejoin_node, base_count).await;
 }
 
-async fn assert_state_sync_has_happened(
+pub async fn assert_state_sync_has_happened(
     logger: &slog::Logger,
     rejoin_node: IcNodeSnapshot,
     base_count: u64,
-) {
-    const NUM_RETRIES: u32 = 200;
-    const BACKOFF_TIME_MILLIS: u64 = 500;
+) -> f64 {
+    const NUM_RETRIES: u32 = 300;
+    const BACKOFF_TIME_MILLIS: u64 = 1000;
 
     info!(
         logger,
@@ -221,15 +228,15 @@ async fn assert_state_sync_has_happened(
     // still reads a slightly older value from the metrics, even though the
     // state sync has already happened. This is a workaround to make the test
     // more robust.
-    for i in 0..NUM_RETRIES {
-        let res = fetch_metrics::<u64>(
+    for _i in 0..NUM_RETRIES {
+        let count = fetch_metrics::<u64>(
             logger,
             rejoin_node.clone(),
             vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT],
         )
         .await;
-        if res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0] > base_count {
-            let res = fetch_metrics::<f64>(
+        if count[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_COUNT][0] > base_count {
+            let time = fetch_metrics::<f64>(
                 logger,
                 rejoin_node.clone(),
                 vec![SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM],
@@ -238,13 +245,30 @@ async fn assert_state_sync_has_happened(
             info!(
                 logger,
                 "State sync finishes successfully in {} seconds",
-                res[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0],
+                time[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0],
             );
 
-            return;
-        }
+            let stats = fetch_metrics::<u64>(
+                logger,
+                rejoin_node.clone(),
+                vec![
+                    STATE_SYNC_SIZE_BYTES_TOTAL_FETCH,
+                    STATE_SYNC_SIZE_BYTES_TOTAL_HARDLINK_FILES,
+                    STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS,
+                ],
+            )
+            .await;
 
-        info!(logger, "No state sync detected yet, attempt {i}.");
+            info!(
+                logger,
+                "State sync size summary, fetch: {} bytes, hardlink files: {} bytes, copy chunks: {} bytes",
+                stats[STATE_SYNC_SIZE_BYTES_TOTAL_FETCH][0],
+                stats[STATE_SYNC_SIZE_BYTES_TOTAL_HARDLINK_FILES][0],
+                stats[STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS][0],
+            );
+
+            return time[SUCCESSFUL_STATE_SYNC_DURATION_SECONDS_SUM][0];
+        }
         tokio::time::sleep(Duration::from_millis(BACKOFF_TIME_MILLIS)).await;
     }
     panic!("Couldn't verify that a state sync has happened after {NUM_RETRIES} attempts.");
@@ -258,8 +282,8 @@ pub async fn fetch_metrics<T>(
 where
     T: Copy + Debug + FromStr,
 {
-    const NUM_RETRIES: u32 = 200;
-    const BACKOFF_TIME_MILLIS: u64 = 500;
+    const NUM_RETRIES: u32 = 500;
+    const BACKOFF_TIME_MILLIS: u64 = 1000;
 
     let metrics = MetricsFetcher::new(
         std::iter::once(node),
@@ -308,11 +332,11 @@ async fn store_and_read_stable(
     );
 }
 
-async fn install_statesync_test_canisters(
-    env: TestEnv,
-    endpoint_runtime: &Runtime,
+pub async fn install_statesync_test_canisters<'a>(
+    env: &'a TestEnv,
+    endpoint_runtime: &'a Runtime,
     num_canisters: usize,
-) -> Vec<Canister> {
+) -> Vec<Canister<'a>> {
     let logger = env.logger();
     let wasm = Wasm::from_file(get_dependency_path(
         env::var("STATESYNC_TEST_CANISTER_WASM_PATH")
@@ -332,7 +356,7 @@ async fn install_statesync_test_canisters(
                 .bytes(Vec::new())
                 .await
                 .unwrap_or_else(|_| {
-                    panic!("Installation of the canister_idx={} failed.", canister_idx)
+                    panic!("Installation of the canister_idx={canister_idx} failed.")
                 });
             info!(
                 new_logger,
@@ -346,7 +370,7 @@ async fn install_statesync_test_canisters(
     join_all(futures).await
 }
 
-async fn modify_canister_heap(
+pub async fn modify_canister_heap(
     logger: slog::Logger,
     canisters: Vec<Canister<'_>>,
     size_level: usize,
@@ -354,39 +378,47 @@ async fn modify_canister_heap(
     skip_odd_indexed_canister: bool,
     seed: usize,
 ) {
-    for x in 1..=size_level {
-        info!(
-            logger,
-            "Start modifying canisters {} times, it is now {}",
-            x,
-            Utc::now()
-        );
-        for (i, canister) in canisters.iter().enumerate() {
-            if skip_odd_indexed_canister && i % 2 == 1 {
-                continue;
-            }
-            let seed_for_canister = i + (x - 1) * num_canisters + seed;
-            let payload = (x as u32, seed_for_canister as u32);
-            // Each call will expand the memory by writing a chunk of 128 MiB.
-            // There are 8 chunks in the canister, so the memory will grow by 1 GiB after 8 calls.
-            let _res: Result<u64, String> = canister
-                .update_("expand_state", dfn_candid::candid, payload)
-                .await
-                .unwrap_or_else(|e| {
-                    panic!(
-                        "Calling expand_state() on canister {} failed: {}",
-                        canister.canister_id_vec8()[0],
-                        e
+    let expansions = canisters
+        .iter()
+        .enumerate()
+        .filter(|(idx, _)| !(skip_odd_indexed_canister && idx % 2 == 1))
+        .map(|(idx, canister)| {
+            let logger_clone = logger.clone();
+            async move {
+                for x in 1..=size_level {
+                    let seed_for_canister = idx + (x - 1) * num_canisters + seed;
+                    let payload = (x as u32, seed_for_canister as u32);
+
+                    let _res: Result<u64, String> = retry_async(
+                        "Trying to expand the canister state",
+                        &logger_clone,
+                        Duration::from_secs(500),
+                        Duration::from_secs(5),
+                        async || {
+                            canister
+                                .update_("expand_state", dfn_candid::candid, payload)
+                                .await
+                                .map_err(|err| anyhow::anyhow!("{}", err))
+                        },
                     )
-                });
-        }
-        info!(
-            logger,
-            "Expanded canisters {} times, it is now {}",
-            x,
-            Utc::now()
-        );
-    }
+                    .await
+                    .unwrap_or_else(|err| {
+                        panic!("Calling expand_state() on canister {canister:?} failed: {err}",)
+                    });
+
+                    info!(
+                        logger_clone,
+                        "Expanded canister {:?} {} times, it is now {}",
+                        canister,
+                        x,
+                        Utc::now()
+                    );
+                }
+            }
+        })
+        .collect::<Vec<_>>();
+
+    join_all(expansions).await;
 }
 
 // The function waits for the manifest reaching or surpassing the given height and returns the manifest height.
@@ -403,7 +435,7 @@ async fn wait_for_manifest(log: &slog::Logger, height: u64, node: IcNodeSnapshot
         }
         tokio::time::sleep(Duration::from_secs(BACKOFF_TIME_SECONDS)).await;
     }
-    panic!("Couldn't get a manifest at height {}.", height);
+    panic!("Couldn't get a manifest at height {height}.");
 }
 
 // The function waits for the CUP reaching or surpassing the given height and returns the CUP height.
@@ -425,5 +457,5 @@ async fn wait_for_cup(log: &slog::Logger, height: u64, node: IcNodeSnapshot) -> 
         }
         tokio::time::sleep(Duration::from_secs(BACKOFF_TIME_SECONDS)).await;
     }
-    panic!("Couldn't get a CUP at height {}.", height);
+    panic!("Couldn't get a CUP at height {height}.");
 }

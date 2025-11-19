@@ -1,13 +1,13 @@
 use crate::tla_value::{TlaValue, ToTla};
 use crate::{Diff, SourceLocation};
-use candid::CandidType;
+use candid::{CandidType, Deserialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
     fmt::{Display, Formatter},
 };
 
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType)]
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq, PartialOrd, Ord, CandidType, Deserialize)]
 pub struct VarAssignment(pub BTreeMap<String, TlaValue>);
 
 impl VarAssignment {
@@ -66,7 +66,7 @@ and
     }
 }
 
-#[derive(Clone, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Default, PartialEq, Eq, Hash, CandidType, Deserialize)]
 pub struct GlobalState(pub VarAssignment);
 
 impl GlobalState {
@@ -91,7 +91,7 @@ impl GlobalState {
     }
 
     pub fn get(&self, name: &str) -> Option<&TlaValue> {
-        self.0 .0.get(name)
+        self.0.0.get(name)
     }
 }
 
@@ -99,14 +99,14 @@ impl std::fmt::Debug for GlobalState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("GlobalState ")?;
         let mut debug_map = f.debug_map();
-        for (key, value) in &self.0 .0 {
+        for (key, value) in &self.0.0 {
             debug_map.entry(key, value);
         }
         debug_map.finish()
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, CandidType)]
 pub struct Label(String);
 
 impl Label {
@@ -176,7 +176,7 @@ pub struct StatePair {
 }
 
 /// A pair of states with local variable names resolved to functions from the process ID
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, CandidType, Deserialize)]
 pub struct ResolvedStatePair {
     pub start: GlobalState,
     pub end: GlobalState,

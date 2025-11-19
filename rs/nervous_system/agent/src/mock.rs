@@ -51,9 +51,7 @@ impl Drop for MockCallCanisters {
         let len = calls.len();
         assert!(
             calls.is_empty(),
-            "{} expected calls were left over (i.e. were never made):\n{:#?}",
-            len,
-            calls,
+            "{len} expected calls were left over (i.e. were never made):\n{calls:#?}",
         );
     }
 }
@@ -95,11 +93,6 @@ impl CallCanisters for MockCallCanisters {
         panic!("Not implemented");
         #[allow(unreachable_code)]
         std::future::ready(Err(MockCallCanistersError("UNREACHABLE".to_string())))
-    }
-
-    /// This could be implemented later, but for now, it's not needed.
-    fn is_canister_stopped_error(&self, _err: &Self::Error) -> bool {
-        unimplemented!();
     }
 }
 

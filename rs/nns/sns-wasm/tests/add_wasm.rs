@@ -2,15 +2,14 @@ use candid::Encode;
 use common::{install_sns_wasm, set_up_state_machine_with_nns};
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_test_utils::{
-    common::{build_mainnet_sns_wasms_wasm, build_sns_wasms_wasm, NnsInitPayloadsBuilder},
+    common::{NnsInitPayloadsBuilder, build_mainnet_sns_wasms_wasm, build_sns_wasms_wasm},
     sns_wasm::{
         self, add_wasm, add_wasm_via_proposal, build_root_sns_wasm, get_wasm, get_wasm_metadata,
     },
-    state_test_helpers,
 };
 use ic_sns_wasm::pb::v1::{
-    add_wasm_response, get_wasm_metadata_response, GetWasmMetadataResponse, GetWasmResponse,
-    MetadataSection, SnsWasmError,
+    GetWasmMetadataResponse, GetWasmResponse, MetadataSection, SnsWasmError, add_wasm_response,
+    get_wasm_metadata_response,
 };
 use ic_state_machine_tests::StateMachine;
 
@@ -47,7 +46,6 @@ fn test_add_wasm_cannot_be_called_directly() {
 
 #[test]
 fn test_add_wasm_can_be_called_directly_if_access_controls_are_disabled() {
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachine::new();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -118,7 +116,6 @@ fn test_sns_w_saves_metadata_on_upgrade() {
         (root_hash, root_wasm, expected_metadata)
     };
 
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let machine = StateMachine::new();
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -154,10 +151,7 @@ fn test_sns_w_saves_metadata_on_upgrade() {
             result: Some(Result::Ok(Ok { sections })),
         } = response
         else {
-            panic!(
-                "Unexpected response from SnsW.get_wasm_metadata: {:?}",
-                response
-            );
+            panic!("Unexpected response from SnsW.get_wasm_metadata: {response:?}");
         };
 
         assert_eq!(sections, expected_metadata);
@@ -178,10 +172,7 @@ fn test_sns_w_saves_metadata_on_upgrade() {
             result: Some(Result::Ok(Ok { sections })),
         } = response
         else {
-            panic!(
-                "Unexpected response from SnsW.get_wasm_metadata: {:?}",
-                response
-            );
+            panic!("Unexpected response from SnsW.get_wasm_metadata: {response:?}");
         };
         assert_eq!(sections, expected_metadata);
     }

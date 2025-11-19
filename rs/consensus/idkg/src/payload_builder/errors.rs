@@ -1,6 +1,6 @@
 use ic_crypto::MegaKeyFromRegistryError;
-use ic_interfaces_state_manager::StateManagerError;
 use ic_types::{
+    Height, RegistryVersion, SubnetId,
     consensus::idkg,
     crypto::canister_threshold_sig::{
         error::{
@@ -10,7 +10,7 @@ use ic_types::{
         idkg::InitialIDkgDealings,
     },
     registry::RegistryClientError,
-    Height, RegistryVersion, SubnetId,
+    state_manager::StateManagerError,
 };
 
 use super::InvalidChainCacheError;

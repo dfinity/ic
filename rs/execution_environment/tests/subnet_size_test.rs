@@ -1,7 +1,8 @@
 use candid::{Decode, Encode};
 use ic_config::{
-    embedders::Config as EmbeddersConfig, execution_environment::Config as HypervisorConfig,
-    subnet_config::CyclesAccountManagerConfig,
+    embedders::Config as EmbeddersConfig,
+    execution_environment::Config as HypervisorConfig,
+    subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_management_canister_types_private::{
     self as ic00, BoundedHttpHeaders, CanisterHttpRequestArgs, CanisterIdRecord,
@@ -11,20 +12,18 @@ use ic_management_canister_types_private::{
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
-use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
-use ic_test_utilities_execution_environment::{
-    filtered_subnet_config, ExecutionFeesFilter, KeepFeesFilter,
-};
+use ic_test_utilities::universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use ic_test_utilities_types::messages::SignedIngressBuilder;
 use ic_types::canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES;
 use ic_types::ingress::WasmResult;
-use ic_types::messages::{SignedIngressContent, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES};
+use ic_types::messages::{MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, SignedIngress};
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, NumBytes, NumInstructions, PrincipalId, SubnetId,
 };
 use more_asserts::assert_lt;
 use std::time::Duration;
 use std::{convert::TryFrom, str::FromStr};
+use wirm::wasmparser;
 
 const B: u64 = 1_000_000_000;
 
@@ -40,8 +39,8 @@ const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = 0;
 // instruction cost of executing inc method on the test canister
 fn inc_instruction_cost(config: HypervisorConfig) -> u64 {
     use ic_config::embedders::MeteringType;
-    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
     use ic_embedders::wasm_utils::instrumentation::WasmMemoryType;
+    use ic_embedders::wasm_utils::instrumentation::instruction_to_cost;
 
     let instruction_to_cost = match config.embedders_config.metering_type {
         MeteringType::New => instruction_to_cost,
@@ -270,9 +269,10 @@ fn simulate_one_gib_per_second_cost(
         .build();
     let canister_id = env.create_canister_with_cycles(
         None,
-        Cycles::new(u128::MAX),
+        DEFAULT_CYCLES_PER_NODE * subnet_size,
         Some(
             CanisterSettingsArgsBuilder::new()
+                .with_freezing_threshold(1)
                 .with_compute_allocation(compute_allocation.as_percent())
                 .with_memory_allocation(one_gib)
                 .build(),
@@ -295,6 +295,57 @@ fn simulate_one_gib_per_second_cost(
     Cycles::from(one_second_cost)
 }
 
+/// Specifies fees to keep in `CyclesAccountManagerConfig` for specific operations,
+/// eg. `ingress induction cost`, `execution cost` etc.
+enum KeepFeesFilter {
+    Execution,
+    IngressInduction,
+    XnetCall,
+}
+
+/// Helps to distinguish different costs that are withdrawn within the same execution round.
+/// All irrelevant fees in `CyclesAccountManagerConfig` are dropped to zero.
+/// This hack allows to calculate operation cost by comparing canister's balance before and after
+/// execution round.
+fn apply_filter(
+    initial_config: CyclesAccountManagerConfig,
+    filter: KeepFeesFilter,
+) -> CyclesAccountManagerConfig {
+    let mut filtered_config = CyclesAccountManagerConfig::system_subnet();
+    match filter {
+        KeepFeesFilter::Execution => {
+            filtered_config.update_message_execution_fee =
+                initial_config.update_message_execution_fee;
+            filtered_config.ten_update_instructions_execution_fee =
+                initial_config.ten_update_instructions_execution_fee;
+            filtered_config.ten_update_instructions_execution_fee_wasm64 =
+                initial_config.ten_update_instructions_execution_fee_wasm64;
+            filtered_config
+        }
+        KeepFeesFilter::IngressInduction => {
+            filtered_config.ingress_message_reception_fee =
+                initial_config.ingress_message_reception_fee;
+            filtered_config.ingress_byte_reception_fee = initial_config.ingress_byte_reception_fee;
+            filtered_config
+        }
+        KeepFeesFilter::XnetCall => {
+            filtered_config.xnet_call_fee = initial_config.xnet_call_fee;
+            filtered_config.xnet_byte_transmission_fee = initial_config.xnet_byte_transmission_fee;
+            filtered_config
+        }
+    }
+}
+
+/// Create a `SubnetConfig` with a redacted `CyclesAccountManagerConfig` to have only the fees
+/// for specific operation.
+fn filtered_subnet_config(subnet_type: SubnetType, filter: KeepFeesFilter) -> SubnetConfig {
+    let mut subnet_config = SubnetConfig::new(subnet_type);
+    subnet_config.cycles_account_manager_config =
+        apply_filter(subnet_config.cycles_account_manager_config, filter);
+
+    subnet_config
+}
+
 /// Simulates `execute_round` to get the cost of installing code,
 /// including charging and refunding execution cycles.
 /// Filtered `CyclesAccountManagerConfig` is used to avoid irrelevant costs,
@@ -304,10 +355,7 @@ fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usiz
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
         .with_config(Some(StateMachineConfig::new(
-            filtered_subnet_config(
-                subnet_type,
-                ExecutionFeesFilter::Keep(KeepFeesFilter::Execution),
-            ),
+            filtered_subnet_config(subnet_type, KeepFeesFilter::Execution),
             HypervisorConfig {
                 embedders_config: EmbeddersConfig {
                     cost_to_compile_wasm_instruction: NumInstructions::from(0),
@@ -338,7 +386,7 @@ fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usiz
 fn simulate_execute_ingress_cost(
     subnet_type: SubnetType,
     subnet_size: usize,
-    filter: ExecutionFeesFilter,
+    filter: KeepFeesFilter,
 ) -> Cycles {
     let env = StateMachineBuilder::new()
         .with_subnet_type(subnet_type)
@@ -362,19 +410,11 @@ fn simulate_execute_ingress_cost(
 }
 
 fn simulate_ingress_induction_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
-    simulate_execute_ingress_cost(
-        subnet_type,
-        subnet_size,
-        ExecutionFeesFilter::Keep(KeepFeesFilter::IngressInduction),
-    )
+    simulate_execute_ingress_cost(subnet_type, subnet_size, KeepFeesFilter::IngressInduction)
 }
 
 fn simulate_execute_message_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycles {
-    simulate_execute_ingress_cost(
-        subnet_type,
-        subnet_size,
-        ExecutionFeesFilter::Keep(KeepFeesFilter::Execution),
-    )
+    simulate_execute_ingress_cost(subnet_type, subnet_size, KeepFeesFilter::Execution)
 }
 
 /// Simulates `execute_round` to get the cost of executing a heartbeat,
@@ -493,6 +533,8 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
                         }),
                         context: vec![],
                     }),
+                    is_replicated: None,
+                    pricing_version: None,
                 })
                 .unwrap(),
             ),
@@ -529,10 +571,7 @@ fn simulate_xnet_call_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycle
         .with_subnet_type(subnet_type)
         .with_subnet_size(subnet_size)
         .with_config(Some(StateMachineConfig::new(
-            filtered_subnet_config(
-                subnet_type,
-                ExecutionFeesFilter::Keep(KeepFeesFilter::XnetCall),
-            ),
+            filtered_subnet_config(subnet_type, KeepFeesFilter::XnetCall),
             HypervisorConfig::default(),
         )))
         .build();
@@ -605,7 +644,7 @@ fn simulate_create_canister_cost(subnet_type: SubnetType, subnet_size: usize) ->
         .unwrap();
     let canister_b = match result {
         WasmResult::Reply(bytes) => Decode!(&bytes, CanisterIdRecord).unwrap().get_canister_id(),
-        WasmResult::Reject(err) => panic!("Expected CreateCanister to succeed but got {}", err),
+        WasmResult::Reject(err) => panic!("Expected CreateCanister to succeed but got {err}"),
     };
 
     canister_b_initial_balance - Cycles::new(env.cycle_balance(canister_b))
@@ -711,6 +750,8 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: CyclesAccountManagerConfig::system_subnet()
                 .default_reserved_balance_limit,
+            fetch_canister_logs_base_fee: Cycles::new(0),
+            fetch_canister_logs_per_byte_fee: Cycles::new(0),
         },
         SubnetType::Application | SubnetType::VerifiedApplication => CyclesAccountManagerConfig {
             reference_subnet_size: DEFAULT_REFERENCE_SUBNET_SIZE,
@@ -745,6 +786,8 @@ fn get_cycles_account_manager_config(subnet_type: SubnetType) -> CyclesAccountMa
             max_storage_reservation_period: Duration::from_secs(0),
             default_reserved_balance_limit: CyclesAccountManagerConfig::application_subnet()
                 .default_reserved_balance_limit,
+            fetch_canister_logs_base_fee: Cycles::new(1_000_000),
+            fetch_canister_logs_per_byte_fee: Cycles::new(800),
         },
     }
 }
@@ -881,14 +924,14 @@ fn ingress_induction_cost_from_bytes(
 
 fn calculate_induction_cost(
     config: &CyclesAccountManagerConfig,
-    ingress: &SignedIngressContent,
+    ingress: &SignedIngress,
     subnet_size: usize,
 ) -> Cycles {
-    let bytes_to_charge = ingress.arg().len()
-        + ingress.method_name().len()
-        + ingress.nonce().map(|n| n.len()).unwrap_or(0);
-
-    ingress_induction_cost_from_bytes(config, NumBytes::from(bytes_to_charge as u64), subnet_size)
+    ingress_induction_cost_from_bytes(
+        config,
+        NumBytes::from(ingress.binary().len() as u64),
+        subnet_size,
+    )
 }
 
 #[test]
@@ -1078,8 +1121,7 @@ fn test_subnet_size_ingress_induction_cost() {
         .method_name("inc")
         .nonce(3)
         .build();
-    let reference_cost =
-        calculate_induction_cost(&config, signed_ingress.content(), reference_subnet_size);
+    let reference_cost = calculate_induction_cost(&config, &signed_ingress, reference_subnet_size);
 
     // Check default cost.
     assert_eq!(
@@ -1134,8 +1176,7 @@ fn test_subnet_size_execute_message_cost() {
     assert_eq!(reference_instructions_cost, 2019);
     let simulated_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
     assert_eq!(
-        simulated_cost,
-        reference_cost,
+        simulated_cost, reference_cost,
         "subnet_size={reference_subnet_size}, simulated_cost={simulated_cost}, reference_cost={reference_cost}"
     );
 

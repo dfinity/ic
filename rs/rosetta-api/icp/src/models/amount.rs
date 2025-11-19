@@ -30,12 +30,12 @@ pub fn from_amount(amount: &Amount, token_name: &str) -> Result<i128, String> {
         } if currency == &cur => {
             let val: i128 = value
                 .parse()
-                .map_err(|e| format!("Parsing amount failed: {}", e))?;
+                .map_err(|e| format!("Parsing amount failed: {e}"))?;
             let _ =
                 u64::try_from(val.abs()).map_err(|_| "Amount does not fit in u64".to_string())?;
             Ok(val)
         }
-        wrong => Err(format!("This value is not {} {:?}", token_name, wrong)),
+        wrong => Err(format!("This value is not {token_name} {wrong:?}")),
     }
 }
 

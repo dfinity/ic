@@ -1,6 +1,6 @@
 use crate::governance::Governance;
 use ic_nervous_system_timer_task::{PeriodicSyncTask, TimerTaskMetricsRegistry};
-use ic_nervous_system_timers::{clear_timer, TimerId};
+use ic_nervous_system_timers::{TimerId, clear_timer};
 use std::cell::RefCell;
 use std::thread::LocalKey;
 use std::time::Duration;
@@ -57,7 +57,7 @@ impl PeriodicSyncTask for DistributeRewardsTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister_state::{governance_mut, set_governance_for_tests, GOVERNANCE};
+    use crate::canister_state::{GOVERNANCE, governance_mut, set_governance_for_tests};
     use crate::governance::Governance;
     use crate::reward::distribution::RewardsDistribution;
     use crate::test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger};
@@ -73,10 +73,9 @@ mod tests {
         thread_local! {
             static METRICS_REGISTRY: RefCell<TimerTaskMetricsRegistry> = RefCell::new(TimerTaskMetricsRegistry::default());
         }
-        let governance_proto = crate::pb::v1::Governance::default();
 
         let governance = Governance::new(
-            governance_proto,
+            Default::default(),
             Arc::new(MockEnvironment::new(Default::default(), 0)),
             Arc::new(StubIcpLedger {}),
             Arc::new(StubCMC {}),

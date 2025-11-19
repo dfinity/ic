@@ -1,13 +1,10 @@
 use crate::addressbook::AddressEntry;
-use bitcoin::p2p::message::NetworkMessage;
 use std::time::{Duration, SystemTime};
 use thiserror::Error;
 use tokio::{sync::mpsc::UnboundedSender, task::JoinHandle};
 
 /// This const represents how often a ping should be sent.
 const PING_INTERVAL: Duration = Duration::from_secs(120);
-/// This const represents how long the adapter should wait for a pong message.
-const PING_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// This enum is used to represent possible errors seen when utilizing
 /// the [Connection](crate::connection::Connection) struct.
@@ -25,7 +22,7 @@ pub enum ConnectionError {
 pub type ConnectionResult<T> = Result<T, ConnectionError>;
 
 /// This struct is used to initialize a [Connection](crate::connection::Connection).
-pub struct ConnectionConfig {
+pub struct ConnectionConfig<NetworkMessage> {
     /// This field contains the address of the connection.
     pub address_entry: AddressEntry,
     /// This field contains the handle to the task that is used for managing the
@@ -33,6 +30,8 @@ pub struct ConnectionConfig {
     pub handle: JoinHandle<()>,
     /// This field is used to send network messages to the related stream.
     pub writer: UnboundedSender<NetworkMessage>,
+    /// This field is used to specify ping timeout duration.
+    pub ping_timeout: Duration,
 }
 
 /// This enum represents the various states that the connection could be in.
@@ -79,7 +78,7 @@ pub enum PingState {
 
 /// This struct is used to manage a connection with a Bitcoin node.
 #[derive(Debug)]
-pub struct Connection {
+pub struct Connection<NetworkMessage> {
     /// This field is to store the BTC node address that is accessed by
     /// this connection.
     address_entry: AddressEntry,
@@ -92,16 +91,19 @@ pub struct Connection {
     writer: UnboundedSender<NetworkMessage>,
     /// This field is used to track the current ping status.
     ping_state: PingState,
+    /// Ping timeout
+    ping_timeout: Duration,
 }
 
-impl Connection {
+impl<NetworkMessage> Connection<NetworkMessage> {
     /// This function creates a new connection that will be used to manage a
     /// connection to the BTC network.
-    pub fn new(config: ConnectionConfig) -> Self {
+    pub fn new(config: ConnectionConfig<NetworkMessage>) -> Self {
         let ConnectionConfig {
             address_entry,
             handle,
             writer,
+            ping_timeout,
         } = config;
 
         let timestamp = SystemTime::now();
@@ -114,6 +116,7 @@ impl Connection {
             ping_state: PingState::Idle {
                 last_pong_at: timestamp,
             },
+            ping_timeout,
         }
     }
 
@@ -235,13 +238,16 @@ impl Connection {
                 ping_sent_at,
                 nonce: _,
             } => match ping_sent_at.elapsed() {
-                Ok(duration) => duration > PING_TIMEOUT,
+                Ok(duration) => duration > self.ping_timeout,
                 // Somehow the connection has a system time from the future.
                 // In this case, the ping should be marked as timed out.
                 Err(_) => true,
             },
             PingState::Idle { last_pong_at: _ } => false,
         };
+        if timed_out {
+            eprintln!("ping timed out after = {}s", self.ping_timeout.as_secs());
+        }
         timed_out && self.is_available()
     }
 }
@@ -253,14 +259,17 @@ mod test {
     use std::str::FromStr;
     use tokio::{
         runtime::Runtime,
-        sync::mpsc::{unbounded_channel, UnboundedReceiver},
+        sync::mpsc::{UnboundedReceiver, unbounded_channel},
     };
 
-    impl Connection {
+    type NetworkMessage =
+        bitcoin::p2p::message::NetworkMessage<bitcoin::block::Header, bitcoin::Block>;
+
+    impl Connection<NetworkMessage> {
         /// This function creates a new connection that will be used to manage a
         /// connection to the BTC network.
         pub fn new_with_state(
-            config: ConnectionConfig,
+            config: ConnectionConfig<NetworkMessage>,
             state: ConnectionState,
             last_pong_at: SystemTime,
         ) -> Self {
@@ -268,6 +277,7 @@ mod test {
                 address_entry,
                 handle,
                 writer,
+                ping_timeout,
             } = config;
 
             Self {
@@ -276,13 +286,17 @@ mod test {
                 state,
                 writer,
                 ping_state: PingState::Idle { last_pong_at },
+                ping_timeout,
             }
         }
     }
 
     fn make_connection_and_receiver(
         runtime: &Runtime,
-    ) -> (Connection, UnboundedReceiver<NetworkMessage>) {
+    ) -> (
+        Connection<NetworkMessage>,
+        UnboundedReceiver<NetworkMessage>,
+    ) {
         let addr = SocketAddr::from_str("127.0.0.1:8333").expect("invalid string");
         let address_entry = AddressEntry::Discovered(addr);
         let handle = runtime.spawn(async {});
@@ -293,6 +307,7 @@ mod test {
                 address_entry,
                 handle,
                 writer,
+                ping_timeout: crate::config::DEFAULT_REQUEST_TIMEOUT,
             }),
             reader,
         )

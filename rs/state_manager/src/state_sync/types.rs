@@ -82,7 +82,7 @@ pub mod proto;
 use ic_interfaces::p2p::state_sync::{Chunk, ChunkId};
 use ic_protobuf::{proxy::ProtoProxy, state::sync::v1 as pb};
 use ic_types::state_sync::StateSyncVersion;
-use ic_types::{malicious_flags::MaliciousFlags, CryptoHashOfState, Height};
+use ic_types::{CryptoHashOfState, Height, malicious_flags::MaliciousFlags};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -118,7 +118,7 @@ pub const FILE_GROUP_CHUNK_ID_OFFSET: u32 = 1 << 30;
 // It is within the whole chunk id range (1 << 32) and can avoid collision with normal file chunks and file group chunks.
 // First, the length of the chunk table is smaller than 1_073_741_824 from the analysis for `FILE_GROUP_CHUNK_ID_OFFSET`. Second, each file group chunk contains multiple files.
 // Therefore the number of file groups is smaller than the length of chunk table, and thus much smaller than 1_073_741_824.
-// From another perspective, the number of file group chunks is smaller than 1/128 of the number of canisters because currently it only includes `canister.pbuf` files smaller than 8 KiB.
+// From another perspective, the number of file group chunks is smaller than the number of canisters because currently it only includes `canister.pbuf` files smaller than `MAX_FILE_SIZE_TO_GROUP`.
 // Therefore, the space between `FILE_GROUP_CHUNK_ID_OFFSET` and `MANIFEST_CHUNK_ID_OFFSET` is adequate for file group chunks.
 pub const MANIFEST_CHUNK_ID_OFFSET: u32 = 1 << 31;
 
@@ -129,7 +129,7 @@ const _: () = assert!(MANIFEST_CHUNK_ID_OFFSET > FILE_GROUP_CHUNK_ID_OFFSET);
 /// Maximum supported StateSync version.
 ///
 /// The replica will panic if trying to deal with a manifest with a version higher than this.
-pub const MAX_SUPPORTED_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V3;
+pub const MAX_SUPPORTED_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V4;
 
 /// The type and associated index (if applicable) of a chunk in state sync.
 #[derive(Eq, PartialEq, Debug)]
@@ -366,7 +366,7 @@ pub fn encode_manifest(manifest: &Manifest) -> Vec<u8> {
 /// Deserializes the manifest from a byte array.
 pub fn decode_manifest(bytes: &[u8]) -> Result<Manifest, String> {
     pb::Manifest::proxy_decode(bytes)
-        .map_err(|err| format!("failed to convert Manifest proto into an object: {}", err))
+        .map_err(|err| format!("failed to convert Manifest proto into an object: {err}"))
 }
 
 pub fn encode_meta_manifest(meta_manifest: &MetaManifest) -> Vec<u8> {
@@ -374,24 +374,20 @@ pub fn encode_meta_manifest(meta_manifest: &MetaManifest) -> Vec<u8> {
 }
 
 pub fn decode_meta_manifest(bytes: Chunk) -> Result<MetaManifest, String> {
-    pb::MetaManifest::proxy_decode(bytes.as_bytes()).map_err(|err| {
-        format!(
-            "failed to convert MetaManifest proto into an object: {}",
-            err
-        )
-    })
+    pb::MetaManifest::proxy_decode(bytes.as_bytes())
+        .map_err(|err| format!("failed to convert MetaManifest proto into an object: {err}"))
 }
 
-type P2PChunkId = u32;
-type ManifestChunkTableIndex = u32;
+pub(crate) type P2PChunkId = u32;
+pub(crate) type ManifestChunkIndex = u32;
 
 /// A chunk id from the P2P level is mapped to a group of indices from the manifest chunk table.
 /// `FileGroupChunks` stores the mapping and can be used to assemble or split the file group chunk.
 #[derive(Clone, Eq, PartialEq, Debug, Default, Deserialize, Serialize)]
-pub struct FileGroupChunks(BTreeMap<P2PChunkId, Vec<ManifestChunkTableIndex>>);
+pub struct FileGroupChunks(BTreeMap<P2PChunkId, Vec<ManifestChunkIndex>>);
 
 impl FileGroupChunks {
-    pub fn new(value: BTreeMap<P2PChunkId, Vec<ManifestChunkTableIndex>>) -> Self {
+    pub fn new(value: BTreeMap<P2PChunkId, Vec<ManifestChunkIndex>>) -> Self {
         FileGroupChunks(value)
     }
 
@@ -399,17 +395,15 @@ impl FileGroupChunks {
         self.0.len()
     }
 
-    pub fn keys(&self) -> impl Iterator<Item = &ManifestChunkTableIndex> {
+    pub fn keys(&self) -> impl Iterator<Item = &P2PChunkId> {
         self.0.keys()
     }
 
-    pub fn iter(
-        &self,
-    ) -> impl Iterator<Item = (&ManifestChunkTableIndex, &Vec<ManifestChunkTableIndex>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&P2PChunkId, &Vec<ManifestChunkIndex>)> {
         self.0.iter()
     }
 
-    pub fn get(&self, chunk_id: &P2PChunkId) -> Option<&Vec<ManifestChunkTableIndex>> {
+    pub fn get(&self, chunk_id: &P2PChunkId) -> Option<&Vec<ManifestChunkIndex>> {
         self.0.get(chunk_id)
     }
 
@@ -505,7 +499,7 @@ impl StateSyncMessage {
                             encoded_manifest.len(),
                         );
                         let sub_manifest = encoded_manifest.get(start..end).unwrap_or_else(||
-                            panic!("We cannot get the {}th piece of the encoded manifest. The manifest and/or meta-manifest must be in abnormal state.", index)
+                            panic!("We cannot get the {index}th piece of the encoded manifest. The manifest and/or meta-manifest must be in abnormal state.")
                         );
                         payload = sub_manifest.to_vec();
                     } else {

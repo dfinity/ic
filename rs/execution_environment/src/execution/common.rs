@@ -2,7 +2,7 @@
 // TODO(RUN-60): Move helper functions here.
 
 use crate::execution_environment::ExecutionResponse;
-use crate::{as_round_instructions, metrics::CallTreeMetrics, ExecuteMessageResult, RoundLimits};
+use crate::{ExecuteMessageResult, RoundLimits, as_round_instructions, metrics::CallTreeMetrics};
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_embedders::{
     wasm_executor::{CanisterStateChanges, ExecutionStateChanges, SliceExecutionOutput},
@@ -14,7 +14,7 @@ use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_interfaces::execution_environment::{
     HypervisorError, HypervisorResult, SubnetAvailableMemory, WasmExecutionOutput,
 };
-use ic_logger::{error, fatal, info, warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, error, fatal, info, warn};
 use ic_management_canister_types_private::CanisterStatusType;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
@@ -53,7 +53,7 @@ pub(crate) fn validate_canister(canister: &CanisterState) -> Result<(), UserErro
             CanisterStatusType::Stopping => ErrorCode::CanisterStopping,
             CanisterStatusType::Stopped => ErrorCode::CanisterStopped,
         };
-        let err_msg = format!("Canister {} is not running", canister_id);
+        let err_msg = format!("Canister {canister_id} is not running");
         return Err(UserError::new(err_code, err_msg));
     }
     Ok(())
@@ -68,7 +68,7 @@ pub(crate) fn action_to_response(
     ingress_with_cycles_error: &IntCounter,
 ) -> ExecutionResponse {
     match call_origin {
-        CallOrigin::Ingress(user_id, message_id) => action_to_ingress_response(
+        CallOrigin::Ingress(user_id, message_id, _method_name) => action_to_ingress_response(
             &canister.canister_id(),
             user_id,
             action,
@@ -77,10 +77,10 @@ pub(crate) fn action_to_response(
             log,
             ingress_with_cycles_error,
         ),
-        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
+        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline, _method_name) => {
             action_to_request_response(canister, action, caller_canister_id, callback_id, deadline)
         }
-        CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => fatal!(
+        CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => fatal!(
             log,
             "The update path should not have created a callback with a query origin",
         ),
@@ -103,7 +103,7 @@ pub(crate) fn action_to_request_response(
 ) -> ExecutionResponse {
     let (response_payload, refund) = match action {
         CallContextAction::NotYetResponded | CallContextAction::AlreadyResponded => {
-            return ExecutionResponse::Empty
+            return ExecutionResponse::Empty;
         }
 
         CallContextAction::NoResponse { refund } => (
@@ -157,7 +157,7 @@ pub(crate) fn action_to_ingress_response(
                 time,
                 state: IngressState::Failed(UserError::new(
                     ErrorCode::CanisterDidNotReply,
-                    format!("Canister {} did not reply to the call", canister_id),
+                    format!("Canister {canister_id} did not reply to the call"),
                 )),
             })
         }
@@ -202,7 +202,9 @@ pub(crate) fn action_to_ingress_response(
         warn!(
             log,
             "[EXC-BUG] No funds can be included with an ingress message: user {}, canister_id {}, message_id {}.",
-            user_id, canister_id, message_id
+            user_id,
+            canister_id,
+            message_id
         );
     }
     match ingress_status {
@@ -241,10 +243,10 @@ pub(crate) fn wasm_result_to_query_response(
     refund: Cycles,
 ) -> ExecutionResponse {
     match call_origin {
-        CallOrigin::Ingress(user_id, message_id) => {
+        CallOrigin::Ingress(user_id, message_id, _method_name) => {
             wasm_result_to_ingress_response(result, canister, user_id, message_id, time)
         }
-        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline) => {
+        CallOrigin::CanisterUpdate(caller_canister_id, callback_id, deadline, _method_name) => {
             let response = Response {
                 originator: caller_canister_id,
                 respondent: canister.canister_id(),
@@ -255,7 +257,7 @@ pub(crate) fn wasm_result_to_query_response(
             };
             ExecutionResponse::Request(response)
         }
-        CallOrigin::CanisterQuery(_, _) | CallOrigin::Query(_) => {
+        CallOrigin::CanisterQuery(..) | CallOrigin::Query(..) => {
             fatal!(log, "The update path should not have a query origin",)
         }
         CallOrigin::SystemTask => {
@@ -419,6 +421,7 @@ fn try_apply_canister_state_changes(
     time: Time,
     network_topology: &NetworkTopology,
     subnet_id: SubnetId,
+    is_composite_query: bool,
     log: &ReplicaLogger,
 ) -> HypervisorResult<RequestMetadataStats> {
     subnet_available_memory
@@ -429,7 +432,14 @@ fn try_apply_canister_state_changes(
         )
         .map_err(|_| HypervisorError::OutOfMemory)?;
 
-    system_state_modifications.apply_changes(time, system_state, network_topology, subnet_id, log)
+    system_state_modifications.apply_changes(
+        time,
+        system_state,
+        network_topology,
+        subnet_id,
+        is_composite_query,
+        log,
+    )
 }
 
 /// Applies canister state change after Wasm execution if possible.
@@ -455,6 +465,7 @@ pub fn apply_canister_state_changes(
     state_changes_error: &IntCounter,
     call_tree_metrics: &dyn CallTreeMetrics,
     call_context_creation_time: Time,
+    is_composite_query: bool,
     deallocate: &dyn Fn(SystemState),
 ) {
     let CanisterStateChanges {
@@ -475,6 +486,7 @@ pub fn apply_canister_state_changes(
         time,
         network_topology,
         subnet_id,
+        is_composite_query,
         log,
     ) {
         Ok(request_stats) => {
@@ -562,7 +574,7 @@ pub(crate) fn finish_call_with_error(
                 // We could improve the rate limiting using some kind of exponential backoff.
                 let log_count = SYSTEM_TASK_ERROR_COUNT.fetch_add(1, Ordering::SeqCst);
                 if log_count < LOG_FIRST_N_SYSTEM_TASKS
-                    || log_count % LOG_ONE_SYSTEM_TASK_OUT_OF == 0
+                    || log_count.is_multiple_of(LOG_ONE_SYSTEM_TASK_OUT_OF)
                 {
                     warn!(
                         log,
@@ -610,10 +622,10 @@ mod test {
     use ic_logger::LoggerImpl;
     use ic_logger::ReplicaLogger;
     use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
-    use ic_types::messages::CallbackId;
-    use ic_types::messages::NO_DEADLINE;
     use ic_types::Cycles;
     use ic_types::Time;
+    use ic_types::messages::CallbackId;
+    use ic_types::messages::NO_DEADLINE;
 
     #[test]
     fn test_wasm_result_to_query_response_refunds_correctly() {
@@ -639,6 +651,7 @@ mod test {
                 CanisterId::from(123u64),
                 CallbackId::new(2),
                 NO_DEADLINE,
+                String::from(""),
             ),
             &log,
             Cycles::from(1000u128),

@@ -1,20 +1,22 @@
-use crate::PayloadCreationError;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces_registry::RegistryClient;
-use ic_logger::{warn, ReplicaLogger};
+use ic_logger::{ReplicaLogger, warn};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
-    consensus::{dkg::Summary, Block},
+    NodeId, RegistryVersion, SubnetId,
+    consensus::{
+        Block,
+        dkg::{DkgPayloadCreationError, DkgSummary},
+    },
     crypto::{
+        AlgorithmId,
         canister_threshold_sig::MasterPublicKey,
         threshold_sig::{
-            ni_dkg::{NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
             ThresholdSigPublicKey,
+            ni_dkg::{NiDkgDealing, NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag},
         },
-        AlgorithmId,
     },
-    NodeId, RegistryVersion, SubnetId,
 };
 use std::collections::{BTreeMap, HashSet};
 
@@ -23,11 +25,11 @@ use std::collections::{BTreeMap, HashSet};
 /// active on the subnet.
 #[allow(clippy::type_complexity)]
 pub fn get_vetkey_public_keys(
-    summary: &Summary,
+    summary: &DkgSummary,
     logger: &ReplicaLogger,
 ) -> (
     BTreeMap<MasterPublicKeyId, MasterPublicKey>,
-    BTreeMap<MasterPublicKeyId, NiDkgId>,
+    BTreeMap<NiDkgMasterPublicKeyId, NiDkgId>,
 ) {
     // Get all next transcripts
     // If there is a current transcript, but no next transcript, use that one instead.
@@ -72,7 +74,7 @@ pub fn get_vetkey_public_keys(
                         public_key: pubkey.into_bytes().to_vec(),
                     },
                 ),
-                (key_id.clone().into(), ni_dkg_id),
+                (key_id.clone(), ni_dkg_id),
             )
         })
         .unzip();
@@ -130,10 +132,10 @@ pub(crate) fn vetkd_key_ids_for_subnet(
     subnet_id: SubnetId,
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
-) -> Result<Vec<NiDkgMasterPublicKeyId>, PayloadCreationError> {
+) -> Result<Vec<NiDkgMasterPublicKeyId>, DkgPayloadCreationError> {
     let Some(chain_key_config) = registry_client
         .get_chain_key_config(subnet_id, registry_version)
-        .map_err(PayloadCreationError::FailedToGetVetKdKeyList)?
+        .map_err(DkgPayloadCreationError::FailedToGetVetKdKeyList)?
     else {
         return Ok(vec![]);
     };
@@ -172,7 +174,7 @@ mod tests {
     use ic_registry_subnet_features::{ChainKeyConfig, KeyConfig};
     use ic_test_utilities_registry::SubnetRecordBuilder;
     use ic_test_utilities_types::ids::subnet_test_id;
-    use ic_types::{crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId, RegistryVersion};
+    use ic_types::{RegistryVersion, crypto::threshold_sig::ni_dkg::NiDkgMasterPublicKeyId};
 
     /// Test that `get_enabled_vet_keys` correctly extracts the vet keys that are in the [`SubnetRecord`] of the
     /// subnet.
@@ -197,7 +199,7 @@ mod tests {
                             curve: VetKdCurve::Bls12_381_G2,
                             name: String::from("first_vet_kd_key"),
                         }),
-                        pre_signatures_to_create_in_advance: 50,
+                        pre_signatures_to_create_in_advance: 0,
                         max_queue_size: 50,
                     },
                     KeyConfig {
@@ -205,12 +207,13 @@ mod tests {
                             curve: VetKdCurve::Bls12_381_G2,
                             name: String::from("second_vet_kd_key"),
                         }),
-                        pre_signatures_to_create_in_advance: 50,
+                        pre_signatures_to_create_in_advance: 0,
                         max_queue_size: 50,
                     },
                 ],
                 signature_request_timeout_ns: None,
                 idkg_key_rotation_period_ms: None,
+                max_parallel_pre_signature_transcripts_in_creation: None,
             })
             .build();
 

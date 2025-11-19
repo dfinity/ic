@@ -1,6 +1,6 @@
 use crate::utils::{expect_error, setup};
 use candid::{CandidType, Encode};
-use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion};
+use criterion::{BatchSize, BenchmarkGroup, Criterion, criterion_group, criterion_main};
 use ic_base_types::PrincipalId;
 use ic_state_machine_tests::{ErrorCode, StateMachine, UserError, WasmResult};
 use ic_types::ingress::{IngressState, IngressStatus};

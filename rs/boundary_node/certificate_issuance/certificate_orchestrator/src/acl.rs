@@ -56,7 +56,7 @@ pub struct WithAuthorize<T, A>(pub T, pub A);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{acl::AuthorizeError, ROOT_PRINCIPALS};
+    use crate::{ROOT_PRINCIPALS, acl::AuthorizeError};
     use candid::Principal;
 
     #[test]

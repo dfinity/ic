@@ -1,13 +1,14 @@
+use ic_base_types::PrincipalId;
 use std::time::Duration;
 use thiserror::Error;
 
 use crate::nns::ledger::icrc1_transfer;
 use crate::sns::governance::{GovernanceCanister, ProposalSubmissionError, SubmittedProposal};
 use crate::sns::swap::SwapCanister;
-use crate::{CallCanisters, ProgressNetwork};
+use crate::{CallCanisters, CallCanistersWithStoppedCanisterError, ProgressNetwork};
 use candid::Nat;
 use ic_sns_governance_api::pb::v1::{
-    get_proposal_response, ListNeurons, NeuronId, Proposal, ProposalData, ProposalId,
+    ListNeurons, NeuronId, Proposal, ProposalData, ProposalId, get_proposal_response,
 };
 use ic_sns_swap::{
     pb::v1::{BuyerState, Lifecycle, RefreshBuyerTokensResponse},
@@ -16,7 +17,7 @@ use ic_sns_swap::{
 use icp_ledger::Tokens;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum SnsProposalError {
     #[error("Error submitting proposal: {0}")]
     ProposalSubmissionError(ProposalSubmissionError),
@@ -25,12 +26,12 @@ pub enum SnsProposalError {
     ProposalError(ProposalId, String),
 }
 
-pub async fn propose_and_wait<C: CallCanisters + ProgressNetwork>(
+pub async fn propose<C: CallCanisters + ProgressNetwork>(
     agent: &C,
     neuron_id: NeuronId,
     sns_governance_canister: GovernanceCanister,
     proposal: Proposal,
-) -> Result<ProposalData, SnsProposalError> {
+) -> Result<ProposalId, SnsProposalError> {
     let response = sns_governance_canister
         .submit_proposal(agent, neuron_id, proposal)
         .await
@@ -38,16 +39,30 @@ pub async fn propose_and_wait<C: CallCanisters + ProgressNetwork>(
     let SubmittedProposal { proposal_id } =
         SubmittedProposal::try_from(response).map_err(SnsProposalError::ProposalSubmissionError)?;
 
+    Ok(proposal_id)
+}
+
+pub async fn propose_and_wait<C: CallCanistersWithStoppedCanisterError + ProgressNetwork>(
+    agent: &C,
+    neuron_id: NeuronId,
+    sns_governance_canister: GovernanceCanister,
+    proposal: Proposal,
+) -> Result<ProposalData, SnsProposalError> {
+    let proposal_id = propose(agent, neuron_id, sns_governance_canister, proposal).await?;
+
     wait_for_proposal_execution(agent, sns_governance_canister, proposal_id).await
 }
 
-pub async fn wait_for_proposal_execution<C: CallCanisters + ProgressNetwork>(
+pub async fn wait_for_proposal_execution<
+    C: CallCanistersWithStoppedCanisterError + ProgressNetwork,
+>(
     agent: &C,
     sns_governance_canister: GovernanceCanister,
     proposal_id: ProposalId,
 ) -> Result<ProposalData, SnsProposalError> {
     // We create some blocks until the proposal has finished executing (`agent.progress(...)`).
     let mut last_proposal_data = None;
+
     for _attempt_count in 1..=50 {
         agent.progress(Duration::from_secs(1)).await;
         let proposal_result = sns_governance_canister
@@ -66,7 +81,7 @@ pub async fn wait_for_proposal_execution<C: CallCanisters + ProgressNetwork>(
                 } else {
                     return Err(SnsProposalError::ProposalError(
                         proposal_id,
-                        format!("Error getting proposal: {:#?}", user_error),
+                        format!("Error getting proposal: {user_error:#?}"),
                     ));
                 }
             }
@@ -80,7 +95,7 @@ pub async fn wait_for_proposal_execution<C: CallCanisters + ProgressNetwork>(
             get_proposal_response::Result::Error(err) => {
                 return Err(SnsProposalError::ProposalError(
                     proposal_id,
-                    format!("Proposal data cannot be found: {:?}", err),
+                    format!("Proposal data cannot be found: {err:?}"),
                 ));
             }
             get_proposal_response::Result::Proposal(proposal_data) => proposal_data,
@@ -98,27 +113,41 @@ pub async fn wait_for_proposal_execution<C: CallCanisters + ProgressNetwork>(
     Err(SnsProposalError::ProposalError(
         proposal_id,
         format!(
-            "Looks like the SNS proposal is never going to be decided: {:#?}",
-            last_proposal_data
+            "Looks like the SNS proposal is never going to be decided: {last_proposal_data:#?}"
         ),
     ))
+}
+
+pub async fn get_principal_neurons<C: CallCanisters>(
+    agent: &C,
+    governance_canister: GovernanceCanister,
+    principal: PrincipalId,
+) -> Result<Vec<NeuronId>, C::Error> {
+    let response = governance_canister
+        .list_neurons(
+            agent,
+            ListNeurons {
+                // should be enough for now, we may consider pagination later
+                limit: 100,
+                of_principal: Some(principal),
+                start_page_at: None,
+            },
+        )
+        .await?;
+    Ok(response
+        .neurons
+        .into_iter()
+        .map(|n| n.id.expect("NeuronId must be set."))
+        .collect())
 }
 
 pub async fn get_caller_neuron<C: CallCanisters>(
     agent: &C,
     governance_canister: GovernanceCanister,
-) -> Result<NeuronId, C::Error> {
-    governance_canister
-        .list_neurons(
-            agent,
-            ListNeurons {
-                limit: 1,
-                of_principal: Some(agent.caller().unwrap().into()),
-                start_page_at: None,
-            },
-        )
+) -> Result<Option<NeuronId>, C::Error> {
+    get_principal_neurons(agent, governance_canister, agent.caller().unwrap().into())
         .await
-        .map(|n| n.neurons[0].id.clone().expect("NeuronId must be set."))
+        .map(|v| v.first().cloned())
 }
 
 pub async fn await_swap_lifecycle<C: CallCanisters + ProgressNetwork>(
@@ -133,7 +162,7 @@ pub async fn await_swap_lifecycle<C: CallCanisters + ProgressNetwork>(
         agent.progress(Duration::from_secs(48 * 60 * 60)).await;
     }
     let mut last_lifecycle = None;
-    for _attempt_count in 1..=100 {
+    for _attempt_count in 1..=200 {
         agent.progress(Duration::from_secs(1)).await;
         let response = sns_swap_canister.get_lifecycle(agent).await.unwrap();
         let lifecycle = Lifecycle::try_from(response.lifecycle.unwrap()).unwrap();
@@ -143,8 +172,7 @@ pub async fn await_swap_lifecycle<C: CallCanisters + ProgressNetwork>(
         last_lifecycle = Some(lifecycle);
     }
     Err(format!(
-        "Looks like the SNS lifecycle {:?} is never going to be reached: {:?}",
-        expected_lifecycle, last_lifecycle,
+        "Looks like the SNS lifecycle {expected_lifecycle:?} is never going to be reached: {last_lifecycle:?}",
     ))
 }
 
@@ -152,6 +180,7 @@ pub async fn participate_in_swap<C: CallCanisters>(
     agent: &C,
     sns_swap_canister: SwapCanister,
     amount_icp_excluding_fees: Tokens,
+    confirmation_text: Option<String>,
 ) -> Result<(), String> {
     let direct_participant = agent.caller().unwrap().into();
     let direct_participant_swap_subaccount = Some(principal_to_subaccount(&direct_participant));
@@ -177,7 +206,7 @@ pub async fn participate_in_swap<C: CallCanisters>(
     .unwrap();
 
     let response = sns_swap_canister
-        .refresh_buyer_tokens(agent, direct_participant, None)
+        .refresh_buyer_tokens(agent, direct_participant, confirmation_text)
         .await
         .map_err(|err| err.to_string())?;
 

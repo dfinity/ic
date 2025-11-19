@@ -1,6 +1,6 @@
 use crate::invariants::common::{
-    assert_valid_urls_and_hash, get_all_hostos_version_records, get_node_records_from_snapshot,
-    get_value_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    InvariantCheckError, RegistrySnapshot, assert_valid_urls_and_hash,
+    get_all_hostos_version_records, get_node_records_from_snapshot, get_value_from_snapshot,
 };
 
 use ic_protobuf::registry::hostos_version::v1::HostosVersionRecord;
@@ -50,7 +50,7 @@ pub(crate) fn check_hostos_version_invariants(
 
 fn get_hostos_version_record(snapshot: &RegistrySnapshot, version: String) -> HostosVersionRecord {
     get_value_from_snapshot(snapshot, make_hostos_version_key(version.clone()))
-        .unwrap_or_else(|| panic!("Could not find HostOS version: {}", version))
+        .unwrap_or_else(|| panic!("Could not find HostOS version: {version}"))
 }
 
 /// Returns the list of HostOS versions where each version is referred to

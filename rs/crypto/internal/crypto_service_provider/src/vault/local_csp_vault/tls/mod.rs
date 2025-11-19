@@ -6,7 +6,7 @@ use crate::types::{CspSecretKey, CspSignature};
 use crate::vault::api::{CspTlsKeygenError, CspTlsSignError, TlsHandshakeCspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
-use ic_crypto_internal_tls::{generate_tls_key_pair_der, TlsKeyPairAndCertGenerationError};
+use ic_crypto_internal_tls::{TlsKeyPairAndCertGenerationError, generate_tls_key_pair_der};
 use ic_crypto_node_key_validation::ValidTlsCertificate;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
@@ -77,8 +77,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let x509_pk_cert = TlsPublicKeyCert::new_from_der(cert.bytes).map_err(|err| {
             CspTlsKeygenError::InternalError {
                 internal_error: format!(
-                    "generated X509 certificate has malformed DER encoding: {}",
-                    err
+                    "generated X509 certificate has malformed DER encoding: {err}"
                 ),
             }
         })?;
@@ -108,16 +107,14 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 SecretKeyStoreInsertionError::SerializationError(serialization_error) => {
                     CspTlsKeygenError::InternalError {
                         internal_error: format!(
-                            "Error persisting secret key store during CSP TLS key generation: {}",
-                            serialization_error
+                            "Error persisting secret key store during CSP TLS key generation: {serialization_error}"
                         ),
                     }
                 }
                 SecretKeyStoreInsertionError::TransientError(io_error) => {
                     CspTlsKeygenError::TransientInternalError {
                         internal_error: format!(
-                            "Error persisting secret key store during CSP TLS key generation: {}",
-                            io_error
+                            "Error persisting secret key store during CSP TLS key generation: {io_error}"
                         ),
                     }
                 }
@@ -132,8 +129,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         PublicKeySetOnceError::Io(io_error) => {
                             CspTlsKeygenError::TransientInternalError {
                                 internal_error: format!(
-                                    "IO error persisting TLS certificate: {}",
-                                    io_error
+                                    "IO error persisting TLS certificate: {io_error}"
                                 ),
                             }
                         }
@@ -152,20 +148,15 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
 
         match &secret_key {
             CspSecretKey::TlsEd25519(secret_key_der) => {
-                let secret_key_bytes =
-                    ic_crypto_internal_basic_sig_ed25519::secret_key_from_pkcs8_v1_der(
-                        &secret_key_der.bytes,
-                    )
+                let secret_key = ic_ed25519::PrivateKey::deserialize_pkcs8(secret_key_der.bytes.expose_secret())
                     .map_err(|e| {
                         CspTlsSignError::MalformedSecretKey {
                             error: format!("Failed to convert TLS secret key DER from key store to Ed25519 secret key: {e:?}")
                     }})?;
 
+                let signature = secret_key.sign_message(message);
                 let signature_bytes =
-                    ic_crypto_internal_basic_sig_ed25519::sign(message, &secret_key_bytes)
-                        .map_err(|e| CspTlsSignError::SigningFailed {
-                            error: format!("{}", e),
-                        })?;
+                    ic_crypto_internal_basic_sig_ed25519::types::SignatureBytes(signature);
 
                 Ok(CspSignature::Ed25519(signature_bytes))
             }
@@ -184,7 +175,7 @@ fn validate_tls_certificate(
 ) -> Result<ValidTlsCertificate, CspTlsKeygenError> {
     ValidTlsCertificate::try_from((cert_proto, node, current_time)).map_err(|error| {
         CspTlsKeygenError::InternalError {
-            internal_error: format!("TLS certificate validation error: {}", error),
+            internal_error: format!("TLS certificate validation error: {error}"),
         }
     })
 }

@@ -1,18 +1,21 @@
 use candid::{Decode, Encode, Principal};
 use cycles_minting_canister::DEFAULT_ICP_XDR_CONVERSION_RATE_TIMESTAMP_SECONDS;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ledger_core::{tokens::CheckedSub, Tokens};
+use ic_ledger_core::{Tokens, tokens::CheckedSub};
 use ic_nervous_system_common::{
-    ledger::compute_distribution_subaccount, ExplosiveTokens, DEFAULT_TRANSFER_FEE, E8,
-    ONE_DAY_SECONDS,
+    DEFAULT_TRANSFER_FEE, E8, ExplosiveTokens, ONE_DAY_SECONDS,
+    ledger::compute_distribution_subaccount,
 };
 use ic_nervous_system_proto::pb::v1::Percentage;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
-use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_constants::{
+    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID,
+    NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET,
+};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        self, icrc1_balance, query, setup_nns_canisters, sns_claim_staked_neuron, sns_get_proposal,
+        icrc1_balance, query, setup_nns_canisters, sns_claim_staked_neuron, sns_get_proposal,
         sns_make_proposal, sns_stake_neuron, sns_wait_for_proposal_executed_or_failed,
         sns_wait_for_proposal_execution,
     },
@@ -20,11 +23,10 @@ use ic_nns_test_utils::{
 use ic_sns_governance::{
     governance::TREASURY_SUBACCOUNT_NONCE,
     pb::v1::{
-        governance_error::ErrorType as SnsErrorType, proposal::Action,
-        transfer_sns_treasury_funds::TransferFrom, GovernanceError as SnsGovernanceError,
-        MintSnsTokens, Motion, NervousSystemParameters, NeuronId as SnsNeuronId,
-        NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-        TransferSnsTreasuryFunds, Vote,
+        GovernanceError as SnsGovernanceError, MintSnsTokens, Motion, NervousSystemParameters,
+        NeuronId as SnsNeuronId, NeuronPermissionList, NeuronPermissionType, Proposal,
+        ProposalData, TransferSnsTreasuryFunds, Vote, governance_error::ErrorType as SnsErrorType,
+        proposal::Action, transfer_sns_treasury_funds::TransferFrom,
     },
     types::E8S_PER_TOKEN,
 };
@@ -32,14 +34,14 @@ use ic_sns_swap::pb::v1::{Init as SwapInit, NeuronBasketConstructionParameters};
 use ic_sns_test_utils::{
     itest_helpers::SnsTestsInitPayloadBuilder,
     state_test_helpers::{
-        participate_in_swap, setup_sns_canisters, sns_cast_vote,
-        state_machine_builder_for_sns_tests, SnsTestCanisterIds,
+        SnsTestCanisterIds, participate_in_swap, setup_sns_canisters, sns_cast_vote,
+        state_machine_builder_for_sns_tests,
     },
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{
-    AccountIdentifier, BinaryAccountBalanceArgs, Subaccount as IcpSubaccount,
-    DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE,
+    AccountIdentifier, BinaryAccountBalanceArgs, DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE,
+    Subaccount as IcpSubaccount,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
@@ -120,7 +122,7 @@ fn new_treasury_scenario(
         .unwrap();
     state_machine.set_time(start_time);
 
-    let first_sns_canister_id = 11;
+    let first_sns_canister_id = NODE_REWARDS_CANISTER_INDEX_IN_NNS_SUBNET + 1;
     let governance = CanisterId::from(first_sns_canister_id + 1);
 
     let sns_treasury_account_nns = Account {
@@ -175,7 +177,7 @@ fn new_treasury_scenario(
         .build();
     sns_init_payload.swap = SwapInit {
         fallback_controller_principal_ids: vec![
-            PrincipalId::new_user_test_id(803_233_237).to_string()
+            PrincipalId::new_user_test_id(803_233_237).to_string(),
         ],
 
         // This is abnormal, but we do this, because this makes it easier to see that only
@@ -285,7 +287,6 @@ fn new_treasury_scenario(
 fn test_sns_treasury_can_transfer_funds_via_proposals() {
     // Step 1: Prepare the world.
 
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let state_machine = state_machine_builder_for_sns_tests().build();
 
     let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&state_machine);
@@ -459,8 +460,7 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
                 wait_for_quiet_deadline_increase_seconds: 5 * ONE_DAY_SECONDS / 2, // 2.5 days
                 ..Default::default()
             },
-            "{:#?}",
-            proposal,
+            "{proposal:#?}",
         );
 
         // Assert that the bar to pass other proposal types is lower.
@@ -509,8 +509,7 @@ fn test_sns_treasury_can_transfer_funds_via_proposals() {
                 wait_for_quiet_deadline_increase_seconds: ONE_DAY_SECONDS,
                 ..Default::default()
             },
-            "{:#?}",
-            proposal,
+            "{proposal:#?}",
         );
     }
 }
@@ -522,7 +521,6 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
     // order to provoke a giant treasury valuation, which then puts a lower cap on the number of
     // tokens that proposals can transfer from the treasury.
 
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let state_machine = state_machine_builder_for_sns_tests().build();
 
     let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&state_machine);
@@ -625,17 +623,14 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
             } = err;
 
             let error_type = SnsErrorType::try_from(*error_type).unwrap();
-            assert_eq!(error_type, SnsErrorType::InvalidProposal, "{:?}", err);
+            assert_eq!(error_type, SnsErrorType::InvalidProposal, "{err:?}");
 
             let error_message = error_message.to_lowercase();
-            assert!(error_message.contains("amount"), "{:?}", err);
-            assert!(error_message.contains("too large"), "{:?}", err);
+            assert!(error_message.contains("amount"), "{err:?}");
+            assert!(error_message.contains("too large"), "{err:?}");
         }
 
-        wrong => panic!(
-            "Proposal submission was NOT rejected (as it should have been): {:?}",
-            wrong
-        ),
+        wrong => panic!("Proposal submission was NOT rejected (as it should have been): {wrong:?}"),
     }
     match &take_sns_tokens_make_proposal_result {
         Err(err) => {
@@ -645,17 +640,14 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
             } = err;
 
             let error_type = SnsErrorType::try_from(*error_type).unwrap();
-            assert_eq!(error_type, SnsErrorType::InvalidProposal, "{:?}", err);
+            assert_eq!(error_type, SnsErrorType::InvalidProposal, "{err:?}");
 
             let error_message = error_message.to_lowercase();
-            assert!(error_message.contains("amount"), "{:?}", err);
-            assert!(error_message.contains("too large"), "{:?}", err);
+            assert!(error_message.contains("amount"), "{err:?}");
+            assert!(error_message.contains("too large"), "{err:?}");
         }
 
-        wrong => panic!(
-            "Proposal submission was NOT rejected (as it should have been): {:?}",
-            wrong
-        ),
+        wrong => panic!("Proposal submission was NOT rejected (as it should have been): {wrong:?}"),
     }
 
     // Step 3.2: Assert that balances are unchanged.
@@ -693,7 +685,6 @@ fn test_transfer_sns_treasury_funds_proposals_that_are_too_big_get_blocked_at_su
 fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
     // Step 1: Prepare the world.
 
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let state_machine = state_machine_builder_for_sns_tests().build();
 
     let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&state_machine);
@@ -764,7 +755,7 @@ fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
             *WHALE,
             whale_neuron_id.clone(),
             Proposal {
-                title: format!("{}: Give whale 20% of the ICP in the treasury", index),
+                title: format!("{index}: Give whale 20% of the ICP in the treasury"),
                 summary: "".to_string(),
                 url: "".to_string(),
                 action: Some(Action::TransferSnsTreasuryFunds(TransferSnsTreasuryFunds {
@@ -813,7 +804,7 @@ fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
     // Step 3.1: Inspect failure reason to make sure it didn't fail for some other reason.
     let proposal =
         sns_get_proposal(&state_machine, governance_canister_id, first_proposal_id).unwrap();
-    assert_ne!(proposal.failed_timestamp_seconds, 0, "{:#?}", proposal);
+    assert_ne!(proposal.failed_timestamp_seconds, 0, "{proposal:#?}");
 
     let failure_reason = proposal.failure_reason.unwrap();
     let SnsGovernanceError {
@@ -823,12 +814,11 @@ fn test_transfer_sns_treasury_funds_upper_bound_is_enforced_at_execution() {
     assert_eq!(
         SnsErrorType::try_from(*error_type),
         Ok(SnsErrorType::PreconditionFailed),
-        "{:#?}",
-        failure_reason,
+        "{failure_reason:#?}",
     );
     let error_message = error_message.to_lowercase();
     for keyword in ["7 day", "upper bound", "exceed", "try again"] {
-        assert!(error_message.contains(keyword), "{:#?}", failure_reason);
+        assert!(error_message.contains(keyword), "{failure_reason:#?}");
     }
 
     // Step 3.2: Assert that treasury is smaller by approximately 2_000 ICP, not 4_000 ICP as would
@@ -860,7 +850,6 @@ fn nns_ledger_balance(state_machine: &StateMachine, account: Account) -> Tokens 
 fn sns_can_mint_funds_via_proposals() {
     // Step 1: Prepare the world.
 
-    state_test_helpers::reduce_state_machine_logging_unless_env_set();
     let state_machine = state_machine_builder_for_sns_tests().build();
 
     let (whale_neuron_id, sns_test_canister_ids) = new_treasury_scenario(&state_machine);

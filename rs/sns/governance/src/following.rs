@@ -1,7 +1,7 @@
 use crate::pb::v1::{
+    Followee, NeuronId, Topic,
     manage_neuron::SetFollowing,
     neuron::{FolloweesForTopic, TopicFollowees},
-    Followee, NeuronId, Topic,
 };
 use itertools::{Either, Itertools};
 use lazy_static::lazy_static;
@@ -21,7 +21,10 @@ pub const MAX_FOLLOWEES_PER_TOPIC: usize = 15;
 lazy_static! {
     /// All topics that are available for following.
     // One enum value is reserved for the unspecified topic.
-    static ref TOPICS: Vec<Topic> = Topic::iter().skip(1).collect::<Vec<_>>();
+    pub(crate) static ref TOPICS: BTreeSet<Topic> = Topic::iter().skip(1).collect();
+
+    /// All non-critical topics.
+    pub(crate) static ref NON_CRITICAL_TOPICS: BTreeSet<Topic> = TOPICS.iter().copied().filter(Topic::is_non_critical).collect();
 
     /// Number of topics that are available for following.
     static ref NUM_TOPICS: usize = TOPICS.len();
@@ -172,11 +175,11 @@ fn fmt_followee_groups(followee_groups: &FolloweeGroups) -> String {
         .map(|(neuron_id, followees)| {
             let followees = followees
                 .iter()
-                .map(|followee| format!("{}", followee))
+                .map(|followee| format!("{followee}"))
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            format!("{}: {}", neuron_id, followees)
+            format!("{neuron_id}: {followees}")
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -239,11 +242,11 @@ fn fmt_alias_groups(followees: &FolloweeAliasGroups) -> String {
         .map(|(neuron_id, followees_for_this_neuron_id)| {
             let followees_for_this_neuron_id = followees_for_this_neuron_id
                 .iter()
-                .map(|followee| format!("{}", followee))
+                .map(|followee| format!("{followee}"))
                 .collect::<Vec<_>>()
                 .join(", ");
 
-            format!("{}: [{}]", neuron_id, followees_for_this_neuron_id)
+            format!("{neuron_id}: [{followees_for_this_neuron_id}]")
         })
         .collect::<Vec<_>>()
         .join(", ")
@@ -404,11 +407,7 @@ impl TryFrom<SetFollowing> for ValidatedSetFollowing {
             .into_iter()
             .filter_map(
                 |(topic, group)| {
-                    if group.count() > 1 {
-                        Some(topic)
-                    } else {
-                        None
-                    }
+                    if group.count() > 1 { Some(topic) } else { None }
                 },
             )
             .collect::<Vec<_>>();

@@ -1,7 +1,7 @@
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::types::CspSecretKey;
 use crate::vault::api::{VetKdCspVault, VetKdEncryptedKeyShareCreationVaultError};
-use crate::{key_id::KeyId, LocalCspVault};
+use crate::{LocalCspVault, key_id::KeyId};
 use assert_matches::assert_matches;
 use ic_crypto_internal_bls12_381_vetkd::{G1Affine, G2Affine, Scalar};
 use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
@@ -35,9 +35,9 @@ fn should_correctly_create_encrypted_vetkd_key_share_for_smoke_test_vector() {
                 f3e68e13f62604d027660883213c90ea72810bcecee58b883fb62118e538243\
                 03718e6876ea400d083beb0439d3934122a4c4b2e58e3f145305b9a0c0a00e3\
                 2dd808574dec2605dbc7f122fe593ca0c07ca92720d0f17b7d53c9c68dbb93d\
-                489078859e5e5fe2b6612ac9536fe7f8b463ca890e170836d25beee4806cc5a\
-                1e087be4fa2223d4b8e1e12ff0932ab3d5c71916f5a1fb0d72f44dadb79eb4c\
-                eff8670",
+                489078859e5e5fe2b6612ac9536fe7f8b463cb6f13724fcbb71581bf23818cf\
+                d85fbb9b3de6c98f73c62890578c5d1c98edec2a9c4cb63a1bd8d78babbaa15\
+                52267d8"
             )
             .expect("invalid test vector")
         ))
@@ -138,7 +138,7 @@ impl CreateVetKdKeyShareTestSetup {
             context: b"context-123".to_vec(),
         };
         let input = b"some-input".to_vec();
-        let rng = ChaCha20Rng::from_seed(rng.gen());
+        let rng = ChaCha20Rng::from_seed(rng.r#gen());
 
         Self {
             master_secret_key,

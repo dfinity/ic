@@ -89,7 +89,7 @@ pub struct HighCapacityRegistryValue {
     pub version: u64,
     /// The timestamp at which the registry mutation happened.
     #[prost(uint64, tag = "5")]
-    pub timestamp_seconds: u64,
+    pub timestamp_nanoseconds: u64,
     #[prost(oneof = "high_capacity_registry_value::Content", tags = "1, 3, 4")]
     pub content: ::core::option::Option<high_capacity_registry_value::Content>,
 }
@@ -136,55 +136,12 @@ pub struct HighCapacityRegistryGetChangesSinceResponse {
     #[prost(message, repeated, tag = "3")]
     pub deltas: ::prost::alloc::vec::Vec<HighCapacityRegistryDelta>,
 }
-/// A single change made to a key in the registry.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RegistryValue {
-    /// The value that was set in this mutation. If the
-    /// mutation is a deletion, the field has no meaning.
-    #[prost(bytes = "vec", tag = "1")]
-    pub value: ::prost::alloc::vec::Vec<u8>,
-    /// The version at which this mutation happened.
-    #[prost(uint64, tag = "2")]
-    pub version: u64,
-    /// If true, this change represents a deletion.
-    #[prost(bool, tag = "3")]
-    pub deletion_marker: bool,
-}
-/// A sequence of changes made to a key in the registry.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RegistryDelta {
-    #[prost(bytes = "vec", tag = "1")]
-    pub key: ::prost::alloc::vec::Vec<u8>,
-    #[prost(message, repeated, tag = "2")]
-    pub values: ::prost::alloc::vec::Vec<RegistryValue>,
-}
 /// Message to retrieve all the changes from the registry
 /// since 'version'.
 #[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct RegistryGetChangesSinceRequest {
     #[prost(uint64, tag = "1")]
     pub version: u64,
-}
-/// Deprecated; instead, use HighCapacityRegistryGetChangesSinceResponse. See the
-/// "Migrating to Large Values/High-Capacity Types" section in the file-level
-/// comments.
-///
-/// Message corresponding to the response from the registry
-/// canister to a get_latest_version() request.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RegistryGetChangesSinceResponse {
-    /// If anything went wrong, the registry canister
-    /// will set this error.
-    #[prost(message, optional, tag = "1")]
-    pub error: ::core::option::Option<RegistryError>,
-    /// The last version of the registry.
-    #[prost(uint64, tag = "2")]
-    pub version: u64,
-    /// A list of all the keys and all the values that change
-    /// and all the intermediate changes since the version
-    /// requested.
-    #[prost(message, repeated, tag = "3")]
-    pub deltas: ::prost::alloc::vec::Vec<RegistryDelta>,
 }
 /// Message to retrieve a version of some registry key
 /// from the registry canister.
@@ -218,7 +175,7 @@ pub struct HighCapacityRegistryGetValueResponse {
     pub version: u64,
     /// The timestamp at which the registry mutation happened.
     #[prost(uint64, tag = "5")]
-    pub timestamp_seconds: u64,
+    pub timestamp_nanoseconds: u64,
     #[prost(
         oneof = "high_capacity_registry_get_value_response::Content",
         tags = "3, 4"
@@ -237,31 +194,6 @@ pub mod high_capacity_registry_get_value_response {
         #[prost(message, tag = "4")]
         LargeValueChunkKeys(super::LargeValueChunkKeys),
     }
-}
-/// Deprecated; instead, use HighCapacityRegistryGetValueResponse. See the
-/// "Migrating to Large Values/High-Capacity Types" section in the file-level
-/// comments.
-///
-/// Message corresponding to the response from the canister
-/// to a get_value() request.
-///
-/// Both 'version' and 'value' are mandatorily set if 'error'
-/// is not set.
-#[derive(Clone, PartialEq, ::prost::Message)]
-pub struct RegistryGetValueResponse {
-    /// If anything went wrong, the registry canister
-    /// will set this error.
-    #[prost(message, optional, tag = "1")]
-    pub error: ::core::option::Option<RegistryError>,
-    /// the version at which the value corresponding to the queried
-    /// key was last mutated (inserted, updated, or deleted)
-    /// before at or at the version specified
-    /// in the RegistryGetValueRequest.
-    #[prost(uint64, tag = "2")]
-    pub version: u64,
-    /// The value retrieved from the registry.
-    #[prost(bytes = "vec", tag = "3")]
-    pub value: ::prost::alloc::vec::Vec<u8>,
 }
 /// Message corresponding to the response from the canister
 /// to a get_latest_version() request.
@@ -318,7 +250,7 @@ pub struct HighCapacityRegistryAtomicMutateRequest {
     pub preconditions: ::prost::alloc::vec::Vec<Precondition>,
     /// The timestamp at which the registry atomic mutate request happened.
     #[prost(uint64, tag = "6")]
-    pub timestamp_seconds: u64,
+    pub timestamp_nanoseconds: u64,
 }
 /// A single mutation in the registry.
 #[derive(candid::CandidType, candid::Deserialize, Eq, Clone, PartialEq, ::prost::Message)]

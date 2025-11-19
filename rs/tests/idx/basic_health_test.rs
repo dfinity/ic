@@ -30,8 +30,8 @@ Coverage::
 
 end::catalog[] */
 
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
 use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
@@ -93,7 +93,10 @@ pub fn test(env: TestEnv) {
         .try_for_each(|n| n.await_status_is_healthy())
         .unwrap();
 
-    info!(log, "Installing universal canisters on subnets (via all nodes), reading and storing messages ...");
+    info!(
+        log,
+        "Installing universal canisters on subnets (via all nodes), reading and storing messages ..."
+    );
     let ucan_ids: Vec<_> = nodes
         .iter()
         .map(|node| {

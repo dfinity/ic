@@ -14,7 +14,6 @@ rust_library(
     version = "0.1.0",
     deps = [
         # Keep sorted.
-        "//rs/crypto/internal/crypto_lib/bls12_381/vetkd",
         "//rs/crypto/internal/crypto_lib/threshold_sig/canister_threshold_sig",
         "//rs/types/types",
     ],

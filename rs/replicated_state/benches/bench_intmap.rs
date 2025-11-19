@@ -1,4 +1,4 @@
-use criterion::{black_box, BatchSize, BenchmarkId, Criterion};
+use criterion::{BatchSize, BenchmarkId, Criterion, black_box};
 use criterion_time::ProcessTime;
 
 use ic_replicated_state::page_map::int_map::{AsInt, IntMap, MutableIntMap};
@@ -21,7 +21,7 @@ impl AsInt for Key128 {
 
     #[inline]
     fn as_int(&self) -> u128 {
-        (self.0 as u128) << 64 | self.1 as u128
+        ((self.0 as u128) << 64) | self.1 as u128
     }
 }
 

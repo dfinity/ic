@@ -1,12 +1,13 @@
 use hex_literal::hex;
 use p256::elliptic_curve::{
-    group::{ff::PrimeField, GroupEncoding},
-    ops::{LinearCombination, Reduce},
+    Field, Group,
+    group::{GroupEncoding, ff::PrimeField},
+    ops::{Invert, LinearCombination, Reduce},
     scalar::IsHigh,
     sec1::FromEncodedPoint,
-    Field, Group,
 };
 use std::ops::{Mul, Neg};
+use std::sync::LazyLock;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -63,14 +64,9 @@ impl Scalar {
             return None;
         }
 
-        let fb = p256::FieldBytes::from_slice(bytes);
-        let s = p256::Scalar::from_repr(*fb);
-
-        if bool::from(s.is_some()) {
-            Some(Self::new(s.unwrap()))
-        } else {
-            None
-        }
+        p256::Scalar::from_repr(*p256::FieldBytes::from_slice(bytes))
+            .into_option()
+            .map(Self::new)
     }
 
     /// Compute the scalar from a larger value
@@ -144,12 +140,15 @@ impl Scalar {
     /// Returns None if no modular inverse exists (ie because the
     /// scalar is zero)
     pub fn invert(&self) -> Option<Self> {
-        let inv = self.s.invert();
-        if bool::from(inv.is_some()) {
-            Some(Self::new(inv.unwrap()))
-        } else {
-            None
-        }
+        self.s.invert().into_option().map(Self::new)
+    }
+
+    /// Perform modular inversion
+    ///
+    /// Returns None if no modular inverse exists (ie because the
+    /// scalar is zero)
+    pub fn invert_vartime(&self) -> Option<Self> {
+        self.s.invert_vartime().into_option().map(Self::new)
     }
 
     /// Check if the scalar is zero
@@ -186,23 +185,22 @@ pub struct Point {
 super::algos::declare_mul_by_g_impl!(Secp256r1MulByGenerator, Point, Scalar);
 super::algos::declare_mul2_table_impl!(Secp256r1Mul2Table, Point, Scalar);
 
-lazy_static::lazy_static! {
+/// Static deserialization of the fixed alternative group generator
+static SECP256R1_GENERATOR_H: LazyLock<Point> = LazyLock::new(|| {
+    Point::deserialize(&hex!(
+        "036774e87305efcb97c0ce289d57cd721972845ca33eccb8026c6d7c1c4182e7c1"
+    ))
+    .expect("The secp256r1 generator_h point is invalid")
+});
 
-    /// Static deserialization of the fixed alternative group generator
-    static ref SECP256R1_GENERATOR_H: Point = Point::deserialize(
-        &hex!("036774e87305efcb97c0ce289d57cd721972845ca33eccb8026c6d7c1c4182e7c1"))
-        .expect("The secp256r1 generator_h point is invalid");
+/// Precomputed multiples of the group generator for fast multiplication
+static SECP256R1_MUL_BY_GEN_TABLE: LazyLock<Secp256r1MulByGenerator> =
+    LazyLock::new(|| Secp256r1MulByGenerator::new(&Point::generator()));
 
-    /// Precomputed multiples of the group generator for fast multiplication
-    static ref SECP256R1_MUL_BY_GEN_TABLE: Secp256r1MulByGenerator =
-        Secp256r1MulByGenerator::new(&Point::generator());
-
-    /// Precomputed linear combinations of the g and h generators
-    /// for fast Pedersen commitment computation
-    static ref SECP256R1_MUL2_GX_HY_TABLE: Secp256r1Mul2Table =
-        Secp256r1Mul2Table::for_standard_generators();
-
-}
+/// Precomputed linear combinations of the g and h generators
+/// for fast Pedersen commitment computation
+static SECP256R1_MUL2_GX_HY_TABLE: LazyLock<Secp256r1Mul2Table> =
+    LazyLock::new(Secp256r1Mul2Table::for_standard_generators);
 
 impl Point {
     /// Internal constructor (private)
@@ -218,15 +216,9 @@ impl Point {
     /// None is returned
     pub fn deserialize(bytes: &[u8]) -> Option<Self> {
         match p256::EncodedPoint::from_bytes(bytes) {
-            Ok(ept) => {
-                let apt = p256::AffinePoint::from_encoded_point(&ept);
-
-                if bool::from(apt.is_some()) {
-                    Some(Self::new(p256::ProjectivePoint::from(apt.unwrap())))
-                } else {
-                    None
-                }
-            }
+            Ok(ept) => p256::AffinePoint::from_encoded_point(&ept)
+                .into_option()
+                .map(|p| Self::new(p256::ProjectivePoint::from(p))),
             Err(_) => None,
         }
     }
@@ -311,7 +303,7 @@ impl Point {
         }
     }
 
-    /// Returns tbl[index-1] if index > 0 or otherwise identity elemement
+    /// Returns tbl[index-1] if index > 0 or otherwise identity element
     ///
     /// Namely if index is equal to zero, or is out of range, identity is returned
     #[inline]

@@ -1,6 +1,6 @@
-use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, Throughput};
+use criterion::measurement::Measurement;
+use criterion::{BenchmarkGroup, Criterion, Throughput, criterion_group, criterion_main};
 
 use ic_crypto_test_utils_multi_sigs::MultiSigTestEnvironment;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -11,6 +11,8 @@ use std::collections::{BTreeMap, BTreeSet};
 criterion_main!(benches);
 criterion_group!(benches, bench_multi_sig,);
 
+const WARMUP_TIME: std::time::Duration = std::time::Duration::from_millis(300);
+
 fn bench_multi_sig(criterion: &mut Criterion) {
     let signer_counts = vec![1, 10, 50, 100];
 
@@ -20,8 +22,9 @@ fn bench_multi_sig(criterion: &mut Criterion) {
 }
 
 fn bench_multi_sig_n_signers(criterion: &mut Criterion, num_of_signers: usize) {
-    let group_name = format!("crypto_multi_sig_{}_signers", num_of_signers);
+    let group_name = format!("crypto_multi_sig_{num_of_signers}_signers");
     let group = &mut criterion.benchmark_group(group_name);
+    group.warm_up_time(WARMUP_TIME);
 
     let rng = &mut reproducible_rng();
 
@@ -51,9 +54,11 @@ fn bench_multi_sig_sign<M: Measurement, R: Rng + CryptoRng>(
                 (signer_crypto, signer_id, message)
             },
             |(signer_crypto, signer_id, message)| {
-                assert!(signer_crypto
-                    .sign_multi(&message, signer_id, env.registry_version)
-                    .is_ok());
+                assert!(
+                    signer_crypto
+                        .sign_multi(&message, signer_id, env.registry_version)
+                        .is_ok()
+                );
             },
             SmallInput,
         )
@@ -80,14 +85,16 @@ fn bench_multi_sig_verify_individual<M: Measurement, R: Rng + CryptoRng>(
                 (verifier_crypto, signature, message, signer_id)
             },
             |(verifier_crypto, signature, message, signer_id)| {
-                assert!(verifier_crypto
-                    .verify_multi_sig_individual(
-                        &signature,
-                        &message,
-                        signer_id,
-                        env.registry_version
-                    )
-                    .is_ok());
+                assert!(
+                    verifier_crypto
+                        .verify_multi_sig_individual(
+                            &signature,
+                            &message,
+                            signer_id,
+                            env.registry_version
+                        )
+                        .is_ok()
+                );
             },
             SmallInput,
         )
@@ -123,9 +130,11 @@ fn bench_multi_sig_combine<M: Measurement, R: Rng + CryptoRng>(
                 (combiner_crypto, signatures)
             },
             |(combiner_crypto, signatures)| {
-                assert!(combiner_crypto
-                    .combine_multi_sig_individuals(signatures, env.registry_version)
-                    .is_ok());
+                assert!(
+                    combiner_crypto
+                        .combine_multi_sig_individuals(signatures, env.registry_version)
+                        .is_ok()
+                );
             },
             SmallInput,
         )
@@ -170,14 +179,16 @@ fn bench_multi_sig_verify_combined<M: Measurement, R: Rng + CryptoRng>(
                 (verifier_crypto, combined_signature, message, signers)
             },
             |(verifier_crypto, combined_signature, message, signers)| {
-                assert!(verifier_crypto
-                    .verify_multi_sig_combined(
-                        &combined_signature,
-                        &message,
-                        signers,
-                        env.registry_version,
-                    )
-                    .is_ok());
+                assert!(
+                    verifier_crypto
+                        .verify_multi_sig_combined(
+                            &combined_signature,
+                            &message,
+                            signers,
+                            env.registry_version,
+                        )
+                        .is_ok()
+                );
             },
             SmallInput,
         )
@@ -185,7 +196,7 @@ fn bench_multi_sig_verify_combined<M: Measurement, R: Rng + CryptoRng>(
 }
 
 fn signable_with_random_32_bytes<R: Rng + CryptoRng>(rng: &mut R) -> SignableMock {
-    SignableMock::new((0..32).map(|_| rng.gen::<u8>()).collect())
+    SignableMock::new((0..32).map(|_| rng.r#gen::<u8>()).collect())
 }
 
 fn as_u64(usize: usize) -> u64 {

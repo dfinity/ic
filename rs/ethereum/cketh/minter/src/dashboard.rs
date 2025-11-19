@@ -3,7 +3,6 @@ mod tests;
 
 use askama::Template;
 use candid::{Nat, Principal};
-use ic_canisters_http_types::HttpRequest;
 use ic_cketh_minter::endpoints::{EthTransaction, RetrieveEthStatus};
 use ic_cketh_minter::erc20::CkTokenSymbol;
 use ic_cketh_minter::eth_logs::{EventSource, ReceivedEvent};
@@ -20,6 +19,7 @@ use ic_cketh_minter::state::transactions::{
 use ic_cketh_minter::state::{EthBalance, InvalidEventReason, MintedEvent, State};
 use ic_cketh_minter::tx::Eip1559TransactionRequest;
 use ic_ethereum_types::Address;
+use ic_http_types::HttpRequest;
 use icrc_ledger_types::icrc1::account::Account;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet};
@@ -164,7 +164,7 @@ impl DashboardPaginationParameters {
         fn parse_query_param(req: &HttpRequest, param_name: &str) -> Result<usize, String> {
             Ok(match req.raw_query_param(param_name) {
                 Some(arg) => usize::from_str(arg)
-                    .map_err(|_| format!("failed to parse the '{}' parameter", param_name))?,
+                    .map_err(|_| format!("failed to parse the '{param_name}' parameter"))?,
                 None => 0,
             })
         }

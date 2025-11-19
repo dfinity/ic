@@ -3,15 +3,15 @@ use crate::{
     execution_environment::{CanisterOutOfCyclesError, IngressHistoryError},
     validation::{ValidationError, ValidationResult},
 };
-use ic_interfaces_state_manager::StateManagerError;
 use ic_types::{
+    CanisterId, Height, NumBytes,
     artifact::IngressMessageId,
     batch::{IngressPayload, ValidationContext},
     consensus::Payload,
     ingress::IngressSets,
     messages::MessageId,
+    state_manager::StateManagerError,
     time::{Time, UNIX_EPOCH},
-    CanisterId, Height, NumBytes,
 };
 use std::collections::HashSet;
 

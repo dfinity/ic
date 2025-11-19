@@ -1,5 +1,8 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag", "string_flag")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
+load("@rules_python//python:defs.bzl", "py_test")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("@rules_shell//shell:sh_test.bzl", "sh_test")
 load("//bazel:defs.bzl", "write_info_file_var")
 
 bool_flag(
@@ -40,6 +43,20 @@ config_setting(
     },
 )
 
+# Allow targets to opt out of hermetic toolchains, in favor of the one provided
+# by the system
+bool_flag(
+    name = "hermetic_cc",
+    build_setting_default = True,
+)
+
+config_setting(
+    name = "use_hermetic_cc",
+    flag_values = {
+        ":hermetic_cc": "True",
+    },
+)
+
 string_flag(
     name = "timeout_value",
     build_setting_default = "10m",
@@ -49,6 +66,12 @@ string_flag(
 write_info_file_var(
     name = "version.txt",
     varname = "STABLE_VERSION",
+    visibility = ["//visibility:public"],
+)
+
+write_info_file_var(
+    name = "commit_date_iso_8601.txt",
+    varname = "STABLE_COMMIT_DATE_ISO_8601",
     visibility = ["//visibility:public"],
 )
 

@@ -1,10 +1,13 @@
+#![allow(deprecated)]
 use crate::PROXIED_CANISTER_CALLS_TRACKER;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::{
-    api::call::{call_with_payment, RejectionCode},
+    api::call::{RejectionCode, call_with_payment},
     call, caller, print,
 };
-use ic_management_canister_types_private::{CanisterInstallMode::Install, InstallCodeArgs};
+use ic_management_canister_types_private::{
+    CanisterInstallMode::Install, CanisterSettingsArgsBuilder, CreateCanisterArgs, InstallCodeArgs,
+};
 use ic_nervous_system_clients::{
     canister_id_record::CanisterIdRecord,
     management_canister_client::ManagementCanisterClient,
@@ -12,12 +15,12 @@ use ic_nervous_system_clients::{
 };
 use ic_nervous_system_proxied_canister_calls_tracker::ProxiedCanisterCallsTracker;
 use ic_nervous_system_root::change_canister::{
-    start_canister, stop_canister, AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest,
+    AddCanisterRequest, CanisterAction, StopOrStartCanisterRequest, start_canister, stop_canister,
 };
 use ic_nervous_system_runtime::{CdkRuntime, Runtime};
 use ic_nns_common::{
     registry::{get_value, mutate_registry},
-    types::CallCanisterProposal,
+    types::CallCanisterRequest,
 };
 use ic_nns_handler_root_interface::{
     ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
@@ -28,7 +31,7 @@ use ic_protobuf::{
     types::v1 as pb,
 };
 use ic_registry_keys::make_nns_canister_records_key;
-use ic_registry_transport::pb::v1::{registry_mutation::Type, Precondition, RegistryMutation};
+use ic_registry_transport::pb::v1::{Precondition, RegistryMutation, registry_mutation::Type};
 use prost::Message;
 
 pub async fn do_add_nns_canister(request: AddCanisterRequest) {
@@ -117,10 +120,28 @@ pub async fn do_add_nns_canister(request: AddCanisterRequest) {
 async fn try_to_create_and_install_canister(
     request: AddCanisterRequest,
 ) -> Result<CanisterId, String> {
+    let compute_allocation = request
+        .compute_allocation
+        .map(|ca| ca.0.try_into())
+        .transpose()
+        .map_err(|_| "Provided compute allocation is too large")?;
+    let memory_allocation = request
+        .memory_allocation
+        .map(|ma| ma.0.try_into())
+        .transpose()
+        .map_err(|_| "Provided memory allocation is too large")?;
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_maybe_compute_allocation(compute_allocation)
+        .with_maybe_memory_allocation(memory_allocation)
+        .build();
+    let create_args = CreateCanisterArgs {
+        settings: Some(settings),
+        sender_canister_version: Some(ic_cdk::api::canister_version()),
+    };
     let (id,): (CanisterIdRecord,) = call_with_payment(
         CanisterId::ic_00().get().0,
         "create_canister",
-        (),
+        (create_args,),
         request.initial_cycles,
     )
     .await
@@ -131,8 +152,6 @@ async fn try_to_create_and_install_canister(
         canister_id: id.get_canister_id().get(),
         wasm_module: request.wasm_module,
         arg: request.arg,
-        compute_allocation: request.compute_allocation,
-        memory_allocation: request.memory_allocation,
         sender_canister_version: Some(ic_cdk::api::canister_version()),
     };
     let install_res: Result<(), (RejectionCode, String)> =
@@ -153,13 +172,13 @@ pub async fn stop_or_start_nns_canister(
     }
 }
 
-pub async fn call_canister(proposal: CallCanisterProposal) {
+pub async fn call_canister(proposal: CallCanisterRequest) {
     print(format!(
         "Calling {}::{}...",
         proposal.canister_id, proposal.method_name,
     ));
 
-    let CallCanisterProposal {
+    let CallCanisterRequest {
         canister_id,
         method_name,
         payload,
@@ -175,7 +194,7 @@ pub async fn call_canister(proposal: CallCanisterProposal) {
 
     let res = CdkRuntime::call_bytes_with_cleanup(*canister_id, method_name, payload)
         .await
-        .map_err(|(code, msg)| format!("Error: {}:{}", code, msg));
+        .map_err(|(code, msg)| format!("Error: {code}:{msg}"));
 
     print(format!(
         "Call {}::{} returned {:?}",

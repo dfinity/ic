@@ -2,7 +2,7 @@ use dfn_core::println;
 use ic_base_types::CanisterId;
 use std::time::Duration;
 
-#[export_name = "canister_init"]
+#[unsafe(export_name = "canister_init")]
 fn canister_init() {
     println!("Unstoppable Canister Init!");
     ic_cdk_timers::set_timer(Duration::from_millis(10), || {

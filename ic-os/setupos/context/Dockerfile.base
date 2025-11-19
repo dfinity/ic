@@ -7,7 +7,7 @@
 # - `docker push/pull dfinity/setupos-base-dev:<tag>`
 #
 # First build stage:
-# - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
+# - Download and cache minimal Ubuntu Server 24.04 LTS Docker image
 # - Install and cache upstream packages from built-in Ubuntu repositories
 #
 # NOTE! If you edit this file, you will need to perform the following

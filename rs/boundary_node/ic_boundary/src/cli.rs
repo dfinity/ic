@@ -6,8 +6,7 @@ use ic_bn_lib::{
         self,
         shed::cli::{ShedSharded, ShedSystem},
     },
-    parse_size,
-    types::RequestType,
+    parse_size, parse_size_usize,
 };
 use ic_config::crypto::CryptoConfig;
 use ic_types::CanisterId;
@@ -15,7 +14,10 @@ use std::time::Duration;
 use std::{net::SocketAddr, path::PathBuf};
 use url::Url;
 
-use crate::core::{AUTHOR_NAME, SERVICE_NAME};
+use crate::{
+    core::{AUTHOR_NAME, SERVICE_NAME},
+    http::RequestType,
+};
 
 #[derive(Parser)]
 #[clap(name = SERVICE_NAME)]
@@ -33,7 +35,6 @@ pub struct Cli {
     #[command(flatten, next_help_heading = "HTTP Client")]
     pub http_client: http::client::cli::HttpClient,
 
-    #[cfg(feature = "tls")]
     #[command(flatten, next_help_heading = "TLS settings")]
     pub tls: Tls,
 
@@ -122,7 +123,6 @@ pub struct Listen {
     pub listen_http_port: Option<u16>,
 
     /// Port to listen for HTTPS (listens on IPv6 wildcard "::")
-    #[cfg(feature = "tls")]
     #[clap(env, long)]
     pub listen_https_port: Option<u16>,
 
@@ -188,7 +188,6 @@ pub struct NfTables {
     pub nftables_system_replicas_var: String,
 }
 
-#[cfg(feature = "tls")]
 #[derive(Args)]
 pub struct Tls {
     /// Hostname to request TLS certificate for
@@ -241,6 +240,30 @@ pub struct Observability {
     /// Enables logging to Journald
     #[clap(env, long)]
     pub obs_log_journald: bool,
+
+    /// Enables Websocket endpoint to subscribe to logs
+    #[clap(env, long)]
+    pub obs_log_websocket: bool,
+
+    /// Websocket broker buffer size (per-topic)
+    #[clap(env, long, default_value = "1000")]
+    pub obs_log_websocket_buffer: usize,
+
+    /// Websocket broker topic idle timeout, after which the topic is removed.
+    #[clap(env, long, default_value = "10m", value_parser = parse_duration)]
+    pub obs_log_websocket_idle_timeout: Duration,
+
+    /// Websocket broker max topics
+    #[clap(env, long, default_value = "100000")]
+    pub obs_log_websocket_max_topics: u64,
+
+    /// Websocket broker max subscribers (per-Topic total)
+    #[clap(env, long, default_value = "1000")]
+    pub obs_log_websocket_max_subscribers_per_topic: usize,
+
+    /// Websocket max subscribers (per-Topic per-IP), 2^16 max
+    #[clap(env, long, default_value = "5")]
+    pub obs_log_websocket_max_subscribers_per_topic_per_ip: u16,
 
     /// Enables logging to /dev/null (to benchmark logging)
     #[clap(env, long)]
@@ -316,8 +339,8 @@ pub struct Cache {
     pub cache_size: Option<u64>,
 
     /// Maximum size of a single cached response item in bytes
-    #[clap(env, long, default_value = "10MB", value_parser = parse_size)]
-    pub cache_max_item_size: u64,
+    #[clap(env, long, default_value = "10MB", value_parser = parse_size_usize)]
+    pub cache_max_item_size: usize,
 
     /// Time-to-live for cache entries
     #[clap(env, long, default_value = "1s", value_parser = parse_duration)]

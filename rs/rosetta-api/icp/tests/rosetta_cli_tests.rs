@@ -49,7 +49,8 @@ async fn rosetta_cli_data_test() {
     let serv_req_handler = req_handler.clone();
 
     let serv = Arc::new(
-        RosettaApiServer::new(serv_ledger, serv_req_handler, addr.clone(), None, false).unwrap(),
+        RosettaApiServer::new(serv_ledger, serv_req_handler, addr.clone(), None, false, 60)
+            .unwrap(),
     );
     let serv_run = serv.clone();
     let arbiter = actix_rt::Arbiter::new();
@@ -112,7 +113,8 @@ async fn rosetta_cli_construction_create_account_test() {
     let serv_req_handler = req_handler.clone();
 
     let serv = Arc::new(
-        RosettaApiServer::new(serv_ledger, serv_req_handler, addr.clone(), None, false).unwrap(),
+        RosettaApiServer::new(serv_ledger, serv_req_handler, addr.clone(), None, false, 60)
+            .unwrap(),
     );
     let serv_run = serv.clone();
     let arbiter = actix_rt::Arbiter::new();
@@ -194,7 +196,8 @@ async fn rosetta_cli_construction_test() {
     let serv_req_handler = req_handler.clone();
 
     let serv = Arc::new(
-        RosettaApiServer::new(serv_ledger, serv_req_handler, addr.clone(), None, false).unwrap(),
+        RosettaApiServer::new(serv_ledger, serv_req_handler, addr.clone(), None, false, 60)
+            .unwrap(),
     );
     let serv_run = serv.clone();
     let arbiter = actix_rt::Arbiter::new();

@@ -7,10 +7,10 @@ rust_library(
     testonly = True,
     srcs = glob(["**/*.rs"]),
     crate_name = "os_qualification_utils",
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     deps = [
         # Keep sorted
         "//rs/canister_client",
+        "//rs/http_utils",
         "//rs/nervous_system/common/test_keys",
         "//rs/nns/common",
         "//rs/nns/constants",
@@ -29,6 +29,7 @@ rust_library(
         "@crate_index//:reqwest",
         "@crate_index//:serde",
         "@crate_index//:slog",
+        "@crate_index//:tempfile",
         "@crate_index//:tokio",
         "@crate_index//:url",
         "@crate_index//:wat",

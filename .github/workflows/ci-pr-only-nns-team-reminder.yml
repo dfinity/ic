@@ -4,7 +4,12 @@ on:
   pull_request:
     types:
       - review_requested
-      
+
+# This helps avoid duplicate reviews from this bot.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   pull-requests: write
 
@@ -14,11 +19,11 @@ jobs:
     steps:
       - uses: actions/github-script@v6
         id: mainStep
-        # If the PR requires nns-team to approve, GitHub will force nns-team to
+        # If the PR requires governance-team to approve, GitHub will force governance-team to
         # be in requested_teams. Therefore, the following condition is always
-        # met when nns-team must approve. (Further filtering takes place in the
+        # met when governance-team must approve. (Further filtering takes place in the
         # script itself.)
-        if: contains(github.event.pull_request.requested_teams.*.name, 'nns-team')
+        if: contains(github.event.pull_request.requested_teams.*.name, 'governance-team')
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           retries: 3
@@ -31,14 +36,14 @@ jobs:
               repo: "ic",
               pull_number: pullRequestNumber,
             });
-            const alreadyRemindedAboutUnreleasedChangelog = reviews
+            const alreadyRemindedGovernanceChecklist = reviews
               .data
               .some(review => review
                 .body
-                .startsWith("If this pull request affects the behavior of any canister owned by")
+                .includes("GOVERNANCE_CHECKLIST_REMINDER_DEDUP")
               );
-            console.log("alreadyRemindedAboutUnreleasedChangelog = " + alreadyRemindedAboutUnreleasedChangelog);
-            if (alreadyRemindedAboutUnreleasedChangelog) {
+            console.log("alreadyRemindedGovernanceChecklist = " + alreadyRemindedGovernanceChecklist);
+            if (alreadyRemindedGovernanceChecklist) {
               return;
             }
 
@@ -46,17 +51,61 @@ jobs:
             // TODO: Figure out how to post in such a way that there is a "Resolve" button nearby.
             console.log("Adding reminder to update unreleased_changelog.md...");
             const reminderText = `
-              If this pull request affects the behavior of any canister owned by
-              the Governance team, remember to update the corresponding
-              unreleased_changes.md file(s).
 
-              To acknowldge this reminder (and unblock the PR), dismiss this
-              code review by going to the bottom of the pull request page, and
-              supply one of the following reasons:
+              This pull request changes code owned by the Governance team. Therefore, make sure that
+              you have considered the following (for Governance-owned code):
 
-              1. Done.
+              1. Update \`unreleased_changelog.md\` (if there are behavior changes, even if they are
+                 non-breaking).
 
-              2. No canister behavior changes.
+              2. Are there BREAKING changes?
+
+              3. Is a data migration needed?
+
+              4. Security review?
+
+
+              # How to Satisfy This Automatic Review
+
+              1. Go to the bottom of the pull request page.
+
+              2. Look for where it says this bot is requesting changes.
+
+              3. Click the three dots to the right.
+
+              4. Select "Dismiss review".
+
+              5. In the text entry box, respond to each of the numbered items in the previous
+                 section, declare one of the following:
+
+                * Done.
+
+                * $REASON_WHY_NO_NEED. E.g. for \`unreleased_changelog.md\`, "No
+                canister behavior changes.", or for item 2, "Existing APIs
+                behave as before.".
+
+
+              # Brief Guide to "Externally Visible" Changes
+
+              "Externally visible behavior change" is very often due to some NEW canister API.
+
+              Changes to EXISTING APIs are more likely to be "breaking".
+
+              If these changes are breaking, make sure that clients know how to migrate, how to
+              maintain their continuity of operations.
+
+              If your changes are behind a feature flag, then, do NOT add entrie(s) to
+              \`unreleased_changelog.md\` in this PR! But rather, add entrie(s) later, in the PR
+              that enables these changes in production.
+
+
+              # Reference(s)
+
+              For a more comprehensive checklist, [see here][checklist].
+
+              [checklist]: https://docs.google.com/document/d/1YeeCzVDB3PmvCGvV0OqZpV-R5F0fMGahoTlmXaIjj_U/edit?tab=t.0#heading=h.thlqmyi5yk1
+
+              GOVERNANCE_CHECKLIST_REMINDER_DEDUP
             `
             .replace(/^ +/gm, '')
             .trim();

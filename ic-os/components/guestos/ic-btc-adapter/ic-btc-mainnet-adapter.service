@@ -1,0 +1,18 @@
+[Unit]
+Description=IC Bitcoin Mainnet Adapter Service Provider
+After=bootstrap-ic-node.service
+Wants=bootstrap-ic-node.service
+After=network-online.target
+Wants=network-online.target
+Requires=ic-btc-mainnet-adapter.socket
+StartLimitIntervalSec=0
+
+[Service]
+User=ic-replica
+ExecStartPre=+/opt/ic/bin/generate-btc-adapter-config.sh -m -o /run/ic-node/config/ic-btc-mainnet-adapter.json5
+ExecStart=/opt/ic/bin/ic-btc-adapter /run/ic-node/config/ic-btc-mainnet-adapter.json5
+Restart=always
+
+[Install]
+WantedBy=ic-replica.service
+Also=ic-btc-mainnet-adapter.socket

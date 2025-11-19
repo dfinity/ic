@@ -1,6 +1,7 @@
 use crate::governance::{Governance, LOG_PREFIX, REWARD_DISTRIBUTION_PERIOD_SECONDS};
 use crate::pb::v1::GovernanceError;
 use async_trait::async_trait;
+use ic_cdk::println;
 use ic_nervous_system_timer_task::RecurringAsyncTask;
 use std::cell::RefCell;
 use std::thread::LocalKey;
@@ -32,13 +33,14 @@ fn delay_until_next_run(
     latest_reward_day_after_genesis: u64,
 ) -> Duration {
     let latest_distribution_nominal_end_timestamp_seconds = latest_reward_day_after_genesis
-        * REWARD_DISTRIBUTION_PERIOD_SECONDS
-        + genesis_timestamp_seconds;
+        .saturating_mul(REWARD_DISTRIBUTION_PERIOD_SECONDS)
+        .saturating_add(genesis_timestamp_seconds);
 
     // We add 1 to the end of the period to make sure we always run after the period is over, to
     // avoid missing any proposals that would be ready to settle right on the edge of the period.
-    let next =
-        latest_distribution_nominal_end_timestamp_seconds + REWARD_DISTRIBUTION_PERIOD_SECONDS + 1;
+    let next = latest_distribution_nominal_end_timestamp_seconds
+        .saturating_add(REWARD_DISTRIBUTION_PERIOD_SECONDS)
+        .saturating_add(1);
 
     // We want the difference between next and now.  If it's in the past, we want to run
     // immediately
@@ -56,11 +58,11 @@ impl RecurringAsyncTask for CalculateDistributableRewardsTask {
         match total_supply {
             Ok(total_supply) => {
                 self.governance.with_borrow_mut(|governance| {
-                    governance.distribute_rewards(total_supply);
+                    governance.distribute_voting_rewards_to_neurons(total_supply);
                 });
             }
             Err(err) => {
-                ic_cdk::println!(
+                println!(
                     "{}Error when getting total ICP supply: {}",
                     LOG_PREFIX,
                     GovernanceError::from(err)
@@ -82,9 +84,10 @@ impl RecurringAsyncTask for CalculateDistributableRewardsTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister_state::{set_governance_for_tests, CanisterRandomnessGenerator};
+    use crate::canister_state::{CanisterRandomnessGenerator, set_governance_for_tests};
     use crate::governance::Governance;
     use crate::test_utils::{MockEnvironment, StubCMC, StubIcpLedger};
+    use ic_nns_governance_api as api;
     use std::sync::Arc;
 
     fn test_delay_until_next_run(
@@ -163,17 +166,15 @@ mod tests {
         let genesis_timestamp_seconds = 10_000;
         let latest_reward_day_after_genesis = 5;
 
-        let governance_proto = crate::pb::v1::Governance {
-            genesis_timestamp_seconds,
-            latest_reward_event: Some(crate::pb::v1::RewardEvent {
-                day_after_genesis: latest_reward_day_after_genesis,
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
         let gov = Governance::new(
-            governance_proto,
+            api::Governance {
+                genesis_timestamp_seconds,
+                latest_reward_event: Some(api::RewardEvent {
+                    day_after_genesis: latest_reward_day_after_genesis,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
             Arc::new(MockEnvironment::new(vec![], now)),
             Arc::new(StubIcpLedger {}),
             Arc::new(StubCMC {}),

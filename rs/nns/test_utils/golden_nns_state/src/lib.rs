@@ -5,9 +5,9 @@ use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConf
 
 use ic_config::flag_status::FlagStatus;
 use ic_nns_test_utils_prepare_golden_state::{
-    maybe_download_and_untar_golden_state_or_panic, StateSource,
+    StateSource, maybe_download_and_untar_golden_state_or_panic,
 };
-use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
+use ic_registry_routing_table::{CANISTER_IDS_PER_SUBNET, CanisterIdRange, RoutingTable};
 use std::ops::RangeInclusive;
 use std::str::FromStr;
 // TODO: Add support for PocketIc.
@@ -265,7 +265,7 @@ mod tests {
     fn assert_routing_table_size(routing_table: RoutingTable, expected_size: usize) {
         let mut num_subnets = 0;
         for entry in routing_table.iter() {
-            println!("routing table entry: {:?}", entry);
+            println!("routing table entry: {entry:?}");
             num_subnets += 1;
         }
         assert_eq!(num_subnets, expected_size);

@@ -11,12 +11,7 @@ import sys
 import tarfile
 import tempfile
 
-ALLOWED_UNDECLARED_DEPENDENCIES = {
-    "ic-os/components/misc/fetch-property.sh": {
-        # fetch-property.sh checks existence of metrics.sh
-        "/opt/ic/bin/metrics.sh",
-    }
-}
+ALLOWED_UNDECLARED_DEPENDENCIES = {}
 
 # Check file patterns /opt/ic/...
 COMPONENT_FILE_PATTERN = r"/opt/ic/[^\s'\"},)]+"
@@ -93,7 +88,7 @@ def main():
 
     files = args.files.split(",")
 
-    tmpdir = tempfile.mkdtemp(prefix="icosbuild")
+    tmpdir = tempfile.mkdtemp(prefix="icostest")
     atexit.register(lambda: subprocess.run(["rm", "-rf", tmpdir], check=True))
     partition_tar_path = os.path.join(tmpdir, "partition.tar")
     subprocess.run(["zstd", "-q", "--threads=0", "-f", "-d", args.image, "-o", partition_tar_path], check=True)

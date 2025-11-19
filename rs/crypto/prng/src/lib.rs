@@ -1,13 +1,13 @@
 //! Offers cryptographically secure pseudorandom number generation (CSPRNG).
+use RandomnessPurpose::*;
 use ic_crypto_sha2::{DomainSeparationContext, Sha256};
+use ic_types::Randomness;
 use ic_types::consensus::RandomBeacon;
 use ic_types::crypto::CryptoHashable;
-use ic_types::Randomness;
 use rand::{CryptoRng, Error, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::fmt;
 use strum_macros::{EnumCount, EnumIter};
-use RandomnessPurpose::*;
 
 #[cfg(test)]
 mod tests;

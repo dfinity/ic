@@ -248,10 +248,9 @@ fn test_convert_to_create_service_nervous_system() {
             description: Some("The best software engineer you ever did saw.\n".to_string()),
             url: Some("https://some-link-to-a-project.org".to_string()),
 
-            fallback_controller_principal_ids: vec![PrincipalId::from_str(
-                "5zxxw-63ouu-faaaa-aaaap-4ai"
-            )
-            .unwrap(),],
+            fallback_controller_principal_ids: vec![
+                PrincipalId::from_str("5zxxw-63ouu-faaaa-aaaap-4ai").unwrap(),
+            ],
 
             dapp_canisters: vec![
                 nervous_system_pb::Canister {
@@ -277,8 +276,7 @@ fn test_convert_to_create_service_nervous_system() {
         .unwrap();
     assert!(
         observed_logo.starts_with("data:image/png;base64,"),
-        "{:?}",
-        observed_logo,
+        "{observed_logo:?}",
     );
 
     let observed_logo_content = base64::decode(

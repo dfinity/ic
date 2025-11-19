@@ -1,14 +1,10 @@
 use anyhow::Result;
-
-use bitcoincore_rpc::{
-    bitcoin::{hashes::Hash, Txid},
-    RpcApi,
-};
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
+use ic_btc_adapter_test_utils::bitcoin::{Txid, hashes::Hash};
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::{
-    state::{eventlog::EventType, RetrieveBtcRequest, RetrieveBtcStatus},
+    state::{RetrieveBtcRequest, RetrieveBtcStatus, eventlog::EventType},
     updates::{get_withdrawal_account::compute_subaccount, retrieve_btc::RetrieveBtcArgs},
 };
 use ic_system_test_driver::{
@@ -21,14 +17,14 @@ use ic_system_test_driver::{
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 use ic_tests_ckbtc::{
-    activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_btc_checker,
-    install_ledger, install_minter, setup, subnet_sys,
+    BTC_MIN_CONFIRMATIONS, CHECK_FEE, OVERALL_TIMEOUT, TIMEOUT_PER_TEST, TRANSFER_FEE, ckbtc_setup,
+    create_canister, install_bitcoin_canister, install_btc_checker, install_ledger, install_minter,
+    subnet_app, subnet_sys,
     utils::{
-        ensure_wallet, generate_blocks, get_btc_address, get_btc_client, send_to_btc_address,
-        wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx,
+        BITCOIN_NETWORK_TRANSFER_FEE, generate_blocks, get_btc_address, get_rpc_client,
+        send_to_btc_address, wait_for_finalization, wait_for_mempool_change, wait_for_signed_tx,
         wait_for_update_balance,
     },
-    BTC_MIN_CONFIRMATIONS, CHECK_FEE, TEST_KEY_LOCAL, TRANSFER_FEE,
 };
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::transfer::TransferArg;
@@ -37,33 +33,33 @@ use slog::{debug, info};
 pub fn test_deposit_and_withdrawal(env: TestEnv) {
     let logger = env.logger();
     let subnet_sys = subnet_sys(&env);
+    let subnet_app = subnet_app(&env);
     let sys_node = subnet_sys.nodes().next().expect("No node in sys subnet.");
-    let btc_rpc = get_btc_client(&env);
-    ensure_wallet(&btc_rpc, &logger);
+    let app_node = subnet_app.nodes().next().expect("No node in app subnet.");
+    let btc_rpc = get_rpc_client::<bitcoin::Network>(&env);
 
-    let default_btc_address = btc_rpc
-        .get_new_address(None, None)
-        .unwrap()
-        .assume_checked();
+    let default_btc_address = btc_rpc.get_address().unwrap();
     // Creating the 101 first block to reach the min confirmations to spend a coinbase utxo.
     debug!(
         &logger,
-        "Generating 101 blocks to default address: {}", &default_btc_address
+        "Generating 101 blocks to default address: {}", default_btc_address
     );
     btc_rpc
-        .generate_to_address(101, &default_btc_address)
+        .generate_to_address(101, default_btc_address)
         .unwrap();
 
     block_on(async {
-        let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
-        install_bitcoin_canister(&runtime, &logger).await;
+        let sys_runtime =
+            runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
+        let runtime = runtime_from_url(app_node.get_public_url(), app_node.effective_canister_id());
+        install_bitcoin_canister(&sys_runtime, &logger).await;
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
         let mut btc_checker_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
-        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
+        let agent = assert_create_agent(app_node.get_public_url().as_str()).await;
         let btc_checker_id = install_btc_checker(&mut btc_checker_canister, &env).await;
         let ledger_id = install_ledger(&mut ledger_canister, minting_user, &logger).await;
         // Here we put the max_time_in_queue to 0 because we want the minter to send request right away with no batching
@@ -71,7 +67,6 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             install_minter(&mut minter_canister, ledger_id, &logger, 0, btc_checker_id).await;
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
-        activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
 
         let ledger_agent = Icrc1Agent {
             agent: agent.clone(),
@@ -99,7 +94,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             &btc_rpc,
             &logger,
             BTC_MIN_CONFIRMATIONS,
-            &default_btc_address,
+            default_btc_address,
         );
 
         // Waiting for the minter to see new utxos
@@ -109,8 +104,6 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             .get_withdrawal_account()
             .await
             .expect("Error while calling get_withdrawal_account");
-
-        const BITCOIN_NETWORK_TRANSFER_FEE: u64 = 2820;
 
         let transfer_amount = btc_to_wrap - BITCOIN_NETWORK_TRANSFER_FEE - CHECK_FEE - TRANSFER_FEE;
 
@@ -131,10 +124,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             "Transfer to the minter account occurred at block {}", transfer_result
         );
 
-        let destination_btc_address = btc_rpc
-            .get_new_address(None, None)
-            .unwrap()
-            .assume_checked();
+        let destination_btc_address = btc_rpc.get_new_address().unwrap();
 
         info!(&logger, "Call retrieve_btc");
 
@@ -161,8 +151,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
                     | RetrieveBtcStatus::Sending { .. }
                     | RetrieveBtcStatus::Submitted { .. }
             ),
-            "Expected status Submitted or Pending, got {:?}",
-            retrieve_status,
+            "Expected status Submitted or Pending, got {retrieve_status:?}",
         );
 
         // Wait for tx to be signed
@@ -175,9 +164,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
         // Check if we have the txid in the bitcoind mempool
         assert!(
             mempool_txids.contains(&btc_txid),
-            "The mempool does not contain the expected txid: {}, mempool contents: {:?}",
-            btc_txid,
-            mempool_txids
+            "The mempool does not contain the expected txid: {btc_txid}, mempool contents: {mempool_txids:?}"
         );
 
         // We are expecting only one transaction in mempool.
@@ -219,7 +206,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             &btc_rpc,
             &logger,
             BTC_MIN_CONFIRMATIONS,
-            &default_btc_address,
+            default_btc_address,
         );
 
         let finalized_txid = wait_for_finalization(
@@ -227,7 +214,7 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
             &minter_agent,
             &logger,
             retrieve_response.block_index,
-            &default_btc_address,
+            default_btc_address,
         )
         .await;
         assert_eq!(txid, finalized_txid);
@@ -249,30 +236,29 @@ pub fn test_deposit_and_withdrawal(env: TestEnv) {
                     ..
                 }) if *block_index == retrieve_response.block_index
             )),
-            "missing the retrieve request in the event log: {:?}",
-            events
+            "missing the retrieve request in the event log: {events:?}"
         );
 
         assert!(
             events.iter().any(
                 |e| matches!(e, EventType::SentBtcTransaction { txid, .. } if txid == &finalized_txid)
             ),
-            "missing the tx submission in the event log: {:?}",
-            events
+            "missing the tx submission in the event log: {events:?}"
         );
 
         assert!(
             events.iter().any(
                 |e| matches!(e, EventType::ConfirmedBtcTransaction { txid } if txid == &finalized_txid)
             ),
-            "missing the tx confirmation in the event log: {:?}",
-            events
+            "missing the tx confirmation in the event log: {events:?}"
         );
     })
 }
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_setup(setup)
+        .with_timeout_per_test(TIMEOUT_PER_TEST)
+        .with_overall_timeout(OVERALL_TIMEOUT)
+        .with_setup(ckbtc_setup)
         .add_test(systest!(test_deposit_and_withdrawal))
         .execute_from_args()?;
     Ok(())

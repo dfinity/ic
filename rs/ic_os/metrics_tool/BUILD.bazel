@@ -26,7 +26,10 @@ rust_library(
     aliases = ALIASES,
     crate_name = "ic_metrics_tool",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    visibility = ["//rs:system-tests-pkg"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
     deps = DEPENDENCIES,
 )
 

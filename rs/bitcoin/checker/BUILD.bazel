@@ -4,23 +4,15 @@ load("//bazel:defs.bzl", "rust_ic_test")
 
 package(default_visibility = ["//visibility:public"])
 
-LIB_SRCS = [
-    "src/blocklist.rs",
-    "src/blocklist/tests.rs",
-    "src/lib.rs",
-    "src/types.rs",
-]
-
 rust_library(
     name = "btc_checker_lib",
-    srcs = LIB_SRCS,
+    srcs = glob(["lib/**"]),
     crate_name = "ic_btc_checker",
     deps = [
         # Keep sorted.
         "@crate_index//:bitcoin",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
-        "@crate_index//:ic-management-canister-types",
         "@crate_index//:serde",
     ],
 )
@@ -41,7 +33,6 @@ rust_test(
         # Keep sorted.
         "@crate_index//:candid_parser",
         "@crate_index//:ic-btc-interface",
-        "@crate_index//:ic-management-canister-types",
         "@crate_index//:proptest",
         "@crate_index//:scraper",
         "@crate_index//:tokio",
@@ -50,19 +41,15 @@ rust_test(
 
 rust_canister(
     name = "btc_checker_canister",
-    srcs = glob(
-        ["src/**"],
-        exclude = LIB_SRCS,
-    ),
+    srcs = glob(["src/**"]),
     compile_data = [
         "templates/dashboard.html",
     ],
-    proc_macro_deps = ["@crate_index//:ic-cdk-macros"],
     service_file = "btc_checker_canister.did",
     deps = [
         # Keep sorted.
         ":btc_checker_lib",
-        "//rs/rust_canisters/http_types",
+        "//packages/ic-http-types",
         "@crate_index//:askama",
         "@crate_index//:base64",
         "@crate_index//:bitcoin",
@@ -101,9 +88,9 @@ rust_ic_test(
         # Keep sorted.
         ":btc_checker_lib",
         "//:pocket-ic-server",
+        "//packages/ic-http-types",
         "//packages/ic-metrics-assert:ic-metrics-assert_pocket_ic",
         "//packages/pocket-ic",
-        "//rs/rust_canisters/http_types",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
         "//rs/types/types",

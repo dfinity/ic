@@ -1,7 +1,7 @@
 use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
 use ic_crypto_internal_test_vectors::test_data;
 use ic_crypto_standalone_sig_verifier::{
-    ecdsa_p256_signature_from_der_bytes, user_public_key_from_bytes, KeyBytesContentType,
+    KeyBytesContentType, ecdsa_p256_signature_from_der_bytes, user_public_key_from_bytes,
 };
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use simple_asn1::oid;
@@ -77,7 +77,7 @@ fn should_fail_parse_raw_ed25519_pk() {
 #[test]
 fn should_correctly_parse_der_encoded_openssl_ecdsa_p256_pk() {
     let rng = &mut ReproducibleRng::new();
-    let pk_der = ic_crypto_ecdsa_secp256r1::PrivateKey::generate_using_rng(rng)
+    let pk_der = ic_secp256r1::PrivateKey::generate_using_rng(rng)
         .public_key()
         .serialize_der();
     let (pk, bytes_type) = user_public_key_from_bytes(&pk_der).unwrap();
@@ -136,7 +136,7 @@ fn should_fail_parsing_ec_keys_on_unsupported_curves() {
 // Generates a new P256 key pair, and computes an ECDSA signature on MESSAGE.
 // Returns the generated public key and the signature, both DER-encoded.
 fn new_p256_pk_and_sig_der<R: Rng + CryptoRng>(rng: &mut R) -> (Vec<u8>, Vec<u8>) {
-    let sk = ic_crypto_ecdsa_secp256r1::PrivateKey::generate_using_rng(rng);
+    let sk = ic_secp256r1::PrivateKey::generate_using_rng(rng);
     let pk_der = sk.public_key().serialize_der();
     let sig_raw = sk.sign_message(MESSAGE.as_bytes());
     let sig_der = p256::ecdsa::Signature::from_slice(&sig_raw)

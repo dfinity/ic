@@ -1,28 +1,29 @@
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
+use ic_interfaces::execution_environment::MessageMemoryUsage;
 use ic_management_canister_types_private::{
     CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode,
     CanisterInstallModeV2, EmptyBlob, InstallChunkedCodeArgs, InstallChunkedCodeArgsLegacy,
     InstallCodeArgs, InstallCodeArgsV2, Method, Payload, UploadChunkArgs, UploadChunkReply,
 };
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_replicated_state::canister_state::NextExecution;
 use ic_replicated_state::canister_state::execution_state::WasmExecutionMode;
 use ic_replicated_state::canister_state::system_state::wasm_chunk_store;
-use ic_replicated_state::canister_state::NextExecution;
-use ic_replicated_state::{ExecutionTask, MessageMemoryUsage, ReplicatedState};
+use ic_replicated_state::{ExecutionTask, ReplicatedState};
 use ic_test_utilities_execution_environment::{
-    check_ingress_status, get_reply, ExecutionTest, ExecutionTestBuilder,
+    ExecutionTest, ExecutionTestBuilder, check_ingress_status, get_reply,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
+use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::ingress::{IngressState, IngressStatus, WasmResult};
 use ic_types::messages::MessageId;
 use ic_types::{
     CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    MAX_MEMORY_ALLOCATION,
 };
 use ic_types_test_utils::ids::{canister_test_id, subnet_test_id, user_test_id};
-use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{UNIVERSAL_CANISTER_WASM, call_args, wasm};
 use maplit::btreemap;
 use std::mem::size_of;
 
@@ -63,39 +64,6 @@ const DTS_INSTALL_WAT: &str = r#"
     )"#;
 
 #[test]
-fn install_code_fails_on_invalid_compute_allocation() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let binary = wat::parse_str("(module)").unwrap();
-    let canister = test.create_canister(Cycles::new(1_000_000_000_000));
-    let err = test
-        .install_canister_with_allocation(canister, binary, Some(1_000), None)
-        .unwrap_err();
-    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
-    assert_eq!(
-        "ComputeAllocation expected to be in the range [0..100], got 1_000",
-        err.description()
-    );
-}
-
-#[test]
-fn install_code_fails_on_invalid_memory_allocation() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let binary = wat::parse_str("(module)").unwrap();
-    let canister = test.create_canister(Cycles::new(1_000_000_000_000));
-    let err = test
-        .install_canister_with_allocation(canister, binary, None, Some(u64::MAX))
-        .unwrap_err();
-    assert_eq!(ErrorCode::CanisterContractViolation, err.code());
-    assert_eq!(
-        format!(
-            "MemoryAllocation expected to be in the range [0..{}], got 18_446_744_073_709_551_615",
-            candid::Nat(MAX_MEMORY_ALLOCATION.get().into())
-        ),
-        err.description()
-    );
-}
-
-#[test]
 fn dts_resume_works_in_install_code() {
     const INSTRUCTION_LIMIT: u64 = 3_000_000;
     let mut test = ExecutionTestBuilder::new()
@@ -109,8 +77,6 @@ fn dts_resume_works_in_install_code() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
     let original_system_state = test.canister_state(canister_id).system_state.clone();
@@ -127,6 +93,7 @@ fn dts_resume_works_in_install_code() {
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
                     WASM_EXECUTION_MODE,
                 ),
         );
@@ -160,8 +127,6 @@ fn dts_abort_works_in_install_code() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
     let original_system_state = test.canister_state(canister_id).system_state.clone();
@@ -178,6 +143,7 @@ fn dts_abort_works_in_install_code() {
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
                     WASM_EXECUTION_MODE
                 ),
         );
@@ -201,6 +167,7 @@ fn dts_abort_works_in_install_code() {
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(INSTRUCTION_LIMIT),
                     test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
                     WASM_EXECUTION_MODE
                 ),
         );
@@ -223,95 +190,6 @@ fn dts_abort_works_in_install_code() {
 }
 
 #[test]
-fn install_code_validate_input_compute_allocation() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_install_code_instruction_limit(1_000_000)
-        .with_install_code_slice_instruction_limit(1_000)
-        .with_manual_execution()
-        .build();
-    test.create_canister_with_allocation(Cycles::new(2_000_000_000_000_000), Some(50), None)
-        .unwrap();
-
-    let canister_id = test
-        .create_canister_with_allocation(Cycles::new(2_000_000_000_000_000), Some(40), None)
-        .unwrap();
-    let payload = InstallCodeArgs {
-        mode: CanisterInstallMode::Install,
-        canister_id: canister_id.get(),
-        wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
-        arg: vec![],
-        compute_allocation: Some(candid::Nat::from(90u64)),
-        memory_allocation: None,
-        sender_canister_version: None,
-    };
-
-    let message_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
-    assert_eq!(
-        test.canister_state(canister_id).next_execution(),
-        NextExecution::None,
-    );
-
-    // Start execution of install code.
-    test.execute_subnet_message();
-    let result = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
-    result.assert_contains(
-        ErrorCode::SubnetOversubscribed,
-        "Canister requested a compute allocation of 90% which cannot be satisfied \
-            because the Subnet's remaining compute capacity is 49%.",
-    );
-}
-
-#[test]
-fn install_code_validate_input_memory_allocation() {
-    let mib: u64 = 1024 * 1024;
-    let mut test = ExecutionTestBuilder::new()
-        .with_subnet_execution_memory(500 * mib as i64)
-        .with_subnet_memory_reservation(0)
-        .with_install_code_instruction_limit(1_000_000)
-        .with_install_code_slice_instruction_limit(1_000)
-        .with_manual_execution()
-        .build();
-    test.create_canister_with_allocation(
-        Cycles::new(20_000_000_000_000_000),
-        None,
-        Some(250 * mib),
-    )
-    .unwrap();
-
-    let canister_id = test
-        .create_canister_with_allocation(
-            Cycles::new(20_000_000_000_000_000),
-            Some(40),
-            Some(240 * mib),
-        )
-        .unwrap();
-    let payload = InstallCodeArgs {
-        mode: CanisterInstallMode::Install,
-        canister_id: canister_id.get(),
-        wasm_module: vec![],
-        arg: vec![],
-        compute_allocation: None,
-        memory_allocation: Some(candid::Nat::from(260 * mib)),
-        sender_canister_version: None,
-    };
-
-    let message_id = test.subnet_message_raw(Method::InstallCode, payload.encode());
-    assert_eq!(
-        test.canister_state(canister_id).next_execution(),
-        NextExecution::None,
-    );
-
-    // Start execution of install code.
-    test.execute_subnet_message();
-    let result = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
-    result.assert_contains(
-        ErrorCode::SubnetOversubscribed,
-        "Canister requested 260.00 MiB of memory but only 250.00 MiB \
-         are available in the subnet.",
-    );
-}
-
-#[test]
 fn install_code_validate_input_controller() {
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000)
@@ -329,8 +207,6 @@ fn install_code_validate_input_controller() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -345,9 +221,8 @@ fn install_code_validate_input_controller() {
     result.assert_contains(
         ErrorCode::CanisterInvalidController,
         &format!(
-            "Only the controllers of the canister {} can control it.\n\
-            Canister's controllers: {}\nSender's ID: {}",
-            canister_id, controller, sender
+            "Only the controllers of the canister {canister_id} can control it.\n\
+            Canister's controllers: {controller}\nSender's ID: {sender}"
         ),
     );
 }
@@ -368,15 +243,14 @@ fn install_code_validates_execution_state() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(r#"(module (memory 0 20))"#).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
     // Install code on empty canister.
-    assert!(test
-        .subnet_message(Method::InstallCode, payload.encode())
-        .is_ok());
+    assert!(
+        test.subnet_message(Method::InstallCode, payload.encode())
+            .is_ok()
+    );
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::None,
@@ -391,9 +265,8 @@ fn install_code_validates_execution_state() {
     result.assert_contains(
         ErrorCode::CanisterNonEmpty,
         &format!(
-            "Canister {} cannot be installed because the canister is not empty. \
-                   Try installing with mode='reinstall' instead.",
-            canister_id
+            "Canister {canister_id} cannot be installed because the canister is not empty. \
+                   Try installing with mode='reinstall' instead."
         ),
     );
 }
@@ -415,8 +288,6 @@ fn install_code_fails_when_not_enough_wasm_custom_sections_memory() {
         canister_id: canister_id.get(),
         wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -444,15 +315,14 @@ fn install_code_succeeds_with_enough_wasm_custom_sections_memory() {
         canister_id: canister_id.get(),
         wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
     // Install code on canister with Wasm sections that fit in the available memory on the subnet.
-    assert!(test
-        .subnet_message(Method::InstallCode, payload.encode())
-        .is_ok());
+    assert!(
+        test.subnet_message(Method::InstallCode, payload.encode())
+            .is_ok()
+    );
     assert_eq!(
         test.canister_state(canister_id).next_execution(),
         NextExecution::None,
@@ -465,9 +335,15 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
     // only a few canisters.
     let available_wasm_custom_sections_memory = 1024; // 1 KiB
 
+    let canister_history_memory_for_creation =
+        size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    let canister_history_memory_for_install = size_of::<CanisterChange>();
+    let canister_history_memory_per_canister =
+        canister_history_memory_for_creation + canister_history_memory_for_install;
     // This value might need adjustment if something changes in the canister's
     // wasm that gets installed in the test.
-    let total_memory_taken_per_canister_in_bytes = 364249;
+    let total_memory_taken_per_canister_in_bytes =
+        364441 + canister_history_memory_per_canister as i64;
 
     let mut test = ExecutionTestBuilder::new()
         .with_install_code_instruction_limit(1_000_000_000)
@@ -488,8 +364,6 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
             canister_id: canister_id.get(),
             wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
             arg: vec![],
-            compute_allocation: None,
-            memory_allocation: None,
             sender_canister_version: None,
         };
 
@@ -505,26 +379,11 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
         iterations += 1;
     }
 
-    // One more request to install a canister with wasm custom sections should fail.
-    let canister_id = test
-        .create_canister_with_allocation(Cycles::new(1_000_000_000_000_000), None, None)
-        .unwrap();
-
-    let payload = InstallCodeArgs {
-        mode: CanisterInstallMode::Install,
-        canister_id: canister_id.get(),
-        wasm_module: include_bytes!("../../../tests/test-data/custom_sections.wasm").to_vec(),
-        arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
-        sender_canister_version: None,
-    };
-    let result = test.subnet_message(Method::InstallCode, payload.encode());
-
-    assert!(result.is_err());
     assert_eq!(
-        test.subnet_available_memory().get_execution_memory(),
-        subnet_available_memory_before - iterations * total_memory_taken_per_canister_in_bytes
+        test.subnet_available_memory().get_execution_memory()
+            + iterations * total_memory_taken_per_canister_in_bytes
+            + canister_history_memory_for_creation as i64,
+        subnet_available_memory_before
     );
 }
 
@@ -538,8 +397,6 @@ fn execute_install_code_message_dts_helper(
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(wasm).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -566,6 +423,7 @@ fn execute_install_code_message_dts_helper(
                 - test.cycles_account_manager().execution_cost(
                     NumInstructions::from(1_000_000),
                     test.subnet_size(),
+                    CanisterCyclesCostSchedule::Normal,
                     WASM_EXECUTION_MODE
                 ),
         );
@@ -609,10 +467,7 @@ fn install_code_with_start_with_err() {
     let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
     err.assert_contains(
         ErrorCode::CanisterTrapped,
-        &format!(
-            "Error from Canister {}: Canister trapped: unreachable",
-            canister_id
-        ),
+        &format!("Error from Canister {canister_id}: Canister trapped: unreachable"),
     );
 }
 
@@ -653,8 +508,6 @@ fn start_install_code_dts(
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(wasm).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -720,10 +573,7 @@ fn install_code_with_init_method_with_error() {
     let err = check_ingress_status(test.ingress_status(&message_id)).unwrap_err();
     err.assert_contains(
         ErrorCode::CanisterTrapped,
-        &format!(
-            "Error from Canister {}: Canister trapped: unreachable",
-            canister_id
-        ),
+        &format!("Error from Canister {canister_id}: Canister trapped: unreachable"),
     );
 }
 
@@ -765,11 +615,12 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
     let canister_history_memory_usage = size_of::<CanisterChange>() + size_of::<PrincipalId>();
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         NumBytes::new(canister_history_memory_usage as u64),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         Cycles::zero(),
     );
     let canister_id = test.create_canister(Cycles::new(900_000) + freezing_threshold_cycles);
@@ -778,8 +629,6 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
     let original_balance = test.canister_state(canister_id).system_state.balance();
@@ -828,8 +677,6 @@ fn install_code_running_out_of_instructions() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(wasm).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -937,8 +784,6 @@ fn dts_install_code_creates_entry_in_subnet_call_context_manager() {
         mode: CanisterInstallMode::Install,
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -1016,8 +861,6 @@ fn subnet_call_context_manager_keeps_install_code_requests_when_abort() {
         mode: CanisterInstallMode::Install,
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -1251,7 +1094,7 @@ fn clean_in_progress_install_code_calls_from_subnet_call_context_manager() {
         check_ingress_status(test.ingress_status(&message_id)),
         Err(UserError::new(
             ErrorCode::CanisterNotFound,
-            format!("Canister {} migrated during a subnet split", canister_id_2),
+            format!("Canister {canister_id_2} migrated during a subnet split"),
         ))
     );
 }
@@ -1388,18 +1231,17 @@ fn assert_consistent_install_code_calls(state: &ReplicatedState, expected_calls:
             .remove_install_code_call(*call_id)
             .unwrap_or_else(|| {
                 panic!(
-                    "Canister AbortedInstallCode task without matching subnet InstallCodeCall: {} {:?}",
-                    call_id, call
+                    "Canister AbortedInstallCode task without matching subnet InstallCodeCall: {call_id} {call:?}"
                 )
             });
     }
 
     // And ensure that no `InstallCodeCalls` are left over in the `SubnetCallContextManager`.
     assert!(
-            subnet_call_context_manager.install_code_calls_len() == 0,
-            "InstallCodeCalls in SubnetCallContextManager without matching canister AbortedInstallCode task: {:?}",
-            subnet_call_context_manager.remove_non_local_install_code_calls(|_| false)
-        );
+        subnet_call_context_manager.install_code_calls_len() == 0,
+        "InstallCodeCalls in SubnetCallContextManager without matching canister AbortedInstallCode task: {:?}",
+        subnet_call_context_manager.remove_non_local_install_code_calls(|_| false)
+    );
 }
 
 fn install_code_args(canister_id: CanisterId) -> InstallCodeArgs {
@@ -1408,8 +1250,6 @@ fn install_code_args(canister_id: CanisterId) -> InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     }
 }
@@ -1913,14 +1753,12 @@ fn install_chunked_fails_from_noncontroller_of_store() {
         Ok(WasmResult::Reject(reject)) => {
             assert!(
                 reject.contains(&format!(
-                    "Only the controllers of the canister {} can control it",
-                    store_canister
+                    "Only the controllers of the canister {store_canister} can control it"
                 )),
-                "Unexpected reject message {}",
-                reject
+                "Unexpected reject message {reject}"
             );
         }
-        other => panic!("Expected reject, but got {:?}", other),
+        other => panic!("Expected reject, but got {other:?}"),
     }
 }
 
@@ -1957,11 +1795,13 @@ fn install_chunked_succeeds_from_store_canister() {
 
     // Install UC wasm on target canister from store canister should succeed
     // even though the store canister isn't its own controller.
-    assert!(!test
-        .canister_state(store_canister)
-        .system_state
-        .controllers
-        .contains(&store_canister.get()));
+    assert!(
+        !test
+            .canister_state(store_canister)
+            .system_state
+            .controllers
+            .contains(&store_canister.get())
+    );
 
     let install = wasm()
         .call_with_cycles(
@@ -2004,8 +1844,6 @@ fn install_with_dts_correctly_updates_system_state() {
         canister_id: canister_id.get(),
         wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -2038,12 +1876,13 @@ fn install_with_dts_correctly_updates_system_state() {
         vec![42]
     );
 
-    assert!(test
-        .canister_state(canister_id)
-        .system_state
-        .global_timer
-        .to_nanos_since_unix_epoch()
-        .is_some());
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .global_timer
+            .to_nanos_since_unix_epoch()
+            .is_some()
+    );
 
     let version_before = test
         .canister_state(canister_id)
@@ -2062,8 +1901,6 @@ fn install_with_dts_correctly_updates_system_state() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -2090,12 +1927,13 @@ fn install_with_dts_correctly_updates_system_state() {
         vec![] as Vec<u8>
     );
 
-    assert!(test
-        .canister_state(canister_id)
-        .system_state
-        .global_timer
-        .to_nanos_since_unix_epoch()
-        .is_none());
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .global_timer
+            .to_nanos_since_unix_epoch()
+            .is_none()
+    );
 
     let version_after = test
         .canister_state(canister_id)
@@ -2131,8 +1969,6 @@ fn upgrade_with_dts_correctly_updates_system_state() {
         canister_id: canister_id.get(),
         wasm_module: UNIVERSAL_CANISTER_WASM.to_vec(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -2165,12 +2001,13 @@ fn upgrade_with_dts_correctly_updates_system_state() {
         vec![42]
     );
 
-    assert!(test
-        .canister_state(canister_id)
-        .system_state
-        .global_timer
-        .to_nanos_since_unix_epoch()
-        .is_some());
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .global_timer
+            .to_nanos_since_unix_epoch()
+            .is_some()
+    );
 
     let version_before = test
         .canister_state(canister_id)
@@ -2189,8 +2026,6 @@ fn upgrade_with_dts_correctly_updates_system_state() {
         canister_id: canister_id.get(),
         wasm_module: wat::parse_str(DTS_INSTALL_WAT).unwrap(),
         arg: vec![],
-        compute_allocation: None,
-        memory_allocation: None,
         sender_canister_version: None,
     };
 
@@ -2219,12 +2054,13 @@ fn upgrade_with_dts_correctly_updates_system_state() {
         vec![42]
     );
 
-    assert!(test
-        .canister_state(canister_id)
-        .system_state
-        .global_timer
-        .to_nanos_since_unix_epoch()
-        .is_none());
+    assert!(
+        test.canister_state(canister_id)
+            .system_state
+            .global_timer
+            .to_nanos_since_unix_epoch()
+            .is_none()
+    );
 
     let version_after = test
         .canister_state(canister_id)
@@ -2283,6 +2119,7 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
     let expected_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(wasm_chunk_store::chunk_size().get()),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
 
@@ -2295,9 +2132,7 @@ fn failed_install_chunked_charges_for_wasm_assembly() {
     assert!(
         charged_cycles - expected_cost <= Cycles::from(1_u64)
             && expected_cost - charged_cycles <= Cycles::from(1_u64),
-        "Charged cycles {} differs from expected cost {}",
-        charged_cycles,
-        expected_cost
+        "Charged cycles {charged_cycles} differs from expected cost {expected_cost}"
     );
 }
 
@@ -2318,8 +2153,6 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
             canister_id,
             wasm.clone(),
             vec![],
-            None,
-            None,
         )
         .encode();
         let _response = test.subnet_message(method_name, arg).unwrap();
@@ -2363,11 +2196,13 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
     let fixed_execution_overhead = test.cycles_account_manager().execution_cost(
         NumInstructions::from(0),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     );
     let expected_cost = test.cycles_account_manager().execution_cost(
         NumInstructions::from(wasm_chunk_store::chunk_size().get()),
         test.subnet_size(),
+        CanisterCyclesCostSchedule::Normal,
         WASM_EXECUTION_MODE,
     ) - fixed_execution_overhead
         + charge_for_regular_install;
@@ -2380,9 +2215,7 @@ fn successful_install_chunked_charges_for_wasm_assembly() {
     assert!(
         charged_cycles - expected_cost <= Cycles::from(1_u64)
             && expected_cost - charged_cycles <= Cycles::from(1_u64),
-        "Charged cycles {} differs from expected cost {}",
-        charged_cycles,
-        expected_cost
+        "Charged cycles {charged_cycles} differs from expected cost {expected_cost}"
     );
 }
 

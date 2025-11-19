@@ -1,4 +1,4 @@
-use candid_parser::utils::{service_compatible, CandidSource};
+use candid_parser::utils::{CandidSource, service_compatible};
 use std::path::PathBuf;
 
 fn main() {
