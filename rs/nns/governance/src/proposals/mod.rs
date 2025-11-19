@@ -92,6 +92,7 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => Ok(
                 ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request),
             ),
+
             // Obsolete actions
             Action::SetDefaultFollowees(_) => Err("SetDefaultFollowees is obsolete".to_string()),
             Action::OpenSnsTokenSwap(_) => Err("OpenSnsTokenSwap is obsolete".to_string()),
@@ -108,16 +109,16 @@ impl ValidProposalAction {
         let topic = match self {
             ValidProposalAction::ManageNeuron(_) => Topic::NeuronManagement,
             ValidProposalAction::ManageNetworkEconomics(_) => Topic::NetworkEconomics,
-            ValidProposalAction::Motion(_) => Topic::Governance,
+            ValidProposalAction::Motion(_)
+            | ValidProposalAction::RegisterKnownNeuron(_)
+            | ValidProposalAction::DeregisterKnownNeuron(_) => Topic::Governance,
             ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => execute_nns_function
                 .nns_function()
                 .compute_topic_at_creation()?,
             ValidProposalAction::ApproveGenesisKyc(_) => Topic::Kyc,
             ValidProposalAction::AddOrRemoveNodeProvider(_) => Topic::ParticipantManagement,
-            ValidProposalAction::RewardNodeProvider(_) => Topic::NodeProviderRewards,
-            ValidProposalAction::RewardNodeProviders(_) => Topic::NodeProviderRewards,
-            ValidProposalAction::RegisterKnownNeuron(_) => Topic::Governance,
-            ValidProposalAction::DeregisterKnownNeuron(_) => Topic::Governance,
+            ValidProposalAction::RewardNodeProvider(_)
+            | ValidProposalAction::RewardNodeProviders(_) => Topic::NodeProviderRewards,
             ValidProposalAction::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
             ValidProposalAction::InstallCode(install_code) => install_code.valid_topic()?,
             ValidProposalAction::StopOrStartCanister(stop_or_start) => {
@@ -135,11 +136,9 @@ impl ValidProposalAction {
     /// be submitted when the heap growth potential is low.
     pub fn allowed_when_resources_are_low(&self) -> bool {
         match self {
-            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
-                crate::pb::v1::NnsFunction::try_from(execute_nns_function.nns_function)
-                    .ok()
-                    .is_some_and(|f| f.allowed_when_resources_are_low())
-            }
+            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => execute_nns_function
+                .nns_function()
+                .allowed_when_resources_are_low(),
             ValidProposalAction::InstallCode(install_code) => {
                 install_code.allowed_when_resources_are_low()
             }
@@ -157,11 +156,6 @@ impl ValidProposalAction {
         } else {
             None
         }
-    }
-
-    /// Returns true if this is a ManageNeuron proposal.
-    pub fn is_manage_neuron(&self) -> bool {
-        self.manage_neuron().is_some()
     }
 }
 

@@ -1679,7 +1679,7 @@ fn test_compute_ballots_for_standard_proposal() {
     };
 
     // Test with initial timestamp
-    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
+    let (ballots, total_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_standard_proposal(now_seconds)
         .expect("Failed computing ballots for standard proposal");
 
@@ -1689,7 +1689,10 @@ fn test_compute_ballots_for_standard_proposal() {
                 .sum()
         });
 
-    assert_eq!(tot_potential_voting_power, expected_potential_voting_power);
+    assert_eq!(
+        total_potential_voting_power,
+        expected_potential_voting_power
+    );
     assert_eq!(
         ballots,
         hashmap! {
@@ -1702,7 +1705,7 @@ fn test_compute_ballots_for_standard_proposal() {
     // Test again with a much later timestamp (not affected by refresh)
     let now_seconds = CREATED_TIMESTAMP_SECONDS + 20 * ONE_YEAR_SECONDS;
 
-    let (ballots, tot_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
+    let (ballots, total_potential_voting_power, _previous_ballots_timestamp_seconds) = governance
         .compute_ballots_for_standard_proposal(now_seconds)
         .expect("Failed computing ballots for standard proposal");
     let expected: u64 = governance.neuron_store.with_active_neurons_iter(|iter| {
@@ -1710,7 +1713,7 @@ fn test_compute_ballots_for_standard_proposal() {
             .sum()
     });
 
-    assert_eq!(tot_potential_voting_power, expected);
+    assert_eq!(total_potential_voting_power, expected);
     assert_eq!(
         ballots,
         hashmap! {

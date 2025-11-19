@@ -3928,13 +3928,14 @@ impl Governance {
             .ok();
         }
 
-        // Convert action to ValidProposalAction before executing
         match ValidProposalAction::try_from(action) {
             Ok(valid_action) => {
-                // A yes decision as been made, execute the proposal!
                 self.start_proposal_execution(proposal_id, &valid_action);
             }
             Err(e) => {
+                // This should not happen as the proposal was validated when it was created. The
+                // only way it can happen is that some validation is added after the proposal was
+                // created.
                 self.set_proposal_execution_status(
                     proposal_id,
                     Err(GovernanceError::new_with_message(
@@ -5020,7 +5021,29 @@ impl Governance {
             .map_or(1, |(k, _)| k + 1)
     }
 
+    fn validate_proposal(
+        &self,
+        proposal: &Proposal,
+    ) -> Result<ValidProposalAction, GovernanceError> {
+        validate_proposal_title(&proposal.title)?;
+        validate_proposal_summary(&proposal.summary)?;
+        validate_proposal_url(&proposal.url)?;
+
+        let action = ValidProposalAction::try_from(proposal.action.clone()).map_err(|e| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid action: {}", e),
+            )
+        })?;
+
+        self.validate_proposal_action(&action)?;
+
+        Ok(action)
+    }
+
     /// Validates a proposal action against the current state of the governance canister.
+    /// TODO(NNS1-4272) move intrinsic validations into the conversion from Action to
+    /// ValidProposalAction, and rename this function to validate_proposal_action_against_state.
     fn validate_proposal_action(
         &self,
         action: &ValidProposalAction,
@@ -5365,23 +5388,11 @@ impl Governance {
     ) -> Result<ProposalId, GovernanceError> {
         let now_seconds = self.env.now();
 
-        validate_proposal_title(&proposal.title)?;
-        validate_proposal_summary(&proposal.summary)?;
-        validate_proposal_url(&proposal.url)?;
-
-        // Convert to ValidProposalAction
-        let action = ValidProposalAction::try_from(proposal.action.clone()).map_err(|e| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!("Invalid action: {}", e),
-            )
-        })?;
+        let action = self.validate_proposal(proposal)?;
 
         if !action.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
         }
-
-        self.validate_proposal_action(&action)?;
 
         // At this point, the topic should be valid because the proposal was just validated, but we
         // exit on error anyway and check for Topic::Unspecified, just to be safe.
@@ -5435,7 +5446,7 @@ impl Governance {
             ));
         }
 
-        let min_dissolve_delay_seconds_to_vote = if action.is_manage_neuron() {
+        let min_dissolve_delay_seconds_to_vote = if action.manage_neuron().is_some() {
             0
         } else {
             self.neuron_minimum_dissolve_delay_to_vote_seconds()
@@ -5452,7 +5463,7 @@ impl Governance {
         }
 
         // Check that there are not too many proposals.
-        if action.is_manage_neuron() {
+        if action.manage_neuron().is_some() {
             // Check that there are not too many open manage neuron
             // proposals already.
             if self
@@ -5495,31 +5506,7 @@ impl Governance {
         }
 
         let (ballots, total_potential_voting_power, previous_ballots_timestamp_seconds) =
-            if let Some(manage_neuron) = action.manage_neuron() {
-                let managed_id = manage_neuron
-                    .get_neuron_id_or_subaccount()?
-                    .ok_or_else(|| {
-                        GovernanceError::new_with_message(
-                            ErrorType::NotFound,
-                            "Proposal must include a neuron to manage.",
-                        )
-                    })?;
-                let ballots =
-                    self.compute_ballots_for_manage_neuron_proposal(&managed_id, proposer_id)?;
-                // Voting power is weird in the case of ManageNeuron proposals. In that case, only
-                // the followees of the targetted neuron can vote, and they all get 1 voting power,
-                // regardless of refresh. Also, these proposals have no rewards. Therefore, in the
-                // case of ManageNeuron, this returns ballots_len.
-                let total_potential_voting_power = ballots.len() as u64;
-                let previous_ballots_timestamp_seconds = None;
-                (
-                    ballots,
-                    total_potential_voting_power,
-                    previous_ballots_timestamp_seconds,
-                )
-            } else {
-                self.compute_ballots_for_standard_proposal(now_seconds)?
-            };
+            self.compute_ballots_for_new_proposal(&action, proposer_id, now_seconds)?;
 
         if ballots.is_empty() {
             // Cannot make a proposal with no eligible voters.  This
@@ -5563,7 +5550,7 @@ impl Governance {
         };
 
         // Wait-For-Quiet is not enabled for ManageNeuron
-        let wait_for_quiet_enabled = !action.is_manage_neuron();
+        let wait_for_quiet_enabled = action.manage_neuron().is_none();
 
         // Create a new proposal ID for this proposal.
         let proposal_num = self.next_proposal_id();
@@ -5630,11 +5617,47 @@ impl Governance {
         Ok(proposal_id)
     }
 
+    /// Computes what ballots a new proposal should have, based on the action. Also returns
+    /// Potential Voting Power and the timestamp of the previous ballots if a voting power spike was
+    /// detected.
+    #[allow(clippy::type_complexity)]
+    fn compute_ballots_for_new_proposal(
+        &self,
+        action: &ValidProposalAction,
+        proposer_id: &NeuronId,
+        now_seconds: u64,
+    ) -> Result<(HashMap<u64, Ballot>, u64, Option<u64>), GovernanceError> {
+        if let Some(manage_neuron) = action.manage_neuron() {
+            let managed_id = manage_neuron
+                .get_neuron_id_or_subaccount()?
+                .ok_or_else(|| {
+                    GovernanceError::new_with_message(
+                        ErrorType::NotFound,
+                        "Proposal must include a neuron to manage.",
+                    )
+                })?;
+            let ballots =
+                self.compute_ballots_for_manage_neuron_proposal(&managed_id, proposer_id)?;
+            // Voting power is weird in the case of ManageNeuron proposals. In that case, only
+            // the followees of the targetted neuron can vote, and they all get 1 voting power,
+            // regardless of refresh. Also, these proposals have no rewards. Therefore, in the
+            // case of ManageNeuron, this returns ballots_len.
+            let total_potential_voting_power = ballots.len() as u64;
+            let previous_ballots_timestamp_seconds = None;
+            Ok((
+                ballots,
+                total_potential_voting_power,
+                previous_ballots_timestamp_seconds,
+            ))
+        } else {
+            self.compute_ballots_for_standard_proposal(now_seconds)
+        }
+    }
+
     /// Computes ballots for a ManageNeuron proposal.
     /// Only the followees of the managed neuron can vote, and they all get 1 voting power.
-    #[allow(clippy::type_complexity)]
     fn compute_ballots_for_manage_neuron_proposal(
-        &mut self,
+        &self,
         managed_id: &NeuronIdOrSubaccount,
         proposer_id: &NeuronId,
     ) -> Result<HashMap<u64, Ballot>, GovernanceError> {
@@ -5676,18 +5699,24 @@ impl Governance {
         Ok(ballots)
     }
 
-    /// Computes what ballots a new proposal should have, based on the action.
-    /// Also returns Potential Voting Power.
+    /// Computes what ballots a standard proposal should have. Also returns
+    /// Potential Voting Power and the timestamp of the previous ballots if a voting power spike was
+    /// detected.
     ///
     /// # Potential Voting Power vs. Deciding Voting Power
     ///
-    /// If all neurons keep themselves refreshed, then deciding voting power =
-    /// potential voting power. Whereas, if a neuron has not refreshed recently
-    /// enough, the amount of voting power it can exercise is less than its
-    /// potential.
+    /// If all neurons keep themselves refreshed, then deciding voting power = potential voting
+    /// power. Whereas, if a neuron has not refreshed recently enough, the amount of voting power it
+    /// can exercise is less than its potential.
+    ///
+    /// # Voting Power Spike
+    ///
+    /// A voting power spike is detected when the total potential voting power is more than 1.5
+    /// times the minimum total potential voting power in the snapshots. If a voting power spike is
+    /// detected, then the previous ballots are returned.
     #[allow(clippy::type_complexity)]
     fn compute_ballots_for_standard_proposal(
-        &mut self,
+        &self,
         now_seconds: u64,
     ) -> Result<
         (
