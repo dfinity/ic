@@ -21,11 +21,12 @@ use ic_nns_test_utils::state_test_helpers::setup_nns_canisters_with_features;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{
-        get_pending_proposals, ledger_account_balance, nns_get_monthly_node_provider_rewards,
+        get_pending_proposals, ledger_account_balance,
         nns_get_most_recent_monthly_node_provider_rewards, nns_get_network_economics_parameters,
-        nns_governance_get_proposal_info, nns_governance_make_proposal,
-        nns_list_node_provider_rewards, nns_wait_for_proposal_execution, query,
-        state_machine_builder_for_nns_tests, update_with_sender,
+        nns_get_node_provider_rewards, nns_governance_get_proposal_info,
+        nns_governance_make_proposal, nns_list_node_provider_rewards,
+        nns_wait_for_proposal_execution, query, state_machine_builder_for_nns_tests,
+        update_with_sender,
     },
 };
 use ic_protobuf::registry::{
@@ -117,7 +118,7 @@ fn test_list_node_provider_rewards() {
 
     // Call get_monthly_node_provider_rewards assert the value is as expected
     let monthly_node_provider_rewards_result: Result<RewardNodeProviders, GovernanceError> =
-        nns_get_monthly_node_provider_rewards(&state_machine);
+        nns_get_node_provider_rewards(&state_machine);
 
     let monthly_node_provider_rewards = monthly_node_provider_rewards_result.unwrap();
     assert!(
@@ -418,7 +419,7 @@ fn test_automated_node_provider_remuneration() {
 
     // Call get_monthly_node_provider_rewards assert the value is as expected
     let monthly_node_provider_rewards_result: Result<RewardNodeProviders, GovernanceError> =
-        nns_get_monthly_node_provider_rewards(&state_machine);
+        nns_get_node_provider_rewards(&state_machine);
 
     let monthly_node_provider_rewards = monthly_node_provider_rewards_result.unwrap();
     assert_eq!(monthly_node_provider_rewards.rewards.len(), 3);

@@ -1515,13 +1515,13 @@ pub fn nns_list_proposals(
 }
 
 /// Return the monthly Node Provider rewards
-pub fn nns_get_monthly_node_provider_rewards(
+pub fn nns_get_node_provider_rewards(
     state_machine: &StateMachine,
 ) -> Result<RewardNodeProviders, GovernanceError> {
     let result = state_machine
         .execute_ingress(
             GOVERNANCE_CANISTER_ID,
-            "get_monthly_node_provider_rewards",
+            "get_node_provider_rewards",
             Encode!(&()).unwrap(),
         )
         .unwrap();
