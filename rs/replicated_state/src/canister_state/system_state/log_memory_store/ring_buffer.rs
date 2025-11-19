@@ -11,20 +11,29 @@ use ic_sys::PageBytes;
 // PageMap file layout.
 // Header layout constants.
 pub const HEADER_OFFSET: MemoryAddress = MemoryAddress::new(0);
-pub const HEADER_RESERVED_SIZE: MemorySize = MemorySize::new(PAGE_SIZE as u64);
-pub const HEADER_SIZE: MemorySize = MemorySize::new(56);
-pub const MAGIC: &[u8; 3] = b"LMS";
+pub const HEADER_SIZE: MemorySize = MemorySize::new(PAGE_SIZE as u64);
+pub const MAGIC: &[u8; 3] = b"CLB"; // Canister Log Buffer
 // Index table layout constants.
-pub const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_RESERVED_SIZE);
+pub const INDEX_TABLE_OFFSET: MemoryAddress = HEADER_OFFSET.add_size(HEADER_SIZE);
 pub const INDEX_TABLE_PAGES: usize = 1;
 pub const INDEX_TABLE_SIZE: MemorySize = MemorySize::new((INDEX_TABLE_PAGES * PAGE_SIZE) as u64);
 pub const INDEX_ENTRY_SIZE: MemorySize = MemorySize::new(28);
+pub const INDEX_ENTRY_COUNT_MAX: u64 = INDEX_TABLE_SIZE.get() / INDEX_ENTRY_SIZE.get();
 // Data region layout constants.
 pub const DATA_REGION_OFFSET: MemoryAddress = INDEX_TABLE_OFFSET.add_size(INDEX_TABLE_SIZE);
 
 // Ring buffer constraints.
-pub const DATA_CAPACITY_MAX: MemorySize = MemorySize::new(100 * 1024 * 1024); // 100 MiB
 pub const RESULT_MAX_SIZE: MemorySize = MemorySize::new(2_000_000); // 2 MB
+
+// With index table of 1 page (4 KiB) and 28 bytes per entry -> 146 entries max.
+// With 2 MB result max size limit we want each index entry segment to be under
+// say 20% of that (400 KB). So 146 segments turns into ~55 MB total data capacity.
+// Small segments help to reduce work on refining log records filtering
+// when fetching logs.
+pub const DATA_CAPACITY_MAX: MemorySize = MemorySize::new(55_000_000); // 55 MB
+const DATA_SEGMENT_SIZE_MAX: u64 = DATA_CAPACITY_MAX.get() / INDEX_ENTRY_COUNT_MAX;
+// Ensure data segment size is significantly smaller than max result size, say 20%.
+const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
 
 struct RingBuffer {
     io: StructIO,
@@ -32,6 +41,10 @@ struct RingBuffer {
 
 impl RingBuffer {
     pub fn new(page_map: PageMap, data_capacity: MemorySize) -> Self {
+        assert!(
+            data_capacity <= DATA_CAPACITY_MAX,
+            "data capacity exceeds maximum"
+        );
         let mut io = StructIO::new(page_map);
         io.save_header(&Header::new(data_capacity));
 
@@ -376,10 +389,3 @@ mod tests {
         );
     }
 }
-
-/*
-bazel test //rs/replicated_state:replicated_state_test \
-  --test_output=streamed \
-  --test_arg=--nocapture \
-  --test_arg=log_memory_store
-*/

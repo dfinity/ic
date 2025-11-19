@@ -1,6 +1,6 @@
 use crate::canister_state::system_state::log_memory_store::{
     memory::{MemoryAddress, MemoryPosition, MemorySize},
-    ring_buffer::{DATA_REGION_OFFSET, HEADER_SIZE, INDEX_TABLE_PAGES, MAGIC},
+    ring_buffer::{DATA_REGION_OFFSET, INDEX_TABLE_PAGES, MAGIC},
 };
 
 /// Header structure for the log memory store (version 1).
@@ -22,7 +22,6 @@ pub(crate) struct Header {
     pub data_tail: MemoryPosition,
     pub next_idx: u64,
 }
-const _: () = assert!(std::mem::size_of::<Header>() == HEADER_SIZE.get() as usize);
 
 impl Header {
     pub fn new(data_capacity: MemorySize) -> Self {
@@ -87,7 +86,7 @@ mod tests {
     fn new_header_sets_defaults() {
         let capacity = MemorySize::new(1024);
         let h = Header::new(capacity);
-        assert_eq!(h.magic, *b"LMS");
+        assert_eq!(h.magic, *b"CLB");
         assert_eq!(h.version, 1);
         assert_eq!(h.index_table_pages, 1);
         assert_eq!(h.index_entries_count, 0);
