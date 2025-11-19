@@ -88,6 +88,7 @@ pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
             Constraint::Length(3), // Instructions area
             Constraint::Length(9), // Input fields area (3 fields × 3 rows each)
             Constraint::Length(1), // Button area
+            Constraint::Length(1), // Spacing after buttons
             Constraint::Min(0),    // Remaining space
         ])
         .split(size);
@@ -143,6 +144,15 @@ pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
         button_area,
         5,
     );
+
+    // Display exit message in the remaining space area with proper spacing
+    if let Some(ref msg) = app.exit_message {
+        let message_area = main_layout[5];
+        let para = Paragraph::new(msg.as_str())
+            .style(Style::default().fg(Color::White))
+            .alignment(Alignment::Center);
+        f.render_widget(para, message_area);
+    }
 
     if let Some(ref error) = app.error_message {
         let max_width = (size.width * 80 / 100).max(MIN_BOX_WIDTH);

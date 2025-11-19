@@ -143,10 +143,7 @@ pub fn main() -> Result<()> {
                     show_status_and_run_upgrader(&params)?;
                     Ok(())
                 }
-                None => {
-                    eprintln!("Recovery cancelled by user");
-                    Ok(())
-                }
+                None => Ok(()),
             }
         }
         None => Err(anyhow!(

@@ -240,6 +240,7 @@ pub struct App {
     current_field: Field,
     params: RecoveryParams,
     error_message: Option<String>,
+    exit_message: Option<String>,
 }
 
 impl Default for App {
@@ -248,6 +249,7 @@ impl Default for App {
             current_field: Field::Version,
             params: RecoveryParams::default(),
             error_message: None,
+            exit_message: None,
         }
     }
 }
@@ -367,7 +369,11 @@ impl App {
 
             // Handle action
             match action {
-                Action::Exit => break Ok(None),
+                Action::Exit => {
+                    self.exit_message = Some("Recovery cancelled by user".to_string());
+                    self.redraw(&mut terminal_guard)?;
+                    break Ok(None);
+                }
                 Action::Proceed => match self.params.validate() {
                     Ok(_) => break Ok(Some(self.params.clone())),
                     Err(e) => {
