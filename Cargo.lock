@@ -2778,7 +2778,6 @@ dependencies = [
  "ic_consensus_system_test_utils",
  "ic_consensus_threshold_sig_system_test_utils",
  "prost 0.13.4",
- "regex",
  "slog",
  "tokio",
 ]

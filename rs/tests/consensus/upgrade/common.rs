@@ -25,7 +25,7 @@ use ic_consensus_threshold_sig_system_test_utils::run_chain_key_signature_test;
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_subnet_type::SubnetType;
-use ic_system_test_driver::util::{LogStream, create_agent};
+use ic_system_test_driver::util::create_agent;
 use ic_system_test_driver::{
     driver::{test_env::TestEnv, test_env_api::*},
     util::{MessageCanister, block_on},
@@ -256,10 +256,6 @@ async fn upgrade_to(
 ) {
     const CUP_PATH: &str = "/var/lib/ic/data/cups/cup.types.v1.CatchUpPackage.pb";
 
-    let log_stream = LogStream::open(std::iter::once(subnet_node.clone()))
-        .await
-        .unwrap();
-
     info!(
         logger,
         "Upgrading subnet {} to {}", subnet_id, target_version
@@ -268,12 +264,13 @@ async fn upgrade_to(
 
     info!(
         logger,
-        "Checking if the node {} has produced a log displaying local CUP info and one \
+        "Checking if the node {} has produced a log displaying the latest computed root hash and one \
         indicating that the orchestrator has gracefully shut down the tasks",
         subnet_node.get_ip_addr(),
     );
 
-    let state_hash_from_logs = fetch_local_cup_hash_from_logs_until_graceful_exit(log_stream).await;
+    let state_hash_from_logs =
+        fetch_computed_root_hash_from_logs_until_graceful_exit(subnet_node).await;
 
     info!(logger, "The orchestrator shut down the tasks gracefully");
     info!(
@@ -307,45 +304,6 @@ async fn upgrade_to(
     );
 }
 
-/// Fetch the latest local CUP state hash from the node logs by continously searching for matching
-/// log entries until detecting that the orchestrator gracefully shut down (which indicates an
-/// upcoming reboot).
-///
-/// This function will thus loop indefinitely if an upgrade is not scheduled.
-async fn fetch_local_cup_hash_from_logs_until_graceful_exit(mut log_stream: LogStream) -> String {
-    let local_cup_regex =
-        regex::Regex::new(r#"Successfully persisted CUP \(.*state_hash=([a-f0-9]{64}).*\)"#)
-            .unwrap();
-    let orchestrator_shutdown = "Orchestrator shut down gracefully";
-
-    // Stream log entries until detecting that the orchestrator has shut down gracefully, while
-    // always keeping track of the latest log entry matching the local CUP regex.
-    // If the stream ends without logging the shutdown message, the function will panic.
-    let mut local_cup_log_entry = None;
-    loop {
-        let (_, entry) = log_stream
-            .find(|_, line| local_cup_regex.is_match(line) || line.contains(orchestrator_shutdown))
-            .await
-            .expect("Orchestrator did not shut down gracefully");
-
-        if entry.contains(orchestrator_shutdown) {
-            break;
-        }
-
-        // Entry matches local CUP regex
-        local_cup_log_entry = Some(entry);
-    }
-    // If `local_cup_log_entry` is still `None`, then there was a log entry with the shutdown
-    // message but none matching the local CUP regex.
-    let local_cup_log_entry = local_cup_log_entry.expect("Log displaying local CUP info not found");
-
-    local_cup_regex
-        .captures(&local_cup_log_entry)
-        .and_then(|caps| caps.get(1))
-        .map(|m| m.as_str().to_string())
-        .expect("Failed to extract state hash from log entry")
-}
-
 // Stops the node and makes sure it becomes unreachable
 pub fn stop_node(logger: &Logger, app_node: &IcNodeSnapshot) {
     app_node
@@ -370,4 +328,59 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
         .await_status_is_healthy()
         .expect("Node not healthy");
     info!(logger, "Node started: {}", app_node.get_ip_addr());
+}
+
+/// Fetch the latest computed state root hash from the node logs by continously searching for
+/// matching log entries until detecting that the orchestrator gracefully shut down (which indicates
+/// an upcoming reboot).
+///
+/// This function will thus loop indefinitely if an upgrade is not scheduled.
+async fn fetch_computed_root_hash_from_logs_until_graceful_exit(node: &IcNodeSnapshot) -> String {
+    let computed_root_hash_regex = r#"Computed root hash CryptoHash\(0x([a-f0-9]{64})\)"#;
+    let orchestrator_shutdown = "Orchestrator shut down gracefully";
+
+    let script = format!(
+        r#"
+        set -euo pipefail
+
+        computed_root_hash_regex='{computed_root_hash_regex}'
+        orchestrator_shutdown='{orchestrator_shutdown}'
+
+        last_state_hash=""
+
+        # Stream log entries until detecting that the orchestrator has shut down gracefully, while
+        # always keeping track of the latest log entry matching the computed_root_hash_regex.
+        # If the logs end without logging the shutdown message, exit with an error.
+        while IFS='' read -r line; do
+            # If orchestrator shutdown is logged, output the last found computed root hash and exit
+            if echo "$line" | grep -q "$orchestrator_shutdown"; then
+                echo -n "$last_state_hash"
+                exit 0
+            fi
+
+            # Update last occurrence of computed root hash
+            # =~ is Bash's regex-matching operator
+            if [[ $line =~ $computed_root_hash_regex ]]; then
+                # BASH_REMATCH is a special Bash array variable containing captured groups
+                last_state_hash="${{BASH_REMATCH[1]}}"
+            fi
+        done < <(journalctl -f -o cat)
+
+        echo -n "Journal ended without detecting orchestrator shutdown" >&2
+        exit 1
+        "#
+    );
+
+    let computed_root_hash_entry = node
+        .block_on_bash_script(&script)
+        .expect("Orchestrator did not shut down gracefully");
+
+    // As of the `.unwrap()` above, the script must have exited with code 0, meaning that if its
+    // output is empty, then no computed root hash log entry was found before the shutdown message.
+    assert!(
+        !computed_root_hash_entry.is_empty(),
+        "Log displaying computed root hash not found"
+    );
+
+    computed_root_hash_entry
 }
