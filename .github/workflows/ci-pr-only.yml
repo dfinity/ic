@@ -41,11 +41,11 @@ jobs:
           run: |
             if [[ '${{ github.event_name == 'pull_request' ]]; then
               # In case this run is triggered by a PR,
-              # we know HEAD is a merge of the PR branch (github.event.pull_request.head.sha)
+              # we know HEAD is a merge of the head of the PR branch (github.event.pull_request.head.sha)
               # and its base branch, let's call that commit DID_CHECK_REV.
               # Then we need to compare the did file of HEAD with the did file of DID_CHECK_REV.
               # Since we've only fetched HEAD we calculate DID_CHECK_REV by
-              # removing the head of the PR from the parents of HEAD
+              # showing the parents of HEAD and filtering out the head of the PR branch
               # such that we end up with the commit on the base branch.
               export DID_CHECK_REV="$(
                 for p in $(git show --no-patch --pretty=%P HEAD); do
@@ -54,7 +54,12 @@ jobs:
               )"
               git fetch --depth=1 origin "$DID_CHECK_REV"
             else
-              echo TODO
+              # In case this run was triggered from ci-kickoff-manual,
+              # HEAD will be the head of the PR branch.
+              # Then we need to compare the did file of HEAD
+              # with the did file of the merge-base of HEAD with the base branch.
+              git fetch origin "${{ inputs.commit-sha }}" "${{ inputs.base-ref }}"
+              export DID_CHECK_REV=$(git merge-base HEAD origin/"${{ inputs.base-ref }}")
             fi
             echo "DID_CHECK_REV=$DID_CHECK_REV"
             bazel test //... \
