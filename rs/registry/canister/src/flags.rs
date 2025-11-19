@@ -195,3 +195,73 @@ pub(crate) fn is_node_swapping_enabled_for_caller(caller: PrincipalId) -> bool {
         false
     })
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum FeaturePolicy<T>
+where
+    T: Clone + Eq,
+{
+    AllowOnly(Vec<T>),
+    AllowAll,
+    DenyOnly(Vec<T>),
+    DenyAll,
+}
+
+impl<T> FeaturePolicy<T>
+where
+    T: Clone + Eq,
+{
+    fn is_allowed(&self, item: &T) -> bool {
+        match &self {
+            FeaturePolicy::AllowOnly(items) => items.contains(item),
+            FeaturePolicy::AllowAll => true,
+            FeaturePolicy::DenyOnly(items) => !items.contains(item),
+            FeaturePolicy::DenyAll => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ic_types::PrincipalId;
+
+    use crate::flags::FeaturePolicy;
+
+    #[test]
+    fn test_allow_all() {
+        let policy = FeaturePolicy::AllowAll;
+
+        assert!(policy.is_allowed(&PrincipalId::new_user_test_id(1)));
+        assert!(policy.is_allowed(&PrincipalId::new_anonymous()));
+    }
+
+    #[test]
+    fn test_deny_all() {
+        let policy = FeaturePolicy::DenyAll;
+
+        assert!(!policy.is_allowed(&PrincipalId::new_user_test_id(1)));
+        assert!(!policy.is_allowed(&PrincipalId::new_anonymous()));
+    }
+
+    #[test]
+    fn test_allow_some() {
+        let user_1 = PrincipalId::new_user_test_id(1);
+        let policy =
+            FeaturePolicy::AllowOnly(vec![user_1.clone(), PrincipalId::new_user_test_id(2)]);
+
+        assert!(policy.is_allowed(&user_1));
+        assert!(!policy.is_allowed(&PrincipalId::new_user_test_id(999)));
+        assert!(!policy.is_allowed(&PrincipalId::new_anonymous()));
+    }
+
+    #[test]
+    fn test_deny_some() {
+        let user_1 = PrincipalId::new_user_test_id(1);
+        let policy =
+            FeaturePolicy::DenyOnly(vec![user_1.clone(), PrincipalId::new_user_test_id(2)]);
+
+        assert!(!policy.is_allowed(&user_1));
+        assert!(policy.is_allowed(&PrincipalId::new_user_test_id(999)));
+        assert!(policy.is_allowed(&PrincipalId::new_anonymous()));
+    }
+}
