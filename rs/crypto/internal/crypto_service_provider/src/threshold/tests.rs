@@ -18,7 +18,7 @@ pub mod util {
     use super::*;
     use crate::LocalCspVault;
     use crate::api::CspThresholdSignError;
-    use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_csp_pub_coeffs;
+    use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::try_number_of_nodes_from_csp_pub_coeffs;
 
     /// Test that a set of threshold signatures behaves correctly.
     ///
