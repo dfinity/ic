@@ -84,7 +84,7 @@ lazy_static! {
             88, 18, 42, 56, 154, 204, 161, 98, 5, 177, 228, 208, 220, 95, 148, 118,
         ];
 
-        btreemap! {
+        let mut additional = btreemap! {
             v1_hash => ExtensionSpec {
                 name: "My Test Extension".to_string(),
                 version: ExtensionVersion(1),
@@ -105,7 +105,13 @@ lazy_static! {
                 topic: Topic::TreasuryAssetManagement,
                 extension_type: ExtensionType::TreasuryManager,
             },
-        }
+        };
+
+        ALLOWED_EXTENSIONS.with(|base| {
+            let mut result = base.borrow().clone();
+            result.append(&mut additional);
+            result
+        })
     };
 }
 

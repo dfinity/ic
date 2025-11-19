@@ -164,17 +164,17 @@ type RegisterExtensionResponse = record {
   result : opt RegisterExtensionResult;
 };
 
-type DeregisterExtensionRequest = record {
+type CleanUpFailedRegisterExtensionRequest = record {
   canister_id : opt principal;
 };
 
-type DeregisterExtensionResult = variant {
+type CleanUpFailedRegisterExtensionResult = variant {
   Ok : record {};
   Err : CanisterCallError;
 };
 
-type DeregisterExtensionResponse = record {
-  result : opt DeregisterExtensionResult;
+type CleanUpFailedRegisterExtensionResponse = record {
+  result : opt CleanUpFailedRegisterExtensionResult;
 };
 
 type RegisterDappCanisterRequest = record {
@@ -223,7 +223,7 @@ type GetTimersResponse = record {
 service : (SnsRootCanister) -> {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
   change_canister : (ChangeCanisterRequest) -> ();
-  deregister_extension : (DeregisterExtensionRequest) -> (DeregisterExtensionResponse);
+  clean_up_failed_register_extension : (CleanUpFailedRegisterExtensionRequest) -> (CleanUpFailedRegisterExtensionResponse);
   get_build_metadata : () -> (text) query;
   get_sns_canisters_summary : (GetSnsCanistersSummaryRequest) -> (
       GetSnsCanistersSummaryResponse,
