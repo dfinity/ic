@@ -93,7 +93,7 @@ impl StructIO {
         )
     }
 
-    pub fn save_index(&mut self, index: IndexTable) {
+    pub fn save_index(&mut self, index: &IndexTable) {
         // Save entries.
         let mut addr = INDEX_TABLE_OFFSET;
         for entry in index.raw_entries() {
@@ -197,6 +197,14 @@ impl StructIO {
         address + MemorySize::new(bytes.len() as u64)
     }
 
+    fn remaining(position: MemoryPosition, capacity: MemorySize) -> MemorySize {
+        if position < MemoryPosition::new(capacity.get()) {
+            capacity - position
+        } else {
+            MemorySize::new(0)
+        }
+    }
+
     fn read_wrapped_vec(
         &self,
         position: MemoryPosition,
@@ -204,15 +212,15 @@ impl StructIO {
         offset: MemoryAddress,
         capacity: MemorySize,
     ) -> (Vec<u8>, MemoryPosition) {
-        let remaining_size = capacity - position;
-        let bytes = if len <= remaining_size {
+        let remaining = Self::remaining(position, capacity);
+        let bytes = if len <= remaining {
             // No wrap.
             let (bytes, _addr) = self.read_raw_vec(offset + position, len);
             bytes
         } else {
             // Wraps around.
-            let (mut bytes, _addr) = self.read_raw_vec(offset + position, remaining_size);
-            let second_part_size = len - remaining_size;
+            let (mut bytes, _addr) = self.read_raw_vec(offset + position, remaining);
+            let second_part_size = len - remaining;
             let (mut second_part, _addr) = self.read_raw_vec(offset, second_part_size);
             bytes.append(&mut second_part);
             bytes
@@ -228,7 +236,7 @@ impl StructIO {
     ) -> ([u8; N], MemoryPosition) {
         let mut result = [0u8; N];
         let len = MemorySize::new(N as u64);
-        let remaining = capacity - position;
+        let remaining = Self::remaining(position, capacity);
         if len <= remaining {
             // No wrap.
             let (bytes, _addr) = self.read_raw_vec(offset + position, len);
@@ -251,14 +259,14 @@ impl StructIO {
         offset: MemoryAddress,
         capacity: MemorySize,
     ) -> MemoryPosition {
-        let remaining_size = capacity - position;
+        let remaining = Self::remaining(position, capacity);
         let len = MemorySize::new(bytes.len() as u64);
-        if len <= remaining_size {
+        if len <= remaining {
             // No wrap.
             self.write_raw_bytes(offset + position, bytes);
         } else {
             // Wrap around.
-            let split = remaining_size.get() as usize;
+            let split = remaining.get() as usize;
             self.write_raw_bytes(offset + position, &bytes[..split]);
             self.write_raw_bytes(offset, &bytes[split..]);
         }

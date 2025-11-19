@@ -113,7 +113,7 @@ impl RingBuffer {
         // TODO: optimize for loading lots of records in a row.
         let mut index = self.io.load_index();
         index.update(position, record);
-        self.io.save_index(index);
+        self.io.save_index(&index);
     }
 
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
