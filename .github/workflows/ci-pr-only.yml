@@ -39,7 +39,7 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
-            git fetch origin --depth=1 'origin/${{ inputs.base-ref }}'
+            git fetch origin --depth=1 '${{ inputs.base-ref }}'
             export DID_CHECK_REV="$(git rev-parse 'origin/${{ inputs.base-ref }}')"
             echo "DID_CHECK_REV=$DID_CHECK_REV"
             bazel test //... \
