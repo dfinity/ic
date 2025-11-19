@@ -1,0 +1,20 @@
+name: External Contributor Slack Notification
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+jobs:
+  notify-slack:
+    name: Notify Slack for External Contributors
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    steps:
+      - name: Post to a Slack channel
+        id: slack
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001 # v1.25.0
+        with:
+          channel-id: eng-idx
+          slack-message: "External Contribution: <${{ github.event.pull_request.html_url }}>"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_API_TOKEN }}
