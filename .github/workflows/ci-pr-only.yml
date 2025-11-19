@@ -34,9 +34,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # On PRs inputs.commit-sha is a merge between the PR and its base.
-          # We need to set DID_CHECK_REV to that base. To make sure base is fetched
-          # we need to fetch with depth 2 to fetch inputs.commit-sha and its parents.
           fetch-depth: 2
           ref: ${{ inputs.commit-sha }}
       - name: Run candid compatibility checks
@@ -46,7 +43,22 @@ jobs:
             set -x
             if [[ '${{ github.event_name }}' == 'pull_request' ]]; then
               # In case this run is triggered by a PR,
-              export DID_CHECK_REV="$(git rev-parse '${{ github.event.pull_request.base.ref }}')"
+              # we know HEAD is a merge of the head of the PR branch (github.event.pull_request.head.sha)
+              # and its base branch, let's call that commit DID_CHECK_REV.
+              # Then we need to compare the did file of HEAD with the did file of DID_CHECK_REV.
+              # Since we've only fetched HEAD we calculate DID_CHECK_REV by
+              # showing the parents of HEAD and filtering out the head of the PR branch
+              # such that we end up with the commit on the base branch.
+              git show --no-patch HEAD
+              git show --no-patch --pretty=%P HEAD
+              parents=($(git show --no-patch --pretty=%P HEAD))
+              for p in "${parents[@]}"; do echo $p; done
+              export DID_CHECK_REV="$(
+                for p in "${parents[@]}"; do
+                  [[ $p != "${{ github.event.pull_request.head.sha }}" ]] && { echo -n "$p"; break; };
+                done
+              )"
+              git fetch --depth=1 origin "$DID_CHECK_REV"
             else
               # In case this run was triggered from ci-kickoff-manual,
               # HEAD will a commit on the PR branch.
