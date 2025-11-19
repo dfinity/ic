@@ -253,7 +253,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 features = ["typed-header"],
             ),
             "axum-prometheus": crate.spec(
-                version = "0.9.0"
+                version = "0.9.0",
             ),
             "axum-server": crate.spec(
                 version = "^0.7.2",
@@ -527,7 +527,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.3.1",
             ),
             "exitcode": crate.spec(
-                version = "1.1.2"
+                version = "1.1.2",
             ),
             "eyre": crate.spec(
                 version = "^0.6.8",
@@ -857,7 +857,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.5.6",
             ),
             "log": crate.spec(
-                version = "0.4.20"
+                version = "0.4.20",
             ),
             "loopdev-3": crate.spec(
                 version = "0.5",
@@ -1311,7 +1311,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.6.2",
             ),
             "simple_logger": crate.spec(
-                version = "4.3.0"
+                version = "4.3.0",
             ),
             "simple_moving_average": crate.spec(
                 version = "^1.0.2",
