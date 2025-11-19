@@ -498,18 +498,35 @@ async fn simulate_node_provider_action(
         img_version_hash,
         artifacts_hash
     );
-    let upgrader_command = format!(
+    let recovery_upgrader_command = format!(
         "sudo -n /opt/ic/bin/guestos-recovery-upgrader.sh version={} version-hash={} recovery-hash={}",
         img_version, img_version_hash, artifacts_hash
     );
-    host.block_on_bash_script_async(&upgrader_command)
+    host.block_on_bash_script_async(&recovery_upgrader_command)
         .await
         .expect("Failed to run guestos-recovery-upgrader");
+
+    // Wait 15 seconds to give enough time for the old version to shut down before spoofing the GuestOS DNS
+    tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+    // For reviewers: We want to wait to try spoofing the GuestOS DNS until AFTER the old GuestOS shuts down (note that after the guestos-recovery-upgrader runs, it takes a few seconds for the guest VM to shut down and the recovery-GuestOS to come up), but we can't wait for the GuestOS version the way we do at the end with `upgrade_version` because the `img_version` is just a dummy value so that the guestos-recovery-upgrader downloads from the correct URL.
+    // Instead, we could track the the boot id of the GuestOS before and after recovery-upgrader runs, but I wasn't sure this was worth the complexity if a 15 second sleep sufficed.
+
+    // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
+    let guest = host.get_guest_ssh().unwrap();
+    info!(
+        logger,
+        "Spoofing GuestOS {} DNS to point the upstreams to the UVM at {}",
+        host.vm_name(),
+        server_ipv6
+    );
+    impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
+        .await
+        .expect("Failed to spoof GuestOS DNS");
 
     // Wait until the node has booted the expected GuestOS version
     retry_with_msg_async!(
         format!(
-            "Waiting until GuestOS {} reboots on the upgrade version {}",
+            "Waiting until GuestOS {} boots on the upgrade version {}",
             host.vm_name(),
             upgrade_version
         ),
@@ -540,18 +557,6 @@ async fn simulate_node_provider_action(
     )
     .await
     .expect("GuestOS did not reboot on the upgrade version");
-
-    // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
-    let guest = host.get_guest_ssh().unwrap();
-    info!(
-        logger,
-        "Spoofing GuestOS {} DNS to point the upstreams to the UVM at {}",
-        host.vm_name(),
-        server_ipv6
-    );
-    impersonate_upstreams::spoof_node_dns_async(&guest, &server_ipv6)
-        .await
-        .expect("Failed to spoof GuestOS DNS");
 }
 
 fn local_recovery(node: &IcNodeSnapshot, subnet_recovery: NNSRecoverySameNodes, logger: &Logger) {
