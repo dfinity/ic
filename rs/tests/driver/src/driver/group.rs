@@ -141,6 +141,9 @@ pub struct CliArgs {
         help = "The list of regexes which will be skipped from the streaming."
     )]
     pub exclude_logs: Vec<Regex>,
+
+    #[clap(long, short, help = "Reduce terminal logging to mostly test output.")]
+    pub quiet: bool,
 }
 
 impl CliArgs {
@@ -218,9 +221,16 @@ fn subproc(
     task_id: TaskId,
     target_fn: impl SubprocessFn,
     ctx: &mut ComposeContext,
+    quiet: bool,
 ) -> SubprocessTask {
     trace!(ctx.group_ctx.log(), "subproc(task_name={})", &task_id);
-    SubprocessTask::new(task_id, ctx.rh.clone(), target_fn, ctx.group_ctx.clone())
+    SubprocessTask::new(
+        task_id,
+        ctx.rh.clone(),
+        target_fn,
+        ctx.group_ctx.clone(),
+        quiet,
+    )
 }
 
 fn timed(
@@ -393,7 +403,7 @@ impl SystemTestSubGroup {
                 };
                 timed(
                     Plan::Leaf {
-                        task: Box::from(subproc(task_id, closure, ctx)),
+                        task: Box::from(subproc(task_id, closure, ctx, false)),
                     },
                     ctx.timeout_per_test,
                     None,
@@ -567,6 +577,8 @@ impl SystemTestGroup {
         debug!(group_ctx.log(), "SystemTestGroup.make_plan");
         let start_time = Utc::now();
 
+        let quiet = group_ctx.quiet;
+
         let mut compose_ctx = ComposeContext {
             rh,
             group_ctx: group_ctx.clone(),
@@ -645,6 +657,7 @@ impl SystemTestGroup {
                 }
             },
             &mut compose_ctx,
+            false,
         )) as Box<dyn Task>;
 
         // The ID of the root task is needed outside this function for awaiting when the plan execution finishes.
@@ -699,6 +712,7 @@ impl SystemTestGroup {
                     }
                 },
                 &mut compose_ctx,
+                quiet,
             )) as Box<dyn Task>
         } else {
             Box::from(EmptyTask::new(keepalive_task_id)) as Box<dyn Task>
@@ -734,6 +748,7 @@ impl SystemTestGroup {
                     }
                 },
                 &mut compose_ctx,
+                quiet,
             );
 
             Box::from(log_task) as Box<dyn Task>
@@ -765,6 +780,7 @@ impl SystemTestGroup {
                     SetupResult {}.write_attribute(&env);
                 },
                 &mut compose_ctx,
+                false,
             );
             timed(
                 Plan::Leaf {
@@ -787,6 +803,7 @@ impl SystemTestGroup {
                     teardown_fn(env);
                 },
                 &mut compose_ctx,
+                false,
             );
             timed(
                 Plan::Leaf {
@@ -927,6 +944,7 @@ impl SystemTestGroup {
             args.group_base_name,
             !args.no_logs,
             args.exclude_logs,
+            args.quiet,
         )?;
 
         let with_farm = self.with_farm;
