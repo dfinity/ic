@@ -363,9 +363,6 @@ impl CatchUpPackageProvider {
                 std::io::Error::new(std::io::ErrorKind::InvalidData, e),
             )
         })?;
-
-        let state_hash = hex::encode(cup.content.state_hash.clone().get().0);
-
         info!(
             self.logger,
             "Persisting CUP (replica_version={}, registry_version={}, height={}, signed={}, state_hash={}, timestamp={}) to file {}",
@@ -373,7 +370,7 @@ impl CatchUpPackageProvider {
             cup.content.registry_version(),
             cup.content.height(),
             cup.is_signed(),
-            state_hash,
+            hex::encode(cup.content.state_hash.clone().get().0),
             cup.content
                 .block
                 .get_value()
@@ -388,12 +385,6 @@ impl CatchUpPackageProvider {
                 e,
             )
         })?;
-        info!(
-            self.logger,
-            "Successfully persisted CUP (height={}, state_hash={})",
-            cup.content.height(),
-            state_hash,
-        );
 
         Ok(cup_file_path)
     }
