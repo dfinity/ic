@@ -320,6 +320,13 @@ main() {
     log_message "Recovery Upgrader completed successfully"
 
     log_message "Launching GuestOS on the new version..."
+
+    if [ -n "$RECOVERY_HASH" ]; then
+        log_message "Setting GUESTOS_RECOVERY_HASH environment variable"
+        systemctl set-environment "GUESTOS_RECOVERY_HASH=$RECOVERY_HASH"
+    fi
+
+    log_message "Restarting guestos.service"
     systemctl restart guestos.service
     log_message "GuestOS service restart initiated"
 }
