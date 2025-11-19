@@ -1,3 +1,4 @@
+#![allow(clippy::disallowed_types)]
 use crate::metrics::CacheMetrics;
 use axum::http;
 use axum::response::Response;

@@ -73,24 +73,24 @@ fn safely_clone_request_headers(orgheaders: HeaderMap) -> reqwest::header::Heade
     // to a later http crate version.
     let mut headers = reqwest::header::HeaderMap::new();
     for (k, v) in orgheaders {
-        if let Some(kk) = k {
-            if PROXIED_CLIENT_HEADERS.contains(&kk.to_string().to_lowercase().as_str()) {
-                let vv = v.as_ref();
-                match reqwest::header::HeaderValue::from_bytes(vv) {
-                    Ok(vvv) => {
-                        match reqwest::header::HeaderName::from_bytes(kk.as_ref()) {
-                            Ok(kkk) => {
-                                headers.insert(kkk, vvv);
-                            }
-                            Err(err) => {
-                                error!("Invalid request header name: {}", err)
-                            }
-                        };
-                    }
-                    // Ignore such headers;
-                    Err(err) => {
-                        error!("Invalid request header value: {}", err)
-                    }
+        if let Some(kk) = k
+            && PROXIED_CLIENT_HEADERS.contains(&kk.to_string().to_lowercase().as_str())
+        {
+            let vv = v.as_ref();
+            match reqwest::header::HeaderValue::from_bytes(vv) {
+                Ok(vvv) => {
+                    match reqwest::header::HeaderName::from_bytes(kk.as_ref()) {
+                        Ok(kkk) => {
+                            headers.insert(kkk, vvv);
+                        }
+                        Err(err) => {
+                            error!("Invalid request header name: {}", err)
+                        }
+                    };
+                }
+                // Ignore such headers;
+                Err(err) => {
+                    error!("Invalid request header value: {}", err)
                 }
             }
         }
@@ -392,10 +392,10 @@ impl MetricsProxier {
                 }
 
                 // Ignore this sample if the conclusion is that we were going to drop it anyway.
-                if let Some(trulykeep) = keep {
-                    if !trulykeep {
-                        continue;
-                    }
+                if let Some(trulykeep) = keep
+                    && !trulykeep
+                {
+                    continue;
                 }
 
                 // Add this sample's metric name documentation if not yet added.

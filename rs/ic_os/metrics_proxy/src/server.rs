@@ -1,7 +1,6 @@
 use crate::config::{HttpProxy, ListenerSpec, Protocol};
 use crate::proxy;
 use crate::tokiotimer::TokioTimer;
-use axum::debug_handler;
 use axum::extract::Request;
 use axum::extract::State;
 use axum::http;
@@ -124,7 +123,6 @@ impl Server {
     /// * `StartError` is returned if the server fails to start.
     pub async fn serve(self) -> Result<(), StartError> {
         // Short helper to issue backend request.
-        #[debug_handler]
         async fn handle_with_proxy(
             headers: HeaderMap,
             State(proxy): State<proxy::MetricsProxier>,

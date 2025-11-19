@@ -85,20 +85,20 @@ impl TryFrom<&ListenOn> for Protocol {
                 }
 
                 if !errors.is_empty() {
-                    return Err(Self::Error::CertificateFileReadError(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Received the following errors: {errors:#?}"),
-                    )));
+                    return Err(Self::Error::CertificateFileReadError(
+                        std::io::Error::other(format!(
+                            "Received the following errors: {errors:#?}"
+                        )),
+                    ));
                 }
 
                 if certs_parsed.is_empty() {
-                    return Err(Self::Error::CertificateFileReadError(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!(
+                    return Err(Self::Error::CertificateFileReadError(
+                        std::io::Error::other(format!(
                             "{} contains no certificates",
                             other.certificate_file.clone().unwrap().display()
-                        ),
-                    )));
+                        )),
+                    ));
                 }
 
                 let key = PrivateKeyDer::from_pem_file(other.key_file.as_ref().unwrap())
@@ -585,28 +585,27 @@ impl TryFrom<PathBuf> for Config {
                         certificate: thiscert,
                         key: thiskey,
                     } = element.listen_on.protocol.clone()
-                    {
-                        if let Protocol::Https {
+                        && let Protocol::Https {
                             certificate: priorcert,
                             key: priorkey,
                         } = prior.protocol.clone()
-                        {
-                            if thiscert != priorcert {
-                                return Err(Self::Error::ConflictingConfig(format!(
-                                    "proxy {} uses a different certificate from proxy {}; the same listening address must use the same certificate",
-                                    prior.index + 1,
-                                    index + 1
-                                )));
-                            }
-                            if thiskey != priorkey {
-                                return Err(Self::Error::ConflictingConfig(format!(
-                                    "proxy {} uses a different private key from proxy {}; the same listening address must use the same private key",
-                                    prior.index + 1,
-                                    index + 1
-                                )));
-                            }
+                    {
+                        if thiscert != priorcert {
+                            return Err(Self::Error::ConflictingConfig(format!(
+                                "proxy {} uses a different certificate from proxy {}; the same listening address must use the same certificate",
+                                prior.index + 1,
+                                index + 1
+                            )));
+                        }
+                        if thiskey != priorkey {
+                            return Err(Self::Error::ConflictingConfig(format!(
+                                "proxy {} uses a different private key from proxy {}; the same listening address must use the same private key",
+                                prior.index + 1,
+                                index + 1
+                            )));
                         }
                     }
+
                     if element.listen_on.protocol != prior.protocol {
                         return Err(Self::Error::ConflictingConfig(format!(
                             "proxy {} in configuration proxies list uses a protocol conflicting with proxy {} listening on the same host and port; the same listening address cannot serve both HTTP and HTTPS at the same time",
@@ -627,13 +626,13 @@ impl TryFrom<PathBuf> for Config {
             }
         }
 
-        if let Some(telemetry) = &cfg.metrics {
-            if let Some(proxy) = by_host_port.get(&format!("{}", telemetry.sockaddr)) {
-                return Err(Self::Error::ConflictingConfig(format!(
-                    "telemetry configuration cannot reuse the host and port used by proxy {}",
-                    proxy.index + 1
-                )));
-            }
+        if let Some(telemetry) = &cfg.metrics
+            && let Some(proxy) = by_host_port.get(&format!("{}", telemetry.sockaddr))
+        {
+            return Err(Self::Error::ConflictingConfig(format!(
+                "telemetry configuration cannot reuse the host and port used by proxy {}",
+                proxy.index + 1
+            )));
         }
 
         Ok(cfg)
@@ -685,7 +684,7 @@ impl From<Config> for Vec<HttpProxy> {
                     );
                 }
                 Some(oldserver) => {
-                    if oldserver.handlers.get(&listen_on.handler).is_none() {
+                    if !oldserver.handlers.contains_key(&listen_on.handler) {
                         servers.insert(
                             serveraddr,
                             HttpProxy {
