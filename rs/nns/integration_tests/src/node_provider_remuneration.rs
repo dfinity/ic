@@ -80,14 +80,7 @@ fn test_list_node_provider_rewards() {
         .proto
         .most_recent_monthly_node_provider_rewards = Some(MonthlyNodeProviderRewards {
         timestamp: 0,
-        rewards: vec![],
-        xdr_conversion_rate: None,
-        minimum_xdr_permyriad_per_icp: None,
-        maximum_node_provider_rewards_e8s: None,
-        registry_version: None,
-        node_providers: vec![],
-        start_date: None,
-        end_date: None,
+        ..Default::default()
     });
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
@@ -133,6 +126,11 @@ fn test_list_node_provider_rewards() {
 
     // Set the average conversion rate
     set_average_icp_xdr_conversion_rate(&state_machine, 155_000);
+
+    for _ in 0..5 {
+        state_machine.advance_time(Duration::from_secs(60 * 60 * 24));
+        state_machine.tick();
+    }
 
     // Call get_monthly_node_provider_rewards assert the value is as expected
     let monthly_node_provider_rewards_result: Result<RewardNodeProviders, GovernanceError> =
