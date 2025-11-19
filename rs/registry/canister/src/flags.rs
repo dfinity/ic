@@ -21,7 +21,7 @@ thread_local! {
     // These are needed for the phased rollout approach in order
     // allow granular rolling out of the feature to specific subnets
     // to specific subset of callers.
-    static NODE_SWAPPING_CALLERS_WHITELIST_POLICY: RefCell<WhitelistFeatureAccessPolicy<PrincipalId>> = RefCell::new(WhitelistFeatureAccessPolicy::Only(
+    static NODE_SWAPPING_CALLERS_POLICY: RefCell<WhitelistFeatureAccessPolicy<PrincipalId>> = RefCell::new(WhitelistFeatureAccessPolicy::Only(
         [
             "xph6u-z3z2t-s7hh7-gtlxh-bbgbx-aatlm-eab4o-bsank-nqruh-3ub4q-sae",
             "lgp6d-brhlv-35izu-khc6p-rfszo-zdwng-xbtkh-xyvjg-y3due-7ha7t-uae",
@@ -46,7 +46,7 @@ thread_local! {
         .collect(),
     ));
 
-    static NODE_SWAPPING_SUBNETS_WHITELIST_POLICY: RefCell<WhitelistFeatureAccessPolicy<SubnetId>> = RefCell::new(WhitelistFeatureAccessPolicy::Only(
+    static NODE_SWAPPING_SUBNETS_POLICY: RefCell<WhitelistFeatureAccessPolicy<SubnetId>> = RefCell::new(WhitelistFeatureAccessPolicy::Only(
         [
             "2fq7c-slacv-26cgz-vzbx2-2jrcs-5edph-i5s2j-tck77-c3rlz-iobzx-mqe",
             "2zs4v-uoqha-xsuun-lveyr-i4ktc-5y3ju-aysud-niobd-gxnqa-ctqem-hae",
@@ -143,23 +143,21 @@ pub mod temporary_overrides {
 
     pub fn test_set_swapping_whitelisted_callers(override_callers: Vec<PrincipalId>) {
         let policy = WhitelistFeatureAccessPolicy::Only(override_callers);
-        NODE_SWAPPING_CALLERS_WHITELIST_POLICY.replace(policy);
+        NODE_SWAPPING_CALLERS_POLICY.replace(policy);
     }
 
     pub fn test_set_swapping_enabled_subnets(override_subnets: Vec<SubnetId>) {
         let policy = WhitelistFeatureAccessPolicy::Only(override_subnets);
-        NODE_SWAPPING_SUBNETS_WHITELIST_POLICY.replace(policy);
+        NODE_SWAPPING_SUBNETS_POLICY.replace(policy);
     }
 }
 
 pub(crate) fn is_node_swapping_enabled_on_subnet(subnet_id: SubnetId) -> bool {
-    NODE_SWAPPING_SUBNETS_WHITELIST_POLICY
-        .with_borrow(|subnet_policy| subnet_policy.is_allowed(&subnet_id))
+    NODE_SWAPPING_SUBNETS_POLICY.with_borrow(|subnet_policy| subnet_policy.is_allowed(&subnet_id))
 }
 
 pub(crate) fn is_node_swapping_enabled_for_caller(caller: PrincipalId) -> bool {
-    NODE_SWAPPING_CALLERS_WHITELIST_POLICY
-        .with_borrow(|caller_policy| caller_policy.is_allowed(&caller))
+    NODE_SWAPPING_CALLERS_POLICY.with_borrow(|caller_policy| caller_policy.is_allowed(&caller))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
