@@ -7,6 +7,7 @@ use serde;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::de::Error;
+use serde::de::Visitor;
 use serde_yaml::{self};
 use std::collections::HashMap;
 use std::fmt;
@@ -115,8 +116,7 @@ impl TryFrom<&ListenOn> for Protocol {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone)]
 /// All possible actions to apply to metrics as part of a client request.
 /// Actions in a list of actions are processed from first to last.
 pub enum LabelFilterAction {
@@ -130,6 +130,84 @@ pub enum LabelFilterAction {
     /// in absolute terms.  Should never be used with
     /// counters!
     AddAbsoluteNoise { amplitude: f64, quantum: f64 },
+}
+
+impl<'de> Deserialize<'de> for LabelFilterAction {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(LabelFilterActionVistor)
+    }
+}
+
+struct LabelFilterActionVistor;
+
+impl<'de> Visitor<'de> for LabelFilterActionVistor {
+    type Value = LabelFilterAction;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a label filter action such as `keep`, `drop`, `reduce_time_resolution` or `add_absolute_noise`")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        match v {
+            "keep" => Ok(LabelFilterAction::Keep),
+            "drop" => Ok(LabelFilterAction::Drop),
+            other => Err(E::custom(format!("unknown action `{}`", other))),
+        }
+    }
+
+    fn visit_map<M>(self, mut map: M) -> Result<Self::Value, M::Error>
+    where
+        M: serde::de::MapAccess<'de>,
+    {
+        // Expect exactly one key in the map
+        let key: Option<String> = map.next_key()?;
+        let key = key.ok_or_else(|| serde::de::Error::custom("expected an action name"))?;
+
+        match key.as_str() {
+            "reduce_time_resolution" => {
+                #[derive(Deserialize)]
+                struct ReduceTR {
+                    resolution: DurationString,
+                }
+
+                let value: ReduceTR = map.next_value().map_err(|e| {
+                    serde::de::Error::custom(format!("invalid reduce_time_resolution: {}", e))
+                })?;
+
+                Ok(LabelFilterAction::ReduceTimeResolution {
+                    resolution: value.resolution,
+                })
+            }
+
+            "add_absolute_noise" => {
+                #[derive(Deserialize)]
+                struct Noise {
+                    amplitude: f64,
+                    quantum: f64,
+                }
+
+                let value: Noise = map.next_value().map_err(|e| {
+                    serde::de::Error::custom(format!("invalid add_absolute_noise: {}", e))
+                })?;
+
+                Ok(LabelFilterAction::AddAbsoluteNoise {
+                    amplitude: value.amplitude,
+                    quantum: value.quantum,
+                })
+            }
+
+            other => Err(serde::de::Error::custom(format!(
+                "unknown action `{}`",
+                other
+            ))),
+        }
+    }
 }
 
 fn anchored_regex<'de, D>(deserializer: D) -> Result<regex::Regex, D::Error>

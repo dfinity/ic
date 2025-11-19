@@ -1,4 +1,4 @@
-use axum_prometheus::{PrometheusMetricLayer, PrometheusMetricLayerBuilder};
+use axum_prometheus::PrometheusMetricLayerBuilder;
 use clap::Parser;
 use tokio::task::JoinSet;
 
