@@ -132,34 +132,16 @@ pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
         );
     }
 
-    let check_text = "<Run recovery>";
-    let exit_text = "<Exit>";
-    let check_text_len = check_text.len() as u16;
-    let exit_text_len = exit_text.len() as u16;
-    let spacing = 5;
-    let total_width = check_text_len + exit_text_len + spacing;
-
     let button_area = main_layout[3];
-    let start_x = button_area.x + (button_area.width.saturating_sub(total_width)) / 2;
-
-    render_button(
+    render_buttons_centered(
         app,
         f,
-        check_text,
-        Field::CheckArtifactsButton,
-        Rect::new(start_x, button_area.y, check_text_len, 1),
-    );
-    render_button(
-        app,
-        f,
-        exit_text,
-        Field::ExitButton,
-        Rect::new(
-            start_x + check_text_len + spacing,
-            button_area.y,
-            exit_text_len,
-            1,
-        ),
+        &[
+            ("<Run recovery>", Field::CheckArtifactsButton),
+            ("<Exit>", Field::ExitButton),
+        ],
+        button_area,
+        5,
     );
 
     if let Some(ref error) = app.error_message {
@@ -226,6 +208,29 @@ fn render_button(app: &App, f: &mut Frame, text: &str, field: Field, area: Rect)
         .bg(if selected { Color::Blue } else { Color::Reset })
         .fg(if selected { Color::White } else { Color::Reset });
     f.render_widget(para, area);
+}
+
+/// Renders buttons horizontally centered in the given area with spacing between them
+fn render_buttons_centered(
+    app: &App,
+    f: &mut Frame,
+    buttons: &[(&str, Field)],
+    area: Rect,
+    spacing: u16,
+) {
+    let total_text_width: u16 = buttons.iter().map(|(text, _)| text.len() as u16).sum();
+    let total_spacing = spacing * (buttons.len().saturating_sub(1)) as u16;
+    let total_width = total_text_width + total_spacing;
+
+    let start_x = area.x + (area.width.saturating_sub(total_width)) / 2;
+
+    // Render each button
+    let mut x = start_x;
+    for (text, field) in buttons {
+        let width = text.len() as u16;
+        render_button(app, f, text, *field, Rect::new(x, area.y, width, 1));
+        x += width + spacing;
+    }
 }
 
 // ============================================================================
