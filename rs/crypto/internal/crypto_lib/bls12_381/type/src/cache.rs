@@ -40,11 +40,11 @@ impl G2PublicKeyCache {
     /// - This leads to an estimate of 329 bytes per element, plus some
     ///   fixed overhead.
     ///
-    /// The above numbers are for x86-64 and may vary slightly on different machines
-    /// due to different structure layout rules.
+    /// The above numbers are for x86-64 and may vary slightly on other machines
+    /// due to differing structure layout rules.
     ///
-    /// The current size leads to an estimated usage of 3.1 MB of memory for the cache
-    pub const SIZE_OF_GLOBAL_CACHE: usize = 10000;
+    /// The current size leads to an estimated maximum memory usage of 321 KiB
+    pub const SIZE_OF_GLOBAL_CACHE: usize = 1000;
 
     /// Create a new signature cache with the specified maximum size
     fn new(max_size: usize) -> Self {

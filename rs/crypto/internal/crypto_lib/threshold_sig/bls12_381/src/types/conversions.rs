@@ -29,23 +29,6 @@ impl From<PublicKey> for PublicKeyBytes {
 }
 
 impl PublicKey {
-    /// Deserializes a `PublicKey` from a *trusted* source.
-    ///
-    /// # Security Notice
-    /// This uses the "unchecked" G2 deserialization (no subgroup check),
-    /// so should only be used on `PublicKeyBytes` obtained
-    /// from a known, trusted source.
-    pub fn from_trusted_bytes(
-        bytes: &PublicKeyBytes,
-    ) -> Result<Self, ThresholdSigPublicKeyBytesConversionError> {
-        G2Projective::deserialize_unchecked(&bytes.0)
-            .map_err(|_| ThresholdSigPublicKeyBytesConversionError::Malformed {
-                key_bytes: Some(bytes.0.to_vec()),
-                internal_error: "Invalid public key".to_string(),
-            })
-            .map(PublicKey)
-    }
-
     /// Deserializes a `PublicKey` with caching
     ///
     /// This is useful if it is expected that the same point will

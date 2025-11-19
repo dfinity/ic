@@ -91,6 +91,17 @@ pub fn combine(
     Ok(CombinedSignatureBytes::from(&signature))
 }
 
+fn bytes_to_key_with_cache(public_key_bytes: &PublicKeyBytes) -> Result<PublicKey, CryptoError> {
+    // This can't be defined on PublicKey because that's just a typedef for G2Projective
+    G2Affine::deserialize_cached(&public_key_bytes.0)
+        .map_err(|_| CryptoError::MalformedPublicKey {
+            algorithm: AlgorithmId::MultiBls12_381,
+            key_bytes: Some(public_key_bytes.0.to_vec()),
+            internal_error: "Point decoding failed".to_string(),
+        })
+        .map(|pt| pt.into())
+}
+
 /// Verifies an individual signature over the given `message` using the given
 /// `public_key_bytes`.
 ///
@@ -107,14 +118,7 @@ pub fn verify_individual(
     public_key_bytes: &PublicKeyBytes,
 ) -> Result<(), CryptoError> {
     let signature = IndividualSignature::try_from(signature_bytes)?;
-
-    let public_key = G2Affine::deserialize_cached(&public_key_bytes.0)
-        .map_err(|_| CryptoError::MalformedPublicKey {
-            algorithm: AlgorithmId::MultiBls12_381,
-            key_bytes: Some(public_key_bytes.0.to_vec()),
-            internal_error: "Point decoding failed".to_string(),
-        })
-        .map(|pt| pt.into());
+    let public_key = bytes_to_key_with_cache(public_key_bytes)?;
 
     if crypto::verify_individual_message_signature(message, &signature, &public_key) {
         Ok(())
@@ -145,7 +149,7 @@ pub fn verify_combined(
     public_keys: &[PublicKeyBytes],
 ) -> Result<(), CryptoError> {
     let public_keys: Result<Vec<PublicKey>, CryptoError> =
-        public_keys.iter().map(PublicKey::try_from).collect();
+        public_keys.iter().map(bytes_to_key_with_cache).collect();
     if crypto::verify_combined_message_signature(
         message,
         &CombinedSignature::try_from(signature)?,

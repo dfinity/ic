@@ -91,7 +91,7 @@ impl ThresholdSignatureCspClient for Csp {
             AlgorithmId::ThresBls12_381 => {
                 let clib_public_coefficients_bytes =
                     PublicCoefficientsBytes::from(public_coefficients);
-                let public_key_bytes = clib::api::individual_public_key_from_trusted_bytes(
+                let public_key_bytes = clib::api::individual_public_key(
                     &clib_public_coefficients_bytes,
                     node_index,
                 )?;
