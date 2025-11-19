@@ -292,12 +292,6 @@ async fn upgrade_to(
         "Extracted state hash from logs before node reboot: {}", state_hash_from_logs
     );
 
-    assert_assigned_replica_version(subnet_node, target_version, logger.clone());
-    info!(
-        logger,
-        "Successfully upgraded subnet {} to {}", subnet_id, target_version
-    );
-
     // Compare the state hash from logs before the reboot with the one from the local CUP after
     // reboot
     let (mut channel, _) = subnet_node
@@ -316,10 +310,15 @@ async fn upgrade_to(
         state_hash_from_logs,
         "State hash from local CUP does not match the one extracted from logs before reboot"
     );
-
     info!(
         logger,
         "State hash from local CUP matches the one extracted from logs before reboot"
+    );
+
+    assert_assigned_replica_version(subnet_node, target_version, logger.clone());
+    info!(
+        logger,
+        "Successfully upgraded subnet {} to {}", subnet_id, target_version
     );
 }
 
