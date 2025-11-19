@@ -2,8 +2,14 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load("//bazel:canbench.bzl", "rust_canbench")
 load("//bazel:canisters.bzl", "rust_canister")
 load("//bazel:defs.bzl", "rust_ic_test")
+load(":feature_flags.bzl", "test_with_tla")
 
 package(default_visibility = ["//visibility:public"])
+
+config_setting(
+    name = "tla_disabled",
+    define_values = {"tla_disabled": "true"},
+)
 
 LIB_DEPS = [
     # Keep sorted.
@@ -64,7 +70,7 @@ LIB_PROC_MACRO_DEPS = [
     for (name, features, extra_deps) in [
         (
             "ckbtc_minter_lib",
-            [],
+            test_with_tla(),
             [],
         ),
         (
@@ -111,12 +117,12 @@ alias(
         # Production version without debug assertions.
         (
             "ckbtc_minter",
-            [],
+            test_with_tla(),
         ),
         # Test version with internal consistency checks.
         (
             "ckbtc_minter_debug",
-            ["self_check"],
+            ["self_check"] + test_with_tla(),
         ),
     ]
 ]
@@ -124,6 +130,7 @@ alias(
 rust_test(
     name = "ckbtc_minter_lib_unit_tests",
     crate = ":ckbtc_minter_lib",
+    crate_features = test_with_tla(),
     deps = [
         # Keep sorted.
         "@crate_index//:assert_matches",

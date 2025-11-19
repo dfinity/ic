@@ -194,6 +194,20 @@ async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusRes
     .expect("failed to fetch canister status")
 }
 
+#[cfg(all(feature = "tla", feature = "test"))]
+#[query(hidden = true)]
+fn get_tla_traces() -> Vec<tla_instrumentation::UpdateTrace> {
+    use ic_ckbtc_minter::tla::TLA_TRACES_MUTEX;
+    let mut traces = TLA_TRACES_MUTEX
+        .as_ref()
+        .expect("TLA_TRACES_MUTEX not initialized in get_tla_traces")
+        .write()
+        .expect("Failed to lock TLA_TRACES_MUTEX in get_tla_traces");
+    let mut drained = Vec::new();
+    std::mem::swap(&mut drained, &mut *traces);
+    drained
+}
+
 #[cfg(feature = "self_check")]
 #[update]
 async fn upload_events(events: Vec<Event>) {
