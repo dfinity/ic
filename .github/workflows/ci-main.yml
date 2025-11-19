@@ -15,7 +15,6 @@ permissions:
 env:
   CI_COMMIT_SHA: ${{ inputs.commit-sha }}
   CI_JOB_NAME: ${{ github.job }}
-  CI_PROJECT_DIR: ${{ github.workspace }}
   CI_EVENT_NAME: ${{ github.event_name }}
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
   CI_RUN_ID: ${{ github.run_id }}
@@ -206,7 +205,7 @@ jobs:
             bazel_do() {
               bazel_cmd="$1"
 
-              "${CI_PROJECT_DIR:-}"/ci/scripts/targets.py "$bazel_cmd" \
+              "${GITHUB_WORKSPACE:-}"/ci/scripts/targets.py "$bazel_cmd" \
                     "${targets_args[@]}" >"$target_pattern_file"
 
               num_targets=$(wc <"$target_pattern_file" -l)
@@ -472,7 +471,7 @@ jobs:
             BASE_SHA='${{ github.event.pull_request.base.sha }}'
             HEAD_SHA='${{ github.event.pull_request.head.sha }}'
 
-            cd "$CI_PROJECT_DIR"
+            cd "$GITHUB_WORKSPACE"
 
             # run full release build on "protected" branches
             if [[ "$RELEASE_BUILD" == 'true' ]]; then
@@ -630,7 +629,7 @@ jobs:
           export CARGO_TERM_COLOR=always # ensure output has colors
 
           if [[ "${{ matrix.name }}" == "Lint" ]]; then
-            "$CI_PROJECT_DIR"/ci/scripts/rust-lint.sh
+            "$GITHUB_WORKSPACE"/ci/scripts/rust-lint.sh
           else
             cargo build --release --locked
           fi
