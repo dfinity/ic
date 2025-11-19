@@ -48,6 +48,7 @@ jobs:
               # Since we've only fetched HEAD we calculate DID_CHECK_REV by
               # showing the parents of HEAD and filtering out the head of the PR branch
               # such that we end up with the commit on the base branch.
+              git show --no-patch --pretty=%P HEAD
               parents=($(git show --no-patch --pretty=%P HEAD))
               for p in "${parents[@]}"; do echo $p; done
               export DID_CHECK_REV="$(
