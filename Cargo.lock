@@ -8262,6 +8262,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-basic-sig",
+ "ic-ed25519 0.5.0",
  "ic-interfaces",
  "ic-logger",
  "ic-management-canister-types-private",
@@ -8505,10 +8506,10 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
- "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-node-key-validation",
  "ic-crypto-secrets-containers",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-ed25519 0.5.0",
  "ic-protobuf",
  "ic-types",
  "rand 0.8.5",
@@ -8885,11 +8886,11 @@ dependencies = [
 name = "ic-crypto-test-utils-tls"
 version = "0.9.0"
 dependencies = [
- "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-tls",
+ "ic-ed25519 0.5.0",
  "ic-interfaces",
  "ic-protobuf",
  "ic-registry-client-fake",

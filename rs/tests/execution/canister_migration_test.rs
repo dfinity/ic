@@ -3,7 +3,7 @@ use std::iter::zip;
 use std::time::Duration;
 
 use anyhow::{Result, bail};
-use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use candid::{CandidType, Decode, Deserialize, Encode, Principal, Reserved};
 use canister_test::Canister;
 use futures::future::join_all;
 use ic_agent::Agent;
@@ -70,18 +70,19 @@ struct MigrateCanisterArgs {
 
 #[derive(Clone, Debug, CandidType, Deserialize, Eq, PartialEq)]
 pub enum ValidationError {
-    MigrationsDisabled,
-    RateLimited,
+    MigrationsDisabled(Reserved),
+    RateLimited(Reserved),
+    ValidationInProgress { canister: Principal },
     MigrationInProgress { canister: Principal },
     CanisterNotFound { canister: Principal },
-    SameSubnet,
+    SameSubnet(Reserved),
     CallerNotController { canister: Principal },
     NotController { canister: Principal },
-    SourceNotStopped,
-    SourceNotReady,
-    TargetNotStopped,
-    TargetHasSnapshots,
-    SourceInsufficientCycles,
+    SourceNotStopped(Reserved),
+    SourceNotReady(Reserved),
+    TargetNotStopped(Reserved),
+    TargetHasSnapshots(Reserved),
+    SourceInsufficientCycles(Reserved),
     CallFailed { reason: String },
 }
 
@@ -397,10 +398,13 @@ async fn test_async(env: TestEnv) {
         .await
         .expect("Failed to call migrate_canister.");
 
-    let decoded_result = Decode!(&result, Result<(), ValidationError>)
+    let decoded_result = Decode!(&result, Result<(), Option<ValidationError>>)
         .expect("Failed to decode reponse from migrate_canister.");
 
-    assert_eq!(decoded_result, Err(ValidationError::MigrationsDisabled));
+    assert_eq!(
+        decoded_result,
+        Err(Some(ValidationError::MigrationsDisabled(Reserved)))
+    );
 
     info!(logger, "Unpausing migrations");
 
@@ -422,7 +426,7 @@ async fn test_async(env: TestEnv) {
         .await
         .expect("Failed to call migrate_canister.");
 
-    let decoded_result = Decode!(&result, Result<(), ValidationError>)
+    let decoded_result = Decode!(&result, Result<(), Option<ValidationError>>)
         .expect("Failed to decode reponse from migrate_canister.");
 
     assert_eq!(decoded_result, Ok(()));
