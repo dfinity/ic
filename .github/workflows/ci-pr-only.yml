@@ -40,7 +40,6 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
-            set -x
             if [[ '${{ github.event_name }}' == 'pull_request' ]]; then
               # In case this run is triggered by a PR,
               # we know HEAD is a merge of the head of the PR branch (github.event.pull_request.head.sha)
@@ -49,8 +48,6 @@ jobs:
               # Since we've only fetched HEAD we calculate DID_CHECK_REV by
               # showing the parents of HEAD and filtering out the head of the PR branch
               # such that we end up with the commit on the base branch.
-              git show --no-patch HEAD
-              git show --no-patch --pretty=%P HEAD
               parents=($(git show --no-patch --pretty=%P HEAD))
               for p in "${parents[@]}"; do echo $p; done
               export DID_CHECK_REV="$(
@@ -58,7 +55,6 @@ jobs:
                   [[ $p != "${{ github.event.pull_request.head.sha }}" ]] && { echo -n "$p"; break; };
                 done
               )"
-              git fetch --depth=1 origin "$DID_CHECK_REV"
             else
               # In case this run was triggered from ci-kickoff-manual,
               # HEAD will a commit on the PR branch.
