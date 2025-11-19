@@ -51,11 +51,3 @@ repos:
     language: system
     always_run: true
     verbose: true
-
-- repo: https://github.com/ansible/ansible-lint.git
-  rev: v24.5.0
-  hooks:
-    - id: ansible-lint
-      always_run: false
-      files: (^|/)testnet/ansible/.+\.(yaml|yml)$
-      args: ['-i', 'testnet/ansible/.ansible-lint-ignore', 'testnet/ansible']

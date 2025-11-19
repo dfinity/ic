@@ -295,10 +295,7 @@ fn der_decode_rfc5915_privatekey(der: &[u8]) -> Result<Vec<u8>, KeyDecodingError
 }
 
 fn pem_encode(raw: &[u8], label: &'static str) -> String {
-    pem::encode(&pem::Pem {
-        tag: label.to_string(),
-        contents: raw.to_vec(),
-    })
+    pem::encode(&pem::Pem::new(label, raw))
 }
 
 /// An ECDSA private key
@@ -357,22 +354,22 @@ impl PrivateKey {
     pub fn deserialize_pkcs8_pem(pem: &str) -> Result<Self, KeyDecodingError> {
         let der =
             pem::parse(pem).map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
-        if der.tag != PEM_HEADER_PKCS8 {
-            return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
+        if der.tag() != PEM_HEADER_PKCS8 {
+            return Err(KeyDecodingError::UnexpectedPemLabel(der.tag().to_string()));
         }
 
-        Self::deserialize_pkcs8_der(&der.contents)
+        Self::deserialize_pkcs8_der(der.contents())
     }
 
     /// Deserialize a private key encoded in RFC 5915 format with PEM encoding
     pub fn deserialize_rfc5915_pem(pem: &str) -> Result<Self, KeyDecodingError> {
         let der =
             pem::parse(pem).map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
-        if der.tag != PEM_HEADER_RFC5915 {
-            return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
+        if der.tag() != PEM_HEADER_RFC5915 {
+            return Err(KeyDecodingError::UnexpectedPemLabel(der.tag().to_string()));
         }
 
-        Self::deserialize_rfc5915_der(&der.contents)
+        Self::deserialize_rfc5915_der(der.contents())
     }
 
     /// Serialize the private key as RFC 5915
@@ -507,11 +504,11 @@ impl PublicKey {
     pub fn deserialize_pem(pem: &str) -> Result<Self, KeyDecodingError> {
         let der =
             pem::parse(pem).map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
-        if der.tag != "PUBLIC KEY" {
-            return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
+        if der.tag() != "PUBLIC KEY" {
+            return Err(KeyDecodingError::UnexpectedPemLabel(der.tag().to_string()));
         }
 
-        Self::deserialize_der(&der.contents)
+        Self::deserialize_der(der.contents())
     }
 
     /// Serialize a public key in SEC1 format
