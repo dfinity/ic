@@ -48,7 +48,7 @@ jobs:
               # removing the head of the PR from the parents of HEAD
               # such that we end up with the commit on the base branch.
               export DID_CHECK_REV="$(
-                for p in "$(git show -s --pretty=%P HEAD)"; do
+                for p in "$(git show --no-patch --pretty=%P HEAD)"; do
                   [[ $p != "${{ github.event.pull_request.head.sha }}" ]] && { echo -n "$p"; break; };
                 done
               )"
