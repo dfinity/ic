@@ -77,7 +77,10 @@ async fn get_node_providers_rewards_calculation_is_only_callable_in_nonreplicate
     pocket_ic.tick().await;
     let day = DateUtc::from_unix_timestamp_nanoseconds(past_time_nanos);
 
-    let request = GetNodeProvidersRewardsCalculationRequest { day };
+    let request = GetNodeProvidersRewardsCalculationRequest {
+        day,
+        algorithm_version: None,
+    };
 
     // Non-replicated query call is allowed.
     let err = query_candid::<_, (GetNodeProvidersRewardsCalculationResponse,)>(
