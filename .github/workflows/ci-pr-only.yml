@@ -9,7 +9,7 @@ on:
         required: true
         type: string
       base-ref:
-        description: The base branch of the PR. Only used when called from ci-kickoff-manual.
+        description: The base branch of the PR
         required: false
         default: ${{ github.event.pull_request.base.ref }}
         type: string
