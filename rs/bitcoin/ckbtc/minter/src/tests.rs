@@ -9,7 +9,7 @@ use crate::{
         ChangeOutput, CkBtcMinterState, Mode, RetrieveBtcRequest, RetrieveBtcStatus,
         SubmittedBtcTransaction,
     },
-    test_fixtures::arbitrary,
+    test_fixtures::{arbitrary, bitcoin_fee_estimator},
     tx,
 };
 use bitcoin::network::constants::Network as BtcNetwork;
@@ -605,7 +605,7 @@ proptest! {
         let target = total_value / 2;
 
         let minter_address= BitcoinAddress::P2wpkhV0(main_pkhash);
-        let fee_estimate = estimate_retrieve_btc_fee(&utxos, Some(target), fee_per_vbyte);
+        let fee_estimate = estimate_retrieve_btc_fee(&utxos, Some(target), fee_per_vbyte, &bitcoin_fee_estimator());
         let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee;
 
         let (unsigned_tx, _, _, _) = build_unsigned_transaction(
@@ -1002,7 +1002,7 @@ proptest! {
         const SMALLEST_TX_SIZE_VBYTES: u64 = 140; // one input, two outputs
         const MIN_MINTER_FEE: u64 = 312;
 
-        let estimate = estimate_retrieve_btc_fee(&utxos, amount, fee_per_vbyte);
+        let estimate = estimate_retrieve_btc_fee(&utxos, amount, fee_per_vbyte, &bitcoin_fee_estimator());
         let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte / 1000;
         let estimate_amount = estimate.minter_fee + estimate.bitcoin_fee;
         prop_assert!(

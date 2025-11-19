@@ -1373,10 +1373,11 @@ pub fn tx_vsize_estimate(input_count: u64, output_count: u64) -> u64 {
 ///   * `available_utxos` - the list of UTXOs available to the minter.
 ///   * `maybe_amount` - the withdrawal amount.
 ///   * `median_fee_millisatoshi_per_vbyte` - the median network fee, in millisatoshi per vbyte.
-pub fn estimate_retrieve_btc_fee(
+pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
     available_utxos: &BTreeSet<Utxo>,
     maybe_amount: Option<u64>,
     median_fee_millisatoshi_per_vbyte: u64,
+    _fee_estimator: &F,
 ) -> WithdrawalFee {
     const DEFAULT_INPUT_COUNT: u64 = 2;
     // One output for the caller and one for the change.
