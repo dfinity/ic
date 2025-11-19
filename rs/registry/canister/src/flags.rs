@@ -21,7 +21,7 @@ thread_local! {
     // These are needed for the phased rollout approach in order
     // allow granular rolling out of the feature to specific subnets
     // to specific subset of callers.
-    static NODE_SWAPPING_WHITELISTED_CALLERS: RefCell<Vec<PrincipalId>> = RefCell::new(
+    static NODE_SWAPPING_CALLERS_POLICY: RefCell<FeaturePolicy<PrincipalId>> = RefCell::new(FeaturePolicy::AllowOnly(
         [
             "xph6u-z3z2t-s7hh7-gtlxh-bbgbx-aatlm-eab4o-bsank-nqruh-3ub4q-sae",
             "lgp6d-brhlv-35izu-khc6p-rfszo-zdwng-xbtkh-xyvjg-y3due-7ha7t-uae",
@@ -44,9 +44,9 @@ thread_local! {
             }
         })
         .collect(),
-    );
+    ));
 
-    static NODE_SWAPPING_ENABLED_SUBNETS: RefCell<Vec<SubnetId>> = RefCell::new(
+    static NODE_SWAPPING_SUBNETS_POLICY: RefCell<FeaturePolicy<SubnetId>> = RefCell::new(FeaturePolicy::AllowOnly(
         [
             "2fq7c-slacv-26cgz-vzbx2-2jrcs-5edph-i5s2j-tck77-c3rlz-iobzx-mqe",
             "2zs4v-uoqha-xsuun-lveyr-i4ktc-5y3ju-aysud-niobd-gxnqa-ctqem-hae",
@@ -102,7 +102,7 @@ thread_local! {
             }
         })
         .collect(),
-    );
+    ));
 }
 
 pub(crate) fn is_chunkifying_large_values_enabled() -> bool {
@@ -142,58 +142,22 @@ pub mod temporary_overrides {
     }
 
     pub fn test_set_swapping_whitelisted_callers(override_callers: Vec<PrincipalId>) {
-        NODE_SWAPPING_WHITELISTED_CALLERS.replace(override_callers.into_iter().collect());
+        let policy = FeaturePolicy::AllowOnly(override_callers);
+        NODE_SWAPPING_CALLERS_POLICY.replace(policy);
     }
 
     pub fn test_set_swapping_enabled_subnets(override_subnets: Vec<SubnetId>) {
-        NODE_SWAPPING_ENABLED_SUBNETS.replace(override_subnets.into_iter().collect());
+        let policy = FeaturePolicy::AllowOnly(override_subnets);
+        NODE_SWAPPING_SUBNETS_POLICY.replace(policy);
     }
 }
 
 pub(crate) fn is_node_swapping_enabled_on_subnet(subnet_id: SubnetId) -> bool {
-    let swapping_enabled = IS_NODE_SWAPPING_ENABLED.get();
-
-    NODE_SWAPPING_ENABLED_SUBNETS.with_borrow(|whitelisted_subnets| {
-        if swapping_enabled {
-            // If swapping is enabled and there are no whitelisted
-            // subnets, consider all subnets as whitelisted.
-            //
-            // This is here to remove the need for explicitly stating
-            // all of the subnet ids in the `NODE_SWAPPING_ENABLED_SUBNETS`
-            // which makes this file less readable and doesn't bring value
-            // yet still can be used to whitelist just some subnets
-            if whitelisted_subnets.is_empty() {
-                return true;
-            }
-
-            return whitelisted_subnets.contains(&subnet_id);
-        }
-
-        false
-    })
+    NODE_SWAPPING_SUBNETS_POLICY.with_borrow(|subnet_policy| subnet_policy.is_allowed(&subnet_id))
 }
 
 pub(crate) fn is_node_swapping_enabled_for_caller(caller: PrincipalId) -> bool {
-    let swapping_enabled = IS_NODE_SWAPPING_ENABLED.get();
-
-    NODE_SWAPPING_WHITELISTED_CALLERS.with_borrow(|enabled_callers| {
-        if swapping_enabled {
-            // If swapping is enabled and there are no whitelisted
-            // callers, consider all callers as whitelisted.
-            //
-            // This is here to remove the need for explicitly stating
-            // all of the node operator ids in the `NODE_SWAPPING_WHITELISTED_CALLERS`
-            // which makes this file less readable and doesn't bring value
-            // yet still can be used to whitelist just some callers
-            if enabled_callers.is_empty() {
-                return true;
-            }
-
-            return enabled_callers.contains(&caller);
-        }
-
-        false
-    })
+    NODE_SWAPPING_CALLERS_POLICY.with_borrow(|caller_policy| caller_policy.is_allowed(&caller))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
