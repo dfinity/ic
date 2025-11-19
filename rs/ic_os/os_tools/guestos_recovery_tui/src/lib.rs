@@ -95,10 +95,16 @@ fn build_upgrader_command(params: &RecoveryParams) -> Command {
 // Types and Data Structures
 // ============================================================================
 
-enum InputResult {
-    Continue,
+/// Represents the action to take after processing user input
+enum Action {
+    /// Continue the event loop and redraw the UI
+    Redraw,
+    /// Exit the application without proceeding
     Exit,
+    /// Proceed with recovery (after validation)
     Proceed,
+    /// No action needed (no redraw required)
+    NoOp,
 }
 
 #[derive(Default, Clone)]
@@ -253,9 +259,16 @@ impl App {
         self.error_message = None;
     }
 
-    fn continue_without_error(&mut self) -> InputResult {
-        self.clear_error();
-        InputResult::Continue
+    /// Redraws the UI, handling any errors
+    fn redraw(&self, terminal_guard: &mut TerminalGuard) -> Result<()> {
+        let _ = terminal_guard
+            .get_mut()
+            .draw(|f: &mut Frame| ui::render_app_ui(self, f))
+            .map_err(|e| {
+                anyhow::anyhow!("Failed to render TUI - terminal may not support required features")
+                    .context(e)
+            })?;
+        Ok(())
     }
 
     fn teardown_and_error(
@@ -315,50 +328,52 @@ impl App {
         execute!(terminal_guard.get_mut().backend_mut(), EnableMouseCapture)
             .context("Failed to enable mouse capture")?;
 
-        terminal_guard
-            .get_mut()
-            .draw(|f: &mut Frame| ui::render_app_ui(self, f))?;
+        self.redraw(&mut terminal_guard)?;
 
         let result = loop {
-            match event::read() {
-                Ok(Event::Key(key)) => {
-                    if key.kind == KeyEventKind::Press || key.kind == KeyEventKind::Repeat {
-                        if key.code == KeyCode::Char('c')
-                            && key.modifiers.contains(KeyModifiers::CONTROL)
-                        {
-                            break Ok(None);
-                        }
-
-                        let needs_redraw = match self.handle_input(key)? {
-                            InputResult::Continue => true,
-                            InputResult::Exit => break Ok(None),
-                            InputResult::Proceed => match self.params.validate() {
-                                Ok(_) => break Ok(Some(self.params.clone())),
-                                Err(e) => {
-                                    self.error_message = Some(e.to_string());
-                                    true
-                                }
-                            },
-                        };
-
-                        if needs_redraw
-                            && let Err(e) = terminal_guard
-                                .get_mut()
-                                .draw(|f: &mut Frame| ui::render_app_ui(self, f))
-                        {
-                            return Self::teardown_and_error(terminal_guard, e, || {
-                                "Failed to render TUI - terminal may not support required features"
-                                    .to_string()
-                            });
-                        }
-                    }
-                }
-                Ok(_) => {}
+            // Read event with error handling
+            let event = match event::read() {
+                Ok(event) => event,
                 Err(e) => {
                     return Self::teardown_and_error(terminal_guard, e, || {
-                        "Failed to read terminal events - terminal may not support required features".to_string()
+                        "Failed to read terminal events - terminal may not support required features"
+                            .to_string()
                     });
                 }
+            };
+
+            // Early continue for non-key events or non-press events
+            let key = match event {
+                Event::Key(key)
+                    if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) =>
+                {
+                    key
+                }
+                _ => continue,
+            };
+
+            // Handle Ctrl+C first (special case)
+            if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                break Ok(None);
+            }
+
+            // Process input and get action
+            let action = self.process_input(key)?;
+
+            // Handle action
+            match action {
+                Action::Exit => break Ok(None),
+                Action::Proceed => match self.params.validate() {
+                    Ok(_) => break Ok(Some(self.params.clone())),
+                    Err(e) => {
+                        self.error_message = Some(e.to_string());
+                        self.redraw(&mut terminal_guard)?;
+                    }
+                },
+                Action::Redraw => {
+                    self.redraw(&mut terminal_guard)?;
+                }
+                Action::NoOp => {}
             }
         };
 
@@ -367,31 +382,35 @@ impl App {
         result
     }
 
-    fn handle_input(&mut self, key: KeyEvent) -> Result<InputResult> {
+    /// Processes a key event and returns the action to take
+    fn process_input(&mut self, key: KeyEvent) -> Result<Action> {
         match key.code {
-            KeyCode::Esc => Ok(InputResult::Exit),
+            KeyCode::Esc => Ok(Action::Exit),
 
             KeyCode::Enter => {
                 if self.current_field.is_input_field() {
                     self.current_field = self.current_field.next();
-                    Ok(self.continue_without_error())
+                    self.clear_error();
+                    Ok(Action::Redraw)
                 } else {
                     Ok(match self.current_field {
-                        Field::ExitButton => InputResult::Exit,
-                        Field::CheckArtifactsButton => InputResult::Proceed,
-                        _ => InputResult::Continue,
+                        Field::ExitButton => Action::Exit,
+                        Field::CheckArtifactsButton => Action::Proceed,
+                        _ => Action::NoOp,
                     })
                 }
             }
 
             KeyCode::Tab | KeyCode::Down => {
                 self.current_field = self.current_field.next();
-                Ok(self.continue_without_error())
+                self.clear_error();
+                Ok(Action::Redraw)
             }
 
             KeyCode::Up => {
                 self.current_field = self.current_field.previous();
-                Ok(self.continue_without_error())
+                self.clear_error();
+                Ok(Action::Redraw)
             }
 
             KeyCode::Left | KeyCode::Right => {
@@ -405,21 +424,23 @@ impl App {
                         _ => unreachable!(),
                     };
                     self.clear_error();
+                    Ok(Action::Redraw)
+                } else {
+                    Ok(Action::NoOp)
                 }
-                Ok(InputResult::Continue)
             }
 
             KeyCode::Char(c) if self.current_field.is_input_field() => {
                 self.handle_input_char(c);
-                Ok(InputResult::Continue)
+                Ok(Action::Redraw)
             }
 
             KeyCode::Backspace if self.current_field.is_input_field() => {
                 self.handle_backspace();
-                Ok(InputResult::Continue)
+                Ok(Action::Redraw)
             }
 
-            _ => Ok(InputResult::Continue),
+            _ => Ok(Action::NoOp),
         }
     }
 }
