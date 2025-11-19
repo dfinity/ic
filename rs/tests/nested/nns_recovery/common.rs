@@ -38,7 +38,7 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use ic_types::ReplicaVersion;
-use nested::util::{get_host_boot_id_async, setup_ic_infrastructure};
+use nested::util::setup_ic_infrastructure;
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
 use slog::{Logger, info};
