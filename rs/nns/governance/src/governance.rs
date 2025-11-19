@@ -111,13 +111,13 @@ use ic_nns_governance_api::{
     },
     subnet_rental::SubnetRentalRequest,
 };
-use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
 };
+use ic_node_rewards_canister_api::{DateUtc, RewardsCalculationAlgorithmVersion};
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, NeuronsFundParticipationConstraints};
@@ -7851,7 +7851,13 @@ impl Governance {
         &self,
         start_date: DateUtc,
         end_date: DateUtc,
-    ) -> Result<(BTreeMap<PrincipalId, u64>, u32), GovernanceError> {
+    ) -> Result<
+        (
+            BTreeMap<PrincipalId, u64>,
+            RewardsCalculationAlgorithmVersion,
+        ),
+        GovernanceError,
+    > {
         let response: Vec<u8> = self
             .env
             .call_canister_method(
@@ -8012,7 +8018,7 @@ impl Governance {
             minimum_xdr_permyriad_per_icp: Some(minimum_xdr_permyriad_per_icp),
             maximum_node_provider_rewards_e8s: Some(maximum_node_provider_rewards_e8s),
             node_providers: self.heap_data.node_providers.clone(),
-            algorithm_version: Some(algorithm_version),
+            algorithm_version: Some(algorithm_version.version),
             registry_version: None,
         })
     }
