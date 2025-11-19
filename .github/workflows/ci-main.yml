@@ -97,7 +97,7 @@ jobs:
               diff_only="false"
               skip_long_tests="true"
           elif [[ '${{ github.event_name }}' == "workflow_dispatch" ]]; then
-              # if a workflow is manually dispatched, we cannot easily find the file changes, therefore build all
+              # if a workflow is manually dispatched, we cannot easily find the file changes, therefore build all targets
               release_build="false"
               diff_only="false"
               skip_long_tests="true"
