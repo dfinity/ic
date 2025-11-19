@@ -41,9 +41,9 @@ go_deps.bzl               @dfinity/idx
 /publish/ @dfinity/idx
 
 # [Packages]
-/packages/canlog/                               @dfinity/cross-chain-team
-/packages/canlog_derive/                        @dfinity/cross-chain-team
-/packages/icrc-cbor/                            @dfinity/finint @dfinity/cross-chain-team
+/packages/canlog/                               @dfinity/defi-team
+/packages/canlog_derive/                        @dfinity/defi-team
+/packages/icrc-cbor/                            @dfinity/defi-team
 /packages/icrc-ledger-agent/                    @dfinity/finint
 /packages/icrc-ledger-client/                   @dfinity/finint
 /packages/icrc-ledger-client-cdk/               @dfinity/finint
@@ -53,12 +53,12 @@ go_deps.bzl               @dfinity/idx
 /packages/ic-error-types/                       @dfinity/team-dsm
 /packages/ic-dummy-getrandom-for-wasm/          @dfinity/consensus
 /packages/ic-ed25519/                           @dfinity/consensus
-/packages/ic-ethereum-types/                    @dfinity/cross-chain-team
+/packages/ic-ethereum-types/                    @dfinity/defi-team
 /packages/ic-heap-bytes/                        @dfinity/team-dsm
 /packages/ic-heap-bytes-derive/                 @dfinity/team-dsm
 /packages/ic-hpke/                              @dfinity/consensus
-/packages/ic-http-types/                        @dfinity/cross-chain-team
-/packages/ic-metrics-assert/                    @dfinity/cross-chain-team
+/packages/ic-http-types/                        @dfinity/defi-team
+/packages/ic-metrics-assert/                    @dfinity/defi-team
 /packages/ic-pub-key/                           @dfinity/consensus
 /packages/ic-secp256k1/                         @dfinity/consensus
 /packages/ic-secp256r1/                         @dfinity/consensus
@@ -94,12 +94,12 @@ go_deps.bzl               @dfinity/idx
 /rs/artifact_pool/                                      @dfinity/consensus
 /rs/backup/                                             @dfinity/consensus
 /rs/bitcoin/                                            @dfinity/ic-interface-owners
-/rs/bitcoin/adapter/                                    @dfinity/consensus @dfinity/cross-chain-team
-/rs/bitcoin/ckbtc/                                      @dfinity/cross-chain-team
-/rs/bitcoin/mock/                                       @dfinity/cross-chain-team
+/rs/bitcoin/adapter/                                    @dfinity/consensus @dfinity/defi-team
+/rs/bitcoin/ckbtc/                                      @dfinity/defi-team
+/rs/bitcoin/mock/                                       @dfinity/defi-team
 /rs/bitcoin/client/                                     @dfinity/consensus
 /rs/bitcoin/consensus/                                  @dfinity/team-dsm @dfinity/consensus
-/rs/bitcoin/checker/                                    @dfinity/cross-chain-team
+/rs/bitcoin/checker/                                    @dfinity/defi-team
 /rs/bitcoin/service/                                    @dfinity/consensus
 /rs/bitcoin/replica_types/                              @dfinity/team-dsm
 /rs/bitcoin/validation                                  @dfinity/consensus @dfinity/team-dsm
@@ -117,16 +117,16 @@ go_deps.bzl               @dfinity/idx
 /rs/config/src/subnet_config.rs                         @dfinity/team-dsm
 /rs/consensus/                                          @dfinity/consensus
 /rs/criterion_time/                                     @dfinity/ic-interface-owners
-/rs/cross-chain/                                        @dfinity/cross-chain-team
+/rs/cross-chain/                                        @dfinity/defi-team
 /rs/crypto/                                             @dfinity/consensus
 /rs/crypto/tree_hash/                                   @dfinity/team-dsm @dfinity/consensus
 /rs/cup_explorer                                        @dfinity/consensus
 /rs/cycles_account_manager/                             @dfinity/team-dsm
 /rs/depcheck/                                           @dfinity/ic-interface-owners
 /rs/determinism_test/                                   @dfinity/team-dsm
-/rs/dogecoin/                                           @dfinity/cross-chain-team
+/rs/dogecoin/                                           @dfinity/defi-team
 /rs/embedders/                                          @dfinity/team-dsm
-/rs/ethereum/                                           @dfinity/cross-chain-team
+/rs/ethereum/                                           @dfinity/defi-team
 /rs/execution_environment/                              @dfinity/team-dsm
 /rs/fuzzers/                                            @dfinity/product-security
 /rs/http_endpoints/                                     @dfinity/consensus
@@ -248,9 +248,9 @@ go_deps.bzl               @dfinity/idx
 /rs/tests/testnets/nns_recovery.rs                      @dfinity/consensus
 /rs/tests/driver/src/driver/simulate_network.rs         @dfinity/consensus @dfinity/idx
 /rs/tests/boundary_nodes/                               @dfinity/node
-/rs/tests/ckbtc/                                        @dfinity/cross-chain-team
+/rs/tests/ckbtc/                                        @dfinity/defi-team
 /rs/tests/consensus/                                    @dfinity/consensus
-/rs/tests/cross_chain/                                  @dfinity/cross-chain-team
+/rs/tests/cross_chain/                                  @dfinity/defi-team
 /rs/tests/crypto/                                       @dfinity/consensus
 /rs/tests/dre/                                          @dfinity/dre
 /rs/tests/execution/                                    @dfinity/team-dsm
