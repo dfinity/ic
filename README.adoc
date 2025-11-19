@@ -171,6 +171,8 @@ While we adapt our development processes and security reviews for a world of dev
 
 To make the mono repository a success, there needs to be some basic rules to make development faster.
 
+Add a contribution
+
 * When adding a new external crate dependency please make sure it is necessary. Check that
 ** There isn't another already imported crate with similar functionality.
 ** The crate is well maintained and comes from reputable authors.
