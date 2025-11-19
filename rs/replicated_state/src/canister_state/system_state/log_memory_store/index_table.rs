@@ -214,17 +214,20 @@ impl IndexTable {
                     .collect()
             };
 
-        let clamp_end_by_size = |entries: &Vec<IndexEntry>, size_limit: MemorySize| -> IndexEntry {
-            let start = entries.first().unwrap();
-            for entry in entries {
-                if self.range_size(start, entry) >= size_limit {
-                    return *entry;
+        let clamp_end_by_size = |entries: &[IndexEntry], limit: MemorySize| -> IndexEntry {
+            let start = entries[0];
+            let mut new_end = start;
+            for &entry in entries {
+                if self.range_size(&start, &entry) >= limit {
+                    break;
                 }
+                new_end = entry;
             }
-            *entries.last().unwrap()
+            new_end
         };
 
-        let size_limit = self.result_max_size + self.segment_size;
+        let filter_size_limit = self.result_max_size + 2 * self.segment_size;
+        let no_filter_size_limit = self.result_max_size + self.segment_size;
         let (start, end) = match filter {
             Some(FetchCanisterLogsFilter::ByIdx(range)) => {
                 let start = find_start_by_key(range.start, |e| e.idx);
@@ -233,7 +236,7 @@ impl IndexTable {
                 if subset.is_empty() {
                     (start, end)
                 } else {
-                    (start, clamp_end_by_size(&subset, size_limit))
+                    (start, clamp_end_by_size(&subset, filter_size_limit))
                 }
             }
             Some(FetchCanisterLogsFilter::ByTimestampNanos(range)) => {
@@ -243,14 +246,14 @@ impl IndexTable {
                 if subset.is_empty() {
                     (start, end)
                 } else {
-                    (start, clamp_end_by_size(&subset, size_limit))
+                    (start, clamp_end_by_size(&subset, filter_size_limit))
                 }
             }
             None => {
                 let end = entries.last().unwrap();
                 let mut new_start = end;
                 for entry in entries.iter().rev() {
-                    if self.range_size(entry, end) >= size_limit {
+                    if self.range_size(entry, end) >= no_filter_size_limit {
                         break;
                     }
                     new_start = entry;
@@ -307,7 +310,7 @@ mod tests {
     // Average segment size: 10 MB / 146 = ~70 KB
     // Individual test record size: 10 KB
     const RECORD_HEADER_SIZE: u64 = 8 + 8 + 4; // idx + timestamp + len
-    const TEST_RECORD_SIZE: MemorySize = MemorySize::new(10 * KB - RECORD_HEADER_SIZE);
+    const TEST_RECORD_CONTENT_SIZE: MemorySize = MemorySize::new(10 * KB - RECORD_HEADER_SIZE);
     // Safety margin to keep “small” and “big” cases clearly separated from the 2 MB limit
     const MARGIN: MemorySize = MemorySize::new(4 * 70 * KB);
 
@@ -321,11 +324,11 @@ mod tests {
     const _: () = assert!(TEST_LOG_SIZE_BIG.get() > TEST_RESULT_MAX_SIZE.get() + MARGIN.get());
     const TEST_BIG_LOG_RECORDS_COUNT: u64 = 250;
 
-    fn make_log_record(idx: u64, ts: u64, len: u64) -> LogRecord {
+    fn make_log_record(idx: u64, ts: u64, record_content_size: u64) -> LogRecord {
         LogRecord {
             idx,
             timestamp: ts,
-            len: len as u32,
+            len: record_content_size as u32,
             content: vec![], // Not needed for tests.
         }
     }
@@ -344,7 +347,7 @@ mod tests {
         data_capacity: MemorySize,
         index_table_pages: u16,
         result_max_size: MemorySize,
-        record_size: MemorySize,
+        record_content_size: MemorySize,
         log_size: MemorySize,
         start_pos: MemoryPosition,
         start_idx: u64,
@@ -358,11 +361,16 @@ mod tests {
         );
         let mut pos = start_pos;
         let mut idx = start_idx;
-        let count = log_size.get() / record_size.get();
-        for _ in 0..count {
-            let rec = make_log_record(idx, idx * 1_000_000, record_size.get());
+        let mut total_size = 0;
+        loop {
+            let rec = make_log_record(idx, idx * 1_000_000, record_content_size.get());
+            let bytes_len = rec.bytes_len() as u64;
+            if total_size + bytes_len > log_size.get() {
+                break;
+            }
             table.update(pos, &rec);
-            pos = advance(pos, rec.bytes_len() as u64, data_capacity);
+            total_size += bytes_len;
+            pos = advance(pos, bytes_len, data_capacity);
             idx += 1;
         }
         table
@@ -401,12 +409,13 @@ mod tests {
     fn single_record_returns_same_start_and_end() {
         for start_position in [TEST_NO_WRAP_POSITION, TEST_WRAP_POSITION] {
             let start_idx = 0;
+            let fake_record = make_log_record(1, 1, TEST_RECORD_CONTENT_SIZE.get());
             let table = make_table_with_config(
                 TEST_DATA_CAPACITY,
                 TEST_INDEX_TABLE_PAGES,
                 TEST_RESULT_MAX_SIZE,
-                TEST_RECORD_SIZE,
-                TEST_RECORD_SIZE, // log size of a single record.
+                TEST_RECORD_CONTENT_SIZE,
+                MemorySize::new(fake_record.bytes_len() as u64), // log size of a single record.
                 start_position,
                 start_idx,
             );
@@ -426,7 +435,7 @@ mod tests {
                 TEST_DATA_CAPACITY,
                 TEST_INDEX_TABLE_PAGES,
                 TEST_RESULT_MAX_SIZE,
-                TEST_RECORD_SIZE,
+                TEST_RECORD_CONTENT_SIZE,
                 TEST_LOG_SIZE_SMALL,
                 start_position,
                 start_idx,
@@ -444,7 +453,7 @@ mod tests {
                 TEST_DATA_CAPACITY,
                 TEST_INDEX_TABLE_PAGES,
                 TEST_RESULT_MAX_SIZE,
-                TEST_RECORD_SIZE,
+                TEST_RECORD_CONTENT_SIZE,
                 TEST_LOG_SIZE_SMALL,
                 start_position,
                 0,
@@ -472,7 +481,7 @@ mod tests {
                 TEST_DATA_CAPACITY,
                 TEST_INDEX_TABLE_PAGES,
                 TEST_RESULT_MAX_SIZE,
-                TEST_RECORD_SIZE,
+                TEST_RECORD_CONTENT_SIZE,
                 TEST_LOG_SIZE_SMALL,
                 start_position,
                 0,
@@ -501,7 +510,7 @@ mod tests {
                 TEST_DATA_CAPACITY,
                 TEST_INDEX_TABLE_PAGES,
                 TEST_RESULT_MAX_SIZE,
-                TEST_RECORD_SIZE,
+                TEST_RECORD_CONTENT_SIZE,
                 TEST_LOG_SIZE_BIG,
                 start_position,
                 start_idx,
@@ -525,7 +534,7 @@ mod tests {
                 TEST_DATA_CAPACITY,
                 TEST_INDEX_TABLE_PAGES,
                 TEST_RESULT_MAX_SIZE,
-                TEST_RECORD_SIZE,
+                TEST_RECORD_CONTENT_SIZE,
                 TEST_LOG_SIZE_BIG,
                 start_position,
                 start_idx,
