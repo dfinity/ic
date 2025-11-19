@@ -256,14 +256,14 @@ mod tests {
         let data_capacity = TEST_DATA_CAPACITY;
         let mut rb = RingBuffer::new(page_map, data_capacity);
 
-        let a = log_record(0, 100, "a");
-        let b = log_record(1, 200, "bb");
-        rb.append(&a);
-        rb.append(&b);
+        let r0 = log_record(0, 100, "a");
+        let r1 = log_record(1, 200, "bb");
+        rb.append(&r0);
+        rb.append(&r1);
 
-        assert_eq!(rb.used_space(), a.bytes_len() + b.bytes_len());
-        assert_eq!(rb.pop_front().unwrap(), a);
-        assert_eq!(rb.pop_front().unwrap(), b);
+        assert_eq!(rb.used_space(), r0.bytes_len() + r1.bytes_len());
+        assert_eq!(rb.pop_front().unwrap(), r0);
+        assert_eq!(rb.pop_front().unwrap(), r1);
         assert!(rb.pop_front().is_none());
     }
 
