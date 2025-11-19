@@ -254,7 +254,7 @@ impl TestEnv {
                     println!("call to /network/status was successfull");
                     break;
                 }
-                Err(Error(err)) if matches_blockchain_is_empty_error(&err) => {
+                Err(Error(err)) if matches_blockchain_is_empty_or_still_syncing_error(&err) => {
                     retries -= 1;
                     sleep(DURATION_BETWEEN_ATTEMPTS).await;
                 }
@@ -407,8 +407,10 @@ impl TestEnv {
     }
 }
 
-fn matches_blockchain_is_empty_error(error: &rosetta_core::miscellaneous::Error) -> bool {
-    (error.code == 700 || error.code == 712 || error.code == 721)
+fn matches_blockchain_is_empty_or_still_syncing_error(
+    error: &rosetta_core::miscellaneous::Error,
+) -> bool {
+    (error.code == 700 || error.code == 702 || error.code == 712 || error.code == 721)
         && error.details.is_some()
         && error
             .details
@@ -416,7 +418,7 @@ fn matches_blockchain_is_empty_error(error: &rosetta_core::miscellaneous::Error)
             .unwrap()
             .get("error_message")
             .is_some_and( |e| {
-                e == "Blockchain is empty" || e == "Block not found: 0" || e == "RosettaBlocks was activated and there are no RosettaBlocks in the database yet. The synch is ongoing, please wait until the first RosettaBlock is written to the database."
+                e == "Blockchain is empty" || e == "The node is still syncing the blocks from the ledger canister. Please wait until the initial sync is complete." || e == "Block not found: 0" || e == "RosettaBlocks was activated and there are no RosettaBlocks in the database yet. The synch is ongoing, please wait until the first RosettaBlock is written to the database."
             })
 }
 

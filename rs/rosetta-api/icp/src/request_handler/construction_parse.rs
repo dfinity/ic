@@ -662,6 +662,8 @@ mod tests {
     };
     use rand_chacha::rand_core::OsRng;
     use rosetta_core::metrics::RosettaMetrics;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
     use std::{str::FromStr, time::SystemTime};
     use url::Url;
 
@@ -695,10 +697,12 @@ mod tests {
         .unwrap();
         // Create a mock canister ID for testing
         let mock_canister_id_hex = "00000000000000000101";
+        let initial_sync_complete = AtomicBool::new(true);
         let handler = RosettaRequestHandler::new(
             "Internet Computer".into(),
             ledger_client.into(),
             RosettaMetrics::new("TKN".into(), mock_canister_id_hex.into()),
+            Arc::new(initial_sync_complete),
         );
 
         // get the nextwork identifier
