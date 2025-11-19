@@ -11,12 +11,14 @@ use ic_nns_common::{pb::v1::NeuronId as ProtoNeuronId, types::UpdateIcpXdrConver
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_governance_api::{
     AddOrRemoveNodeProvider, DateRangeFilter, ExecuteNnsFunction, GovernanceError,
-    ListNodeProviderRewardsRequest, MakeProposalRequest, NetworkEconomics, NnsFunction,
-    NodeProvider, ProposalActionRequest, RewardNodeProvider, RewardNodeProviders,
+    ListNodeProviderRewardsRequest, MakeProposalRequest, MonthlyNodeProviderRewards,
+    NetworkEconomics, NnsFunction, NodeProvider, ProposalActionRequest, RewardNodeProvider,
+    RewardNodeProviders,
     add_or_remove_node_provider::Change,
     manage_neuron_response::Command as CommandResponse,
     reward_node_provider::{RewardMode, RewardToAccount},
 };
+use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::state_test_helpers::setup_nns_canisters_with_features;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -73,8 +75,24 @@ impl NodeInfo {
 fn test_list_node_provider_rewards() {
     let state_machine = state_machine_builder_for_nns_tests().build();
 
+    let mut governance_init_payload = GovernanceCanisterInitPayloadBuilder::new();
+    governance_init_payload
+        .proto
+        .most_recent_monthly_node_provider_rewards = Some(MonthlyNodeProviderRewards {
+        timestamp: 0,
+        rewards: vec![],
+        xdr_conversion_rate: None,
+        minimum_xdr_permyriad_per_icp: None,
+        maximum_node_provider_rewards_e8s: None,
+        registry_version: None,
+        node_providers: vec![],
+        start_date: None,
+        end_date: None,
+    });
+
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
+        .with_governance_init_payload(governance_init_payload)
         .with_test_neurons()
         .build();
     setup_nns_canisters_with_features(&state_machine, nns_init_payload, &[]);
