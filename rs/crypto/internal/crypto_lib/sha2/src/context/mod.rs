@@ -5,11 +5,6 @@ use std::fmt;
 #[cfg(test)]
 mod tests;
 
-/// A domain separation context that can be represented as bytes.
-pub trait Context {
-    fn as_bytes(&self) -> &[u8];
-}
-
 /// A domain separation context based on a `String` to separate domains when
 /// hashing.
 pub struct DomainSeparationContext {
@@ -39,9 +34,13 @@ impl DomainSeparationContext {
     }
 
     /// Returns the domain as string.
-    #[allow(dead_code)]
     pub fn domain(&self) -> &String {
         &self.domain
+    }
+
+    /// Returns the byte encoding of the domain separator
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.bytes
     }
 }
 
@@ -52,11 +51,5 @@ impl fmt::Debug for DomainSeparationContext {
             "DomainSeparationContext{{ domain: \"{}\" }}",
             &self.domain
         )
-    }
-}
-
-impl Context for DomainSeparationContext {
-    fn as_bytes(&self) -> &[u8] {
-        &self.bytes
     }
 }

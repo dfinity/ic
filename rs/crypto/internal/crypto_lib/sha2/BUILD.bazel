@@ -9,7 +9,10 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = []
 
-DEV_DEPENDENCIES = []
+DEV_DEPENDENCIES = [
+    # Keep sorted.
+    "@crate_index//:hex",
+]
 
 MACRO_DEV_DEPENDENCIES = []
 

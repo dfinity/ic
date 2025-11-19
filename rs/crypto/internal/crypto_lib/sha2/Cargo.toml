@@ -9,3 +9,5 @@ documentation.workspace = true
 [dependencies]
 sha2 = { workspace = true }
 
+[dev-dependencies]
+hex = { workspace = true }

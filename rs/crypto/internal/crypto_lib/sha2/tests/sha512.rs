@@ -1,4 +1,4 @@
-use ic_crypto_internal_sha2::{Context, Sha512};
+use ic_crypto_internal_sha2::{DomainSeparationContext, Sha512};
 use std::hash::Hash;
 
 const EXPECTED_DIGEST: [u8; 64] = [
@@ -93,97 +93,64 @@ fn should_panic_on_calling_finish_of_std_hash_hasher() {
 
 #[test]
 fn test_sha512_with_nonempty_context_and_nonempty_input() {
-    let context = TestContext::new(&[0x11, 0x22, 0x33, 0x44]);
+    let context = DomainSeparationContext::new("ctx");
     let data = b"data";
 
     let mut state = Sha512::new_with_context(&context);
     state.write(data);
     let digest = state.finish();
 
-    // macOS: $ echo -n '\x11\x22\x33\x44data' | shasum -a 512
+    // macOS/Linux: $ echo -n '\x03ctxdata' | shasum -a 512
     assert_eq!(
-        digest,
-        [
-            0xCD, 0x8B, 0x5A, 0x40, 0xAF, 0x62, 0xBA, 0xA0, 0x44, 0xB5, 0xAB, 0xA7, 0x61, 0x75,
-            0xF2, 0x2C, 0xF1, 0xAB, 0x6A, 0x58, 0x19, 0x74, 0xA3, 0xA5, 0xFF, 0x9E, 0xEE, 0xE7,
-            0x76, 0xBC, 0x36, 0xBB, 0x42, 0x0A, 0xBD, 0x44, 0xC6, 0x9A, 0xD0, 0xA9, 0x68, 0x51,
-            0x97, 0x5C, 0xC8, 0xF6, 0x95, 0x94, 0x64, 0x75, 0xD2, 0x69, 0x93, 0xA3, 0xE6, 0xA9,
-            0x7A, 0xD2, 0x39, 0x0C, 0x3A, 0x39, 0xC2, 0x56,
-        ]
+        hex::encode(digest),
+        "65d6df8afdd6265c938d20c300420510af65378712f4286eecd3de772a2ce6abdadb3d8f6af69687394c4aa85a6228a0175d658efbaa2f6c0d328f48238b47e5"
     );
 }
 
 #[test]
 fn test_sha512_with_empty_context_and_empty_data() {
-    let context = TestContext::new(&[]);
+    let context = DomainSeparationContext::new("");
     let data = b"";
 
     let mut state = Sha512::new_with_context(&context);
     state.write(data);
     let digest = state.finish();
 
-    // macOS: $ echo -n '' | shasum -a 512
+    // macOS/Linux: $ echo -n '\x00' | shasum -a 512
     assert_eq!(
-        digest,
-        [
-            0xcf, 0x83, 0xe1, 0x35, 0x7e, 0xef, 0xb8, 0xbd, 0xf1, 0x54, 0x28, 0x50, 0xd6, 0x6d,
-            0x80, 0x07, 0xd6, 0x20, 0xe4, 0x05, 0x0b, 0x57, 0x15, 0xdc, 0x83, 0xf4, 0xa9, 0x21,
-            0xd3, 0x6c, 0xe9, 0xce, 0x47, 0xd0, 0xd1, 0x3c, 0x5d, 0x85, 0xf2, 0xb0, 0xff, 0x83,
-            0x18, 0xd2, 0x87, 0x7e, 0xec, 0x2f, 0x63, 0xb9, 0x31, 0xbd, 0x47, 0x41, 0x7a, 0x81,
-            0xa5, 0x38, 0x32, 0x7a, 0xf9, 0x27, 0xda, 0x3e,
-        ]
+        hex::encode(digest),
+        "b8244d028981d693af7b456af8efa4cad63d282e19ff14942c246e50d9351d22704a802a71c3580b6370de4ceb293c324a8423342557d4e5c38438f0e36910ee"
     );
 }
 
 #[test]
 fn test_sha512_with_nonempty_context_and_empty_input() {
-    let context = TestContext::new(&[0x11, 0x22, 0x33, 0x44]);
+    let context = DomainSeparationContext::new("ctx");
     let data = b"";
 
     let mut state = Sha512::new_with_context(&context);
     state.write(data);
     let digest = state.finish();
 
-    // macOS: $ echo -n '\x11\x22\x33\x44' | shasum -a 512
+    // macOS/Linux: $ echo -n '\x03ctx' | shasum -a 512
     assert_eq!(
-        digest,
-        [
-            0xDF, 0xF8, 0x4D, 0x65, 0x53, 0x00, 0x03, 0xB1, 0xB4, 0x61, 0x59, 0x4A, 0xDE, 0x1B,
-            0x59, 0xBE, 0x19, 0x16, 0x0A, 0x72, 0x02, 0x64, 0x56, 0x45, 0xF1, 0x4C, 0x95, 0x93,
-            0x3C, 0x6B, 0x86, 0x9F, 0x1B, 0x80, 0xF9, 0x71, 0x65, 0x51, 0x6D, 0xA4, 0x13, 0xB3,
-            0xD4, 0xAA, 0x19, 0x19, 0x31, 0xA8, 0x9C, 0x0A, 0x0B, 0xBF, 0xF3, 0x67, 0x7C, 0x26,
-            0xD9, 0x2D, 0xA1, 0x1C, 0xB8, 0x9A, 0x62, 0xCD,
-        ]
+        hex::encode(digest),
+        "b853b52881da68aa94d4d938cb5ea61e75241cdab5a44db397f40111be0b77d6059c1b79a76f462d5a6f1cc75a92bd15fab2cf757306ce3cb10ab3ae095a52bd"
     );
 }
 
 #[test]
 fn test_sha512_with_empty_context_and_nonempty_input() {
-    let context = TestContext::new(&[]);
+    let context = DomainSeparationContext::new("");
     let data = b"data";
 
     let mut state = Sha512::new_with_context(&context);
     state.write(data);
     let digest = state.finish();
 
-    assert_eq!(digest, EXPECTED_DIGEST);
-}
-
-#[derive(Debug)]
-struct TestContext {
-    bytes: Vec<u8>,
-}
-
-impl TestContext {
-    pub fn new(bytes: &[u8]) -> Self {
-        TestContext {
-            bytes: bytes.to_vec(),
-        }
-    }
-}
-
-impl Context for TestContext {
-    fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
+    // macOS/Linux: $ echo -n '\x00data' | shasum -a 512
+    assert_eq!(
+        hex::encode(digest),
+        "b563f34508ea65312780440f125b7e1c11be5babffb56b5dc72fffe3b958461573ca50122b97c20b19be1bc8904f9f5d0810823b023d79e1c685de4aac6e906e"
+    );
 }

@@ -13,7 +13,7 @@
 #![deny(clippy::unwrap_used)]
 
 mod context;
-pub use context::{Context, DomainSeparationContext};
+pub use context::DomainSeparationContext;
 
 mod sha256;
 pub use sha256::Sha256;

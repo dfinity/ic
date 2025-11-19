@@ -10,7 +10,7 @@ use ic_crypto_internal_bls12_381_type::{
     G1Projective, G2Affine, G2Projective, Scalar, verify_bls_signature,
 };
 
-use ic_crypto_sha2::{Context, DomainSeparationContext};
+use ic_crypto_sha2::DomainSeparationContext;
 use rand::{CryptoRng, Rng};
 
 /// Domain separator for Hash-to-G1 to be used for signature generation in a

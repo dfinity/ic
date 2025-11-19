@@ -1,4 +1,4 @@
-use crate::Context;
+use crate::DomainSeparationContext;
 use sha2::Digest;
 
 /// Hasher with fixed algorithm that is guaranteed not to change in the future
@@ -23,7 +23,7 @@ impl Sha256 {
     }
 
     /// Returns a new Sha256 object, with the specified domain/context.
-    pub fn new_with_context(context: &dyn Context) -> Self {
+    pub fn new_with_context(context: &DomainSeparationContext) -> Self {
         let mut hash = Self::new();
         hash.write(context.as_bytes());
         hash
