@@ -39,8 +39,23 @@ jobs:
         uses: ./.github/actions/bazel
         with:
           run: |
-            git fetch origin --depth=1 '${{ inputs.base-ref }}'
-            export DID_CHECK_REV="$(git rev-parse 'origin/${{ inputs.base-ref }}')"
+            if [[ '${{ github.event_name == 'pull_request' ]]; then
+              # In case this run is triggered by a PR,
+              # we know HEAD is a merge of the PR branch (github.event.pull_request.head.sha)
+              # and its base branch, let's call that commit DID_CHECK_REV.
+              # Then we need to compare the did file of HEAD with the did file of DID_CHECK_REV.
+              # Since we've only fetched HEAD we calculate DID_CHECK_REV by
+              # removing the head of the PR from the parents of HEAD
+              # such that we end up with the commit on the base branch.
+              export DID_CHECK_REV=$(\
+                for p in "$(git show -s --pretty=%P HEAD)"; do \
+                  [[ $p != "${{ github.event.pull_request.head.sha }}" ]] && { echo "$p"; break; };
+                done\
+              )
+              git fetch origin "$DID_CHECK_REV"
+            else
+              echo TODO
+            fi
             echo "DID_CHECK_REV=$DID_CHECK_REV"
             bazel test //... \
               --build_tag_filters="didc" \
