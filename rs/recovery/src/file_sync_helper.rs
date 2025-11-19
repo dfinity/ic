@@ -145,7 +145,7 @@ where
             // would copy `file1` into `target/file1`, but `dir2` (and its contents)
             // into `target/dir2`, losing the `dir1` parent directory.
             //
-            // Instead, we add `--relative` and add a `./` prefix to each include path:
+            // Instead, we add the `--relative` flag and a `./` prefix to each include path:
             // `rsync --relative src/./file1 src/./dir1/dir2 target`
             // This way, rsync preserves the paths relative to the `./` marker:
             //     - `file1` into `target/file1`,
