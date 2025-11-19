@@ -45,7 +45,7 @@ type ValidatedPoolReaderRef<T> = Arc<RwLock<dyn ValidatedPoolReader<T> + Send + 
 const INGRESS_LABEL: &str = "ingress";
 const IDKG_DEALING_LABEL: &str = "idkg_dealing";
 const INGRESS_URI: &str = "/block/ingress/rpc";
-const IDKG_DEALING_URI: &str = "/block/dealing/rpc";
+const IDKG_DEALING_URI: &str = "/block/idkg_dealing/rpc";
 const MIN_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_ARTIFACT_RPC_TIMEOUT: Duration = Duration::from_secs(120);
 
