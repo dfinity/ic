@@ -46,6 +46,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.commit-sha }}
+          path: . # this is required for the manual workflow dispatch case
       - uses: ./.github/actions/post-commit-status
         with:
           commit-sha: ${{ inputs.commit-sha }}
