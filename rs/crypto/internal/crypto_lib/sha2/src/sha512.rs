@@ -22,7 +22,7 @@ impl Sha512 {
     /// Returns a new Sha512 object, with the specified domain/context.
     pub fn new_with_context(context: &DomainSeparationContext) -> Self {
         let mut hash = Self::new();
-        hash.write(&context.as_bytes());
+        hash.write(context.as_bytes());
         hash
     }
 
