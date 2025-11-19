@@ -1,8 +1,6 @@
 use anyhow::anyhow;
 use anyhow::bail;
-use candid::CandidType;
-use candid::Nat;
-use candid::{Decode, Encode};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_ledger_core::block::EncodedBlock;
 use ic_ledger_core::tokens::TokensType;
@@ -138,6 +136,7 @@ impl RosettaBlock {
                 IcrcOperation::Transfer { fee, .. } => fee,
                 IcrcOperation::Approve { fee, .. } => fee,
                 IcrcOperation::Burn { fee, .. } => fee,
+                IcrcOperation::FeeCollector { .. } => None,
             }))
     }
 
@@ -363,6 +362,10 @@ pub enum IcrcOperation {
         expires_at: Option<u64>,
         fee: Option<Nat>,
     },
+    FeeCollector {
+        fee_collector: Option<Account>,
+        caller: Option<Principal>,
+    },
 }
 
 impl TryFrom<BTreeMap<String, Value>> for IcrcOperation {
@@ -495,6 +498,17 @@ impl From<IcrcOperation> for BTreeMap<String, Value> {
                     map.insert("fee".to_string(), Value::Nat(fee));
                 }
             }
+            Op::FeeCollector {
+                fee_collector,
+                caller,
+            } => {
+                if let Some(fee_collector) = fee_collector {
+                    map.insert("fee_collector".to_string(), Value::from(fee_collector));
+                }
+                if let Some(caller) = caller {
+                    map.insert("caller".to_string(), Value::from(caller));
+                }
+            }
         }
         map
     }
@@ -608,9 +622,13 @@ where
                 amount: amount.into(),
                 fee: fee.map(Into::into),
             },
-            Op::FeeCollector { .. } => {
-                panic!("FeeCollector107 not implemented")
-            }
+            Op::FeeCollector {
+                fee_collector,
+                caller,
+            } => Self::FeeCollector {
+                fee_collector,
+                caller,
+            },
         }
     }
 }

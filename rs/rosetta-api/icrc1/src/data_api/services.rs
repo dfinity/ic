@@ -1173,6 +1173,12 @@ mod test {
                                 IcrcOperation::Mint { to, .. } => to,
                                 IcrcOperation::Burn { from, .. } => from,
                                 IcrcOperation::Approve { from, .. } => from,
+                                IcrcOperation::FeeCollector {
+                                    fee_collector,
+                                    caller,
+                                } => {
+                                    panic!("FeeCollector107 not implemented")
+                                }
                             }
                             .into(),
                         );
@@ -1219,6 +1225,12 @@ mod test {
                                             .try_into()
                                             .unwrap(),
                                     ),
+                                IcrcOperation::FeeCollector {
+                                    fee_collector,
+                                    caller,
+                                } => {
+                                    panic!("FeeCollector107 not implemented")
+                                }
                             })
                             .count();
 

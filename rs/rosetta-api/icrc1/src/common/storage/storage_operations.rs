@@ -388,6 +388,12 @@ pub fn update_account_balances(connection: &mut Connection) -> anyhow::Result<()
                         )?;
                     }
                 }
+                crate::common::storage::types::IcrcOperation::FeeCollector {
+                    fee_collector,
+                    caller,
+                } => {
+                    // we don't need to credit fee to anyone here
+                }
             }
         }
 
@@ -505,6 +511,28 @@ pub fn store_blocks(
                 expected_allowance,
                 fee,
                 expires_at,
+            ),
+            // can we reuse some of the fields, e.g. from = caller, to=fee_collector?
+            //
+            // we probably need to extend the block table with fee collector column
+            // we could copy the fee collector from previous column or have another
+            // column with feecol block index (similar to legacy mechanism)
+            // or add a separate table where we add fee collectors (probably now)
+            crate::common::storage::types::IcrcOperation::FeeCollector {
+                fee_collector,
+                caller,
+            } => (
+                "107feecol",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Nat::from(0u64),
+                None,
+                None,
+                None,
             ),
         };
 
