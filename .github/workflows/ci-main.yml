@@ -37,6 +37,7 @@ jobs:
         with:
           fetch-depth: ${{ github.event_name == 'pull_request' && 256 || 0 }}
           ref: ${{ inputs.commit-sha }}
+          path: . # this is required for the manual workflow dispatch case
       - name: Run Libfuzzer targets
         uses: ./.github/actions/bazel
         with:
