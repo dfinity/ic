@@ -19,6 +19,7 @@ use ic_nns_governance_api::{
     reward_node_provider::{RewardMode, RewardToAccount},
 };
 use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
+use ic_nns_test_utils::registry::TEST_ID;
 use ic_nns_test_utils::state_test_helpers::setup_nns_canisters_with_features;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -37,6 +38,7 @@ use ic_protobuf::registry::{
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::PrincipalId;
+use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, TOKEN_SUBDIVIDABLE_BY, Tokens};
 use maplit::btreemap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
@@ -73,7 +75,10 @@ impl NodeInfo {
 
 #[test]
 fn test_list_node_provider_rewards() {
-    let state_machine = state_machine_builder_for_nns_tests().build();
+    let state_machine = state_machine_builder_for_nns_tests()
+        .with_nns_subnet_id(subnet_test_id(TEST_ID))
+        .with_subnet_id(subnet_test_id(TEST_ID))
+        .build();
 
     let mut governance_init_payload = GovernanceCanisterInitPayloadBuilder::new();
     governance_init_payload
