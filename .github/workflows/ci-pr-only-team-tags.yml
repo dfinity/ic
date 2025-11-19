@@ -1,7 +1,7 @@
 name: Tag Team Reviewers
 
 on:
-  pull_request:
+  pull_request_target:
     # Only tag PRs on the branches for which we have protection rules / rulesets
     branches:
       - master

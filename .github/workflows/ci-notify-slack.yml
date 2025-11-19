@@ -1,7 +1,9 @@
 name: PR Slack Notification
 
 on:
-  pull_request:
+  # pull_request_target needs to be used so that we can use the SLACK_API_TOKEN secret for forked PRs
+  # however, pull_request_target cannot be used with a checkout step, which why we need to curl the team-channels.json file
+  pull_request_target:
     types: [review_requested]
 
 jobs:
