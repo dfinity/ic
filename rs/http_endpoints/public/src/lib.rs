@@ -55,7 +55,7 @@ use axum::{
     error_handling::HandleErrorLayer,
     extract::{DefaultBodyLimit, MatchedPath, State},
     middleware::Next,
-    response::Redirect,
+    response::{IntoResponse, Redirect, Response},
     routing::get,
 };
 use crossbeam::atomic::AtomicCell;
@@ -117,6 +117,12 @@ const TLS_HANDHAKE_BYTES: u8 = 22;
 pub struct HttpError {
     pub status: StatusCode,
     pub message: String,
+}
+
+impl IntoResponse for HttpError {
+    fn into_response(self) -> Response {
+        (self.status, self.message).into_response()
+    }
 }
 
 /// Struct that holds all endpoint services.
@@ -252,10 +258,10 @@ pub fn start_server(
     ingress_throttler: Arc<RwLock<dyn IngressPoolThrottler + Send + Sync>>,
     ingress_tx: Sender<UnvalidatedArtifactMutation<SignedIngress>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
-    query_signer: Arc<dyn BasicSigner<QueryResponseHash> + Send + Sync>,
+    query_signer: Arc<dyn BasicSigner<QueryResponseHash>>,
     registry_client: Arc<dyn RegistryClient>,
-    tls_config: Arc<dyn TlsConfig + Send + Sync>,
-    ingress_verifier: Arc<dyn IngressSigVerifier + Send + Sync>,
+    tls_config: Arc<dyn TlsConfig>,
+    ingress_verifier: Arc<dyn IngressSigVerifier>,
     node_id: NodeId,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,

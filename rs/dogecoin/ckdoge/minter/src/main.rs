@@ -133,6 +133,12 @@ fn check_invariants() -> Result<(), String> {
     })
 }
 
+#[cfg(feature = "self_check")]
+#[query]
+fn self_check() -> Result<(), String> {
+    check_invariants()
+}
+
 #[query]
 fn retrieve_doge_status(req: RetrieveDogeStatusRequest) -> RetrieveDogeStatus {
     ic_ckbtc_minter::state::read_state(|s| {

@@ -611,9 +611,12 @@ pub struct IcpFeatures {
     /// and the ICP features `cycles_minting`, `icp_token`, `nns_governance`, `sns`, `ii` must all be enabled.
     /// Subnets: NNS.
     pub nns_ui: Option<IcpFeaturesConfig>,
-    /// Deploys the bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
+    /// Deploys the Bitcoin canister under the testnet canister ID `g4xu7-jiaaa-aaaan-aaaaq-cai` and configured for the regtest network.
     /// Subnets: Bitcoin.
     pub bitcoin: Option<IcpFeaturesConfig>,
+    /// Deploys the Dogecoin canister under the mainnet canister ID `gordg-fyaaa-aaaan-aaadq-cai` and configured for the regtest network.
+    /// Subnets: Bitcoin.
+    pub dogecoin: Option<IcpFeaturesConfig>,
     /// Deploys the canister migration orchestrator canister.
     /// Subnets: NNS.
     pub canister_migration: Option<IcpFeaturesConfig>,
@@ -646,6 +649,7 @@ pub struct InstanceConfig {
     pub icp_config: Option<IcpConfig>,
     pub log_level: Option<String>,
     pub bitcoind_addr: Option<Vec<SocketAddr>>,
+    pub dogecoind_addr: Option<Vec<SocketAddr>>,
     pub icp_features: Option<IcpFeatures>,
     pub incomplete_state: Option<IncompleteStateFlag>,
     pub initial_time: Option<InitialTime>,
@@ -801,6 +805,7 @@ impl ExtendedSubnetConfigSet {
             ii,
             nns_ui,
             bitcoin,
+            dogecoin,
             canister_migration,
         } = icp_features;
         // NNS canisters
@@ -833,7 +838,7 @@ impl ExtendedSubnetConfigSet {
             }
         }
         // canisters on the Bitcoin subnet
-        for (flag, icp_feature_str) in [(bitcoin, "bitcoin")] {
+        for (flag, icp_feature_str) in [(bitcoin, "bitcoin"), (dogecoin, "dogecoin")] {
             if flag.is_some() {
                 check_empty_subnet(&self.bitcoin, "Bitcoin", icp_feature_str)?;
                 self.bitcoin = Some(self.bitcoin.unwrap_or_default());

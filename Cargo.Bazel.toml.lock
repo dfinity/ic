@@ -1993,9 +1993,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.10.17"
+version = "0.10.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eaac522d18020d5fbc8320ecb12a9b13b2137ae31133da2d42fa256a825507c4"
+checksum = "8037a01ec09d6c06883a38bad4f47b8d06158ad360b841e0ae5707c9884dfaf6"
 dependencies = [
  "anyhow",
  "binread",
@@ -2016,9 +2016,9 @@ dependencies = [
 
 [[package]]
 name = "candid_derive"
-version = "0.10.17"
+version = "0.10.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a1b4fddbd462182050989068d53604a91a3d0f117c3c8316c6818023df00add"
+checksum = "fb45f4d5eff3805598ee633dd80f8afb306c023249d34b5b7dfdc2080ea1df2e"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -3622,6 +3622,7 @@ dependencies = [
  "ic-certificate-verification",
  "ic-certification",
  "ic-certified-map",
+ "ic-doge-interface",
  "ic-gateway",
  "ic-http-certification",
  "ic-http-gateway",
@@ -3704,7 +3705,7 @@ dependencies = [
  "parking_lot 0.12.1",
  "paste",
  "pcre2",
- "pem 1.1.1",
+ "pem",
  "pin-project-lite",
  "ping",
  "pkcs8 0.10.2",
@@ -5774,7 +5775,7 @@ dependencies = [
  "k256 0.13.4",
  "leb128",
  "p256",
- "pem 3.0.3",
+ "pem",
  "pkcs8 0.10.2",
  "rand 0.8.5",
  "rangemap",
@@ -6006,6 +6007,17 @@ dependencies = [
  "serde",
  "serde_bytes",
  "sha2 0.10.9",
+]
+
+[[package]]
+name = "ic-doge-interface"
+version = "0.1.0"
+source = "git+https://github.com/dfinity/dogecoin-canister?rev=74e6dc9a10ba64d2dbad013282c26d74cd49863f#74e6dc9a10ba64d2dbad013282c26d74cd49863f"
+dependencies = [
+ "candid",
+ "datasize",
+ "serde",
+ "serde_bytes",
 ]
 
 [[package]]
@@ -9053,15 +9065,6 @@ checksum = "19b17cddbe7ec3f8bc800887bab5e717348c95ea2ca0b1bf0837fb964dc67099"
 
 [[package]]
 name = "pem"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8835c273a76a90455d7344889b0964598e3316e2a79ede8e36f16bdcf2228b8"
-dependencies = [
- "base64 0.13.1",
-]
-
-[[package]]
-name = "pem"
 version = "3.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1b8fcc794035347fb64beda2d3b462595dd2753e3f268d89c5aae77e8cf2c310"
@@ -10461,7 +10464,7 @@ version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54077e1872c46788540de1ea3d7f4ccb1983d12f9aa909b234468676c1a36779"
 dependencies = [
- "pem 3.0.3",
+ "pem",
  "ring 0.17.14",
  "rustls-pki-types",
  "time",
@@ -11127,7 +11130,7 @@ dependencies = [
  "futures-rustls",
  "http 1.3.1",
  "log",
- "pem 3.0.3",
+ "pem",
  "rcgen",
  "ring 0.17.14",
  "serde",

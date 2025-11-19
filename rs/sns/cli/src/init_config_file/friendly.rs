@@ -2,7 +2,7 @@ use anyhow::{Result, anyhow};
 use ic_base_types::PrincipalId;
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nns_governance_api::{
-    CreateServiceNervousSystem, Proposal, proposal::Action,
+    CreateServiceNervousSystem, MakeProposalRequest, ProposalActionRequest,
     proposal_validation::validate_user_submitted_proposal_fields,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -327,7 +327,7 @@ fn parse_image_path(
 }
 
 impl SnsConfigurationFile {
-    pub fn try_convert_to_nns_proposal(&self, base_path: &Path) -> Result<Proposal> {
+    pub fn try_convert_to_nns_proposal(&self, base_path: &Path) -> Result<MakeProposalRequest> {
         // Extract the proposal action from the config file
         let create_service_nervous_system =
             self.try_convert_to_create_service_nervous_system(base_path)?;
@@ -355,17 +355,16 @@ impl SnsConfigurationFile {
         // Empty strings is a legal NNS Proposal Url.
         let url = nns_proposal.url.clone().unwrap_or_default();
 
-        let proposal = Proposal {
+        let proposal = MakeProposalRequest {
             title,
             summary,
             url,
-            action: Some(Action::CreateServiceNervousSystem(
+            action: Some(ProposalActionRequest::CreateServiceNervousSystem(
                 create_service_nervous_system,
             )),
         };
 
-        validate_user_submitted_proposal_fields(&(proposal.clone()))
-            .map_err(|e| anyhow!("{}", e))?;
+        validate_user_submitted_proposal_fields(&proposal).map_err(|e| anyhow!("{}", e))?;
 
         Ok(proposal)
     }
