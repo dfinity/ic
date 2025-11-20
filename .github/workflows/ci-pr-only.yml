@@ -13,6 +13,11 @@ on:
         required: false
         default: ${{ github.event.pull_request.base.ref }}
         type: string
+      pr-number:
+        description: 'The PR number'
+        required: false
+        default: ${{ github.event.pull_request.number }}
+        type: string
 
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
@@ -77,6 +82,7 @@ jobs:
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
+          ref: ${{ inputs.commit-sha }}
           filters: |
             fuzzers:
               - '.github/workflows/ci-pr-only.yml'
@@ -95,8 +101,6 @@ jobs:
     name: Lock Generate
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      CI_EVENT_NAME: ${{ github.event_name }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
@@ -113,6 +117,7 @@ jobs:
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
+          ref: ${{ inputs.commit-sha }}
           filters: |
             lock-generate:
               - '.github/workflows/ci-pr-only.yml'
@@ -133,8 +138,6 @@ jobs:
     runs-on: ubuntu-latest
     container: *container-setup
     timeout-minutes: 30
-    env:
-      CI_EVENT_NAME: ${{ github.event_name }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
@@ -151,6 +154,7 @@ jobs:
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
+          ref: ${{ inputs.commit-sha }}
           filters: |
             generate-config-fixtures:
               - '.github/workflows/ci-pr-only.yml'
@@ -170,23 +174,21 @@ jobs:
     env:
       SHELL_WRAPPER: "/usr/bin/time"
       CARGO_AUDIT_VERSION: "0.21.0"
-      CI_MERGE_REQUEST_IID: ${{ github.event.pull_request.number }}
+      CI_MERGE_REQUEST_IID: ${{ inputs.pr-number }}
       CI_PROJECT_PATH: ${{ github.repository }}
       CI_PIPELINE_ID: ${{ github.run_id }}
-      CI_COMMIT_SHA: ${{ github.sha }}
+      CI_COMMIT_SHA: ${{ inputs.commit-sha }}
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
       SLACK_PSEC_BOT_OAUTH_TOKEN: ${{ secrets.SLACK_PSEC_BOT_OAUTH_TOKEN }}
       REPO_NAME: ${{ github.repository }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.commit-sha }}
+      - *checkout
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter
         with:
+          ref: ${{ inputs.commit-sha }}
           filters: |
             depcheck:
               - '.github/workflows/ci-pr-only.yml'
