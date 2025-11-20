@@ -229,14 +229,6 @@ fn render_input_field(
     f.render_widget(para, area);
 }
 
-fn render_button(state: &InputState, f: &mut Frame, text: &str, field: Field, area: Rect) {
-    let selected = state.current_field() == field;
-    let para = Paragraph::new(text)
-        .bg(if selected { Color::Blue } else { Color::Reset })
-        .fg(if selected { Color::White } else { Color::Reset });
-    f.render_widget(para, area);
-}
-
 /// Renders buttons horizontally centered in the given area with spacing between them
 fn render_buttons_centered(
     state: &InputState,
@@ -255,7 +247,11 @@ fn render_buttons_centered(
     let mut x = start_x;
     for (text, field) in buttons {
         let width = text.len() as u16;
-        render_button(state, f, text, *field, Rect::new(x, area.y, width, 1));
+        let selected = state.current_field() == *field;
+        let para = Paragraph::new(*text)
+            .bg(if selected { Color::Blue } else { Color::Reset })
+            .fg(if selected { Color::White } else { Color::Reset });
+        f.render_widget(para, Rect::new(x, area.y, width, 1));
         x += width + spacing;
     }
 }
