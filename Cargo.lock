@@ -11156,6 +11156,10 @@ name = "ic-nervous-system-common-validation"
 version = "0.9.0"
 
 [[package]]
+name = "ic-nervous-system-feature-access-policy"
+version = "0.9.0"
+
+[[package]]
 name = "ic-nervous-system-governance"
 version = "0.0.1"
 dependencies = [
