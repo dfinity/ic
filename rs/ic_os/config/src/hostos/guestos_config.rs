@@ -9,7 +9,7 @@ use std::net::Ipv6Addr;
 use std::path::Path;
 use utils::to_cidr;
 
-const DEFAULT_GUESTOS_RECOVERY_FILE_PATH: &str = "/run/config/guestos_recovered";
+const DEFAULT_GUESTOS_RECOVERY_FILE_PATH: &str = "/run/config/guestos_recovery_hash";
 
 /// Generate the GuestOS configuration based on the provided HostOS configuration.
 /// If hostos_config.icos_settings.enable_trusted_execution_environment is true,
@@ -104,36 +104,27 @@ fn node_ipv6_address(
     mac.calculate_slaac(&deterministic_config.prefix)
 }
 
-/// Retrieves the recovery-hash from the GUESTOS_RECOVERY_HASH environment variable, if present.
-/// If a recovery hash is found and GuestOS hasn't been marked as recovered yet,
-/// it marks HostOS as recovered and returns the hash.
+/// Retrieves the recovery-hash from the recovery file, if present.
+/// The file is read once and then deleted to ensure one-time use.
 fn guestos_recovery_hash(recovery_file_path: &Path) -> Result<Option<RecoveryConfig>> {
-    let recovery_hash_value = match std::env::var("GUESTOS_RECOVERY_HASH") {
-        Ok(value) if !value.is_empty() => value,
-        _ => return Ok(None),
-    };
-
     if !recovery_file_path.exists() {
-        mark_hostos_recovered(recovery_file_path)?;
-        Ok(Some(RecoveryConfig {
-            recovery_hash: recovery_hash_value,
-        }))
-    } else {
-        Ok(None)
-    }
-}
-
-/// Marks that HostOS has booted GuestOS in recovery mode by creating a tracking file.
-/// This ensures that subsequent GuestOS launches in the same HostOS boot
-/// will not use the recovery_hash again.
-fn mark_hostos_recovered(recovery_file_path: &Path) -> Result<()> {
-    if let Some(parent) = recovery_file_path.parent() {
-        std::fs::create_dir_all(parent)?;
+        return Ok(None);
     }
 
-    std::fs::File::create(recovery_file_path)?;
+    let recovery_hash_value = std::fs::read_to_string(recovery_file_path)?
+        .trim()
+        .to_string();
 
-    Ok(())
+    if recovery_hash_value.is_empty() {
+        let _ = std::fs::remove_file(recovery_file_path);
+        return Ok(None);
+    }
+
+    std::fs::remove_file(recovery_file_path)?;
+
+    Ok(Some(RecoveryConfig {
+        recovery_hash: recovery_hash_value,
+    }))
 }
 
 #[cfg(test)]
@@ -272,27 +263,29 @@ mod tests {
     #[test]
     fn test_recovery_hash() {
         let temp_dir = tempdir().unwrap();
-        let recovery_file_path = temp_dir.path().join("guestos_recovered");
+        let recovery_file_path = temp_dir.path().join("guestos_recovery_hash");
 
-        // Test case 1: Environment variable not set
-        unsafe {
-            std::env::remove_var("GUESTOS_RECOVERY_HASH");
-        }
+        // Test case 1: Recovery file does not exist
         let recovery_config = guestos_recovery_hash(&recovery_file_path).unwrap();
         assert_eq!(recovery_config, None);
+        assert!(!recovery_file_path.exists());
 
-        // Test case 2: Empty environment variable is treated as absent
-        unsafe {
-            std::env::set_var("GUESTOS_RECOVERY_HASH", "");
-        }
+        // Test case 2: Recovery file exists but is empty
+        std::fs::write(&recovery_file_path, "").unwrap();
         let recovery_config = guestos_recovery_hash(&recovery_file_path).unwrap();
         assert_eq!(recovery_config, None);
+        // File should be deleted after reading
+        assert!(!recovery_file_path.exists());
 
-        // Test case 3: Non-empty environment variable with no recovery file
-        // The function should return the recovery hash and create the recovery file
-        unsafe {
-            std::env::set_var("GUESTOS_RECOVERY_HASH", "test123");
-        }
+        // Test case 3: Recovery file exists with whitespace-only content
+        std::fs::write(&recovery_file_path, "   \n\t  ").unwrap();
+        let recovery_config = guestos_recovery_hash(&recovery_file_path).unwrap();
+        assert_eq!(recovery_config, None);
+        assert!(!recovery_file_path.exists());
+
+        // Test case 4: Recovery file exists with valid hash
+        // The function should return the recovery hash and delete the file
+        std::fs::write(&recovery_file_path, "test123").unwrap();
         let recovery_config = guestos_recovery_hash(&recovery_file_path).unwrap();
         assert_eq!(
             recovery_config,
@@ -300,11 +293,18 @@ mod tests {
                 recovery_hash: "test123".to_string(),
             })
         );
-        assert!(recovery_file_path.exists());
+        // File should be deleted after reading (one-time use)
+        assert!(!recovery_file_path.exists());
 
-        // Test case 4: Recovery file now exists
-        // The function should return None since GuestOS has already been recovered
+        // Test case 5: Recovery file with hash and trailing whitespace
+        std::fs::write(&recovery_file_path, "  test456  \n").unwrap();
         let recovery_config = guestos_recovery_hash(&recovery_file_path).unwrap();
-        assert_eq!(recovery_config, None);
+        assert_eq!(
+            recovery_config,
+            Some(RecoveryConfig {
+                recovery_hash: "test456".to_string(),
+            })
+        );
+        assert!(!recovery_file_path.exists());
     }
 }

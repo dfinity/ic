@@ -322,8 +322,11 @@ main() {
     log_message "Launching GuestOS on the new version..."
 
     if [ -n "$RECOVERY_HASH" ]; then
-        log_message "Setting GUESTOS_RECOVERY_HASH environment variable"
-        systemctl set-environment "GUESTOS_RECOVERY_HASH=$RECOVERY_HASH"
+        log_message "Writing recovery hash to file"
+        RECOVERY_FILE="/run/config/guestos_recovery_hash"
+        mkdir -p "$(dirname "$RECOVERY_FILE")"
+        echo "$RECOVERY_HASH" >"$RECOVERY_FILE"
+        log_message "Recovery hash written to $RECOVERY_FILE"
     fi
 
     log_message "Restarting guestos.service"
