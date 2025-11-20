@@ -87,7 +87,6 @@ fn test_canister_snapshot_download() {
         .arg(url.to_string())
         .arg("--identity")
         .arg("anonymous")
-        .arg("--verbose")
         .current_dir(dfx_home_dir.clone())
         .env("HOME", dfx_home_dir.clone())
         .output()
@@ -96,12 +95,16 @@ fn test_canister_snapshot_download() {
     // Check that the snapshots downloaded using PocketIC and dfx are equal.
     let diff = Command::new("diff")
         .arg("-r")
-        .arg(output_dir)
-        .arg(dfx_output_dir)
+        .arg(output_dir.clone())
+        .arg(dfx_output_dir.clone())
         .output()
         .expect("Failed to execute diff");
     match diff.status.code() {
         Some(0) => (),
-        status => panic!("Snapshots differ: {:?}", status),
+        _ => panic!(
+            "Snapshots differ (dfx snapshot: {}): {}",
+            dfx_output_dir.display(),
+            String::from_utf8(diff.stdout).unwrap()
+        ),
     };
 }
