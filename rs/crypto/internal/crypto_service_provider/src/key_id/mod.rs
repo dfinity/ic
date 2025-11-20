@@ -106,7 +106,7 @@ impl<B: AsRef<[u8]>> From<(AlgorithmId, &B)> for KeyId {
 
 impl From<&CspPublicKey> for KeyId {
     fn from(public_key: &CspPublicKey) -> Self {
-        KeyId::from((public_key.algorithm_id(), &public_key.pk_bytes()))
+        KeyId::from((AlgorithmId::from(public_key), public_key))
     }
 }
 
