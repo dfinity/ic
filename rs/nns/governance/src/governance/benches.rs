@@ -72,6 +72,7 @@ fn set_up<R: Rng>(
                 action: Some(Action::Motion(Motion {
                     motion_text: "Motion".to_string(),
                 })),
+                self_describing_action: None,
             }),
             ..Default::default()
         },
@@ -535,6 +536,7 @@ fn distribute_rewards_with_stable_neurons() -> BenchResult {
                     action: Some(api::proposal::Action::Motion(api::Motion {
                         motion_text: "Motion".to_string(),
                     })),
+                    self_describing_action: None,
                 }),
                 ..Default::default()
             }
@@ -719,6 +721,7 @@ fn list_proposals_benchmark() -> BenchResult {
                     url: "".to_string(),
                     title: Some("Title".to_string()),
                     action: Some(proposal_action),
+                    self_describing_action: None,
                 },
             )
             .now_or_never()

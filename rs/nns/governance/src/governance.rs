@@ -13,6 +13,7 @@ use crate::{
         split_governance_proto,
     },
     is_comprehensive_neuron_list_enabled, is_neuron_follow_restrictions_enabled,
+    is_self_describing_proposal_actions_enabled,
     neuron::{DissolveStateAndAge, Neuron, NeuronBuilder, Visibility},
     neuron_data_validation::{NeuronDataValidationSummary, NeuronDataValidator},
     neuron_store::{
@@ -27,9 +28,9 @@ use crate::{
         DateRangeFilter, latest_node_provider_rewards, list_node_provider_rewards,
         record_node_provider_rewards,
     },
-    pb,
     pb::{
-        proposal_conversions::proposal_data_to_info,
+        self,
+        proposal_conversions::{ProposalDisplayOptions, proposal_data_to_info},
         v1::{
             ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem,
             ExecuteNnsFunction, Followees, FulfillSubnetRentalRequest,
@@ -102,9 +103,9 @@ use ic_nns_constants::{
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
-    GetNeuronIndexRequest, ListNeuronVotesRequest, ListNeurons, ListNeuronsResponse,
-    ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronResponse, NeuronIndexData,
-    NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
+    GetNeuronIndexRequest, GetPendingProposalsRequest, ListNeuronVotesRequest, ListNeurons,
+    ListNeuronsResponse, ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronResponse,
+    NeuronIndexData, NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
     proposal_validation::{
         validate_proposal_summary, validate_proposal_title, validate_proposal_url,
@@ -3637,8 +3638,7 @@ impl Governance {
             .map(|proposal_data| {
                 proposal_data_to_info(
                     proposal_data,
-                    false,
-                    false,
+                    ProposalDisplayOptions::for_get_proposal_info(),
                     &caller_neurons,
                     now_seconds,
                     voting_period_seconds,
@@ -3714,9 +3714,17 @@ impl Governance {
     ///   EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX. The caller can
     ///   retrieve dropped payloads by calling `get_proposal_info` for
     ///   each proposal of interest.
-    pub fn get_pending_proposals(&self, caller: &PrincipalId) -> Vec<ProposalInfo> {
+    pub fn get_pending_proposals(
+        &self,
+        caller: &PrincipalId,
+        req: Option<GetPendingProposalsRequest>,
+    ) -> Vec<ProposalInfo> {
         let now = self.env.now();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
+        let return_self_describing_action = is_self_describing_proposal_actions_enabled()
+            && req
+                .and_then(|r| r.return_self_describing_action)
+                .unwrap_or(false);
         self.heap_data
             .proposals
             .values()
@@ -3724,8 +3732,9 @@ impl Governance {
             .map(|data| {
                 proposal_data_to_info(
                     data,
-                    true,
-                    false,
+                    ProposalDisplayOptions::for_get_pending_proposals(
+                        return_self_describing_action,
+                    ),
                     &caller_neurons,
                     now,
                     self.voting_period_seconds(),
@@ -3833,6 +3842,8 @@ impl Governance {
             req.include_reward_status.iter().cloned().collect();
         let include_status: HashSet<i32> = req.include_status.iter().cloned().collect();
         let caller_neurons = self.get_neuron_ids_by_principal(caller);
+        let return_self_describing_action = is_self_describing_proposal_actions_enabled()
+            && req.return_self_describing_action.unwrap_or(false);
         let now = self.env.now();
         let proposal_matches_request = |data: &ProposalData| -> bool {
             let topic = data.topic();
@@ -3881,8 +3892,10 @@ impl Governance {
             .map(|(_, proposal_data)| {
                 proposal_data_to_info(
                     proposal_data,
-                    true,
-                    req.omit_large_fields.unwrap_or_default(),
+                    ProposalDisplayOptions::for_list_proposals(
+                        req.omit_large_fields.unwrap_or_default(),
+                        return_self_describing_action,
+                    ),
                     &caller_neurons,
                     now,
                     self.voting_period_seconds(),
