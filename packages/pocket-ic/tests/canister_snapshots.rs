@@ -1,5 +1,5 @@
 use candid::Principal;
-use pocket_ic::PocketIcBuilder;
+use pocket_ic::{PocketIc, PocketIcBuilder, update_candid};
 use std::process::Command;
 
 const T: u128 = 1_000_000_000_000;
@@ -9,21 +9,7 @@ fn test_canister_wasm() -> Vec<u8> {
     std::fs::read(wasm_path).unwrap()
 }
 
-#[test]
-fn test_canister_snapshot_download() {
-    let mut pic = PocketIcBuilder::new().with_application_subnet().build();
-
-    // Create and install a test canister.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, 100 * T);
-    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
-
-    // Ensure that the canister has non-empty WASM chunk store.
-    pic.upload_chunk(canister_id, None, vec![0; 1 << 20])
-        .unwrap();
-    pic.upload_chunk(canister_id, None, vec![1; 1 << 19])
-        .unwrap();
-
+fn test_canister_snapshot_download(pic: &mut PocketIc, canister_id: Principal) {
     // Take a snapshot to download later.
     // The canister should be stopped before taking a snapshot
     // (checked by dfx).
@@ -107,4 +93,47 @@ fn test_canister_snapshot_download() {
             String::from_utf8(diff.stdout).unwrap()
         ),
     };
+}
+
+#[test]
+fn test_canister_snapshot_download_empty_stable_memory_and_chunk_store() {
+    let mut pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    // Create and install a test canister.
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, 100 * T);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    // Ensure that the canister has empty stable memory.
+    let stable_size = update_candid::<_, (u64,)>(&pic, canister_id, "stable_size", ())
+        .unwrap()
+        .0;
+    assert_eq!(stable_size, 0);
+
+    // Ensure that the canister has non-empty WASM chunk store.
+    let chunks = pic.stored_chunks(canister_id, None).unwrap();
+    assert!(chunks.is_empty());
+
+    test_canister_snapshot_download(&mut pic, canister_id);
+}
+
+#[test]
+fn test_canister_snapshot_download_nonempty_stable_memory_and_chunk_store() {
+    let mut pic = PocketIcBuilder::new().with_application_subnet().build();
+
+    // Create and install a test canister.
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, 100 * T);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    // Ensure that the canister has non-empty stable memory.
+    update_candid::<_, ()>(&pic, canister_id, "stable_grow_and_fill", (42_u64,)).unwrap();
+
+    // Ensure that the canister has non-empty WASM chunk store.
+    pic.upload_chunk(canister_id, None, vec![0; 1 << 20])
+        .unwrap();
+    pic.upload_chunk(canister_id, None, vec![1; 1 << 19])
+        .unwrap();
+
+    test_canister_snapshot_download(&mut pic, canister_id);
 }

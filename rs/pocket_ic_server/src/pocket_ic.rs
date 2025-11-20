@@ -3739,16 +3739,18 @@ impl Operation for CanisterSnapshotDownload {
                 }
 
                 // Download stable memory.
-                let stable_memory_path = self.output_dir.join("stable_memory.bin");
-                if let Err(e) = download_blob_to_file(
-                    subnet.clone(),
-                    self.canister_id,
-                    self.snapshot_id,
-                    BlobKind::StableMemory,
-                    metadata.stable_memory_size,
-                    stable_memory_path,
-                ) {
-                    return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                if metadata.stable_memory_size != 0 {
+                    let stable_memory_path = self.output_dir.join("stable_memory.bin");
+                    if let Err(e) = download_blob_to_file(
+                        subnet.clone(),
+                        self.canister_id,
+                        self.snapshot_id,
+                        BlobKind::StableMemory,
+                        metadata.stable_memory_size,
+                        stable_memory_path,
+                    ) {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                    }
                 }
 
                 // Download WASM chunk store.
