@@ -17,6 +17,7 @@ on:
         description: 'The PR number'
         required: false
         default: ${{ github.event.pull_request.number }}
+        type: string
 
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
