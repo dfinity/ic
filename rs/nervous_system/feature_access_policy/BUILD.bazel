@@ -1,0 +1,32 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+LIB_SRCS = glob(
+    ["src/**"],
+)
+
+rust_library(
+    name = "feature_access_policy",
+    srcs = LIB_SRCS,
+    crate_name = "ic_nervous_system_feature_access_poolicy",
+    deps = [],
+)
+
+# rust_test_suite(
+#     name = "temporary_integration_test",
+#     srcs = glob(["tests/**/*.rs"]),
+#     deps = [":temporary"] + DEPENDENCIES + DEV_DEPENDENCIES,
+# )
+
+# rust_doc_test(
+#     name = "temporary_doc_test",
+#     crate = ":temporary",
+#     deps = DEPENDENCIES + DEV_DEPENDENCIES,
+# )
+
+rust_test(
+    name = "test",
+    crate = ":feature_access_policy"
+)
+
