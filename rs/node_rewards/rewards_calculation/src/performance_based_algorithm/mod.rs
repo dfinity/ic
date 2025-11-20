@@ -123,6 +123,7 @@ trait PerformanceBasedAlgorithm {
 
         // Process each day in the reward period
         for day in reward_period {
+            ic_cdk::println!("calculate_rewards for day: {:?}", day);
             let result_for_day = Self::calculate_daily_rewards(&input_provider, &day)?;
 
             // Accumulate total rewards per provider across all days

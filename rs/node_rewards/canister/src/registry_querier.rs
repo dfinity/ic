@@ -35,6 +35,11 @@ impl RegistryQuerier {
 
     ///  Returns the latest registry version corresponding to the given timestamp.
     pub fn version_for_timestamp_nanoseconds(&self, ts: UnixTsNanos) -> Option<RegistryVersion> {
+        ic_cdk::println!(
+            "timestamp_to_versions_map: {:?}",
+            self.registry_client.timestamp_to_versions_map()
+        );
+        ic_cdk::println!("ts: {:?}", ts);
         self.registry_client
             .timestamp_to_versions_map()
             .range(..=ts)
@@ -87,6 +92,7 @@ impl RegistryQuerier {
         date: &NaiveDate,
         provider_filter: Option<&PrincipalId>,
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, RegistryClientError> {
+        ic_cdk::println!("get_rewardable_nodes_per_provider: {:?}", date);
         let mut rewardable_nodes_per_provider: BTreeMap<_, Vec<RewardableNode>> = BTreeMap::new();
         let registry_version = self
             .version_for_timestamp_nanoseconds(last_unix_timestamp_nanoseconds(date))

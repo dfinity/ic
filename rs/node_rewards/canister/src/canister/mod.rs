@@ -148,7 +148,7 @@ impl NodeRewardsCanister {
         ))?;
 
         if last_day_synced < to_date {
-            return Err("Metrics and registry are not synced up to to_date".to_string());
+            return Err(format!("Metrics and registry are not synced up to to_date, last synced: {last_day_synced} to_date: {to_date}").to_string());
         }
 
         if from_date > to_date {
@@ -183,6 +183,7 @@ impl rewards_calculation::performance_based_algorithm::PerformanceBasedAlgorithm
     for &NodeRewardsCanister
 {
     fn get_rewards_table(&self, date: &NaiveDate) -> Result<NodeRewardsTable, String> {
+        ic_cdk::println!("get_rewards_table for date: {:?}", date);
         let registry_querier = RegistryQuerier::new(self.registry_client.clone());
 
         let version = registry_querier

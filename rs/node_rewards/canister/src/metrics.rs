@@ -115,6 +115,7 @@ where
         let mut success = true;
         let last_timestamp_per_subnet = self.last_timestamp_per_subnet(subnets.clone());
         let subnets_metrics = self.fetch_subnets_metrics(&last_timestamp_per_subnet).await;
+        ic_cdk::println!("subnets_metrics: {:?}", subnets_metrics);
         for (subnet_id, call_result) in subnets_metrics {
             match call_result {
                 Ok(subnet_update) => {

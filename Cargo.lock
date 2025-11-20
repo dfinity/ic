@@ -20961,6 +20961,7 @@ version = "0.9.0"
 dependencies = [
  "chrono",
  "ic-base-types",
+ "ic-cdk",
  "ic-protobuf",
  "itertools 0.12.1",
  "lazy_static",

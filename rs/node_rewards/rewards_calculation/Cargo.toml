@@ -11,6 +11,7 @@ path = "src/lib.rs"
 
 [dependencies]
 ic-base-types = { path = "../../types/base_types" }
+ic-cdk = { workspace = true }
 itertools = { workspace = true }
 ic-protobuf = { path = "../../protobuf" }
 lazy_static = { workspace = true }
