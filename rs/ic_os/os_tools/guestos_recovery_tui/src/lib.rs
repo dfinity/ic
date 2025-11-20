@@ -482,15 +482,6 @@ where
     })
 }
 
-/// Detects success message in log lines
-fn detect_success_message(log_lines: &[String]) -> Option<String> {
-    const SUCCESS_INDICATOR: &str = "Recovery Upgrader completed successfully";
-    log_lines
-        .iter()
-        .find(|line| line.contains(SUCCESS_INDICATOR))
-        .map(|_| SUCCESS_INDICATOR.to_string())
-}
-
 /// Monitors a child process, displaying real-time logs in the terminal.
 /// Returns the process exit status and all collected logs.
 fn monitor_process_with_logs(
@@ -620,13 +611,6 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
     let (status, all_logs) =
         monitor_process_with_logs(child, stdout_handle, log_lines, &mut terminal_guard, params)?;
 
-    let success_message = detect_success_message(&all_logs);
-    let error_messages = if status.success() {
-        Vec::new()
-    } else {
-        extract_errors_from_logs(&all_logs)
-    };
-
     if status.success() {
         // For success: immediately exit TUI and print prominent success message.
         // Exiting TUI immediately prevents guestos service logs from cluttering the TUI screen.
@@ -636,13 +620,12 @@ pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
             .expect("TerminalGuard: terminal was already taken.");
         teardown_terminal(&mut terminal)?;
 
-        let message = success_message
-            .as_deref()
-            .unwrap_or("Recovery completed successfully!");
-        print_prominent_success_message(message);
+        print_prominent_success_message("Recovery completed successfully!");
 
         Ok(())
     } else {
+        let error_messages = extract_errors_from_logs(&all_logs);
+
         // For failure: show completion screen and wait for user to press any key
         terminal_guard.get_mut().draw(|f| {
             ui::draw_failure_screen(f, status.code(), &all_logs, &error_messages, params);
