@@ -310,8 +310,8 @@ pub(crate) struct MessageRoutingMetrics {
     pub(crate) subnet_split_height: IntGaugeVec,
     /// Number of blocks proposed.
     pub(crate) blocks_proposed_total: IntCounter,
-    /// Number of blocks not proposed.
-    pub(crate) blocks_not_proposed_total: IntCounter,
+    /// Number of blocks not proposed by blockmaker ID.
+    pub(crate) blocks_not_proposed_total: IntCounterVec,
 
     /// The memory footprint of all the canisters on this subnet. Note that this
     /// counter is from the perspective of the canisters and does not account
@@ -442,9 +442,10 @@ impl MessageRoutingMetrics {
                 BLOCKS_PROPOSED_TOTAL,
                 "Successfully proposed blocks (blocks that became part of the blockchain)."
             ),
-            blocks_not_proposed_total: metrics_registry.int_counter(
+            blocks_not_proposed_total: metrics_registry.int_counter_vec(
                 BLOCKS_NOT_PROPOSED_TOTAL,
-                "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R)."
+                "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S < R).",
+                &["blockmaker_id"],
             ),
             canisters_memory_usage_bytes: metrics_registry.int_gauge(
                 "canister_memory_usage_bytes",
@@ -1319,9 +1320,13 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         ) = self.read_registry(registry_version, state.metadata.own_subnet_id);
 
         self.metrics.blocks_proposed_total.inc();
-        self.metrics
-            .blocks_not_proposed_total
-            .inc_by(batch.blockmaker_metrics.failed_blockmakers.len() as u64);
+        for failed_blockmaker in &batch.blockmaker_metrics.failed_blockmakers {
+            self.metrics
+                .blocks_not_proposed_total
+                .with_label_values(&[&format!("{}", failed_blockmaker)])
+                .inc();
+        }
+
         state
             .metadata
             .blockmaker_metrics_time_series
