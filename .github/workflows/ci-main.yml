@@ -100,7 +100,7 @@ jobs:
               # if a workflow is manually dispatched, we cannot easily find the file changes, therefore build all targets
               release_build="false"
               diff_only="false"
-              skip_long_tests="true"
+              skip_long_tests="false"
           else
               # default behavior is to not release, only build targets with modified inputs and skip long_tests.
               release_build="false"
