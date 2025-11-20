@@ -100,8 +100,6 @@ jobs:
     name: Lock Generate
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      PR_NUMBER: ${{ inputs.pr-number }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
@@ -138,8 +136,6 @@ jobs:
     runs-on: ubuntu-latest
     container: *container-setup
     timeout-minutes: 30
-    env:
-      PR_NUMBER: ${{ inputs.pr-number }}
     steps:
       - name: Create GitHub App Token
         uses: actions/create-github-app-token@v1
