@@ -125,10 +125,20 @@ impl RecoveryParams {
             Self::validate_hex_field(&self.version, len, "VERSION", "Git commit hash")?;
         }
         if let Some(len) = Field::VersionHash.required_length() {
-            Self::validate_hex_field(&self.version_hash, len, "VERSION-HASH", "SHA256")?;
+            Self::validate_hex_field(
+                &self.version_hash,
+                len,
+                "VERSION-HASH",
+                "Recovery-GuestOS SHA256",
+            )?;
         }
         if let Some(len) = Field::RecoveryHash.required_length() {
-            Self::validate_hex_field(&self.recovery_hash, len, "RECOVERY-HASH", "SHA256")?;
+            Self::validate_hex_field(
+                &self.recovery_hash,
+                len,
+                "RECOVERY-HASH",
+                "Recovery archive SHA256",
+            )?;
         }
         Ok(())
     }
@@ -158,6 +168,13 @@ pub(crate) enum Field {
     ExitButton,
 }
 
+struct FieldMetadata {
+    label: &'static str,
+    description: &'static str,
+    required_len: Option<usize>,
+    is_input: bool,
+}
+
 impl Field {
     const ALL: &'static [Field] = &[
         Field::Version,
@@ -170,6 +187,35 @@ impl Field {
     const INPUT_FIELDS: &'static [Field] =
         &[Field::Version, Field::VersionHash, Field::RecoveryHash];
 
+    fn metadata(&self) -> FieldMetadata {
+        match self {
+            Field::Version => FieldMetadata {
+                label: "VERSION:",
+                description: "Mandatory. The commit ID of the recovery-GuestOS update image (40 hex characters).",
+                required_len: Some(VERSION_LENGTH),
+                is_input: true,
+            },
+            Field::VersionHash => FieldMetadata {
+                label: "VERSION-HASH:",
+                description: "Mandatory. The SHA256 sum of the recovery-GuestOS update image (64 hex characters).",
+                required_len: Some(HASH_LENGTH),
+                is_input: true,
+            },
+            Field::RecoveryHash => FieldMetadata {
+                label: "RECOVERY-HASH:",
+                description: "Mandatory. The SHA256 sum of the recovery.tar.zst (64 hex characters).",
+                required_len: Some(HASH_LENGTH),
+                is_input: true,
+            },
+            _ => FieldMetadata {
+                label: "",
+                description: "",
+                required_len: None,
+                is_input: false,
+            },
+        }
+    }
+
     fn next(&self) -> Self {
         let pos = Self::ALL.iter().position(|&f| f == *self).unwrap_or(0);
         Self::ALL[(pos + 1) % Self::ALL.len()]
@@ -181,16 +227,12 @@ impl Field {
     }
 
     fn is_input_field(&self) -> bool {
-        Self::INPUT_FIELDS.contains(self)
+        self.metadata().is_input
     }
 
     /// Returns the required length for this field
     fn required_length(&self) -> Option<usize> {
-        match self {
-            Field::Version => Some(VERSION_LENGTH),
-            Field::VersionHash | Field::RecoveryHash => Some(HASH_LENGTH),
-            _ => None,
-        }
+        self.metadata().required_len
     }
 
     fn get_value_mut<'a>(&self, params: &'a mut RecoveryParams) -> Option<&'a mut String> {
@@ -203,27 +245,11 @@ impl Field {
     }
 
     fn label(&self) -> &'static str {
-        match self {
-            Field::Version => "VERSION:",
-            Field::VersionHash => "VERSION-HASH:",
-            Field::RecoveryHash => "RECOVERY-HASH:",
-            _ => "",
-        }
+        self.metadata().label
     }
 
     fn description(&self) -> &'static str {
-        match self {
-            Field::Version => {
-                "Mandatory. The commit ID of the recovery-GuestOS update image (40 hex characters)."
-            }
-            Field::VersionHash => {
-                "Mandatory. The SHA256 sum of the recovery-GuestOS update image (64 hex characters)."
-            }
-            Field::RecoveryHash => {
-                "Mandatory. The SHA256 sum of the recovery.tar.zst (64 hex characters)."
-            }
-            _ => "",
-        }
+        self.metadata().description
     }
 
     fn get_value<'a>(&self, params: &'a RecoveryParams) -> &'a str {
