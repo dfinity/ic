@@ -33,6 +33,7 @@ ic-nervous-system-chunks = { path = "../../nervous_system/chunks" }
 ic-nervous-system-clients = { path = "../../nervous_system/clients" }
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
+ic-nervous-system-feature-access-policy = { path = "../../nervous_system/feature_access_policy" }
 ic-nervous-system-rate-limits = { path = "../../nervous_system/rate_limits" }
 ic-nervous-system-string = { path = "../../nervous_system/string" }
 ic-nervous-system-temporary = { path = "../../nervous_system/temporary" }

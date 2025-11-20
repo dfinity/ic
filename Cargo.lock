@@ -20669,6 +20669,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-feature-access-policy",
  "ic-nervous-system-integration-tests",
  "ic-nervous-system-rate-limits",
  "ic-nervous-system-string",

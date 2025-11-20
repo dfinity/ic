@@ -21,6 +21,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/chunks",
     "//rs/nervous_system/clients",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/feature_access_policy",
     "//rs/nervous_system/rate_limits",
     "//rs/nervous_system/string",
     "//rs/nervous_system/temporary",
