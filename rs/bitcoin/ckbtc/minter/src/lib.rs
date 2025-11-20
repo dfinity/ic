@@ -1272,11 +1272,6 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     }
 
     let fee_shares = distribute(fee + minter_fee, outputs.len() as u64);
-    // The default dustRelayFee is 3 sat/vB,
-    // which translates to a dust threshold of 546 satoshi for P2PKH outputs.
-    // The threshold for other types is lower,
-    // so we simply use 546 satoshi as the minimum amount per output.
-    const MIN_OUTPUT_AMOUNT: u64 = 546;
 
     // The last output has to match the main_address.
     debug_assert!(matches!(unsigned_tx.outputs.iter().last(),
@@ -1288,7 +1283,7 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
         .zip(fee_shares.iter())
         .take(num_outputs - 1)
     {
-        if output.value <= *fee_share + MIN_OUTPUT_AMOUNT {
+        if output.value <= *fee_share + F::DUST_LIMIT {
             return Err(BuildTxError::DustOutput {
                 address: output.address.clone(),
                 amount: output.value,

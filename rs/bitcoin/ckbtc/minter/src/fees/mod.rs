@@ -5,6 +5,8 @@ use ic_btc_interface::{MillisatoshiPerByte, Satoshi};
 use std::cmp::max;
 
 pub trait FeeEstimator {
+    const DUST_LIMIT: u64;
+
     /// Estimate the median fees based on the given fee percentiles (slice of fee rates in milli base unit per vbyte/byte).
     fn estimate_median_fee(
         &self,
@@ -57,6 +59,12 @@ impl BitcoinFeeEstimator {
 }
 
 impl FeeEstimator for BitcoinFeeEstimator {
+    // The default dustRelayFee is 3 sat/vB,
+    // which translates to a dust threshold of 546 satoshi for P2PKH outputs.
+    // The threshold for other types is lower,
+    // so we simply use 546 satoshi as the minimum amount per output.
+    const DUST_LIMIT: u64 = 546;
+
     fn estimate_median_fee(
         &self,
         fee_percentiles: &[MillisatoshiPerByte],
@@ -80,6 +88,8 @@ impl FeeEstimator for BitcoinFeeEstimator {
         const MINTER_FEE_PER_INPUT: u64 = 146;
         const MINTER_FEE_PER_OUTPUT: u64 = 4;
         const MINTER_FEE_CONSTANT: u64 = 26;
+        // The minter's address is of type P2WPKH which means it has a dust limit of 294 sats.
+        // For additional safety, we round that value up.
         const MINTER_ADDRESS_DUST_LIMIT: Satoshi = 300;
 
         max(

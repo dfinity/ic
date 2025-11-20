@@ -32,6 +32,10 @@ impl DogecoinFeeEstimator {
 }
 
 impl FeeEstimator for DogecoinFeeEstimator {
+    // Dogecoin has a dust limit of 0.01 DOGE.
+    // in Koinu
+    const DUST_LIMIT: u64 = 1_000_000;
+
     fn estimate_median_fee(&self, fee_percentiles: &[u64]) -> Option<u64> {
         const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = 5_000;
 
@@ -63,15 +67,12 @@ impl FeeEstimator for DogecoinFeeEstimator {
         const MINTER_FEE_PER_OUTPUT: u64 = 4_000_000;
         //in Koinu
         const MINTER_FEE_CONSTANT: u64 = 26_000_000;
-        // Dogecoin has a dust limit of 0.01 DOGE.
-        // in Koinu
-        const MINTER_ADDRESS_DUST_LIMIT: u64 = 1_000_000;
 
         max(
             MINTER_FEE_PER_INPUT * num_inputs
                 + MINTER_FEE_PER_OUTPUT * num_outputs
                 + MINTER_FEE_CONSTANT,
-            MINTER_ADDRESS_DUST_LIMIT,
+            Self::DUST_LIMIT,
         )
     }
 
