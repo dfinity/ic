@@ -7,18 +7,12 @@ const ERROR_EMPTY_COLLECTION_DENY_ONLY: &str =
     "An empty collection of items sent to `deny_only`. Use `allow_all`.";
 
 #[derive(Debug)]
-pub struct FeatureAccessPolicy<T>
-where
-    T: Debug + Eq + Hash,
-{
+pub struct FeatureAccessPolicy<T> {
     inner: FeatureAccessPolicyInner<T>,
 }
 
 #[derive(Debug)]
-enum FeatureAccessPolicyInner<T>
-where
-    T: Debug + Eq + Hash,
-{
+enum FeatureAccessPolicyInner<T> {
     AllowAll,
     AllowOnly(HashSet<T>),
     DenyAll,
@@ -44,7 +38,7 @@ where
     /// Use only when sure that some items will be passed in the collection
     /// as the function will panic if it receives an empty collection.
     ///
-    /// If you want the library to make a best effor guess, use `FeatureAccessPolicy::allow()`
+    /// If you want the library to make a best effort guess, use `FeatureAccessPolicy::allow()`
     #[track_caller]
     pub fn allow_only<I: IntoIterator<Item = T>>(items: I) -> Self {
         let items: HashSet<T> = items.into_iter().collect();
@@ -83,7 +77,7 @@ where
     /// Use only when sure that some items will be passed in the collection
     /// as the function will panic if it receives an empty collection.
     ///
-    /// If you want the library to make a best effor guess, use `FeatureAccessPolicy::deny()`
+    /// If you want the library to make a best effort guess, use `FeatureAccessPolicy::deny()`
     #[track_caller]
     pub fn deny_only<I: IntoIterator<Item = T>>(items: I) -> Self {
         let items: HashSet<T> = items.into_iter().collect();
@@ -126,6 +120,14 @@ where
             FeatureAccessPolicyInner::DenyAll => false,
             FeatureAccessPolicyInner::DenyOnly(items) => !items.contains(item),
         }
+    }
+
+    pub fn is_all_allowed(&self) -> bool {
+        matches!(self.inner, FeatureAccessPolicyInner::AllowAll)
+    }
+
+    pub fn is_all_denied(&self) -> bool {
+        matches!(self.inner, FeatureAccessPolicyInner::DenyAll)
     }
 }
 
@@ -222,5 +224,28 @@ mod tests {
 
         assert!(!policy.is_allowed(&42));
         assert!(policy.is_allowed(&999));
+    }
+
+    #[test]
+    fn is_all_allowed_works() {
+        let policy: FeatureAccessPolicy<i32> = FeatureAccessPolicy::allow_all();
+
+        assert!(policy.is_all_allowed());
+        assert!(!policy.is_all_denied());
+
+        let policy = FeatureAccessPolicy::allow_only([1, 42]);
+        assert!(!policy.is_all_allowed());
+        assert!(!policy.is_all_denied());
+    }
+
+    #[test]
+    fn is_all_denied_works() {
+        let policy: FeatureAccessPolicy<i32> = FeatureAccessPolicy::deny_all();
+        assert!(policy.is_all_denied());
+        assert!(!policy.is_all_allowed());
+
+        let policy = FeatureAccessPolicy::deny_only([1, 42]);
+        assert!(!policy.is_all_allowed());
+        assert!(!policy.is_all_denied());
     }
 }
