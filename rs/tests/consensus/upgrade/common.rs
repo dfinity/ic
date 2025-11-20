@@ -275,7 +275,6 @@ async fn upgrade_to(
 
     // Concurrently fetch the latest computed root hash from logs and assert that the orchestrator
     // shut down gracefully
-
     let h1 = tokio::spawn(fetch_latest_computed_root_hash_from_logs(log_stream));
     let subnet_node_cl = subnet_node.clone();
     let h2 = tokio::spawn(async move {
@@ -353,7 +352,7 @@ pub fn start_node(logger: &Logger, app_node: &IcNodeSnapshot) {
 /// Returns the last computed root hash found in the logs, or panics if no such log entry is found
 /// before the log stream ends.
 ///
-/// This function will thus never return if an upgrade is not scheduled.
+/// This function will never return if an upgrade is not scheduled.
 async fn fetch_latest_computed_root_hash_from_logs(mut log_stream: LogStream) -> String {
     let computed_root_hash_regex =
         regex::Regex::new(r#"Computed root hash CryptoHash\(0x([a-f0-9]{64})\)"#).unwrap();
@@ -383,7 +382,7 @@ async fn fetch_latest_computed_root_hash_from_logs(mut log_stream: LogStream) ->
 /// orchestrator is shutting down, the endpoint might close right away without letting us the
 /// chance to read the relevant log entry. In constrast, the SSH connection remains open longer.
 ///
-/// This function will thus never return if an upgrade is not scheduled.
+/// This function will never return if an upgrade is not scheduled.
 async fn assert_orchestrator_stopped_gracefully(node: &IcNodeSnapshot) {
     const MESSAGE: &str = r"Orchestrator shut down gracefully";
 
