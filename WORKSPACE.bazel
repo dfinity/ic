@@ -3,12 +3,11 @@ workspace(
 )
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
-load("//bazel:mainnet-icos-images.bzl", "get_mainnet_guestos_images", "get_mainnet_setupos_images")
 
 http_archive(
     name = "rules_rust",
-    integrity = "sha256-5Kgp+5cZcrJoTOUq9CF6KJdNsB2zNzvYM9UnYMoY5lc=",
-    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.66.0/rules_rust-0.66.0.tar.gz"],
+    integrity = "sha256-3Ch+PsqAsp1cyV4mHK4nPu3xr0oAqWrpN+I0U02tskw=",
+    urls = ["https://github.com/bazelbuild/rules_rust/releases/download/0.67.0/rules_rust-0.67.0.tar.gz"],
 )
 
 load("@rules_rust//crate_universe:repositories.bzl", "crate_universe_dependencies")
@@ -42,26 +41,3 @@ external_crates_repository(
 load("@crate_index//:defs.bzl", "crate_repositories")
 
 crate_repositories()
-
-# Motoko support
-
-http_archive(
-    name = "rules_motoko",
-    sha256 = "f7cb0a906c8efe9d2ad8d27f0f6ac11f6409a771d74874f7e47d45959063dfe3",
-    strip_prefix = "rules_motoko-0.2.1",
-    urls = ["https://github.com/dfinity/rules_motoko/archive/refs/tags/v0.2.1.tar.gz"],
-)
-
-load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")
-
-rules_motoko_dependencies()
-
-# ormolu binary for haskell linting
-load("//pre-commit:ormolu.bzl", "ormolu")
-
-ormolu(name = "ormolu")
-
-# Mainnet ICOS image support
-get_mainnet_setupos_images()
-
-get_mainnet_guestos_images()

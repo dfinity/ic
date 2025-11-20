@@ -1,10 +1,12 @@
 use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::tasks::{TaskType, schedule_now};
-use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
-use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
 use ic_ckdoge_minter::{
-    DOGECOIN_CANISTER_RUNTIME, Event, EventType, GetEventsArg,
-    candid_api::{RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError},
+    DOGECOIN_CANISTER_RUNTIME, Event, EventType, GetEventsArg, UpdateBalanceArgs,
+    UpdateBalanceError, Utxo, UtxoStatus,
+    candid_api::{
+        GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
+        RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
+    },
     lifecycle::init::MinterArg,
     updates,
 };
@@ -54,6 +56,11 @@ fn post_upgrade() {
 #[update]
 async fn get_doge_address(args: GetDogeAddressArgs) -> String {
     updates::get_doge_address(args).await
+}
+
+#[query]
+fn get_known_utxos(args: UpdateBalanceArgs) -> Vec<Utxo> {
+    ic_ckbtc_minter::queries::get_known_utxos(args)
 }
 
 #[update]
@@ -126,6 +133,19 @@ fn check_invariants() -> Result<(), String> {
     })
 }
 
+#[cfg(feature = "self_check")]
+#[query]
+fn self_check() -> Result<(), String> {
+    check_invariants()
+}
+
+#[query]
+fn retrieve_doge_status(req: RetrieveDogeStatusRequest) -> RetrieveDogeStatus {
+    ic_ckbtc_minter::state::read_state(|s| {
+        RetrieveDogeStatus::from(s.retrieve_btc_status_v2(req.block_index))
+    })
+}
+
 // TODO XC-495: Currently events from ckBTC are re-used and it might be worthwhile to split
 // both types of events:
 // 1) ckBTC has some deprecated events only for backwards-compatibility purposes
@@ -169,9 +189,9 @@ fn check_candid_interface_compatibility() {
         CandidSource::Text(&new_interface),
         CandidSource::File(&old_interface),
     )
-    .unwrap_or_else(|e| {
-        panic!(
-            "New interface {new_interface} is not equal to old interface {old_interface_content}: {e}",
-        )
-    });
+        .unwrap_or_else(|e| {
+            panic!(
+                "New interface {new_interface} is not equal to old interface {old_interface_content}: {e}",
+            )
+        });
 }

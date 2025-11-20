@@ -583,7 +583,7 @@ pub mod proposal {
         /// key can be destroyed so that the neuron can only be controlled
         /// by its followees, although this makes it impossible to
         /// subsequently unlock the balance.
-        ManageNeuron(Box<super::ManageNeuron>),
+        ManageNeuron(Box<super::ManageNeuronProposal>),
         /// Propose a change to some network parameters of network
         /// economics.
         ManageNetworkEconomics(super::NetworkEconomics),
@@ -646,12 +646,12 @@ pub struct Empty {}
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
-pub struct ManageNeuron {
+pub struct ManageNeuronProposal {
     /// This is the legacy way to specify neuron IDs that is now discouraged.
     pub id: Option<NeuronId>,
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     pub neuron_id_or_subaccount: Option<manage_neuron::NeuronIdOrSubaccount>,
-    pub command: Option<manage_neuron::Command>,
+    pub command: Option<manage_neuron::ManageNeuronProposalCommand>,
 }
 /// Nested message and enum types in `ManageNeuron`.
 pub mod manage_neuron {
@@ -1009,7 +1009,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug,
     )]
-    pub enum Command {
+    pub enum ManageNeuronProposalCommand {
         Configure(Configure),
         Disburse(Disburse),
         Spawn(Spawn),
@@ -1444,7 +1444,10 @@ pub mod governance_error {
         Unspecified = 0,
         /// The operation was successfully completed.
         Ok = 1,
-        /// This operation is not available, e.g., not implemented.
+        /// There have been too many instances of this operation recently. In
+        /// practice, this usually just means that another instance of this operation
+        /// is currently in flight, but another reason this might come up is rate
+        /// limiting.
         Unavailable = 2,
         /// The caller is not authorized to perform this operation.
         NotAuthorized = 3,
@@ -2921,7 +2924,7 @@ pub struct XdrConversionRate {
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
-pub struct ListProposalInfo {
+pub struct ListProposalInfoRequest {
     /// Limit on the number of \[ProposalInfo\] to return. If no value is
     /// specified, or if a value greater than 100 is specified, 100
     /// will be used.
@@ -3099,13 +3102,35 @@ pub mod claim_or_refresh_neuron_from_account_response {
         NeuronId(NeuronId),
     }
 }
-/// The monthly Node Provider rewards as of a point in time.
+/// Date UTC used in NodeProviderRewards to define their validity boundaries
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
+)]
+pub struct DateUtc {
+    pub year: u32,
+    pub month: u32,
+    pub day: u32,
+}
+/// The monthly Node Provider rewards, representing the distribution of rewards for a specific time period.
+///
+/// Prior to the introduction of the performance-based reward algorithm, rewards were computed from a
+/// single registry snapshot (identified by `registry_version`). After performance-based rewards were enabled,
+/// rewards depend on node metrics collected over a date range, making `start_date` and `end_date` essential
+/// for defining the covered period. In this case, `registry_version` is no longer set.
+///
+/// Summary of field usage:
+/// - Before performance-based rewards: `registry_version` is Some; `start_date` and `end_date` are None.
+/// - After performance-based rewards: `start_date` and `end_date` are Some; `registry_version` is None.
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
 pub struct MonthlyNodeProviderRewards {
     /// The time when the rewards were calculated.
     pub timestamp: u64,
+    /// The start date (included) that these rewards cover.
+    pub start_date: Option<DateUtc>,
+    /// The end date (included) that these rewards cover.
+    pub end_date: Option<DateUtc>,
     /// The Rewards calculated and rewarded.
     pub rewards: Vec<RewardNodeProvider>,
     /// The XdrConversionRate used to calculate the rewards.  This comes from the CMC canister.
