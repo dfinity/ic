@@ -384,12 +384,16 @@ pub(crate) fn draw_failure_screen(
 
 /// Creates the parameter display lines for the UI
 pub(crate) fn create_parameter_lines(params: &RecoveryParams) -> Vec<Line<'_>> {
-    vec![
-        Line::from("Parameters:"),
-        Line::from(format!("  VERSION: {}", params.version)),
-        Line::from(format!("  VERSION-HASH: {}", params.version_hash)),
-        Line::from(format!("  RECOVERY-HASH: {}", params.recovery_hash)),
-    ]
+    let lines = vec![
+        format!("  VERSION: {}", params.version),
+        format!("  VERSION-HASH: {}", params.version_hash),
+        format!("  RECOVERY-HASH: {}", params.recovery_hash),
+    ];
+
+    lines
+        .into_iter()
+        .map(|text| Line::from(vec![Span::styled(text, Style::default().fg(Color::Yellow))]))
+        .collect()
 }
 
 pub(crate) fn calculate_log_viewport(
