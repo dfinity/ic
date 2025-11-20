@@ -17,7 +17,7 @@ const MIN_TERMINAL_WIDTH: u16 = 10;
 const MIN_TERMINAL_HEIGHT: u16 = 15;
 
 // UI layout constants
-pub(crate) const TEXT_PADDING: u16 = 4; // Padding for text display
+const TEXT_PADDING: u16 = 4;
 const MIN_BOX_WIDTH: u16 = 60;
 const BOX_HEIGHT: u16 = 5;
 const BORDER_PADDING: u16 = 4;
@@ -279,17 +279,14 @@ fn render_logs_screen(f: &mut Frame, state: &RunningState, size: Rect) {
     f.render_widget(para, size);
 }
 
-pub(crate) fn calculate_log_viewport(
-    total_lines: usize,
-    available_height: usize,
-) -> (usize, usize) {
+fn calculate_log_viewport(total_lines: usize, available_height: usize) -> (usize, usize) {
     let lines_to_show = total_lines.min(available_height);
     let start_idx = total_lines.saturating_sub(lines_to_show);
     (start_idx, lines_to_show)
 }
 
 /// Truncates a line to fit within the maximum width, appending "..." if needed
-pub(crate) fn truncate_line(line: &str, max_width: usize) -> String {
+fn truncate_line(line: &str, max_width: usize) -> String {
     if line.len() > max_width {
         format!("{}...", &line[..max_width.saturating_sub(3)])
     } else {
