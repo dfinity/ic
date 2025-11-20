@@ -15,7 +15,6 @@ use icrc_ledger_types::icrc1::transfer::Memo;
 use scopeguard::{ScopeGuard, guard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
-use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
@@ -66,15 +65,6 @@ pub const MAX_REQUESTS_PER_BATCH: usize = 100;
 /// * For the cycles, we use a lower bound on the price of Bitcoin of 1 BTC = 10_000 XDR, so that 10 sats correspond to 1B cycles.
 pub const REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS: u64 =
     (MAX_REQUESTS_PER_BATCH as u64) * 10;
-
-/// The constants used to compute the minter's fee to cover its own cycle consumption.
-pub const MINTER_FEE_PER_INPUT: u64 = 146;
-pub const MINTER_FEE_PER_OUTPUT: u64 = 4;
-pub const MINTER_FEE_CONSTANT: u64 = 26;
-/// Dust limit for the minter's address.
-/// The minter's address is of type P2WPKH which means it has a dust limit of 294 sats.
-/// For additional safety, we round that value up.
-pub const MINTER_ADDRESS_DUST_LIMIT: Satoshi = 300;
 
 /// The minimum fee increment for transaction resubmission.
 /// See https://en.bitcoin.it/wiki/Miner_fees#Relaying for more detail.
@@ -1307,15 +1297,6 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     ))
 }
 
-pub fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> Satoshi {
-    max(
-        MINTER_FEE_PER_INPUT * num_inputs
-            + MINTER_FEE_PER_OUTPUT * num_outputs
-            + MINTER_FEE_CONSTANT,
-        MINTER_ADDRESS_DUST_LIMIT,
-    )
-}
-
 /// Distributes an amount across the specified number of shares as fairly as
 /// possible.
 ///
@@ -1368,10 +1349,11 @@ pub fn tx_vsize_estimate(input_count: u64, output_count: u64) -> u64 {
 ///   * `available_utxos` - the list of UTXOs available to the minter.
 ///   * `maybe_amount` - the withdrawal amount.
 ///   * `median_fee_millisatoshi_per_vbyte` - the median network fee, in millisatoshi per vbyte.
-pub fn estimate_retrieve_btc_fee(
+pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
     available_utxos: &BTreeSet<Utxo>,
     maybe_amount: Option<u64>,
     median_fee_millisatoshi_per_vbyte: u64,
+    fee_estimator: &F,
 ) -> WithdrawalFee {
     const DEFAULT_INPUT_COUNT: u64 = 2;
     // One output for the caller and one for the change.
@@ -1396,7 +1378,7 @@ pub fn estimate_retrieve_btc_fee(
     };
 
     let vsize = tx_vsize_estimate(input_count, DEFAULT_OUTPUT_COUNT);
-    let minter_fee = evaluate_minter_fee(input_count, DEFAULT_OUTPUT_COUNT);
+    let minter_fee = fee_estimator.evaluate_minter_fee(input_count, DEFAULT_OUTPUT_COUNT);
     // We subtract one from the outputs because the minter's output
     // does not participate in fees distribution.
     let bitcoin_fee =

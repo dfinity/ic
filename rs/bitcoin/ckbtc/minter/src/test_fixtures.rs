@@ -154,7 +154,7 @@ pub fn build_unsigned_transaction(
     ),
     BuildTxError,
 > {
-    let bitcoin_fee_estimator = BitcoinFeeEstimator::new(Network::Mainnet, 50_000, 100);
+    let bitcoin_fee_estimator = bitcoin_fee_estimator();
     crate::build_unsigned_transaction(
         available_utxos,
         outputs,
@@ -162,6 +162,10 @@ pub fn build_unsigned_transaction(
         fee_per_vbyte,
         &bitcoin_fee_estimator,
     )
+}
+
+pub fn bitcoin_fee_estimator() -> BitcoinFeeEstimator {
+    BitcoinFeeEstimator::new(Network::Mainnet, 50_000, 100)
 }
 
 pub mod mock {
