@@ -111,24 +111,11 @@ pub struct RecoveryParams {
 
 impl RecoveryParams {
     pub fn validate(&self) -> Result<()> {
-        if let Some(len) = Field::Version.required_length() {
-            Self::validate_hex_field(&self.version, len, "VERSION", "Git commit hash")?;
-        }
-        if let Some(len) = Field::VersionHash.required_length() {
-            Self::validate_hex_field(
-                &self.version_hash,
-                len,
-                "VERSION-HASH",
-                "Recovery-GuestOS SHA256",
-            )?;
-        }
-        if let Some(len) = Field::RecoveryHash.required_length() {
-            Self::validate_hex_field(
-                &self.recovery_hash,
-                len,
-                "RECOVERY-HASH",
-                "Recovery archive SHA256",
-            )?;
+        for field in Field::INPUT_FIELDS {
+            if let Some(len) = field.required_length() {
+                let meta = field.metadata();
+                Self::validate_hex_field(field.get_value(self), len, meta.name, meta.short_desc)?;
+            }
         }
         Ok(())
     }
@@ -159,8 +146,9 @@ pub(crate) enum Field {
 }
 
 struct FieldMetadata {
-    label: &'static str,
+    name: &'static str,
     description: &'static str,
+    short_desc: &'static str,
     required_len: Option<usize>,
     is_input: bool,
 }
@@ -180,26 +168,30 @@ impl Field {
     fn metadata(&self) -> FieldMetadata {
         match self {
             Field::Version => FieldMetadata {
-                label: "VERSION:",
+                name: "VERSION",
                 description: "Mandatory. The commit ID of the recovery-GuestOS update image (40 hex characters).",
+                short_desc: "Git commit hash",
                 required_len: Some(VERSION_LENGTH),
                 is_input: true,
             },
             Field::VersionHash => FieldMetadata {
-                label: "VERSION-HASH:",
+                name: "VERSION-HASH",
                 description: "Mandatory. The SHA256 sum of the recovery-GuestOS update image (64 hex characters).",
+                short_desc: "Recovery-GuestOS SHA256",
                 required_len: Some(HASH_LENGTH),
                 is_input: true,
             },
             Field::RecoveryHash => FieldMetadata {
-                label: "RECOVERY-HASH:",
+                name: "RECOVERY-HASH",
                 description: "Mandatory. The SHA256 sum of the recovery.tar.zst (64 hex characters).",
+                short_desc: "Recovery archive SHA256",
                 required_len: Some(HASH_LENGTH),
                 is_input: true,
             },
             _ => FieldMetadata {
-                label: "",
+                name: "",
                 description: "",
+                short_desc: "",
                 required_len: None,
                 is_input: false,
             },
@@ -225,7 +217,7 @@ impl Field {
     }
 
     fn label(&self) -> &'static str {
-        self.metadata().label
+        self.metadata().name
     }
 
     fn description(&self) -> &'static str {
@@ -559,6 +551,7 @@ impl App {
     fn transition_to_running(&mut self, params: RecoveryParams) -> Result<()> {
         let mut cmd = build_upgrader_command(&params);
         cmd.stdout(Stdio::piped());
+        // Redirect stderr to null to avoid cluttering the TUI output
         cmd.stderr(Stdio::null());
 
         let mut child = cmd.spawn().context("Failed to spawn recovery upgrader")?;
