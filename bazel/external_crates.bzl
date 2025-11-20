@@ -1364,15 +1364,15 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^2.6.1",
             ),
             "syn": crate.spec(
-                version = "^1.0.109",
+                version = "^2.0.110",
                 features = [
                     "fold",
                     "full",
                 ],
             ),
-            "syn2": crate.spec(
+            "syn-old": crate.spec(
                 package = "syn",
-                version = "^2.0.101",
+                version = "^1.0.109",
             ),
             "syscalls": crate.spec(
                 version = "^0.6.18",
