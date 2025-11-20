@@ -1469,6 +1469,25 @@ impl PocketIc {
                 .await
         })
     }
+
+    /// Upload a canister snapshot from a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// Returns the snapshot ID of the uploaded snapshot.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn canister_snapshot_upload(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        replace_snapshot: Option<Vec<u8>>,
+        snapshot_dir: PathBuf,
+    ) -> Vec<u8> {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .canister_snapshot_upload(canister_id, sender, replace_snapshot, snapshot_dir)
+                .await
+        })
+    }
 }
 
 impl Default for PocketIc {

@@ -247,6 +247,7 @@ pub enum OpOut {
     MessageId((EffectivePrincipal, Vec<u8>)),
     Topology(Topology),
     CanisterHttp(Vec<CanisterHttpRequest>),
+    CanisterSnapshotId(Vec<u8>),
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
@@ -363,6 +364,9 @@ impl std::fmt::Debug for OpOut {
             }
             OpOut::CanisterHttp(canister_http_reqeusts) => {
                 write!(f, "CanisterHttp({canister_http_reqeusts:?})")
+            }
+            OpOut::CanisterSnapshotId(snapshot_id) => {
+                write!(f, "CanisterSnapshotId({})", hex::encode(snapshot_id))
             }
         }
     }

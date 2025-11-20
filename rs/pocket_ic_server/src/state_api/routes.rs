@@ -10,10 +10,10 @@ use super::state::{
 };
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
-    CanisterSnapshotDownload, DashboardRequest, GetCanisterHttp, GetControllers, GetCyclesBalance,
-    GetStableMemory, GetSubnet, GetTime, GetTopology, IngressMessageStatus, MockCanisterHttp,
-    PubKey, Query, QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest,
-    SubmitIngressMessage, SubnetReadStateRequest, Tick,
+    CanisterSnapshotDownload, CanisterSnapshotUpload, DashboardRequest, GetCanisterHttp,
+    GetControllers, GetCyclesBalance, GetStableMemory, GetSubnet, GetTime, GetTopology,
+    IngressMessageStatus, MockCanisterHttp, PubKey, Query, QueryRequest, SetCertifiedTime,
+    SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage, SubnetReadStateRequest, Tick,
 };
 use crate::{BlobStore, InstanceId, OpId, Operation, async_trait, pocket_ic::PocketIc};
 use aide::{
@@ -42,7 +42,8 @@ use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, IcpConfig, IcpFeatures, InitialTime, InstanceConfig,
     MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCanisterSnapshotDownload, RawCycles, RawIngressStatusArgs, RawMessageId,
+    RawCanisterResult, RawCanisterSnapshotDownload, RawCanisterSnapshotId,
+    RawCanisterSnapshotUpload, RawCycles, RawIngressStatusArgs, RawMessageId,
     RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
     RawTime, TickConfigs, Topology,
 };
@@ -135,6 +136,10 @@ where
         .directory_route(
             "/canister_snapshot_download",
             post(handler_canister_snapshot_download),
+        )
+        .directory_route(
+            "/canister_snapshot_upload",
+            post(handler_canister_snapshot_upload),
         )
 }
 
@@ -565,6 +570,16 @@ impl TryFrom<OpOut> for Vec<RawCanisterHttpRequest> {
     }
 }
 
+impl TryFrom<OpOut> for RawCanisterSnapshotId {
+    type Error = OpConversionError;
+    fn try_from(value: OpOut) -> Result<Self, Self::Error> {
+        match value {
+            OpOut::CanisterSnapshotId(snapshot_id) => Ok(RawCanisterSnapshotId { snapshot_id }),
+            _ => Err(OpConversionError),
+        }
+    }
+}
+
 #[async_trait]
 impl FromOpOut for PocketHttpResponse {
     async fn from(value: OpOut) -> (StatusCode, ApiResponse<PocketHttpResponse>) {
@@ -815,6 +830,54 @@ pub async fn handler_canister_snapshot_download(
         sender: ic_types::PrincipalId(sender.into()),
         canister_id,
         snapshot_id,
+        snapshot_dir,
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
+}
+
+pub async fn handler_canister_snapshot_upload(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(RawCanisterSnapshotUpload {
+        sender,
+        canister_id,
+        replace_snapshot,
+        snapshot_dir,
+    }): axum::extract::Json<RawCanisterSnapshotUpload>,
+) -> (StatusCode, Json<ApiResponse<RawCanisterSnapshotId>>) {
+    let timeout = timeout_or_default(headers);
+    let canister_id = match CanisterId::try_from(canister_id.canister_id) {
+        Ok(canister_id) => canister_id,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::Error {
+                    message: format!("{e:?}"),
+                }),
+            );
+        }
+    };
+    let replace_snapshot = if let Some(replace_snapshot) = replace_snapshot {
+        match SnapshotId::try_from(replace_snapshot.snapshot_id) {
+            Ok(snapshot_id) => Some(snapshot_id),
+            Err(e) => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(ApiResponse::Error {
+                        message: format!("{e:?}"),
+                    }),
+                );
+            }
+        }
+    } else {
+        None
+    };
+    let op = CanisterSnapshotUpload {
+        sender: ic_types::PrincipalId(sender.into()),
+        canister_id,
+        replace_snapshot,
         snapshot_dir,
     };
     let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
@@ -1078,6 +1141,13 @@ async fn op_out_to_response(op_out: OpOut) -> Response {
             StatusCode::OK,
             Json(ApiResponse::Success(
                 Vec::<RawCanisterHttpRequest>::try_from(opout).unwrap(),
+            )),
+        )
+            .into_response(),
+        opout @ OpOut::CanisterSnapshotId(_) => (
+            StatusCode::OK,
+            Json(ApiResponse::Success(
+                RawCanisterSnapshotId::try_from(opout).unwrap(),
             )),
         )
             .into_response(),
