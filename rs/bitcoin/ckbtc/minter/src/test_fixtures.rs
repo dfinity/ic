@@ -140,7 +140,7 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
     );
 }
 
-pub fn build_unsigned_transaction(
+pub fn build_bitcoin_unsigned_transaction(
     available_utxos: &mut BTreeSet<Utxo>,
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,

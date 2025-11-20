@@ -1,9 +1,9 @@
 use crate::fees::{BitcoinFeeEstimator, FeeEstimator};
-use crate::test_fixtures::{bitcoin_fee_estimator, build_unsigned_transaction};
+use crate::test_fixtures::{bitcoin_fee_estimator, build_bitcoin_unsigned_transaction};
 use crate::{
     BuildTxError, CacheWithExpiration, Network,
     address::BitcoinAddress,
-    estimate_retrieve_btc_fee, fake_sign, greedy,
+    build_unsigned_transaction, estimate_retrieve_btc_fee, fake_sign, greedy,
     lifecycle::init::InitArgs,
     state::invariants::CheckInvariantsImpl,
     state::{
@@ -256,7 +256,7 @@ fn should_have_same_input_and_output_count() {
     let fee_per_vbyte = 10000;
 
     let fee_estimator = bitcoin_fee_estimator();
-    let (tx, change_output, _, _) = crate::build_unsigned_transaction(
+    let (tx, change_output, _, _) = build_unsigned_transaction(
         &mut available_utxos,
         vec![(out1_addr.clone(), 100_000), (out2_addr.clone(), 99_999)],
         minter_addr.clone(),
@@ -303,7 +303,7 @@ fn test_min_change_amount() {
     let fee_per_vbyte = 10000;
 
     let fee_estimator = bitcoin_fee_estimator();
-    let (tx, change_output, _, _) = crate::build_unsigned_transaction(
+    let (tx, change_output, _, _) = build_unsigned_transaction(
         &mut available_utxos,
         vec![
             (out1_addr.clone(), utxo_1.value),
@@ -378,7 +378,7 @@ fn test_no_dust_outputs() {
     for dust in 0..=P2PKH_DUST_THRESHOLD {
         let fee_per_vbyte = 10000;
         assert_eq!(
-            build_unsigned_transaction(
+            build_bitcoin_unsigned_transaction(
                 &mut available_utxos,
                 vec![(out1_addr.clone(), 99_000), (out2_addr.clone(), dust)],
                 minter_addr.clone(),
@@ -393,7 +393,7 @@ fn test_no_dust_outputs() {
 
         let fee_per_vbyte = 4000;
         assert_eq!(
-            build_unsigned_transaction(
+            build_bitcoin_unsigned_transaction(
                 &mut available_utxos,
                 vec![(out1_addr.clone(), 99_000), (out2_addr.clone(), dust)],
                 minter_addr.clone(),
@@ -426,7 +426,7 @@ fn test_no_dust_in_change_output() {
     let fee_estimator = bitcoin_fee_estimator();
     for change in 1..=100 {
         let mut available_utxos = btreeset! {utxo.clone()};
-        let (tx, change_output, _withdrawal_fee, _utxos) = crate::build_unsigned_transaction(
+        let (tx, change_output, _withdrawal_fee, _utxos) = build_unsigned_transaction(
             &mut available_utxos,
             vec![(out1_addr.clone(), utxo.value - change)],
             minter_addr.clone(),
@@ -621,7 +621,7 @@ proptest! {
         let fee_estimate = estimate_retrieve_btc_fee(&utxos, Some(target), fee_per_vbyte, &fee_estimator);
         let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee;
 
-        let (unsigned_tx, _, _, _) = crate::build_unsigned_transaction(
+        let (unsigned_tx, _, _, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             minter_address,
@@ -661,7 +661,7 @@ proptest! {
     ) {
         prop_assume!(dst_pkhash != main_pkhash);
 
-        let (unsigned_tx, _, _, _) = build_unsigned_transaction(
+        let (unsigned_tx, _, _, _) = build_bitcoin_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             BitcoinAddress::P2wpkhV0(main_pkhash),
@@ -689,7 +689,7 @@ proptest! {
             .collect();
         let minter_address = BitcoinAddress::P2wpkhV0(main_pkhash);
         let fee_estimator = bitcoin_fee_estimator();
-        let (unsigned_tx, change_output, _, _) = crate::build_unsigned_transaction(
+        let (unsigned_tx, change_output, _, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
             minter_address.clone(),
@@ -735,7 +735,7 @@ proptest! {
         let total_value = utxos.iter().map(|u| u.value).sum::<u64>();
 
         prop_assert_eq!(
-            build_unsigned_transaction(
+            build_bitcoin_unsigned_transaction(
                 &mut utxos,
                 vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), total_value * 2)],
                 BitcoinAddress::P2wpkhV0(main_pkhash),
@@ -746,7 +746,7 @@ proptest! {
         prop_assert_eq!(&utxos_copy, &utxos);
 
         prop_assert_eq!(
-            build_unsigned_transaction(
+            build_bitcoin_unsigned_transaction(
                 &mut utxos,
                 vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), 1)],
                 BitcoinAddress::P2wpkhV0(main_pkhash),
@@ -823,7 +823,7 @@ proptest! {
         }
         let fee_per_vbyte = 100_000u64;
 
-        let (tx, change_output, withdrawal_fee, used_utxos) = build_unsigned_transaction(
+        let (tx, change_output, withdrawal_fee, used_utxos) = build_bitcoin_unsigned_transaction(
             &mut state.available_utxos,
             requests.iter().map(|r| (r.address.clone(), r.amount)).collect(),
             BitcoinAddress::P2wpkhV0(main_pkhash),
@@ -848,7 +848,7 @@ proptest! {
         for i in 1..=resubmission_chain_length {
             let prev_txid = txids.last().unwrap();
             // Build a replacement transaction
-            let (tx, change_output, withdrawal_fee, _used_utxos) = build_unsigned_transaction(
+            let (tx, change_output, withdrawal_fee, _used_utxos) = build_bitcoin_unsigned_transaction(
                 &mut used_utxos.clone().into_iter().collect(),
                 requests.iter().map(|r| (r.address.clone(), r.amount)).collect(),
                 BitcoinAddress::P2wpkhV0(main_pkhash),
