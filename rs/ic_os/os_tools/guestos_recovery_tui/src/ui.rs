@@ -134,7 +134,7 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
             state,
             f,
             *field,
-            field.label(),
+            &format!("{}:", field.label()),
             field.get_value(&state.params),
             field.description(),
             fields_layout[i],
@@ -305,10 +305,11 @@ fn build_failure_text<'a>(
 ) -> Vec<Line<'a>> {
     let mut text = Vec::new();
     text.push(Line::from(""));
-    text.push(create_error_line(format!(
-        "✗ Recovery failed with exit code: {:?}",
-        exit_code
-    )));
+    text.push(
+        Line::from(format!("✗ Recovery failed with exit code: {:?}", exit_code))
+            .red()
+            .bold(),
+    );
     text.push(Line::from(""));
     let separator = create_separator(size.width);
     text.push(Line::from(vec![Span::styled(
@@ -332,7 +333,7 @@ fn build_failure_text<'a>(
 
     // Add error logs or error messages
     if !log_lines.is_empty() {
-        text.push(create_error_line("Error logs:"));
+        text.push(Line::from("Error logs:").red().bold());
         text.push(Line::from(""));
 
         let available_height = size.height.saturating_sub(COMPLETION_SCREEN_OVERHEAD) as usize;
@@ -345,7 +346,7 @@ fn build_failure_text<'a>(
             .collect();
         text.extend(formatted_lines);
     } else if !error_messages.is_empty() {
-        text.push(create_error_line("Error details:"));
+        text.push(Line::from("Error details:").red().bold());
         text.push(Line::from(""));
         let max_width = (size.width.saturating_sub(TEXT_PADDING)) as usize;
         text.extend(format_log_lines(error_messages, max_width));
@@ -445,14 +446,6 @@ fn create_block<'a>(title: &'a str, active: bool, is_error: bool) -> Block<'a> {
             .title(Span::styled(title, Style::default().bold().fg(Color::Cyan)));
     }
     block
-}
-
-/// Creates a styled error line with red bold text.
-fn create_error_line(text: impl Into<String>) -> Line<'static> {
-    Line::from(vec![Span::styled(
-        text.into(),
-        Style::default().fg(Color::Red).bold(),
-    )])
 }
 
 /// Renders a text block (paragraph) with a block border, alignment, and text wrapping.
