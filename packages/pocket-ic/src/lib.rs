@@ -1451,9 +1451,9 @@ impl PocketIc {
         })
     }
 
-    /// Download a canister snapshot to a given output directory.
+    /// Download a canister snapshot to a given snapshot directory.
     /// The sender must be a controller of the canister.
-    /// The output directory must be empty if it exists.
+    /// The snapshot directory must be empty if it exists.
     #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
     pub fn canister_snapshot_download(
         &self,

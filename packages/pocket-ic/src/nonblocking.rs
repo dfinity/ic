@@ -1693,9 +1693,9 @@ impl PocketIc {
         self.post(endpoint, raw_mock_canister_http_response).await
     }
 
-    /// Download a canister snapshot to a given output directory.
+    /// Download a canister snapshot to a given snapshot directory.
     /// The sender must be a controller of the canister.
-    /// The output directory must be empty if it exists.
+    /// The snapshot directory must be empty if it exists.
     #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
     pub async fn canister_snapshot_download(
         &self,

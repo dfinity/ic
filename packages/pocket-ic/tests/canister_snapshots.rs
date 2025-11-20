@@ -41,7 +41,7 @@ fn test_canister_snapshot_download(pic: &mut PocketIc, canister_id: Principal) {
     let url = pic.make_live(None);
 
     // Create a home directory for dfx (that contains a configuration file)
-    // and an output directory for the snapshot downloaded using dfx.
+    // and a snapshot directory for the snapshot downloaded using dfx.
     let dfx_temp_dir = tempfile::tempdir().unwrap();
     let dfx_home_dir = dfx_temp_dir.path().to_path_buf();
     let dfx_snapshot_dir = dfx_home_dir.join("snapshot");
@@ -55,7 +55,7 @@ fn test_canister_snapshot_download(pic: &mut PocketIc, canister_id: Principal) {
     )
     .unwrap();
 
-    // dfx expects the output directory to exist.
+    // dfx expects the snapshot directory to exist.
     std::fs::create_dir_all(dfx_snapshot_dir.clone()).unwrap();
 
     // Download canister snapshot using dfx.
