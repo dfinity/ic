@@ -12,15 +12,15 @@ use_repo(ext, "rules_buf_toolchains")
 register_toolchains("@rules_buf_toolchains//:all")
 
 # General Bazel helpers
-bazel_dep(name = "bazel_skylib", version = "1.7.1")
+bazel_dep(name = "bazel_skylib", version = "1.8.2")
 bazel_dep(name = "aspect_bazel_lib", version = "2.9.0")
 bazel_dep(name = "rules_shell", version = "0.6.1")
 
 bazel_dep(name = "buildifier_prebuilt", version = "8.2.0.2", dev_dependency = True)
 
 # CC dependencies (for C libs like miracl-core, etc)
-bazel_dep(name = "rules_cc", version = "0.0.16")
-bazel_dep(name = "platforms", version = "0.0.11")
+bazel_dep(name = "rules_cc", version = "0.2.8")
+bazel_dep(name = "platforms", version = "1.0.0")
 bazel_dep(name = "hermetic_cc_toolchain", version = "3.1.1")
 archive_override(
     module_name = "hermetic_cc_toolchain",
@@ -667,6 +667,13 @@ http_file(
     downloaded_file_path = "basic_bitcoin.wasm.gz",
     sha256 = "e5560c9f7ca3f06c62b0169ffdc5b568ce0eb48e600a1ab893fdeb7414117dc2",
     url = "https://github.com/dfinity/examples/releases/download/rust-basic-bitcoin-25-10-10/basic_bitcoin.wasm.gz",
+)
+
+http_file(
+    name = "dogecoin_example_canister",
+    downloaded_file_path = "basic_dogecoin.wasm",
+    sha256 = "2eacb8de00dc2fc9bd43f7a5a8a4cd79c61c40ed3f761df84105a4a450f9e0c4",
+    url = "https://github.com/dfinity/dogecoin-canister/releases/download/example%2Fbasic-dogecoin%2F2025-11-12/basic_dogecoin.wasm",
 )
 
 http_file(

@@ -20,10 +20,7 @@ async fn main() -> Result<(), Error> {
     // Symmetric Key
     let sym_key = XChaCha20Poly1305::generate_key(&mut ChaChaOsRng);
 
-    let sym_key_pem = pem::encode(&Pem {
-        tag: "SYMMETRIC_KEY".into(),
-        contents: sym_key.to_vec(),
-    });
+    let sym_key_pem = pem::encode(&Pem::new("SYMMETRIC_KEY", sym_key.to_vec()));
 
     std::fs::write(cli.key_path, sym_key_pem)?;
 

@@ -1,8 +1,6 @@
 use std::time::Duration;
 
 use assert_matches::assert_matches;
-use ic_crypto_internal_basic_sig_ed25519::types::PublicKeyBytes as Ed25519PublicKeyBytes;
-use ic_crypto_internal_basic_sig_ed25519::types::SignatureBytes as Ed25519SignatureBytes;
 use ic_crypto_internal_tls::TlsEd25519SecretKeyDerBytes;
 use ic_crypto_internal_tls::TlsKeyPairAndCertGenerationError;
 use ic_crypto_internal_tls::generate_tls_key_pair_der;
@@ -44,7 +42,7 @@ fn should_generate_ed25519_secret_key_as_pkcs8_v1_format_in_der_encoding() {
     .expect("failed to generate TLS keys");
 
     assert_matches!(
-        ic_crypto_internal_basic_sig_ed25519::secret_key_from_pkcs8_v1_der(&secret_key.bytes),
+        ic_ed25519::PrivateKey::deserialize_pkcs8(secret_key.bytes.expose_secret()),
         Ok(_)
     );
 }
@@ -77,21 +75,15 @@ fn should_generate_self_signed_certificate() {
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
 
-    let public_key = Ed25519PublicKeyBytes::try_from(
-        x509.tbs_certificate
-            .subject_pki
-            .subject_public_key
-            .data
-            .to_vec(),
+    let sig = x509.signature_value.data.to_vec();
+    let msg = x509.tbs_certificate.as_ref();
+
+    let pk = ic_ed25519::PublicKey::deserialize_raw(
+        &x509.tbs_certificate.subject_pki.subject_public_key.data,
     )
     .expect("conversion to Ed25519 public key failed");
-    let sig = Ed25519SignatureBytes::try_from(x509.signature_value.data.to_vec())
-        .expect("failed to parse signature");
-    let msg = x509.tbs_certificate.as_ref();
-    assert_eq!(
-        ic_crypto_internal_basic_sig_ed25519::verify(&sig, msg, &public_key),
-        Ok(())
-    );
+
+    assert_eq!(pk.verify_signature(msg, &sig), Ok(()));
 }
 
 #[test]
@@ -122,17 +114,12 @@ fn should_generate_valid_public_key_with_correct_algorithm() {
     .expect("failed to generate TLS keys");
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
-    let public_key = Ed25519PublicKeyBytes::try_from(
-        x509.tbs_certificate
-            .subject_pki
-            .subject_public_key
-            .data
-            .to_vec(),
+
+    // Parsing implicitly validates the key
+    let _pk = ic_ed25519::PublicKey::deserialize_raw(
+        &x509.tbs_certificate.subject_pki.subject_public_key.data,
     )
     .expect("conversion to Ed25519 public key failed");
-    assert!(ic_crypto_internal_basic_sig_ed25519::verify_public_key(
-        &public_key
-    ));
 
     let (_remainder, x509) = X509Certificate::from_der(&cert.bytes).unwrap();
     assert_eq!(

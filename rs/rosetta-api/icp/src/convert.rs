@@ -1,5 +1,6 @@
 mod state;
 
+use crate::errors::Details;
 use crate::{
     convert,
     convert::state::State,
@@ -42,6 +43,7 @@ use on_wire::{FromWire, IntoWire};
 use rosetta_core::convert::principal_id_from_public_key;
 use serde_json::{Number, Value, from_value, map::Map};
 use std::convert::{TryFrom, TryInto};
+use tracing::log::debug;
 
 /// This module converts from ledger_canister data structures to Rosetta data
 /// structures
@@ -111,8 +113,15 @@ pub fn operations_to_requests(
         if o.coin_change.is_some() {
             return Err(op_error(o, "Coin changes are not permitted".into()));
         }
-        let account = from_model_account_identifier(o.account.as_ref().unwrap())
-            .map_err(|e| op_error(o, e))?;
+        let account = from_model_account_identifier(o.account.as_ref().unwrap()).map_err(|e| {
+            op_error(
+                o,
+                format!(
+                    "error converting '{:?}' to account identifier: {e:?}",
+                    o.account.as_ref()
+                ),
+            )
+        })?;
 
         let validate_neuron_management_op = || {
             if o.amount.is_some() && o.type_.parse::<OperationType>()? != OperationType::Disburse {
@@ -136,13 +145,25 @@ pub fn operations_to_requests(
             }
         };
 
-        match o.type_.parse::<OperationType>()? {
+        let parsed_type = o.type_.parse::<OperationType>().map_err(|e| {
+            let err_msg = format!("Error parsing operation type '{}': {e}", o.type_);
+            debug!("{}", err_msg);
+            ApiError::InvalidTransaction(false, Details::from(err_msg))
+        })?;
+        match parsed_type {
             OperationType::Transaction => {
                 let amount = o
                     .amount
                     .as_ref()
                     .ok_or_else(|| op_error(o, "Amount must be populated".into()))?;
-                let amount = from_amount(amount, token_name).map_err(|e| op_error(o, e))?;
+                let amount = from_amount(amount, token_name).map_err(|e| {
+                    let err_msg = format!(
+                        "Transaction - Error converting amount (value: {}, currency: {:?}): {e}",
+                        amount.value, amount.currency
+                    );
+                    debug!("{}", err_msg);
+                    op_error(o, err_msg)
+                })?;
                 state.transaction(account, amount)?;
             }
             OperationType::Approve => {
@@ -156,13 +177,25 @@ pub fn operations_to_requests(
                     .amount
                     .as_ref()
                     .ok_or_else(|| op_error(o, "Amount must be populated".into()))?;
-                let amount = from_amount(amount, token_name).map_err(|e| op_error(o, e))?;
+                let amount = from_amount(amount, token_name).map_err(|e| {
+                    let err_msg = format!(
+                        "Fee - Error converting amount (value: {}, currency: {:?}): {e}",
+                        amount.value, amount.currency
+                    );
+                    debug!("{}", err_msg);
+                    op_error(o, err_msg)
+                })?;
                 state.fee(account, Tokens::from_e8s((-amount) as u64))?;
             }
             OperationType::Stake => {
                 validate_neuron_management_op()?;
                 let NeuronIdentifierMetadata { neuron_index, .. } =
-                    o.metadata.clone().try_into()?;
+                    NeuronIdentifierMetadata::try_from(o.metadata.clone()).map_err(|e| {
+                        let err_msg =
+                            format!("Stake - Failed to parse neuron identifier metadata: {e:?}");
+                        debug!("{}", err_msg);
+                        e
+                    })?;
                 state.stake(account, neuron_index)?;
             }
             OperationType::SetDissolveTimestamp => {
@@ -170,7 +203,11 @@ pub fn operations_to_requests(
                 let SetDissolveTimestampMetadata {
                     neuron_index,
                     timestamp,
-                } = o.metadata.clone().try_into()?;
+                } = SetDissolveTimestampMetadata::try_from(o.metadata.clone()).map_err(|e| {
+                    let err_msg = format!("SetDissolveTimestamp - Failed to parse metadata: {e:?}");
+                    debug!("{}", err_msg);
+                    e
+                })?;
                 state.set_dissolve_timestamp(account, neuron_index, timestamp)?;
             }
             OperationType::ChangeAutoStakeMaturity => {
@@ -178,7 +215,7 @@ pub fn operations_to_requests(
                 let ChangeAutoStakeMaturityMetadata {
                     neuron_index,
                     requested_setting_for_auto_stake_maturity,
-                } = o.metadata.clone().try_into()?;
+                } = ChangeAutoStakeMaturityMetadata::try_from(o.metadata.clone())?;
                 state.change_auto_stake_maturity(
                     account,
                     neuron_index,
@@ -212,11 +249,20 @@ pub fn operations_to_requests(
                 let DisburseMetadata {
                     neuron_index,
                     recipient,
-                } = o.metadata.clone().try_into()?;
+                } = o.metadata.clone().try_into().map_err(|e| {
+                    let err_msg = format!("Disburse - Failed to parse metadata: {e:?}");
+                    debug!("{}", err_msg);
+                    e
+                })?;
                 validate_neuron_management_op()?;
                 let amount = if let Some(ref amount) = o.amount {
                     Some(ledgeramount_from_amount(amount, token_name).map_err(|e| {
-                        ApiError::internal_error(format!("Could not convert Amount {e:?}"))
+                        let err_msg = format!(
+                            "Disburse - Could not convert amount (value: {}, currency: {:?}): {e:?}",
+                            amount.value, amount.currency
+                        );
+                        debug!("{}", err_msg);
+                        ApiError::internal_error(err_msg)
                     })?)
                 } else {
                     None
@@ -243,7 +289,11 @@ pub fn operations_to_requests(
                     controller,
                     percentage_to_spawn,
                     spawned_neuron_index,
-                } = o.metadata.clone().try_into()?;
+                } = o.metadata.clone().try_into().map_err(|e| {
+                    let err_msg = format!("Spawn - Failed to parse metadata: {e:?}");
+                    debug!("{}", err_msg);
+                    e
+                })?;
                 validate_neuron_management_op()?;
                 state.spawn(
                     account,
@@ -301,7 +351,11 @@ pub fn operations_to_requests(
                     followees,
                     controller,
                     neuron_index,
-                } = o.metadata.clone().try_into()?;
+                } = o.metadata.clone().try_into().map_err(|e| {
+                    let err_msg = format!("Follow - Failed to parse metadata: {e:?}");
+                    debug!("{}", err_msg);
+                    e
+                })?;
                 validate_neuron_management_op()?;
                 // convert from pkp in operation to principal in request.
                 let pid = match controller {
@@ -433,8 +487,14 @@ pub fn principal_id_from_public_key_or_principal(
 ) -> Result<PrincipalId, ApiError> {
     match pkp {
         PublicKeyOrPrincipal::Principal(p) => Ok(p),
-        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk)
-            .map_err(|err| ApiError::InvalidPublicKey(false, err.into())),
+        PublicKeyOrPrincipal::PublicKey(pk) => principal_id_from_public_key(&pk).map_err(|err| {
+            let err_msg = format!(
+                "Failed to derive principal ID from public key (curve_type: {:?}): {err:?}",
+                pk.curve_type
+            );
+            debug!("{}", err_msg);
+            ApiError::InvalidPublicKey(false, Details::from(err_msg))
+        }),
     }
 }
 

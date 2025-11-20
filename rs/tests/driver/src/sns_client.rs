@@ -26,7 +26,8 @@ use ic_nervous_system_proto::pb::v1::{Duration, Image, Percentage, Tokens};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_governance_api::{
-    CreateServiceNervousSystem, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
+    CreateServiceNervousSystem, MakeProposalRequest, ManageNeuronCommandRequest,
+    ManageNeuronRequest, ManageNeuronResponse, NnsFunction, ProposalActionRequest,
     create_service_nervous_system::{
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
         governance_parameters::VotingRewardParameters,
@@ -36,9 +37,7 @@ use ic_nns_governance_api::{
         },
         swap_parameters::NeuronBasketConstructionParameters,
     },
-    manage_neuron::Command,
     manage_neuron_response::Command as CommandResp,
-    proposal::Action,
 };
 use ic_nns_test_utils::sns_wasm::ensure_sns_wasm_gzipped;
 use ic_sns_governance::pb::v1::governance::Mode;
@@ -417,17 +416,19 @@ async fn deploy_new_sns_via_proposal(
     let neuron_id = NeuronId {
         id: TEST_NEURON_1_ID,
     };
-    let manage_neuron_payload = ManageNeuron {
+    let manage_neuron_payload = ManageNeuronRequest {
         id: Some(neuron_id),
         neuron_id_or_subaccount: None,
-        command: Some(Command::MakeProposal(Box::new(Proposal {
-            title: Some("title".to_string()),
-            summary: "summary".to_string(),
-            url: "https://forum.dfinity.org/t/x/".to_string(),
-            action: Some(Action::CreateServiceNervousSystem(
-                create_service_nervous_system_proposal,
-            )),
-        }))),
+        command: Some(ManageNeuronCommandRequest::MakeProposal(Box::new(
+            MakeProposalRequest {
+                title: Some("title".to_string()),
+                summary: "summary".to_string(),
+                url: "https://forum.dfinity.org/t/x/".to_string(),
+                action: Some(ProposalActionRequest::CreateServiceNervousSystem(
+                    create_service_nervous_system_proposal,
+                )),
+            },
+        ))),
     };
     let proposer = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
     let res: ManageNeuronResponse = governance_canister
