@@ -62,7 +62,7 @@ fn render_terminal_too_small_error(f: &mut Frame, size: Rect) -> bool {
     render_text_block(
         f,
         error_text,
-        create_error_block("Error"),
+        create_block("Error", false, true),
         size,
         Alignment::Center,
     );
@@ -180,7 +180,7 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
         let error_area = Rect::new(start_x, vertical_area.y, box_width, BOX_HEIGHT);
 
         let error_para = Paragraph::new(error.as_str())
-            .block(create_error_block("Error"))
+            .block(create_block("Error", false, true))
             .wrap(Wrap { trim: true });
         f.render_widget(Clear, error_area);
         f.render_widget(error_para, error_area);
@@ -217,15 +217,7 @@ fn render_input_field(
     area: Rect,
 ) {
     let selected = state.current_field() == field;
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .bg(if selected { Color::Blue } else { Color::Reset })
-        .title(Span::styled(
-            label,
-            Style::default()
-                .bold()
-                .fg(if selected { Color::White } else { Color::Cyan }),
-        ));
+    let block = create_block(label, selected, false);
     let input = if selected {
         format!("{}█", value)
     } else {
@@ -278,7 +270,7 @@ pub(crate) fn draw_logs_screen(
     logs: &[String],
     size: Rect,
 ) {
-    let block = create_bordered_block("GuestOS Recovery Upgrader", Some(Style::default().bold()));
+    let block = create_block("GuestOS Recovery Upgrader", false, false);
 
     let mut text = create_parameter_lines(params);
     text.push(Line::from(""));
@@ -377,10 +369,7 @@ pub(crate) fn draw_failure_screen(
     params: &RecoveryParams,
     size: Rect,
 ) {
-    let block = create_bordered_block(
-        "Recovery Failed",
-        Some(Style::default().fg(Color::Red).bold()),
-    );
+    let block = create_block("Recovery Failed", false, true);
 
     let mut text = build_failure_text(exit_code, log_lines, error_messages, params, size);
 
@@ -439,23 +428,23 @@ fn create_separator(width: u16) -> String {
     "─".repeat((width.saturating_sub(TEXT_PADDING)).max(10) as usize)
 }
 
-/// Creates a bordered block with a title and optional styling.
-#[allow(mismatched_lifetime_syntaxes)]
-fn create_bordered_block(title: &str, style: Option<Style>) -> Block {
-    let mut block = Block::default().borders(Borders::ALL).title(title);
-    if let Some(s) = style {
-        block = block.style(s);
+/// Unified helper to create consistent UI blocks
+fn create_block<'a>(title: &'a str, active: bool, is_error: bool) -> Block<'a> {
+    let mut block = Block::default().borders(Borders::ALL);
+
+    if is_error {
+        block = block.fg(Color::Red).bg(Color::Black).title(title);
+    } else if active {
+        block = block.bg(Color::Blue).title(Span::styled(
+            title,
+            Style::default().bold().fg(Color::White),
+        ));
+    } else {
+        block = block
+            .bg(Color::Reset)
+            .title(Span::styled(title, Style::default().bold().fg(Color::Cyan)));
     }
     block
-}
-
-/// Creates a styled error block with consistent red styling.
-fn create_error_block(title: &str) -> Block<'_> {
-    Block::default()
-        .borders(Borders::ALL)
-        .fg(Color::Red)
-        .bg(Color::Black)
-        .title(title)
 }
 
 /// Creates a styled error line with red bold text.
