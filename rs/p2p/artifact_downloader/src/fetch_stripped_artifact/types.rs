@@ -1,6 +1,9 @@
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
+use ic_types::NodeIndex;
+use ic_types::consensus::idkg::IDkgArtifactId;
 use ic_types::crypto::CryptoHash;
+use ic_types::crypto::canister_threshold_sig::idkg::SignedIDkgDealing;
 use ic_types::messages::SignedIngress;
 use ic_types::{artifact::IngressMessageId, crypto::CryptoHashOf, messages::SignedRequestBytes};
 
@@ -48,4 +51,18 @@ impl TryFrom<pb::StrippedIngressMessage> for SignedIngressId {
             ingress_bytes_hash,
         })
     }
+}
+
+/// Unique identifiers for messages that may be stripped from block proposals.
+#[derive(Debug, PartialEq)]
+pub(crate) enum StrippedMessageId {
+    Ingress(SignedIngressId),
+    IDkgDealing(IDkgArtifactId, NodeIndex),
+}
+
+/// Messages that may be stripped from block proposals.
+#[derive(Debug, PartialEq)]
+pub(crate) enum StrippedMessage {
+    Ingress(SignedIngressId, SignedIngress),
+    IDkgDealing(IDkgArtifactId, NodeIndex, SignedIDkgDealing),
 }
