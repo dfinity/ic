@@ -60,6 +60,7 @@ ic-base-types = { path = "../../rs/types/base_types" }
 ic-cdk = { workspace = true }
 icrc-ledger-types = { path = "../icrc-ledger-types" }
 ic-error-types = { path = "../ic-error-types" }
+ic-management-canister-types-private = { path = "../../rs/types/management_canister_types" }
 ic-migration-canister = { path = "../../rs/migration_canister" }
 ic-nns-governance-api = { path = "../../rs/nns/governance/api" }
 ic-sns-wasm = { path = "../../rs/nns/sns-wasm" }

@@ -1,5 +1,5 @@
-use candid::{Reserved, Principal};
-use ic_management_canister_types::{ReadCanisterSnapshotMetadataResult, SnapshotSource};
+use candid::{Principal, Reserved};
+use ic_management_canister_types_private::{ReadCanisterSnapshotMetadataResponse, SnapshotSource};
 use pocket_ic::{PocketIc, PocketIcBuilder, update_candid};
 use std::process::Command;
 
@@ -68,18 +68,30 @@ fn test_canister_snapshot_download_upload(pic: &mut PocketIc, canister_id: Princ
     };
 
     // Compare snapshot metadata.
-    /*
+    // The source and timestamps are expected to differ and
+    // thus they are overwritten before comparision.
     let downloaded_metadata_path = downloaded_snapshot_dir.join("metadata.json");
     let downloaded_metadata_bytes = std::fs::read(downloaded_metadata_path).unwrap();
-    let downloaded_metadata: ReadCanisterSnapshotMetadataResult = serde_json::from_slice(&downloaded_metadata_bytes).unwrap();
+    let downloaded_metadata: ReadCanisterSnapshotMetadataResponse =
+        serde_json::from_slice(&downloaded_metadata_bytes).unwrap();
+
     let uploaded_metadata_path = uploaded_snapshot_dir.join("metadata.json");
     let uploaded_metadata_bytes = std::fs::read(uploaded_metadata_path).unwrap();
-    let mut uploaded_metadata: ReadCanisterSnapshotMetadataResult = serde_json::from_slice(&uploaded_metadata_bytes).unwrap();
-    assert_eq!(uploaded_metadata.source, Some(SnapshotSource::MetadataUpload(Reserved)));
+    let mut uploaded_metadata: ReadCanisterSnapshotMetadataResponse =
+        serde_json::from_slice(&uploaded_metadata_bytes).unwrap();
+
+    assert_eq!(
+        downloaded_metadata.source,
+        SnapshotSource::TakenFromCanister(Reserved)
+    );
+    assert_eq!(
+        uploaded_metadata.source,
+        SnapshotSource::MetadataUpload(Reserved)
+    );
+
     uploaded_metadata.source = downloaded_metadata.source;
-    uploaded_metadata.timestamp = downloaded_metadata.timestamp;
+    uploaded_metadata.taken_at_timestamp = downloaded_metadata.taken_at_timestamp;
     assert_eq!(downloaded_metadata, uploaded_metadata);
-    */
 
     // We skip the rest of the test on Windows
     // since there's no Windows build of dfx
