@@ -216,7 +216,7 @@ fn render_input_field(
     description: &str,
     area: Rect,
 ) {
-    let selected = state.current_field == field;
+    let selected = state.current_field() == field;
     let block = Block::default()
         .borders(Borders::ALL)
         .bg(if selected { Color::Blue } else { Color::Reset })
@@ -237,7 +237,7 @@ fn render_input_field(
 }
 
 fn render_button(state: &InputState, f: &mut Frame, text: &str, field: Field, area: Rect) {
-    let selected = state.current_field == field;
+    let selected = state.current_field() == field;
     let para = Paragraph::new(text)
         .bg(if selected { Color::Blue } else { Color::Reset })
         .fg(if selected { Color::White } else { Color::Reset });

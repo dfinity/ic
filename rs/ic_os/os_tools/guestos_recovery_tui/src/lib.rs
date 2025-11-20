@@ -203,16 +203,6 @@ impl Field {
         }
     }
 
-    fn next(&self) -> Self {
-        let pos = Self::ALL.iter().position(|&f| f == *self).unwrap_or(0);
-        Self::ALL[(pos + 1) % Self::ALL.len()]
-    }
-
-    fn previous(&self) -> Self {
-        let pos = Self::ALL.iter().position(|&f| f == *self).unwrap_or(0);
-        Self::ALL[(pos + Self::ALL.len() - 1) % Self::ALL.len()]
-    }
-
     fn is_input_field(&self) -> bool {
         self.metadata().is_input
     }
@@ -249,22 +239,17 @@ impl Field {
     }
 }
 
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub(crate) struct InputState {
-    pub current_field: Field,
+    pub focused_index: usize,
     pub params: RecoveryParams,
     pub error_message: Option<String>,
     pub exit_message: Option<String>,
 }
 
-impl Default for InputState {
-    fn default() -> Self {
-        Self {
-            current_field: Field::Version,
-            params: RecoveryParams::default(),
-            error_message: None,
-            exit_message: None,
-        }
+impl InputState {
+    pub fn current_field(&self) -> Field {
+        Field::ALL[self.focused_index]
     }
 }
 
@@ -476,62 +461,86 @@ impl App {
                 input_state.exit_message = Some("Recovery cancelled by user".to_string());
                 self.should_quit = true;
             }
+            KeyCode::Enter => return self.handle_submission(input_state),
+            KeyCode::Tab | KeyCode::Down | KeyCode::Up | KeyCode::Left | KeyCode::Right => {
+                self.handle_navigation(input_state, key.code);
+            }
+            _ => self.handle_text_input(input_state, key.code),
+        }
+        Ok(false)
+    }
 
-            KeyCode::Enter => {
-                if input_state.current_field.is_input_field() {
-                    input_state.current_field = input_state.current_field.next();
+    fn handle_navigation(&mut self, input_state: &mut InputState, key_code: KeyCode) {
+        let count = Field::ALL.len();
+        match key_code {
+            KeyCode::Tab | KeyCode::Down => {
+                input_state.focused_index = (input_state.focused_index + 1) % count;
+                self.clear_error();
+            }
+            KeyCode::Up => {
+                input_state.focused_index = (input_state.focused_index + count - 1) % count;
+                self.clear_error();
+            }
+            KeyCode::Left | KeyCode::Right => {
+                let current = input_state.current_field();
+                if matches!(current, Field::CheckArtifactsButton | Field::ExitButton) {
+                    // Toggle between the last two fields (buttons)
+                    if current == Field::CheckArtifactsButton {
+                        if let Some(idx) = Field::ALL.iter().position(|&f| f == Field::ExitButton) {
+                            input_state.focused_index = idx;
+                        }
+                    } else if let Some(idx) = Field::ALL
+                        .iter()
+                        .position(|&f| f == Field::CheckArtifactsButton)
+                    {
+                        input_state.focused_index = idx;
+                    }
                     self.clear_error();
-                } else {
-                    match input_state.current_field {
-                        Field::ExitButton => {
-                            input_state.exit_message =
-                                Some("Recovery cancelled by user".to_string());
-                            self.should_quit = true;
-                        }
-                        Field::CheckArtifactsButton => {
-                            // Validate and transition to running
-                            if let Err(e) = input_state.params.validate() {
-                                input_state.error_message = Some(e.to_string());
-                            } else {
-                                self.transition_to_running(input_state.params.clone())?;
-                                return Ok(true);
-                            }
-                        }
-                        _ => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_submission(&mut self, input_state: &mut InputState) -> Result<bool> {
+        let current = input_state.current_field();
+        if current.is_input_field() {
+            input_state.focused_index = (input_state.focused_index + 1) % Field::ALL.len();
+            self.clear_error();
+            Ok(false)
+        } else {
+            match current {
+                Field::ExitButton => {
+                    input_state.exit_message = Some("Recovery cancelled by user".to_string());
+                    self.should_quit = true;
+                    Ok(false)
+                }
+                Field::CheckArtifactsButton => {
+                    // Validate and transition to running
+                    if let Err(e) = input_state.params.validate() {
+                        input_state.error_message = Some(e.to_string());
+                        Ok(false)
+                    } else {
+                        self.transition_to_running(input_state.params.clone())?;
+                        Ok(true)
                     }
                 }
+                _ => Ok(false),
             }
+        }
+    }
 
-            KeyCode::Tab | KeyCode::Down => {
-                input_state.current_field = input_state.current_field.next();
-                self.clear_error();
-            }
+    fn handle_text_input(&mut self, input_state: &mut InputState, key_code: KeyCode) {
+        let current = input_state.current_field();
+        if !current.is_input_field() {
+            return;
+        }
 
-            KeyCode::Up => {
-                input_state.current_field = input_state.current_field.previous();
-                self.clear_error();
-            }
-
-            KeyCode::Left | KeyCode::Right => {
-                if matches!(
-                    input_state.current_field,
-                    Field::CheckArtifactsButton | Field::ExitButton
-                ) {
-                    input_state.current_field = match input_state.current_field {
-                        Field::CheckArtifactsButton => Field::ExitButton,
-                        Field::ExitButton => Field::CheckArtifactsButton,
-                        _ => unreachable!(),
-                    };
-                    self.clear_error();
-                }
-            }
-
-            KeyCode::Char(c) if input_state.current_field.is_input_field() => {
+        match key_code {
+            KeyCode::Char(c) => {
                 match (
-                    input_state.current_field.required_length(),
-                    input_state
-                        .current_field
-                        .get_value_mut(&mut input_state.params),
+                    current.required_length(),
+                    current.get_value_mut(&mut input_state.params),
                 ) {
                     (Some(max_len), Some(field_value))
                         if field_value.len() < max_len && c.is_ascii_hexdigit() =>
@@ -543,19 +552,14 @@ impl App {
                 }
             }
 
-            KeyCode::Backspace if input_state.current_field.is_input_field() => {
-                if let Some(field_value) = input_state
-                    .current_field
-                    .get_value_mut(&mut input_state.params)
-                {
+            KeyCode::Backspace => {
+                if let Some(field_value) = current.get_value_mut(&mut input_state.params) {
                     field_value.pop();
                     self.clear_error();
                 }
             }
-
             _ => {}
         }
-        Ok(false)
     }
 
     fn transition_to_running(&mut self, params: RecoveryParams) -> Result<()> {
