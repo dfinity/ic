@@ -284,7 +284,7 @@ async fn upgrade_to(
 
     let (r1, r2) = tokio::join!(h1, h2);
     let state_hash_from_logs = r1.unwrap();
-    let _ = r2.unwrap();
+    r2.unwrap();
 
     info!(logger, "The orchestrator shut down the tasks gracefully");
     info!(
