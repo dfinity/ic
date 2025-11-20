@@ -2,8 +2,7 @@ mod ui;
 
 use anyhow::{Context, Result};
 use crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
-    KeyModifiers,
+    DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
 };
 use crossterm::execute;
 use crossterm::terminal::{
@@ -14,6 +13,7 @@ use std::io::{self, BufRead, BufReader, Read};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 // ============================================================================
 // Constants
@@ -96,18 +96,6 @@ fn build_upgrader_command(params: &RecoveryParams) -> Command {
 // ============================================================================
 // Types and Data Structures
 // ============================================================================
-
-/// Represents the action to take after processing user input
-enum Action {
-    /// Continue the event loop and redraw the UI
-    Redraw,
-    /// Exit the application without proceeding
-    Exit,
-    /// Proceed with recovery (after validation)
-    Proceed,
-    /// No action needed (no redraw required)
-    NoOp,
-}
 
 #[derive(Default, Clone)]
 pub struct RecoveryParams {
@@ -262,14 +250,15 @@ impl Field {
     }
 }
 
-pub struct App {
-    current_field: Field,
-    params: RecoveryParams,
-    error_message: Option<String>,
-    exit_message: Option<String>,
+#[derive(Clone)]
+pub(crate) struct InputState {
+    pub current_field: Field,
+    pub params: RecoveryParams,
+    pub error_message: Option<String>,
+    pub exit_message: Option<String>,
 }
 
-impl Default for App {
+impl Default for InputState {
     fn default() -> Self {
         Self {
             current_field: Field::Version,
@@ -280,24 +269,74 @@ impl Default for App {
     }
 }
 
+pub(crate) struct RunningState {
+    pub child: std::process::Child,
+    pub stdout_handle: Option<thread::JoinHandle<()>>,
+    pub log_lines: Arc<Mutex<Vec<String>>>,
+    pub params: RecoveryParams,
+}
+
+#[derive(Clone)]
+pub(crate) struct DoneState {
+    pub params: RecoveryParams,
+    pub logs: Vec<String>,
+    pub exit_status: std::process::ExitStatus,
+    pub error_messages: Vec<String>,
+}
+
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum AppState {
+    Input(InputState),
+    Running(RunningState),
+    Done(DoneState),
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        AppState::Input(InputState::default())
+    }
+}
+
+pub struct App {
+    state: Option<AppState>,
+    should_quit: bool,
+    result: Option<Result<()>>,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            state: Some(AppState::default()),
+            should_quit: false,
+            result: None,
+        }
+    }
+}
+
 impl App {
     pub fn new() -> Self {
         Self::default()
     }
 
     fn clear_error(&mut self) {
-        self.error_message = None;
+        if let Some(AppState::Input(state)) = &mut self.state {
+            state.error_message = None;
+        }
     }
 
     /// Redraws the UI, handling any errors
     fn redraw(&self, terminal_guard: &mut TerminalGuard) -> Result<()> {
-        let _ = terminal_guard
-            .get_mut()
-            .draw(|f: &mut Frame| ui::render_app_ui(self, f))
-            .map_err(|e| {
-                anyhow::anyhow!("Failed to render TUI - terminal may not support required features")
+        if let Some(state) = &self.state {
+            let _ = terminal_guard
+                .get_mut()
+                .draw(|f: &mut Frame| ui::render(f, state))
+                .map_err(|e| {
+                    anyhow::anyhow!(
+                        "Failed to render TUI - terminal may not support required features"
+                    )
                     .context(e)
-            })?;
+                })?;
+        }
         Ok(())
     }
 
@@ -314,31 +353,8 @@ impl App {
         Err(e.into()).with_context(context)
     }
 
-    fn handle_input_char(&mut self, c: char) {
-        match (
-            self.current_field.required_length(),
-            self.current_field.get_value_mut(&mut self.params),
-        ) {
-            (Some(max_len), Some(field_value))
-                if field_value.len() < max_len && c.is_ascii_hexdigit() =>
-            {
-                field_value.push(c);
-                self.clear_error();
-            }
-            _ => {}
-        }
-    }
-
-    fn handle_backspace(&mut self) {
-        if let Some(field_value) = self.current_field.get_value_mut(&mut self.params) {
-            field_value.pop();
-            self.clear_error();
-        }
-    }
-
-    /// Runs the interactive TUI and returns the recovery parameters if the user proceeds.
-    /// Returns `None` if the user exits without proceeding.
-    pub fn run(&mut self) -> Result<Option<RecoveryParams>> {
+    /// Runs the interactive TUI application.
+    pub fn run(&mut self) -> Result<()> {
         if !atty::is(atty::Stream::Stdout) || !atty::is(atty::Stream::Stdin) {
             anyhow::bail!(
                 "This program requires an interactive terminal.\n\
@@ -353,132 +369,261 @@ impl App {
         let terminal_size = terminal_guard.get_mut().size()?;
         let test_size = Rect::new(0, 0, terminal_size.width, terminal_size.height);
         if let Err(e) = ui::validate_terminal_size(test_size) {
-            return Self::teardown_and_error(terminal_guard, e, || {
+            let _ = Self::teardown_and_error(terminal_guard, e, || {
                 "Terminal size validation failed".to_string()
             });
+            return Err(anyhow::anyhow!("Terminal size validation failed"));
         }
 
         execute!(terminal_guard.get_mut().backend_mut(), EnableMouseCapture)
             .context("Failed to enable mouse capture")?;
 
-        self.redraw(&mut terminal_guard)?;
-
-        let result = loop {
-            // Read event with error handling
-            let event = match event::read() {
-                Ok(event) => event,
-                Err(e) => {
-                    return Self::teardown_and_error(terminal_guard, e, || {
-                        "Failed to read terminal events - terminal may not support required features"
-                            .to_string()
-                    });
-                }
-            };
-
-            // Early continue for non-key events or non-press events
-            let key = match event {
-                Event::Key(key)
-                    if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) =>
-                {
-                    key
-                }
-                _ => continue,
-            };
-
-            // Handle Ctrl+C first (special case)
-            if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-                break Ok(None);
+        // Main Loop
+        loop {
+            if self.should_quit {
+                break;
             }
 
-            // Process input and get action
-            let action = self.process_input(key)?;
+            self.redraw(&mut terminal_guard)?;
 
-            // Handle action
-            match action {
-                Action::Exit => {
-                    self.exit_message = Some("Recovery cancelled by user".to_string());
-                    self.redraw(&mut terminal_guard)?;
-                    break Ok(None);
-                }
-                Action::Proceed => match self.params.validate() {
-                    Ok(_) => break Ok(Some(self.params.clone())),
-                    Err(e) => {
-                        self.error_message = Some(e.to_string());
-                        self.redraw(&mut terminal_guard)?;
-                    }
-                },
-                Action::Redraw => {
-                    self.redraw(&mut terminal_guard)?;
-                }
-                Action::NoOp => {}
+            // Event polling
+            if crossterm::event::poll(Duration::from_millis(PROCESS_POLL_INTERVAL_MS))? {
+                let event = crossterm::event::read()
+                    .map_err(|e| anyhow::anyhow!("Failed to read terminal events").context(e))?;
+                self.handle_event(event)?;
             }
-        };
+
+            // State tick
+            self.tick()?;
+        }
 
         execute!(terminal_guard.get_mut().backend_mut(), DisableMouseCapture)
             .context("Failed to disable mouse capture")?;
-        result
+
+        // If we finished successfully, print the message after cleanup
+        if let Some(Ok(())) = self.result {
+            // Drop guard to cleanup terminal before printing
+            drop(terminal_guard);
+            print_prominent_success_message("Recovery completed successfully!");
+        } else if let Some(Err(ref _e)) = self.result {
+            // If we failed with an error (not just a cancelled operation)
+            // The guard will drop and we can print error if needed, but caller handles it.
+        }
+
+        if let Some(result) = self.result.take() {
+            result
+        } else {
+            Ok(()) // Default to Ok if exited cleanly (e.g. Ctrl+C)
+        }
     }
 
-    /// Processes a key event and returns the action to take
-    fn process_input(&mut self, key: KeyEvent) -> Result<Action> {
+    fn handle_event(&mut self, event: Event) -> Result<()> {
+        match event {
+            Event::Key(key)
+                if key.kind == KeyEventKind::Press || key.kind == KeyEventKind::Repeat =>
+            {
+                // Global Ctrl+C handler
+                if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+                    self.should_quit = true;
+                    self.result = None; // Cancelled
+                    return Ok(());
+                }
+                self.handle_key_event(key)
+            }
+            _ => Ok(()),
+        }
+    }
+
+    fn handle_key_event(&mut self, key: KeyEvent) -> Result<()> {
+        let state = self.state.take();
+
+        match state {
+            Some(AppState::Input(mut input_state)) => {
+                match self.handle_input_key_event(&mut input_state, key) {
+                    Ok(true) => Ok(()), // Transition occurred, self.state is already set
+                    Ok(false) => {
+                        self.state = Some(AppState::Input(input_state));
+                        Ok(())
+                    }
+                    Err(e) => {
+                        self.state = Some(AppState::Input(input_state));
+                        Err(e)
+                    }
+                }
+            }
+            Some(AppState::Running(s)) => {
+                self.state = Some(AppState::Running(s));
+                Ok(())
+            }
+            Some(AppState::Done(s)) => {
+                // Any key exits
+                self.should_quit = true;
+                self.state = Some(AppState::Done(s));
+                Ok(())
+            }
+            None => Ok(()),
+        }
+    }
+
+    fn handle_input_key_event(
+        &mut self,
+        input_state: &mut InputState,
+        key: KeyEvent,
+    ) -> Result<bool> {
         match key.code {
-            KeyCode::Esc => Ok(Action::Exit),
+            KeyCode::Esc => {
+                input_state.exit_message = Some("Recovery cancelled by user".to_string());
+                self.should_quit = true;
+            }
 
             KeyCode::Enter => {
-                if self.current_field.is_input_field() {
-                    self.current_field = self.current_field.next();
+                if input_state.current_field.is_input_field() {
+                    input_state.current_field = input_state.current_field.next();
                     self.clear_error();
-                    Ok(Action::Redraw)
                 } else {
-                    Ok(match self.current_field {
-                        Field::ExitButton => Action::Exit,
-                        Field::CheckArtifactsButton => Action::Proceed,
-                        _ => Action::NoOp,
-                    })
+                    match input_state.current_field {
+                        Field::ExitButton => {
+                            input_state.exit_message =
+                                Some("Recovery cancelled by user".to_string());
+                            self.should_quit = true;
+                        }
+                        Field::CheckArtifactsButton => {
+                            // Validate and transition to running
+                            if let Err(e) = input_state.params.validate() {
+                                input_state.error_message = Some(e.to_string());
+                            } else {
+                                self.transition_to_running(input_state.params.clone())?;
+                                return Ok(true);
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             }
 
             KeyCode::Tab | KeyCode::Down => {
-                self.current_field = self.current_field.next();
+                input_state.current_field = input_state.current_field.next();
                 self.clear_error();
-                Ok(Action::Redraw)
             }
 
             KeyCode::Up => {
-                self.current_field = self.current_field.previous();
+                input_state.current_field = input_state.current_field.previous();
                 self.clear_error();
-                Ok(Action::Redraw)
             }
 
             KeyCode::Left | KeyCode::Right => {
                 if matches!(
-                    self.current_field,
+                    input_state.current_field,
                     Field::CheckArtifactsButton | Field::ExitButton
                 ) {
-                    self.current_field = match self.current_field {
+                    input_state.current_field = match input_state.current_field {
                         Field::CheckArtifactsButton => Field::ExitButton,
                         Field::ExitButton => Field::CheckArtifactsButton,
                         _ => unreachable!(),
                     };
                     self.clear_error();
-                    Ok(Action::Redraw)
-                } else {
-                    Ok(Action::NoOp)
                 }
             }
 
-            KeyCode::Char(c) if self.current_field.is_input_field() => {
-                self.handle_input_char(c);
-                Ok(Action::Redraw)
+            KeyCode::Char(c) if input_state.current_field.is_input_field() => {
+                match (
+                    input_state.current_field.required_length(),
+                    input_state
+                        .current_field
+                        .get_value_mut(&mut input_state.params),
+                ) {
+                    (Some(max_len), Some(field_value))
+                        if field_value.len() < max_len && c.is_ascii_hexdigit() =>
+                    {
+                        field_value.push(c);
+                        self.clear_error();
+                    }
+                    _ => {}
+                }
             }
 
-            KeyCode::Backspace if self.current_field.is_input_field() => {
-                self.handle_backspace();
-                Ok(Action::Redraw)
+            KeyCode::Backspace if input_state.current_field.is_input_field() => {
+                if let Some(field_value) = input_state
+                    .current_field
+                    .get_value_mut(&mut input_state.params)
+                {
+                    field_value.pop();
+                    self.clear_error();
+                }
             }
 
-            _ => Ok(Action::NoOp),
+            _ => {}
         }
+        Ok(false)
+    }
+
+    fn transition_to_running(&mut self, params: RecoveryParams) -> Result<()> {
+        let mut cmd = build_upgrader_command(&params);
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::null());
+
+        let mut child = cmd.spawn().context("Failed to spawn recovery upgrader")?;
+
+        let log_lines = Arc::new(Mutex::new(Vec::<String>::new()));
+
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get stdout handle"))?;
+
+        let stdout_handle = spawn_log_reader_thread(stdout, Arc::clone(&log_lines));
+
+        self.state = Some(AppState::Running(RunningState {
+            child,
+            stdout_handle: Some(stdout_handle),
+            log_lines,
+            params,
+        }));
+
+        Ok(())
+    }
+
+    fn tick(&mut self) -> Result<()> {
+        let finished_state = if let Some(AppState::Running(running_state)) = &mut self.state {
+            match running_state.child.try_wait() {
+                Ok(Some(status)) => {
+                    // Process finished
+                    if let Some(handle) = running_state.stdout_handle.take() {
+                        handle.join().ok();
+                    }
+
+                    // Collect logs
+                    let logs = running_state.log_lines.lock().unwrap().clone();
+
+                    if status.success() {
+                        // Success!
+                        self.result = Some(Ok(()));
+                        self.should_quit = true;
+                        None
+                    } else {
+                        // Failure -> Transition to Done
+                        let error_messages = extract_errors_from_logs(&logs);
+                        Some(DoneState {
+                            params: running_state.params.clone(),
+                            logs,
+                            exit_status: status,
+                            error_messages,
+                        })
+                    }
+                }
+                Ok(None) => None, // Still running
+                Err(e) => return Err(anyhow::anyhow!("Error waiting for process: {}", e)),
+            }
+        } else {
+            None
+        };
+
+        if let Some(done_state) = finished_state {
+            self.result = Some(Err(anyhow::anyhow!("Recovery failed")));
+            self.state = Some(AppState::Done(done_state));
+        }
+
+        Ok(())
     }
 }
 
@@ -506,55 +651,6 @@ where
             }
         }
     })
-}
-
-/// Monitors a child process, displaying real-time logs in the terminal.
-/// Returns the process exit status and all collected logs.
-fn monitor_process_with_logs(
-    mut child: std::process::Child,
-    stdout_handle: thread::JoinHandle<()>,
-    log_lines: Arc<Mutex<Vec<String>>>,
-    terminal_guard: &mut TerminalGuard,
-    params: &RecoveryParams,
-) -> Result<(std::process::ExitStatus, Vec<String>)> {
-    let mut last_log_count = 0;
-    let status = loop {
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                stdout_handle.join().ok();
-                break status;
-            }
-            Ok(None) => {
-                let logs = log_lines.lock().unwrap();
-                let current_count = logs.len();
-                // Only redraw if we have new logs
-                if current_count > last_log_count {
-                    let current_logs: Vec<String> = logs.clone();
-                    drop(logs);
-
-                    terminal_guard
-                        .get_mut()
-                        .draw(|f| ui::draw_logs_screen(f, params, &current_logs))
-                        .ok();
-
-                    last_log_count = current_count;
-                } else {
-                    drop(logs);
-                }
-
-                thread::sleep(std::time::Duration::from_millis(PROCESS_POLL_INTERVAL_MS));
-            }
-            Err(e) => {
-                return Err(anyhow::anyhow!("Error waiting for process: {}", e));
-            }
-        }
-    };
-
-    let logs = log_lines.lock().unwrap();
-    let all_logs: Vec<String> = logs.clone();
-    drop(logs);
-
-    Ok((status, all_logs))
 }
 
 /// Extracts the last N error lines from log output
@@ -598,74 +694,4 @@ fn print_prominent_success_message(message: &str) {
         GREEN, separator, RESET, GREEN, BOLD, message, RESET, RESET, GREEN, separator, RESET
     );
     let _ = handle.flush();
-}
-
-// ============================================================================
-// Main Execution
-// ============================================================================
-
-/// Displays a status screen and runs the recovery upgrader script with the given parameters.
-/// Shows real-time logs and a completion screen with results.
-pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
-    if params.version.is_empty() || params.version_hash.is_empty() {
-        anyhow::bail!("Invalid parameters: version and version-hash must be non-empty");
-    }
-
-    let status = {
-        let terminal = setup_terminal()?;
-        let mut terminal_guard = TerminalGuard::new(terminal);
-
-        terminal_guard
-            .get_mut()
-            .draw(|f| ui::draw_status_screen(f, params))?;
-
-        let mut cmd = build_upgrader_command(params);
-        cmd.stdout(Stdio::piped());
-        // Explicitly discard stderr - dd's status=progress output to stderr would clutter the display
-        cmd.stderr(Stdio::null());
-
-        let mut child = cmd.spawn().context("Failed to spawn recovery upgrader")?;
-
-        let log_lines = Arc::new(Mutex::new(Vec::<String>::new()));
-
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get stdout handle"))?;
-
-        let stdout_handle = spawn_log_reader_thread(stdout, Arc::clone(&log_lines));
-
-        let (status, all_logs) = monitor_process_with_logs(
-            child,
-            stdout_handle,
-            log_lines,
-            &mut terminal_guard,
-            params,
-        )?;
-
-        if !status.success() {
-            let error_messages = extract_errors_from_logs(&all_logs);
-
-            // For failure: show completion screen and wait for user to press any key
-            terminal_guard.get_mut().draw(|f| {
-                ui::draw_failure_screen(f, status.code(), &all_logs, &error_messages, params);
-            })?;
-
-            // Wait for user to press any key before exiting
-            if let Event::Key(_) = event::read()? {}
-        }
-
-        status
-    }; // terminal_guard is dropped here, safely restoring the terminal
-
-    if status.success() {
-        // Print success message after terminal is teared down
-        print_prominent_success_message("Recovery completed successfully!");
-        Ok(())
-    } else {
-        anyhow::bail!(
-            "Recovery upgrader failed with exit code: {:?}",
-            status.code()
-        );
-    }
 }

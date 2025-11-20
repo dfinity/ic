@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
-use crate::{App, Field, RecoveryParams};
+use crate::{AppState, DoneState, Field, InputState, RecoveryParams, RunningState};
 use anyhow::Result;
 
 // ============================================================================
@@ -74,13 +74,21 @@ fn render_terminal_too_small_error(f: &mut Frame, size: Rect) -> bool {
 // ============================================================================
 
 /// Renders the main UI for the App
-pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
+pub(crate) fn render(f: &mut Frame, state: &AppState) {
     let size = f.area();
 
     if render_terminal_too_small_error(f, size) {
         return;
     }
 
+    match state {
+        AppState::Input(s) => render_input_screen(f, s, size),
+        AppState::Running(s) => render_running_screen(f, s, size),
+        AppState::Done(s) => render_done_screen(f, s, size),
+    }
+}
+
+fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
     let main_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -123,11 +131,11 @@ pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
 
     for (i, field) in Field::INPUT_FIELDS.iter().enumerate() {
         render_input_field(
-            app,
+            state,
             f,
             *field,
             field.label(),
-            field.get_value(&app.params),
+            field.get_value(&state.params),
             field.description(),
             fields_layout[i],
         );
@@ -135,7 +143,7 @@ pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
 
     let button_area = main_layout[3];
     render_buttons_centered(
-        app,
+        state,
         f,
         &[
             ("<Run recovery>", Field::CheckArtifactsButton),
@@ -146,7 +154,7 @@ pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
     );
 
     // Display exit message in the remaining space area with proper spacing
-    if let Some(ref msg) = app.exit_message {
+    if let Some(ref msg) = state.exit_message {
         let message_area = main_layout[5];
         let para = Paragraph::new(msg.as_str())
             .style(Style::default().fg(Color::White))
@@ -154,7 +162,7 @@ pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
         f.render_widget(para, message_area);
     }
 
-    if let Some(ref error) = app.error_message {
+    if let Some(ref error) = state.error_message {
         let max_width = (size.width * 80 / 100).max(MIN_BOX_WIDTH);
         let error_text_width = error.len().min(u16::MAX as usize) as u16;
         let box_width = error_text_width.clamp(MIN_BOX_WIDTH, max_width) + BORDER_PADDING;
@@ -179,12 +187,28 @@ pub(crate) fn render_app_ui(app: &App, f: &mut Frame) {
     }
 }
 
+fn render_running_screen(f: &mut Frame, state: &RunningState, size: Rect) {
+    let logs = state.log_lines.lock().unwrap();
+    draw_logs_screen(f, &state.params, &logs, size);
+}
+
+fn render_done_screen(f: &mut Frame, state: &DoneState, size: Rect) {
+    draw_failure_screen(
+        f,
+        state.exit_status.code(),
+        &state.logs,
+        &state.error_messages,
+        &state.params,
+        size,
+    );
+}
+
 // ============================================================================
 // Component Rendering Functions
 // ============================================================================
 
 fn render_input_field(
-    app: &App,
+    state: &InputState,
     f: &mut Frame,
     field: Field,
     label: &str,
@@ -192,7 +216,7 @@ fn render_input_field(
     description: &str,
     area: Rect,
 ) {
-    let selected = app.current_field == field;
+    let selected = state.current_field == field;
     let block = Block::default()
         .borders(Borders::ALL)
         .bg(if selected { Color::Blue } else { Color::Reset })
@@ -212,8 +236,8 @@ fn render_input_field(
     f.render_widget(para, area);
 }
 
-fn render_button(app: &App, f: &mut Frame, text: &str, field: Field, area: Rect) {
-    let selected = app.current_field == field;
+fn render_button(state: &InputState, f: &mut Frame, text: &str, field: Field, area: Rect) {
+    let selected = state.current_field == field;
     let para = Paragraph::new(text)
         .bg(if selected { Color::Blue } else { Color::Reset })
         .fg(if selected { Color::White } else { Color::Reset });
@@ -222,7 +246,7 @@ fn render_button(app: &App, f: &mut Frame, text: &str, field: Field, area: Rect)
 
 /// Renders buttons horizontally centered in the given area with spacing between them
 fn render_buttons_centered(
-    app: &App,
+    state: &InputState,
     f: &mut Frame,
     buttons: &[(&str, Field)],
     area: Rect,
@@ -238,7 +262,7 @@ fn render_buttons_centered(
     let mut x = start_x;
     for (text, field) in buttons {
         let width = text.len() as u16;
-        render_button(app, f, text, *field, Rect::new(x, area.y, width, 1));
+        render_button(state, f, text, *field, Rect::new(x, area.y, width, 1));
         x += width + spacing;
     }
 }
@@ -247,25 +271,13 @@ fn render_buttons_centered(
 // Screen Rendering Functions
 // ============================================================================
 
-/// Draws the initial status screen showing parameters and "Starting recovery..." message
-pub(crate) fn draw_status_screen(f: &mut Frame, params: &RecoveryParams) {
-    let size = f.area();
-    let block = create_bordered_block("GuestOS Recovery Upgrader", Some(Style::default().bold()));
-
-    let mut text = create_parameter_lines(params);
-    text.push(Line::from(""));
-    text.push(Line::from("Starting recovery process..."));
-    text.push(Line::from("This may take several minutes. Please wait..."));
-
-    render_text_block(f, text, block, size, Alignment::Left);
-}
-
 /// Draws the real-time logs screen during recovery process
-pub(crate) fn draw_logs_screen(f: &mut Frame, params: &RecoveryParams, logs: &[String]) {
-    let size = f.area();
-    if render_terminal_too_small_error(f, size) {
-        return;
-    }
+pub(crate) fn draw_logs_screen(
+    f: &mut Frame,
+    params: &RecoveryParams,
+    logs: &[String],
+    size: Rect,
+) {
     let block = create_bordered_block("GuestOS Recovery Upgrader", Some(Style::default().bold()));
 
     let mut text = create_parameter_lines(params);
@@ -363,8 +375,8 @@ pub(crate) fn draw_failure_screen(
     log_lines: &[String],
     error_messages: &[String],
     params: &RecoveryParams,
+    size: Rect,
 ) {
-    let size = f.area();
     let block = create_bordered_block(
         "Recovery Failed",
         Some(Style::default().fg(Color::Red).bold()),
