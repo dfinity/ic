@@ -391,11 +391,10 @@ fn test_guaranteed_refunds(
         cycles_before >= cycles_after,
         "Too many cycles refunded: before = {cycles_before}, after = {cycles_after}"
     );
-    // TODO(MR-730): Enable this check once refunds are being routed.
-    // prop_assert!(
-    //     cycles_before - cycles_after < 1_000_000_000,
-    //     "More than 1B cycles lost: before = {cycles_before}, after = {cycles_after}"
-    // );
+    prop_assert!(
+        cycles_before - cycles_after < 1_000_000_000,
+        "More than 1B cycles lost: before = {cycles_before}, after = {cycles_after}"
+    );
 }
 
 /// Tests that all calls are concluded successfully during subnet splitting and whilst upholding
