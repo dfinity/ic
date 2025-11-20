@@ -165,6 +165,11 @@ RUN adduser --system --disabled-password --home /var/lib/admin --shell /bin/bash
     adduser admin vsock && \
     adduser admin sudo
 
+# The "limited-console" account for restricted console access
+RUN adduser --system --disabled-password --home /var/lib/limited-console --shell /sbin/nologin limited-console && \
+    chown limited-console:nogroup /var/lib/limited-console && \
+    adduser limited-console systemd-journal
+
 # The "node_exporter" account. Used to run node_exporter binary to export
 # telemetry metrics of the GuestOS.
 RUN addgroup node_exporter && \
@@ -195,6 +200,13 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
     chmod 0644 /opt/ic/share/*
+
+# Create wrapper script to prevent bash escape in restricted shell
+# A symlink won't work because bash checks its invocation name ($0), not the symlink target
+RUN mkdir -p /opt/ic/bin/rbash && \
+    echo '#!/bin/sh' > /opt/ic/bin/rbash/bash && \
+    echo 'exec /bin/rbash "$@"' >> /opt/ic/bin/rbash/bash && \
+    chmod 0755 /opt/ic/bin/rbash/bash
 
 # ------ DEV VARIANT ---------------------------------------------
 

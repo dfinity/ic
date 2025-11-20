@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
 
+### Added
+- Added support for legacy `SignedTransaction` format from pre-v2.1.0 for the `construction/submit` endpoint.
+
 ## [2.1.8] - 2025-10-09
 ### Added
 - Added explicit timeout in ic-agent initialization to improve initial sync performance ([#7131](https://github.com/dfinity/ic/pull/7131))
@@ -81,7 +84,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - added functionality to refresh voting power on the governance canister
 ### Changed
 - [BREAKING CHANGE]: consolidate block and transaction tables into a single table
-  The clients have to delete the old database and re-sync the Rosetta node from scratch. 
+  The clients have to delete the old database and re-sync the Rosetta node from scratch.
+- [BREAKING CHANGE]: change `pub type SignedTransaction = Vec<Request>` to
+  `pub struct SignedTransaction { pub requests: Vec<Request> }`, affecting the
+  `construction/submit` endpoint.
 
 ## [2.0.0] - 2024-01-18
 ### Fixes

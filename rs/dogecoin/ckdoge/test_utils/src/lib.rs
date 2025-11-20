@@ -1,6 +1,6 @@
 mod dogecoin;
 mod events;
-mod flow;
+pub mod flow;
 mod ledger;
 mod minter;
 
@@ -21,6 +21,7 @@ use icrc_ledger_types::icrc1::account::Account;
 use pocket_ic::ErrorCode;
 use pocket_ic::RejectCode;
 use pocket_ic::{PocketIc, PocketIcBuilder, RejectResponse};
+use std::collections::BTreeSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
@@ -34,6 +35,7 @@ pub const RETRIEVE_DOGE_MIN_AMOUNT: u64 = 50 * DOGE;
 pub const LEDGER_TRANSFER_FEE: u64 = DOGE / 100;
 const MAX_TIME_IN_QUEUE: Duration = Duration::from_secs(10);
 pub const MIN_CONFIRMATIONS: u32 = 60;
+pub const BLOCK_TIME: Duration = Duration::from_secs(60);
 
 pub struct Setup {
     pub env: Arc<PocketIc>,
@@ -244,19 +246,45 @@ pub fn assert_trap<T: Debug>(result: Result<T, RejectResponse>, message: &str) {
     );
 }
 
-pub fn txid() -> Txid {
-    Txid::from([42u8; 32])
+pub fn txid(bytes: [u8; 32]) -> Txid {
+    Txid::from(bytes)
 }
 
 pub fn utxo_with_value(value: u64) -> Utxo {
     Utxo {
         height: 0,
         outpoint: OutPoint {
-            txid: txid(),
+            txid: txid([42u8; 32]),
             vout: 1,
         },
         value,
     }
+}
+
+pub fn utxos_with_value(values: &[u64]) -> BTreeSet<Utxo> {
+    assert!(
+        values.len() < u16::MAX as usize,
+        "Adapt logic below to create more unique UTXOs!"
+    );
+    let utxos = values
+        .iter()
+        .enumerate()
+        .map(|(i, &value)| {
+            let mut txid = [0; 32];
+            txid[0] = (i % 256) as u8;
+            txid[1] = (i / 256) as u8;
+            Utxo {
+                height: 0,
+                outpoint: OutPoint {
+                    txid: Txid::from(txid),
+                    vout: 1,
+                },
+                value,
+            }
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(values.len(), utxos.len());
+    utxos
 }
 
 pub fn into_outpoint(
@@ -289,4 +317,15 @@ pub fn into_rust_dogecoin_network(network: Network) -> bitcoin::dogecoin::Networ
         Network::Testnet => bitcoin::dogecoin::Network::Testnet,
         Network::Regtest => bitcoin::dogecoin::Network::Regtest,
     }
+}
+
+/// Expect exactly one element on anything that can be turn into an iterator.
+pub fn only_one<T, I: IntoIterator<Item = T>>(iter: I) -> T {
+    let mut iter = iter.into_iter();
+    let result = iter.next().expect("BUG: expected exactly one item, got 0.");
+    assert!(
+        iter.next().is_none(),
+        "BUG: expected exactly one item, got at least 2"
+    );
+    result
 }

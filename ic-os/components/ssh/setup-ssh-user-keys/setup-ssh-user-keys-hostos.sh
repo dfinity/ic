@@ -16,7 +16,7 @@ copy_ssh_keys() {
 
 # Create home directories
 echo "Creating user home directories"
-for ACCOUNT in backup readonly admin; do
+for ACCOUNT in backup readonly admin limited-console; do
     HOMEDIR=$(getent passwd "${ACCOUNT}" | cut -d: -f6)
     echo "Creating home directory for ${ACCOUNT}: ${HOMEDIR}"
     mkdir -p "${HOMEDIR}"

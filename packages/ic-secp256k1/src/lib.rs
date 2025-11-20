@@ -48,10 +48,6 @@ impl std::fmt::Display for KeyDecodingError {
 
 impl std::error::Error for KeyDecodingError {}
 
-/// See RFC 3279 section 2.3.5
-static ECDSA_OID: LazyLock<simple_asn1::OID> =
-    LazyLock::new(|| simple_asn1::oid!(1, 2, 840, 10045, 2, 1));
-
 /// See "SEC 2: Recommended Elliptic Curve Domain Parameters"
 /// Section A.2.1
 /// https://www.secg.org/sec2-v2.pdf
@@ -293,53 +289,8 @@ fn der_decode_rfc5915_privatekey(der: &[u8]) -> Result<Vec<u8>, KeyDecodingError
     }
 }
 
-fn der_encode_pkcs8_rfc5208_private_key(secret_key: &[u8]) -> Vec<u8> {
-    use simple_asn1::*;
-
-    // simple_asn1::to_der can only fail if you use an invalid object identifier
-    // so to avoid returning a Result from this function we use expect
-
-    let pkcs8_version = ASN1Block::Integer(0, BigInt::new(num_bigint::Sign::Plus, vec![0]));
-    let ecdsa_oid = ASN1Block::ObjectIdentifier(0, ECDSA_OID.clone());
-    let secp256k1_oid = ASN1Block::ObjectIdentifier(0, SECP256K1_OID.clone());
-
-    let alg_id = ASN1Block::Sequence(0, vec![ecdsa_oid, secp256k1_oid]);
-
-    let octet_string =
-        ASN1Block::OctetString(0, der_encode_rfc5915_privatekey(secret_key, false, None));
-
-    let blocks = vec![pkcs8_version, alg_id, octet_string];
-
-    simple_asn1::to_der(&ASN1Block::Sequence(0, blocks))
-        .expect("Failed to encode ECDSA private key as DER")
-}
-
-/// DER encode the public point into a SubjectPublicKeyInfo
-///
-/// The public_point can be either the compressed or uncompressed format
-fn der_encode_ecdsa_spki_pubkey(public_point: &[u8]) -> Vec<u8> {
-    use simple_asn1::*;
-
-    // simple_asn1::to_der can only fail if you use an invalid object identifier
-    // so to avoid returning a Result from this function we use expect
-
-    let ecdsa_oid = ASN1Block::ObjectIdentifier(0, ECDSA_OID.clone());
-    let secp256k1_oid = ASN1Block::ObjectIdentifier(0, SECP256K1_OID.clone());
-    let alg_id = ASN1Block::Sequence(0, vec![ecdsa_oid, secp256k1_oid]);
-
-    let key_bytes = ASN1Block::BitString(0, public_point.len() * 8, public_point.to_vec());
-
-    let blocks = vec![alg_id, key_bytes];
-
-    simple_asn1::to_der(&ASN1Block::Sequence(0, blocks))
-        .expect("Failed to encode ECDSA private key as DER")
-}
-
 fn pem_encode(raw: &[u8], label: &'static str) -> String {
-    pem::encode(&pem::Pem {
-        tag: label.to_string(),
-        contents: raw.to_vec(),
-    })
+    pem::encode(&pem::Pem::new(label, raw))
 }
 
 /// BIP341 / Taproot derivation step
@@ -460,11 +411,11 @@ impl PrivateKey {
     pub fn deserialize_pkcs8_pem(pem: &str) -> Result<Self, KeyDecodingError> {
         let der =
             pem::parse(pem).map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
-        if der.tag != PEM_HEADER_PKCS8 {
-            return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
+        if der.tag() != PEM_HEADER_PKCS8 {
+            return Err(KeyDecodingError::UnexpectedPemLabel(der.tag().to_string()));
         }
 
-        Self::deserialize_pkcs8_der(&der.contents)
+        Self::deserialize_pkcs8_der(der.contents())
     }
 
     /// Deserialize a private key encoded in RFC 5915 format
@@ -477,10 +428,10 @@ impl PrivateKey {
     pub fn deserialize_rfc5915_pem(pem: &str) -> Result<Self, KeyDecodingError> {
         let der =
             pem::parse(pem).map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
-        if der.tag != PEM_HEADER_RFC5915 {
-            return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
+        if der.tag() != PEM_HEADER_RFC5915 {
+            return Err(KeyDecodingError::UnexpectedPemLabel(der.tag().to_string()));
         }
-        Self::deserialize_rfc5915_der(&der.contents)
+        Self::deserialize_rfc5915_der(der.contents())
     }
 
     /// Serialize the private key to a simple bytestring
@@ -494,7 +445,12 @@ impl PrivateKey {
 
     /// Serialize the private key as PKCS8 format in DER encoding
     pub fn serialize_pkcs8_der(&self) -> Vec<u8> {
-        der_encode_pkcs8_rfc5208_private_key(&self.serialize_sec1())
+        use k256::pkcs8::EncodePrivateKey;
+        self.key
+            .to_pkcs8_der()
+            .expect("Serialization cannot fail unless key is invalid")
+            .as_bytes()
+            .to_vec()
     }
 
     /// Serialize the private key as PKCS8 format in PEM encoding
@@ -882,11 +838,11 @@ impl PublicKey {
     pub fn deserialize_pem(pem: &str) -> Result<Self, KeyDecodingError> {
         let der =
             pem::parse(pem).map_err(|e| KeyDecodingError::InvalidPemEncoding(format!("{e:?}")))?;
-        if der.tag != "PUBLIC KEY" {
-            return Err(KeyDecodingError::UnexpectedPemLabel(der.tag));
+        if der.tag() != "PUBLIC KEY" {
+            return Err(KeyDecodingError::UnexpectedPemLabel(der.tag().to_string()));
         }
 
-        Self::deserialize_der(&der.contents)
+        Self::deserialize_der(der.contents())
     }
 
     /// Serialize a public key in SEC1 format
@@ -915,12 +871,20 @@ impl PublicKey {
 
     /// Serialize a public key in DER as a SubjectPublicKeyInfo
     pub fn serialize_der(&self) -> Vec<u8> {
-        der_encode_ecdsa_spki_pubkey(&self.serialize_sec1(false))
+        use k256::pkcs8::EncodePublicKey;
+        self.key
+            .to_public_key_der()
+            .expect("Encoding is infalliable as long as key is valid")
+            .as_ref()
+            .to_vec()
     }
 
     /// Serialize a public key in PEM encoding of a SubjectPublicKeyInfo
     pub fn serialize_pem(&self) -> String {
-        pem_encode(&self.serialize_der(), "PUBLIC KEY")
+        use k256::pkcs8::EncodePublicKey;
+        self.key
+            .to_public_key_pem(k256::pkcs8::LineEnding::CRLF)
+            .expect("Encoding is infalliable as long as key is valid")
     }
 
     /// Deprecated alias of verify_ecdsa_signature

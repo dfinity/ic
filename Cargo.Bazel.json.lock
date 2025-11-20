@@ -1,5 +1,5 @@
 {
-  "checksum": "61d7c33d026726168c0b093230aa9363736334b63bf888fce350f0e5a18a70cd",
+  "checksum": "ebb3080ae4d750a48beff104c98480985de2f139596e0868f2ed48fd9f81874f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -11458,7 +11458,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -11565,7 +11565,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -11652,14 +11652,14 @@
       ],
       "license_file": null
     },
-    "candid 0.10.17": {
+    "candid 0.10.20": {
       "name": "candid",
-      "version": "0.10.17",
+      "version": "0.10.20",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid/0.10.17/download",
-          "sha256": "eaac522d18020d5fbc8320ecb12a9b13b2137ae31133da2d42fa256a825507c4"
+          "url": "https://static.crates.io/crates/candid/0.10.20/download",
+          "sha256": "8037a01ec09d6c06883a38bad4f47b8d06158ad360b841e0ae5707c9884dfaf6"
         }
       },
       "targets": [
@@ -11756,7 +11756,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "candid_derive 0.10.17",
+              "id": "candid_derive 0.10.20",
               "target": "candid_derive"
             },
             {
@@ -11791,7 +11791,7 @@
             ]
           }
         },
-        "version": "0.10.17"
+        "version": "0.10.20"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11799,14 +11799,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "candid_derive 0.10.17": {
+    "candid_derive 0.10.20": {
       "name": "candid_derive",
-      "version": "0.10.17",
+      "version": "0.10.20",
       "package_url": "https://github.com/dfinity/candid",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/candid_derive/0.10.17/download",
-          "sha256": "8a1b4fddbd462182050989068d53604a91a3d0f117c3c8316c6818023df00add"
+          "url": "https://static.crates.io/crates/candid_derive/0.10.20/download",
+          "sha256": "fb45f4d5eff3805598ee633dd80f8afb306c023249d34b5b7dfdc2080ea1df2e"
         }
       },
       "targets": [
@@ -11850,7 +11850,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.10.17"
+        "version": "0.10.20"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11906,7 +11906,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -12015,7 +12015,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -20210,7 +20210,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -20808,7 +20808,7 @@
               "target": "canbench_rs"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -21129,6 +21129,10 @@
               "target": "ic_certified_map"
             },
             {
+              "id": "ic-doge-interface 0.1.0",
+              "target": "ic_doge_interface"
+            },
+            {
               "id": "ic-gateway 0.2.0",
               "target": "ic_gateway"
             },
@@ -21446,7 +21450,7 @@
               "target": "pcre2"
             },
             {
-              "id": "pem 1.1.1",
+              "id": "pem 3.0.3",
               "target": "pem"
             },
             {
@@ -25835,7 +25839,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -25919,7 +25923,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -33480,7 +33484,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -33704,7 +33708,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -33946,7 +33950,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -34052,7 +34056,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -34139,7 +34143,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -34202,7 +34206,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -34369,7 +34373,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -34432,7 +34436,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -34507,7 +34511,7 @@
               "target": "cached"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -34679,6 +34683,68 @@
       ],
       "license_file": "LICENSE"
     },
+    "ic-doge-interface 0.1.0": {
+      "name": "ic-doge-interface",
+      "version": "0.1.0",
+      "package_url": "https://github.com/dfinity/dogecoin-canister",
+      "repository": {
+        "Git": {
+          "remote": "https://github.com/dfinity/dogecoin-canister",
+          "commitish": {
+            "Rev": "74e6dc9a10ba64d2dbad013282c26d74cd49863f"
+          },
+          "strip_prefix": "interface"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_doge_interface",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_doge_interface",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.20",
+              "target": "candid"
+            },
+            {
+              "id": "datasize 0.2.15",
+              "target": "datasize"
+            },
+            {
+              "id": "serde 1.0.219",
+              "target": "serde"
+            },
+            {
+              "id": "serde_bytes 0.11.15",
+              "target": "serde_bytes"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.1.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": null
+    },
     "ic-error-types 0.2.0": {
       "name": "ic-error-types",
       "version": "0.2.0",
@@ -34801,7 +34867,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35047,7 +35113,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35126,7 +35192,7 @@
               "target": "bytes"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35276,7 +35342,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35424,7 +35490,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35718,7 +35784,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35777,7 +35843,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35865,7 +35931,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -35959,7 +36025,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -36216,7 +36282,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -36373,7 +36439,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -36448,7 +36514,7 @@
         "deps": {
           "common": [
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -36713,7 +36779,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -36784,7 +36850,7 @@
               "target": "anyhow"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -53408,53 +53474,6 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "pem 1.1.1": {
-      "name": "pem",
-      "version": "1.1.1",
-      "package_url": "https://github.com/jcreekmore/pem-rs.git",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/pem/1.1.1/download",
-          "sha256": "a8835c273a76a90455d7344889b0964598e3316e2a79ede8e36f16bdcf2228b8"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "pem",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "pem",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "base64 0.13.1",
-              "target": "base64"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "1.1.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE.md"
-    },
     "pem 3.0.3": {
       "name": "pem",
       "version": "3.0.3",
@@ -55373,7 +55392,7 @@
               "target": "base64"
             },
             {
-              "id": "candid 0.10.17",
+              "id": "candid 0.10.20",
               "target": "candid"
             },
             {
@@ -94175,7 +94194,7 @@
     "cached 0.49.2",
     "canbench 0.2.1",
     "canbench-rs 0.2.1",
-    "candid 0.10.17",
+    "candid 0.10.20",
     "candid_parser 0.1.4",
     "cargo_metadata 0.14.2",
     "cc 1.2.22",
@@ -94258,6 +94277,7 @@
     "ic-certificate-verification 3.0.3",
     "ic-certification 3.0.3",
     "ic-certified-map 0.3.4",
+    "ic-doge-interface 0.1.0",
     "ic-gateway 0.2.0",
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.3.0",
@@ -94340,7 +94360,7 @@
     "parking_lot 0.12.1",
     "paste 1.0.15",
     "pcre2 0.2.6",
-    "pem 1.1.1",
+    "pem 3.0.3",
     "pin-project-lite 0.2.13",
     "ping 0.5.0",
     "pkcs8 0.10.2",

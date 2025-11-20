@@ -1,3 +1,4 @@
+use crate::only_one;
 use ic_ckdoge_minter::EventType;
 use ic_ckdoge_minter::RetrieveBtcRequest;
 use std::collections::BTreeMap;
@@ -51,6 +52,26 @@ impl<E> MinterEventAssert<E> {
             self.events
         );
         self
+    }
+
+    pub fn none_satisfy<P>(self, predicate: P) -> Self
+    where
+        P: Fn(&E) -> bool,
+        E: fmt::Debug,
+    {
+        let unexpected = self.events.iter().find(|event| predicate(event));
+        if let Some(unexpected) = unexpected {
+            panic!("Unexpected event: {:?}", unexpected);
+        }
+        self
+    }
+
+    pub fn extract_exactly_one<P>(self, predicate: P) -> E
+    where
+        P: Fn(&E) -> bool,
+        E: fmt::Debug,
+    {
+        only_one(self.events.into_iter().filter(|event| predicate(event)))
     }
 }
 

@@ -583,7 +583,7 @@ pub mod proposal {
         /// key can be destroyed so that the neuron can only be controlled
         /// by its followees, although this makes it impossible to
         /// subsequently unlock the balance.
-        ManageNeuron(Box<super::ManageNeuron>),
+        ManageNeuron(Box<super::ManageNeuronProposal>),
         /// Propose a change to some network parameters of network
         /// economics.
         ManageNetworkEconomics(super::NetworkEconomics),
@@ -646,12 +646,12 @@ pub struct Empty {}
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
-pub struct ManageNeuron {
+pub struct ManageNeuronProposal {
     /// This is the legacy way to specify neuron IDs that is now discouraged.
     pub id: Option<NeuronId>,
     /// The ID of the neuron to manage. This can either be a subaccount or a neuron ID.
     pub neuron_id_or_subaccount: Option<manage_neuron::NeuronIdOrSubaccount>,
-    pub command: Option<manage_neuron::Command>,
+    pub command: Option<manage_neuron::ManageNeuronProposalCommand>,
 }
 /// Nested message and enum types in `ManageNeuron`.
 pub mod manage_neuron {
@@ -1009,7 +1009,7 @@ pub mod manage_neuron {
     #[derive(
         candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug,
     )]
-    pub enum Command {
+    pub enum ManageNeuronProposalCommand {
         Configure(Configure),
         Disburse(Disburse),
         Spawn(Spawn),
@@ -2924,7 +2924,7 @@ pub struct XdrConversionRate {
 #[derive(
     candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, Debug, Default,
 )]
-pub struct ListProposalInfo {
+pub struct ListProposalInfoRequest {
     /// Limit on the number of \[ProposalInfo\] to return. If no value is
     /// specified, or if a value greater than 100 is specified, 100
     /// will be used.
@@ -3144,6 +3144,9 @@ pub struct MonthlyNodeProviderRewards {
     pub maximum_node_provider_rewards_e8s: Option<u64>,
     /// The registry version used to calculate these rewards at the time the rewards were calculated.
     pub registry_version: Option<u64>,
+    /// Rewards calculation algorithm version used to calculate rewards.
+    /// See RewardsCalculationAlgorithmVersion for the allowed values.
+    pub algorithm_version: Option<u32>,
     /// The list of node_provieders at the time when the rewards were calculated.
     pub node_providers: Vec<NodeProvider>,
 }

@@ -1318,6 +1318,7 @@ async fn test_mint_monthly_node_provider_rewards() {
                 node_providers: vec![],
                 start_date: None,
                 end_date: None,
+                algorithm_version: None,
             }),
             ..Default::default()
         },
@@ -1350,6 +1351,7 @@ async fn test_mint_monthly_node_provider_rewards() {
         maximum_node_provider_rewards_e8s,
         registry_version,
         node_providers,
+        algorithm_version: _,
     } = most_recent_monthly_node_provider_rewards;
     let reward = rewards[0].clone();
     assert_eq!(reward.node_provider.unwrap(), node_provider);

@@ -1,8 +1,8 @@
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary", "motoko_library")
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:candid.bzl", "did_git_test")
 load("//bazel:defs.bzl", "rust_ic_test_suite")
 load("//bazel:prost.bzl", "generated_files_check")
+load("//bazel/candid:defs.bzl", "did_git_test")
 
 package(default_visibility = ["//visibility:public"])
 

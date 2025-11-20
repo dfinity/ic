@@ -2189,47 +2189,6 @@ message XdrConversionRate {
   optional uint64 xdr_permyriad_per_icp = 2;
 }
 
-// Proposals with restricted voting are not included unless the caller
-// is allowed to vote on them.
-//
-// The actual ballots of the proposal are restricted to ballots cast
-// by the caller.
-message ListProposalInfo {
-  // Limit on the number of [ProposalInfo] to return. If no value is
-  // specified, or if a value greater than 100 is specified, 100
-  // will be used.
-  uint32 limit = 1;
-  // If specified, only return proposals that are strictly earlier than
-  // the specified proposal according to the proposal ID. If not
-  // specified, start with the most recent proposal.
-  ic_nns_common.pb.v1.ProposalId before_proposal = 2;
-  // Exclude proposals with a topic in this list. This is particularly
-  // useful to exclude proposals on the topics TOPIC_EXCHANGE_RATE and
-  // TOPIC_KYC which most users are not likely to be interested in
-  // seeing.
-  repeated Topic exclude_topic = 3;
-  // Include proposals that have a reward status in this list (see
-  // [ProposalRewardStatus] for more information). If this list is
-  // empty, no restriction is applied. For example, many users listing
-  // proposals will only be interested in proposals for which they can
-  // receive voting rewards, i.e., with reward status
-  // PROPOSAL_REWARD_STATUS_ACCEPT_VOTES.
-  repeated ProposalRewardStatus include_reward_status = 4;
-  // Include proposals that have a status in this list (see
-  // [ProposalStatus] for more information). If this list is empty, no
-  // restriction is applied.
-  repeated ProposalStatus include_status = 5;
-  // Include all ManageNeuron proposals regardless of the visibility of the
-  // proposal to the caller principal. Note that exclude_topic is still
-  // respected even when this option is set to true.
-  optional bool include_all_manage_neuron_proposals = 6;
-  // Omits "large fields" from the response. Currently only omits the
-  // `logo` and `token_logo` field of CreateServiceNervousSystem proposals. This
-  // is useful to improve download times and to ensure that the response to the
-  // request doesn't exceed the message size limit.
-  optional bool omit_large_fields = 7;
-}
-
 // A response to "ListKnownNeurons"
 message ListKnownNeuronsResponse {
   // List of known neurons.
@@ -2286,6 +2245,9 @@ message MonthlyNodeProviderRewards {
 
   // The registry version used to calculate these rewards at the time the rewards were calculated.
   optional uint64 registry_version = 6;
+
+  // Rewards calculation algorithm version used to calculate rewards.
+  optional uint32 algorithm_version = 10;
 
   // The list of node_provieders at the time when the rewards were calculated.
   repeated NodeProvider node_providers = 7;

@@ -59,7 +59,7 @@ use ic_system_test_driver::{
         },
     },
     systest,
-    util::{UniversalCanister, block_on, get_identity, get_nns_node},
+    util::{block_on, get_identity, get_nns_node},
 };
 use ic_types::{
     CanisterId, Height, PrincipalId, SubnetId,
@@ -68,11 +68,41 @@ use ic_types::{
         HttpQueryResponseReply, HttpReadStateResponse, NodeSignature,
     },
 };
-use ic_universal_canister::wasm;
+use ic_utils::interfaces::ManagementCanister;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use time::OffsetDateTime;
+
+const CERTIFIED_VAR_WAT: &str = r#"
+;; A canister serving a certified variable
+(module
+  (import "ic0" "msg_reply" (func $msg_reply))
+  (import "ic0" "msg_reply_data_append"
+    (func $msg_reply_data_append (param i32 i32)))
+  (import "ic0" "data_certificate_size" (func $data_certificate_size (result i32)))
+  (import "ic0" "data_certificate_copy"
+      (func $data_certificate_copy (param i32 i32 i32)))
+
+  (func $certificate
+    (local $size i32)
+    (local.set $size (call $data_certificate_size))
+    (i32.store (i32.const 0) (local.get $size))
+    (call $data_certificate_copy
+      (i32.const 0)
+      (i32.const 0)
+      (local.get $size))
+    (call $msg_reply_data_append
+      (i32.const 0)
+      (local.get $size))
+    (call $msg_reply))
+
+  (memory $memory 1)
+  (export "memory" (memory $memory))
+  (export "canister_update certificate_as_update" (func $certificate))
+  (export "canister_query certificate" (func $certificate))
+)
+"#;
 
 /// How long to wait between subsequent nns delegation fetch requests.
 const RETRY_DELAY: tokio::time::Duration = tokio::time::Duration::from_secs(60);
@@ -94,20 +124,27 @@ fn setup(env: TestEnv) {
 
     info!(
         env.logger(),
-        "Installing universal canister on the Application subnet"
+        "Installing certified variables canister on the Application subnet"
     );
     let (_subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
     let agent = node.build_default_agent();
+    let management_canister = ManagementCanister::create(&agent);
+    let wasm = wat::parse_str(CERTIFIED_VAR_WAT).expect("Failed to parse certified variables WAT");
+
     tokio::runtime::Runtime::new().unwrap().block_on(async {
-        let _canister = UniversalCanister::new_with_params_with_retries(
-            &agent,
-            node.effective_canister_id(),
-            /*compute_allocation= */ None,
-            /*cycles= */ None,
-            /*pages= */ None,
-            &env.logger(),
-        )
-        .await;
+        management_canister
+            .create_canister()
+            .as_provisional_create_with_amount(None)
+            .with_effective_canister_id(node.effective_canister_id())
+            .call_and_wait()
+            .await
+            .expect("Failed to create the certified variables canister");
+
+        management_canister
+            .install_code(&node.effective_canister_id().0, &wasm)
+            .call_and_wait()
+            .await
+            .expect("Failed to install the certified variables canister");
     });
 
     upgrade_application_subnet_if_necessary(&env);
@@ -429,7 +466,7 @@ struct QueryResponse {
 /// canister ranges in the flat format to the canister.
 fn query_v2_passes_correct_delegation_to_canister(env: TestEnv) {
     let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
-    let arg = wasm().data_certificate().append_and_reply().build();
+    let arg = vec![];
 
     let response: QueryResponse = block_on(send(
         &node,
@@ -453,7 +490,7 @@ fn query_v2_passes_correct_delegation_to_canister(env: TestEnv) {
 /// canister ranges in the tree format to the canister.
 fn query_v3_passes_correct_delegation_to_canister(env: TestEnv) {
     let (subnet, node) = get_subnet_and_node(&env, SubnetType::Application);
-    let arg = wasm().data_certificate().append_and_reply().build();
+    let arg = vec![];
 
     let response: QueryResponse = block_on(send(
         &node,
@@ -496,7 +533,7 @@ fn call_content(canister_id: PrincipalId) -> EnvelopeContent {
         ingress_expiry: expiration.unix_timestamp_nanos() as u64,
         sender: get_identity().sender().unwrap(),
         canister_id: canister_id.into(),
-        method_name: String::from("update"),
+        method_name: String::from("certificate_as_update"),
         arg: vec![],
         nonce: None,
     }
@@ -508,7 +545,7 @@ fn query_content(canister_id: PrincipalId, arg: Vec<u8>) -> EnvelopeContent {
         ingress_expiry: expiration.unix_timestamp_nanos() as u64,
         sender: get_identity().sender().unwrap(),
         canister_id: canister_id.into(),
-        method_name: String::from("query"),
+        method_name: String::from("certificate"),
         arg,
         nonce: None,
     }

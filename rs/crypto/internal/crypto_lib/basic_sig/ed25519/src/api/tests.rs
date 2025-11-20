@@ -22,21 +22,10 @@ mod keygen {
 }
 
 mod serialization {
-    use crate::types::{PublicKeyBytes, SecretKeyBytes};
-    use crate::{
-        KeyDecodingError, public_key_from_der, secret_key_from_pkcs8_v1_der,
-        secret_key_to_pkcs8_v1_der, secret_key_to_pkcs8_v2_der,
-    };
-    use assert_matches::assert_matches;
-    use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;
-    use ic_crypto_secrets_containers::{SecretArray, SecretBytes};
+    use crate::public_key_from_der;
 
     // Example DER-pk from https://tools.ietf.org/html/rfc8410#section-10.1
     const PK_DER_BASE64: &str = "MCowBQYDK2VwAyEAGb9ECWmEzf6FQbrBZ9w7lshQhqowtrbLDFw4rXAxZuE";
-
-    // Example DER-sk from https://tools.ietf.org/html/rfc8410#section-10.3
-    const SK_DER_BASE64: &str = "MC4CAQAwBQYDK2VwBCIEINTuctv5E1hK1bbY8fdp+K06/nwoy/HU++CXqI9EdVhC";
-    const SK_RAW_HEX: &str = "D4EE72DBF913584AD5B6D8F1F769F8AD3AFE7C28CBF1D4FBE097A88F44755842";
 
     // Example ECDSA DER-encoded key, for testing.
     const ECDSA_P256_PK_1_DER_HEX: &str = "3059301306072a8648ce3d020106082a8648ce3d03010703420004485c32997ce7c6d38ca82c821185c689d424fac7c9695bb97786c4248aab6428949bcd163e2bcf3eeeac4f200b38fbd053f82c4e1776dc9c6dc8db9b7c35e06f";
@@ -77,75 +66,6 @@ mod serialization {
         let pk_result = public_key_from_der(&pk_der);
         assert!(pk_result.is_err());
         assert!(pk_result.unwrap_err().is_malformed_public_key());
-    }
-
-    #[test]
-    fn should_correctly_parse_der_encoded_sk() {
-        let sk_der = SecretBytes::new(base64::decode(SK_DER_BASE64).unwrap());
-        let expected_sk = hex_to_32_bytes(SK_RAW_HEX);
-        assert_matches!(secret_key_from_pkcs8_v1_der(&sk_der), Ok(secret_key)
-            if secret_key.0.expose_secret() == &expected_sk
-        );
-    }
-
-    #[test]
-    fn should_fail_parsing_a_corrupted_der_encoded_sk() {
-        let mut sk_der = base64::decode(SK_DER_BASE64).unwrap();
-        sk_der[0] += 1;
-        assert_matches!(
-            secret_key_from_pkcs8_v1_der(&SecretBytes::new(sk_der)),
-            Err(KeyDecodingError::InvalidEncoding(_))
-        );
-    }
-
-    #[test]
-    fn should_fail_parsing_der_encoded_sk_of_wrong_length() {
-        let mut sk_der = base64::decode(SK_DER_BASE64).unwrap();
-        sk_der.push(0);
-        assert_eq!(sk_der.len(), 49);
-        assert_matches!(
-            secret_key_from_pkcs8_v1_der(&SecretBytes::new(sk_der)),
-            Err(KeyDecodingError::InvalidEncoding(_))
-        );
-    }
-
-    #[test]
-    fn should_correctly_encode_sk_as_pkcs8_v1_der() {
-        let sk_bytes = SecretKeyBytes(SecretArray::new_and_dont_zeroize_argument(
-            &hex_to_32_bytes(SK_RAW_HEX),
-        ));
-        let sk_expected = SecretBytes::new(base64::decode(SK_DER_BASE64).unwrap());
-
-        let sk_der = secret_key_to_pkcs8_v1_der(&sk_bytes);
-
-        assert_eq!(sk_der, sk_expected);
-    }
-
-    #[test]
-    fn should_correctly_encode_sk_as_pkcs8_v2_der() {
-        let sk_raw = [
-            23, 222, 179, 132, 243, 182, 175, 46, 55, 255, 145, 82, 212, 63, 65, 46, 184, 145, 149,
-            235, 110, 217, 184, 26, 140, 179, 27, 0, 1, 223, 93, 27,
-        ];
-        let pk_raw = [
-            166, 67, 137, 39, 17, 63, 64, 114, 183, 163, 58, 74, 233, 230, 14, 103, 51, 197, 76,
-            214, 93, 201, 74, 166, 220, 49, 145, 172, 32, 154, 60, 17,
-        ];
-        let sk_pkcs8_v2_der = [
-            48, 83, 2, 1, 1, 48, 5, 6, 3, 43, 101, 112, 4, 34, 4, 32, 23, 222, 179, 132, 243, 182,
-            175, 46, 55, 255, 145, 82, 212, 63, 65, 46, 184, 145, 149, 235, 110, 217, 184, 26, 140,
-            179, 27, 0, 1, 223, 93, 27, 161, 35, 3, 33, 0, 166, 67, 137, 39, 17, 63, 64, 114, 183,
-            163, 58, 74, 233, 230, 14, 103, 51, 197, 76, 214, 93, 201, 74, 166, 220, 49, 145, 172,
-            32, 154, 60, 17,
-        ];
-
-        let sk = SecretKeyBytes(SecretArray::new_and_dont_zeroize_argument(&sk_raw));
-        let pk = PublicKeyBytes(pk_raw);
-
-        assert_eq!(
-            secret_key_to_pkcs8_v2_der(&sk, &pk),
-            SecretBytes::new(sk_pkcs8_v2_der.to_vec())
-        );
     }
 
     // TODO(CRP-616) Add more failure tests with corrupted DER-keys.

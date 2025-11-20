@@ -12,7 +12,8 @@ use axum::{
     extract::State,
     response::{Html, IntoResponse},
 };
-use bitcoin::Network as BtcAdapterNetwork;
+use bitcoin::Network as BitcoinAdapterNetwork;
+use bitcoin::dogecoin::Network as DogecoinAdapterNetwork;
 use bytes::Bytes;
 use candid::{CandidType, Decode, Encode, Principal};
 use cycles_minting_canister::{
@@ -26,8 +27,10 @@ use hyper::header::{CONTENT_TYPE, HeaderValue};
 use hyper::{Method, StatusCode};
 use ic_boundary::{Health, RootKey, status};
 use ic_btc_adapter::config::{Config as BitcoinAdapterConfig, IncomingSource as BtcIncomingSource};
-use ic_btc_adapter::start_server as start_btc_server;
-use ic_btc_interface::{Fees as BtcFees, InitConfig as BtcInitConfig, Network as BtcNetwork};
+use ic_btc_adapter::{AdapterNetwork, start_server as start_btc_server};
+use ic_btc_interface::{
+    Fees as BitcoinFees, InitConfig as BitcoinInitConfig, Network as BitcoinNetwork,
+};
 use ic_config::adapters::AdaptersConfig;
 use ic_config::execution_environment::MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT;
 use ic_config::{
@@ -35,6 +38,9 @@ use ic_config::{
     subnet_config::SubnetConfig,
 };
 use ic_crypto_sha2::Sha256;
+use ic_doge_interface::{
+    Fees as DogecoinFees, InitConfig as DogecoinInitConfig, Network as DogecoinNetwork,
+};
 use ic_http_endpoints_public::query;
 use ic_http_endpoints_public::{
     CanisterReadStateServiceBuilder, IngressValidatorBuilder, QueryServiceBuilder,
@@ -68,9 +74,10 @@ use ic_nervous_system_common::ONE_YEAR_SECONDS;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{
     BITCOIN_TESTNET_CANISTER_ID, CYCLES_LEDGER_CANISTER_ID, CYCLES_LEDGER_INDEX_CANISTER_ID,
-    CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID, LEDGER_CANISTER_ID,
-    LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, NNS_UI_CANISTER_ID,
-    REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    CYCLES_MINTING_CANISTER_ID, DOGECOIN_CANISTER_ID, GOVERNANCE_CANISTER_ID, IDENTITY_CANISTER_ID,
+    LEDGER_CANISTER_ID, LEDGER_INDEX_CANISTER_ID, LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID,
+    NNS_UI_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_AGGREGATOR_CANISTER_ID,
+    SNS_WASM_CANISTER_ID,
 };
 use ic_nns_delegation_manager::{NNSDelegationBuilder, NNSDelegationReader};
 use ic_nns_governance_api::{NetworkEconomics, Neuron, neuron::DissolveState};
@@ -186,6 +193,7 @@ const INTERNET_IDENTITY_TEST_CANISTER_WASM: &[u8] =
 const NNS_DAPP_TEST_CANISTER_WASM: &[u8] = include_bytes!(env!("NNS_DAPP_TEST_CANISTER_WASM_PATH"));
 const BITCOIN_TESTNET_CANISTER_WASM: &[u8] =
     include_bytes!(env!("BITCOIN_TESTNET_CANISTER_WASM_PATH"));
+const DOGECOIN_CANISTER_WASM: &[u8] = include_bytes!(env!("DOGECOIN_CANISTER_WASM_PATH"));
 const MIGRATION_CANISTER_WASM: &[u8] = include_bytes!(env!("MIGRATION_CANISTER_WASM_PATH"));
 
 const DEFAULT_SUBACCOUNT: Subaccount = Subaccount([0; 32]);
@@ -200,7 +208,7 @@ const INITIAL_CYCLES: u128 = u128::MAX / 2;
 // - it is still possible to top up the canister with further cycles without overflowing 64-bit range.
 const INITIAL_CYCLES_64_BIT: u64 = u64::MAX / 2;
 
-// Maximum duration of waiting for bitcoin/canister http adapter server to start.
+// Maximum duration of waiting for bitcoin/dogecoin/canister http adapter server to start.
 const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
 
 // Clippy complains that these are interior-mutable.
@@ -321,6 +329,7 @@ impl BitcoinAdapterParts {
     fn new(
         bitcoind_addr: Vec<SocketAddr>,
         uds_path: PathBuf,
+        network: AdapterNetwork,
         log_level: Option<Level>,
         replica_logger: ReplicaLogger,
         metrics_registry: MetricsRegistry,
@@ -332,7 +341,7 @@ impl BitcoinAdapterParts {
             logger: logger_config_from_level(log_level),
             incoming_source: BtcIncomingSource::Path(uds_path.clone()),
             address_limits: (1, 1),
-            ..BitcoinAdapterConfig::default_with(BtcAdapterNetwork::Regtest.into())
+            ..BitcoinAdapterConfig::default_with(network)
         };
         let adapter = tokio::spawn(async move {
             start_btc_server(replica_logger, metrics_registry, bitcoin_adapter_config).await
@@ -428,7 +437,6 @@ pub(crate) struct CanisterHttp {
 pub(crate) struct Subnet {
     pub state_machine: Arc<StateMachine>,
     pub canister_http: Arc<Mutex<CanisterHttp>>,
-    delegation_from_nns: watch::Sender<Option<NNSDelegationBuilder>>,
     _canister_http_adapter_parts: CanisterHttpAdapterParts,
 }
 
@@ -446,15 +454,13 @@ impl Subnet {
             https_outcalls_uds_path: Some(uds_path),
             ..Default::default()
         };
-        let (nns_delegation_tx, nns_delegation_rx) = watch::channel(None);
         let client = setup_canister_http_client(
             state_machine.runtime.handle().clone(),
             &state_machine.metrics_registry,
             adapter_config,
-            state_machine.query_handler.lock().unwrap().clone(),
+            state_machine.transform_handler.lock().unwrap().clone(),
             MAX_CANISTER_HTTP_REQUESTS_IN_FLIGHT,
             state_machine.replica_logger.clone(),
-            NNSDelegationReader::new(nns_delegation_rx, state_machine.replica_logger.clone()),
         );
         let canister_http = Arc::new(Mutex::new(CanisterHttp {
             client: Arc::new(Mutex::new(client)),
@@ -463,23 +469,12 @@ impl Subnet {
         Self {
             state_machine,
             canister_http,
-            delegation_from_nns: nns_delegation_tx,
             _canister_http_adapter_parts: canister_http_adapter_parts,
         }
     }
 
     fn get_subnet_id(&self) -> SubnetId {
         self.state_machine.get_subnet_id()
-    }
-
-    fn set_delegation_from_nns(&self, delegation_from_nns: CertificateDelegation) {
-        let builder = NNSDelegationBuilder::try_new(
-            delegation_from_nns.certificate,
-            self.get_subnet_id(),
-            &self.state_machine.replica_logger,
-        )
-        .unwrap();
-        self.delegation_from_nns.send(Some(builder)).unwrap();
     }
 }
 
@@ -539,12 +534,14 @@ struct PocketIcSubnets {
     icp_config: IcpConfig,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
+    dogecoind_addr: Option<Vec<SocketAddr>>,
     icp_features: Option<IcpFeatures>,
     initial_time: SystemTime,
     auto_progress_enabled: bool,
     gateway_port: Option<u16>,
     synced_registry_version: RegistryVersion,
     _bitcoin_adapter_parts: Option<BitcoinAdapterParts>,
+    _dogecoin_adapter_parts: Option<BitcoinAdapterParts>,
 }
 
 impl PocketIcSubnets {
@@ -559,6 +556,7 @@ impl PocketIcSubnets {
         icp_config: &IcpConfig,
         log_level: Option<Level>,
         bitcoin_adapter_uds_path: Option<PathBuf>,
+        dogecoin_adapter_uds_path: Option<PathBuf>,
     ) -> StateMachineBuilder {
         let subnet_type = conv_type(subnet_kind);
         let subnet_size = subnet_size(subnet_kind);
@@ -649,6 +647,7 @@ impl PocketIcSubnets {
             .with_registry_data_provider(registry_data_provider.clone())
             .with_log_level(log_level)
             .with_bitcoin_testnet_uds_path(bitcoin_adapter_uds_path)
+            .with_dogecoin_testnet_uds_path(dogecoin_adapter_uds_path)
             .create_at_registry_version(create_at_registry_version)
     }
 
@@ -658,6 +657,7 @@ impl PocketIcSubnets {
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
         initial_time: SystemTime,
         auto_progress_enabled: bool,
@@ -686,12 +686,14 @@ impl PocketIcSubnets {
             icp_config,
             log_level,
             bitcoind_addr,
+            dogecoind_addr,
             icp_features,
             initial_time,
             auto_progress_enabled,
             gateway_port,
             synced_registry_version,
             _bitcoin_adapter_parts: None,
+            _dogecoin_adapter_parts: None,
         }
     }
 
@@ -777,6 +779,12 @@ impl PocketIcSubnets {
             } else {
                 None
             };
+        let dogecoin_adapter_uds_path =
+            if matches!(subnet_kind, SubnetKind::Bitcoin) && self.dogecoind_addr.is_some() {
+                Some(NamedTempFile::new().unwrap().into_temp_path().to_path_buf())
+            } else {
+                None
+            };
 
         let latest_registry_version = self.registry_data_provider.latest_version().get();
         let create_at_registry_version = if update_registry_and_system_canisters {
@@ -799,6 +807,7 @@ impl PocketIcSubnets {
             &self.icp_config,
             self.log_level,
             bitcoin_adapter_uds_path.clone(),
+            dogecoin_adapter_uds_path.clone(),
         );
 
         if let Some(subnet_id) = subnet_id {
@@ -877,11 +886,22 @@ impl PocketIcSubnets {
         }
 
         // We need `StateMachine` components (metrics/logger)
-        // to create a bitcoin adapter (if applicable).
+        // to create a bitcoin/dogecoin adapter (if applicable).
         if let Some(bitcoin_adapter_uds_path) = bitcoin_adapter_uds_path {
             self._bitcoin_adapter_parts = Some(BitcoinAdapterParts::new(
                 self.bitcoind_addr.clone().unwrap(),
                 bitcoin_adapter_uds_path,
+                AdapterNetwork::Bitcoin(BitcoinAdapterNetwork::Regtest),
+                self.log_level,
+                sm.replica_logger.clone(),
+                sm.metrics_registry.clone(),
+            ));
+        }
+        if let Some(dogecoin_adapter_uds_path) = dogecoin_adapter_uds_path {
+            self._dogecoin_adapter_parts = Some(BitcoinAdapterParts::new(
+                self.dogecoind_addr.clone().unwrap(),
+                dogecoin_adapter_uds_path,
+                AdapterNetwork::Dogecoin(DogecoinAdapterNetwork::Regtest),
                 self.log_level,
                 sm.replica_logger.clone(),
                 sm.metrics_registry.clone(),
@@ -935,16 +955,6 @@ impl PocketIcSubnets {
             subnet.state_machine.execute_round();
         }
 
-        // Fetch the NNS delegation for the newly created subnet.
-        // This can only be done after updating the registry and executing
-        // a round on the NNS subnet (above).
-        let nns_subnet = self.get_nns().unwrap();
-        if subnet_id != nns_subnet.get_subnet_id() {
-            let delegation = nns_subnet.get_delegation_for_subnet(subnet_id).unwrap();
-            let subnet = self.subnets.get_subnet(subnet_id).unwrap();
-            subnet.set_delegation_from_nns(delegation);
-        }
-
         let subnet_config = SubnetConfigInternal {
             subnet_id,
             subnet_kind,
@@ -969,6 +979,7 @@ impl PocketIcSubnets {
                 ii,
                 nns_ui,
                 bitcoin,
+                dogecoin,
                 canister_migration,
             } = icp_features;
             if let Some(ref config) = registry {
@@ -997,6 +1008,9 @@ impl PocketIcSubnets {
             }
             if let Some(ref config) = bitcoin {
                 self.deploy_bitcoin(config);
+            }
+            if let Some(ref config) = dogecoin {
+                self.deploy_dogecoin(config);
             }
             if let Some(ref config) = canister_migration {
                 self.deploy_canister_migration(config);
@@ -2178,9 +2192,9 @@ impl PocketIcSubnets {
             assert_eq!(canister_id, BITCOIN_TESTNET_CANISTER_ID);
 
             // Install the Bitcoin testnet canister.
-            let args = BtcInitConfig {
-                network: Some(BtcNetwork::Regtest),
-                fees: Some(BtcFees::testnet()),
+            let args = BitcoinInitConfig {
+                network: Some(BitcoinNetwork::Regtest),
+                fees: Some(BitcoinFees::testnet()),
                 ..Default::default()
             };
             btc_subnet
@@ -2189,6 +2203,79 @@ impl PocketIcSubnets {
                     canister_id,
                     CanisterInstallMode::Install,
                     BITCOIN_TESTNET_CANISTER_WASM.to_vec(),
+                    Encode!(&args).unwrap(),
+                )
+                .unwrap();
+        }
+    }
+
+    fn deploy_dogecoin(&self, config: &IcpFeaturesConfig) {
+        // Using a match here to force an update after changing
+        // the type of `IcpFeaturesConfig`.
+        match config {
+            IcpFeaturesConfig::DefaultConfig => (),
+        };
+
+        // Nothing to do if the Bitcoin subnet does not exist (yet).
+        let Some(ref btc_subnet) = self.btc_subnet else {
+            return;
+        };
+
+        if !btc_subnet
+            .state_machine
+            .canister_exists(DOGECOIN_CANISTER_ID)
+        {
+            // Create the Dogecoin mainnet canister with its ICP mainnet settings and configured for the regtest network.
+            // These settings have been obtained by calling
+            // `dfx canister call r7inp-6aaaa-aaaaa-aaabq-cai canister_status '(record {canister_id=principal"gordg-fyaaa-aaaan-aaadq-cai";})' --ic`:
+            //     settings = record {
+            //       freezing_threshold = opt (2_592_000 : nat);
+            //       wasm_memory_threshold = opt (0 : nat);
+            //       controllers = vec {
+            //         principal "r7inp-6aaaa-aaaaa-aaabq-cai";
+            //         principal "gordg-fyaaa-aaaan-aaadq-cai";
+            //       };
+            //       reserved_cycles_limit = opt (5_000_000_000_000 : nat);
+            //       log_visibility = opt variant { controllers };
+            //       wasm_memory_limit = opt (3_221_225_472 : nat);
+            //       memory_allocation = opt (0 : nat);
+            //       compute_allocation = opt (0 : nat);
+            //     };
+
+            let settings = CanisterSettingsArgs {
+                controllers: Some(BoundedVec::new(vec![
+                    ROOT_CANISTER_ID.get(),
+                    DOGECOIN_CANISTER_ID.get(),
+                ])),
+                compute_allocation: Some(0_u64.into()),
+                memory_allocation: Some(0_u64.into()),
+                freezing_threshold: Some(2_592_000_u64.into()),
+                reserved_cycles_limit: Some(5_000_000_000_000_u128.into()),
+                log_visibility: Some(LogVisibilityV2::Controllers),
+                log_memory_limit: Some(4_096_u64.into()),
+                wasm_memory_limit: Some(3_221_225_472_u64.into()),
+                wasm_memory_threshold: Some(0_u64.into()),
+                environment_variables: None,
+            };
+            let canister_id = btc_subnet.state_machine.create_canister_with_cycles(
+                Some(DOGECOIN_CANISTER_ID.get()),
+                Cycles::zero(),
+                Some(settings),
+            );
+            assert_eq!(canister_id, DOGECOIN_CANISTER_ID);
+
+            // Install the Dogecoin mainnet canister configured for the regtest network.
+            let args = DogecoinInitConfig {
+                network: Some(DogecoinNetwork::Regtest),
+                fees: Some(DogecoinFees::testnet()),
+                ..Default::default()
+            };
+            btc_subnet
+                .state_machine
+                .install_wasm_in_mode(
+                    canister_id,
+                    CanisterInstallMode::Install,
+                    DOGECOIN_CANISTER_WASM.to_vec(),
                     Encode!(&args).unwrap(),
                 )
                 .unwrap();
@@ -2475,6 +2562,7 @@ impl PocketIc {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn try_new(
         runtime: Arc<Runtime>,
         seed: u64,
@@ -2483,6 +2571,7 @@ impl PocketIc {
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
         icp_features: Option<IcpFeatures>,
         incomplete_state: Option<IncompleteStateFlag>,
         initial_time: Option<Time>,
@@ -2740,6 +2829,7 @@ impl PocketIc {
             icp_config,
             log_level,
             bitcoind_addr,
+            dogecoind_addr,
             icp_features,
             initial_time,
             auto_progress_enabled,
@@ -3279,14 +3369,6 @@ fn process_mock_canister_https_response(
     };
     let timeout = context.time + Duration::from_secs(5 * 60);
     let canister_id = context.request.sender;
-    let delegation = pic.get_nns_delegation_for_subnet(subnet.get_subnet_id());
-    let builder = delegation.map(|delegation| {
-        NNSDelegationBuilder::try_new(delegation.certificate, subnet_id, &subnet.replica_logger)
-            .unwrap()
-    });
-    let (_, delegation_rx) = watch::channel(builder);
-    let nns_delegation_reader =
-        NNSDelegationReader::new(delegation_rx, subnet.replica_logger.clone());
 
     let response_to_content = |response: &CanisterHttpResponse| match response {
         CanisterHttpResponse::CanisterHttpReply(reply) => {
@@ -3307,10 +3389,9 @@ fn process_mock_canister_https_response(
             let mut client = CanisterHttpAdapterClientImpl::new(
                 pic.runtime.handle().clone(),
                 grpc_channel,
-                subnet.query_handler.lock().unwrap().clone(),
+                subnet.transform_handler.lock().unwrap().clone(),
                 1,
                 MetricsRegistry::new(),
-                nns_delegation_reader.clone(),
                 subnet.replica_logger.clone(),
             );
             client
@@ -3851,6 +3932,9 @@ impl Operation for CallRequest {
         match subnet {
             Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
+                // Make sure the latest state is certified for the ingress filter to work.
+                subnet.certify_latest_state();
+
                 let node = &subnet.nodes[0];
                 let (s, mut r) = mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
                 let ingress_filter = subnet.ingress_filter.clone();
@@ -4754,6 +4838,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
                 false,
                 None,
             )
@@ -4767,6 +4852,7 @@ mod tests {
                 },
                 None,
                 IcpConfig::default(),
+                None,
                 None,
                 None,
                 None,

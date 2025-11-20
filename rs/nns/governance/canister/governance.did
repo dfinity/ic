@@ -5,7 +5,7 @@ type AccountIdentifier = record {
 type Action = variant {
   RegisterKnownNeuron : KnownNeuron;
   DeregisterKnownNeuron : DeregisterKnownNeuron;
-  ManageNeuron : ManageNeuron;
+  ManageNeuron : ManageNeuronProposal;
   UpdateCanisterSettings : UpdateCanisterSettings;
   InstallCode : InstallCode;
   StopOrStartCanister : StopOrStartCanister;
@@ -153,7 +153,7 @@ type SetFollowingResponse = record {
 };
 
 // KEEP THIS IN SYNC WITH ManageNeuronCommandRequest!
-type Command = variant {
+type ManageNeuronProposalCommand = variant {
   Spawn : Spawn;
   Split : Split;
   Follow : Follow;
@@ -517,7 +517,7 @@ type ListNodeProvidersResponse = record {
   node_providers : vec NodeProvider;
 };
 
-type ListProposalInfo = record {
+type ListProposalInfoRequest = record {
   include_reward_status : vec int32;
   omit_large_fields : opt bool;
   before_proposal : opt ProposalId;
@@ -543,11 +543,11 @@ type MakeProposalResponse = record {
   proposal_id : opt ProposalId;
 };
 
-// Not to be confused with ManageNeuronRequest. (Yes, this is very structurally
-// similar to that, but not actually exactly equivalent.)
-type ManageNeuron = record {
+// Not to be confused with ManageNeuronRequest. This is only used to represent a manage neuron proposal. 
+// (Yes, this is very structurally similar to that, but not actually exactly equivalent)
+type ManageNeuronProposal = record {
   id : opt NeuronId;
-  command : opt Command;
+  command : opt ManageNeuronProposalCommand;
   neuron_id_or_subaccount : opt NeuronIdOrSubaccount;
 };
 
@@ -620,6 +620,7 @@ type DateUtc = record {
 type MonthlyNodeProviderRewards = record {
   minimum_xdr_permyriad_per_icp : opt nat64;
   registry_version : opt nat64;
+  algorithm_version : opt nat32;
   node_providers : vec NodeProvider;
   timestamp : nat64;
   start_date : opt DateUtc;
@@ -1461,7 +1462,7 @@ service : (Governance) -> {
       ListNodeProviderRewardsResponse,
     ) query;
   list_node_providers : () -> (ListNodeProvidersResponse) query;
-  list_proposals : (ListProposalInfo) -> (ListProposalInfoResponse) query;
+  list_proposals : (ListProposalInfoRequest) -> (ListProposalInfoResponse) query;
   list_neuron_votes : (ListNeuronVotesRequest) -> (ListNeuronVotesResponse) query;
   manage_neuron : (ManageNeuronRequest) -> (ManageNeuronResponse);
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (

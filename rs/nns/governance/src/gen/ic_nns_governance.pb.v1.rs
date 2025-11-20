@@ -3152,62 +3152,6 @@ pub struct XdrConversionRate {
     #[prost(uint64, optional, tag = "2")]
     pub xdr_permyriad_per_icp: ::core::option::Option<u64>,
 }
-/// Proposals with restricted voting are not included unless the caller
-/// is allowed to vote on them.
-///
-/// The actual ballots of the proposal are restricted to ballots cast
-/// by the caller.
-#[derive(
-    candid::CandidType,
-    candid::Deserialize,
-    serde::Serialize,
-    comparable::Comparable,
-    Clone,
-    PartialEq,
-    ::prost::Message,
-)]
-pub struct ListProposalInfo {
-    /// Limit on the number of \[ProposalInfo\] to return. If no value is
-    /// specified, or if a value greater than 100 is specified, 100
-    /// will be used.
-    #[prost(uint32, tag = "1")]
-    pub limit: u32,
-    /// If specified, only return proposals that are strictly earlier than
-    /// the specified proposal according to the proposal ID. If not
-    /// specified, start with the most recent proposal.
-    #[prost(message, optional, tag = "2")]
-    pub before_proposal: ::core::option::Option<::ic_nns_common::pb::v1::ProposalId>,
-    /// Exclude proposals with a topic in this list. This is particularly
-    /// useful to exclude proposals on the topics TOPIC_EXCHANGE_RATE and
-    /// TOPIC_KYC which most users are not likely to be interested in
-    /// seeing.
-    #[prost(enumeration = "Topic", repeated, tag = "3")]
-    pub exclude_topic: ::prost::alloc::vec::Vec<i32>,
-    /// Include proposals that have a reward status in this list (see
-    /// \[ProposalRewardStatus\] for more information). If this list is
-    /// empty, no restriction is applied. For example, many users listing
-    /// proposals will only be interested in proposals for which they can
-    /// receive voting rewards, i.e., with reward status
-    /// PROPOSAL_REWARD_STATUS_ACCEPT_VOTES.
-    #[prost(enumeration = "ProposalRewardStatus", repeated, tag = "4")]
-    pub include_reward_status: ::prost::alloc::vec::Vec<i32>,
-    /// Include proposals that have a status in this list (see
-    /// \[ProposalStatus\] for more information). If this list is empty, no
-    /// restriction is applied.
-    #[prost(enumeration = "ProposalStatus", repeated, tag = "5")]
-    pub include_status: ::prost::alloc::vec::Vec<i32>,
-    /// Include all ManageNeuron proposals regardless of the visibility of the
-    /// proposal to the caller principal. Note that exclude_topic is still
-    /// respected even when this option is set to true.
-    #[prost(bool, optional, tag = "6")]
-    pub include_all_manage_neuron_proposals: ::core::option::Option<bool>,
-    /// Omits "large fields" from the response. Currently only omits the
-    /// `logo` and `token_logo` field of CreateServiceNervousSystem proposals. This
-    /// is useful to improve download times and to ensure that the response to the
-    /// request doesn't exceed the message size limit.
-    #[prost(bool, optional, tag = "7")]
-    pub omit_large_fields: ::core::option::Option<bool>,
-}
 /// A response to "ListKnownNeurons"
 #[derive(
     candid::CandidType,
@@ -3304,6 +3248,9 @@ pub struct MonthlyNodeProviderRewards {
     /// The registry version used to calculate these rewards at the time the rewards were calculated.
     #[prost(uint64, optional, tag = "6")]
     pub registry_version: ::core::option::Option<u64>,
+    /// Rewards calculation algorithm version used to calculate rewards.
+    #[prost(uint32, optional, tag = "10")]
+    pub algorithm_version: ::core::option::Option<u32>,
     /// The list of node_provieders at the time when the rewards were calculated.
     #[prost(message, repeated, tag = "7")]
     pub node_providers: ::prost::alloc::vec::Vec<NodeProvider>,
