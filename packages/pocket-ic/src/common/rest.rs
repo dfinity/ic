@@ -1106,5 +1106,5 @@ pub struct RawCanisterSnapshotDownload {
     #[serde(deserialize_with = "base64::deserialize")]
     #[serde(serialize_with = "base64::serialize")]
     pub snapshot_id: Vec<u8>,
-    pub output_dir: PathBuf,
+    pub snapshot_dir: PathBuf,
 }

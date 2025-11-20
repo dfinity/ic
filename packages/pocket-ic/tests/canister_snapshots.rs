@@ -21,12 +21,12 @@ fn test_canister_snapshot_download(pic: &mut PocketIc, canister_id: Principal) {
 
     // Download canister snapshot using PocketIC.
     let temp_dir = tempfile::tempdir().unwrap();
-    let output_dir = temp_dir.path().to_path_buf();
+    let snapshot_dir = temp_dir.path().to_path_buf();
     pic.canister_snapshot_download(
         canister_id,
         Principal::anonymous(),
         snapshot_id.clone(),
-        output_dir.clone(),
+        snapshot_dir.clone(),
     );
 
     // We skip the rest of the test on Windows
@@ -44,7 +44,7 @@ fn test_canister_snapshot_download(pic: &mut PocketIc, canister_id: Principal) {
     // and an output directory for the snapshot downloaded using dfx.
     let dfx_temp_dir = tempfile::tempdir().unwrap();
     let dfx_home_dir = dfx_temp_dir.path().to_path_buf();
-    let dfx_output_dir = dfx_home_dir.join("snapshot");
+    let dfx_snapshot_dir = dfx_home_dir.join("snapshot");
 
     // We need to turn off telemetry explicitly,
     // otherwise dfx panics.
@@ -56,7 +56,7 @@ fn test_canister_snapshot_download(pic: &mut PocketIc, canister_id: Principal) {
     .unwrap();
 
     // dfx expects the output directory to exist.
-    std::fs::create_dir_all(dfx_output_dir.clone()).unwrap();
+    std::fs::create_dir_all(dfx_snapshot_dir.clone()).unwrap();
 
     // Download canister snapshot using dfx.
     let relative_dfx_path = std::env::var_os("DFX").expect("Missing dfx binary");
@@ -68,7 +68,7 @@ fn test_canister_snapshot_download(pic: &mut PocketIc, canister_id: Principal) {
         .arg(canister_id.to_string())
         .arg(hex::encode(snapshot_id))
         .arg("--dir")
-        .arg(dfx_output_dir.clone())
+        .arg(dfx_snapshot_dir.clone())
         .arg("--network")
         .arg(url.to_string())
         .arg("--identity")
@@ -81,15 +81,15 @@ fn test_canister_snapshot_download(pic: &mut PocketIc, canister_id: Principal) {
     // Check that the snapshots downloaded using PocketIC and dfx are equal.
     let diff = Command::new("diff")
         .arg("-r")
-        .arg(output_dir.clone())
-        .arg(dfx_output_dir.clone())
+        .arg(snapshot_dir.clone())
+        .arg(dfx_snapshot_dir.clone())
         .output()
         .expect("Failed to execute diff");
     match diff.status.code() {
         Some(0) => (),
         _ => panic!(
             "Snapshots differ (dfx snapshot: {}): {}",
-            dfx_output_dir.display(),
+            dfx_snapshot_dir.display(),
             String::from_utf8(diff.stdout).unwrap()
         ),
     };

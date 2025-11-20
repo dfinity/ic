@@ -3592,7 +3592,7 @@ pub struct CanisterSnapshotDownload {
     pub sender: PrincipalId,
     pub canister_id: CanisterId,
     pub snapshot_id: SnapshotId,
-    pub output_dir: PathBuf,
+    pub snapshot_dir: PathBuf,
 }
 
 fn ensure_empty_dir(path: &Path) -> Result<(), String> {
@@ -3686,7 +3686,7 @@ impl Operation for CanisterSnapshotDownload {
         let subnet = route(pic, effective_principal, false);
         match subnet {
             Ok(subnet) => {
-                if let Err(e) = ensure_empty_dir(&self.output_dir) {
+                if let Err(e) = ensure_empty_dir(&self.snapshot_dir) {
                     return OpOut::Error(PocketIcError::InvalidCanisterSnapshotDirectory(e));
                 }
 
@@ -3704,7 +3704,7 @@ impl Operation for CanisterSnapshotDownload {
                     }
                 };
                 let metadata_bytes = serde_json::to_string_pretty(&metadata).unwrap();
-                let metadata_path = self.output_dir.join("metadata.json");
+                let metadata_path = self.snapshot_dir.join("metadata.json");
                 if let Err(e) = std::fs::write(metadata_path, metadata_bytes) {
                     return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
                         "Could not write metadata file: {}",
@@ -3713,7 +3713,7 @@ impl Operation for CanisterSnapshotDownload {
                 }
 
                 // Download WASM binary.
-                let wasm_module_path = self.output_dir.join("wasm_module.bin");
+                let wasm_module_path = self.snapshot_dir.join("wasm_module.bin");
                 if let Err(e) = download_blob_to_file(
                     subnet.clone(),
                     self.canister_id,
@@ -3726,7 +3726,7 @@ impl Operation for CanisterSnapshotDownload {
                 }
 
                 // Download WASM memory.
-                let wasm_memory_path = self.output_dir.join("wasm_memory.bin");
+                let wasm_memory_path = self.snapshot_dir.join("wasm_memory.bin");
                 if let Err(e) = download_blob_to_file(
                     subnet.clone(),
                     self.canister_id,
@@ -3740,7 +3740,7 @@ impl Operation for CanisterSnapshotDownload {
 
                 // Download stable memory.
                 if metadata.stable_memory_size != 0 {
-                    let stable_memory_path = self.output_dir.join("stable_memory.bin");
+                    let stable_memory_path = self.snapshot_dir.join("stable_memory.bin");
                     if let Err(e) = download_blob_to_file(
                         subnet.clone(),
                         self.canister_id,
@@ -3763,7 +3763,7 @@ impl Operation for CanisterSnapshotDownload {
                     }
                 };
                 if !chunk_store.is_empty() {
-                    let chunk_store_path = self.output_dir.join("wasm_chunk_store");
+                    let chunk_store_path = self.snapshot_dir.join("wasm_chunk_store");
                     if let Err(e) = std::fs::create_dir_all(&chunk_store_path) {
                         return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
                             "Could not create WASM chunk store directory: {}",
@@ -3790,11 +3790,11 @@ impl Operation for CanisterSnapshotDownload {
 
     fn id(&self) -> OpId {
         OpId(format!(
-            "canister_snapshot_download(sender={},canister_id={},snapshot_id={},output_dir='{}')",
+            "canister_snapshot_download(sender={},canister_id={},snapshot_id={},snapshot_dir='{}')",
             self.sender,
             self.canister_id,
             self.snapshot_id,
-            self.output_dir.display()
+            self.snapshot_dir.display()
         ))
     }
 }

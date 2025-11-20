@@ -1460,12 +1460,12 @@ impl PocketIc {
         canister_id: CanisterId,
         sender: Principal,
         snapshot_id: Vec<u8>,
-        output_dir: PathBuf,
+        snapshot_dir: PathBuf,
     ) {
         let runtime = self.runtime.clone();
         runtime.block_on(async {
             self.pocket_ic
-                .canister_snapshot_download(canister_id, sender, snapshot_id, output_dir)
+                .canister_snapshot_download(canister_id, sender, snapshot_id, snapshot_dir)
                 .await
         })
     }

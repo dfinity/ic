@@ -785,7 +785,7 @@ pub async fn handler_canister_snapshot_download(
         sender,
         canister_id,
         snapshot_id,
-        output_dir,
+        snapshot_dir,
     }): axum::extract::Json<RawCanisterSnapshotDownload>,
 ) -> (StatusCode, Json<ApiResponse<()>>) {
     let timeout = timeout_or_default(headers);
@@ -815,7 +815,7 @@ pub async fn handler_canister_snapshot_download(
         sender: ic_types::PrincipalId(sender.into()),
         canister_id,
         snapshot_id,
-        output_dir,
+        snapshot_dir,
     };
     let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(response))
