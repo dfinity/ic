@@ -101,6 +101,7 @@ const METRIC_SHED_MESSAGE_BYTES_TOTAL: &str = "mr_shed_message_bytes_total";
 const METRIC_SUBNET_SPLIT_HEIGHT: &str = "mr_subnet_split_height";
 const BLOCKS_PROPOSED_TOTAL: &str = "mr_blocks_proposed_total";
 const BLOCKS_NOT_PROPOSED_TOTAL: &str = "mr_blocks_not_proposed_total";
+const BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL: &str = "mr_blocks_not_proposed_by_blockmaker_total";
 const METRIC_NEXT_CHECKPOINT_HEIGHT: &str = "mr_next_checkpoint_height";
 const METRIC_REMOTE_CERTIFIED_HEIGHTS: &str = "mr_remote_certified_heights";
 
@@ -310,8 +311,10 @@ pub(crate) struct MessageRoutingMetrics {
     pub(crate) subnet_split_height: IntGaugeVec,
     /// Number of blocks proposed.
     pub(crate) blocks_proposed_total: IntCounter,
+    /// Number of blocks not proposed.
+    pub(crate) blocks_not_proposed_total: IntCounter,
     /// Number of blocks not proposed by blockmaker ID.
-    pub(crate) blocks_not_proposed_total: IntCounterVec,
+    pub(crate) blocks_not_proposed_by_blockmaker_total: IntCounterVec,
 
     /// The memory footprint of all the canisters on this subnet. Note that this
     /// counter is from the perspective of the canisters and does not account
@@ -442,8 +445,12 @@ impl MessageRoutingMetrics {
                 BLOCKS_PROPOSED_TOTAL,
                 "Successfully proposed blocks (blocks that became part of the blockchain)."
             ),
-            blocks_not_proposed_total: metrics_registry.int_counter_vec(
+            blocks_not_proposed_total: metrics_registry.int_counter(
                 BLOCKS_NOT_PROPOSED_TOTAL,
+                "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R)."
+            ),
+            blocks_not_proposed_by_blockmaker_total: metrics_registry.int_counter_vec(
+                BLOCKS_NOT_PROPOSED_BY_BLOCKMAKER_TOTAL,
                 "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R).",
                 &["blockmaker_id"],
             ),
@@ -1320,9 +1327,12 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         ) = self.read_registry(registry_version, state.metadata.own_subnet_id);
 
         self.metrics.blocks_proposed_total.inc();
+        self.metrics
+            .blocks_not_proposed_total
+            .inc_by(batch.blockmaker_metrics.failed_blockmakers.len() as u64);
         for failed_blockmaker in &batch.blockmaker_metrics.failed_blockmakers {
             self.metrics
-                .blocks_not_proposed_total
+                .blocks_not_proposed_by_blockmaker_total
                 .with_label_values(&[&failed_blockmaker.to_string()])
                 .inc();
         }
