@@ -1323,7 +1323,7 @@ impl<RegistryClient_: RegistryClient> BatchProcessor for BatchProcessorImpl<Regi
         for failed_blockmaker in &batch.blockmaker_metrics.failed_blockmakers {
             self.metrics
                 .blocks_not_proposed_total
-                .with_label_values(&[&format!("{}", failed_blockmaker)])
+                .with_label_values(&[&failed_blockmaker.to_string()])
                 .inc();
         }
 
