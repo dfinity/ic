@@ -302,12 +302,6 @@ impl App {
         Self::default()
     }
 
-    fn clear_error(&mut self) {
-        if let Some(AppState::Input(state)) = &mut self.state {
-            state.error_message = None;
-        }
-    }
-
     fn redraw(&self, terminal_guard: &mut TerminalGuard) -> Result<()> {
         if let Some(state) = &self.state {
             let _ = terminal_guard
@@ -456,6 +450,9 @@ impl App {
         input_state: &mut InputState,
         key: KeyEvent,
     ) -> Result<bool> {
+        // Clear error on any user input
+        input_state.error_message = None;
+
         match key.code {
             KeyCode::Esc => {
                 input_state.exit_message = Some("Recovery cancelled by user".to_string());
@@ -475,11 +472,9 @@ impl App {
         match key_code {
             KeyCode::Tab | KeyCode::Down => {
                 input_state.focused_index = (input_state.focused_index + 1) % count;
-                self.clear_error();
             }
             KeyCode::Up => {
                 input_state.focused_index = (input_state.focused_index + count - 1) % count;
-                self.clear_error();
             }
             KeyCode::Left | KeyCode::Right => {
                 let current = input_state.current_field();
@@ -495,7 +490,6 @@ impl App {
                     {
                         input_state.focused_index = idx;
                     }
-                    self.clear_error();
                 }
             }
             _ => {}
@@ -506,7 +500,6 @@ impl App {
         let current = input_state.current_field();
         if current.is_input_field() {
             input_state.focused_index = (input_state.focused_index + 1) % Field::ALL.len();
-            self.clear_error();
             Ok(false)
         } else {
             match current {
@@ -546,7 +539,6 @@ impl App {
                         if field_value.len() < max_len && c.is_ascii_hexdigit() =>
                     {
                         field_value.push(c);
-                        self.clear_error();
                     }
                     _ => {}
                 }
@@ -555,7 +547,6 @@ impl App {
             KeyCode::Backspace => {
                 if let Some(field_value) = current.get_value_mut(&mut input_state.params) {
                     field_value.pop();
-                    self.clear_error();
                 }
             }
             _ => {}
