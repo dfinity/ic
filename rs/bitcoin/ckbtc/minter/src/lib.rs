@@ -1416,7 +1416,7 @@ pub fn estimate_retrieve_btc_fee(
 #[async_trait]
 pub trait CanisterRuntime {
     /// Type used to estimate fees.
-    type Fee: FeeEstimator;
+    type Estimator: FeeEstimator;
 
     /// Returns the caller of the current call.
     fn caller(&self) -> Principal {
@@ -1463,7 +1463,7 @@ pub trait CanisterRuntime {
     fn refresh_fee_percentiles_frequency(&self) -> Duration;
 
     /// How to estimate fees.
-    fn fee_estimator(&self, state: &CkBtcMinterState) -> Self::Fee;
+    fn fee_estimator(&self, state: &CkBtcMinterState) -> Self::Estimator;
 
     /// Retrieves the current transaction fee percentiles.
     async fn get_current_fee_percentiles(
@@ -1514,7 +1514,7 @@ pub struct IcCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
-    type Fee = BitcoinFeeEstimator;
+    type Estimator = BitcoinFeeEstimator;
 
     fn refresh_fee_percentiles_frequency(&self) -> Duration {
         const ONE_HOUR: Duration = Duration::from_secs(3_600);

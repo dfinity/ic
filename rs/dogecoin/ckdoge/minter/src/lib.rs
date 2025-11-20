@@ -42,7 +42,7 @@ pub struct DogeCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for DogeCanisterRuntime {
-    type Fee = DogecoinFeeEstimator;
+    type Estimator = DogecoinFeeEstimator;
 
     fn fee_estimator(&self, state: &CkBtcMinterState) -> DogecoinFeeEstimator {
         DogecoinFeeEstimator::from_state(state)
