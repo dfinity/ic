@@ -31,71 +31,6 @@ const PROCESS_POLL_INTERVAL_MS: u64 = 100; // Polling interval for process monit
 const RECOVERY_UPGRADER_SCRIPT: &str = "/opt/ic/bin/guestos-recovery-upgrader.sh";
 
 // ============================================================================
-// Terminal Management
-// ============================================================================
-
-fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
-    enable_raw_mode().context("Failed to enable raw mode")?;
-
-    let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
-
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend).context("Failed to create terminal")?;
-    terminal.clear().context("Failed to clear terminal")?;
-
-    Ok(terminal)
-}
-
-fn teardown_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
-    disable_raw_mode().context("Failed to disable raw mode")?;
-    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
-    terminal.show_cursor().context("Failed to show cursor")?;
-    Ok(())
-}
-
-/// Guard struct to ensure terminal cleanup on panic
-struct TerminalGuard {
-    terminal: Option<Terminal<CrosstermBackend<io::Stdout>>>,
-}
-
-impl TerminalGuard {
-    fn new(terminal: Terminal<CrosstermBackend<io::Stdout>>) -> Self {
-        Self {
-            terminal: Some(terminal),
-        }
-    }
-
-    fn get_mut(&mut self) -> &mut Terminal<CrosstermBackend<io::Stdout>> {
-        self.terminal
-            .as_mut()
-            .expect("TerminalGuard: terminal was already taken.")
-    }
-}
-
-impl Drop for TerminalGuard {
-    fn drop(&mut self) {
-        if let Some(ref mut terminal) = self.terminal {
-            let _ = teardown_terminal(terminal);
-        }
-    }
-}
-
-// ============================================================================
-// Command Building
-// ============================================================================
-
-fn build_upgrader_command(params: &RecoveryParams) -> Command {
-    let mut cmd = Command::new("sudo");
-    cmd.arg("-n")
-        .arg(RECOVERY_UPGRADER_SCRIPT)
-        .arg(format!("version={}", params.version))
-        .arg(format!("version-hash={}", params.version_hash))
-        .arg(format!("recovery-hash={}", params.recovery_hash));
-    cmd
-}
-
-// ============================================================================
 // Types and Data Structures
 // ============================================================================
 
@@ -268,6 +203,90 @@ impl Default for AppState {
     }
 }
 
+// ============================================================================
+// Terminal Management
+// ============================================================================
+
+fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
+    enable_raw_mode().context("Failed to enable raw mode")?;
+
+    let mut stdout = io::stdout();
+    execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
+
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend).context("Failed to create terminal")?;
+    terminal.clear().context("Failed to clear terminal")?;
+
+    Ok(terminal)
+}
+
+fn teardown_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
+    disable_raw_mode().context("Failed to disable raw mode")?;
+    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+    terminal.show_cursor().context("Failed to show cursor")?;
+    Ok(())
+}
+
+/// Prints a prominent success message to stderr (outside the TUI).
+/// This message is designed to be highly visible and will appear in the normal
+/// terminal after the TUI exits, before any subsequent service logs.
+/// The message uses prominent formatting with borders and colors to stand out.
+fn print_prominent_success_message(message: &str) {
+    use std::io::Write;
+    let stdout = std::io::stdout();
+    let mut handle = stdout.lock();
+
+    // ANSI color codes
+    const GREEN: &str = "\x1b[32m";
+    const BOLD: &str = "\x1b[1m";
+    const RESET: &str = "\x1b[0m";
+    const SEPARATOR_CHAR: &str = "═";
+
+    let width = size().map(|(w, _)| w as usize).unwrap_or(80).min(100);
+
+    let separator = SEPARATOR_CHAR.repeat(width);
+
+    // Print prominent success message with borders, styling, and extra spacing
+    // The extra blank lines help separate it from subsequent service logs
+    let _ = writeln!(
+        handle,
+        "\n\n{}{}{}\n{}{}✓ {}{}{}\n{}{}{}\n\n",
+        GREEN, separator, RESET, GREEN, BOLD, message, RESET, RESET, GREEN, separator, RESET
+    );
+    let _ = handle.flush();
+}
+
+/// Guard struct to ensure terminal cleanup on panic
+struct TerminalGuard {
+    terminal: Option<Terminal<CrosstermBackend<io::Stdout>>>,
+}
+
+impl TerminalGuard {
+    fn new(terminal: Terminal<CrosstermBackend<io::Stdout>>) -> Self {
+        Self {
+            terminal: Some(terminal),
+        }
+    }
+
+    fn get_mut(&mut self) -> &mut Terminal<CrosstermBackend<io::Stdout>> {
+        self.terminal
+            .as_mut()
+            .expect("TerminalGuard: terminal was already taken.")
+    }
+}
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        if let Some(ref mut terminal) = self.terminal {
+            let _ = teardown_terminal(terminal);
+        }
+    }
+}
+
+// ============================================================================
+// Application Logic
+// ============================================================================
+
 pub struct App {
     state: Option<AppState>,
     should_quit: bool,
@@ -320,11 +339,7 @@ impl App {
     /// Runs the interactive TUI application.
     pub fn run(&mut self) -> Result<()> {
         if !atty::is(atty::Stream::Stdout) || !atty::is(atty::Stream::Stdin) {
-            anyhow::bail!(
-                "This program requires an interactive terminal.\n\
-                VS Code terminal and regular terminals should work.\n\
-                Make sure you're not piping or redirecting output."
-            );
+            anyhow::bail!("This tool requires an interactive terminal.");
         }
 
         let terminal = setup_terminal()?;
@@ -614,6 +629,16 @@ impl App {
 // Process and Log Monitoring
 // ============================================================================
 
+fn build_upgrader_command(params: &RecoveryParams) -> Command {
+    let mut cmd = Command::new("sudo");
+    cmd.arg("-n")
+        .arg(RECOVERY_UPGRADER_SCRIPT)
+        .arg(format!("version={}", params.version))
+        .arg(format!("version-hash={}", params.version_hash))
+        .arg(format!("recovery-hash={}", params.recovery_hash));
+    cmd
+}
+
 /// Spawns a thread to read lines from stdout and append them to a shared log buffer
 fn spawn_log_reader_thread<R>(
     stream: R,
@@ -643,37 +668,4 @@ fn extract_errors_from_logs(log_lines: &[String]) -> Vec<String> {
     }
     let start = log_lines.len().saturating_sub(MAX_ERROR_LINES);
     log_lines[start..].to_vec()
-}
-
-// ============================================================================
-// Success Message Printing
-// ============================================================================
-
-/// Prints a prominent success message to stderr (outside the TUI).
-/// This message is designed to be highly visible and will appear in the normal
-/// terminal after the TUI exits, before any subsequent service logs.
-/// The message uses prominent formatting with borders and colors to stand out.
-fn print_prominent_success_message(message: &str) {
-    use std::io::Write;
-    let stdout = std::io::stdout();
-    let mut handle = stdout.lock();
-
-    // ANSI color codes
-    const GREEN: &str = "\x1b[32m";
-    const BOLD: &str = "\x1b[1m";
-    const RESET: &str = "\x1b[0m";
-    const SEPARATOR_CHAR: &str = "═";
-
-    let width = size().map(|(w, _)| w as usize).unwrap_or(80).min(100);
-
-    let separator = SEPARATOR_CHAR.repeat(width);
-
-    // Print prominent success message with borders, styling, and extra spacing
-    // The extra blank lines help separate it from subsequent service logs
-    let _ = writeln!(
-        handle,
-        "\n\n{}{}{}\n{}{}✓ {}{}{}\n{}{}{}\n\n",
-        GREEN, separator, RESET, GREEN, BOLD, message, RESET, RESET, GREEN, separator, RESET
-    );
-    let _ = handle.flush();
 }
