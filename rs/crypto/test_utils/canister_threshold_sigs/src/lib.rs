@@ -1395,7 +1395,7 @@ pub fn set_of_nodes(ids: &[u64]) -> BTreeSet<NodeId> {
 }
 
 fn random_registry_version<R: RngCore + CryptoRng>(rng: &mut R) -> RegistryVersion {
-    RegistryVersion::new(rng.gen_range(1..u32::MAX) as u64)
+    RegistryVersion::new(rng.gen_range(1..u64::MAX))
 }
 
 pub fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
