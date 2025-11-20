@@ -66,7 +66,7 @@ impl StructIO {
         _ = self.write_raw_u64(addr, header.next_idx);
     }
 
-    pub fn load_index(&self) -> IndexTable {
+    pub fn load_index_table(&self) -> IndexTable {
         let h = self.load_header();
         let pos = h.data_head;
         let front = self
@@ -93,7 +93,7 @@ impl StructIO {
         )
     }
 
-    pub fn save_index(&mut self, index: &IndexTable) {
+    pub fn save_index_table(&mut self, index: &IndexTable) {
         // Save entries.
         let mut addr = INDEX_TABLE_OFFSET;
         for entry in index.raw_entries() {
@@ -401,7 +401,7 @@ mod tests {
         let mut io = StructIO::new(PageMap::new_for_testing());
         let data_capacity = MemorySize::new(10_000_000);
         io.save_header(&Header::new(data_capacity));
-        let loaded_index = io.load_index();
+        let loaded_index = io.load_index_table();
         let loaded = loaded_index.raw_entries();
 
         // For 10 MB data capacity, 28 bytes per entry = 146 entries
@@ -432,14 +432,14 @@ mod tests {
         let mut io = StructIO::new(PageMap::new_for_testing());
         let data_capacity = MemorySize::new(10_000_000);
         io.save_header(&Header::new(data_capacity));
-        io.save_index(&IndexTable::new(
+        io.save_index_table(&IndexTable::new(
             None,
             data_capacity,
             1,
             RESULT_MAX_SIZE,
             original.clone(),
         ));
-        let loaded_index = io.load_index();
+        let loaded_index = io.load_index_table();
         let loaded = loaded_index.raw_entries();
 
         assert_eq!(loaded.len(), original.len());

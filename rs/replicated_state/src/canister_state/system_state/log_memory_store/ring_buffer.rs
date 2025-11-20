@@ -80,39 +80,58 @@ impl RingBuffer {
         self.io.load_header().next_idx
     }
 
-    pub fn append(&mut self, record: &LogRecord) {
-        let added_size = MemorySize::new(record.bytes_len() as u64);
-        let capacity = MemorySize::new(self.capacity() as u64);
-        if added_size > capacity {
-            debug_assert!(
-                false,
-                "log record size {added_size:?} exceeds ring buffer capacity {capacity:?}",
-            );
-            return;
-        }
-        // Free space by popping old records if needed.
-        while MemorySize::new(self.used_space() as u64) + added_size > capacity {
-            if self.pop_front().is_none() {
-                break; // No more records to pop, limit reached.
-            }
-        }
-
-        // Save the record at the tail position.
-        let mut h = self.io.load_header();
-        self.io.save_record(h.data_tail, record);
-
-        // Update header with new tail position, size and next idx.
-        let position = h.data_tail;
-        h.data_tail = h.advance_position(position, added_size);
-        h.data_size = h.data_size.saturating_add(added_size);
-        h.next_idx = record.idx + 1;
-        self.io.save_header(&h);
-
-        // Update lookup table after writing the record and updating the header.
-        self.update_index(position, record);
+    #[cfg(test)]
+    pub fn append(&mut self, record: &CanisterLogRecord) {
+        self.append_log(vec![record.clone()]);
     }
 
-    fn pop_front(&mut self) -> Option<LogRecord> {
+    pub fn append_log(&mut self, records: Vec<CanisterLogRecord>) {
+        let mut index = self.io.load_index_table();
+        for r in records {
+            let record = LogRecord::from(r);
+
+            // Check that records are added in order, otherwise it breaks the index.
+            let h = self.io.load_header();
+            if record.idx < h.next_idx {
+                debug_assert!(false, "log records must be appended in order");
+                continue;
+            }
+
+            let added_size = MemorySize::new(record.bytes_len() as u64);
+            let capacity = MemorySize::new(self.capacity() as u64);
+            if added_size > capacity {
+                debug_assert!(
+                    false,
+                    "log record size {added_size:?} exceeds ring buffer capacity {capacity:?}",
+                );
+                return;
+            }
+            // Free space by popping old records if needed.
+            while MemorySize::new(self.used_space() as u64) + added_size > capacity {
+                if self.pop_front().is_none() {
+                    break; // No more records to pop, limit reached.
+                }
+            }
+
+            // Save the record at the tail position.
+            let mut h = self.io.load_header();
+            self.io.save_record(h.data_tail, &record);
+
+            // Update header with new tail position, size and next idx.
+            let position = h.data_tail;
+            h.data_tail = h.advance_position(position, added_size);
+            h.data_size = h.data_size.saturating_add(added_size);
+            h.next_idx = record.idx + 1;
+            self.io.save_header(&h);
+
+            // Update the index table with the latest record position.
+            index.update(position, &record);
+        }
+        // It's fine to save the index table only once after saving all the records.
+        self.io.save_index_table(&index);
+    }
+
+    fn pop_front(&mut self) -> Option<CanisterLogRecord> {
         let mut h = self.io.load_header();
         let record = self.io.load_record(h.data_head)?;
         let removed_size = MemorySize::new(record.bytes_len() as u64);
@@ -121,18 +140,15 @@ impl RingBuffer {
         self.io.save_header(&h);
         // No need to update the index here since front entry is never
         // stored in the PageMap but rather computed on table load.
-        Some(record)
-    }
-
-    fn update_index(&mut self, position: MemoryPosition, record: &LogRecord) {
-        // TODO: maybe optimize for loading lots of records in a row.
-        let mut index = self.io.load_index();
-        index.update(position, record);
-        self.io.save_index(&index);
+        Some(CanisterLogRecord {
+            idx: record.idx,
+            timestamp_nanos: record.timestamp,
+            content: record.content,
+        })
     }
 
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
-        let index = self.io.load_index();
+        let index = self.io.load_index_table();
         let (start_inclusive, end_inclusive) = match index.bounded_scan_range(filter.clone()) {
             Some(range) => range,
             None => return vec![],
@@ -221,21 +237,16 @@ mod tests {
 
     const TEST_DATA_CAPACITY: MemorySize = MemorySize::new(2_000_000); // 2 MB
 
-    fn log_record(idx: u64, timestamp: u64, message: &str) -> LogRecord {
-        LogRecord {
-            idx,
-            timestamp,
-            len: message.len() as u32,
-            content: message.as_bytes().to_vec(),
-        }
-    }
-
-    fn canister_log_record(idx: u64, timestamp: u64, message: &str) -> CanisterLogRecord {
+    fn log_record(idx: u64, timestamp: u64, message: &str) -> CanisterLogRecord {
         CanisterLogRecord {
             idx,
             timestamp_nanos: timestamp,
             content: message.as_bytes().to_vec(),
         }
+    }
+
+    fn bytes_len(r: &CanisterLogRecord) -> usize {
+        LogRecord::from(r.clone()).bytes_len()
     }
 
     #[test]
@@ -261,7 +272,7 @@ mod tests {
         rb.append(&r0);
         rb.append(&r1);
 
-        assert_eq!(rb.used_space(), r0.bytes_len() + r1.bytes_len());
+        assert_eq!(rb.used_space(), bytes_len(&r0) + bytes_len(&r1));
         assert_eq!(rb.pop_front().unwrap(), r0);
         assert_eq!(rb.pop_front().unwrap(), r1);
         assert!(rb.pop_front().is_none());
@@ -275,7 +286,7 @@ mod tests {
         let mut rb = RingBuffer::new(page_map, data_capacity);
 
         let r0 = log_record(0, 100, "12345");
-        assert_eq!(r0.bytes_len(), record_size);
+        assert_eq!(bytes_len(&r0), record_size);
         let r1 = log_record(1, 200, "12345");
         let r2 = log_record(2, 300, "12345");
         let r3 = log_record(3, 400, "12345");
@@ -302,7 +313,7 @@ mod tests {
         let mut rb = RingBuffer::new(page_map, data_capacity);
 
         let r0 = log_record(0, 100, "12345");
-        assert_eq!(r0.bytes_len(), record_size);
+        assert_eq!(bytes_len(&r0), record_size);
         let r1 = log_record(1, 200, "12345");
         let r2 = log_record(2, 300, "12345");
         let r3 = log_record(3, 400, "123456"); // 26 bytes to force eviction.
@@ -328,12 +339,12 @@ mod tests {
         let mut rb = RingBuffer::new(page_map, data_capacity);
 
         // Push many records to cause wrap-around without eviction.
-        let mut pushed: Vec<LogRecord> = vec![];
-        let mut popped: Vec<LogRecord> = vec![];
+        let mut pushed: Vec<CanisterLogRecord> = vec![];
+        let mut popped: Vec<CanisterLogRecord> = vec![];
         for i in 0..1_000 {
             let record = log_record(i, i * 100, "12345");
             // Free space until the new record fits, popped records are collected.
-            while rb.used_space() + record.bytes_len() > rb.capacity() {
+            while rb.used_space() + bytes_len(&record) > rb.capacity() {
                 popped.push(rb.pop_front().expect("expected record to pop"));
             }
             rb.append(&record);
@@ -365,9 +376,9 @@ mod tests {
         assert_eq!(
             res,
             vec![
-                canister_log_record(0, 1000, "alpha"),
-                canister_log_record(1, 2000, "beta"),
-                canister_log_record(2, 3000, "gamma")
+                log_record(0, 1000, "alpha"),
+                log_record(1, 2000, "beta"),
+                log_record(2, 3000, "gamma")
             ]
         );
 
@@ -375,7 +386,7 @@ mod tests {
         let res = rb.records(Some(FetchCanisterLogsFilter::ByIdx(
             FetchCanisterLogsRange { start: 1, end: 2 },
         )));
-        assert_eq!(res, vec![canister_log_record(1, 2000, "beta"),]);
+        assert_eq!(res, vec![log_record(1, 2000, "beta"),]);
 
         // Filter by timestamp range [1500, 3500).
         let res = rb.records(Some(FetchCanisterLogsFilter::ByTimestampNanos(
@@ -386,10 +397,7 @@ mod tests {
         )));
         assert_eq!(
             res,
-            vec![
-                canister_log_record(1, 2000, "beta"),
-                canister_log_record(2, 3000, "gamma")
-            ]
+            vec![log_record(1, 2000, "beta"), log_record(2, 3000, "gamma")]
         );
     }
 
