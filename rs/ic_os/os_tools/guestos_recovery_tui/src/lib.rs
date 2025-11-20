@@ -35,8 +35,7 @@ fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode().context("Failed to enable raw mode")?;
 
     let mut stdout = io::stdout();
-    // Try to enter alternate screen mode, but don't fail if it doesn't work
-    let _ = execute!(stdout, EnterAlternateScreen);
+    execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
 
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).context("Failed to create terminal")?;
@@ -324,7 +323,6 @@ impl App {
         }
     }
 
-    /// Redraws the UI, handling any errors
     fn redraw(&self, terminal_guard: &mut TerminalGuard) -> Result<()> {
         if let Some(state) = &self.state {
             let _ = terminal_guard
@@ -596,7 +594,6 @@ impl App {
                     let logs = running_state.log_lines.lock().unwrap().clone();
 
                     if status.success() {
-                        // Success!
                         self.result = Some(Ok(()));
                         self.should_quit = true;
                         None
@@ -681,8 +678,7 @@ fn print_prominent_success_message(message: &str) {
     const RESET: &str = "\x1b[0m";
     const SEPARATOR_CHAR: &str = "═";
 
-    // Get terminal width, defaulting to 80 if unavailable
-    let width = size().map(|(w, _)| w as usize).unwrap_or(80).min(100); // Cap at 100 for readability
+    let width = size().map(|(w, _)| w as usize).unwrap_or(80).min(100);
 
     let separator = SEPARATOR_CHAR.repeat(width);
 
