@@ -44,10 +44,12 @@ use ic_registry_canister_api::AddNodePayload;
 use ic_state_machine_tests::{PayloadBuilder, StateMachine};
 use ic_types::PrincipalId;
 use ic_types::batch::BlockmakerMetrics;
+use ic_types::time::current_time;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, TOKEN_SUBDIVIDABLE_BY, Tokens};
 use maplit::btreemap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
+use rewards_calculation::REWARDS_TABLE_DAYS;
 use std::{
     collections::BTreeMap,
     time::{Duration, UNIX_EPOCH},
@@ -90,7 +92,7 @@ fn test_list_node_provider_rewards() {
     governance_init_payload
         .proto
         .most_recent_monthly_node_provider_rewards = Some(MonthlyNodeProviderRewards {
-        timestamp: 0,
+        timestamp: current_time().as_secs_since_unix_epoch(),
         ..Default::default()
     });
 
@@ -114,7 +116,8 @@ fn test_list_node_provider_rewards() {
     let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
         to_account: Some(node_info_1.provider_account.into_proto_with_checksum()),
     }));
-    let expected_rewards_e8s_1 = ((10 * 24_000) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
+    let expected_rewards_e8s_1 =
+        ((24_000.0 / REWARDS_TABLE_DAYS) as u64 * TOKEN_SUBDIVIDABLE_BY) / 155_000;
     let expected_node_provider_reward_1 = RewardNodeProvider {
         node_provider: Some(node_info_1.provider.clone()),
         amount_e8s: expected_rewards_e8s_1,
@@ -150,14 +153,14 @@ fn test_list_node_provider_rewards() {
     // Set the average conversion rate
     set_average_icp_xdr_conversion_rate(&state_machine, 155_000);
 
-    for _ in 0..24 * 5 {
+    for _ in 0..30 {
         let blockmaker_metrics = BlockmakerMetrics {
             blockmaker: node_id,
             failed_blockmakers: vec![],
         };
         let payload = PayloadBuilder::default().with_blockmaker_metrics(blockmaker_metrics);
-        state_machine.advance_time(Duration::from_secs(60 * 60));
         state_machine.tick_with_config(payload);
+        state_machine.advance_time(Duration::from_secs(60 * 60 * 24));
     }
 
     // Call get_monthly_node_provider_rewards assert the value is as expected
@@ -910,11 +913,11 @@ fn add_node_rewards_table(state_machine: &StateMachine) {
     let new_entries = btreemap! {
         "EU".to_string() =>  NodeRewardRates {
             rates: btreemap!{
-                "default".to_string() => NodeRewardRate {
+                "type1".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 24_000,
                     reward_coefficient_percent: None,
                 },
-                "small".to_string() => NodeRewardRate {
+                "type3".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 35_000,
                     reward_coefficient_percent: None,
                 },
@@ -922,11 +925,11 @@ fn add_node_rewards_table(state_machine: &StateMachine) {
         },
         "North America,Canada".to_string() =>  NodeRewardRates {
             rates: btreemap!{
-                "default".to_string() => NodeRewardRate {
+                "type1".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 68_000,
                     reward_coefficient_percent: None,
                 },
-                "small".to_string() => NodeRewardRate {
+                "type3".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 11_000,
                     reward_coefficient_percent: None,
                 },
@@ -934,15 +937,15 @@ fn add_node_rewards_table(state_machine: &StateMachine) {
         },
         "North America,US,CA".to_string() =>  NodeRewardRates {
             rates: btreemap!{
-                "default".to_string() => NodeRewardRate {
+                "type1".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 234_000,
                     reward_coefficient_percent: None,
                 },
-                "small".to_string() => NodeRewardRate {
+                "type3".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 907_000,
                     reward_coefficient_percent: None,
                 },
-                "storage_upgrade".to_string() => NodeRewardRate {
+                "type3.1".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 103_000,
                     reward_coefficient_percent: None,
                 },
