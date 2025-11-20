@@ -231,7 +231,7 @@ fn teardown_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> R
 /// This message is designed to be highly visible and will appear in the normal
 /// terminal after the TUI exits, before any subsequent service logs.
 /// The message uses prominent formatting with borders and colors to stand out.
-fn print_prominent_success_message(message: &str) {
+fn print_success_summary(message: &str) {
     use std::io::Write;
     let stdout = std::io::stdout();
     let mut handle = stdout.lock();
@@ -362,7 +362,7 @@ impl App {
 
         // If we finished successfully, print the message after cleanup
         if let Some(Ok(())) = self.result {
-            print_prominent_success_message("Recovery completed successfully!");
+            print_success_summary("Recovery completed successfully!");
         } else if self.result.is_none() {
             println!("\nManual recovery has been canceled.");
         } else if let Some(Err(ref _e)) = self.result {
@@ -494,7 +494,7 @@ impl App {
                         input_state.error_message = Some(e.to_string());
                         Ok(false)
                     } else {
-                        self.transition_to_running(input_state.params.clone())?;
+                        self.start_recovery_process(input_state.params.clone())?;
                         Ok(true)
                     }
                 }
@@ -533,7 +533,7 @@ impl App {
         }
     }
 
-    fn transition_to_running(&mut self, params: RecoveryParams) -> Result<()> {
+    fn start_recovery_process(&mut self, params: RecoveryParams) -> Result<()> {
         let mut cmd = build_upgrader_command(&params);
         cmd.stdout(Stdio::piped());
         // Redirect stderr to null to avoid cluttering the TUI output
@@ -548,7 +548,7 @@ impl App {
             .take()
             .ok_or_else(|| anyhow::anyhow!("Failed to get stdout handle"))?;
 
-        let stdout_handle = spawn_log_reader_thread(stdout, Arc::clone(&log_lines));
+        let stdout_handle = start_log_capture(stdout, Arc::clone(&log_lines));
 
         self.state = Some(AppState::Running(RunningState {
             child,
@@ -618,10 +618,7 @@ fn build_upgrader_command(params: &RecoveryParams) -> Command {
 }
 
 /// Spawns a thread to read lines from stdout and append them to a shared log buffer
-fn spawn_log_reader_thread<R>(
-    stream: R,
-    log_lines: Arc<Mutex<Vec<String>>>,
-) -> thread::JoinHandle<()>
+fn start_log_capture<R>(stream: R, log_lines: Arc<Mutex<Vec<String>>>) -> thread::JoinHandle<()>
 where
     R: Read + Send + 'static,
 {

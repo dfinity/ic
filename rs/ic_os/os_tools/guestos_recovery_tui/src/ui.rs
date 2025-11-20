@@ -52,7 +52,7 @@ fn is_terminal_too_small(size: Rect) -> bool {
 }
 
 /// Renders an error message when the terminal is too small.
-fn render_terminal_too_small_error(f: &mut Frame, size: Rect) -> bool {
+fn render_if_too_small(f: &mut Frame, size: Rect) -> bool {
     if !is_terminal_too_small(size) {
         return false;
     }
@@ -80,13 +80,13 @@ fn render_terminal_too_small_error(f: &mut Frame, size: Rect) -> bool {
 pub(crate) fn render(f: &mut Frame, state: &AppState) {
     let size = f.area();
 
-    if render_terminal_too_small_error(f, size) {
+    if render_if_too_small(f, size) {
         return;
     }
 
     match state {
         AppState::Input(s) => render_input_screen(f, s, size),
-        AppState::Running(s) => render_running_screen(f, s, size),
+        AppState::Running(s) => render_logs_screen(f, s, size),
         AppState::Done(s) => render_done_screen(f, s, size),
     }
 }
@@ -150,7 +150,7 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
     }
 
     let button_area = main_layout[3];
-    render_buttons_centered(
+    render_action_buttons(
         state,
         f,
         &[
@@ -217,7 +217,7 @@ fn render_input_field(
 }
 
 /// Renders buttons horizontally centered in the given area with spacing between them
-fn render_buttons_centered(
+fn render_action_buttons(
     state: &InputState,
     f: &mut Frame,
     buttons: &[(&str, Field)],
@@ -247,16 +247,12 @@ fn render_buttons_centered(
 // Screen: Running (Logs)
 // ============================================================================
 
-fn render_running_screen(f: &mut Frame, state: &RunningState, size: Rect) {
+fn render_logs_screen(f: &mut Frame, state: &RunningState, size: Rect) {
     let logs = state.log_lines.lock().unwrap();
-    draw_logs_screen(f, &state.params, &logs, size);
-}
 
-/// Draws the real-time logs screen during recovery process
-fn draw_logs_screen(f: &mut Frame, params: &RecoveryParams, logs: &[String], size: Rect) {
     let block = create_block("GuestOS Recovery Upgrader", false, false);
 
-    let mut text = create_parameter_lines(params);
+    let mut text = create_parameter_lines(&state.params);
     text.push(Line::from(""));
     text.push(Line::from("Recovery process logs:"));
     text.push(Line::from(""));
