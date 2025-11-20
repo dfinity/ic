@@ -25,8 +25,27 @@ const STATUS_SCREEN_OVERHEAD: u16 = 10;
 const COMPLETION_SCREEN_OVERHEAD: u16 = 16;
 
 // ============================================================================
-// Terminal Validation
+// Shared UI Components & Helpers
 // ============================================================================
+
+/// Unified helper to create consistent UI blocks
+fn create_block<'a>(title: &'a str, active: bool, is_error: bool) -> Block<'a> {
+    let mut block = Block::default().borders(Borders::ALL);
+
+    if is_error {
+        block = block.fg(Color::Red).bg(Color::Black).title(title);
+    } else if active {
+        block = block.bg(Color::Blue).title(Span::styled(
+            title,
+            Style::default().bold().fg(Color::White),
+        ));
+    } else {
+        block = block
+            .bg(Color::Reset)
+            .title(Span::styled(title, Style::default().bold().fg(Color::Cyan)));
+    }
+    block
+}
 
 fn is_terminal_too_small(size: Rect) -> bool {
     size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT
@@ -54,7 +73,7 @@ fn render_terminal_too_small_error(f: &mut Frame, size: Rect) -> bool {
 }
 
 // ============================================================================
-// Main UI Rendering
+// Main Entry Point
 // ============================================================================
 
 /// Renders the main UI for the App
@@ -71,6 +90,10 @@ pub(crate) fn render(f: &mut Frame, state: &AppState) {
         AppState::Done(s) => render_done_screen(f, s, size),
     }
 }
+
+// ============================================================================
+// Screen: Input
+// ============================================================================
 
 fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
     let main_layout = Layout::default()
@@ -172,26 +195,6 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
     }
 }
 
-fn render_running_screen(f: &mut Frame, state: &RunningState, size: Rect) {
-    let logs = state.log_lines.lock().unwrap();
-    draw_logs_screen(f, &state.params, &logs, size);
-}
-
-fn render_done_screen(f: &mut Frame, state: &DoneState, size: Rect) {
-    draw_failure_screen(
-        f,
-        state.exit_status.code(),
-        &state.logs,
-        &state.error_messages,
-        &state.params,
-        size,
-    );
-}
-
-// ============================================================================
-// Component Rendering Functions
-// ============================================================================
-
 fn render_input_field(
     state: &InputState,
     f: &mut Frame,
@@ -241,16 +244,16 @@ fn render_buttons_centered(
 }
 
 // ============================================================================
-// Screen Rendering Functions
+// Screen: Running (Logs)
 // ============================================================================
 
+fn render_running_screen(f: &mut Frame, state: &RunningState, size: Rect) {
+    let logs = state.log_lines.lock().unwrap();
+    draw_logs_screen(f, &state.params, &logs, size);
+}
+
 /// Draws the real-time logs screen during recovery process
-pub(crate) fn draw_logs_screen(
-    f: &mut Frame,
-    params: &RecoveryParams,
-    logs: &[String],
-    size: Rect,
-) {
+fn draw_logs_screen(f: &mut Frame, params: &RecoveryParams, logs: &[String], size: Rect) {
     let block = create_block("GuestOS Recovery Upgrader", false, false);
 
     let mut text = create_parameter_lines(params);
@@ -272,6 +275,71 @@ pub(crate) fn draw_logs_screen(
             logs.len()
         )));
     }
+
+    let para = Paragraph::new(text)
+        .block(block)
+        .alignment(Alignment::Left)
+        .wrap(Wrap { trim: true });
+    f.render_widget(para, size);
+}
+
+pub(crate) fn calculate_log_viewport(
+    total_lines: usize,
+    available_height: usize,
+) -> (usize, usize) {
+    let lines_to_show = total_lines.min(available_height);
+    let start_idx = total_lines.saturating_sub(lines_to_show);
+    (start_idx, lines_to_show)
+}
+
+/// Truncates a line to fit within the maximum width, appending "..." if needed
+pub(crate) fn truncate_line(line: &str, max_width: usize) -> String {
+    if line.len() > max_width {
+        format!("{}...", &line[..max_width.saturating_sub(3)])
+    } else {
+        line.to_string()
+    }
+}
+
+/// Formats log lines with indentation and truncation for display.
+#[allow(mismatched_lifetime_syntaxes)]
+fn format_log_lines(lines: &[String], max_width: usize) -> Vec<Line> {
+    lines
+        .iter()
+        .map(|line| Line::from(format!("  {}", truncate_line(line, max_width))))
+        .collect()
+}
+
+// ============================================================================
+// Screen: Done (Failure)
+// ============================================================================
+
+fn render_done_screen(f: &mut Frame, state: &DoneState, size: Rect) {
+    draw_failure_screen(
+        f,
+        state.exit_status.code(),
+        &state.logs,
+        &state.error_messages,
+        &state.params,
+        size,
+    );
+}
+
+/// Draws the failure completion screen with error details
+fn draw_failure_screen(
+    f: &mut Frame,
+    exit_code: Option<i32>,
+    log_lines: &[String],
+    error_messages: &[String],
+    params: &RecoveryParams,
+    size: Rect,
+) {
+    let block = create_block("Recovery Failed", false, true);
+
+    let mut text = build_failure_text(exit_code, log_lines, error_messages, params, size);
+
+    text.push(Line::from(""));
+    text.push(Line::from("Press any key to continue..."));
 
     let para = Paragraph::new(text)
         .block(block)
@@ -349,35 +417,8 @@ fn build_failure_text<'a>(
     text
 }
 
-/// Draws the failure completion screen with error details
-pub(crate) fn draw_failure_screen(
-    f: &mut Frame,
-    exit_code: Option<i32>,
-    log_lines: &[String],
-    error_messages: &[String],
-    params: &RecoveryParams,
-    size: Rect,
-) {
-    let block = create_block("Recovery Failed", false, true);
-
-    let mut text = build_failure_text(exit_code, log_lines, error_messages, params, size);
-
-    text.push(Line::from(""));
-    text.push(Line::from("Press any key to continue..."));
-
-    let para = Paragraph::new(text)
-        .block(block)
-        .alignment(Alignment::Left)
-        .wrap(Wrap { trim: true });
-    f.render_widget(para, size);
-}
-
-// ============================================================================
-// UI Utility Functions
-// ============================================================================
-
 /// Creates the parameter display lines for the UI
-pub(crate) fn create_parameter_lines(params: &RecoveryParams) -> Vec<Line<'_>> {
+fn create_parameter_lines(params: &RecoveryParams) -> Vec<Line<'_>> {
     let lines = vec![
         format!("  VERSION: {}", params.version),
         format!("  VERSION-HASH: {}", params.version_hash),
@@ -388,50 +429,4 @@ pub(crate) fn create_parameter_lines(params: &RecoveryParams) -> Vec<Line<'_>> {
         .into_iter()
         .map(|text| Line::from(vec![Span::styled(text, Style::default().fg(Color::Yellow))]))
         .collect()
-}
-
-pub(crate) fn calculate_log_viewport(
-    total_lines: usize,
-    available_height: usize,
-) -> (usize, usize) {
-    let lines_to_show = total_lines.min(available_height);
-    let start_idx = total_lines.saturating_sub(lines_to_show);
-    (start_idx, lines_to_show)
-}
-
-/// Truncates a line to fit within the maximum width, appending "..." if needed
-pub(crate) fn truncate_line(line: &str, max_width: usize) -> String {
-    if line.len() > max_width {
-        format!("{}...", &line[..max_width.saturating_sub(3)])
-    } else {
-        line.to_string()
-    }
-}
-
-/// Formats log lines with indentation and truncation for display.
-#[allow(mismatched_lifetime_syntaxes)]
-fn format_log_lines(lines: &[String], max_width: usize) -> Vec<Line> {
-    lines
-        .iter()
-        .map(|line| Line::from(format!("  {}", truncate_line(line, max_width))))
-        .collect()
-}
-
-/// Unified helper to create consistent UI blocks
-fn create_block<'a>(title: &'a str, active: bool, is_error: bool) -> Block<'a> {
-    let mut block = Block::default().borders(Borders::ALL);
-
-    if is_error {
-        block = block.fg(Color::Red).bg(Color::Black).title(title);
-    } else if active {
-        block = block.bg(Color::Blue).title(Span::styled(
-            title,
-            Style::default().bold().fg(Color::White),
-        ));
-    } else {
-        block = block
-            .bg(Color::Reset)
-            .title(Span::styled(title, Style::default().bold().fg(Color::Cyan)));
-    }
-    block
 }
