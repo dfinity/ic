@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The function `PocketIcBuilder::with_dogecoind_addrs` to specify a list of addresses at which a `dogecoind` process is listening
   for Dogecoin support in PocketIC.
 - The function `PocketIc::canister_snapshot_download` to download a canister snapshot to a given snapshot directory.
+- The function `PocketIc::canister_snapshot_upload` to upload a canister snapshot from a given snapshot directory.
 
 ### Changed
 - Deprecated `PocketIcBuilder::with_initial_timestamp`, use `PocketIcBuilder::with_initial_time` instead.
