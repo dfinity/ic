@@ -27,6 +27,5 @@ rust_library(
 
 rust_test(
     name = "test",
-    crate = ":feature_access_policy"
+    crate = ":feature_access_policy",
 )
-
