@@ -506,10 +506,8 @@ async fn simulate_node_provider_action(
         .await
         .expect("Failed to run guestos-recovery-upgrader");
 
-    // Wait 15 seconds to give enough time for the old version to shut down before spoofing the GuestOS DNS
-    tokio::time::sleep(std::time::Duration::from_secs(15)).await;
-    // For reviewers: We want to wait to try spoofing the GuestOS DNS until AFTER the old GuestOS shuts down (note that after the guestos-recovery-upgrader runs, it takes a few seconds for the guest VM to shut down and the recovery-GuestOS to come up), but we can't wait for the GuestOS version the way we do at the end with `upgrade_version` because the `img_version` is just a dummy value so that the guestos-recovery-upgrader downloads from the correct URL.
-    // Instead, we could track the the boot id of the GuestOS before and after recovery-upgrader runs, but I wasn't sure this was worth the complexity if a 15 second sleep sufficed.
+    // Wait 10 seconds to give enough time for the old version to shut down before spoofing the GuestOS DNS
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
 
     // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
     let guest = host.get_guest_ssh().unwrap();

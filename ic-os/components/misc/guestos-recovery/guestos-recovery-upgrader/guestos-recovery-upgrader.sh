@@ -42,7 +42,7 @@ parse_args() {
     done
 }
 
-# Helper function to log messages to logger and stdout/stderr
+# Helper function to log messages to logger and stdout
 log_message() {
     local message="$1"
     # Write to system logger
