@@ -216,14 +216,6 @@ impl Field {
         }
     }
 
-    fn label(&self) -> &'static str {
-        self.metadata().name
-    }
-
-    fn description(&self) -> &'static str {
-        self.metadata().description
-    }
-
     fn get_value<'a>(&self, params: &'a RecoveryParams) -> &'a str {
         match self {
             Field::Version => &params.version,

@@ -130,13 +130,14 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
         .split(main_layout[2]);
 
     for (i, field) in Field::INPUT_FIELDS.iter().enumerate() {
+        let meta = field.metadata();
         render_input_field(
             state,
             f,
             *field,
-            &format!("{}:", field.label()),
+            &format!("{}:", meta.name),
             field.get_value(&state.params),
-            field.description(),
+            meta.description,
             fields_layout[i],
         );
     }
