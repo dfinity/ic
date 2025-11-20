@@ -29,7 +29,7 @@ use crate::{
     },
     pb,
     pb::{
-        proposal_conversions::{convert_proposal, proposal_data_to_info},
+        proposal_conversions::proposal_data_to_info,
         v1::{
             ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem,
             ExecuteNnsFunction, Followees, FulfillSubnetRentalRequest,
@@ -106,16 +106,18 @@ use ic_nns_governance_api::{
     ListProposalInfoRequest, ListProposalInfoResponse, ManageNeuronResponse, NeuronIndexData,
     NeuronInfo, NeuronVote, NeuronVotes, ProposalInfo,
     manage_neuron_response::{self, StakeMaturityResponse},
-    proposal_validation,
+    proposal_validation::{
+        validate_proposal_summary, validate_proposal_title, validate_proposal_url,
+    },
     subnet_rental::SubnetRentalRequest,
 };
-use ic_node_rewards_canister_api::DateUtc;
 use ic_node_rewards_canister_api::monthly_rewards::{
     GetNodeProvidersMonthlyXdrRewardsRequest, GetNodeProvidersMonthlyXdrRewardsResponse,
 };
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsRequest, GetNodeProvidersRewardsResponse,
 };
+use ic_node_rewards_canister_api::{DateUtc, RewardsCalculationAlgorithmVersion};
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, NeuronsFundParticipationConstraints};
@@ -5136,9 +5138,9 @@ impl Governance {
             }
         }
 
-        proposal_validation::validate_user_submitted_proposal_fields(&convert_proposal(
-            proposal, true,
-        ))?;
+        validate_proposal_title(&proposal.title)?;
+        validate_proposal_summary(&proposal.summary)?;
+        validate_proposal_url(&proposal.url)?;
 
         if !proposal.allowed_when_resources_are_low() {
             self.check_heap_can_grow()?;
@@ -7849,7 +7851,13 @@ impl Governance {
         &self,
         start_date: DateUtc,
         end_date: DateUtc,
-    ) -> Result<BTreeMap<PrincipalId, u64>, GovernanceError> {
+    ) -> Result<
+        (
+            BTreeMap<PrincipalId, u64>,
+            RewardsCalculationAlgorithmVersion,
+        ),
+        GovernanceError,
+    > {
         let response: Vec<u8> = self
             .env
             .call_canister_method(
@@ -7857,7 +7865,8 @@ impl Governance {
                 "get_node_providers_rewards",
                 Encode!(&GetNodeProvidersRewardsRequest {
                     from_day: start_date,
-                    to_day: end_date
+                    to_day: end_date,
+                    algorithm_version: None
                 })
                 .unwrap(),
             )
@@ -7888,13 +7897,14 @@ impl Governance {
             ));
         }
 
-        if let Ok(rewards) = response {
-            let rewards = rewards
+        if let Ok(result) = response {
+            let rewards = result
                 .rewards_xdr_permyriad
                 .into_iter()
                 .map(|(principal, amount)| (PrincipalId::from(principal), amount))
                 .collect();
-            return Ok(rewards);
+            let algorithm_version = result.algorithm_version;
+            return Ok((rewards, algorithm_version));
         }
 
         Err(GovernanceError::new_with_message(
@@ -7962,7 +7972,7 @@ impl Governance {
         let end_date = DateUtc::from_unix_timestamp_seconds(end_date_timestamp_seconds);
 
         // Maps node providers to their rewards in XDR
-        let rewards_per_node_provider = self
+        let (rewards_per_node_provider, algorithm_version) = self
             .get_node_providers_xdr_permyriad_rewards(start_date, end_date)
             .await?;
 
@@ -8008,6 +8018,7 @@ impl Governance {
             minimum_xdr_permyriad_per_icp: Some(minimum_xdr_permyriad_per_icp),
             maximum_node_provider_rewards_e8s: Some(maximum_node_provider_rewards_e8s),
             node_providers: self.heap_data.node_providers.clone(),
+            algorithm_version: Some(algorithm_version.version),
             registry_version: None,
         })
     }

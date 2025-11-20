@@ -19,6 +19,7 @@ fn test_node_provider_rewards_read_from_correct_sources() {
         node_providers: vec![],
         start_date: None,
         end_date: None,
+        algorithm_version: None,
     };
 
     let rewards_2 = MonthlyNodeProviderRewards {
@@ -31,6 +32,7 @@ fn test_node_provider_rewards_read_from_correct_sources() {
         node_providers: vec![],
         start_date: None,
         end_date: None,
+        algorithm_version: None,
     };
     let mut governance = Governance::new(
         Default::default(),
@@ -73,6 +75,7 @@ fn test_list_node_provider_rewards_api() {
         node_providers: vec![],
         start_date: None,
         end_date: None,
+        algorithm_version: None,
     };
 
     let rewards_2 = MonthlyNodeProviderRewards {
@@ -85,6 +88,7 @@ fn test_list_node_provider_rewards_api() {
         node_providers: vec![],
         start_date: None,
         end_date: None,
+        algorithm_version: None,
     };
 
     let mut governance = Governance::new(
@@ -127,6 +131,7 @@ fn test_list_node_provider_rewards_api_with_paging_and_filters() {
             node_providers: vec![],
             start_date: None,
             end_date: None,
+            algorithm_version: None,
         };
         governance.update_most_recent_monthly_node_provider_rewards(rewards.clone());
         rewards_minted.push(rewards);

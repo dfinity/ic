@@ -9,7 +9,9 @@ use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_ID;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance_api::{Proposal, manage_neuron::NeuronIdOrSubaccount, proposal::Action};
+use ic_nns_governance_api::{
+    MakeProposalRequest, ProposalActionRequest, manage_neuron::NeuronIdOrSubaccount,
+};
 use itertools::Itertools;
 use std::{
     collections::HashSet,
@@ -178,9 +180,9 @@ fn functions_disallowed_in_pre_initialization_swap() -> Vec<&'static str> {
     ]
 }
 
-fn confirmation_messages(proposal: &Proposal) -> Result<Vec<String>> {
+fn confirmation_messages(proposal: &MakeProposalRequest) -> Result<Vec<String>> {
     let csns = match &proposal.action {
-        Some(Action::CreateServiceNervousSystem(csns)) => csns,
+        Some(ProposalActionRequest::CreateServiceNervousSystem(csns)) => csns,
         _ => {
             return Err(anyhow!(
                 "Internal error: Somehow a proposal was made not of type CreateServiceNervousSystem",
@@ -226,7 +228,10 @@ Once the swap is completed, the SNS will be in normal mode and these proposal ac
     Ok(vec![dapp_canister_controllers, allowed_proposals])
 }
 
-fn inform_user_of_sns_behavior(proposal: &Proposal, skip_confirmation: bool) -> Result<()> {
+fn inform_user_of_sns_behavior(
+    proposal: &MakeProposalRequest,
+    skip_confirmation: bool,
+) -> Result<()> {
     let messages = confirmation_messages(proposal)?;
     for message in messages {
         println!();
@@ -266,7 +271,7 @@ fn confirm_understanding(skip_confirmation: bool) -> Result<()> {
 fn load_configuration_and_validate(
     network: &str,
     configuration_file_path: &PathBuf,
-) -> Result<Proposal> {
+) -> Result<MakeProposalRequest> {
     // Read the file.
     let init_config_file = std::fs::read_to_string(configuration_file_path).map_err(|err| {
         let current_dir = std::env::current_dir().expect("cannot read env::current_dir");
@@ -313,7 +318,7 @@ fn load_configuration_and_validate(
     // Validate that NNS root is one of the controllers of all dapp canisters,
     // as listed in the configuration file.
     let canister_ids = match &proposal.action {
-        Some(Action::CreateServiceNervousSystem(csns)) => csns
+        Some(ProposalActionRequest::CreateServiceNervousSystem(csns)) => csns
             .dapp_canisters
             .iter()
             .map(|canister| -> Result<CanisterId> {
@@ -494,9 +499,9 @@ mod test {
             .try_convert_to_create_service_nervous_system(test_root_dir)
             .unwrap();
 
-        let proposal = Proposal {
+        let proposal = MakeProposalRequest {
             title: Some("Test Proposal".to_string()),
-            action: Some(Action::CreateServiceNervousSystem(
+            action: Some(ProposalActionRequest::CreateServiceNervousSystem(
                 create_service_nervous_system,
             )),
             summary: "Test Proposal Summary".to_string(),
@@ -546,9 +551,9 @@ Once the swap is completed, the SNS will be in normal mode and these proposal ac
             create_service_nervous_system
         };
 
-        let proposal = Proposal {
+        let proposal = MakeProposalRequest {
             title: Some("Test Proposal".to_string()),
-            action: Some(Action::CreateServiceNervousSystem(
+            action: Some(ProposalActionRequest::CreateServiceNervousSystem(
                 create_service_nervous_system,
             )),
             summary: "Test Proposal Summary".to_string(),

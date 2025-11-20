@@ -251,7 +251,6 @@ upload_artifacts(
         "//conditions:default": [
             "//publish/binaries:bundle-legacy",  # avoid overwriting legacy artifacts
             "//publish/canisters:bundle",
-            "//ic-os/guestos/envs/dev:bundle-disk",  # used by icos_deploy testnet script
             "//ic-os/guestos/envs/prod:bundle-update",
             "//ic-os/guestos/envs/dev:bundle-update",  # used by nested tests
             "//ic-os/hostos/envs/prod:bundle-update",
