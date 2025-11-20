@@ -187,23 +187,6 @@ where
         }
     }
 
-    /// Use only when sure that some items will be passed in the collection
-    /// as the function will panic if it receives an empty collection.
-    ///
-    /// If you want the library to make a best effort guess, use `FeatureAccessPolicy::allow()`
-    #[track_caller]
-    pub fn allow_only<I: IntoIterator<Item = T>>(items: I) -> Self {
-        let items: HashSet<T> = items.into_iter().collect();
-
-        if items.is_empty() {
-            panic!("{ERROR_EMPTY_COLLECTION_ALLOW_ONLY}");
-        }
-
-        Self {
-            inner: FeatureAccessPolicyInner::AllowOnly(items),
-        }
-    }
-
     /// Use when unsure about the number of items in the collection.
     ///
     /// The library will try to make a best effort guess about what the
@@ -229,18 +212,16 @@ where
     /// Use only when sure that some items will be passed in the collection
     /// as the function will panic if it receives an empty collection.
     ///
-    /// If you want the library to make a best effort guess, use `FeatureAccessPolicy::deny()`
+    /// If you want the library to make a best effort guess, use `FeatureAccessPolicy::allow()`
     #[track_caller]
-    pub fn deny_only<I: IntoIterator<Item = T>>(items: I) -> Self {
-        let items: HashSet<T> = items.into_iter().collect();
+    pub fn allow_only<I: IntoIterator<Item = T>>(items: I) -> Self {
+        let value = Self::allow(items);
 
-        if items.is_empty() {
-            panic!("{ERROR_EMPTY_COLLECTION_DENY_ONLY}");
+        if matches!(value.inner, FeatureAccessPolicyInner::DenyAll) {
+            panic!("{ERROR_EMPTY_COLLECTION_ALLOW_ONLY}");
         }
 
-        Self {
-            inner: FeatureAccessPolicyInner::DenyOnly(items),
-        }
+        value
     }
 
     /// Use when unsure about the number of items in the collection.
@@ -263,6 +244,21 @@ where
         Self {
             inner: FeatureAccessPolicyInner::DenyOnly(items),
         }
+    }
+
+    /// Use only when sure that some items will be passed in the collection
+    /// as the function will panic if it receives an empty collection.
+    ///
+    /// If you want the library to make a best effort guess, use `FeatureAccessPolicy::deny()`
+    #[track_caller]
+    pub fn deny_only<I: IntoIterator<Item = T>>(items: I) -> Self {
+        let value = Self::deny(items);
+
+        if matches!(value.inner, FeatureAccessPolicyInner::AllowAll) {
+            panic!("{ERROR_EMPTY_COLLECTION_DENY_ONLY}");
+        }
+
+        value
     }
 
     pub fn is_allowed(&self, item: &T) -> bool {
