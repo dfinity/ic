@@ -119,6 +119,7 @@ system_test_nns(
         "PROXY_WASM_PATH": "$(rootpath //rs/rust_canisters/proxy_canister:proxy_canister)",
     },
     tags = [
+        "dynamic_testnet",
         "long_test",
     ],
     runtime_deps =
