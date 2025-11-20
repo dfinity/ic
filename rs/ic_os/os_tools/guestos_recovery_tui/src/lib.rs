@@ -398,14 +398,17 @@ impl App {
         execute!(terminal_guard.get_mut().backend_mut(), DisableMouseCapture)
             .context("Failed to disable mouse capture")?;
 
+        // Drop guard to cleanup terminal before printing any final messages
+        drop(terminal_guard);
+
         // If we finished successfully, print the message after cleanup
         if let Some(Ok(())) = self.result {
-            // Drop guard to cleanup terminal before printing
-            drop(terminal_guard);
             print_prominent_success_message("Recovery completed successfully!");
+        } else if self.result.is_none() {
+            println!("\nManual recovery has been canceled.");
         } else if let Some(Err(ref _e)) = self.result {
             // If we failed with an error (not just a cancelled operation)
-            // The guard will drop and we can print error if needed, but caller handles it.
+            // The guard is dropped so we can print error if needed, but caller handles it.
         }
 
         if let Some(result) = self.result.take() {
