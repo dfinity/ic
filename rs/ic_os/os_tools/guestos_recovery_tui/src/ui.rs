@@ -7,7 +7,6 @@ use ratatui::{
 };
 
 use crate::{AppState, DoneState, Field, InputState, RecoveryParams, RunningState};
-use anyhow::Result;
 
 // ============================================================================
 // Constants
@@ -31,19 +30,6 @@ const COMPLETION_SCREEN_OVERHEAD: u16 = 16;
 
 fn is_terminal_too_small(size: Rect) -> bool {
     size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT
-}
-
-pub(crate) fn validate_terminal_size(size: Rect) -> Result<()> {
-    if is_terminal_too_small(size) {
-        anyhow::bail!(
-            "Terminal too small: {}x{} (minimum: {}x{}). Please resize your terminal.",
-            size.width,
-            size.height,
-            MIN_TERMINAL_WIDTH,
-            MIN_TERMINAL_HEIGHT
-        );
-    }
-    Ok(())
 }
 
 /// Renders an error message when the terminal is too small.

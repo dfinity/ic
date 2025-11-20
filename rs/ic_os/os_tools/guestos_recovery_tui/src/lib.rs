@@ -8,7 +8,7 @@ use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode, size,
 };
-use ratatui::{Frame, Terminal, backend::CrosstermBackend, layout::Rect};
+use ratatui::{Frame, Terminal, backend::CrosstermBackend};
 use std::io::{self, BufRead, BufReader, Read};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -323,19 +323,6 @@ impl App {
         Ok(())
     }
 
-    fn teardown_and_error(
-        mut terminal_guard: TerminalGuard,
-        e: impl Into<anyhow::Error>,
-        context: impl FnOnce() -> String,
-    ) -> Result<Option<RecoveryParams>> {
-        let mut term = terminal_guard
-            .terminal
-            .take()
-            .expect("TerminalGuard: terminal was already taken.");
-        teardown_terminal(&mut term)?;
-        Err(e.into()).with_context(context)
-    }
-
     /// Runs the interactive TUI application.
     pub fn run(&mut self) -> Result<()> {
         if !atty::is(atty::Stream::Stdout) || !atty::is(atty::Stream::Stdin) {
@@ -344,15 +331,6 @@ impl App {
 
         let terminal = setup_terminal()?;
         let mut terminal_guard = TerminalGuard::new(terminal);
-
-        let terminal_size = terminal_guard.get_mut().size()?;
-        let test_size = Rect::new(0, 0, terminal_size.width, terminal_size.height);
-        if let Err(e) = ui::validate_terminal_size(test_size) {
-            let _ = Self::teardown_and_error(terminal_guard, e, || {
-                "Terminal size validation failed".to_string()
-            });
-            return Err(anyhow::anyhow!("Terminal size validation failed"));
-        }
 
         execute!(terminal_guard.get_mut().backend_mut(), EnableMouseCapture)
             .context("Failed to enable mouse capture")?;
