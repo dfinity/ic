@@ -72,6 +72,19 @@ fn render_if_too_small(f: &mut Frame, size: Rect) -> bool {
     true
 }
 
+fn create_parameter_lines(params: &RecoveryParams) -> Vec<Line<'_>> {
+    let lines = vec![
+        format!("  VERSION: {}", params.version),
+        format!("  VERSION-HASH: {}", params.version_hash),
+        format!("  RECOVERY-HASH: {}", params.recovery_hash),
+    ];
+
+    lines
+        .into_iter()
+        .map(|text| Line::from(vec![Span::styled(text, Style::default().fg(Color::Yellow))]))
+        .collect()
+}
+
 // ============================================================================
 // Main Entry Point
 // ============================================================================
@@ -408,18 +421,4 @@ fn build_failure_text<'a>(
     }
 
     text
-}
-
-/// Creates the parameter display lines for the UI
-fn create_parameter_lines(params: &RecoveryParams) -> Vec<Line<'_>> {
-    let lines = vec![
-        format!("  VERSION: {}", params.version),
-        format!("  VERSION-HASH: {}", params.version_hash),
-        format!("  RECOVERY-HASH: {}", params.recovery_hash),
-    ];
-
-    lines
-        .into_iter()
-        .map(|text| Line::from(vec![Span::styled(text, Style::default().fg(Color::Yellow))]))
-        .collect()
 }
