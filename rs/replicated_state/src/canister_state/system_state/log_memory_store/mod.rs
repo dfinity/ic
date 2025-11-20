@@ -5,6 +5,9 @@ pub(crate) mod memory;
 pub(crate) mod ring_buffer;
 pub(crate) mod struct_io;
 
+use crate::canister_state::system_state::log_memory_store::{
+    memory::MemorySize, ring_buffer::RingBuffer,
+};
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_types::CanisterLog;
@@ -20,8 +23,10 @@ const DELTA_LOG_SIZES_CAP: usize = 100;
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct LogMemoryStore {
     #[validate_eq(Ignore)]
-    pub data: PageMap,
+    pub ring_buffer: RingBuffer,
 
+    // ring_buffer: RingBuffer, // cached reference to the inner ring buffer of the
+    // page_map: PageMap,
     /// (!) No need to preserve across checkpoints.
     /// Tracks the size of each delta log appended during a round.
     /// Multiple logs can be appended in one round (e.g. heartbeat, timers, or message executions).
@@ -40,59 +45,56 @@ impl LogMemoryStore {
         Self::new_inner(PageMap::new_for_testing())
     }
 
+    pub fn from_checkpoint(page_map: PageMap) -> Self {
+        Self::new_inner(page_map)
+    }
+
     pub fn new_inner(page_map: PageMap) -> Self {
-        // TODO: implement initialization logic.
-        let tmp_data = page_map.clone();
+        let data_capacity = MemorySize::new(10_000_000); // TODO: populate it properly
         Self {
-            data: tmp_data,
+            ring_buffer: RingBuffer::new(page_map, data_capacity),
             delta_log_sizes: VecDeque::new(),
         }
     }
 
-    pub fn from_checkpoint(data: PageMap) -> Self {
-        Self {
-            data,
-            delta_log_sizes: VecDeque::new(),
-        }
-    }
-
-    pub fn page_map(&self) -> &PageMap {
-        &self.data
+    pub fn page_map(&mut self) -> &PageMap {
+        self.ring_buffer.page_map()
     }
 
     pub fn page_map_mut(&mut self) -> &mut PageMap {
-        &mut self.data
+        self.ring_buffer.page_map_mut()
     }
 
     pub fn clear(&mut self) {
         // TODO.
     }
 
-    pub fn capacity(&self) -> usize {
-        // TODO.
-        0
+    pub fn capacity(&mut self) -> usize {
+        self.ring_buffer.capacity()
     }
 
-    pub fn used_space(&self) -> usize {
-        // TODO.
-        0
+    pub fn used_space(&mut self) -> usize {
+        self.ring_buffer.used_space()
     }
 
-    /// Returns true if the canister log buffer is empty.
-    pub fn is_empty(&self) -> bool {
+    pub fn is_empty(&mut self) -> bool {
         self.used_space() == 0
     }
 
-    pub fn next_id(&self) -> u64 {
-        // TODO.
-        0
+    pub fn next_id(&mut self) -> u64 {
+        self.ring_buffer.next_id()
     }
 
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.used_space());
 
-        // TODO: implement appending logic.
+        let records: Vec<CanisterLogRecord> = delta_log
+            .records_mut()
+            .iter_mut()
+            .map(std::mem::take)
+            .collect();
+        self.ring_buffer.append_log(records);
     }
 
     /// Records the size of the appended delta log.
@@ -108,8 +110,8 @@ impl LogMemoryStore {
         self.delta_log_sizes.drain(..).collect()
     }
 
-    pub fn records(&self, _filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
-        vec![] // TODO.
+    pub fn records(&mut self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
+        self.ring_buffer.records(filter)
     }
 }
 

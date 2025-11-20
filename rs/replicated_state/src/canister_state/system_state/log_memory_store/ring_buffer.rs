@@ -1,12 +1,14 @@
 use crate::canister_state::system_state::log_memory_store::{
     header::Header,
     log_record::LogRecord,
-    memory::{MemoryAddress, MemoryPosition, MemorySize},
+    memory::{MemoryAddress, MemorySize},
     struct_io::StructIO,
 };
 use crate::page_map::{PAGE_SIZE, PageIndex, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
 use ic_sys::PageBytes;
+use ic_validate_eq::ValidateEq;
+use ic_validate_eq_derive::ValidateEq;
 
 // PageMap file layout.
 // Header layout constants.
@@ -35,7 +37,9 @@ const DATA_SEGMENT_SIZE_MAX: u64 = DATA_CAPACITY_MAX.get() / INDEX_ENTRY_COUNT_M
 // Ensure data segment size is significantly smaller than max result size, say 20%.
 const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
 
-struct RingBuffer {
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
+pub struct RingBuffer {
+    #[validate_eq(Ignore)]
     io: StructIO,
 }
 
@@ -52,21 +56,29 @@ impl RingBuffer {
     }
 
     pub fn init(page_map: PageMap, data_capacity: MemorySize) -> Self {
-        let io = StructIO::new(page_map);
+        let mut io = StructIO::new(page_map);
         if io.load_header().magic != *MAGIC {
             // Not initialized yet, create a new instance.
-            return Self::new(io.into_page_map(), data_capacity);
+            io.save_header(&Header::new(data_capacity));
         }
         Self { io }
     }
 
-    pub fn dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
-        self.io.dirty_pages()
+    pub fn page_map(&mut self) -> &PageMap {
+        self.io.page_map()
     }
 
-    pub fn into_page_map(self) -> PageMap {
-        self.io.into_page_map()
+    pub fn page_map_mut(&mut self) -> &mut PageMap {
+        self.io.page_map_mut()
     }
+
+    // pub fn dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
+    //     self.io.dirty_pages()
+    // }
+
+    // pub fn into_page_map(self) -> PageMap {
+    //     self.io.into_page_map()
+    // }
 
     pub fn capacity(&self) -> usize {
         self.io.load_header().data_capacity.get() as usize
@@ -100,18 +112,10 @@ impl RingBuffer {
             let added_size = MemorySize::new(record.bytes_len() as u64);
             let capacity = MemorySize::new(self.capacity() as u64);
             if added_size > capacity {
-                debug_assert!(
-                    false,
-                    "log record size {added_size:?} exceeds ring buffer capacity {capacity:?}",
-                );
+                debug_assert!(false, "log record size exceeds ring buffer capacity",);
                 return;
             }
-            // Free space by popping old records if needed.
-            while MemorySize::new(self.used_space() as u64) + added_size > capacity {
-                if self.pop_front().is_none() {
-                    break; // No more records to pop, limit reached.
-                }
-            }
+            self.make_free_space(added_size);
 
             // Save the record at the tail position.
             let mut h = self.io.load_header();
@@ -129,6 +133,15 @@ impl RingBuffer {
         }
         // It's fine to save the index table only once after saving all the records.
         self.io.save_index_table(&index_table);
+    }
+
+    fn make_free_space(&mut self, added_size: MemorySize) {
+        let capacity = MemorySize::new(self.capacity() as u64);
+        while MemorySize::new(self.used_space() as u64) + added_size > capacity {
+            if self.pop_front().is_none() {
+                break; // No more records to pop, limit reached.
+            }
+        }
     }
 
     fn pop_front(&mut self) -> Option<CanisterLogRecord> {

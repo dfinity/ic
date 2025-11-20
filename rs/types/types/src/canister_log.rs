@@ -101,6 +101,10 @@ impl Records {
         &self.records
     }
 
+    fn get_mut(&mut self) -> &mut VecDeque<CanisterLogRecord> {
+        &mut self.records
+    }
+
     fn used_space(&self) -> usize {
         self.used_space
     }
@@ -198,6 +202,10 @@ impl CanisterLog {
     /// Returns the canister log records.
     pub fn records(&self) -> &VecDeque<CanisterLogRecord> {
         self.records.get()
+    }
+
+    pub fn records_mut(&mut self) -> &mut VecDeque<CanisterLogRecord> {
+        self.records.get_mut()
     }
 
     /// Clears the canister log records.
