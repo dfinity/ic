@@ -135,7 +135,7 @@ fn test_list_node_provider_rewards() {
         &node_info_1.provider_id,
         "AN1",
         rewardable_nodes_1,
-        "0:0:0:0:0:0:0:0",
+        "0:0:0:0:0:0:0:w",
     );
 
     // Add Nodes
