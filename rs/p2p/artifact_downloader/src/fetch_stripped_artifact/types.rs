@@ -54,15 +54,26 @@ impl TryFrom<pb::StrippedIngressMessage> for SignedIngressId {
 }
 
 /// Unique identifiers for messages that may be stripped from block proposals.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum StrippedMessageId {
     Ingress(SignedIngressId),
     IDkgDealing(IDkgArtifactId, NodeIndex),
 }
 
 /// Messages that may be stripped from block proposals.
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum StrippedMessage {
     Ingress(SignedIngressId, SignedIngress),
     IDkgDealing(IDkgArtifactId, NodeIndex, SignedIDkgDealing),
+}
+
+impl From<&StrippedMessage> for StrippedMessageId {
+    fn from(message: &StrippedMessage) -> Self {
+        match message {
+            StrippedMessage::Ingress(id, _) => StrippedMessageId::Ingress(id.clone()),
+            StrippedMessage::IDkgDealing(id, node_index, _) => {
+                StrippedMessageId::IDkgDealing(id.clone(), *node_index)
+            }
+        }
+    }
 }

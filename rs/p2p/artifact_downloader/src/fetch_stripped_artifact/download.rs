@@ -982,31 +982,31 @@ mod tests {
     async fn download_works() {
         let block = fake_block_proposal(vec![]);
         let ingress_message = SignedIngressBuilder::new().nonce(1).build();
-        let mut mock_transport = MockTransport::new();
-        let mut mock_peers = MockPeers::default();
-        let ingress_message_clone = ingress_message.clone();
-        mock_peers.expect_peers().return_const(vec![NODE_1]);
-        mock_transport
-            .expect_rpc()
-            .returning(move |_, _| Ok(response(ingress_message_clone.clone())));
-        let ingress_id = SignedIngressId::from(&ingress_message);
-        let response = download_stripped_message(
-            Arc::new(mock_transport),
-            StrippedMessageId::Ingress(ingress_id.clone()),
-            ConsensusMessageId::from(&block),
-            &no_op_logger(),
-            &FetchStrippedConsensusArtifactMetrics::new(&MetricsRegistry::new()),
-            mock_peers,
-        )
-        .await;
-
-        assert_eq!(
-            response,
-            (
-                StrippedMessage::Ingress(ingress_id, ingress_message),
-                NODE_1
+        let node_index = 1;
+        let idkg_dealing = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        for stripped_message in [
+            StrippedMessage::Ingress(SignedIngressId::from(&ingress_message), ingress_message),
+            StrippedMessage::IDkgDealing(idkg_dealing.message_id(), node_index, idkg_dealing),
+        ] {
+            let mut mock_transport = MockTransport::new();
+            let mut mock_peers = MockPeers::default();
+            let stripped_message_clone = stripped_message.clone();
+            mock_peers.expect_peers().return_const(vec![NODE_1]);
+            mock_transport
+                .expect_rpc()
+                .returning(move |_, _| Ok(response(stripped_message_clone.clone())));
+            let response = download_stripped_message(
+                Arc::new(mock_transport),
+                StrippedMessageId::from(&stripped_message),
+                ConsensusMessageId::from(&block),
+                &no_op_logger(),
+                &FetchStrippedConsensusArtifactMetrics::new(&MetricsRegistry::new()),
+                mock_peers,
             )
-        );
+            .await;
+
+            assert_eq!(response, (stripped_message, NODE_1));
+        }
     }
 
     // Utility functions below
@@ -1087,15 +1087,22 @@ mod tests {
         })
     }
 
-    fn response(ingress_message: SignedIngress) -> axum::response::Response<Bytes> {
+    fn response(stripped_message: StrippedMessage) -> axum::response::Response<Bytes> {
         axum::response::Response::builder()
-            .body(Bytes::from(
-                pb::GetIngressMessageInBlockResponse::proxy_encode(
-                    GetIngressMessageInBlockResponse {
-                        serialized_ingress_message: ingress_message.binary().clone(),
-                    },
-                ),
-            ))
+            .body(Bytes::from(match stripped_message {
+                StrippedMessage::Ingress(_, ingress_message) => {
+                    pb::GetIngressMessageInBlockResponse::proxy_encode(
+                        GetIngressMessageInBlockResponse {
+                            serialized_ingress_message: ingress_message.binary().clone(),
+                        },
+                    )
+                }
+                StrippedMessage::IDkgDealing(_, _, dealing) => {
+                    pb::GetIDkgDealingInBlockResponse::proxy_encode(GetIDkgDealingInBlockResponse {
+                        signed_dealing: dealing,
+                    })
+                }
+            }))
             .unwrap()
     }
 }
