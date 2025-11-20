@@ -298,6 +298,11 @@ message IDkgDealingSupport {
   types.v1.BasicSignature sig_share = 4;
 }
 
+message StrippedDealing {
+  uint32 dealer_index = 1;
+  PrefixPairIDkg dealing_id = 2;
+}
+
 message IDkgPrefix {
   uint64 group_tag = 1;
   uint64 meta_hash = 2;

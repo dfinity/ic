@@ -1149,6 +1149,11 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
 
                 // Aggregate the support shares per dealing
                 for dealing_state in transcript_state.dealing_state.into_values() {
+                    if completed_dealings.len()
+                        >= (transcript_params.collection_threshold().get() as usize)
+                    {
+                        break;
+                    }
                     if let Some(sig_batch) = self.crypto_aggregate_dealing_support(
                         &transcript_params,
                         &dealing_state.support_shares,
@@ -1187,6 +1192,9 @@ impl<'a> IDkgTranscriptBuilderImpl<'a> {
 
         let mut signatures = Vec::new();
         for support_share in support_shares {
+            if signatures.len() >= (transcript_params.verification_threshold().get() as usize) {
+                break;
+            }
             signatures.push(&support_share.sig_share);
         }
 

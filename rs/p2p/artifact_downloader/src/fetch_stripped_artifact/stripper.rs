@@ -1,7 +1,11 @@
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
-    artifact::IdentifiableArtifact, batch::IngressPayload, consensus::ConsensusMessage,
+    artifact::IdentifiableArtifact,
+    batch::IngressPayload,
+    consensus::{ConsensusMessage, idkg::IDkgObject},
 };
+
+use crate::fetch_stripped_artifact::types::stripped::StrippedIDkgDealings;
 
 use super::types::{
     SignedIngressId,
@@ -35,15 +39,42 @@ impl Strippable for ConsensusMessage {
                 // Remove the ingress payload from the proto.
                 if let Some(block) = proto.value.as_mut() {
                     block.ingress_payload = None;
+                    if let Some(idkg) = block.idkg_payload.as_mut() {
+                        for t in &mut idkg.idkg_transcripts {
+                            for d in &mut t.verified_dealings {
+                                d.signed_dealing_tuple = None;
+                            }
+                        }
+                    }
                 }
 
                 let data_payload = block_proposal.content.as_ref().payload.as_ref().as_data();
+
+                let transcripts = data_payload
+                    .idkg
+                    .as_ref()
+                    .map(|idkg| idkg.idkg_transcripts.clone())
+                    .unwrap_or_default();
+                let stripped_dealings = transcripts
+                    .into_iter()
+                    .flat_map(|(_id, transcript)| {
+                        transcript
+                            .verified_dealings
+                            .iter()
+                            .map(|(dealer_index, signed_dealing)| {
+                                (dealer_index.clone(), signed_dealing.content.message_id())
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+
                 let stripped_ingress_payload = data_payload.batch.ingress.strip();
 
                 MaybeStrippedConsensusMessage::StrippedBlockProposal(StrippedBlockProposal {
                     block_proposal_without_ingresses_proto: proto,
                     stripped_ingress_payload,
                     unstripped_consensus_message_id,
+                    stripped_dealings: StrippedIDkgDealings { stripped_dealings },
                 })
             }
             msg => MaybeStrippedConsensusMessage::Unstripped(msg),
