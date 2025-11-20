@@ -58,6 +58,7 @@ jobs:
     with:
       commit-sha: ${{ inputs.commit-sha }}
       base-ref: ${{ needs.get-pr-base-ref.outputs.base-ref }}
+      pr-number: ${{ inputs.pr-number }}
     permissions:
       contents: read
       pull-requests: write
