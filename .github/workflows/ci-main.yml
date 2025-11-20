@@ -75,6 +75,7 @@ jobs:
           if [[ "${is_protected_branch:-}" == "true" && '${{ github.event_name }}' != 'workflow_dispatch' ]]; then
               # if we are on a "protected" branch, targeting an rc branch or master we
               # upload all artifacts and run a release build (with versioning)
+              # but don't set this if it has been kicked off manually, because that is for external contribution PRs
               release_build="true"
               diff_only="false"
               skip_long_tests="false"
