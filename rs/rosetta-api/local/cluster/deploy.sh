@@ -186,19 +186,6 @@ port_forward() {
     }
 }
 
-# Install or upgrade Prometheus
-helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q prometheus || {
-    echo "Installing Prometheus..."
-    helm install prometheus prometheus-community/prometheus --namespace monitoring --create-namespace --kube-context="$MINIKUBE_PROFILE" --values prometheus_values.yaml
-}
-
-# Wait for Prometheus server to be ready
-echo "Waiting for Prometheus server to be ready..."
-wait_for_ready pod app.kubernetes.io/instance=prometheus monitoring 300
-
-# Forward Prometheus port if not already forwarded
-port_forward monitoring prometheus-server 9090:80
-
 # Install or upgrade cAdvisor
 helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q cadvisor || {
     echo "Installing cAdvisor..."
@@ -209,11 +196,26 @@ helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q cadvisor ||
 echo "Waiting for cAdvisor server to be ready..."
 wait_for_ready pod app.kubernetes.io/name=cadvisor monitoring 300
 
-# Install or upgrade kube-prometheus
+# Install or upgrade kube-prometheus-stack (includes Prometheus, Grafana, Alertmanager, Node Exporter, etc.)
 helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q kube-prometheus || {
-    echo "Installing kube-prometheus..."
-    helm install kube-prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --kube-context="$MINIKUBE_PROFILE"
+    echo "Installing kube-prometheus-stack..."
+    helm install kube-prometheus prometheus-community/kube-prometheus-stack \
+        --namespace monitoring \
+        --create-namespace \
+        --values kube-prometheus-values.yaml \
+        --kube-context="$MINIKUBE_PROFILE"
 }
+
+# Wait for kube-prometheus-stack operator to be ready first
+echo "Waiting for kube-prometheus-stack operator to be ready..."
+wait_for_ready pod app=kube-prometheus-stack-operator monitoring 300
+
+# Wait for Prometheus to be ready
+echo "Waiting for Prometheus to be ready..."
+wait_for_ready pod app.kubernetes.io/name=prometheus monitoring 300
+
+# Forward Prometheus port if not already forwarded
+port_forward monitoring kube-prometheus-kube-prome-prometheus 9090:9090
 
 # Function to load a local TAR if provided
 load_local_tar() {
@@ -247,10 +249,10 @@ helm upgrade --install local-rosetta . \
 
 # Wait for Grafana server to be ready
 echo "Waiting for Grafana server to be ready..."
-wait_for_ready pod app=grafana monitoring 300
+wait_for_ready pod app.kubernetes.io/name=grafana monitoring 300
 
 # Forward Grafana port if not already forwarded
-port_forward monitoring grafana 3000:80
+port_forward monitoring kube-prometheus-grafana 3000:80
 
 # Function to check if a service exists and print its URL
 print_service_url() {
