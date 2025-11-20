@@ -801,7 +801,7 @@ impl PocketIc {
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
-    pub async fn make_live_with_params(
+    pub fn make_live_with_params(
         &mut self,
         ip_addr: Option<IpAddr>,
         listen_at: Option<u16>,
@@ -1447,6 +1447,25 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .mock_canister_http_response(mock_canister_http_response)
+                .await
+        })
+    }
+
+    /// Download a canister snapshot to a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// The snapshot directory must be empty if it exists.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn canister_snapshot_download(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        snapshot_id: Vec<u8>,
+        snapshot_dir: PathBuf,
+    ) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .canister_snapshot_download(canister_id, sender, snapshot_id, snapshot_dir)
                 .await
         })
     }
