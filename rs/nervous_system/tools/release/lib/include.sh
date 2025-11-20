@@ -2,7 +2,7 @@
 
 # Set a few useful variables
 LIB_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/" &>/dev/null && pwd)
-NNS_TOOLS_DIR=$LIB_DIR/..
+
 # Needed because otherwise we get conflicts between two users running scripts on same machine (tmp directory is shared)
 MY_DOWNLOAD_DIR="/tmp/$(whoami)_nns_tools_tmp"
 mkdir -p $MY_DOWNLOAD_DIR
@@ -17,8 +17,7 @@ __dfx() {
     HOME="${DFX_HOME:-$HOME}" dfx "${@}"
 }
 
-source "$NNS_TOOLS_DIR/../lib.sh"
-
+source "$LIB_DIR/lib.sh"
 source "$LIB_DIR/canister_wasms.sh"
 source "$LIB_DIR/canisters.sh"
 source "$LIB_DIR/constants.sh"

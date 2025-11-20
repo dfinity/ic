@@ -1027,6 +1027,7 @@ pub struct StateMachineBuilder {
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     log_level: Option<Level>,
     bitcoin_testnet_uds_path: Option<PathBuf>,
+    dogecoin_testnet_uds_path: Option<PathBuf>,
     remove_old_states: bool,
     /// If a registry version is provided, then new registry records are created for the `StateMachine`
     /// at the provided registry version.
@@ -1070,6 +1071,7 @@ impl StateMachineBuilder {
             with_extra_canister_range: None,
             log_level: Some(Level::Warning),
             bitcoin_testnet_uds_path: None,
+            dogecoin_testnet_uds_path: None,
             remove_old_states: true,
             create_at_registry_version: Some(INITIAL_REGISTRY_VERSION),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
@@ -1295,6 +1297,16 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_dogecoin_testnet_uds_path(
+        self,
+        dogecoin_testnet_uds_path: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            dogecoin_testnet_uds_path,
+            ..self
+        }
+    }
+
     pub fn with_remove_old_states(self, remove_old_states: bool) -> Self {
         Self {
             remove_old_states,
@@ -1400,6 +1412,7 @@ impl StateMachineBuilder {
     /// in the provided association of subnet IDs and `StateMachine`s.
     pub fn build_with_subnets(self, subnets: Arc<dyn Subnets>) -> Arc<StateMachine> {
         let bitcoin_testnet_uds_path = self.bitcoin_testnet_uds_path.clone();
+        let dogecoin_testnet_uds_path = self.dogecoin_testnet_uds_path.clone();
 
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
         let sm = Arc::new(self.build_internal());
@@ -1443,7 +1456,7 @@ impl StateMachineBuilder {
             bitcoin_testnet_uds_metrics_path: None,
             dogecoin_mainnet_uds_path: None,
             dogecoin_mainnet_uds_metrics_path: None,
-            dogecoin_testnet_uds_path: None,
+            dogecoin_testnet_uds_path,
             dogecoin_testnet_uds_metrics_path: None,
             https_outcalls_uds_path: None,
             https_outcalls_uds_metrics_path: None,
@@ -1459,8 +1472,8 @@ impl StateMachineBuilder {
             &sm.metrics_registry,
             bitcoin_clients.btc_mainnet_client,
             bitcoin_clients.btc_testnet_client,
-            bitcoin_clients.doge_testnet_client,
             bitcoin_clients.doge_mainnet_client,
+            bitcoin_clients.doge_testnet_client,
             sm.subnet_id,
             sm.registry_client.clone(),
             BitcoinPayloadBuilderConfig::default(),
@@ -2320,6 +2333,7 @@ impl StateMachine {
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone())))
             .unwrap()
+            .expect("The latest state should be certified")
             .map_err(SubmitIngressError::UserError)?;
 
         // All checks were successful at this point so we can push the ingress message to the ingress pool.
@@ -4107,6 +4121,9 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> Result<MessageId, UserError> {
+        // Make sure the latest state is certified for the ingress filter to work.
+        self.certify_latest_state();
+
         let msg = self.ingress_message(sender, canister_id, method, payload);
 
         // Fetch ingress validation settings from the registry.
@@ -4121,7 +4138,8 @@ impl StateMachine {
         let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone())))
-            .unwrap()?;
+            .unwrap()
+            .expect("The latest state should be certified")?;
 
         let msg_id = msg.content().id();
         let builder = PayloadBuilder::new().signed_ingress(msg);
@@ -4683,12 +4701,26 @@ pub fn certify_latest_state_helper(
     secret_key: &SecretKeyBytes,
     subnet_id: SubnetId,
 ) {
+    if state_manager.latest_state_height() == Height::from(0) {
+        let (height, replicated_state) = state_manager.take_tip();
+        state_manager.commit_and_certify(
+            replicated_state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
+    }
+    assert_ne!(state_manager.latest_state_height(), Height::from(0));
     if state_manager.latest_state_height() > state_manager.latest_certified_height() {
         let state_hashes = state_manager.list_state_hashes_to_certify();
         let (height, hash) = state_hashes.last().unwrap();
         state_manager
             .deliver_state_certification(certify_hash(secret_key, subnet_id, height, hash));
     }
+    assert_eq!(
+        state_manager.latest_certified_height(),
+        state_manager.latest_state_height()
+    );
 }
 
 fn certify_hash(

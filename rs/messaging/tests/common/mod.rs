@@ -38,7 +38,9 @@ pub enum CallStatus {
 
 impl TestSubnet {
     pub fn new(env: Arc<StateMachine>, canisters_count: u64) -> Self {
-        let wasm = Project::cargo_bin_maybe_from_env("messaging-test-canister", &[]).bytes();
+        let wasm = Project::new()
+            .cargo_bin_with_package(Some("messaging-test"), "messaging-test-canister", &[])
+            .bytes();
         for _ in 0..canisters_count {
             env.install_canister_with_cycles(
                 wasm.clone(),

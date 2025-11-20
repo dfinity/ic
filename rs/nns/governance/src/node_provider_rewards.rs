@@ -99,6 +99,7 @@ mod test {
             node_providers: vec![],
             start_date: None,
             end_date: None,
+            algorithm_version: None,
         };
 
         let rewards_2 = MonthlyNodeProviderRewards {
@@ -111,6 +112,7 @@ mod test {
             node_providers: vec![],
             start_date: None,
             end_date: None,
+            algorithm_version: None,
         };
 
         // Assert empty on start
