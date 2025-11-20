@@ -5,6 +5,7 @@ use ic_btc_interface::{MillisatoshiPerByte, Satoshi};
 use std::cmp::max;
 
 pub trait FeeEstimator {
+    /// Estimate the median fees based on the given fee percentiles (slice of fee rates in milli base unit per vbyte/byte).
     fn estimate_median_fee(
         &self,
         fee_percentiles: &[MillisatoshiPerByte],
