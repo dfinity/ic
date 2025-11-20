@@ -85,7 +85,7 @@ pub fn test_batching(env: TestEnv) {
             five_hours_nanos,
             btc_checker_id,
         )
-            .await;
+        .await;
 
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
@@ -165,7 +165,7 @@ pub fn test_batching(env: TestEnv) {
                 retrieve_amount,
                 destination_btc_address.to_string(),
             )
-                .await
+            .await
             {
                 block_indexes.push(block_index);
                 k += 1;
@@ -212,7 +212,7 @@ pub fn test_batching(env: TestEnv) {
             retrieve_amount,
             destination_btc_address.to_string(),
         )
-            .await;
+        .await;
 
         // Let's wait for the transaction to appear on the mempool
         let mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
@@ -266,7 +266,10 @@ pub fn test_batching(env: TestEnv) {
             .map(|entry| entry.amount.to_sat())
             .sum::<u64>();
 
-        let fee = minter_agent.estimate_withdrawal_fee(retrieve_amount).await.unwrap();
+        let fee = minter_agent
+            .estimate_withdrawal_fee(retrieve_amount)
+            .await
+            .unwrap();
 
         // We can check that the destination address has received all the bitcoin
         assert_eq!(

@@ -124,7 +124,7 @@ pub fn test_btc_checker(env: TestEnv) {
             BTC_MIN_CONFIRMATIONS * BTC_BLOCK_REWARD + BITCOIN_NETWORK_TRANSFER_FEE,
             &btc_address0,
         )
-            .await;
+        .await;
         let update_balance_tainted_result = minter_agent
             .update_balance(UpdateBalanceArgs {
                 owner: None,
@@ -135,7 +135,8 @@ pub fn test_btc_checker(env: TestEnv) {
             .expect("expected to have at a valid result");
         assert_eq!(update_balance_tainted_result.len(), 1);
 
-        if let UtxoStatus::Tainted(_) = &update_balance_tainted_result[0] {} else {
+        if let UtxoStatus::Tainted(_) = &update_balance_tainted_result[0] {
+        } else {
             panic!("expected the minter to see one tainted utxo");
         }
         assert_no_transaction(&ledger_agent, &logger).await;
@@ -150,7 +151,7 @@ pub fn test_btc_checker(env: TestEnv) {
             2 * BTC_MIN_CONFIRMATIONS * BTC_BLOCK_REWARD + 2 * BITCOIN_NETWORK_TRANSFER_FEE,
             &btc_address0,
         )
-            .await;
+        .await;
 
         stop_canister(&btc_checker_canister).await;
         let update_balance_checker_unavailable = minter_agent
@@ -195,7 +196,7 @@ pub fn test_btc_checker(env: TestEnv) {
                         &account1,
                         first_transfer_amount - CHECK_FEE,
                     )
-                        .await;
+                    .await;
                 }
                 _ => {
                     panic!("expected the minter to see one not tainted utxo");
@@ -212,7 +213,7 @@ pub fn test_btc_checker(env: TestEnv) {
             3 * BTC_MIN_CONFIRMATIONS * BTC_BLOCK_REWARD + 3 * BITCOIN_NETWORK_TRANSFER_FEE,
             &btc_address0,
         )
-            .await;
+        .await;
 
         let update_balance_new_utxos = minter_agent
             .update_balance(UpdateBalanceArgs {
@@ -224,7 +225,8 @@ pub fn test_btc_checker(env: TestEnv) {
             .expect("Expected to have at least one utxo result.");
         assert_eq!(update_balance_new_utxos.len(), 1);
 
-        if let UtxoStatus::Checked(_) = &update_balance_new_utxos[0] {} else {
+        if let UtxoStatus::Checked(_) = &update_balance_new_utxos[0] {
+        } else {
             panic!("Expected to have checked the utxos but not minted");
         }
 
@@ -246,7 +248,7 @@ pub fn test_btc_checker(env: TestEnv) {
                 &account1,
                 first_transfer_amount - CHECK_FEE,
             )
-                .await;
+            .await;
         } else {
             panic!("expected the minter to see one clean utxo");
         }
@@ -293,9 +295,9 @@ pub fn test_btc_checker(env: TestEnv) {
             .expect("Error while calling retrieve_btc");
 
         if let Err(RetrieveBtcError::GenericError {
-                       error_message,
-                       error_code,
-                   }) = retrieve_result
+            error_message,
+            error_code,
+        }) = retrieve_result
         {
             assert_eq!(error_code, 1);
             assert_eq!(error_message, "Destination address is tainted");
@@ -326,7 +328,10 @@ pub fn test_btc_checker(env: TestEnv) {
         let _mempool_txids = wait_for_mempool_change(&btc_rpc, &logger).await;
         generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address0);
         // We can compute the minter's fee
-        let fee = minter_agent.estimate_withdrawal_fee(retrieve_amount).await.unwrap();
+        let fee = minter_agent
+            .estimate_withdrawal_fee(retrieve_amount)
+            .await
+            .unwrap();
         // let minters_fee: u64 = ic_ckbtc_minter::evaluate_minter_fee(1, 2);
         // Use the following estimator : https://btc.network/estimate
         // 1 input and 2 outputs => 141 vbyte
@@ -339,7 +344,7 @@ pub fn test_btc_checker(env: TestEnv) {
             retrieve_amount - fee.minter_fee - bitcoin_network_fee,
             &btc_address2,
         )
-            .await;
+        .await;
 
         // Amount expected to be left on withdrawal_account
         let expected_change_amount = transfer_amount - retrieve_amount;

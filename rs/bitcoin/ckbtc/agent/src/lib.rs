@@ -111,7 +111,7 @@ impl CkBtcMinterAgent {
             "retrieve_btc_status",
             RetrieveBtcStatusRequest { block_index },
         )
-            .await
+        .await
     }
 
     pub async fn estimate_withdrawal_fee(
@@ -120,9 +120,11 @@ impl CkBtcMinterAgent {
     ) -> Result<WithdrawalFee, CkBtcMinterAgentError> {
         self.query(
             "estimate_withdrawal_fee",
-            EstimateFeeArg { amount: Some(amount) },
+            EstimateFeeArg {
+                amount: Some(amount),
+            },
         )
-            .await
+        .await
     }
 
     pub async fn distribute_kyt_fee(&self) -> Result<(), CkBtcMinterAgentError> {
@@ -148,7 +150,7 @@ impl CkBtcMinterAgent {
                 body: Default::default(),
             },
         )
-            .await
+        .await
     }
 
     pub async fn get_metrics_map(&self) -> BTreeMap<String, Metric> {
