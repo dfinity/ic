@@ -4146,6 +4146,9 @@ impl Operation for CallRequest {
         match subnet {
             Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
+                // Make sure the latest state is certified for the ingress filter to work.
+                subnet.certify_latest_state();
+
                 let node = &subnet.nodes[0];
                 let (s, mut r) = mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
                 let ingress_filter = subnet.ingress_filter.clone();

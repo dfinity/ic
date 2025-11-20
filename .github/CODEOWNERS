@@ -89,14 +89,6 @@ go_deps.bzl               @dfinity/idx
 /pre-commit/                                                             @dfinity/idx
 /.mergify.yaml                                                           @dfinity/idx
 
-# [Testnet]
-/testnet/                                                  @dfinity/node @dfinity/dre
-/testnet/ansible/                                          @dfinity/platform-operations
-/testnet/docs/                                             @dfinity/ic-support
-/testnet/env/                                              @dfinity/platform-operations
-/testnet/release/                                          @dfinity/dre
-/testnet/tools/nns-tools/                                  @dfinity/governance-team
-
 # [Rust]
 /rs/                                                    @dfinity/ic-interface-owners
 /rs/artifact_pool/                                      @dfinity/consensus

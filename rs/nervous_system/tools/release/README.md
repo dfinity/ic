@@ -144,7 +144,7 @@ mkdir $PROPOSALS_DIR
 # NNS:
 for CANISTER in "${NNS_CANISTERS[@]}"
 do
-    ./testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh \
+    ./rs/nervous_system/tools/release/prepare-nns-upgrade-proposal-text.sh \
         $CANISTER \
         $RC \
         > $PROPOSALS_DIR/nns-$CANISTER.md
@@ -153,7 +153,7 @@ done
 # SNS:
 for CANISTER in "${SNS_CANISTERS[@]}"
 do
-    ./testnet/tools/nns-tools/prepare-publish-sns-wasm-proposal-text.sh \
+    ./rs/nervous_system/tools/release/prepare-publish-sns-wasm-proposal-text.sh \
         $CANISTER \
         $RC \
         $PROPOSALS_DIR/sns-$CANISTER.md # no `>`
@@ -194,7 +194,7 @@ SUBMITTING_NEURON_ID=51
 # NNS:
 for CANISTER in "${NNS_CANISTERS[@]}"
 do
-    ./testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh \
+    ./rs/nervous_system/tools/release/submit-mainnet-nns-upgrade-proposal.sh \
         $PROPOSALS_DIR/nns-$CANISTER.md \
         $SUBMITTING_NEURON_ID
 done
@@ -202,7 +202,7 @@ done
 # SNS:
 for CANISTER in "${SNS_CANISTERS[@]}"
 do
-    ./testnet/tools/nns-tools/submit-mainnet-publish-sns-wasm-proposal.sh \
+    ./rs/nervous_system/tools/release/submit-mainnet-publish-sns-wasm-proposal.sh \
         $PROPOSALS_DIR/sns-$CANISTER.md \
         $SUBMITTING_NEURON_ID
 done
