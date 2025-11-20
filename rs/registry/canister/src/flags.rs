@@ -1,5 +1,7 @@
 use std::{
     cell::{Cell, RefCell},
+    collections::HashSet,
+    hash::Hash,
     str::FromStr,
 };
 
@@ -142,12 +144,12 @@ pub mod temporary_overrides {
     }
 
     pub fn test_set_swapping_whitelisted_callers(override_callers: Vec<PrincipalId>) {
-        let policy = WhitelistFeatureAccessPolicy::Only(override_callers);
+        let policy = WhitelistFeatureAccessPolicy::Only(override_callers.into_iter().collect());
         NODE_SWAPPING_CALLERS_POLICY.replace(policy);
     }
 
     pub fn test_set_swapping_enabled_subnets(override_subnets: Vec<SubnetId>) {
-        let policy = WhitelistFeatureAccessPolicy::Only(override_subnets);
+        let policy = WhitelistFeatureAccessPolicy::Only(override_subnets.into_iter().collect());
         NODE_SWAPPING_SUBNETS_POLICY.replace(policy);
     }
 }
@@ -164,15 +166,15 @@ pub(crate) fn is_node_swapping_enabled_for_caller(caller: PrincipalId) -> bool {
 #[allow(dead_code)]
 enum WhitelistFeatureAccessPolicy<T>
 where
-    T: Clone + Eq,
+    T: Clone + Eq + Hash,
 {
-    Only(Vec<T>),
+    Only(HashSet<T>),
     All,
 }
 
 impl<T> WhitelistFeatureAccessPolicy<T>
 where
-    T: Clone + Eq,
+    T: Clone + Eq + Hash,
 {
     fn is_allowed(&self, item: &T) -> bool {
         match &self {
@@ -184,9 +186,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use ic_types::PrincipalId;
-
-    use crate::flags::WhitelistFeatureAccessPolicy;
+    use super::*;
 
     #[test]
     fn test_whitelist_allow_all() {
@@ -198,7 +198,7 @@ mod tests {
 
     #[test]
     fn test_whitelist_deny_all() {
-        let policy = WhitelistFeatureAccessPolicy::Only(vec![]);
+        let policy = WhitelistFeatureAccessPolicy::Only(HashSet::new());
 
         assert!(!policy.is_allowed(&PrincipalId::new_user_test_id(1)));
         assert!(!policy.is_allowed(&PrincipalId::new_anonymous()));
@@ -207,8 +207,11 @@ mod tests {
     #[test]
     fn test_whitelist_allow_some() {
         let user_1 = PrincipalId::new_user_test_id(1);
-        let policy =
-            WhitelistFeatureAccessPolicy::Only(vec![user_1, PrincipalId::new_user_test_id(2)]);
+        let policy = WhitelistFeatureAccessPolicy::Only(
+            [user_1, PrincipalId::new_user_test_id(2)]
+                .into_iter()
+                .collect(),
+        );
 
         assert!(policy.is_allowed(&user_1));
         assert!(!policy.is_allowed(&PrincipalId::new_user_test_id(999)));
