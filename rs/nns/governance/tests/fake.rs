@@ -16,9 +16,10 @@ use ic_nns_constants::{
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
-        ExecuteNnsFunction, GovernanceError, ManageNeuron, Motion, NetworkEconomics, Proposal,
+        GovernanceError, ManageNeuron, Motion, NetworkEconomics, Proposal,
         Vote, manage_neuron, manage_neuron::NeuronIdOrSubaccount, proposal,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
 use ic_nns_governance_api::Neuron;
 use ic_nns_governance_api::{ManageNeuronResponse, manage_neuron_response};
@@ -472,7 +473,7 @@ impl Environment for FakeDriver {
     fn execute_nns_function(
         &self,
         _proposal_id: u64,
-        _update: &ExecuteNnsFunction,
+        _update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         Ok(())
         //panic!("unexpected call")

@@ -2,11 +2,12 @@ use crate::{
     governance::LOG_PREFIX,
     pb::v1::{
         AddOrRemoveNodeProvider, ApproveGenesisKyc, CreateServiceNervousSystem,
-        DeregisterKnownNeuron, ExecuteNnsFunction, FulfillSubnetRentalRequest, GovernanceError,
-        InstallCode, KnownNeuron, ManageNeuron, Motion, NetworkEconomics, ProposalData,
-        RewardNodeProvider, RewardNodeProviders, StopOrStartCanister, Topic,
-        UpdateCanisterSettings, Vote, governance_error::ErrorType, proposal::Action,
+        DeregisterKnownNeuron, FulfillSubnetRentalRequest, GovernanceError, InstallCode,
+        KnownNeuron, ManageNeuron, Motion, NetworkEconomics, ProposalData, RewardNodeProvider,
+        RewardNodeProviders, StopOrStartCanister, Topic, UpdateCanisterSettings, Vote,
+        governance_error::ErrorType, proposal::Action,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
 use ic_base_types::CanisterId;
 use ic_cdk::println;
@@ -17,6 +18,7 @@ use std::collections::HashMap;
 pub mod call_canister;
 pub mod create_service_nervous_system;
 pub mod deregister_known_neuron;
+pub mod execute_nns_function;
 pub mod fulfill_subnet_rental_request;
 pub mod install_code;
 pub mod register_known_neuron;
@@ -31,7 +33,7 @@ pub enum ValidProposalAction {
     ManageNeuron(Box<ManageNeuron>),
     ManageNetworkEconomics(NetworkEconomics),
     Motion(Motion),
-    ExecuteNnsFunction(ExecuteNnsFunction),
+    ExecuteNnsFunction(ValidExecuteNnsFunction),
     ApproveGenesisKyc(ApproveGenesisKyc),
     AddOrRemoveNodeProvider(AddOrRemoveNodeProvider),
     RewardNodeProvider(RewardNodeProvider),
@@ -58,9 +60,10 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
                 ValidProposalAction::ManageNetworkEconomics(network_economics),
             ),
             Action::Motion(motion) => Ok(ValidProposalAction::Motion(motion)),
-            Action::ExecuteNnsFunction(execute_nns_function) => Ok(
-                ValidProposalAction::ExecuteNnsFunction(execute_nns_function),
-            ),
+            Action::ExecuteNnsFunction(execute_nns_function) => {
+                ValidExecuteNnsFunction::try_from(execute_nns_function)
+                    .map(ValidProposalAction::ExecuteNnsFunction)
+            }
             Action::ApproveGenesisKyc(approve_genesis_kyc) => {
                 Ok(ValidProposalAction::ApproveGenesisKyc(approve_genesis_kyc))
             }
@@ -112,9 +115,9 @@ impl ValidProposalAction {
             ValidProposalAction::Motion(_)
             | ValidProposalAction::RegisterKnownNeuron(_)
             | ValidProposalAction::DeregisterKnownNeuron(_) => Topic::Governance,
-            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => execute_nns_function
-                .nns_function()
-                .compute_topic_at_creation()?,
+            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
+                execute_nns_function.compute_topic_at_creation()
+            }
             ValidProposalAction::ApproveGenesisKyc(_) => Topic::Kyc,
             ValidProposalAction::AddOrRemoveNodeProvider(_) => Topic::ParticipantManagement,
             ValidProposalAction::RewardNodeProvider(_)
@@ -136,9 +139,9 @@ impl ValidProposalAction {
     /// be submitted when the heap growth potential is low.
     pub fn allowed_when_resources_are_low(&self) -> bool {
         match self {
-            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => execute_nns_function
-                .nns_function()
-                .allowed_when_resources_are_low(),
+            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
+                execute_nns_function.allowed_when_resources_are_low()
+            }
             ValidProposalAction::InstallCode(install_code) => {
                 install_code.allowed_when_resources_are_low()
             }

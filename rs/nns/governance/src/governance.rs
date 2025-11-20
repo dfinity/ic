@@ -33,7 +33,7 @@ use crate::{
         proposal_conversions::{ProposalDisplayOptions, proposal_data_to_info},
         v1::{
             ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem,
-            ExecuteNnsFunction, Followees, FulfillSubnetRentalRequest,
+            Followees, FulfillSubnetRentalRequest,
             GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
             Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
             ListKnownNeuronsResponse, ManageNeuron, MonthlyNodeProviderRewards, Motion,
@@ -71,7 +71,12 @@ use crate::{
             swap_background_information,
         },
     },
-    proposals::{ValidProposalAction, call_canister::CallCanister, sum_weighted_voting_power},
+    proposals::{
+        ValidProposalAction,
+        call_canister::CallCanister,
+        execute_nns_function::{ValidExecuteNnsFunction, ValidNnsFunction},
+        sum_weighted_voting_power,
+    },
     storage::{VOTING_POWER_SNAPSHOTS, with_voting_history_store, with_voting_history_store_mut},
 };
 use async_trait::async_trait;
@@ -98,8 +103,7 @@ use ic_nervous_system_rate_limits::{
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
-    LIFELINE_CANISTER_ID, MIGRATION_CANISTER_ID, NODE_REWARDS_CANISTER_ID, REGISTRY_CANISTER_ID,
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SUBNET_RENTAL_CANISTER_ID,
+    NODE_REWARDS_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_nns_governance_api::{
     self as api, CreateServiceNervousSystem as ApiCreateServiceNervousSystem,
@@ -437,277 +441,6 @@ impl Command {
             Command::MakeProposal(_) => true,
             _ => false,
         }
-    }
-}
-
-impl NnsFunction {
-    /// Returns whether proposals where the action is such an NnsFunction should
-    /// be allowed to be submitted when the heap growth potential is low.
-    pub(crate) fn allowed_when_resources_are_low(&self) -> bool {
-        matches!(
-            self,
-            NnsFunction::HardResetNnsRootToVersion
-                | NnsFunction::ReviseElectedGuestosVersions
-                | NnsFunction::DeployGuestosToAllSubnetNodes
-        )
-    }
-
-    fn can_have_large_payload(&self) -> bool {
-        matches!(
-            self,
-            NnsFunction::NnsCanisterInstall
-                | NnsFunction::HardResetNnsRootToVersion
-                | NnsFunction::AddSnsWasm
-        )
-    }
-
-    /// Checks if the function is obsolete and returns an error message if it is.
-    fn check_obsolete(&self) -> Result<(), String> {
-        let format_obsolete_message = |replacement: &str| -> String {
-            format!(
-                "{} is obsolete. Use {} instead.",
-                self.as_str_name(),
-                replacement,
-            )
-        };
-        match self {
-            NnsFunction::BlessReplicaVersion
-            | NnsFunction::RetireReplicaVersion
-            | NnsFunction::UpdateElectedHostosVersions => Err(format_obsolete_message(
-                Self::ReviseElectedHostosVersions.as_str_name(),
-            )),
-            NnsFunction::UpdateApiBoundaryNodesVersion => Err(format_obsolete_message(
-                Self::DeployGuestosToSomeApiBoundaryNodes.as_str_name(),
-            )),
-            NnsFunction::UpdateNodesHostosVersion => Err(format_obsolete_message(
-                Self::DeployHostosToSomeNodes.as_str_name(),
-            )),
-            NnsFunction::UpdateUnassignedNodesConfig => Err(format_obsolete_message(&format!(
-                "{}/{}",
-                Self::DeployGuestosToAllUnassignedNodes.as_str_name(),
-                Self::UpdateSshReadonlyAccessForAllUnassignedNodes.as_str_name()
-            ))),
-            NnsFunction::NnsCanisterUpgrade | NnsFunction::NnsRootUpgrade => {
-                Err(format_obsolete_message("InstallCode"))
-            }
-            NnsFunction::StopOrStartNnsCanister => {
-                Err(format_obsolete_message("Action::StopOrStartCanister"))
-            }
-            NnsFunction::UpdateAllowedPrincipals => Err(
-                "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS is only used for the old SNS \
-                initialization mechanism, which is now obsolete. Use \
-                CREATE_SERVICE_NERVOUS_SYSTEM instead."
-                    .to_string(),
-            ),
-            NnsFunction::IcpXdrConversionRate => Err(
-                "NNS_FUNCTION_ICP_XDR_CONVERSION_RATE is obsolete as conversion rates \
-                are now provided by the exchange rate canister automatically."
-                    .to_string(),
-            ),
-            _ => Ok(()),
-        }
-    }
-
-    pub fn canister_and_function(&self) -> Result<(CanisterId, &str), GovernanceError> {
-        let (canister_id, method) = match self {
-            NnsFunction::Unspecified => {
-                return Err(GovernanceError::new(ErrorType::PreconditionFailed));
-            }
-            NnsFunction::AssignNoid => (REGISTRY_CANISTER_ID, "add_node_operator"),
-
-            NnsFunction::CreateSubnet => (REGISTRY_CANISTER_ID, "create_subnet"),
-            NnsFunction::AddNodeToSubnet => (REGISTRY_CANISTER_ID, "add_nodes_to_subnet"),
-            NnsFunction::RemoveNodesFromSubnet => {
-                (REGISTRY_CANISTER_ID, "remove_nodes_from_subnet")
-            }
-            NnsFunction::ChangeSubnetMembership => {
-                (REGISTRY_CANISTER_ID, "change_subnet_membership")
-            }
-            NnsFunction::NnsCanisterInstall => (ROOT_CANISTER_ID, "add_nns_canister"),
-            NnsFunction::HardResetNnsRootToVersion => {
-                (LIFELINE_CANISTER_ID, "hard_reset_root_to_version")
-            }
-            NnsFunction::RecoverSubnet => (REGISTRY_CANISTER_ID, "recover_subnet"),
-            NnsFunction::ReviseElectedGuestosVersions => {
-                (REGISTRY_CANISTER_ID, "revise_elected_guestos_versions")
-            }
-            NnsFunction::UpdateNodeOperatorConfig => {
-                (REGISTRY_CANISTER_ID, "update_node_operator_config")
-            }
-            NnsFunction::DeployGuestosToAllSubnetNodes => {
-                (REGISTRY_CANISTER_ID, "deploy_guestos_to_all_subnet_nodes")
-            }
-            NnsFunction::ReviseElectedHostosVersions => {
-                (REGISTRY_CANISTER_ID, "revise_elected_hostos_versions")
-            }
-            NnsFunction::DeployHostosToSomeNodes => {
-                (REGISTRY_CANISTER_ID, "deploy_hostos_to_some_nodes")
-            }
-            NnsFunction::UpdateConfigOfSubnet => (REGISTRY_CANISTER_ID, "update_subnet"),
-            NnsFunction::IcpXdrConversionRate => {
-                (CYCLES_MINTING_CANISTER_ID, "set_icp_xdr_conversion_rate")
-            }
-            NnsFunction::ClearProvisionalWhitelist => {
-                (REGISTRY_CANISTER_ID, "clear_provisional_whitelist")
-            }
-            NnsFunction::SetAuthorizedSubnetworks => {
-                (CYCLES_MINTING_CANISTER_ID, "set_authorized_subnetwork_list")
-            }
-            NnsFunction::SetFirewallConfig => (REGISTRY_CANISTER_ID, "set_firewall_config"),
-            NnsFunction::AddFirewallRules => (REGISTRY_CANISTER_ID, "add_firewall_rules"),
-            NnsFunction::RemoveFirewallRules => (REGISTRY_CANISTER_ID, "remove_firewall_rules"),
-            NnsFunction::UpdateFirewallRules => (REGISTRY_CANISTER_ID, "update_firewall_rules"),
-            NnsFunction::RemoveNodes => (REGISTRY_CANISTER_ID, "remove_nodes"),
-            NnsFunction::UninstallCode => (CanisterId::ic_00(), "uninstall_code"),
-            NnsFunction::UpdateNodeRewardsTable => {
-                (REGISTRY_CANISTER_ID, "update_node_rewards_table")
-            }
-            NnsFunction::AddOrRemoveDataCenters => {
-                (REGISTRY_CANISTER_ID, "add_or_remove_data_centers")
-            }
-            NnsFunction::RemoveNodeOperators => (REGISTRY_CANISTER_ID, "remove_node_operators"),
-            NnsFunction::RerouteCanisterRanges => (REGISTRY_CANISTER_ID, "reroute_canister_ranges"),
-            NnsFunction::PrepareCanisterMigration => {
-                (REGISTRY_CANISTER_ID, "prepare_canister_migration")
-            }
-            NnsFunction::CompleteCanisterMigration => {
-                (REGISTRY_CANISTER_ID, "complete_canister_migration")
-            }
-            NnsFunction::AddSnsWasm => (SNS_WASM_CANISTER_ID, "add_wasm"),
-            NnsFunction::UpdateSubnetType => (CYCLES_MINTING_CANISTER_ID, "update_subnet_type"),
-            NnsFunction::ChangeSubnetTypeAssignment => {
-                (CYCLES_MINTING_CANISTER_ID, "change_subnet_type_assignment")
-            }
-            NnsFunction::UpdateSnsWasmSnsSubnetIds => {
-                (SNS_WASM_CANISTER_ID, "update_sns_subnet_list")
-            }
-            NnsFunction::InsertSnsWasmUpgradePathEntries => {
-                (SNS_WASM_CANISTER_ID, "insert_upgrade_path_entries")
-            }
-            NnsFunction::BitcoinSetConfig => (ROOT_CANISTER_ID, "call_canister"),
-            NnsFunction::AddApiBoundaryNodes => (REGISTRY_CANISTER_ID, "add_api_boundary_nodes"),
-            NnsFunction::RemoveApiBoundaryNodes => {
-                (REGISTRY_CANISTER_ID, "remove_api_boundary_nodes")
-            }
-            NnsFunction::DeployGuestosToSomeApiBoundaryNodes => (
-                REGISTRY_CANISTER_ID,
-                "deploy_guestos_to_some_api_boundary_nodes",
-            ),
-            NnsFunction::DeployGuestosToAllUnassignedNodes => (
-                REGISTRY_CANISTER_ID,
-                "deploy_guestos_to_all_unassigned_nodes",
-            ),
-            NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => (
-                REGISTRY_CANISTER_ID,
-                "update_ssh_readonly_access_for_all_unassigned_nodes",
-            ),
-            NnsFunction::SubnetRentalRequest => {
-                (SUBNET_RENTAL_CANISTER_ID, "execute_rental_request_proposal")
-            }
-            NnsFunction::PauseCanisterMigrations => (MIGRATION_CANISTER_ID, "disable_api"),
-            NnsFunction::UnpauseCanisterMigrations => (MIGRATION_CANISTER_ID, "enable_api"),
-            NnsFunction::SetSubnetOperationalLevel => {
-                (REGISTRY_CANISTER_ID, "set_subnet_operational_level")
-            }
-            NnsFunction::BlessReplicaVersion
-            | NnsFunction::RetireReplicaVersion
-            | NnsFunction::UpdateElectedHostosVersions
-            | NnsFunction::UpdateAllowedPrincipals
-            | NnsFunction::UpdateApiBoundaryNodesVersion
-            | NnsFunction::UpdateUnassignedNodesConfig
-            | NnsFunction::UpdateNodesHostosVersion
-            | NnsFunction::NnsCanisterUpgrade
-            | NnsFunction::NnsRootUpgrade
-            | NnsFunction::StopOrStartNnsCanister => {
-                let error_message = match self.check_obsolete() {
-                    Err(error_message) => error_message,
-                    Ok(_) => unreachable!("Obsolete NnsFunction not handled"),
-                };
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    error_message,
-                ));
-            }
-        };
-        Ok((canister_id, method))
-    }
-
-    pub(crate) fn compute_topic_at_creation(&self) -> Result<Topic, GovernanceError> {
-        let topic = match self {
-            NnsFunction::Unspecified => {
-                println!("{}ERROR: NnsFunction::Unspecified", LOG_PREFIX);
-                return Err(GovernanceError::new_with_message(
-                    ErrorType::InvalidProposal,
-                    "NnsFunction::Unspecified",
-                ));
-            }
-            NnsFunction::BlessReplicaVersion
-            | NnsFunction::RetireReplicaVersion
-            | NnsFunction::UpdateElectedHostosVersions
-            | NnsFunction::UpdateApiBoundaryNodesVersion
-            | NnsFunction::UpdateNodesHostosVersion
-            | NnsFunction::UpdateUnassignedNodesConfig
-            | NnsFunction::NnsCanisterUpgrade
-            | NnsFunction::NnsRootUpgrade
-            | NnsFunction::UpdateAllowedPrincipals
-            | NnsFunction::IcpXdrConversionRate
-            | NnsFunction::StopOrStartNnsCanister => match self.check_obsolete() {
-                Ok(_) => unreachable!("Obsolete NnsFunction not handled"),
-                Err(error_message) => {
-                    return Err(GovernanceError::new_with_message(
-                        ErrorType::InvalidProposal,
-                        error_message,
-                    ));
-                }
-            },
-            NnsFunction::AssignNoid
-            | NnsFunction::UpdateNodeOperatorConfig
-            | NnsFunction::RemoveNodeOperators
-            | NnsFunction::RemoveNodes
-            | NnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => Topic::NodeAdmin,
-            NnsFunction::CreateSubnet
-            | NnsFunction::AddNodeToSubnet
-            | NnsFunction::RecoverSubnet
-            | NnsFunction::RemoveNodesFromSubnet
-            | NnsFunction::ChangeSubnetMembership
-            | NnsFunction::UpdateConfigOfSubnet
-            | NnsFunction::SetSubnetOperationalLevel => Topic::SubnetManagement,
-            NnsFunction::ReviseElectedGuestosVersions
-            | NnsFunction::ReviseElectedHostosVersions => Topic::IcOsVersionElection,
-            NnsFunction::DeployHostosToSomeNodes
-            | NnsFunction::DeployGuestosToAllSubnetNodes
-            | NnsFunction::DeployGuestosToSomeApiBoundaryNodes
-            | NnsFunction::DeployGuestosToAllUnassignedNodes => Topic::IcOsVersionDeployment,
-            NnsFunction::ClearProvisionalWhitelist => Topic::NetworkEconomics,
-            NnsFunction::SetAuthorizedSubnetworks => Topic::SubnetManagement,
-            NnsFunction::SetFirewallConfig => Topic::SubnetManagement,
-            NnsFunction::AddFirewallRules => Topic::SubnetManagement,
-            NnsFunction::RemoveFirewallRules => Topic::SubnetManagement,
-            NnsFunction::UpdateFirewallRules => Topic::SubnetManagement,
-            NnsFunction::UninstallCode => Topic::Governance,
-            NnsFunction::UpdateNodeRewardsTable => Topic::NetworkEconomics,
-            NnsFunction::AddOrRemoveDataCenters => Topic::ParticipantManagement,
-            NnsFunction::RerouteCanisterRanges => Topic::SubnetManagement,
-            NnsFunction::PrepareCanisterMigration => Topic::SubnetManagement,
-            NnsFunction::CompleteCanisterMigration => Topic::SubnetManagement,
-            NnsFunction::UpdateSubnetType => Topic::SubnetManagement,
-            NnsFunction::ChangeSubnetTypeAssignment => Topic::SubnetManagement,
-            NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
-            NnsFunction::AddApiBoundaryNodes | NnsFunction::RemoveApiBoundaryNodes => {
-                Topic::ApiBoundaryNodeManagement
-            }
-            NnsFunction::SubnetRentalRequest => Topic::SubnetRental,
-            NnsFunction::NnsCanisterInstall
-            | NnsFunction::HardResetNnsRootToVersion
-            | NnsFunction::BitcoinSetConfig => Topic::ProtocolCanisterManagement,
-            NnsFunction::AddSnsWasm | NnsFunction::InsertSnsWasmUpgradePathEntries => {
-                Topic::ServiceNervousSystemManagement
-            }
-            NnsFunction::PauseCanisterMigrations | NnsFunction::UnpauseCanisterMigrations => {
-                Topic::ProtocolCanisterManagement
-            }
-        };
-        Ok(topic)
     }
 }
 
@@ -1286,7 +1019,7 @@ pub trait Environment: Send + Sync {
         panic!("Not implemented.");
     }
 
-    /// Executes a `ExecuteNnsFunction`. The standard implementation is
+    /// Executes a `ValidExecuteNnsFunction`. The standard implementation is
     /// expected to call out to another canister and eventually report the
     /// result back
     ///
@@ -1294,7 +1027,7 @@ pub trait Environment: Send + Sync {
     fn execute_nns_function(
         &self,
         proposal_id: u64,
-        update: &ExecuteNnsFunction,
+        update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError>;
 
     /// Returns rough information as to how much the heap can grow.
@@ -5095,28 +4828,14 @@ impl Governance {
 
     fn validate_execute_nns_function(
         &self,
-        update: &ExecuteNnsFunction,
+        update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
-        let nns_function = NnsFunction::try_from(update.nns_function).map_err(|_| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                format!("Invalid NnsFunction id: {}", update.nns_function),
-            )
-        })?;
-
         let invalid_proposal_error = |error_message: String| -> GovernanceError {
             GovernanceError::new_with_message(ErrorType::InvalidProposal, error_message)
         };
 
-        nns_function
-            .check_obsolete()
-            .map_err(|obsolete_error_message| {
-                invalid_proposal_error(format!(
-                    "Proposal is obsolete because {obsolete_error_message}",
-                ))
-            })?;
-
-        if !nns_function.can_have_large_payload()
+        // Check payload size limits
+        if !update.can_have_large_payload()
             && update.payload.len() > PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX
         {
             return Err(invalid_proposal_error(format!(
@@ -5126,16 +4845,17 @@ impl Governance {
             )));
         }
 
-        match nns_function {
-            NnsFunction::SubnetRentalRequest => {
+        // Validate specific payloads based on the nns_function type
+        match update.nns_function {
+            ValidNnsFunction::SubnetRentalRequest => {
                 self.validate_subnet_rental_proposal(&update.payload)
                     .map_err(invalid_proposal_error)?;
             }
-            NnsFunction::AssignNoid => {
+            ValidNnsFunction::AssignNoid => {
                 Self::validate_assign_noid_payload(&update.payload, &self.heap_data.node_providers)
                     .map_err(invalid_proposal_error)?;
             }
-            NnsFunction::AddOrRemoveDataCenters => {
+            ValidNnsFunction::AddOrRemoveDataCenters => {
                 Self::validate_add_or_remove_data_centers_payload(&update.payload)
                     .map_err(invalid_proposal_error)?;
             }
