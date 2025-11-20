@@ -125,6 +125,8 @@ use ic_sns_wasm::pb::v1::{
     DeployNewSnsRequest, DeployNewSnsResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
 };
 use ic_stable_structures::{Storable, storable::Bound};
+use ic_types::Time;
+use ic_types::time::current_time;
 use icp_ledger::{AccountIdentifier, Subaccount, TOKEN_SUBDIVIDABLE_BY, Tokens};
 use itertools::Itertools;
 use maplit::hashmap;
@@ -4297,7 +4299,9 @@ impl Governance {
         }
 
         let monthly_node_provider_rewards = if are_performance_based_rewards_enabled() {
-            self.get_node_providers_rewards().await?
+            let res = self.get_node_providers_rewards().await;
+            ic_cdk::println!("result automatic distribution: {:?}", res);
+            res?
         } else {
             self.get_monthly_node_provider_rewards().await?
         };
@@ -4363,26 +4367,29 @@ impl Governance {
         }
     }
 
-    fn next_start_date_node_providers_rewards(&self) -> Result<DateUtc, GovernanceError> {
-        let latest_node_provider_rewards = self
-            .get_most_recent_monthly_node_provider_rewards()
-            .ok_or(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "No rewards found for the last month.",
-            ))?;
+    fn next_start_date_node_providers_rewards(&self) -> DateUtc {
+        let rewards_option = self.get_most_recent_monthly_node_provider_rewards();
 
-        if let Some(end_date) = latest_node_provider_rewards.end_date {
-            let naive_date =
-                NaiveDate::from_ymd(end_date.year as i32, end_date.month, end_date.day);
-            let next_start_date = DateUtc::from(naive_date.succ());
+        rewards_option
+            .map(|rewards| {
+                rewards
+                    .end_date
+                    .map(|end_date| {
+                        // If end_date is present, calculate the day after it.
 
-            Ok(next_start_date)
-        } else {
-            let next_start_date =
-                DateUtc::from_unix_timestamp_seconds(latest_node_provider_rewards.timestamp);
-
-            Ok(next_start_date)
-        }
+                        let naive_date =
+                            NaiveDate::from_ymd(end_date.year as i32, end_date.month, end_date.day);
+                        DateUtc::from(naive_date.succ())
+                    })
+                    .unwrap_or_else(|| DateUtc::from_unix_timestamp_seconds(rewards.timestamp))
+            })
+            .unwrap_or_else(|| {
+                let default_timestamp_seconds =
+                    Time::from_nanos_since_unix_epoch(ic_cdk::api::time())
+                        .as_secs_since_unix_epoch()
+                        .saturating_sub(NODE_PROVIDER_REWARD_PERIOD_SECONDS);
+                DateUtc::from_unix_timestamp_seconds(default_timestamp_seconds)
+            })
     }
 
     async fn perform_action(&mut self, pid: u64, action: Action) {
@@ -7955,7 +7962,7 @@ impl Governance {
     ) -> Result<MonthlyNodeProviderRewards, GovernanceError> {
         let mut rewards = vec![];
 
-        let start_date = self.next_start_date_node_providers_rewards()?;
+        let start_date = self.next_start_date_node_providers_rewards();
         let now = self.env.now();
 
         // Today we have collected up to and included node metrics of yesterday

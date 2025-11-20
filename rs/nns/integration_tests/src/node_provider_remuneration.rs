@@ -87,18 +87,12 @@ fn test_list_node_provider_rewards() {
         .with_nns_subnet_id(subnet_test_id(TEST_ID))
         .with_subnet_id(subnet_test_id(TEST_ID))
         .build();
+    let subnet = subnet_test_id(TEST_ID);
 
-    let mut governance_init_payload = GovernanceCanisterInitPayloadBuilder::new();
-    governance_init_payload
-        .proto
-        .most_recent_monthly_node_provider_rewards = Some(MonthlyNodeProviderRewards {
-        timestamp: current_time().as_secs_since_unix_epoch(),
-        ..Default::default()
-    });
+    ic_cdk::println!("Subnet ID: {:?}", subnet.get().0);
 
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
-        .with_governance_init_payload(governance_init_payload)
         .with_test_neurons()
         .build();
     setup_nns_canisters_with_features(&state_machine, nns_init_payload, &[]);
@@ -149,17 +143,18 @@ fn test_list_node_provider_rewards() {
         )
         .map(|result| Decode!(&result.bytes(), NodeId).unwrap())
         .unwrap();
+    ic_cdk::println!("NodeId constructed: {:?}", node_id.get());
 
     // Set the average conversion rate
     set_average_icp_xdr_conversion_rate(&state_machine, 155_000);
 
+    ic_cdk::println!("FINISHED SETUP, ADVANCING TIME TO TRIGGER REWARDS");
     for _ in 0..30 {
         let blockmaker_metrics = BlockmakerMetrics {
             blockmaker: node_id,
             failed_blockmakers: vec![],
         };
-        let payload = PayloadBuilder::default().with_blockmaker_metrics(blockmaker_metrics);
-        state_machine.tick_with_config(payload);
+        state_machine.execute_round_with_blockmaker_metrics(blockmaker_metrics);
         state_machine.advance_time(Duration::from_secs(60 * 60 * 24));
     }
 
