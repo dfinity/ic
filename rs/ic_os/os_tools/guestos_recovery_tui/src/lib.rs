@@ -27,6 +27,9 @@ const HASH_LENGTH: usize = 64; // SHA256 hash length (hex characters)
 const MAX_ERROR_LINES: usize = 30; // Maximum number of error lines to display
 const PROCESS_POLL_INTERVAL_MS: u64 = 100; // Polling interval for process monitoring
 
+// Script paths
+const RECOVERY_UPGRADER_SCRIPT: &str = "/opt/ic/bin/guestos-recovery-upgrader.sh";
+
 // ============================================================================
 // Terminal Management
 // ============================================================================
@@ -85,7 +88,7 @@ impl Drop for TerminalGuard {
 fn build_upgrader_command(params: &RecoveryParams) -> Command {
     let mut cmd = Command::new("sudo");
     cmd.arg("-n")
-        .arg("/opt/ic/bin/guestos-recovery-upgrader.sh")
+        .arg(RECOVERY_UPGRADER_SCRIPT)
         .arg(format!("version={}", params.version))
         .arg(format!("version-hash={}", params.version_hash))
         .arg(format!("recovery-hash={}", params.recovery_hash));
