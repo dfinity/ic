@@ -444,7 +444,7 @@ impl MessageRoutingMetrics {
             ),
             blocks_not_proposed_total: metrics_registry.int_counter_vec(
                 BLOCKS_NOT_PROPOSED_TOTAL,
-                "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S < R).",
+                "Failures to propose a block (when the node was block maker rank R but the subnet accepted the block from the block maker with rank S > R).",
                 &["blockmaker_id"],
             ),
             canisters_memory_usage_bytes: metrics_registry.int_gauge(
