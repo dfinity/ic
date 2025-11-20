@@ -59,13 +59,11 @@ fn render_terminal_too_small_error(f: &mut Frame, size: Rect) -> bool {
         )),
         Line::from("Please resize your terminal"),
     ];
-    render_text_block(
-        f,
-        error_text,
-        create_block("Error", false, true),
-        size,
-        Alignment::Center,
-    );
+    let para = Paragraph::new(error_text)
+        .block(create_block("Error", false, true))
+        .alignment(Alignment::Center)
+        .wrap(Wrap { trim: true });
+    f.render_widget(para, size);
     true
 }
 
@@ -289,7 +287,11 @@ pub(crate) fn draw_logs_screen(
         )));
     }
 
-    render_text_block(f, text, block, size, Alignment::Left);
+    let para = Paragraph::new(text)
+        .block(block)
+        .alignment(Alignment::Left)
+        .wrap(Wrap { trim: true });
+    f.render_widget(para, size);
 }
 
 /// Builds the text content for the failure completion screen
@@ -301,6 +303,9 @@ fn build_failure_text<'a>(
     size: Rect,
 ) -> Vec<Line<'a>> {
     let mut text = Vec::new();
+    let create_separator =
+        || "─".repeat((size.width.saturating_sub(TEXT_PADDING)).max(10) as usize);
+
     text.push(Line::from(""));
     text.push(
         Line::from(format!("✗ Recovery failed with exit code: {:?}", exit_code))
@@ -308,7 +313,7 @@ fn build_failure_text<'a>(
             .bold(),
     );
     text.push(Line::from(""));
-    let separator = create_separator(size.width);
+    let separator = create_separator();
     text.push(Line::from(vec![Span::styled(
         separator,
         Style::default().fg(Color::DarkGray),
@@ -323,7 +328,7 @@ fn build_failure_text<'a>(
     text.extend(create_parameter_lines(params));
     text.push(Line::from(""));
     text.push(Line::from(vec![Span::styled(
-        create_separator(size.width),
+        create_separator(),
         Style::default().fg(Color::DarkGray),
     )]));
     text.push(Line::from(""));
@@ -374,7 +379,11 @@ pub(crate) fn draw_failure_screen(
     text.push(Line::from(""));
     text.push(Line::from("Press any key to continue..."));
 
-    render_text_block(f, text, block, size, Alignment::Left);
+    let para = Paragraph::new(text)
+        .block(block)
+        .alignment(Alignment::Left)
+        .wrap(Wrap { trim: true });
+    f.render_widget(para, size);
 }
 
 // ============================================================================
@@ -422,10 +431,6 @@ fn format_log_lines(lines: &[String], max_width: usize) -> Vec<Line> {
         .collect()
 }
 
-fn create_separator(width: u16) -> String {
-    "─".repeat((width.saturating_sub(TEXT_PADDING)).max(10) as usize)
-}
-
 /// Unified helper to create consistent UI blocks
 fn create_block<'a>(title: &'a str, active: bool, is_error: bool) -> Block<'a> {
     let mut block = Block::default().borders(Borders::ALL);
@@ -443,19 +448,4 @@ fn create_block<'a>(title: &'a str, active: bool, is_error: bool) -> Block<'a> {
             .title(Span::styled(title, Style::default().bold().fg(Color::Cyan)));
     }
     block
-}
-
-/// Renders a text block (paragraph) with a block border, alignment, and text wrapping.
-fn render_text_block(
-    f: &mut Frame,
-    text: Vec<Line>,
-    block: Block,
-    area: Rect,
-    alignment: Alignment,
-) {
-    let para = Paragraph::new(text)
-        .block(block)
-        .alignment(alignment)
-        .wrap(Wrap { trim: true });
-    f.render_widget(para, area);
 }
