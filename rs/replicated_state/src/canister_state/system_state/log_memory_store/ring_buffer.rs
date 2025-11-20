@@ -86,7 +86,7 @@ impl RingBuffer {
     }
 
     pub fn append_log(&mut self, records: Vec<CanisterLogRecord>) {
-        let mut index = self.io.load_index_table();
+        let mut index_table = self.io.load_index_table();
         for r in records {
             let record = LogRecord::from(r);
 
@@ -125,10 +125,10 @@ impl RingBuffer {
             self.io.save_header(&h);
 
             // Update the index table with the latest record position.
-            index.update(position, &record);
+            index_table.update(position, &record);
         }
         // It's fine to save the index table only once after saving all the records.
-        self.io.save_index_table(&index);
+        self.io.save_index_table(&index_table);
     }
 
     fn pop_front(&mut self) -> Option<CanisterLogRecord> {
