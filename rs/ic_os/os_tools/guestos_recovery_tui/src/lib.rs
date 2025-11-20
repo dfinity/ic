@@ -581,66 +581,62 @@ fn print_prominent_success_message(message: &str) {
 /// Displays a status screen and runs the recovery upgrader script with the given parameters.
 /// Shows real-time logs and a completion screen with results.
 pub fn show_status_and_run_upgrader(params: &RecoveryParams) -> Result<()> {
-    let terminal = setup_terminal()?;
-    let mut terminal_guard = TerminalGuard::new(terminal);
-
-    terminal_guard
-        .get_mut()
-        .draw(|f| ui::draw_status_screen(f, params))?;
-
     if params.version.is_empty() || params.version_hash.is_empty() {
         anyhow::bail!("Invalid parameters: version and version-hash must be non-empty");
     }
 
-    let mut cmd = build_upgrader_command(params);
-    cmd.stdout(Stdio::piped());
-    // Explicitly discard stderr - dd's status=progress output to stderr would clutter the display
-    cmd.stderr(Stdio::null());
+    let status = {
+        let terminal = setup_terminal()?;
+        let mut terminal_guard = TerminalGuard::new(terminal);
 
-    let mut child = cmd.spawn().context("Failed to spawn recovery upgrader")?;
+        terminal_guard
+            .get_mut()
+            .draw(|f| ui::draw_status_screen(f, params))?;
 
-    let log_lines = Arc::new(Mutex::new(Vec::<String>::new()));
+        let mut cmd = build_upgrader_command(params);
+        cmd.stdout(Stdio::piped());
+        // Explicitly discard stderr - dd's status=progress output to stderr would clutter the display
+        cmd.stderr(Stdio::null());
 
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| anyhow::anyhow!("Failed to get stdout handle"))?;
+        let mut child = cmd.spawn().context("Failed to spawn recovery upgrader")?;
 
-    let stdout_handle = spawn_log_reader_thread(stdout, Arc::clone(&log_lines));
+        let log_lines = Arc::new(Mutex::new(Vec::<String>::new()));
 
-    let (status, all_logs) =
-        monitor_process_with_logs(child, stdout_handle, log_lines, &mut terminal_guard, params)?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get stdout handle"))?;
+
+        let stdout_handle = spawn_log_reader_thread(stdout, Arc::clone(&log_lines));
+
+        let (status, all_logs) = monitor_process_with_logs(
+            child,
+            stdout_handle,
+            log_lines,
+            &mut terminal_guard,
+            params,
+        )?;
+
+        if !status.success() {
+            let error_messages = extract_errors_from_logs(&all_logs);
+
+            // For failure: show completion screen and wait for user to press any key
+            terminal_guard.get_mut().draw(|f| {
+                ui::draw_failure_screen(f, status.code(), &all_logs, &error_messages, params);
+            })?;
+
+            // Wait for user to press any key before exiting
+            if let Event::Key(_) = event::read()? {}
+        }
+
+        status
+    }; // terminal_guard is dropped here, safely restoring the terminal
 
     if status.success() {
-        // For success: immediately exit TUI and print prominent success message.
-        // Exiting TUI immediately prevents guestos service logs from cluttering the TUI screen.
-        let mut terminal = terminal_guard
-            .terminal
-            .take()
-            .expect("TerminalGuard: terminal was already taken.");
-        teardown_terminal(&mut terminal)?;
-
+        // Print success message after terminal is teared down
         print_prominent_success_message("Recovery completed successfully!");
-
         Ok(())
     } else {
-        let error_messages = extract_errors_from_logs(&all_logs);
-
-        // For failure: show completion screen and wait for user to press any key
-        terminal_guard.get_mut().draw(|f| {
-            ui::draw_failure_screen(f, status.code(), &all_logs, &error_messages, params);
-        })?;
-
-        // Wait for user to press any key before exiting
-        if let Event::Key(_) = event::read()? {}
-
-        let mut terminal = terminal_guard
-            .terminal
-            .take()
-            .expect("TerminalGuard: terminal was already taken.");
-        let _ = terminal.clear();
-        teardown_terminal(&mut terminal)?;
-
         anyhow::bail!(
             "Recovery upgrader failed with exit code: {:?}",
             status.code()
