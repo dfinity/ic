@@ -4052,16 +4052,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
 
 [[package]]
-name = "downstream-calls-test"
-version = "0.1.0"
-dependencies = [
- "candid",
- "ic-base-types",
- "ic-cdk",
- "serde",
-]
-
-[[package]]
 name = "drawille"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10834,9 +10824,7 @@ name = "ic-messaging"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "candid",
  "canister-test",
- "downstream-calls-test",
  "ic-base-types",
  "ic-certification-version",
  "ic-config",
@@ -10881,18 +10869,17 @@ dependencies = [
  "ic-utils-thread",
  "lazy_static",
  "maplit",
+ "messaging-test",
+ "messaging-test-utils",
  "mockall",
  "pretty_assertions",
  "prometheus 0.13.4",
  "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "random-traffic-test",
- "serde",
  "slog",
  "test-strategy 0.3.1",
  "tracing",
- "xnet-test",
 ]
 
 [[package]]
@@ -20316,22 +20303,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f"
 dependencies = [
  "rand_core 0.6.4",
-]
-
-[[package]]
-name = "random-traffic-test"
-version = "0.9.0"
-dependencies = [
- "candid",
- "futures",
- "ic-base-types",
- "ic-cdk",
- "ic-error-types 0.2.0",
- "ic-types",
- "proptest",
- "rand 0.8.5",
- "serde",
- "serde_bytes",
 ]
 
 [[package]]
