@@ -44,6 +44,10 @@ pub struct RecoveryParams {
     pub recovery_hash: String,
 }
 
+fn is_lowercase_hex(c: char) -> bool {
+    c.is_ascii_digit() || ('a'..='f').contains(&c)
+}
+
 impl RecoveryParams {
     pub fn validate(&self) -> Result<()> {
         for field in Field::INPUT_FIELDS {
@@ -78,9 +82,9 @@ impl RecoveryParams {
                 value.len()
             );
         }
-        if !value.chars().all(|c| c.is_ascii_hexdigit()) {
+        if !value.chars().all(is_lowercase_hex) {
             anyhow::bail!(
-                "{} must contain only hexadecimal characters ({})",
+                "{} must contain only lowercase hexadecimal characters ({})",
                 name,
                 description
             );
@@ -538,7 +542,7 @@ impl GuestOSRecoveryApp {
                     current.get_value_mut(&mut input_state.params),
                 ) {
                     (Some(max_len), Some(field_value))
-                        if field_value.len() < max_len && c.is_ascii_hexdigit() =>
+                        if field_value.len() < max_len && is_lowercase_hex(c) =>
                     {
                         field_value.push(c);
                     }
