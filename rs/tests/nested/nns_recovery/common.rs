@@ -38,7 +38,7 @@ use ic_system_test_driver::{
     util::block_on,
 };
 use ic_types::ReplicaVersion;
-use nested::util::setup_ic_infrastructure;
+use nested::util::{get_guest_boot_id_async, setup_ic_infrastructure};
 use rand::seq::SliceRandom;
 use sha2::{Digest, Sha256};
 use slog::{Logger, info};
@@ -481,13 +481,25 @@ async fn simulate_node_provider_action(
     let server_ipv6 = impersonate_upstreams::get_upstreams_uvm_ipv6(env);
     info!(
         logger,
-        "Spoofing HostOS {} DNS to point the upstreams to the UVM at {}",
+        "Spoofing HostOS {} DNS to point the upstreams to the UVM at {}",
         host.vm_name(),
         server_ipv6
     );
     impersonate_upstreams::spoof_node_dns_async(host, &server_ipv6)
         .await
         .expect("Failed to spoof HostOS DNS");
+
+    // Get the current boot ID from the GuestOS before running recovery-upgrader
+    info!(
+        logger,
+        "Retrieving the current boot ID from GuestOS {} before recovery-upgrader to detect reboot...",
+        host.vm_name()
+    );
+    let guest_boot_id_pre_upgrade = get_guest_boot_id_async(host).await;
+    info!(
+        logger,
+        "Guest boot ID pre upgrade: '{}'", guest_boot_id_pre_upgrade
+    );
 
     // Run guestos-recovery-upgrader directly, bypassing the limited-console manual recovery TUI
     info!(
@@ -506,8 +518,39 @@ async fn simulate_node_provider_action(
         .await
         .expect("Failed to run guestos-recovery-upgrader");
 
-    // Wait 5 seconds to give enough time for the old Guest VM to shut down before spoofing the GuestOS DNS
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    // Wait for the GuestOS to reboot by monitoring boot ID changes
+    info!(
+        logger,
+        "Waiting for GuestOS {} to reboot (boot ID to change from '{}')...",
+        host.vm_name(),
+        guest_boot_id_pre_upgrade
+    );
+    retry_with_msg_async!(
+        format!(
+            "Waiting until GuestOS {}'s boot ID changes from its pre upgrade value of '{}'",
+            host.vm_name(),
+            guest_boot_id_pre_upgrade
+        ),
+        &logger,
+        secs(60),
+        secs(2),
+        || async {
+            match get_guest_boot_id_async(host).await {
+                guest_boot_id if guest_boot_id != guest_boot_id_pre_upgrade => {
+                    info!(
+                        logger,
+                        "Guest boot ID changed from '{}' to '{}'",
+                        guest_boot_id_pre_upgrade,
+                        guest_boot_id
+                    );
+                    Ok(())
+                }
+                _ => bail!("Guest boot ID is still '{}'", guest_boot_id_pre_upgrade),
+            }
+        }
+    )
+    .await
+    .expect("GuestOS did not reboot after running guestos-recovery-upgrader");
 
     // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
     let guest = host.get_guest_ssh().unwrap();

@@ -336,6 +336,19 @@ pub async fn get_host_boot_id_async(node: &NestedVm) -> String {
         .to_string()
 }
 
+/// Get the current boot ID from a GuestOS node. Asynchronous version
+pub async fn get_guest_boot_id_async(node: &NestedVm) -> String {
+    let guest = node
+        .get_guest_ssh()
+        .expect("Failed to get guest SSH session");
+    guest
+        .block_on_bash_script_async("journalctl -q --list-boots | tail -n1 | awk '{print $2}'")
+        .await
+        .expect("Failed to retrieve guest boot ID")
+        .trim()
+        .to_string()
+}
+
 /// Execute a bash script on a node via SSH and log the output.
 pub fn block_on_bash_script_and_log<N: SshSession>(log: &Logger, node: &N, cmd: &str) {
     match node.block_on_bash_script(cmd) {
