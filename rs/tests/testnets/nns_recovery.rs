@@ -23,7 +23,7 @@
 //
 // To recover the latest mainnet NNS subnet backup make sure your testnet is deployed to zh1 (where the backup pod is located)
 // by passing the following to ict `--set-required-host-features=dc=zh1` and pass `--test_env=RECOVER_LATEST_MAINNET_NNS_SUBNET_BACKUP=1`.
-// Note that the NNS backup is over 15GB so it will require around 3 minutes to download, X minutes to unpack and Y GB of disk space.
+// Note that the NNS backup is over 15GB so it will require around 3 minutes to download, 15 minutes to unpack and 59G of disk space.
 //
 // To get access to P8s and Grafana look for the following lines in the ict console output:
 //
