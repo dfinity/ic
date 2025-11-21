@@ -1393,9 +1393,9 @@ pub fn set_of_nodes(ids: &[u64]) -> BTreeSet<NodeId> {
     }
     nodes
 }
-
+// Random registry version decreased by a margin that allows for increasing it again sufficiently during tests.
 fn random_registry_version<R: RngCore + CryptoRng>(rng: &mut R) -> RegistryVersion {
-    RegistryVersion::new(rng.gen_range(1..u64::MAX))
+    RegistryVersion::new(rng.gen_range(1..u64::MAX- 10_000))
 }
 
 pub fn random_transcript_id<R: RngCore + CryptoRng>(rng: &mut R) -> IDkgTranscriptId {
