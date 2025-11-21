@@ -1,127 +1,105 @@
 ---- MODULE CkbtcMinter_Apalache ----
 
-EXTENDS TLC, Sequences, FiniteSets
+EXTENDS TLC, Sequences, FiniteSets, TypeAliases
 
 \* CODE_LINK_INSERT_CONSTANTS
 
-(*
-@typeAlias: btc_address = Str;
-@typeAlias: pid = Str;
-@typeAlias: utxo = {id: Seq(Int), owner: $btc_address, amount: Int};
-@typeAlias: withdrawal_req = {request_id: Int, address: $btc_address, amount: Int};
-@typeAlias: submission = {consumed_utxos: Set($utxo), outputs: Seq({owner: $btc_address, amount: Int}), other_data: Int};
-*)
-
-CONSTANTS 
-    \* @type: Set(Str);
-    CK_BTC_ADDRESSES,
+CONSTANTS
+    \* @type: Set($principal);
+    PRINCIPALS,
+    \* @type: Set($subaccount);
+    SUBACCOUNTS,
+    \* @type: $principal;
+    MINTER_PRINCIPAL,
+    \* @type: $subaccount;
+    MINTER_SUBACCOUNT,
     \* @type: Int;
     MAX_USER_BTC_TRANSFERS,
-    \* @type: Int;
+    \* @type: $amount;
     BTC_SUPPLY,
+    \* @type: $amount;
+    MINTER_INITIAL_SUPPLY,
     \* @type: Set($pid);
     UPDATE_BALANCE_PROCESS_IDS,
     \* @type: Set($pid);
     RETRIEVE_BTC_PROCESS_IDS,
     \* @type: Set($pid);
     RESUBMIT_RETRIEVE_BTC_PROCESS_IDS,
-    \* @type: Str;
+    \* @type: $btcAddress;
     USER_BTC_ADDRESS,
-    \* @type: Str;
-    MINTER_BTC_ADDRESS,
     \* @type: $pid;
-    INGEST_BTC_STATE_PROCESS_ID,
-    \* @type: Str;
     BTC_PROCESS_ID,
-    \* @type: $pid;
-    USER_CK_BTC_TRANSFER_PROCESS_ID,
     \* @type: $pid;
     LEDGER_PROCESS_ID,
     \* @type: $pid;
     BTC_CANISTER_PROCESS_ID,
-    \* @type: $pid;
-    HEARTBEAT_PROCESS_ID,
-    \* Converts a user CK_BTC address to a withdrawal account on the ledger.
-    \* @type: $btc_address => ;
-    BTC_TO_WITHDRAWAL(_)
+    \* @type: Set($pid);
+    HEARTBEAT_PROCESS_IDS,
+    \* @type: $amount;
+    RETRIEVE_BTC_FEE,
+    \* @type: $ckbtcAddress -> $btcAddress;
+    DEPOSIT_ADDRESS
+
+(*
+@typeAlias: requestId = Int;
+*)
+_dummy == TRUE
 
 VARIABLES
-    \* @type: Set(Int);
+    \* @type: Set($utxo);
     btc,
-    \* @type: Set(Int);
+    \* @type: Set($utxo);
     btc_canister,
-    \* @type: Int;
-    utxos_states_addresses,
-    \* @type: Set(Int);
+    \* @type: $ckbtcAddress -> Set($utxo);
+    utxos_state_addresses,
+    \* @type: Set($principal);
     locks,
-    \* @type: Seq(Int);
-    pending_retrieve_btc_requests,
-    \* @type: Int;
-    requests_in_flight,
-    \* @type: Int;
+    \* @type: $ckbtcAddress -> $amount;
     balance,
-    \* @type: Set(Int);
+    \* @type: Set($submission);
     btc_canister_to_btc,
-    \* @type: Seq(Int);
+    \* @type: Seq($minterToBtcCanisterRequest);
     minter_to_btc_canister,
-    \* @type: Set(Int);
+    \* @type: Set($btcCanisterToMinterResponse);
     btc_canister_to_minter,
-    \* @type: Seq(Int);
+    \* @type: Seq($minterToLedgerRequest);
     minter_to_ledger,
-    \* @type: Set(Int);
+    \* @type: Set($ledgerToMinterResponse);
     ledger_to_minter,
     \* @type: Int;
     next_request_id,
     \* @type: Int;
     resubmit_count,
-    \* @type: Str;
+    \* @type: $pc;
     pc,
-    \* @type: Int;
-    stack,
-    \* @type: Int;
+    \* @type: $pid -> Seq($withdrawalReq);
     submitted,
-    \* @type: Int;
+    \* @type: $pid -> Seq($requestId);
+    submitted_ids,
+    \* @type: $pid -> Set($utxo);
     spent,
-    \* @type: Int;
+    \* @type: $pid -> Seq({ owner: $btcAddress, amount: $amount});
     outputs,
     \* @type: Int;
     nr_user_transfers,
-    \* @type: Int;
-    ck_btc_address,
-    \* @type: Int;
+    \* @type: $pid -> $amount;
     amount,
-    \* @type: Int;
-    resubmit_request_id,
-    \* @type: Int;
-    resubmission
+    \* @type: $pid -> $ckbtcAddress;
+    caller_account,
+    \* @type: $pid -> Set($utxo);
+    new_utxos,
+    \* @type: $pid -> $optSubmission;
+    new_transaction,
+    \* @type: Seq($withdrawalReq);
+    pending,
+    \* @type: $principal -> Set($utxo);
+    finalized_utxos,
+    \* @type: Set($utxo);
+    available_utxos,
+    \* @type: Set($submittedTx);
+    submitted_transactions
 
-MOD == INSTANCE CkbtcMinter
-    WITH
-        btc <- btc,
-        btc_canister <- btc_canister,
-        utxos_states_addresses <- utxos_states_addresses,
-        locks <- locks,
-        pending_retrieve_btc_requests <- pending_retrieve_btc_requests,
-        requests_in_flight <- requests_in_flight,
-        balance <- balance,
-        btc_canister_to_btc <- btc_canister_to_btc,
-        minter_to_btc_canister <- minter_to_btc_canister,
-        btc_canister_to_minter <- btc_canister_to_minter,
-        minter_to_ledger <- minter_to_ledger,
-        ledger_to_minter <- ledger_to_minter,
-        next_request_id <- next_request_id,
-        resubmit_count <- resubmit_count,
-        pc <- pc,
-        stack <- stack,
-        submitted <- submitted,
-        spent <- spent,
-        outputs <- outputs,
-        nr_user_transfers <- nr_user_transfers,
-        ck_btc_address <- ck_btc_address,
-        amount <- amount,
-        resubmit_request_id <- resubmit_request_id,
-        resubmission <- resubmission
+INSTANCE CkbtcMinter
 
-ApalacheSpec == [MOD!Next]_MOD!vars
 
 ====
