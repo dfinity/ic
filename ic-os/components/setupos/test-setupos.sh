@@ -207,25 +207,25 @@ function test_verify_deployment_path_warning() {
 
 function test_check_cmdline_var() {
     # Test parameter set to 1.
-    check_cmdline_var testparm /dev/fd/3 3<<< 'otherparm_quoted="abc def" testparm=1' || {
+    check_cmdline_var testparm /dev/fd/3 3<<<'otherparm_quoted="abc def" testparm=1' || {
         echo "  FAIL: expected check_cmdline_var to be true with testparm=1"
         exit 1
     }
 
     # Test parameter set to 0.
-    ! check_cmdline_var testparm /dev/fd/3 3<<< 'otherparm_quoted="abc def" testparm=0' || {
+    ! check_cmdline_var testparm /dev/fd/3 3<<<'otherparm_quoted="abc def" testparm=0' || {
         echo "  FAIL: expected check_cmdline_var to be false with testparm=0"
         exit 1
     }
 
     # Test parameter set (equivalent to 1).
-    check_cmdline_var testparm /dev/fd/3 3<<< 'otherparm_quoted="abc def" testparm' || {
+    check_cmdline_var testparm /dev/fd/3 3<<<'otherparm_quoted="abc def" testparm' || {
         echo "  FAIL: expected check_cmdline_var to be true with testparm"
         exit 1
     }
 
     # Test parameter absent.
-    check_cmdline_var testparm /dev/fd/3 3<<< 'otherparm_quoted="abc def" notestparm' || {
+    check_cmdline_var testparm /dev/fd/3 3<<<'otherparm_quoted="abc def" notestparm' || {
         echo "  FAIL: expected check_cmdline_var to be true without testparm"
         exit 1
     }
