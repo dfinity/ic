@@ -205,9 +205,10 @@ async fn upload_events(events: Vec<Event>) {
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {
         let fee_estimator = IC_CANISTER_RUNTIME.fee_estimator(s);
+        let withdrawal_amount = arg.amount.unwrap_or(s.fee_based_retrieve_btc_min_amount);
         ic_ckbtc_minter::estimate_retrieve_btc_fee(
             &s.available_utxos,
-            arg.amount,
+            withdrawal_amount,
             s.last_median_fee_per_vbyte
                 .expect("Bitcoin current fee percentiles not retrieved yet."),
             &fee_estimator,

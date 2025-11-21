@@ -23,7 +23,6 @@ use maplit::btreeset;
 use proptest::{
     array::uniform20,
     collection::{btree_set, vec as pvec},
-    option,
     prelude::any,
     prop_assert, prop_assert_eq, prop_assume, proptest,
 };
@@ -618,7 +617,7 @@ proptest! {
 
         let fee_estimator = bitcoin_fee_estimator();
         let minter_address= BitcoinAddress::P2wpkhV0(main_pkhash);
-        let fee_estimate = estimate_retrieve_btc_fee(&utxos, Some(target), fee_per_vbyte, &fee_estimator);
+        let fee_estimate = estimate_retrieve_btc_fee(&utxos, target, fee_per_vbyte, &fee_estimator);
         let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee;
 
         let (unsigned_tx, _, _, _) = build_unsigned_transaction(
@@ -1012,7 +1011,7 @@ proptest! {
     #[test]
     fn test_fee_range(
         utxos in btree_set(arbitrary::utxo(5_000u64..1_000_000_000), 0..20),
-        amount in option::of(any::<u64>()),
+        amount in any::<u64>(),
         fee_per_vbyte in 2000..10000u64,
     ) {
         const SMALLEST_TX_SIZE_VBYTES: u64 = 140; // one input, two outputs

@@ -1351,30 +1351,31 @@ pub fn tx_vsize_estimate(input_count: u64, output_count: u64) -> u64 {
 ///   * `median_fee_millisatoshi_per_vbyte` - the median network fee, in millisatoshi per vbyte.
 pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
     available_utxos: &BTreeSet<Utxo>,
-    maybe_amount: Option<u64>,
+    withdrawal_amount: u64,
     median_fee_millisatoshi_per_vbyte: u64,
     fee_estimator: &F,
 ) -> WithdrawalFee {
     const DEFAULT_INPUT_COUNT: u64 = 2;
     // One output for the caller and one for the change.
     const DEFAULT_OUTPUT_COUNT: u64 = 2;
-    let input_count = match maybe_amount {
-        Some(amount) => {
-            // We simulate the algorithm that selects UTXOs for the
-            // specified amount. If the withdrawal rate is low, we
-            // should get the exact number of inputs that the minter
-            // will use.
-            let mut utxos = available_utxos.clone();
-            let selected_utxos =
-                utxos_selection(amount, &mut utxos, DEFAULT_OUTPUT_COUNT as usize - 1);
 
-            if !selected_utxos.is_empty() {
-                selected_utxos.len() as u64
-            } else {
-                DEFAULT_INPUT_COUNT
-            }
+    let input_count = {
+        // We simulate the algorithm that selects UTXOs for the
+        // specified amount. If the withdrawal rate is low, we
+        // should get the exact number of inputs that the minter
+        // will use.
+        let mut utxos = available_utxos.clone();
+        let selected_utxos = utxos_selection(
+            withdrawal_amount,
+            &mut utxos,
+            DEFAULT_OUTPUT_COUNT as usize - 1,
+        );
+
+        if !selected_utxos.is_empty() {
+            selected_utxos.len() as u64
+        } else {
+            DEFAULT_INPUT_COUNT
         }
-        None => DEFAULT_INPUT_COUNT,
     };
 
     let vsize = tx_vsize_estimate(input_count, DEFAULT_OUTPUT_COUNT);
