@@ -842,7 +842,7 @@ static_assertions = "1.1.0"
 strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 subtle = "2.6.1"
-syn = { version = "1.0.109", features = ["fold", "full"] }
+syn = { version = "2.0.110", features = ["fold", "full"] }
 sys-mount = "3.0"
 systemd = "0.10"
 tar = "0.4.39"
