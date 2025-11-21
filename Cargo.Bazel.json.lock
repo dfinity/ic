@@ -1,5 +1,5 @@
 {
-  "checksum": "2609b786c600db114f6d8068b0daf08ecc5c8cec1bf5a11cd09a8b705a106962",
+  "checksum": "26f0ae89d1b17650c10ccd30e9b4f934eb088eac8caf5d9748e01b006d8dbb59",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -15385,53 +15385,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "convert_case 0.7.1": {
-      "name": "convert_case",
-      "version": "0.7.1",
-      "package_url": "https://github.com/rutrum/convert-case",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/convert_case/0.7.1/download",
-          "sha256": "bb402b8d4c85569410425650ce3eddc7d698ed96d39a73f941b08fb63082f1e7"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "convert_case",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "convert_case",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "unicode-segmentation 1.12.0",
-              "target": "unicode_segmentation"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.7.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "cookie 0.16.2": {
       "name": "cookie",
       "version": "0.16.2",
@@ -17653,143 +17606,6 @@
         },
         "edition": "2021",
         "version": "0.28.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "crossterm 0.29.0": {
-      "name": "crossterm",
-      "version": "0.29.0",
-      "package_url": "https://github.com/crossterm-rs/crossterm",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/crossterm/0.29.0/download",
-          "sha256": "d8b9f2e4c67f833b660cdb0a3523065869fb35570177239812ed4c905aeff87b"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "crossterm",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "crossterm",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "bracketed-paste",
-            "default",
-            "derive-more",
-            "events",
-            "windows"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "bitflags 2.9.0",
-              "target": "bitflags"
-            },
-            {
-              "id": "derive_more 2.0.1",
-              "target": "derive_more"
-            },
-            {
-              "id": "parking_lot 0.12.1",
-              "target": "parking_lot"
-            }
-          ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              {
-                "id": "mio 1.0.2",
-                "target": "mio"
-              },
-              {
-                "id": "signal-hook 0.3.17",
-                "target": "signal_hook"
-              },
-              {
-                "id": "signal-hook-mio 0.2.5",
-                "target": "signal_hook_mio"
-              }
-            ],
-            "aarch64-unknown-linux-gnu": [
-              {
-                "id": "mio 1.0.2",
-                "target": "mio"
-              },
-              {
-                "id": "signal-hook 0.3.17",
-                "target": "signal_hook"
-              },
-              {
-                "id": "signal-hook-mio 0.2.5",
-                "target": "signal_hook_mio"
-              }
-            ],
-            "cfg(unix)": [
-              {
-                "id": "rustix 1.0.5",
-                "target": "rustix"
-              }
-            ],
-            "x86_64-apple-darwin": [
-              {
-                "id": "mio 1.0.2",
-                "target": "mio"
-              },
-              {
-                "id": "signal-hook 0.3.17",
-                "target": "signal_hook"
-              },
-              {
-                "id": "signal-hook-mio 0.2.5",
-                "target": "signal_hook_mio"
-              }
-            ],
-            "x86_64-unknown-linux-gnu": [
-              {
-                "id": "mio 1.0.2",
-                "target": "mio"
-              },
-              {
-                "id": "signal-hook 0.3.17",
-                "target": "signal_hook"
-              },
-              {
-                "id": "signal-hook-mio 0.2.5",
-                "target": "signal_hook_mio"
-              }
-            ]
-          }
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "document-features 0.2.12",
-              "target": "document_features"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.29.0"
       },
       "license": "MIT",
       "license_ids": [
@@ -20426,127 +20242,6 @@
       ],
       "license_file": "LICENSE"
     },
-    "derive_more 2.0.1": {
-      "name": "derive_more",
-      "version": "2.0.1",
-      "package_url": "https://github.com/JelteF/derive_more",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/derive_more/2.0.1/download",
-          "sha256": "093242cf7570c207c83073cf82f79706fe7b8317e98620a47d5be7c3d8497678"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "derive_more",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "derive_more",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "is_variant",
-            "std"
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "derive_more-impl 2.0.1",
-              "target": "derive_more_impl"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "2.0.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
-    "derive_more-impl 2.0.1": {
-      "name": "derive_more-impl",
-      "version": "2.0.1",
-      "package_url": "https://github.com/JelteF/derive_more",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/derive_more-impl/2.0.1/download",
-          "sha256": "bda628edc44c4bb645fbe0f758797143e4e07926f7ebf4e9bdfbd3d2ce621df3"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "derive_more_impl",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "derive_more_impl",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default",
-            "is_variant"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "convert_case 0.7.1",
-              "target": "convert_case"
-            },
-            {
-              "id": "proc-macro2 1.0.95",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.40",
-              "target": "quote"
-            },
-            {
-              "id": "syn 2.0.110",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "2.0.1"
-      },
-      "license": "MIT",
-      "license_ids": [
-        "MIT"
-      ],
-      "license_file": "LICENSE"
-    },
     "devicemapper 0.34.4": {
       "name": "devicemapper",
       "version": "0.34.4",
@@ -21494,10 +21189,6 @@
             {
               "id": "crossbeam-channel 0.5.15",
               "target": "crossbeam_channel"
-            },
-            {
-              "id": "crossterm 0.29.0",
-              "target": "crossterm"
             },
             {
               "id": "csv 1.2.2",
@@ -22587,6 +22278,10 @@
               "target": "trust_dns_resolver"
             },
             {
+              "id": "tui-textarea 0.7.0",
+              "target": "tui_textarea"
+            },
+            {
               "id": "turmoil 0.6.4",
               "target": "turmoil"
             },
@@ -23342,60 +23037,6 @@
         "MIT"
       ],
       "license_file": "LICENSE"
-    },
-    "document-features 0.2.12": {
-      "name": "document-features",
-      "version": "0.2.12",
-      "package_url": "https://github.com/slint-ui/document-features",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/document-features/0.2.12/download",
-          "sha256": "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "document_features",
-            "crate_root": "lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "document_features",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "default"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "litrs 1.0.0",
-              "target": "litrs"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.2.12"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "downcast 0.11.0": {
       "name": "downcast",
@@ -44407,45 +44048,6 @@
         "Unicode-3.0"
       ],
       "license_file": "LICENSE"
-    },
-    "litrs 1.0.0": {
-      "name": "litrs",
-      "version": "1.0.0",
-      "package_url": "https://github.com/LukasKalbertodt/litrs",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/litrs/1.0.0/download",
-          "sha256": "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "litrs",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "litrs",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2021",
-        "version": "1.0.0"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
     },
     "little-loadshedder 0.2.0": {
       "name": "little-loadshedder",
@@ -66905,9 +66507,7 @@
             "fs",
             "mm",
             "param",
-            "std",
-            "stdio",
-            "termios"
+            "std"
           ],
           "selects": {}
         },
@@ -82861,6 +82461,69 @@
       ],
       "license_file": "LICENSE"
     },
+    "tui-textarea 0.7.0": {
+      "name": "tui-textarea",
+      "version": "0.7.0",
+      "package_url": "https://github.com/rhysd/tui-textarea",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/tui-textarea/0.7.0/download",
+          "sha256": "0a5318dd619ed73c52a9417ad19046724effc1287fb75cdcc4eca1d6ac1acbae"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tui_textarea",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "tui_textarea",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "crossterm",
+            "default",
+            "ratatui"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "crossterm 0.28.1",
+              "target": "crossterm"
+            },
+            {
+              "id": "ratatui 0.29.0",
+              "target": "ratatui"
+            },
+            {
+              "id": "unicode-width 0.2.0",
+              "target": "unicode_width"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "0.7.0"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.txt"
+    },
     "tungstenite 0.21.0": {
       "name": "tungstenite",
       "version": "0.21.0",
@@ -95335,7 +94998,6 @@
     "criterion 0.5.1",
     "crossbeam 0.8.4",
     "crossbeam-channel 0.5.15",
-    "crossterm 0.29.0",
     "csv 1.2.2",
     "ctrlc 3.4.5",
     "curve25519-dalek 4.1.3",
@@ -95618,6 +95280,7 @@
     "tracing-slog 0.2.0",
     "tracing-subscriber 0.3.20",
     "trust-dns-resolver 0.22.0",
+    "tui-textarea 0.7.0",
     "turmoil 0.6.4",
     "url 2.5.4",
     "uuid 1.12.1",

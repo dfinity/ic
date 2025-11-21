@@ -8,7 +8,6 @@ rust_library(
     crate_name = "guestos_recovery_tui",
     deps = [
         "@crate_index//:anyhow",
-        "@crate_index//:crossterm",
         "@crate_index//:ratatui",
     ],
 )

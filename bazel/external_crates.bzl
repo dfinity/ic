@@ -443,9 +443,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "async_tokio",
                 ],
             ),
-            "crossterm": crate.spec(
-                version = "^0.29",
-            ),
             "crossbeam": crate.spec(
                 version = "^0.8.4",
             ),

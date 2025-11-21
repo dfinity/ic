@@ -1,11 +1,11 @@
 mod ui;
 
 use anyhow::{Context, Result};
-use crossterm::event::{
+use ratatui::crossterm::event::{
     DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers,
 };
-use crossterm::execute;
-use crossterm::terminal::{
+use ratatui::crossterm::execute;
+use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode, size,
 };
 use ratatui::{Frame, Terminal, backend::CrosstermBackend};
@@ -370,8 +370,8 @@ impl GuestOSRecoveryApp {
             self.redraw(&mut terminal_guard)?;
 
             // Event polling
-            if crossterm::event::poll(Duration::from_millis(PROCESS_POLL_INTERVAL_MS))? {
-                let event = crossterm::event::read()
+            if ratatui::crossterm::event::poll(Duration::from_millis(PROCESS_POLL_INTERVAL_MS))? {
+                let event = ratatui::crossterm::event::read()
                     .map_err(|e| anyhow::anyhow!("Failed to read terminal events").context(e))?;
                 self.handle_event(event)?;
             }
