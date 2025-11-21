@@ -20,12 +20,15 @@ pub trait FeeEstimator {
     fn evaluate_transaction_fee(&self, tx: &UnsignedTransaction, fee_rate: u64) -> u64;
 
     /// Compute a new minimum withdrawal amount based on the current fee rate
-    fn fee_based_minimum_withrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi;
+    fn fee_based_minimum_withdrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi;
 }
 
 pub struct BitcoinFeeEstimator {
+    /// The Bitcoin network that the minter will connect to
     network: Network,
+    /// Minimum amount of bitcoin that can be retrieved
     retrieve_btc_min_amount: u64,
+    /// The fee for a single Bitcoin check request.
     check_fee: u64,
 }
 
@@ -50,7 +53,7 @@ impl BitcoinFeeEstimator {
         )
     }
 
-    /// An estimated fee per vbyte of 142 millistatoshis per vbyte was selected around 2025.06.21 01:09:50 UTC
+    /// An estimated fee per vbyte of 142 millisatoshis per vbyte was selected around 2025.06.21 01:09:50 UTC
     /// for Bitcoin Mainnet, whereas the median fee around that time should have been 2_000.
     /// Until we know the root cause, we ensure that the estimated fee has a meaningful minimum value.
     const fn minimum_fee_per_vbyte(&self) -> MillisatoshiPerByte {
@@ -103,7 +106,7 @@ impl FeeEstimator for BitcoinFeeEstimator {
 
     /// Returns the minimum withdrawal amount based on the current median fee rate (in millisatoshi per byte).
     /// The returned amount is in satoshi.
-    fn fee_based_minimum_withrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi {
+    fn fee_based_minimum_withdrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi {
         match self.network {
             Network::Mainnet | Network::Testnet => {
                 const PER_REQUEST_RBF_BOUND: u64 = 22_100;

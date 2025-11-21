@@ -249,7 +249,7 @@ pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
             match fee_estimator.estimate_median_fee(&fees) {
                 Some(median_fee) => {
                     let fee_based_retrieve_btc_min_amount =
-                        fee_estimator.fee_based_minimum_withrawal_amount(median_fee);
+                        fee_estimator.fee_based_minimum_withdrawal_amount(median_fee);
                     log!(
                         Priority::Debug,
                         "[estimate_fee_per_vbyte]: update median fee per vbyte to {median_fee} and fee-based minimum retrieve amount to {fee_based_retrieve_btc_min_amount} with {fees:?}"

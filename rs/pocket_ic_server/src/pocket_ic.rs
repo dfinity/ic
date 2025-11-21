@@ -64,10 +64,10 @@ use ic_interfaces_state_manager::StateReader;
 use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::{ReplicaLogger, no_op_logger};
 use ic_management_canister_types_private::{
-    BoundedVec, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, EcdsaCurve,
-    EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId, Method as Ic00Method,
-    ProvisionalCreateCanisterWithCyclesArgs, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve,
-    VetKdKeyId,
+    BoundedVec, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs,
+    CanisterSnapshotDataKind, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
+    Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs, ReadCanisterSnapshotDataArgs,
+    ReadCanisterSnapshotMetadataArgs, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
 };
 use ic_metrics::MetricsRegistry;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
@@ -109,7 +109,8 @@ use ic_types::batch::BlockmakerMetrics;
 use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::messages::{CertificateDelegationFormat, CertificateDelegationMetadata};
 use ic_types::{
-    CanisterId, Cycles, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SubnetId,
+    CanisterId, Cycles, Height, NodeId, NumInstructions, PrincipalId, RegistryVersion, SnapshotId,
+    SubnetId,
     artifact::UnvalidatedArtifactMutation,
     canister_http::{
         CanisterHttpReject, CanisterHttpRequest as AdapterCanisterHttpRequest,
@@ -145,10 +146,10 @@ use std::hash::Hash;
 use std::str::FromStr;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    fs::{File, remove_file},
+    fs::{File, OpenOptions, remove_file},
     io::{BufReader, Read, Write},
     net::SocketAddr,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -216,6 +217,9 @@ const MAX_START_SERVER_DURATION: Duration = Duration::from_secs(60);
 // https://rust-lang.github.io/rust-clippy/master/index.html#/declare_interior_mutable_const
 #[allow(clippy::declare_interior_mutable_const)]
 const CONTENT_TYPE_CBOR: HeaderValue = HeaderValue::from_static("application/cbor");
+
+// Maximum data chunk size when downloading/uploading canister snapshots.
+const MAX_CHUNK_SIZE: u64 = 2_000_000;
 
 fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
     // To set the ICP/XDR conversion rate, the PocketIC time (in seconds) must be strictly larger than the default timestamp in CMC state.
@@ -3584,6 +3588,218 @@ impl Operation for AdvanceTimeAndTick {
 }
 
 #[derive(Clone, Debug)]
+pub struct CanisterSnapshotDownload {
+    pub sender: PrincipalId,
+    pub canister_id: CanisterId,
+    pub snapshot_id: SnapshotId,
+    pub snapshot_dir: PathBuf,
+}
+
+fn ensure_empty_dir(path: &Path) -> Result<(), String> {
+    // Create the directory if needed (including parents).
+    // Succeeds silently if the directory already exists.
+    std::fs::create_dir_all(path)
+        .map_err(|e| format!("Could not create snapshot directory: {}", e))?;
+
+    // Now ensure it's actually a directory.
+    if !path.is_dir() {
+        return Err("Snapshot directory path exists but is not a directory".to_string());
+    }
+
+    // Check if it is empty.
+    if std::fs::read_dir(path)
+        .map_err(|e| format!("Could not read snapshot directory: {}", e))?
+        .next()
+        .is_some()
+    {
+        return Err("Snapshot directory is not empty".to_string());
+    }
+
+    Ok(())
+}
+
+enum BlobKind {
+    WasmModule,
+    WasmMemory,
+    StableMemory,
+}
+
+impl BlobKind {
+    fn description(&self) -> &str {
+        match self {
+            BlobKind::WasmModule => "WASM module",
+            BlobKind::WasmMemory => "WASM memory",
+            BlobKind::StableMemory => "stable memory",
+        }
+    }
+}
+
+fn download_blob_to_file(
+    subnet: Arc<StateMachine>,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+    blob_kind: BlobKind,
+    length: u64,
+    file: PathBuf,
+) -> Result<(), String> {
+    let mut offset = 0;
+    let mut file = OpenOptions::new()
+        .create(true) // create the file if it doesn't exist
+        .append(true) // allow appending
+        .open(file)
+        .map_err(|e| format!("Could not create {} file: {}", blob_kind.description(), e))?;
+    while offset < length {
+        let chunk_size = std::cmp::min(length - offset, MAX_CHUNK_SIZE);
+        let kind = match blob_kind {
+            BlobKind::WasmModule => CanisterSnapshotDataKind::WasmModule {
+                offset,
+                size: chunk_size,
+            },
+            BlobKind::WasmMemory => CanisterSnapshotDataKind::WasmMemory {
+                offset,
+                size: chunk_size,
+            },
+            BlobKind::StableMemory => CanisterSnapshotDataKind::StableMemory {
+                offset,
+                size: chunk_size,
+            },
+        };
+        let data_args = ReadCanisterSnapshotDataArgs {
+            canister_id: canister_id.into(),
+            snapshot_id,
+            kind,
+        };
+        let data = subnet
+            .read_canister_snapshot_data(&data_args)
+            .map_err(|e| e.description().to_string())?
+            .chunk;
+        file.write_all(&data)
+            .map_err(|e| format!("Could not write {} file: {}", blob_kind.description(), e))?;
+        offset += chunk_size;
+    }
+    Ok(())
+}
+
+impl Operation for CanisterSnapshotDownload {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let effective_principal = EffectivePrincipal::CanisterId(self.canister_id);
+        let subnet = route(pic, effective_principal, false);
+        match subnet {
+            Ok(subnet) => {
+                if let Err(e) = ensure_empty_dir(&self.snapshot_dir) {
+                    return OpOut::Error(PocketIcError::InvalidCanisterSnapshotDirectory(e));
+                }
+
+                // Download snapshot metadata.
+                let metadata_args = ReadCanisterSnapshotMetadataArgs {
+                    canister_id: self.canister_id.into(),
+                    snapshot_id: self.snapshot_id,
+                };
+                let metadata = match subnet.read_canister_snapshot_metadata(&metadata_args) {
+                    Ok(metadata) => metadata,
+                    Err(e) => {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(
+                            e.description().to_string(),
+                        ));
+                    }
+                };
+                let metadata_bytes = serde_json::to_string_pretty(&metadata).unwrap();
+                let metadata_path = self.snapshot_dir.join("metadata.json");
+                if let Err(e) = std::fs::write(metadata_path, metadata_bytes) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                        "Could not write metadata file: {}",
+                        e
+                    )));
+                }
+
+                // Download WASM binary.
+                let wasm_module_path = self.snapshot_dir.join("wasm_module.bin");
+                if let Err(e) = download_blob_to_file(
+                    subnet.clone(),
+                    self.canister_id,
+                    self.snapshot_id,
+                    BlobKind::WasmModule,
+                    metadata.wasm_module_size,
+                    wasm_module_path,
+                ) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                }
+
+                // Download WASM memory.
+                let wasm_memory_path = self.snapshot_dir.join("wasm_memory.bin");
+                if let Err(e) = download_blob_to_file(
+                    subnet.clone(),
+                    self.canister_id,
+                    self.snapshot_id,
+                    BlobKind::WasmMemory,
+                    metadata.wasm_memory_size,
+                    wasm_memory_path,
+                ) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                }
+
+                // Download stable memory.
+                if metadata.stable_memory_size != 0 {
+                    let stable_memory_path = self.snapshot_dir.join("stable_memory.bin");
+                    if let Err(e) = download_blob_to_file(
+                        subnet.clone(),
+                        self.canister_id,
+                        self.snapshot_id,
+                        BlobKind::StableMemory,
+                        metadata.stable_memory_size,
+                        stable_memory_path,
+                    ) {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                    }
+                }
+
+                // Download WASM chunk store.
+                let chunk_store = match subnet.get_snapshot_chunk_store(&metadata_args) {
+                    Ok(chunk_store) => chunk_store,
+                    Err(e) => {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(
+                            e.description().to_string(),
+                        ));
+                    }
+                };
+                if !chunk_store.is_empty() {
+                    let chunk_store_path = self.snapshot_dir.join("wasm_chunk_store");
+                    if let Err(e) = std::fs::create_dir_all(&chunk_store_path) {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                            "Could not create WASM chunk store directory: {}",
+                            e
+                        )));
+                    }
+                    for (hash, chunk) in chunk_store {
+                        let hash_str = hex::encode(hash);
+                        let chunk_file = chunk_store_path.join(format!("{hash_str}.bin"));
+                        if let Err(e) = std::fs::write(chunk_file, chunk) {
+                            return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                                "Could not write WASM chunk: {}",
+                                e
+                            )));
+                        }
+                    }
+                }
+
+                OpOut::NoOutput
+            }
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!(
+            "canister_snapshot_download(sender={},canister_id={},snapshot_id={},snapshot_dir='{}')",
+            self.sender,
+            self.canister_id,
+            self.snapshot_id,
+            self.snapshot_dir.display()
+        ))
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct SubmitIngressMessage(pub CanisterCall);
 
 impl Operation for SubmitIngressMessage {
@@ -3932,6 +4148,9 @@ impl Operation for CallRequest {
         match subnet {
             Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
             Ok(subnet) => {
+                // Make sure the latest state is certified for the ingress filter to work.
+                subnet.certify_latest_state();
+
                 let node = &subnet.nodes[0];
                 let (s, mut r) = mpsc::channel(MAX_P2P_IO_CHANNEL_SIZE);
                 let ingress_filter = subnet.ingress_filter.clone();

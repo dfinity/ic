@@ -165,7 +165,9 @@ pub fn build_bitcoin_unsigned_transaction(
 }
 
 pub fn bitcoin_fee_estimator() -> BitcoinFeeEstimator {
-    BitcoinFeeEstimator::new(Network::Mainnet, 50_000, 100)
+    const RETRIEVE_BTC_MIN_AMOUNT: u64 = 50_000;
+    const BTC_CHECK_FEE: u64 = 100;
+    BitcoinFeeEstimator::new(Network::Mainnet, RETRIEVE_BTC_MIN_AMOUNT, BTC_CHECK_FEE)
 }
 
 pub mod mock {

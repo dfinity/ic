@@ -271,43 +271,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
 
     #[cfg(feature = "http")]
     #[tokio::test]
-    async fn test_canister_http_app_subnet_proxies_requests_to_config_address() {
-        let url = start_http_server("127.0.0.1".parse().unwrap());
-
-        // ipv6 socks proxy.
-        let socks_addr = spawn_forward_socks5_server("[::1]:0", url.clone())
-            .await
-            .expect("Failed to bind socks");
-
-        let path = "/tmp/canister-http-test-".to_string() + &Uuid::new_v4().to_string();
-        // Suppose the server does not have a socks client set.
-        let server_config = Config {
-            incoming_source: IncomingSource::Path(path.into()),
-            socks_proxy: format!("socks5h://[{0}]:{1}", socks_addr.ip(), socks_addr.port()),
-            ..Default::default()
-        };
-        let mut client = spawn_grpc_server(server_config);
-        let unreachable_url = "10.255.255.1:9999";
-
-        // Make a request with socks proxy/
-        let request = tonic::Request::new(HttpsOutcallRequest {
-            url: format!("http://{}/get", &unreachable_url),
-            headers: Vec::new(),
-            method: HttpMethod::Get as i32,
-            body: "hello".to_string().as_bytes().to_vec(),
-            max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
-            // If there is no socks proxy passed, it means we are an app subnet, we should try the config.
-            socks_proxy_addrs: vec![],
-        });
-        // The requests succeeds.
-        let response = client.https_outcall(request).await;
-        let http_response = response.unwrap().into_inner();
-        assert_eq!(http_response.status, StatusCode::OK.as_u16() as u32);
-    }
-
-    #[cfg(feature = "http")]
-    #[tokio::test]
     /// This test sets up an http server at 127.0.0.1, and a socks server that forwards all requests to the http server.
     /// The direct request is made to an unreachable URL and thus fallsback to using the sock proxy.
     /// This tests the socks proxy passed to the adapter via the request.
@@ -335,7 +298,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: true,
             ..Default::default()
         });
         // Everything should fail.
@@ -349,7 +311,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: true,
             // Suppose there are two socks proxies passed, one broken, and one working.
             socks_proxy_addrs: vec![
                 format!("socks5://{}", unreachable_url),
@@ -378,7 +339,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
         let response = client.https_outcall(request).await;
@@ -405,7 +365,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
         let response = client.https_outcall(request).await;
@@ -440,7 +399,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
         let response = client.https_outcall(request).await;
@@ -465,7 +423,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Post as i32,
             body: "420".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
 
@@ -492,7 +449,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Head as i32,
             body: "".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
 
@@ -520,7 +476,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: format!("{}", response_limit + 1).as_bytes().to_vec(),
             max_response_size_bytes: response_limit,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
 
@@ -555,7 +510,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: format!("{response_size}").as_bytes().to_vec(),
             max_response_size_bytes: response_size * 2,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
 
@@ -583,7 +537,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: format!("{delay}").as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
 
@@ -622,7 +575,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Head as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 64,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
         let response = client.https_outcall(request).await;
@@ -660,7 +612,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".as_bytes().to_vec(),
             max_response_size_bytes: response_limit,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
 
@@ -686,7 +637,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
             method: HttpMethod::Get as i32,
             body: "hello".to_string().as_bytes().to_vec(),
             max_response_size_bytes: 512,
-            socks_proxy_allowed: false,
             ..Default::default()
         });
         let response = client.https_outcall(request).await;
@@ -790,7 +740,6 @@ MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgob29X4H4m2XOkSZE
                     method: HttpMethod::Get as i32,
                     body: "hello".to_string().as_bytes().to_vec(),
                     max_response_size_bytes: 512,
-                    socks_proxy_allowed: false,
                     ..Default::default()
                 });
 

@@ -332,7 +332,6 @@ pub fn test_btc_checker(env: TestEnv) {
             .estimate_withdrawal_fee(retrieve_amount)
             .await
             .unwrap();
-        // let minters_fee: u64 = ic_ckbtc_minter::evaluate_minter_fee(1, 2);
         // Use the following estimator : https://btc.network/estimate
         // 1 input and 2 outputs => 141 vbyte
         // The regtest network fee defined in ckbtc/minter/src/lib.rs is 5 sat/vbyte.

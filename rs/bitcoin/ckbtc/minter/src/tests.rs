@@ -1019,7 +1019,7 @@ proptest! {
         const MIN_MINTER_FEE: u64 = BitcoinFeeEstimator::MINTER_ADDRESS_P2PWPKH_DUST_LIMIT;
 
         let fee_estimator = bitcoin_fee_estimator();
-        let amount = max(amount, fee_estimator.fee_based_minimum_withrawal_amount(fee_per_vbyte));
+        let amount = max(amount, fee_estimator.fee_based_minimum_withdrawal_amount(fee_per_vbyte));
         let estimate = estimate_retrieve_btc_fee(&utxos, amount, fee_per_vbyte, &fee_estimator).unwrap();
         let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte / 1000;
         let estimate_amount = estimate.minter_fee + estimate.bitcoin_fee;
