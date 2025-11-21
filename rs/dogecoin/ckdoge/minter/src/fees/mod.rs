@@ -81,7 +81,9 @@ impl FeeEstimator for DogecoinFeeEstimator {
             Network::Mainnet | Network::Testnet => {
                 //in Koinu
                 const PER_REQUEST_RBF_BOUND: u64 = 374_000;
-                //in Bytes
+                // in Bytes
+                // Size of a typical transaction made by the minter,
+                // which is a P2PKH transaction with 2 inputs and 2 outputs
                 const PER_REQUEST_SIZE_BOUND: u64 = 374;
                 //in Koinu
                 const PER_REQUEST_MINTER_FEE_BOUND: u64 = 326_000;
