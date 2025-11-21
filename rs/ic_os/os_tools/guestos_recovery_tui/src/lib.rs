@@ -126,28 +126,24 @@ impl Field {
         match self {
             Field::Version => FieldMetadata {
                 name: "VERSION",
-                description: "Mandatory. The commit ID of the recovery-GuestOS update image (40 hex characters).",
-                short_desc: "Git commit hash",
+                short_desc: "Recovery-GuestOS version",
                 required_len: Some(VERSION_LENGTH),
                 is_input: true,
             },
             Field::VersionHash => FieldMetadata {
                 name: "VERSION-HASH",
-                description: "Mandatory. The SHA256 sum of the recovery-GuestOS update image (64 hex characters).",
-                short_desc: "Recovery-GuestOS SHA256",
+                short_desc: "Recovery-GuestOS hash",
                 required_len: Some(HASH_LENGTH),
                 is_input: true,
             },
             Field::RecoveryHash => FieldMetadata {
                 name: "RECOVERY-HASH",
-                description: "Mandatory. The SHA256 sum of the recovery.tar.zst (64 hex characters).",
-                short_desc: "Recovery archive SHA256",
+                short_desc: "Recovery archive hash",
                 required_len: Some(HASH_LENGTH),
                 is_input: true,
             },
             _ => FieldMetadata {
                 name: "",
-                description: "",
                 short_desc: "",
                 required_len: None,
                 is_input: false,
