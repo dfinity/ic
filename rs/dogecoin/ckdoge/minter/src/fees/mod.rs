@@ -7,7 +7,7 @@ use ic_ckbtc_minter::{MillisatoshiPerByte, Satoshi, fees::FeeEstimator};
 use std::cmp::max;
 
 // TODO DEFI-2458: have proper domain design for handling units:
-// * fee rate (millistatoshis/vbyte or millikoinus/byte)
+// * fee rate (millisatoshis/vbyte or millikoinus/byte)
 // * base unit (satoshi or koinu)
 // * millis base unit (millisatoshis or millikoinus)
 pub struct DogecoinFeeEstimator {
@@ -76,7 +76,7 @@ impl FeeEstimator for DogecoinFeeEstimator {
         )
     }
 
-    fn fee_based_minimum_withrawal_amount(&self, median_fee: u64) -> u64 {
+    fn fee_based_minimum_withdrawal_amount(&self, median_fee: u64) -> u64 {
         match self.network {
             Network::Mainnet | Network::Testnet => {
                 //in Koinu
