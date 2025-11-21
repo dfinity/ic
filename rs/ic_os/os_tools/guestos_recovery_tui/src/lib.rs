@@ -47,23 +47,33 @@ pub struct RecoveryParams {
 impl RecoveryParams {
     pub fn validate(&self) -> Result<()> {
         for field in Field::INPUT_FIELDS {
-            if let Some(len) = field.required_length() {
+            if let Some(required_len) = field.required_length() {
                 let meta = field.metadata();
-                Self::validate_hex_field(field.get_value(self), len, meta.name, meta.short_desc)?;
+                Self::validate_hex_field(
+                    field.get_value(self),
+                    required_len,
+                    meta.name,
+                    meta.short_desc,
+                )?;
             }
         }
         Ok(())
     }
 
-    fn validate_hex_field(value: &str, len: usize, name: &str, description: &str) -> Result<()> {
+    fn validate_hex_field(
+        value: &str,
+        required_len: usize,
+        name: &str,
+        description: &str,
+    ) -> Result<()> {
         if value.is_empty() {
             anyhow::bail!("{} is required", name);
         }
-        if value.len() != len || !value.chars().all(|c| c.is_ascii_hexdigit()) {
+        if value.len() != required_len || !value.chars().all(|c| c.is_ascii_hexdigit()) {
             anyhow::bail!(
                 "{} must be exactly {} hexadecimal characters ({})",
                 name,
-                len,
+                required_len,
                 description
             );
         }
