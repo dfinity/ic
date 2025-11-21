@@ -178,7 +178,7 @@ pub struct Args {
     pub sqlite_max_cache_kb: Option<i64>,
 
     /// Flush the cache and shrink the memory after processing account balances.
-    /// Lower values reduce memory usage but may impact performance.
+    /// If enabled, reduces memory usage but may impact performance.
     #[arg(long = "flush-cache-shrink-mem", default_value = "false")]
     pub flush_cache_shrink_mem: bool,
 

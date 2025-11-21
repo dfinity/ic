@@ -64,9 +64,7 @@ pub struct StorageClient {
 impl StorageClient {
     /// Constructs a new SQLite in-persistent store.
     pub fn new_persistent(db_file_path: &Path) -> anyhow::Result<Self> {
-        std::fs::create_dir_all(db_file_path.parent().unwrap())?;
-        let connection = rusqlite::Connection::open(db_file_path)?;
-        Self::new(connection, None, false, BALANCE_SYNC_BATCH_SIZE_DEFAULT)
+        Self::new_persistent_with_cache_and_batch_size(db_file_path, None, false, BALANCE_SYNC_BATCH_SIZE_DEFAULT)
     }
 
     /// Constructs a new SQLite in-persistent store with custom cache size and batch size.

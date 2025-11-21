@@ -161,8 +161,8 @@ ICRC Rosetta uses SQLite for each ledger's blockchain data storage. When running
 
 ### Default Settings
 
-- Pod memory limit: `512Mi`
-- Pod memory request: `256Mi`
+- Pod memory limit: `1024Mi`
+- Pod memory request: `512Mi`
 - SQLite cache per database: `20MB` (20480 KB)
 
 ## Notes
