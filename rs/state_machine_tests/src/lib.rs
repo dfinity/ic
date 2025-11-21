@@ -23,6 +23,7 @@ use ic_crypto_test_utils_ni_dkg::{
 use ic_crypto_tree_hash::{Label, Path as LabeledTreePath, sparse_labeled_tree_from_paths};
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
+use ic_error_types::RejectCode;
 pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::{ExecutionServices, IngressHistoryReaderImpl};
 use ic_http_endpoints_public::{IngressWatcher, IngressWatcherHandle, metrics::HttpHandlerMetrics};
@@ -67,11 +68,11 @@ use ic_management_canister_types_private::{
 };
 use ic_messaging::SyncMessageRouting;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::node_rewards::v2::NodeRewardsTable;
 use ic_protobuf::{
     registry::{
         crypto::v1::{ChainKeyEnabledSubnetList, PublicKey as PublicKeyProto, X509PublicKeyCert},
         node::v1::{ConnectionEndpoint, NodeRecord},
+        node_rewards::v2::NodeRewardsTable,
         provisional_whitelist::v1::ProvisionalWhitelist as PbProvisionalWhitelist,
         replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
         routing_table::v1::{
@@ -108,11 +109,12 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     CheckpointLoadingMetrics, Memory, PageMap, ReplicatedState,
     canister_state::{
-        NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
+        NextExecution, NumWasmPages, WASM_PAGE_SIZE_IN_BYTES,
         system_state::{CanisterHistory, CyclesUseCase},
     },
     metadata_state::subnet_call_context_manager::{SignWithThresholdContext, ThresholdArguments},
     page_map::Buffer,
+    replicated_state::ReplicatedStateMessageRouting,
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_manager::StateManagerImpl;
@@ -127,29 +129,24 @@ use ic_test_utilities_registry::{
 use ic_test_utilities_time::FastForwardTimeSource;
 pub use ic_types::ingress::WasmResult;
 use ic_types::{
-    CanisterId, CryptoHashOfState, Cycles, NumBytes, PrincipalId, SubnetId, UserId,
-    canister_http::{
-        CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponseMetadata,
-    },
-    crypto::threshold_sig::ThresholdSigPublicKey,
-    ingress::{IngressState, IngressStatus},
-    messages::{CallbackId, MessageId},
-    time::Time,
-};
-use ic_types::{
-    CanisterLog, CountBytes, CryptoHashOfPartialState, Height, NodeId, Randomness, RegistryVersion,
-    ReplicaVersion, SnapshotId,
+    CanisterId, CanisterLog, CountBytes, CryptoHashOfPartialState, CryptoHashOfState, Cycles,
+    Height, NodeId, NumBytes, PrincipalId, Randomness, RegistryVersion, ReplicaVersion, SnapshotId,
+    SubnetId, UserId,
     artifact::IngressMessageId,
     batch::{
         Batch, BatchMessages, BatchSummary, BlockmakerMetrics, CanisterCyclesCostSchedule,
         ChainKeyData, ConsensusResponse, QueryStatsPayload, SelfValidatingPayload, TotalQueryStats,
         ValidationContext, XNetPayload,
     },
-    canister_http::{CanisterHttpResponse, CanisterHttpResponseContent},
+    canister_http::{
+        CanisterHttpRequestContext, CanisterHttpRequestId, CanisterHttpResponse,
+        CanisterHttpResponseContent, CanisterHttpResponseMetadata,
+    },
     consensus::{
         block_maker::SubnetRecords,
         certification::{Certification, CertificationContent},
     },
+    crypto::threshold_sig::ThresholdSigPublicKey,
     crypto::{
         AlgorithmId, CombinedThresholdSig, CombinedThresholdSigOf, KeyPurpose, Signable, Signed,
         canister_threshold_sig::MasterPublicKey,
@@ -157,28 +154,28 @@ use ic_types::{
             NiDkgId, NiDkgMasterPublicKeyId, NiDkgTag, NiDkgTargetSubnet, NiDkgTranscript,
         },
     },
+    ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::{
-        Blob, Certificate, CertificateDelegation, CertificateDelegationMetadata,
+        Blob, CallbackId, Certificate, CertificateDelegation, CertificateDelegationMetadata,
         EXPECTED_MESSAGE_ID_LENGTH, HttpCallContent, HttpCanisterUpdate, HttpRequestContent,
-        HttpRequestEnvelope, Payload as MsgPayload, Query, QuerySource, RejectContext,
+        HttpRequestEnvelope, MessageId, Payload as MsgPayload, Query, QuerySource, RejectContext,
         SignedIngress, extract_effective_canister_id,
     },
+    nominal_cycles::NominalCycles,
     signature::ThresholdSignature,
-    time::GENESIS,
+    time::{GENESIS, Time},
     xnet::{CertifiedStreamSlice, StreamIndex},
 };
 use ic_xnet_payload_builder::{
     RefillTaskHandle, XNetPayloadBuilderImpl, XNetPayloadBuilderMetrics, XNetSlicePoolImpl,
     certified_slice_pool::CertifiedSlicePool, refill_stream_slice_indices,
 };
-use rcgen::{CertificateParams, KeyPair};
-use serde::Deserialize;
 
-use ic_error_types::RejectCode;
 use maplit::btreemap;
 use rand::{Rng, SeedableRng, rngs::StdRng};
-use serde::Serialize;
+use rcgen::{CertificateParams, KeyPair};
+use serde::{Deserialize, Serialize};
 use slog::Level;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -1030,6 +1027,7 @@ pub struct StateMachineBuilder {
     with_extra_canister_range: Option<std::ops::RangeInclusive<CanisterId>>,
     log_level: Option<Level>,
     bitcoin_testnet_uds_path: Option<PathBuf>,
+    dogecoin_testnet_uds_path: Option<PathBuf>,
     remove_old_states: bool,
     /// If a registry version is provided, then new registry records are created for the `StateMachine`
     /// at the provided registry version.
@@ -1073,6 +1071,7 @@ impl StateMachineBuilder {
             with_extra_canister_range: None,
             log_level: Some(Level::Warning),
             bitcoin_testnet_uds_path: None,
+            dogecoin_testnet_uds_path: None,
             remove_old_states: true,
             create_at_registry_version: Some(INITIAL_REGISTRY_VERSION),
             cost_schedule: CanisterCyclesCostSchedule::Normal,
@@ -1298,6 +1297,16 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_dogecoin_testnet_uds_path(
+        self,
+        dogecoin_testnet_uds_path: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            dogecoin_testnet_uds_path,
+            ..self
+        }
+    }
+
     pub fn with_remove_old_states(self, remove_old_states: bool) -> Self {
         Self {
             remove_old_states,
@@ -1403,6 +1412,7 @@ impl StateMachineBuilder {
     /// in the provided association of subnet IDs and `StateMachine`s.
     pub fn build_with_subnets(self, subnets: Arc<dyn Subnets>) -> Arc<StateMachine> {
         let bitcoin_testnet_uds_path = self.bitcoin_testnet_uds_path.clone();
+        let dogecoin_testnet_uds_path = self.dogecoin_testnet_uds_path.clone();
 
         // Build a `StateMachine` for the subnet with `self.subnet_id`.
         let sm = Arc::new(self.build_internal());
@@ -1446,7 +1456,7 @@ impl StateMachineBuilder {
             bitcoin_testnet_uds_metrics_path: None,
             dogecoin_mainnet_uds_path: None,
             dogecoin_mainnet_uds_metrics_path: None,
-            dogecoin_testnet_uds_path: None,
+            dogecoin_testnet_uds_path,
             dogecoin_testnet_uds_metrics_path: None,
             https_outcalls_uds_path: None,
             https_outcalls_uds_metrics_path: None,
@@ -1462,8 +1472,8 @@ impl StateMachineBuilder {
             &sm.metrics_registry,
             bitcoin_clients.btc_mainnet_client,
             bitcoin_clients.btc_testnet_client,
-            bitcoin_clients.doge_testnet_client,
             bitcoin_clients.doge_mainnet_client,
+            bitcoin_clients.doge_testnet_client,
             sm.subnet_id,
             sm.registry_client.clone(),
             BitcoinPayloadBuilderConfig::default(),
@@ -2323,6 +2333,7 @@ impl StateMachine {
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone())))
             .unwrap()
+            .expect("The latest state should be certified")
             .map_err(SubmitIngressError::UserError)?;
 
         // All checks were successful at this point so we can push the ingress message to the ingress pool.
@@ -2622,22 +2633,32 @@ impl StateMachine {
     /// This function panics if the state machine did not process all messages within the
     /// `max_ticks` iterations.
     pub fn run_until_completion(&self, max_ticks: usize) {
-        let mut reached_completion = false;
         for _tick in 0..max_ticks {
-            let state = self.state_manager.get_latest_state().take();
-            reached_completion = !state
-                .canisters_iter()
-                .any(|canister| canister.has_input() || canister.has_output())
-                && !state.subnet_queues().has_input()
-                && !state.subnet_queues().has_output();
-            if reached_completion {
-                break;
+            if !self.has_inflight_messages() {
+                return;
             }
             self.tick();
         }
-        if !reached_completion {
-            panic!("The state machine did not reach completion after {max_ticks} ticks");
-        }
+        panic!("The state machine did not reach completion after {max_ticks} ticks");
+    }
+
+    /// Checks whether the state machine has any in-flight messages (paused, in
+    /// ingress queues, canister queues, streams or refund pool).
+    pub fn has_inflight_messages(&self) -> bool {
+        let state = self.state_manager.get_latest_state().take();
+        state.canisters_iter().any(|canister| {
+            canister.has_input()
+                || canister.has_output()
+                // We're assuming no heartbeat.
+                || canister.next_execution() != NextExecution::None
+        }) || state.subnet_queues().has_input()
+            || state.subnet_queues().has_output()
+            // Should also look at the `SubnetCallContextManager`, but that's likely overkill.
+            || !state.refunds().is_empty()
+            || state
+                .streams()
+                .iter()
+                .any(|(_, stream)| !stream.messages().is_empty())
     }
 
     /// Checks critical error counters and panics if a critical error occurred.
@@ -4100,6 +4121,9 @@ impl StateMachine {
         method: impl ToString,
         payload: Vec<u8>,
     ) -> Result<MessageId, UserError> {
+        // Make sure the latest state is certified for the ingress filter to work.
+        self.certify_latest_state();
+
         let msg = self.ingress_message(sender, canister_id, method, payload);
 
         // Fetch ingress validation settings from the registry.
@@ -4114,7 +4138,8 @@ impl StateMachine {
         let ingress_filter = self.ingress_filter.lock().unwrap().clone();
         self.runtime
             .block_on(ingress_filter.oneshot((provisional_whitelist, msg.clone())))
-            .unwrap()?;
+            .unwrap()
+            .expect("The latest state should be certified")?;
 
         let msg_id = msg.content().id();
         let builder = PayloadBuilder::new().signed_ingress(msg);
@@ -4532,6 +4557,25 @@ impl StateMachine {
         balance
     }
 
+    /// Returns the cycle consumption metrics of the specified canister.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the specified canister does not exist.
+    pub fn consumed_cycles_by_use_cases(
+        &self,
+        canister_id: CanisterId,
+    ) -> BTreeMap<CyclesUseCase, NominalCycles> {
+        let state = self.state_manager.get_latest_state().take();
+        state
+            .canister_state(&canister_id)
+            .unwrap_or_else(|| panic!("Canister {canister_id} not found"))
+            .system_state
+            .canister_metrics
+            .get_consumed_cycles_by_use_cases()
+            .clone()
+    }
+
     /// Returns `sign_with_ecdsa` contexts from internal subnet call context manager.
     pub fn sign_with_ecdsa_contexts(&self) -> BTreeMap<CallbackId, SignWithThresholdContext> {
         let state = self.state_manager.get_latest_state().take();
@@ -4657,12 +4701,26 @@ pub fn certify_latest_state_helper(
     secret_key: &SecretKeyBytes,
     subnet_id: SubnetId,
 ) {
+    if state_manager.latest_state_height() == Height::from(0) {
+        let (height, replicated_state) = state_manager.take_tip();
+        state_manager.commit_and_certify(
+            replicated_state,
+            height.increment(),
+            CertificationScope::Metadata,
+            None,
+        );
+    }
+    assert_ne!(state_manager.latest_state_height(), Height::from(0));
     if state_manager.latest_state_height() > state_manager.latest_certified_height() {
         let state_hashes = state_manager.list_state_hashes_to_certify();
         let (height, hash) = state_hashes.last().unwrap();
         state_manager
             .deliver_state_certification(certify_hash(secret_key, subnet_id, height, hash));
     }
+    assert_eq!(
+        state_manager.latest_certified_height(),
+        state_manager.latest_state_height()
+    );
 }
 
 fn certify_hash(

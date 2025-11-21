@@ -499,11 +499,6 @@ This feature is still experimental, so please report any issues you encounter
 with it, especially if they look something like `error[E0460]: found possibly
 newer version of crate ...`.
 
-### Is is possible to deploy a static testnet bazel?
-
-Yes! Follow this procedure:
-[testnet/tools/README.md](https://github.com/dfinity/ic/blob/master/testnet/tools/README.md)
-
 ### What is the official Bazel slack channel?
 
 You can also find additional help in the Google Bazel documentation and in the

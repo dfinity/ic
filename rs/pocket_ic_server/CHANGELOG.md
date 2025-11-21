@@ -15,7 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New DELETE endpoint `/prune_graph/<state_label>/<op_id>` for pruning the result of a long-running operation.
   This endpoint should be called after successfully reading the result using the GET endpoint `/read_graph/<state_label>/<op_id>`.
   The `state_label` and `op_id` are returned by `ApiResponse::Started {state_label, op_id}`.
-- New ICP features `bitcoin` and `canister_migration` can be specified in the optional field `icp_features` in the argument of the endpoint `/instances/`.
+- New ICP features `bitcoin`, `dogecoin`, and `canister_migration` can be specified in the optional field `icp_features` in the argument of the endpoint `/instances/`.
+- Support for Dogecoin: PocketIC server interacts with a `dogecoind` process listening at an address and port specified in a new optional field `dogecoind_addr` of the endpoint `/instances/`.
+- The endpoint `/instances/<instance_id>/update/canister_snapshot_download` to download a canister snapshot to a given snapshot directory.
 
 
 

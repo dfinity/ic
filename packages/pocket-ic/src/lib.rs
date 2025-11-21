@@ -169,6 +169,7 @@ pub struct PocketIcBuilder {
     icp_config: IcpConfig,
     log_level: Option<Level>,
     bitcoind_addr: Option<Vec<SocketAddr>>,
+    dogecoind_addr: Option<Vec<SocketAddr>>,
     icp_features: IcpFeatures,
     initial_time: Option<InitialTime>,
 }
@@ -187,6 +188,7 @@ impl PocketIcBuilder {
             icp_config: IcpConfig::default(),
             log_level: None,
             bitcoind_addr: None,
+            dogecoind_addr: None,
             icp_features: IcpFeatures::default(),
             initial_time: None,
         }
@@ -209,6 +211,7 @@ impl PocketIcBuilder {
             self.icp_config,
             self.log_level,
             self.bitcoind_addr,
+            self.dogecoind_addr,
             self.icp_features,
             self.initial_time,
             self.http_gateway_config,
@@ -226,6 +229,7 @@ impl PocketIcBuilder {
             self.icp_config,
             self.log_level,
             self.bitcoind_addr,
+            self.dogecoind_addr,
             self.icp_features,
             self.initial_time,
             self.http_gateway_config,
@@ -282,6 +286,13 @@ impl PocketIcBuilder {
     pub fn with_bitcoind_addrs(self, bitcoind_addrs: Vec<SocketAddr>) -> Self {
         Self {
             bitcoind_addr: Some(bitcoind_addrs),
+            ..self
+        }
+    }
+
+    pub fn with_dogecoind_addrs(self, dogecoind_addrs: Vec<SocketAddr>) -> Self {
+        Self {
+            dogecoind_addr: Some(dogecoind_addrs),
             ..self
         }
     }
@@ -572,6 +583,7 @@ impl PocketIc {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn from_components(
         subnet_config_set: impl Into<ExtendedSubnetConfigSet>,
         server_url: Option<Url>,
@@ -582,6 +594,7 @@ impl PocketIc {
         icp_config: IcpConfig,
         log_level: Option<Level>,
         bitcoind_addr: Option<Vec<SocketAddr>>,
+        dogecoind_addr: Option<Vec<SocketAddr>>,
         icp_features: IcpFeatures,
         initial_time: Option<InitialTime>,
         http_gateway_config: Option<InstanceHttpGatewayConfig>,
@@ -607,6 +620,7 @@ impl PocketIc {
                 icp_config,
                 log_level,
                 bitcoind_addr,
+                dogecoind_addr,
                 icp_features,
                 initial_time,
                 http_gateway_config,
@@ -787,7 +801,7 @@ impl PocketIc {
     /// Returns the URL at which `/api` requests
     /// for this instance can be made.
     #[instrument(skip(self), fields(instance_id=self.pocket_ic.instance_id))]
-    pub async fn make_live_with_params(
+    pub fn make_live_with_params(
         &mut self,
         ip_addr: Option<IpAddr>,
         listen_at: Option<u16>,
@@ -1433,6 +1447,25 @@ impl PocketIc {
         runtime.block_on(async {
             self.pocket_ic
                 .mock_canister_http_response(mock_canister_http_response)
+                .await
+        })
+    }
+
+    /// Download a canister snapshot to a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// The snapshot directory must be empty if it exists.
+    #[instrument(ret, skip(self), fields(instance_id=self.pocket_ic.instance_id))]
+    pub fn canister_snapshot_download(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        snapshot_id: Vec<u8>,
+        snapshot_dir: PathBuf,
+    ) {
+        let runtime = self.runtime.clone();
+        runtime.block_on(async {
+            self.pocket_ic
+                .canister_snapshot_download(canister_id, sender, snapshot_id, snapshot_dir)
                 .await
         })
     }

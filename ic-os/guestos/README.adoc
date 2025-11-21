@@ -28,8 +28,6 @@ The GuestOS image (`disk.img`) can booted directly in QEMU using the following c
 
 * Note: Press `Ctrl-A` followed by `x` to exit the QEMU console.
 
-Alternatively, Bazel can be used to perform a testnet deployment. For documentation on this process, see ic/testnet/tools/README.md.
-
 == Developing the Ubuntu system
 
 The Ubuntu configuration and system logic is contained in the components/ subdirectory.
