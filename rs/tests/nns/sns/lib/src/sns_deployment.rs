@@ -14,6 +14,7 @@ use ic_nervous_system_common::E8;
 use ic_nervous_system_proto::pb::v1::Canister;
 use ic_nns_governance_api::CreateServiceNervousSystem;
 use ic_rosetta_test_utils::EdKeypair;
+use ic_sns_swap::{pb::v1::new_sale_ticket_response, swap::principal_to_subaccount};
 use ic_system_test_driver::{
     canister_agent::{CanisterAgent, HasCanisterAgentCapability},
     canister_api::{
@@ -38,18 +39,12 @@ use ic_system_test_driver::{
     types::{CanisterStatusResult, CreateCanisterResult},
     util::UniversalCanister,
 };
-use rosetta_core::models::RosettaSupportedKeyPair;
-
-use ic_sns_governance::pb::v1::governance::Mode;
-use ic_sns_swap::{
-    pb::v1::{Lifecycle, new_sale_ticket_response},
-    swap::principal_to_subaccount,
-};
 use ic_types::{Cycles, Height};
 use ic_universal_canister::{management, wasm};
 use icp_ledger::{AccountIdentifier, Subaccount};
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
+use rosetta_core::models::RosettaSupportedKeyPair;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use tokio::runtime::Builder;
@@ -599,36 +594,6 @@ pub fn install_sns(
         (Installation was performed using the one-proposal flow.)",
         start_time.elapsed()
     );
-}
-
-/// Initiates a token swap using the given parameters. Specifically, it creates
-/// an OpenSnsTokenSwap proposal and executes it, then asserts that the SNS swap
-/// is open.
-pub fn initiate_token_swap(
-    env: TestEnv,
-    create_service_nervous_system_proposal: CreateServiceNervousSystem,
-) {
-    let log = env.logger();
-    let start_time = Instant::now();
-
-    let sns_client = SnsClient::read_attribute(&env);
-    sns_client.initiate_token_swap_immediately(&env, create_service_nervous_system_proposal);
-    block_on(sns_client.assert_state(&env, Lifecycle::Open, Mode::PreInitializationSwap));
-    info!(
-        log,
-        "==== The SNS token swap has been initialized successfully in {:?} ====",
-        start_time.elapsed()
-    );
-}
-
-/// Like [`initiate_token_swap`], but initiates the token swap with "openchat-ish"
-/// parameters. (Not guaranteed to be exactly the same as the actual parameters
-/// used by openchat.)
-///
-/// This function should be the one used "by default" for most tests, to ensure
-/// that the tests are using realistic parameters.
-pub fn initiate_token_swap_with_oc_parameters(env: TestEnv) {
-    initiate_token_swap(env, openchat_create_service_nervous_system_proposal());
 }
 
 pub fn workload_many_users_rps20_refresh_buyer_tokens(env: TestEnv) {
