@@ -5,6 +5,5 @@ edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-atty = { workspace = true }
 crossterm = { workspace = true }
 ratatui = { workspace = true }

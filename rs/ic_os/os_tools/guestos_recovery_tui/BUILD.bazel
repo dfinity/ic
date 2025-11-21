@@ -4,7 +4,6 @@ package(default_visibility = ["//rs:ic-os-pkg"])
 
 DEPENDENCIES = [
     "@crate_index//:anyhow",
-    "@crate_index//:atty",
     "@crate_index//:crossterm",
     "@crate_index//:ratatui",
 ]

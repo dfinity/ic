@@ -5556,7 +5556,6 @@ name = "guestos_recovery_tui"
 version = "1.0.0"
 dependencies = [
  "anyhow",
- "atty",
  "crossterm 0.29.0",
  "ratatui",
 ]

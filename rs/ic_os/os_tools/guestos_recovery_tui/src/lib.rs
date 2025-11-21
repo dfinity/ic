@@ -9,7 +9,7 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode, size,
 };
 use ratatui::{Frame, Terminal, backend::CrosstermBackend};
-use std::io::{self, BufRead, BufReader, Read};
+use std::io::{self, BufRead, BufReader, IsTerminal, Read};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -325,7 +325,7 @@ impl App {
 
     /// Runs the interactive TUI application.
     pub fn run(&mut self) -> Result<()> {
-        if !atty::is(atty::Stream::Stdout) || !atty::is(atty::Stream::Stdin) {
+        if !io::stdout().is_terminal() || !io::stdin().is_terminal() {
             anyhow::bail!("This tool requires an interactive terminal.");
         }
 
