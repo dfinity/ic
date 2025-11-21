@@ -353,6 +353,7 @@ impl RegistryReplicator {
         let metrics = Arc::clone(&self.metrics);
         let registry_client = Arc::clone(&self.registry_client);
         let cancelled = Arc::clone(&self.cancelled);
+        let started = Arc::clone(&self.started);
         let poll_delay = self.poll_delay;
 
         let future = async move {
@@ -388,6 +389,8 @@ impl RegistryReplicator {
                    _ = cancellation_token.cancelled() => break
                 };
             }
+
+            started.store(false, Ordering::Relaxed);
         };
 
         Ok(future)
@@ -445,13 +448,26 @@ impl RegistryReplicator {
         }
     }
 
-    pub fn stop_polling_and_set_local_registry_data(&self, source_registry: &dyn LocalStore) {
+    pub async fn stop_polling_and_set_local_registry_data(&self, source_registry: &dyn LocalStore) {
         self.stop_polling();
+        // Wait until polling has actually stopped.
+        while self.started.load(Ordering::Relaxed) {
+            tokio::time::sleep(self.poll_delay).await;
+        }
         self.set_local_registry_data(source_registry);
     }
 
+    /// Instruct the replicator to stop polling for registry updates.
+    /// This does not wait for the polling to actually stop: An ongoing poll might still be in
+    /// progress, potentially modifying the local store after this function returns. Though, it is
+    /// guaranteed that new polls will not be started some time after this function returns, and
+    /// that the Future returned by `start_polling` will eventually complete.
     pub fn stop_polling(&self) {
         self.cancelled.fetch_or(true, Ordering::Relaxed);
+    }
+
+    pub fn is_polling(&self) -> bool {
+        self.started.load(Ordering::Relaxed)
     }
 
     pub fn get_registry_client(&self) -> Arc<dyn RegistryClient> {
@@ -562,11 +578,15 @@ mod tests {
         let replicator = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
         let token = CancellationToken::new();
 
+        assert!(!replicator.started.load(Ordering::Relaxed));
+
         let fut = replicator.start_polling(token.clone());
         assert!(fut.is_ok());
+        assert!(replicator.started.load(Ordering::Relaxed));
 
         let fut = replicator.start_polling(token);
         assert!(fut.is_err_and(|e| e.kind() == ErrorKind::AlreadyExists));
+        assert!(replicator.started.load(Ordering::Relaxed));
     }
 
     #[tokio::test]
@@ -579,7 +599,8 @@ mod tests {
 
         let new_replicator = new_locally_initialized_replicator(2 * INIT_NUM_VERSIONS).await;
         replicator
-            .stop_polling_and_set_local_registry_data(new_replicator.get_local_store().as_ref());
+            .stop_polling_and_set_local_registry_data(new_replicator.get_local_store().as_ref())
+            .await;
         replicator.stop_polling();
 
         assert!(replicator.cancelled.load(Ordering::Relaxed));

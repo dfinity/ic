@@ -394,7 +394,8 @@ impl Upgrade {
         }
         let new_local_store = LocalStoreImpl::new(local_store_location);
         self.registry_replicator
-            .stop_polling_and_set_local_registry_data(&new_local_store);
+            .stop_polling_and_set_local_registry_data(&new_local_store)
+            .await;
         reexec_current_process(&self.logger)
     }
 

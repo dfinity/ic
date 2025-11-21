@@ -380,6 +380,10 @@ async fn test_poll_and_start_polling_and_stop_polling_correctly_update_local_sto
     let new_record = random_mutate(&pocket_ic, &mut rng).await;
     tokio::time::sleep(replicator.get_poll_delay() + DELAY_LEEWAY).await;
 
+    // After stopping polling, ensure that replicator is indeed not polling after waiting for
+    // the poll delay
+    assert!(!replicator.is_polling());
+
     // Since we stopped polling, even though we waited for the poll delay, local store and
     // client should still contain the previous state
     assert_replicator_not_up_to_date_yet(&replicator, latest_version, &records, &new_record);
