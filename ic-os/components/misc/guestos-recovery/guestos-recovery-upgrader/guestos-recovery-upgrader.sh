@@ -315,6 +315,11 @@ main() {
     fi
 
     extract_upgrade "$TMPDIR"
+
+    log_message "Stopping guestos.service for manual upgrade"
+    systemctl stop guestos.service
+    log_message "GuestOS service stopped"
+
     install_upgrade "$TMPDIR"
 
     log_message "Recovery Upgrader completed successfully"
@@ -329,9 +334,9 @@ main() {
         log_message "Recovery hash written to $RECOVERY_FILE"
     fi
 
-    log_message "Restarting guestos.service"
-    systemctl restart guestos.service
-    log_message "GuestOS service restart initiated"
+    log_message "Restarting guestos service after manual upgrade"
+    systemctl start guestos.service
+    log_message "GuestOS service restarted successfully"
 }
 
 main "$@"
