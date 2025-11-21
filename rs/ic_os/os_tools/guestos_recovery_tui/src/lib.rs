@@ -69,11 +69,19 @@ impl RecoveryParams {
         if value.is_empty() {
             anyhow::bail!("{} is required", name);
         }
-        if value.len() != required_len || !value.chars().all(|c| c.is_ascii_hexdigit()) {
+        if value.len() != required_len {
             anyhow::bail!(
-                "{} must be exactly {} hexadecimal characters ({})",
+                "{} must be exactly {} hexadecimal characters ({}); got {}",
                 name,
                 required_len,
+                description,
+                value.len()
+            );
+        }
+        if !value.chars().all(|c| c.is_ascii_hexdigit()) {
+            anyhow::bail!(
+                "{} must contain only hexadecimal characters ({})",
+                name,
                 description
             );
         }
