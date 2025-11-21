@@ -83,7 +83,7 @@ mod tests {
         );
 
         set_governance_for_tests(governance);
-        let governance = governance_mut();
+        let governance = legacy_governance_mut();
 
         // In this test, we don't care that rewards are actually distributed, only that the
         // timer is scheduled and then cancelled.  Other tests cover that the rewards are distributed.

@@ -76,19 +76,13 @@ are best practices for making use of the unsafe block:
       await is not advised. It is best practice to reacquire a reference to the state after
       an async call.
 */
-/// Returns an immutable reference to the global state.
-///
-/// This should only be called once the global state has been initialized, which
-/// happens in `canister_init` or `canister_post_upgrade`.
-pub fn governance() -> &'static Governance {
-    unsafe { &*GOVERNANCE.with(|g| g.as_ptr()) }
-}
-
 /// Returns a mutable reference to the global state.
 ///
-/// This should only be called once the global state has been initialized, which
-/// happens in `canister_init` or `canister_post_upgrade`.
-pub fn governance_mut() -> &'static mut Governance {
+/// This should only be called once the global state has been initialized, which happens in
+/// `canister_init` or `canister_post_upgrade`. Consider using `with_governance_mut` instead, as
+/// this function can lead to undefined behavior, for example, a reference of the global state being
+/// used across an await.
+pub fn legacy_governance_mut() -> &'static mut Governance {
     unsafe { &mut *GOVERNANCE.with(|g| g.as_ptr()) }
 }
 
@@ -104,9 +98,11 @@ pub fn with_governance_mut<R>(f: impl FnOnce(&mut Governance) -> R) -> R {
 pub fn set_governance(gov: Governance) {
     GOVERNANCE.set(gov);
 
-    governance()
-        .validate()
-        .expect("Error initializing the governance canister.");
+    with_governance(|governance| {
+        governance
+            .validate()
+            .expect("Error initializing the governance canister.")
+    });
 }
 #[cfg(any(test, not(target_arch = "wasm32")))]
 pub fn set_governance_for_tests(gov: Governance) {

@@ -227,7 +227,7 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
     governance.heap_data.proposals = PROPOSALS.clone();
 
     set_governance_for_tests(governance);
-    let governance = governance_mut();
+    let governance = legacy_governance_mut();
     schedule_tasks();
 
     // Step 2: Call code under test.
