@@ -37,7 +37,7 @@ impl FeeEstimator for DogecoinFeeEstimator {
     const DUST_LIMIT: u64 = 1_000_000;
 
     fn estimate_median_fee(&self, fee_percentiles: &[u64]) -> Option<u64> {
-        const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = 5_000;
+        const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = DogecoinFeeEstimator::DUST_LIMIT * 1_000;
 
         match &self.network {
             Network::Mainnet | Network::Testnet => {
