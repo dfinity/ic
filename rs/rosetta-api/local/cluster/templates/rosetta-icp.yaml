@@ -3,6 +3,23 @@
 # - It's the latest image and deployLatest is true, OR
 # - It's a local image and useLocallyBuilt is true
 {{- if or (and (not .isLocallyBuilt) $.Values.icpConfig.deployLatest) (and .isLocallyBuilt $.Values.icpConfig.useLocallyBuilt) }}
+{{- if $.Values.usePersistentVolumes }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .name }}-pvc
+  namespace: {{ .namespace }}
+spec:
+  accessModes:
+    {{- range $.Values.persistentVolume.accessModes }}
+    - {{ . }}
+    {{- end }}
+  storageClassName: {{ $.Values.persistentVolume.storageClass }}
+  resources:
+    requests:
+      storage: {{ $.Values.persistentVolume.size }}
+---
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -69,9 +86,15 @@ spec:
             memory: {{ .resources.requests.memory }}
             cpu: {{ .resources.requests.cpu }}
       volumes:
+        {{- $serviceName := .name }}
         {{- range $.Values.volumes }}
         - name: {{ .name }}
+          {{- if $.Values.usePersistentVolumes }}
+          persistentVolumeClaim:
+            claimName: {{ $serviceName }}-pvc
+          {{- else }}
           emptyDir: {}
+          {{- end }}
         {{- end }}
 ---
 {{- end }}

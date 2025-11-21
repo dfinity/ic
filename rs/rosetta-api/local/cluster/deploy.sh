@@ -11,7 +11,9 @@ set -e
 #   --local-icrc1-image-tar <path>   Path to local ICRC1 image tar file
 #   --no-icp-latest                  Don't deploy ICP Rosetta latest image
 #   --no-icrc1-latest                Don't deploy ICRC1 Rosetta latest image
-#   --clean                          Clean up Minikube cluster and Helm chart before deploying
+#   --use-persistent-volumes         Use persistent volumes for /data partition (survives --clean)
+#   --clean                          Clean up Minikube cluster and Helm chart before deploying (keeps persistent volumes)
+#   --purge                          Like --clean but also deletes persistent volumes
 #   --stop                           Stop the Minikube cluster
 #   --help                           Display this help message
 
@@ -23,7 +25,9 @@ LOCAL_ICP_IMAGE_TAR=""
 LOCAL_ICRC1_IMAGE_TAR=""
 DEPLOY_ICP_LATEST=true
 DEPLOY_ICRC1_LATEST=true
+USE_PERSISTENT_VOLUMES=false
 CLEAN=false
+PURGE=false
 STOP=false
 MINIKUBE_PROFILE="local-rosetta"
 
@@ -56,10 +60,17 @@ while [[ "$#" -gt 0 ]]; do
         --no-icrc1-latest)
             DEPLOY_ICRC1_LATEST=false
             ;;
+        --use-persistent-volumes)
+            USE_PERSISTENT_VOLUMES=true
+            ;;
         --clean) CLEAN=true ;;
+        --purge)
+            PURGE=true
+            CLEAN=true
+            ;;
         --stop) STOP=true ;;
         --help)
-            sed -n '5,16p' "$0"
+            sed -n '5,18p' "$0"
             exit 0
             ;;
         *)
@@ -157,11 +168,26 @@ command -v helm &>/dev/null || {
     fi
 }
 
-# Clean up Minikube cluster and Helm chart if --clean flag is set
+# Clean up Minikube cluster and Helm chart if --clean or --purge flag is set
 [[ "$CLEAN" == true ]] && {
-    echo "Cleaning up Minikube cluster and Helm chart..."
-    helm uninstall local-rosetta || true
-    minikube delete -p "$MINIKUBE_PROFILE"
+    echo "Cleaning up Helm chart..."
+
+    # Uninstall the Helm chart
+    helm uninstall local-rosetta --kube-context="$MINIKUBE_PROFILE" 2>/dev/null || true
+
+    # If --purge is set, also delete persistent volumes
+    if [[ "$PURGE" == true ]]; then
+        echo "Purging persistent volumes..."
+        kubectl delete pvc --all -n rosetta-api --context="$MINIKUBE_PROFILE" 2>/dev/null || true
+        echo "Deleting Minikube cluster..."
+        minikube delete -p "$MINIKUBE_PROFILE"
+    elif [[ "$USE_PERSISTENT_VOLUMES" == false ]]; then
+        # Only delete the cluster if not using persistent volumes (for backward compatibility)
+        echo "Deleting Minikube cluster..."
+        minikube delete -p "$MINIKUBE_PROFILE"
+    else
+        echo "Persistent volumes preserved. Use --purge to delete them."
+    fi
 }
 
 # Start Minikube with the specified profile if not already running
@@ -229,9 +255,20 @@ load_local_tar() {
     return 0
 }
 
+# Track which images were loaded for forcing restarts later
+ICP_IMAGE_LOADED=false
+ICRC_IMAGE_LOADED=false
+
 # Load local ICP and ICRC1 images if provided
-load_local_tar "$LOCAL_ICP_IMAGE_TAR"
-load_local_tar "$LOCAL_ICRC1_IMAGE_TAR"
+if [[ -n "$LOCAL_ICP_IMAGE_TAR" ]]; then
+    load_local_tar "$LOCAL_ICP_IMAGE_TAR"
+    ICP_IMAGE_LOADED=true
+fi
+
+if [[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]]; then
+    load_local_tar "$LOCAL_ICRC1_IMAGE_TAR"
+    ICRC_IMAGE_LOADED=true
+fi
 
 echo "Deploying Helm chart..."
 # Deploy or upgrade the Helm chart
@@ -245,7 +282,24 @@ helm upgrade --install local-rosetta . \
     --set icrcConfig.deployLatest="$DEPLOY_ICRC1_LATEST" \
     --set icpConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICP_IMAGE_TAR" ]] && echo "true" || echo "false") \
     --set icrcConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]] && echo "true" || echo "false") \
+    --set usePersistentVolumes="$USE_PERSISTENT_VOLUMES" \
     --kube-context="$MINIKUBE_PROFILE"
+
+# Force restart of deployments if new local images were loaded
+# This is necessary because loading an image with the same tag doesn't trigger a pod restart
+if [[ "$ICP_IMAGE_LOADED" == true ]]; then
+    if kubectl get deployment icp-rosetta-local -n rosetta-api --context="$MINIKUBE_PROFILE" &>/dev/null; then
+        echo "Forcing restart of icp-rosetta-local to pick up new image..."
+        kubectl rollout restart deployment/icp-rosetta-local -n rosetta-api --context="$MINIKUBE_PROFILE"
+    fi
+fi
+
+if [[ "$ICRC_IMAGE_LOADED" == true ]]; then
+    if kubectl get deployment icrc-rosetta-local -n rosetta-api --context="$MINIKUBE_PROFILE" &>/dev/null; then
+        echo "Forcing restart of icrc-rosetta-local to pick up new image..."
+        kubectl rollout restart deployment/icrc-rosetta-local -n rosetta-api --context="$MINIKUBE_PROFILE"
+    fi
+fi
 
 # Wait for Grafana server to be ready
 echo "Waiting for Grafana server to be ready..."
