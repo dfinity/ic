@@ -1,4 +1,4 @@
-use ic_crypto_sha2::{DomainSeparationContext, Sha256};
+use ic_crypto_sha2::Sha256;
 use std::hash::Hash;
 
 const EXPECTED_DIGEST: [u8; 32] = [
