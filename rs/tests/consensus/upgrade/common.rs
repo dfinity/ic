@@ -275,15 +275,15 @@ async fn upgrade_to(
 
     // Concurrently fetch the latest computed root hash from logs and assert that the orchestrator
     // shut down gracefully
-    let h1 = tokio::spawn(fetch_latest_computed_root_hash_from_logs(log_stream));
+    let fetch_hash_handle = tokio::spawn(fetch_latest_computed_root_hash_from_logs(log_stream));
     let subnet_node_cl = subnet_node.clone();
-    let h2 = tokio::spawn(async move {
+    let graceful_stop_handle = tokio::spawn(async move {
         assert_orchestrator_stopped_gracefully(&subnet_node_cl).await;
     });
 
-    let (r1, r2) = tokio::join!(h1, h2);
-    let state_hash_from_logs = r1.unwrap();
-    r2.unwrap();
+    let (fetch_hash_res, graceful_stop_res) = tokio::join!(fetch_hash_handle, graceful_stop_handle);
+    let state_hash_from_logs = fetch_hash_res.unwrap();
+    graceful_stop_res.unwrap();
 
     info!(logger, "The orchestrator shut down the tasks gracefully");
     info!(
