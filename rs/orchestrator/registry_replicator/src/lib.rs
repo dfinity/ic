@@ -417,8 +417,17 @@ impl RegistryReplicator {
         poll_result.and(self.registry_client.poll_once().map_err(|e| e.to_string()))
     }
 
-    /// Set the local registry data to what is contained in the provided local
-    /// store.
+    /// Set the local registry data to what is contained in the provided local store.
+    ///
+    /// IMPORTANT: This function does not update the registry client cache (i.e. does not call
+    /// `poll_once` on it). This means that the latter will continue to serve data from the old
+    /// local store after this function returns.
+    /// It is not sufficient to call `poll_once` on the registry client here, because the latter
+    /// only fetches changes since the latest known version, which would work only if the current
+    /// local store is a prefix of the new one.
+    /// Because this might not be the case (e.g. during NNS recovery on failover nodes), the caller
+    /// is responsible for polling the registry client (if the current local store is a prefix of
+    /// the new one) or for creating a new registry client, if needed.
     fn set_local_registry_data(&self, source_registry: &dyn LocalStore) {
         // Read the registry data.
         let changelog = source_registry
@@ -433,13 +442,6 @@ impl RegistryReplicator {
             self.local_store
                 .store(RegistryVersion::from((v + 1) as u64), cle)
                 .expect("Could not store change log entry");
-        }
-
-        if let Err(msg) = self.registry_client.poll_once() {
-            warn!(
-                self.logger,
-                "Failed to update the registry client after setting local registry data: {}", msg
-            )
         }
     }
 
@@ -544,10 +546,6 @@ mod tests {
 
         target.set_local_registry_data(source.get_local_store().as_ref());
         assert_eq!(
-            target.registry_client.get_latest_version(),
-            RegistryVersion::from(2 * INIT_NUM_VERSIONS as u64)
-        );
-        assert_eq!(
             target
                 .get_local_store()
                 .get_changelog_since_version(ZERO_REGISTRY_VERSION)
@@ -578,17 +576,22 @@ mod tests {
         replicator.stop_polling();
         assert!(replicator.cancelled.load(Ordering::Relaxed));
         replicator.stop_polling();
-        replicator.stop_polling_and_set_local_registry_data(
-            new_locally_initialized_replicator(2 * INIT_NUM_VERSIONS)
-                .await
-                .get_local_store()
-                .as_ref(),
-        );
+
+        let new_replicator = new_locally_initialized_replicator(2 * INIT_NUM_VERSIONS).await;
+        replicator
+            .stop_polling_and_set_local_registry_data(new_replicator.get_local_store().as_ref());
         replicator.stop_polling();
+
         assert!(replicator.cancelled.load(Ordering::Relaxed));
         assert_eq!(
-            replicator.registry_client.get_latest_version(),
-            RegistryVersion::from(2 * INIT_NUM_VERSIONS as u64)
+            replicator
+                .get_local_store()
+                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
+                .unwrap(),
+            new_replicator
+                .get_local_store()
+                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
+                .unwrap()
         );
     }
 }
