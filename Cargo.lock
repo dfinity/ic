@@ -11143,11 +11143,13 @@ dependencies = [
  "candid",
  "dfn_core",
  "futures",
+ "ic-crypto-sha2",
  "ic-nervous-system-canisters",
  "ic-nervous-system-common",
  "ic-wasm",
  "icp-ledger",
  "icrc-ledger-types",
+ "lazy_static",
  "libflate",
  "prometheus-parse",
 ]
