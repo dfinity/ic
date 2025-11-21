@@ -4,9 +4,8 @@ use crate::canister_state::system_state::log_memory_store::{
     memory::{MemoryAddress, MemorySize},
     struct_io::StructIO,
 };
-use crate::page_map::{PAGE_SIZE, PageIndex, PageMap};
+use crate::page_map::{PAGE_SIZE, PageMap};
 use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
-use ic_sys::PageBytes;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 
@@ -64,8 +63,8 @@ impl RingBuffer {
         Self { io }
     }
 
-    pub fn page_map(&mut self) -> &PageMap {
-        self.io.page_map()
+    pub fn into_page_map(&self) -> PageMap {
+        self.io.into_page_map()
     }
 
     pub fn page_map_mut(&mut self) -> &mut PageMap {

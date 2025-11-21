@@ -250,7 +250,7 @@ impl PageMapType {
                 .map(|can| can.system_state.wasm_chunk_store.page_map()),
             PageMapType::LogMemoryStore(id) => state
                 .canister_state(id)
-                .map(|can| can.system_state.log_memory_store.page_map()),
+                .map(|can| &can.system_state.log_memory_store.into_page_map()),
             PageMapType::SnapshotWasmMemory(id) => state
                 .canister_snapshots
                 .get(*id)

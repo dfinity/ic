@@ -23,7 +23,7 @@ const DELTA_LOG_SIZES_CAP: usize = 100;
 #[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct LogMemoryStore {
     #[validate_eq(Ignore)]
-    pub ring_buffer: RingBuffer,
+    pub page_map: PageMap,
 
     // ring_buffer: RingBuffer, // cached reference to the inner ring buffer of the
     // page_map: PageMap,
@@ -52,29 +52,34 @@ impl LogMemoryStore {
     pub fn new_inner(page_map: PageMap) -> Self {
         let data_capacity = MemorySize::new(10_000_000); // TODO: populate it properly
         Self {
-            ring_buffer: RingBuffer::new(page_map, data_capacity),
+            page_map,
             delta_log_sizes: VecDeque::new(),
         }
     }
 
-    pub fn page_map(&mut self) -> &PageMap {
-        self.ring_buffer.page_map()
+    pub fn page_map(&self) -> &PageMap {
+        &self.page_map
     }
 
     pub fn page_map_mut(&mut self) -> &mut PageMap {
-        self.ring_buffer.page_map_mut()
+        &mut self.page_map
     }
 
     pub fn clear(&mut self) {
         // TODO.
     }
 
+    fn ring_buffer(&self) -> RingBuffer {
+        let data_capacity = MemorySize::new(10_000_000); // TODO: populate it properly
+        RingBuffer::init(self.page_map.clone(), data_capacity)
+    }
+
     pub fn capacity(&mut self) -> usize {
-        self.ring_buffer.capacity()
+        self.ring_buffer().capacity()
     }
 
     pub fn used_space(&mut self) -> usize {
-        self.ring_buffer.used_space()
+        self.ring_buffer().used_space()
     }
 
     pub fn is_empty(&mut self) -> bool {
@@ -82,7 +87,7 @@ impl LogMemoryStore {
     }
 
     pub fn next_id(&mut self) -> u64 {
-        self.ring_buffer.next_id()
+        self.ring_buffer().next_id()
     }
 
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
@@ -94,7 +99,7 @@ impl LogMemoryStore {
             .iter_mut()
             .map(std::mem::take)
             .collect();
-        self.ring_buffer.append_log(records);
+        self.ring_buffer().append_log(records);
     }
 
     /// Records the size of the appended delta log.
@@ -111,7 +116,7 @@ impl LogMemoryStore {
     }
 
     pub fn records(&mut self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
-        self.ring_buffer.records(filter)
+        self.ring_buffer().records(filter)
     }
 }
 

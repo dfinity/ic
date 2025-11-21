@@ -5,8 +5,7 @@ use crate::canister_state::system_state::log_memory_store::{
     memory::{MemoryAddress, MemoryPosition, MemorySize},
     ring_buffer::{DATA_REGION_OFFSET, HEADER_OFFSET, INDEX_TABLE_OFFSET, RESULT_MAX_SIZE},
 };
-use crate::page_map::{Buffer, PageIndex, PageMap};
-use ic_sys::PageBytes;
+use crate::page_map::{Buffer, PageMap};
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
 
@@ -23,16 +22,8 @@ impl StructIO {
         }
     }
 
-    // pub fn dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
-    //     self.buffer.dirty_pages().collect()
-    // }
-
-    // pub fn into_page_map(self) -> PageMap {
-    //     self.buffer.into_page_map()
-    // }
-
-    pub fn page_map(&mut self) -> &PageMap {
-        self.buffer.page_map()
+    pub fn into_page_map(&self) -> PageMap {
+        self.buffer.into_page_map()
     }
 
     pub fn page_map_mut(&mut self) -> &mut PageMap {
