@@ -67,12 +67,9 @@ impl BootstrapOptions {
             .context("Failed to set output file size")?;
 
         // Format the disk image as FAT
-        // mkfs.vfat is usually in /usr/sbin which is not always in the PATH
-        let path_with_usr_sbin = format!("/usr/sbin:{}", env::var("PATH").unwrap_or_default());
-        if !Command::new("mkfs.vfat")
+        if !Command::new("/usr/sbin/mkfs.vfat")
             .arg("-n")
             .arg("CONFIG")
-            .env("PATH", path_with_usr_sbin)
             .arg(out_file)
             .status()
             .context("Failed to execute mkfs.vfat command")?

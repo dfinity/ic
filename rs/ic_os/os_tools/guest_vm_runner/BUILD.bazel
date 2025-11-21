@@ -91,7 +91,9 @@ rust_test(
         "integration_tests",
     ],
     data = glob(["golden/*"]) + ["//ic-os/guestos/envs/prod:disk-img-for-tests.tar"],
-    env = {"ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)"},
+    env = {
+        "ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)",
+    },
     # Mark it manual here and expose it in //ic-os/tests:integration_tests
     tags = ["manual"],
     deps = DEV_DEPENDENCIES,

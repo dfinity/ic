@@ -102,7 +102,7 @@ impl Partition for ExtPartition {
             .args([
                 "-f",
                 "1970-1-1 0:0:0",
-                "debugfs",
+                "/usr/sbin/debugfs",
                 "-w",
                 (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",
@@ -138,7 +138,7 @@ impl Partition for ExtPartition {
         );
 
         // Use debugfs to dump the entire filesystem
-        let out = Command::new("debugfs")
+        let out = Command::new("/usr/sbin/debugfs")
             .args([
                 "-R",
                 &format!("rdump / {}", output.display()),
@@ -171,7 +171,7 @@ impl Partition for ExtPartition {
         };
 
         // run the underlying debugfs operation
-        let mut cmd = Command::new("debugfs")
+        let mut cmd = Command::new("/usr/sbin/debugfs")
             .args([
                 (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",
@@ -217,7 +217,7 @@ impl ExtPartition {
             .args([
                 "-f",
                 "1970-1-1 0:0:0",
-                "debugfs",
+                "/usr/sbin/debugfs",
                 "-w",
                 (self.backing_dir.path().join(STORE_NAME).to_str().unwrap()),
                 "-f",
