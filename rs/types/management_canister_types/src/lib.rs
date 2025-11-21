@@ -3702,7 +3702,7 @@ impl UploadChunkArgs {
 ///   hash : blob;
 /// }
 /// ```
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Deserialize)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, CandidType, Serialize, Deserialize)]
 pub struct ChunkHash {
     #[serde(with = "serde_bytes")]
     pub hash: Vec<u8>,
@@ -4224,7 +4224,7 @@ impl ReadCanisterSnapshotMetadataArgs {
 
 impl Payload<'_> for ReadCanisterSnapshotMetadataArgs {}
 
-#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Deserialize, EnumIter)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize, EnumIter)]
 pub enum SnapshotSource {
     #[serde(rename = "taken_from_canister")]
     TakenFromCanister(Reserved),
@@ -4321,7 +4321,7 @@ impl TryFrom<pb_canister_state_bits::SnapshotSource> for SnapshotSource {
 /// }
 /// ```
 
-#[derive(Clone, PartialEq, Debug, CandidType, Deserialize)]
+#[derive(Clone, PartialEq, Debug, CandidType, Serialize, Deserialize)]
 pub struct ReadCanisterSnapshotMetadataResponse {
     pub source: SnapshotSource,
     pub taken_at_timestamp: u64,

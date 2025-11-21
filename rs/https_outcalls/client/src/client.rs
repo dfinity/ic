@@ -189,8 +189,6 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         })
                         .collect(),
                     body: request_body.unwrap_or_default(),
-                    // TODO(BOUN-1467): Remove this field once everything is done.
-                    socks_proxy_allowed: true,
                     socks_proxy_addrs,
                 })
                 .map_err(|grpc_status| {

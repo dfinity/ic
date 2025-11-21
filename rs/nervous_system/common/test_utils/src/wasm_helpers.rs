@@ -5,6 +5,11 @@ use std::io::Read;
 /// A small, valid WASM suitable for tests.
 pub const SMALLEST_VALID_WASM_BYTES: &[u8; 8] = &[0, 0x61, 0x73, 0x6D, 1, 0, 0, 0];
 
+pub const SMALLEST_VALID_WASM_HASH: [u8; 32] = [
+    147, 164, 75, 187, 150, 199, 81, 33, 142, 76, 0, 212, 121, 228, 193, 67, 88, 18, 42, 56, 154,
+    204, 161, 98, 5, 177, 228, 208, 220, 95, 148, 118,
+];
+
 /// Return a version of `wasm` extended with a metadata section
 /// "icp:[public|private] $name$contents".
 pub fn annotate_wasm_with_metadata(

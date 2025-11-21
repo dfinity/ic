@@ -124,6 +124,7 @@ fn test_neuron_voting() {
                     motion_text: "dummy text 0".to_string(),
                 })),
                 url: "".to_string(),
+                self_describing_action: None,
             },
             Proposal {
                 title: Some("dummy title 1".to_string()),
@@ -132,6 +133,7 @@ fn test_neuron_voting() {
                     motion_text: "dummy text 1".to_string(),
                 })),
                 url: "".to_string(),
+                self_describing_action: None,
             },
             Proposal {
                 title: Some("dummy title 2".to_string()),
@@ -140,6 +142,7 @@ fn test_neuron_voting() {
                     motion_text: "dummy text 2".to_string(),
                 })),
                 url: "".to_string(),
+                self_describing_action: None,
             },
         ];
 

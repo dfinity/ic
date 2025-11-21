@@ -4,10 +4,10 @@ use crate::common::rest::{
     CreateHttpGatewayResponse, CreateInstanceResponse, ExtendedSubnetConfigSet, HttpGatewayBackend,
     HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpConfig, IcpFeatures, InitialTime,
     InstanceConfig, InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles,
-    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult, RawCycles,
-    RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
-    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
-    RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
+    RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
+    RawCanisterSnapshotDownload, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs,
+    RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
+    RawSubnetId, RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
@@ -1691,6 +1691,31 @@ impl PocketIc {
         let raw_mock_canister_http_response: RawMockCanisterHttpResponse =
             mock_canister_http_response.into();
         self.post(endpoint, raw_mock_canister_http_response).await
+    }
+
+    /// Download a canister snapshot to a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// The snapshot directory must be empty if it exists.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn canister_snapshot_download(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        snapshot_id: Vec<u8>,
+        snapshot_dir: PathBuf,
+    ) {
+        let endpoint = "update/canister_snapshot_download";
+        #[cfg(not(windows))]
+        let snapshot_dir = snapshot_dir;
+        #[cfg(windows)]
+        let snapshot_dir = wsl_path(&snapshot_dir, "snapshot directory").into();
+        let raw_canister_snapshot_download = RawCanisterSnapshotDownload {
+            sender: sender.into(),
+            canister_id: canister_id.into(),
+            snapshot_id,
+            snapshot_dir,
+        };
+        self.post(endpoint, raw_canister_snapshot_download).await
     }
 }
 
