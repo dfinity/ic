@@ -431,7 +431,13 @@ impl RegistryReplicator {
     /// Because this might not be the case (e.g. during NNS recovery on failover nodes), the caller
     /// is responsible for polling the registry client (if the current local store is a prefix of
     /// the new one) or for creating a new registry client, if needed.
-    fn set_local_registry_data(&self, source_registry: &dyn LocalStore) {
+    pub async fn stop_polling_and_set_local_registry_data(&self, source_registry: &dyn LocalStore) {
+        self.stop_polling();
+        // Wait until polling has actually stopped.
+        while self.is_polling() {
+            tokio::time::sleep(self.poll_delay).await;
+        }
+
         // Read the registry data.
         let changelog = source_registry
             .get_changelog_since_version(RegistryVersion::from(0))
@@ -446,15 +452,6 @@ impl RegistryReplicator {
                 .store(RegistryVersion::from((v + 1) as u64), cle)
                 .expect("Could not store change log entry");
         }
-    }
-
-    pub async fn stop_polling_and_set_local_registry_data(&self, source_registry: &dyn LocalStore) {
-        self.stop_polling();
-        // Wait until polling has actually stopped.
-        while self.is_polling() {
-            tokio::time::sleep(self.poll_delay).await;
-        }
-        self.set_local_registry_data(source_registry);
     }
 
     /// Instruct the replicator to stop polling for registry updates.
@@ -556,11 +553,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_set_local_registry_data_works() {
+    async fn test_set_stop_polling_and_set_local_registry_data_works() {
         let source = new_locally_initialized_replicator(2 * INIT_NUM_VERSIONS).await;
         let target = new_locally_initialized_replicator(INIT_NUM_VERSIONS).await;
 
-        target.set_local_registry_data(source.get_local_store().as_ref());
+        target
+            .stop_polling_and_set_local_registry_data(source.get_local_store().as_ref())
+            .await;
         assert_eq!(
             target
                 .get_local_store()
@@ -596,23 +595,6 @@ mod tests {
         replicator.stop_polling();
         assert!(replicator.cancelled.load(Ordering::Relaxed));
         replicator.stop_polling();
-
-        let new_replicator = new_locally_initialized_replicator(2 * INIT_NUM_VERSIONS).await;
-        replicator
-            .stop_polling_and_set_local_registry_data(new_replicator.get_local_store().as_ref())
-            .await;
-        replicator.stop_polling();
-
         assert!(replicator.cancelled.load(Ordering::Relaxed));
-        assert_eq!(
-            replicator
-                .get_local_store()
-                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
-                .unwrap(),
-            new_replicator
-                .get_local_store()
-                .get_changelog_since_version(ZERO_REGISTRY_VERSION)
-                .unwrap()
-        );
     }
 }
