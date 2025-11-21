@@ -32,12 +32,12 @@ use crate::{
         self,
         proposal_conversions::{ProposalDisplayOptions, proposal_data_to_info},
         v1::{
-            ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem,
-            Followees, FulfillSubnetRentalRequest,
-            GetNeuronsFundAuditInfoRequest, GetNeuronsFundAuditInfoResponse,
-            Governance as GovernanceProto, GovernanceError, InstallCode, KnownNeuron,
-            ListKnownNeuronsResponse, ManageNeuron, MonthlyNodeProviderRewards, Motion,
-            NetworkEconomics, NeuronState, NeuronsFundAuditInfo, NeuronsFundData,
+            ArchivedMonthlyNodeProviderRewards, Ballot, CreateServiceNervousSystem, Followees,
+            FulfillSubnetRentalRequest, GetNeuronsFundAuditInfoRequest,
+            GetNeuronsFundAuditInfoResponse, Governance as GovernanceProto, GovernanceError,
+            InstallCode, KnownNeuron, ListKnownNeuronsResponse, ManageNeuron,
+            MonthlyNodeProviderRewards, Motion, NetworkEconomics, NeuronState,
+            NeuronsFundAuditInfo, NeuronsFundData,
             NeuronsFundParticipation as NeuronsFundParticipationPb,
             NeuronsFundSnapshot as NeuronsFundSnapshotPb, NnsFunction, NodeProvider, Proposal,
             ProposalData, ProposalRewardStatus, ProposalStatus, RestoreAgingSummary, RewardEvent,
@@ -5116,7 +5116,7 @@ impl Governance {
 
         // At this point, the topic should be valid because the proposal was just validated, but we
         // exit on error anyway and check for Topic::Unspecified, just to be safe.
-        let topic = action.compute_topic_at_creation()?;
+        let topic = action.topic()?;
         if topic == Topic::Unspecified {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,

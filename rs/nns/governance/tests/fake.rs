@@ -16,8 +16,8 @@ use ic_nns_constants::{
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential, RngError},
     pb::v1::{
-        GovernanceError, ManageNeuron, Motion, NetworkEconomics, Proposal,
-        Vote, manage_neuron, manage_neuron::NeuronIdOrSubaccount, proposal,
+        GovernanceError, ManageNeuron, Motion, NetworkEconomics, Proposal, Vote, manage_neuron,
+        manage_neuron::NeuronIdOrSubaccount, proposal,
     },
     proposals::execute_nns_function::ValidExecuteNnsFunction,
 };

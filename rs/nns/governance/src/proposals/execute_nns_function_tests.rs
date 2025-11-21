@@ -9,7 +9,7 @@ fn test_execute_nns_function_try_from_errors() {
             let result = ValidExecuteNnsFunction::try_from(execute_nns_function);
             let err = result.unwrap_err();
             assert!(
-                err.contains(&error_message),
+                err.error_message.contains(&error_message),
                 "Expected error message to contain '{}', but got '{}'",
                 error_message,
                 err

@@ -48,10 +48,13 @@ pub enum ValidProposalAction {
 }
 
 impl TryFrom<Option<Action>> for ValidProposalAction {
-    type Error = String;
+    type Error = GovernanceError;
 
     fn try_from(action: Option<Action>) -> Result<Self, Self::Error> {
-        let action = action.ok_or("Action is required")?;
+        let action = action.ok_or(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Action is required",
+        ))?;
         match action {
             Action::ManageNeuron(manage_neuron) => {
                 Ok(ValidProposalAction::ManageNeuron(manage_neuron))
@@ -97,18 +100,25 @@ impl TryFrom<Option<Action>> for ValidProposalAction {
             ),
 
             // Obsolete actions
-            Action::SetDefaultFollowees(_) => Err("SetDefaultFollowees is obsolete".to_string()),
-            Action::OpenSnsTokenSwap(_) => Err("OpenSnsTokenSwap is obsolete".to_string()),
-            Action::SetSnsTokenSwapOpenTimeWindow(_) => {
-                Err("SetSnsTokenSwapOpenTimeWindow is obsolete".to_string())
-            }
+            Action::SetDefaultFollowees(_) => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "Se tDefaultFollowees is obsolete",
+            )),
+            Action::OpenSnsTokenSwap(_) => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "OpenSnsTokenSwap is obsolete",
+            )),
+            Action::SetSnsTokenSwapOpenTimeWindow(_) => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "SetSnsTokenSwapOpenTimeWindow is obsolete",
+            )),
         }
     }
 }
 
 impl ValidProposalAction {
     /// Computes a topic to a given proposal action at the creation time.
-    pub fn compute_topic_at_creation(&self) -> Result<Topic, GovernanceError> {
+    pub fn topic(&self) -> Result<Topic, GovernanceError> {
         let topic = match self {
             ValidProposalAction::ManageNeuron(_) => Topic::NeuronManagement,
             ValidProposalAction::ManageNetworkEconomics(_) => Topic::NetworkEconomics,
@@ -116,7 +126,7 @@ impl ValidProposalAction {
             | ValidProposalAction::RegisterKnownNeuron(_)
             | ValidProposalAction::DeregisterKnownNeuron(_) => Topic::Governance,
             ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
-                execute_nns_function.compute_topic_at_creation()
+                execute_nns_function.topic()
             }
             ValidProposalAction::ApproveGenesisKyc(_) => Topic::Kyc,
             ValidProposalAction::AddOrRemoveNodeProvider(_) => Topic::ParticipantManagement,

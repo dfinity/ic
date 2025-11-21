@@ -43,7 +43,11 @@ impl Environment for DegradedEnv {
         111000222
     }
 
-    fn execute_nns_function(&self, _: u64, _: &ValidExecuteNnsFunction) -> Result<(), GovernanceError> {
+    fn execute_nns_function(
+        &self,
+        _: u64,
+        _: &ValidExecuteNnsFunction,
+    ) -> Result<(), GovernanceError> {
         unimplemented!()
     }
 

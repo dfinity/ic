@@ -1,4 +1,6 @@
-use crate::pb::v1::{ExecuteNnsFunction, NnsFunction, Topic};
+use crate::pb::v1::{
+    ExecuteNnsFunction, GovernanceError, NnsFunction, Topic, governance_error::ErrorType,
+};
 
 use ic_base_types::CanisterId;
 use ic_nns_constants::{
@@ -10,6 +12,20 @@ use ic_nns_constants::{
 pub struct ValidExecuteNnsFunction {
     pub nns_function: ValidNnsFunction,
     pub payload: Vec<u8>,
+}
+
+impl ValidExecuteNnsFunction {
+    pub(crate) fn allowed_when_resources_are_low(&self) -> bool {
+        self.nns_function.allowed_when_resources_are_low()
+    }
+
+    pub(crate) fn can_have_large_payload(&self) -> bool {
+        self.nns_function.can_have_large_payload()
+    }
+
+    pub(crate) fn topic(&self) -> Topic {
+        self.nns_function.topic()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -60,7 +76,7 @@ pub enum ValidNnsFunction {
 }
 
 impl ValidNnsFunction {
-    pub fn allowed_when_resources_are_low(&self) -> bool {
+    fn allowed_when_resources_are_low(&self) -> bool {
         matches!(
             self,
             ValidNnsFunction::HardResetNnsRootToVersion
@@ -69,7 +85,7 @@ impl ValidNnsFunction {
         )
     }
 
-    pub fn can_have_large_payload(&self) -> bool {
+    fn can_have_large_payload(&self) -> bool {
         matches!(
             self,
             ValidNnsFunction::NnsCanisterInstall
@@ -78,7 +94,7 @@ impl ValidNnsFunction {
         )
     }
 
-    pub fn canister_and_function(&self) -> (CanisterId, &'static str) {
+    pub(crate) fn canister_and_function(&self) -> (CanisterId, &'static str) {
         match self {
             ValidNnsFunction::AssignNoid => (REGISTRY_CANISTER_ID, "add_node_operator"),
 
@@ -188,13 +204,14 @@ impl ValidNnsFunction {
         }
     }
 
-    pub fn compute_topic_at_creation(&self) -> Topic {
+    fn topic(&self) -> Topic {
         match self {
             ValidNnsFunction::AssignNoid
             | ValidNnsFunction::UpdateNodeOperatorConfig
             | ValidNnsFunction::RemoveNodeOperators
             | ValidNnsFunction::RemoveNodes
             | ValidNnsFunction::UpdateSshReadonlyAccessForAllUnassignedNodes => Topic::NodeAdmin,
+
             ValidNnsFunction::CreateSubnet
             | ValidNnsFunction::AddNodeToSubnet
             | ValidNnsFunction::RecoverSubnet
@@ -213,25 +230,34 @@ impl ValidNnsFunction {
             | ValidNnsFunction::ChangeSubnetTypeAssignment
             | ValidNnsFunction::UpdateSnsWasmSnsSubnetIds
             | ValidNnsFunction::SetSubnetOperationalLevel => Topic::SubnetManagement,
+
             ValidNnsFunction::ReviseElectedGuestosVersions
             | ValidNnsFunction::ReviseElectedHostosVersions => Topic::IcOsVersionElection,
+
             ValidNnsFunction::DeployHostosToSomeNodes
             | ValidNnsFunction::DeployGuestosToAllSubnetNodes
             | ValidNnsFunction::DeployGuestosToSomeApiBoundaryNodes
             | ValidNnsFunction::DeployGuestosToAllUnassignedNodes => Topic::IcOsVersionDeployment,
+
             ValidNnsFunction::ClearProvisionalWhitelist
             | ValidNnsFunction::UpdateNodeRewardsTable => Topic::NetworkEconomics,
+
             ValidNnsFunction::UninstallCode => Topic::Governance,
+
             ValidNnsFunction::AddOrRemoveDataCenters => Topic::ParticipantManagement,
+
             ValidNnsFunction::AddApiBoundaryNodes | ValidNnsFunction::RemoveApiBoundaryNodes => {
                 Topic::ApiBoundaryNodeManagement
             }
+
             ValidNnsFunction::SubnetRentalRequest => Topic::SubnetRental,
+
             ValidNnsFunction::NnsCanisterInstall
             | ValidNnsFunction::HardResetNnsRootToVersion
             | ValidNnsFunction::BitcoinSetConfig
             | ValidNnsFunction::PauseCanisterMigrations
             | ValidNnsFunction::UnpauseCanisterMigrations => Topic::ProtocolCanisterManagement,
+
             ValidNnsFunction::AddSnsWasm | ValidNnsFunction::InsertSnsWasmUpgradePathEntries => {
                 Topic::ServiceNervousSystemManagement
             }
@@ -377,34 +403,25 @@ impl TryFrom<NnsFunction> for ValidNnsFunction {
 }
 
 impl TryFrom<ExecuteNnsFunction> for ValidExecuteNnsFunction {
-    type Error = String;
+    type Error = GovernanceError;
 
     fn try_from(value: ExecuteNnsFunction) -> Result<Self, Self::Error> {
         // First convert i32 to NnsFunction
-        let nns_function_enum = NnsFunction::try_from(value.nns_function)
-            .map_err(|_| format!("Invalid NnsFunction id: {}", value.nns_function))?;
+        let nns_function_enum = NnsFunction::try_from(value.nns_function).map_err(|_| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid NnsFunction id: {}", value.nns_function),
+            )
+        })?;
 
         // Then convert NnsFunction to ValidNnsFunction
-        let nns_function = ValidNnsFunction::try_from(nns_function_enum)?;
+        let nns_function = ValidNnsFunction::try_from(nns_function_enum)
+            .map_err(|e| GovernanceError::new_with_message(ErrorType::InvalidProposal, e))?;
 
         Ok(ValidExecuteNnsFunction {
             nns_function,
             payload: value.payload,
         })
-    }
-}
-
-impl ValidExecuteNnsFunction {
-    pub fn allowed_when_resources_are_low(&self) -> bool {
-        self.nns_function.allowed_when_resources_are_low()
-    }
-
-    pub fn can_have_large_payload(&self) -> bool {
-        self.nns_function.can_have_large_payload()
-    }
-
-    pub fn compute_topic_at_creation(&self) -> Topic {
-        self.nns_function.compute_topic_at_creation()
     }
 }
 
