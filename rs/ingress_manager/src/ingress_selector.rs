@@ -1887,7 +1887,7 @@ mod tests {
     #[test]
     fn test_validate_empty_payload_succeeds() {
         let validation_result = payload_validation_test_case(
-            IngressPayload::from(vec![]),
+            IngressPayload::default(),
             HashSet::new(),
             ValidationContext {
                 time: UNIX_EPOCH,
@@ -1906,7 +1906,7 @@ mod tests {
         let certified_height = Height::new(0);
         let error = IngressHistoryError::StateRemoved(Height::new(1));
         let validation_result = payload_validation_test_case(
-            IngressPayload::from(vec![]),
+            IngressPayload::default(),
             HashSet::new(),
             ValidationContext {
                 time: UNIX_EPOCH,
@@ -1930,7 +1930,7 @@ mod tests {
         let certified_height = Height::new(0);
         let error = StateManagerError::StateNotCommittedYet(Height::new(1));
         let validation_result = payload_validation_test_case(
-            IngressPayload::from(vec![]),
+            IngressPayload::default(),
             HashSet::new(),
             ValidationContext {
                 time: UNIX_EPOCH,

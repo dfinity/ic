@@ -1,6 +1,9 @@
 use ic_protobuf::proxy::{ProxyDecodeError, try_from_option_field};
 use ic_protobuf::types::v1 as pb;
+use ic_types::NodeIndex;
+use ic_types::consensus::idkg::IDkgArtifactId;
 use ic_types::crypto::CryptoHash;
+use ic_types::crypto::canister_threshold_sig::idkg::SignedIDkgDealing;
 use ic_types::messages::SignedIngress;
 use ic_types::{artifact::IngressMessageId, crypto::CryptoHashOf, messages::SignedRequestBytes};
 
@@ -47,5 +50,54 @@ impl TryFrom<pb::StrippedIngressMessage> for SignedIngressId {
             ingress_message_id,
             ingress_bytes_hash,
         })
+    }
+}
+
+/// Unique identifiers for messages that may be stripped from block proposals.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum StrippedMessageId {
+    Ingress(SignedIngressId),
+    IDkgDealing(IDkgArtifactId, NodeIndex),
+}
+
+/// Messages that may be stripped from block proposals.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum StrippedMessage {
+    Ingress(SignedIngressId, SignedIngress),
+    IDkgDealing(IDkgArtifactId, NodeIndex, SignedIDkgDealing),
+}
+
+impl From<&StrippedMessage> for StrippedMessageId {
+    fn from(message: &StrippedMessage) -> Self {
+        match message {
+            StrippedMessage::Ingress(id, _) => StrippedMessageId::Ingress(id.clone()),
+            StrippedMessage::IDkgDealing(id, node_index, _) => {
+                StrippedMessageId::IDkgDealing(id.clone(), *node_index)
+            }
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+pub(crate) enum StrippedMessageType {
+    Ingress,
+    IDkgDealing,
+}
+
+impl StrippedMessageType {
+    pub(crate) fn as_str(&self) -> &str {
+        match self {
+            StrippedMessageType::Ingress => "ingress",
+            StrippedMessageType::IDkgDealing => "idkg_dealing",
+        }
+    }
+}
+
+impl From<&StrippedMessageId> for StrippedMessageType {
+    fn from(id: &StrippedMessageId) -> Self {
+        match id {
+            StrippedMessageId::Ingress(_) => StrippedMessageType::Ingress,
+            StrippedMessageId::IDkgDealing(_, _) => StrippedMessageType::IDkgDealing,
+        }
     }
 }
