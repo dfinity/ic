@@ -178,6 +178,7 @@ impl<'a> GenericIdentity<'a> {
             GenericIdentityInner::K256(sk) => sk.sign_message_with_ecdsa(bytes).to_vec(),
             GenericIdentityInner::P256(sk) => sk.sign_message(bytes).to_vec(),
             GenericIdentityInner::Canister(canister_signer) => {
+                let sign_future = canister_signer.sign(bytes);
                 // We are in a sync method and need to call the async `CanisterSigner::sign`,
                 // which can be done with `tokio::runtime::Handle::block_on`. However, we
                 // cannot call `block_on` directly because the containing method itself is
@@ -185,8 +186,10 @@ impl<'a> GenericIdentity<'a> {
                 // `spawn_blocking`s in between. Therefore, we need to wrap the call to
                 // `block_on` in a `block_in_place` as a workaround (which is usually discouraged,
                 // because it points to a design flaw in the overall architecture).
-                let future = canister_signer.sign(bytes);
-                tokio::task::block_in_place(|| tokio::runtime::Handle::current().block_on(future))
+                #[allow(clippy::disallowed_methods)]
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(sign_future)
+                })
             }
         }
     }
@@ -279,7 +282,7 @@ impl<'a> CanisterSigner<'a> {
 
         let seed_hash = Sha256::hash(&self.seed);
         let msg_hash = Sha256::hash(message);
-        let sig_tree = labeled(b"sig", labeled(&seed_hash, labeled(&msg_hash, leaf(b""))));
+        let sig_tree = labeled(b"sig", labeled(seed_hash, labeled(msg_hash, leaf(b""))));
 
         let mut certificate_cbor = self.certify_variable(&sig_tree.digest()).await;
 
@@ -288,41 +291,35 @@ impl<'a> CanisterSigner<'a> {
             certificate_cbor = resign_certificate_with_random_signature(&certificate_cbor, rng);
         }
 
-        let canister_sig_cbor = {
-            #[derive(serde::Serialize)]
-            struct CanisterSignature {
-                certificate: ByteBuf,
-                tree: HashTree,
-            }
-            let canister_sig = CanisterSignature {
-                certificate: ByteBuf::from(certificate_cbor),
-                tree: sig_tree,
-            };
-            // serialize to self-describing CBOR
-            let mut serializer = serde_cbor::Serializer::new(Vec::new());
-            serializer.self_describe().unwrap();
-            canister_sig.serialize(&mut serializer).unwrap();
-            serializer.into_inner()
+        #[derive(serde::Serialize)]
+        struct CanisterSignature {
+            certificate: ByteBuf,
+            tree: HashTree,
+        }
+        let canister_sig = CanisterSignature {
+            certificate: ByteBuf::from(certificate_cbor),
+            tree: sig_tree,
         };
-        canister_sig_cbor
+        // serialize to self-describing CBOR
+        let mut serializer = serde_cbor::Serializer::new(Vec::new());
+        serializer.self_describe().unwrap();
+        canister_sig.serialize(&mut serializer).unwrap();
+        serializer.into_inner()
     }
 
     async fn certify_variable(&self, variable_data: &[u8]) -> Vec<u8> {
         use ic_universal_canister::wasm;
 
-        let _result = self
+        let _ = self
             .canister
             .update(wasm().certified_data_set(variable_data).reply().build())
             .await
             .expect("failed to call universal canister to set certified data");
 
-        let certificate = self
-            .canister
+        self.canister
             .query(wasm().data_certificate().append_and_reply().build())
             .await
-            .expect("failed to call universal canister to get data certificate");
-
-        certificate
+            .expect("failed to call universal canister to get data certificate")
     }
 }
 
