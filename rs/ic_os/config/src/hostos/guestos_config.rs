@@ -115,16 +115,15 @@ fn guestos_recovery_hash(recovery_file_path: &Path) -> Result<Option<RecoveryCon
         .trim()
         .to_string();
 
-    if recovery_hash_value.is_empty() {
-        let _ = std::fs::remove_file(recovery_file_path);
-        return Ok(None);
-    }
-
     std::fs::remove_file(recovery_file_path)?;
 
-    Ok(Some(RecoveryConfig {
-        recovery_hash: recovery_hash_value,
-    }))
+    if recovery_hash_value.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(RecoveryConfig {
+            recovery_hash: recovery_hash_value,
+        }))
+    }
 }
 
 #[cfg(test)]
