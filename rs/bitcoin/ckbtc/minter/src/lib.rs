@@ -1354,41 +1354,30 @@ pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
     withdrawal_amount: u64,
     median_fee_millisatoshi_per_vbyte: u64,
     fee_estimator: &F,
-) -> WithdrawalFee {
-    const DEFAULT_INPUT_COUNT: u64 = 2;
-    // One output for the caller and one for the change.
-    const DEFAULT_OUTPUT_COUNT: u64 = 2;
+) -> Result<WithdrawalFee, BuildTxError> {
+    // We simulate the algorithm that selects UTXOs for the
+    // specified amount.
+    let mut utxos = available_utxos.clone();
+    let selected_utxos = utxos_selection(withdrawal_amount, &mut utxos, 1);
+    let dummy_minter_address = BitcoinAddress::P2wpkhV0([u8::MAX; 20]);
+    let dummy_recipient_address = BitcoinAddress::P2wpkhV0([42_u8; 20]);
 
-    let input_count = {
-        // We simulate the algorithm that selects UTXOs for the
-        // specified amount. If the withdrawal rate is low, we
-        // should get the exact number of inputs that the minter
-        // will use.
-        let mut utxos = available_utxos.clone();
-        let selected_utxos = utxos_selection(
-            withdrawal_amount,
-            &mut utxos,
-            DEFAULT_OUTPUT_COUNT as usize - 1,
+    build_unsigned_transaction_from_inputs(
+        &selected_utxos,
+        vec![(dummy_recipient_address, withdrawal_amount)],
+        dummy_minter_address,
+        median_fee_millisatoshi_per_vbyte,
+        fee_estimator,
+    )
+    .map(|(unsigned_tx, _change_output, fee)| {
+        assert_eq!(
+            unsigned_tx.outputs.len(),
+            2,
+            "BUG: expected 1 output to the recipient and one change output to the minter, \
+                so that the totality of the fee is paid in full by the recipient"
         );
-
-        if !selected_utxos.is_empty() {
-            selected_utxos.len() as u64
-        } else {
-            DEFAULT_INPUT_COUNT
-        }
-    };
-
-    let vsize = tx_vsize_estimate(input_count, DEFAULT_OUTPUT_COUNT);
-    let minter_fee = fee_estimator.evaluate_minter_fee(input_count, DEFAULT_OUTPUT_COUNT);
-    // We subtract one from the outputs because the minter's output
-    // does not participate in fees distribution.
-    let bitcoin_fee =
-        vsize * median_fee_millisatoshi_per_vbyte / 1000 / (DEFAULT_OUTPUT_COUNT - 1).max(1);
-    let minter_fee = minter_fee / (DEFAULT_OUTPUT_COUNT - 1).max(1);
-    WithdrawalFee {
-        minter_fee,
-        bitcoin_fee,
-    }
+        fee
+    })
 }
 
 #[async_trait]
