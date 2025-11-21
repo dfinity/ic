@@ -8397,6 +8397,7 @@ dependencies = [
 name = "ic-crypto-internal-sha2"
 version = "0.9.0"
 dependencies = [
+ "hex",
  "sha2 0.10.9",
 ]
 
