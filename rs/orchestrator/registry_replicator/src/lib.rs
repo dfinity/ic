@@ -451,7 +451,7 @@ impl RegistryReplicator {
     pub async fn stop_polling_and_set_local_registry_data(&self, source_registry: &dyn LocalStore) {
         self.stop_polling();
         // Wait until polling has actually stopped.
-        while self.started.load(Ordering::Relaxed) {
+        while self.is_polling() {
             tokio::time::sleep(self.poll_delay).await;
         }
         self.set_local_registry_data(source_registry);
