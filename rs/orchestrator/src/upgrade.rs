@@ -396,7 +396,9 @@ impl Upgrade {
         self.registry_replicator
             .stop_polling_and_set_local_registry_data(&new_local_store)
             .await;
-        reexec_current_process(&self.logger)
+        // Restart the current process to pick up the new local store.
+        // The call should not return. If it does, it is an error.
+        Err(reexec_current_process(&self.logger))
     }
 
     async fn remove_state(&self) -> OrchestratorResult<()> {
