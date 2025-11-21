@@ -388,14 +388,12 @@ members = [
     "rs/rust_canisters/dfn_http_metrics",
     "rs/rust_canisters/dfn_json",
     "rs/rust_canisters/dfn_protobuf",
-    "rs/rust_canisters/downstream_calls_test",
     "rs/rust_canisters/ecdsa",
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
     "rs/rust_canisters/messaging_test",
     "rs/rust_canisters/on_wire",
     "rs/rust_canisters/proxy_canister",
-    "rs/rust_canisters/random_traffic_test",
     "rs/rust_canisters/response_payload_test",
     "rs/rust_canisters/stable_memory_integrity",
     "rs/rust_canisters/stable_reader",
@@ -844,7 +842,7 @@ static_assertions = "1.1.0"
 strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 subtle = "2.6.1"
-syn = { version = "1.0.109", features = ["fold", "full"] }
+syn = { version = "2.0.110", features = ["fold", "full"] }
 sys-mount = "3.0"
 systemd = "0.10"
 tar = "0.4.39"

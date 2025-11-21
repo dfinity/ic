@@ -1,9 +1,16 @@
+use crate::address::BitcoinAddress;
+use crate::fees::BitcoinFeeEstimator;
 use crate::lifecycle::init::InitArgs;
-use crate::{ECDSAPublicKey, GetUtxosResponse, IC_CANISTER_RUNTIME, Network, Timestamp, lifecycle};
+use crate::queries::WithdrawalFee;
+use crate::{
+    BuildTxError, ECDSAPublicKey, GetUtxosResponse, IC_CANISTER_RUNTIME, Network, Timestamp,
+    lifecycle, state, tx,
+};
 use candid::Principal;
 use ic_base_types::CanisterId;
-use ic_btc_interface::{OutPoint, Utxo};
+use ic_btc_interface::{OutPoint, Satoshi, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
+use std::collections::BTreeSet;
 use std::time::Duration;
 
 pub const NOW: Timestamp = Timestamp::new(1733145560 * 1_000_000_000);
@@ -133,8 +140,39 @@ pub fn expect_panic_with_message<F: FnOnce() -> R, R: std::fmt::Debug>(
     );
 }
 
+pub fn build_bitcoin_unsigned_transaction(
+    available_utxos: &mut BTreeSet<Utxo>,
+    outputs: Vec<(BitcoinAddress, Satoshi)>,
+    main_address: BitcoinAddress,
+    fee_per_vbyte: u64,
+) -> Result<
+    (
+        tx::UnsignedTransaction,
+        state::ChangeOutput,
+        WithdrawalFee,
+        Vec<Utxo>,
+    ),
+    BuildTxError,
+> {
+    let bitcoin_fee_estimator = bitcoin_fee_estimator();
+    crate::build_unsigned_transaction(
+        available_utxos,
+        outputs,
+        main_address,
+        fee_per_vbyte,
+        &bitcoin_fee_estimator,
+    )
+}
+
+pub fn bitcoin_fee_estimator() -> BitcoinFeeEstimator {
+    const RETRIEVE_BTC_MIN_AMOUNT: u64 = 50_000;
+    const BTC_CHECK_FEE: u64 = 100;
+    BitcoinFeeEstimator::new(Network::Mainnet, RETRIEVE_BTC_MIN_AMOUNT, BTC_CHECK_FEE)
+}
+
 pub mod mock {
     use crate::CkBtcMinterState;
+    use crate::fees::BitcoinFeeEstimator;
     use crate::management::CallError;
     use crate::updates::update_balance::UpdateBalanceError;
     use crate::{
@@ -156,6 +194,7 @@ pub mod mock {
 
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
+            type Estimator = BitcoinFeeEstimator;
             fn caller(&self) -> Principal;
             fn id(&self) -> Principal;
             fn time(&self) -> u64;
@@ -166,6 +205,7 @@ pub mod mock {
             fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress;
             fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String;
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
+            fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator;
             async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;

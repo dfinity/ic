@@ -166,6 +166,9 @@ async fn caller_not_whitelisted() {
     });
     builder.enable_swapping_feature_globally();
     builder.enable_swapping_feature_for_subnet(subnet_id);
+    // In order to avoid the feature being enabled for all node
+    // operators there needs to be some other caller whitelisted.
+    builder.whitelist_swapping_feature_caller(PrincipalId::new_user_test_id(999));
 
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
 
@@ -221,6 +224,10 @@ async fn subnet_not_whitelisted() {
 
     builder.enable_swapping_feature_globally();
     builder.whitelist_swapping_feature_caller(node_operator_id);
+    // There needs to be at least one subnet specified as whitelisted
+    // to actually check the subnet whitelisting, otherwise they will
+    // all be deemed as whitelisted.
+    builder.enable_swapping_feature_for_subnet(SubnetId::new(PrincipalId::new_subnet_test_id(999)));
 
     install_registry_canister_with_payload_builder(&pocket_ic, builder.build(), true).await;
 
