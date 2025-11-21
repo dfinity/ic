@@ -287,13 +287,13 @@ impl Drop for TerminalGuard {
 // Application Logic
 // ============================================================================
 
-pub struct App {
+pub struct GuestOSRecoveryApp {
     state: Option<AppState>,
     should_quit: bool,
     result: Option<Result<()>>,
 }
 
-impl Default for App {
+impl Default for GuestOSRecoveryApp {
     fn default() -> Self {
         Self {
             state: Some(AppState::default()),
@@ -303,7 +303,7 @@ impl Default for App {
     }
 }
 
-impl App {
+impl GuestOSRecoveryApp {
     pub fn new() -> Self {
         Self::default()
     }
