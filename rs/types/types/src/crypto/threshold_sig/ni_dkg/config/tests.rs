@@ -400,7 +400,7 @@ fn invalid_configs() -> Vec<NiDkgConfig> {
         ..valid_config()
     };
 
-    //NiDkgConfig with threshold smaller than `max_corrupt_receivers`
+    //NiDkgConfig with `threshold` smaller than `max_corrupt_receivers`
     let config_2 = NiDkgConfig {
         max_corrupt_receivers: NumberOfNodes::new(2),
         threshold: dkg_threshold(1),
