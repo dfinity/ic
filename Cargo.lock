@@ -3845,7 +3845,7 @@ dependencies = [
  "convert_case 0.7.1",
  "proc-macro2",
  "quote",
- "syn 2.0.101",
+ "syn 2.0.110",
 ]
 
 [[package]]
@@ -16334,7 +16334,7 @@ dependencies = [
  "indoc 2.0.7",
  "proc-macro2",
  "quote",
- "syn 2.0.101",
+ "syn 2.0.110",
 ]
 
 [[package]]
