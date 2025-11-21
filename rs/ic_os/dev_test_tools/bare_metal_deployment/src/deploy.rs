@@ -5,8 +5,9 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-/// The reload_hostos tool to be copied to the baremetal host
-const RELOAD_HOSTOS_CMD: &[u8] = include_bytes!(env!("RELOAD_HOSTOS_CMD"));
+// The reload_hostos tool to be copied to the baremetal host, defines RELOAD_HOSTOS_CMD
+include!(concat!(env!("OUT_DIR"), "/reload_hostos_cmd.rs"));
+
 const SSH_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Source of an OS image
