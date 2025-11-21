@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
 
-use crate::{AppState, DoneState, Field, InputState, RecoveryParams, RunningState};
+use crate::{AppState, FailureState, Field, InputState, RecoveryParams, RunningState};
 
 // ============================================================================
 // Constants
@@ -100,7 +100,7 @@ pub(crate) fn render(f: &mut Frame, state: &AppState) {
     match state {
         AppState::Input(s) => render_input_screen(f, s, size),
         AppState::Running(s) => render_logs_screen(f, s, size),
-        AppState::Done(s) => render_done_screen(f, s, size),
+        AppState::Failure(s) => render_failure_screen(f, s, size),
     }
 }
 
@@ -317,10 +317,10 @@ fn format_log_lines(lines: &[String], max_width: usize) -> Vec<Line> {
 }
 
 // ============================================================================
-// Screen: Done (Failure)
+// Screen: Failure
 // ============================================================================
 
-fn render_done_screen(f: &mut Frame, state: &DoneState, size: Rect) {
+fn render_failure_screen(f: &mut Frame, state: &FailureState, size: Rect) {
     draw_failure_screen(
         f,
         state.exit_status.code(),

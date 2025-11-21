@@ -201,7 +201,7 @@ pub(crate) struct RunningState {
 }
 
 #[derive(Clone)]
-pub(crate) struct DoneState {
+pub(crate) struct FailureState {
     pub params: RecoveryParams,
     pub logs: Vec<String>,
     pub exit_status: std::process::ExitStatus,
@@ -212,7 +212,11 @@ pub(crate) struct DoneState {
 pub(crate) enum AppState {
     Input(InputState),
     Running(RunningState),
-    Done(DoneState),
+    /// There is no "Success" state because on success, the TUI exits immediately
+    /// to allow the GuestOSRecoveryApp to print a success message to stdout (outside the TUI),
+    /// followed by the GuestOS startup logs.
+    /// This state is only reached if the recovery process fails.
+    Failure(FailureState),
 }
 
 impl Default for AppState {
@@ -433,10 +437,10 @@ impl GuestOSRecoveryApp {
                 self.state = Some(AppState::Running(s));
                 Ok(())
             }
-            Some(AppState::Done(s)) => {
+            Some(AppState::Failure(s)) => {
                 // Any key exits
                 self.should_quit = true;
-                self.state = Some(AppState::Done(s));
+                self.state = Some(AppState::Failure(s));
                 Ok(())
             }
             None => Ok(()),
@@ -595,9 +599,9 @@ impl GuestOSRecoveryApp {
                         self.should_quit = true;
                         None
                     } else {
-                        // Failure -> Transition to Done
+                        // Failure -> Transition to FailureState
                         let error_messages = extract_errors_from_logs(&logs);
-                        Some(DoneState {
+                        Some(FailureState {
                             params: running_state.params.clone(),
                             logs,
                             exit_status: status,
@@ -612,9 +616,9 @@ impl GuestOSRecoveryApp {
             None
         };
 
-        if let Some(done_state) = finished_state {
+        if let Some(failure_state) = finished_state {
             self.result = Some(Err(anyhow::anyhow!("Recovery failed")));
-            self.state = Some(AppState::Done(done_state));
+            self.state = Some(AppState::Failure(failure_state));
         }
 
         Ok(())
