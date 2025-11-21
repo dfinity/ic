@@ -2,15 +2,13 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
-DEPENDENCIES = [
-    "@crate_index//:anyhow",
-    "@crate_index//:crossterm",
-    "@crate_index//:ratatui",
-]
-
 rust_library(
     name = "guestos_recovery_tui",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "guestos_recovery_tui",
-    deps = DEPENDENCIES,
+    deps = [
+        "@crate_index//:anyhow",
+        "@crate_index//:crossterm",
+        "@crate_index//:ratatui",
+    ],
 )
