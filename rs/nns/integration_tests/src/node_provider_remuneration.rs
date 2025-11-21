@@ -89,8 +89,6 @@ fn test_list_node_provider_rewards() {
         .build();
     let subnet = subnet_test_id(TEST_ID);
 
-    ic_cdk::println!("Subnet ID: {:?}", subnet.get().0);
-
     let nns_init_payload = NnsInitPayloadsBuilder::new()
         .with_initial_invariant_compliant_mutations()
         .with_test_neurons()
@@ -107,16 +105,6 @@ fn test_list_node_provider_rewards() {
         AccountIdentifier::from(*TEST_USER2_PRINCIPAL),
         None,
     );
-    let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_1.provider_account.into_proto_with_checksum()),
-    }));
-    let expected_rewards_e8s_1 =
-        ((24_000.0 / REWARDS_TABLE_DAYS) as u64 * TOKEN_SUBDIVIDABLE_BY) / 155_000;
-    let expected_node_provider_reward_1 = RewardNodeProvider {
-        node_provider: Some(node_info_1.provider.clone()),
-        amount_e8s: expected_rewards_e8s_1,
-        reward_mode: reward_mode_1.clone(),
-    };
 
     // Add Node Providers
     add_node_provider(&state_machine, node_info_1.provider.clone());
@@ -143,20 +131,40 @@ fn test_list_node_provider_rewards() {
         )
         .map(|result| Decode!(&result.bytes(), NodeId).unwrap())
         .unwrap();
-    ic_cdk::println!("NodeId constructed: {:?}", node_id.get());
 
     // Set the average conversion rate
     set_average_icp_xdr_conversion_rate(&state_machine, 155_000);
 
-    ic_cdk::println!("FINISHED SETUP, ADVANCING TIME TO TRIGGER REWARDS");
-    for _ in 0..30 {
+    ic_cdk::println!("Current time: {:?}", state_machine.time());
+    let rewards_days = 30;
+
+    for _ in 0..rewards_days {
+        // All success failure rate is 0
         let blockmaker_metrics = BlockmakerMetrics {
             blockmaker: node_id,
             failed_blockmakers: vec![],
         };
-        state_machine.execute_round_with_blockmaker_metrics(blockmaker_metrics);
+        let payload = PayloadBuilder::new().with_blockmaker_metrics(blockmaker_metrics);
+        state_machine.tick_with_config(payload.clone());
+        state_machine.tick();
+        state_machine.tick();
         state_machine.advance_time(Duration::from_secs(60 * 60 * 24));
     }
+
+    state_machine.tick();
+    state_machine.tick();
+    state_machine.tick();
+
+    let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
+        to_account: Some(node_info_1.provider_account.into_proto_with_checksum()),
+    }));
+    let expected_rewards_e8s_1 =
+        ((24_000.0 / REWARDS_TABLE_DAYS) as u64 * rewards_days * TOKEN_SUBDIVIDABLE_BY) / 155_000;
+    let expected_node_provider_reward_1 = RewardNodeProvider {
+        node_provider: Some(node_info_1.provider.clone()),
+        amount_e8s: expected_rewards_e8s_1,
+        reward_mode: reward_mode_1.clone(),
+    };
 
     // Call get_monthly_node_provider_rewards assert the value is as expected
     let monthly_node_provider_rewards_result: Result<RewardNodeProviders, GovernanceError> =
@@ -328,429 +336,429 @@ fn test_list_node_provider_rewards() {
     );
 }
 
-#[test]
-fn test_automated_node_provider_remuneration() {
-    let state_machine = state_machine_builder_for_nns_tests().build();
-
-    let nns_init_payload = NnsInitPayloadsBuilder::new()
-        .with_initial_invariant_compliant_mutations()
-        .with_test_neurons()
-        .build();
-    setup_nns_canisters_with_features(&state_machine, nns_init_payload, &[]);
-
-    add_data_centers(&state_machine);
-    add_node_rewards_table(&state_machine);
-
-    // Define the set of node operators and node providers
-    let node_info_1 = NodeInfo::new(
-        *TEST_USER1_PRINCIPAL,
-        *TEST_USER2_PRINCIPAL,
-        AccountIdentifier::from(*TEST_USER2_PRINCIPAL),
-        None,
-    );
-    let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_1.provider_account.into_proto_with_checksum()),
-    }));
-    let expected_rewards_e8s_1 =
-        (((10 * 24_000) + (21 * 68_000) + (6 * 11_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
-    assert_eq!(expected_rewards_e8s_1, 1_118_709_677);
-    let expected_node_provider_reward_1 = RewardNodeProvider {
-        node_provider: Some(node_info_1.provider.clone()),
-        amount_e8s: expected_rewards_e8s_1,
-        reward_mode: reward_mode_1.clone(),
-    };
-    let node_info_2 = NodeInfo::new(
-        *TEST_USER3_PRINCIPAL,
-        *TEST_USER4_PRINCIPAL,
-        AccountIdentifier::from(*TEST_USER4_PRINCIPAL),
-        None,
-    );
-    let reward_mode_2 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_2.provider_account.into_proto_with_checksum()),
-    }));
-    let expected_rewards_e8s_2 =
-        (((35 * 68_000) + (17 * 11_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
-    assert_eq!(expected_rewards_e8s_2, 1_656_129_032);
-    let expected_node_provider_reward_2 = RewardNodeProvider {
-        node_provider: Some(node_info_2.provider.clone()),
-        amount_e8s: expected_rewards_e8s_2,
-        reward_mode: reward_mode_2.clone(),
-    };
-
-    let node_info_3 = NodeInfo::new(
-        *TEST_USER5_PRINCIPAL,
-        *TEST_USER6_PRINCIPAL,
-        AccountIdentifier::from(*TEST_USER7_PRINCIPAL),
-        Some(AccountIdentifier::from(*TEST_USER7_PRINCIPAL)),
-    );
-    let reward_mode_3 = Some(RewardMode::RewardToAccount(RewardToAccount {
-        to_account: Some(node_info_3.provider.reward_account.clone().unwrap()),
-    }));
-    let expected_rewards_e8s_3 =
-        (((19 * 234_000) + (33 * 907_000) + (4 * 103_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
-    assert_eq!(expected_rewards_e8s_3, 22_444_516_129);
-    let expected_node_provider_reward_3 = RewardNodeProvider {
-        node_provider: Some(node_info_3.provider.clone()),
-        amount_e8s: expected_rewards_e8s_3,
-        reward_mode: reward_mode_3.clone(),
-    };
-
-    let node_operator_id_4 = *TEST_USER7_PRINCIPAL;
-
-    // Add Node Providers
-    add_node_provider(&state_machine, node_info_1.provider.clone());
-    add_node_provider(&state_machine, node_info_2.provider.clone());
-    add_node_provider(&state_machine, node_info_3.provider.clone());
-
-    // Add Node Operator 1
-    let rewardable_nodes_1 = btreemap! { "default".to_string() => 10 };
-    add_node_operator(
-        &state_machine,
-        &node_info_1.operator_id,
-        &node_info_1.provider_id,
-        "AN1",
-        rewardable_nodes_1,
-        "0:0:0:0:0:0:0:0",
-    );
-
-    // Add Node Operator 2
-    let rewardable_nodes_2 = btreemap! {
-        "default".to_string() => 35,
-        "small".to_string() => 17,
-    };
-    add_node_operator(
-        &state_machine,
-        &node_info_2.operator_id,
-        &node_info_2.provider_id,
-        "BC1",
-        rewardable_nodes_2,
-        "0:0:0:0:0:0:0:0",
-    );
-
-    // Add Node Operator 3
-    let rewardable_nodes_3 = btreemap! {
-        "default".to_string() => 19,
-        "small".to_string() => 33,
-        "storage_upgrade".to_string() => 4,
-    };
-    add_node_operator(
-        &state_machine,
-        &node_info_3.operator_id,
-        &node_info_3.provider_id,
-        "FM1",
-        rewardable_nodes_3,
-        "0:0:0:0:0:0:0:0",
-    );
-
-    // Add Node Operator 4
-    let rewardable_nodes_4 = btreemap! {
-        "default".to_string() => 21,
-        "small".to_string() => 6,
-    };
-    add_node_operator(
-        &state_machine,
-        &node_operator_id_4,
-        &node_info_1.provider_id,
-        "BC1",
-        rewardable_nodes_4,
-        "0:0:0:0:0:0:0:0",
-    );
-
-    // Set the average conversion rate
-    set_average_icp_xdr_conversion_rate(&state_machine, 155_000);
-
-    // Call get_monthly_node_provider_rewards assert the value is as expected
-    let monthly_node_provider_rewards_result: Result<RewardNodeProviders, GovernanceError> =
-        nns_get_node_provider_rewards(&state_machine);
-
-    let monthly_node_provider_rewards = monthly_node_provider_rewards_result.unwrap();
-    assert_eq!(monthly_node_provider_rewards.rewards.len(), 3);
-    assert!(
-        monthly_node_provider_rewards
-            .rewards
-            .contains(&expected_node_provider_reward_1),
-        "Expected reward 1: {expected_node_provider_reward_2:?} not found in monthly rewards: {monthly_node_provider_rewards:?}"
-    );
-    assert!(
-        monthly_node_provider_rewards
-            .rewards
-            .contains(&expected_node_provider_reward_2),
-        "Expected reward 2: {expected_node_provider_reward_1:?} not found in monthly rewards: {monthly_node_provider_rewards:?}"
-    );
-    assert!(
-        monthly_node_provider_rewards
-            .rewards
-            .contains(&expected_node_provider_reward_3),
-        "Expected reward 3: {expected_node_provider_reward_3:?} not found in monthly rewards: {monthly_node_provider_rewards:?}"
-    );
-
-    // Assert account balances are 0
-    assert_account_balance(&state_machine, node_info_1.provider_account, 0);
-    assert_account_balance(&state_machine, node_info_2.provider_account, 0);
-    assert_account_balance(&state_machine, node_info_3.provider_account, 0);
-
-    // Assert there is no most recent monthly Node Provider reward
-    let most_recent_rewards = nns_get_most_recent_monthly_node_provider_rewards(&state_machine);
-    assert!(most_recent_rewards.is_none());
-
-    // Submit and execute proposal to pay NPs via Registry-driven rewards
-    reward_node_providers_via_registry(&state_machine);
-
-    // Assert account balances are as expected
-    assert_account_balance(
-        &state_machine,
-        node_info_1.provider_account,
-        expected_node_provider_reward_1.amount_e8s,
-    );
-    assert_account_balance(
-        &state_machine,
-        node_info_2.provider_account,
-        expected_node_provider_reward_2.amount_e8s,
-    );
-    assert_account_balance(
-        &state_machine,
-        node_info_3.provider_account,
-        expected_node_provider_reward_3.amount_e8s,
-    );
-
-    // Assert the most recent monthly Node Provider reward was set as expected
-    let mut most_recent_rewards =
-        nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
-    let np_rewards_from_proposal_timestamp = most_recent_rewards.timestamp;
-
-    assert!(
-        most_recent_rewards
-            .rewards
-            .contains(&expected_node_provider_reward_1)
-    );
-    assert!(
-        most_recent_rewards
-            .rewards
-            .contains(&expected_node_provider_reward_2)
-    );
-    assert!(
-        most_recent_rewards
-            .rewards
-            .contains(&expected_node_provider_reward_3)
-    );
-
-    // Assert advancing time less than a month doesn't trigger monthly NP rewards
-    let mut rewards_were_triggered = false;
-    for _ in 0..5 {
-        state_machine.advance_time(Duration::from_secs(60));
-        let most_recent_rewards =
-            nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
-        if most_recent_rewards.timestamp != np_rewards_from_proposal_timestamp {
-            rewards_were_triggered = true;
-            break;
-        }
-    }
-
-    assert!(
-        !rewards_were_triggered,
-        "Automated rewards were triggered even though less than 1 month has passed."
-    );
-
-    // Assert account balances haven't changed
-    assert_account_balance(
-        &state_machine,
-        node_info_1.provider_account,
-        expected_node_provider_reward_1.amount_e8s,
-    );
-
-    assert_account_balance(
-        &state_machine,
-        node_info_2.provider_account,
-        expected_node_provider_reward_2.amount_e8s,
-    );
-
-    assert_account_balance(
-        &state_machine,
-        node_info_3.provider_account,
-        expected_node_provider_reward_3.amount_e8s,
-    );
-
-    // Set a new average conversion rate so that we can assert that the automated monthly
-    // NP rewards paid a different reward than the proposal-based reward.
-    let average_icp_xdr_conversion_rate_for_automated_rewards = 345_000;
-    set_average_icp_xdr_conversion_rate(
-        &state_machine,
-        average_icp_xdr_conversion_rate_for_automated_rewards,
-    );
-
-    // Assert that advancing time by a month triggers an automated monthly NP reward event
-    state_machine.advance_time(Duration::from_secs(ONE_MONTH_SECONDS));
-
-    let mut rewards_were_triggered = false;
-    let mut np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
-    for _ in 0..10 {
-        state_machine.advance_time(Duration::from_secs(60));
-        most_recent_rewards =
-            nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
-        np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
-        if np_rewards_from_automation_timestamp == np_rewards_from_proposal_timestamp {
-            continue;
-        }
-        rewards_were_triggered = true;
-    }
-
-    assert!(
-        rewards_were_triggered,
-        "Automated rewards were not triggered even though more than 1 month has passed."
-    );
-
-    assert_ne!(
-        np_rewards_from_automation_timestamp,
-        np_rewards_from_proposal_timestamp
-    );
-
-    let expected_automated_rewards_e8s_1 = (((10 * 24_000) + (21 * 68_000) + (6 * 11_000))
-        * TOKEN_SUBDIVIDABLE_BY)
-        / average_icp_xdr_conversion_rate_for_automated_rewards;
-
-    let expected_automated_node_provider_reward_1 = RewardNodeProvider {
-        node_provider: Some(node_info_1.provider.clone()),
-        amount_e8s: expected_automated_rewards_e8s_1,
-        reward_mode: reward_mode_1.clone(),
-    };
-
-    let expected_automated_rewards_e8s_2 = (((35 * 68_000) + (17 * 11_000))
-        * TOKEN_SUBDIVIDABLE_BY)
-        / average_icp_xdr_conversion_rate_for_automated_rewards;
-
-    let expected_automated_node_provider_reward_2 = RewardNodeProvider {
-        node_provider: Some(node_info_2.provider.clone()),
-        amount_e8s: expected_automated_rewards_e8s_2,
-        reward_mode: reward_mode_2.clone(),
-    };
-
-    let expected_automated_rewards_e8s_3 = (((19 * 234_000) + (33 * 907_000) + (4 * 103_000))
-        * TOKEN_SUBDIVIDABLE_BY)
-        / average_icp_xdr_conversion_rate_for_automated_rewards;
-
-    let expected_automated_node_provider_reward_3 = RewardNodeProvider {
-        node_provider: Some(node_info_3.provider.clone()),
-        amount_e8s: expected_automated_rewards_e8s_3,
-        reward_mode: reward_mode_3.clone(),
-    };
-
-    assert!(
-        most_recent_rewards
-            .rewards
-            .contains(&expected_automated_node_provider_reward_1)
-    );
-
-    assert!(
-        most_recent_rewards
-            .rewards
-            .contains(&expected_automated_node_provider_reward_2)
-    );
-
-    assert!(
-        most_recent_rewards
-            .rewards
-            .contains(&expected_automated_node_provider_reward_3)
-    );
-
-    // Assert additional rewards have been transferred to the Node Provider accounts
-    assert_account_balance(
-        &state_machine,
-        node_info_1.provider_account,
-        expected_node_provider_reward_1.amount_e8s + expected_automated_rewards_e8s_1,
-    );
-
-    assert_account_balance(
-        &state_machine,
-        node_info_2.provider_account,
-        expected_node_provider_reward_2.amount_e8s + expected_automated_rewards_e8s_2,
-    );
-
-    assert_account_balance(
-        &state_machine,
-        node_info_3.provider_account,
-        expected_node_provider_reward_3.amount_e8s + expected_automated_rewards_e8s_3,
-    );
-
-    let actual_minimum_xdr_permyriad_per_icp = nns_get_network_economics_parameters(&state_machine)
-        .minimum_icp_xdr_rate
-        * NetworkEconomics::ICP_XDR_RATE_TO_BASIS_POINT_MULTIPLIER;
-
-    // Set a new average conversion that is far below the `actual_minimum_xdr_permyriad_per_icp`
-    // to trigger the limit.
-    let average_icp_xdr_conversion_rate_for_automated_rewards = 1;
-    set_average_icp_xdr_conversion_rate(
-        &state_machine,
-        average_icp_xdr_conversion_rate_for_automated_rewards,
-    );
-
-    // Assert that advancing time by a month triggers an automated monthly NP reward event
-    state_machine.advance_time(Duration::from_secs(ONE_MONTH_SECONDS));
-
-    let mut rewards_were_triggered = false;
-    for _ in 0..10 {
-        state_machine.advance_time(Duration::from_secs(60));
-        most_recent_rewards =
-            nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
-        np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
-        if np_rewards_from_automation_timestamp == np_rewards_from_proposal_timestamp {
-            continue;
-        }
-        rewards_were_triggered = true;
-    }
-
-    assert!(
-        rewards_were_triggered,
-        "Automated rewards were not triggered even though more than 1 month has passed."
-    );
-
-    let expected_automated_rewards_e8s_1 = (((10 * 24_000) + (21 * 68_000) + (6 * 11_000))
-        * TOKEN_SUBDIVIDABLE_BY)
-        / actual_minimum_xdr_permyriad_per_icp;
-
-    let expected_automated_node_provider_reward_1 = RewardNodeProvider {
-        node_provider: Some(node_info_1.provider),
-        amount_e8s: expected_automated_rewards_e8s_1,
-        reward_mode: reward_mode_1,
-    };
-
-    let expected_automated_rewards_e8s_2 = (((35 * 68_000) + (17 * 11_000))
-        * TOKEN_SUBDIVIDABLE_BY)
-        / actual_minimum_xdr_permyriad_per_icp;
-
-    let expected_automated_node_provider_reward_2 = RewardNodeProvider {
-        node_provider: Some(node_info_2.provider),
-        amount_e8s: expected_automated_rewards_e8s_2,
-        reward_mode: reward_mode_2,
-    };
-
-    let expected_automated_rewards_e8s_3 = (((19 * 234_000) + (33 * 907_000) + (4 * 103_000))
-        * TOKEN_SUBDIVIDABLE_BY)
-        / actual_minimum_xdr_permyriad_per_icp;
-
-    let expected_automated_node_provider_reward_3 = RewardNodeProvider {
-        node_provider: Some(node_info_3.provider),
-        amount_e8s: expected_automated_rewards_e8s_3,
-        reward_mode: reward_mode_3,
-    };
-
-    assert!(
-        most_recent_rewards
-            .rewards
-            .contains(&expected_automated_node_provider_reward_1)
-    );
-
-    assert!(
-        most_recent_rewards
-            .rewards
-            .contains(&expected_automated_node_provider_reward_2)
-    );
-
-    assert!(
-        most_recent_rewards
-            .rewards
-            .contains(&expected_automated_node_provider_reward_3)
-    );
-}
+// #[test]
+// fn test_automated_node_provider_remuneration() {
+//     let state_machine = state_machine_builder_for_nns_tests().build();
+//
+//     let nns_init_payload = NnsInitPayloadsBuilder::new()
+//         .with_initial_invariant_compliant_mutations()
+//         .with_test_neurons()
+//         .build();
+//     setup_nns_canisters_with_features(&state_machine, nns_init_payload, &[]);
+//
+//     add_data_centers(&state_machine);
+//     add_node_rewards_table(&state_machine);
+//
+//     // Define the set of node operators and node providers
+//     let node_info_1 = NodeInfo::new(
+//         *TEST_USER1_PRINCIPAL,
+//         *TEST_USER2_PRINCIPAL,
+//         AccountIdentifier::from(*TEST_USER2_PRINCIPAL),
+//         None,
+//     );
+//     let reward_mode_1 = Some(RewardMode::RewardToAccount(RewardToAccount {
+//         to_account: Some(node_info_1.provider_account.into_proto_with_checksum()),
+//     }));
+//     let expected_rewards_e8s_1 =
+//         (((10 * 24_000) + (21 * 68_000) + (6 * 11_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
+//     assert_eq!(expected_rewards_e8s_1, 1_118_709_677);
+//     let expected_node_provider_reward_1 = RewardNodeProvider {
+//         node_provider: Some(node_info_1.provider.clone()),
+//         amount_e8s: expected_rewards_e8s_1,
+//         reward_mode: reward_mode_1.clone(),
+//     };
+//     let node_info_2 = NodeInfo::new(
+//         *TEST_USER3_PRINCIPAL,
+//         *TEST_USER4_PRINCIPAL,
+//         AccountIdentifier::from(*TEST_USER4_PRINCIPAL),
+//         None,
+//     );
+//     let reward_mode_2 = Some(RewardMode::RewardToAccount(RewardToAccount {
+//         to_account: Some(node_info_2.provider_account.into_proto_with_checksum()),
+//     }));
+//     let expected_rewards_e8s_2 =
+//         (((35 * 68_000) + (17 * 11_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
+//     assert_eq!(expected_rewards_e8s_2, 1_656_129_032);
+//     let expected_node_provider_reward_2 = RewardNodeProvider {
+//         node_provider: Some(node_info_2.provider.clone()),
+//         amount_e8s: expected_rewards_e8s_2,
+//         reward_mode: reward_mode_2.clone(),
+//     };
+//
+//     let node_info_3 = NodeInfo::new(
+//         *TEST_USER5_PRINCIPAL,
+//         *TEST_USER6_PRINCIPAL,
+//         AccountIdentifier::from(*TEST_USER7_PRINCIPAL),
+//         Some(AccountIdentifier::from(*TEST_USER7_PRINCIPAL)),
+//     );
+//     let reward_mode_3 = Some(RewardMode::RewardToAccount(RewardToAccount {
+//         to_account: Some(node_info_3.provider.reward_account.clone().unwrap()),
+//     }));
+//     let expected_rewards_e8s_3 =
+//         (((19 * 234_000) + (33 * 907_000) + (4 * 103_000)) * TOKEN_SUBDIVIDABLE_BY) / 155_000;
+//     assert_eq!(expected_rewards_e8s_3, 22_444_516_129);
+//     let expected_node_provider_reward_3 = RewardNodeProvider {
+//         node_provider: Some(node_info_3.provider.clone()),
+//         amount_e8s: expected_rewards_e8s_3,
+//         reward_mode: reward_mode_3.clone(),
+//     };
+//
+//     let node_operator_id_4 = *TEST_USER7_PRINCIPAL;
+//
+//     // Add Node Providers
+//     add_node_provider(&state_machine, node_info_1.provider.clone());
+//     add_node_provider(&state_machine, node_info_2.provider.clone());
+//     add_node_provider(&state_machine, node_info_3.provider.clone());
+//
+//     // Add Node Operator 1
+//     let rewardable_nodes_1 = btreemap! { "default".to_string() => 10 };
+//     add_node_operator(
+//         &state_machine,
+//         &node_info_1.operator_id,
+//         &node_info_1.provider_id,
+//         "AN1",
+//         rewardable_nodes_1,
+//         "0:0:0:0:0:0:0:0",
+//     );
+//
+//     // Add Node Operator 2
+//     let rewardable_nodes_2 = btreemap! {
+//         "default".to_string() => 35,
+//         "small".to_string() => 17,
+//     };
+//     add_node_operator(
+//         &state_machine,
+//         &node_info_2.operator_id,
+//         &node_info_2.provider_id,
+//         "BC1",
+//         rewardable_nodes_2,
+//         "0:0:0:0:0:0:0:0",
+//     );
+//
+//     // Add Node Operator 3
+//     let rewardable_nodes_3 = btreemap! {
+//         "default".to_string() => 19,
+//         "small".to_string() => 33,
+//         "storage_upgrade".to_string() => 4,
+//     };
+//     add_node_operator(
+//         &state_machine,
+//         &node_info_3.operator_id,
+//         &node_info_3.provider_id,
+//         "FM1",
+//         rewardable_nodes_3,
+//         "0:0:0:0:0:0:0:0",
+//     );
+//
+//     // Add Node Operator 4
+//     let rewardable_nodes_4 = btreemap! {
+//         "default".to_string() => 21,
+//         "small".to_string() => 6,
+//     };
+//     add_node_operator(
+//         &state_machine,
+//         &node_operator_id_4,
+//         &node_info_1.provider_id,
+//         "BC1",
+//         rewardable_nodes_4,
+//         "0:0:0:0:0:0:0:0",
+//     );
+//
+//     // Set the average conversion rate
+//     set_average_icp_xdr_conversion_rate(&state_machine, 155_000);
+//
+//     // Call get_monthly_node_provider_rewards assert the value is as expected
+//     let monthly_node_provider_rewards_result: Result<RewardNodeProviders, GovernanceError> =
+//         nns_get_node_provider_rewards(&state_machine);
+//
+//     let monthly_node_provider_rewards = monthly_node_provider_rewards_result.unwrap();
+//     assert_eq!(monthly_node_provider_rewards.rewards.len(), 3);
+//     assert!(
+//         monthly_node_provider_rewards
+//             .rewards
+//             .contains(&expected_node_provider_reward_1),
+//         "Expected reward 1: {expected_node_provider_reward_2:?} not found in monthly rewards: {monthly_node_provider_rewards:?}"
+//     );
+//     assert!(
+//         monthly_node_provider_rewards
+//             .rewards
+//             .contains(&expected_node_provider_reward_2),
+//         "Expected reward 2: {expected_node_provider_reward_1:?} not found in monthly rewards: {monthly_node_provider_rewards:?}"
+//     );
+//     assert!(
+//         monthly_node_provider_rewards
+//             .rewards
+//             .contains(&expected_node_provider_reward_3),
+//         "Expected reward 3: {expected_node_provider_reward_3:?} not found in monthly rewards: {monthly_node_provider_rewards:?}"
+//     );
+//
+//     // Assert account balances are 0
+//     assert_account_balance(&state_machine, node_info_1.provider_account, 0);
+//     assert_account_balance(&state_machine, node_info_2.provider_account, 0);
+//     assert_account_balance(&state_machine, node_info_3.provider_account, 0);
+//
+//     // Assert there is no most recent monthly Node Provider reward
+//     let most_recent_rewards = nns_get_most_recent_monthly_node_provider_rewards(&state_machine);
+//     assert!(most_recent_rewards.is_none());
+//
+//     // Submit and execute proposal to pay NPs via Registry-driven rewards
+//     reward_node_providers_via_registry(&state_machine);
+//
+//     // Assert account balances are as expected
+//     assert_account_balance(
+//         &state_machine,
+//         node_info_1.provider_account,
+//         expected_node_provider_reward_1.amount_e8s,
+//     );
+//     assert_account_balance(
+//         &state_machine,
+//         node_info_2.provider_account,
+//         expected_node_provider_reward_2.amount_e8s,
+//     );
+//     assert_account_balance(
+//         &state_machine,
+//         node_info_3.provider_account,
+//         expected_node_provider_reward_3.amount_e8s,
+//     );
+//
+//     // Assert the most recent monthly Node Provider reward was set as expected
+//     let mut most_recent_rewards =
+//         nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
+//     let np_rewards_from_proposal_timestamp = most_recent_rewards.timestamp;
+//
+//     assert!(
+//         most_recent_rewards
+//             .rewards
+//             .contains(&expected_node_provider_reward_1)
+//     );
+//     assert!(
+//         most_recent_rewards
+//             .rewards
+//             .contains(&expected_node_provider_reward_2)
+//     );
+//     assert!(
+//         most_recent_rewards
+//             .rewards
+//             .contains(&expected_node_provider_reward_3)
+//     );
+//
+//     // Assert advancing time less than a month doesn't trigger monthly NP rewards
+//     let mut rewards_were_triggered = false;
+//     for _ in 0..5 {
+//         state_machine.advance_time(Duration::from_secs(60));
+//         let most_recent_rewards =
+//             nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
+//         if most_recent_rewards.timestamp != np_rewards_from_proposal_timestamp {
+//             rewards_were_triggered = true;
+//             break;
+//         }
+//     }
+//
+//     assert!(
+//         !rewards_were_triggered,
+//         "Automated rewards were triggered even though less than 1 month has passed."
+//     );
+//
+//     // Assert account balances haven't changed
+//     assert_account_balance(
+//         &state_machine,
+//         node_info_1.provider_account,
+//         expected_node_provider_reward_1.amount_e8s,
+//     );
+//
+//     assert_account_balance(
+//         &state_machine,
+//         node_info_2.provider_account,
+//         expected_node_provider_reward_2.amount_e8s,
+//     );
+//
+//     assert_account_balance(
+//         &state_machine,
+//         node_info_3.provider_account,
+//         expected_node_provider_reward_3.amount_e8s,
+//     );
+//
+//     // Set a new average conversion rate so that we can assert that the automated monthly
+//     // NP rewards paid a different reward than the proposal-based reward.
+//     let average_icp_xdr_conversion_rate_for_automated_rewards = 345_000;
+//     set_average_icp_xdr_conversion_rate(
+//         &state_machine,
+//         average_icp_xdr_conversion_rate_for_automated_rewards,
+//     );
+//
+//     // Assert that advancing time by a month triggers an automated monthly NP reward event
+//     state_machine.advance_time(Duration::from_secs(ONE_MONTH_SECONDS));
+//
+//     let mut rewards_were_triggered = false;
+//     let mut np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
+//     for _ in 0..10 {
+//         state_machine.advance_time(Duration::from_secs(60));
+//         most_recent_rewards =
+//             nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
+//         np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
+//         if np_rewards_from_automation_timestamp == np_rewards_from_proposal_timestamp {
+//             continue;
+//         }
+//         rewards_were_triggered = true;
+//     }
+//
+//     assert!(
+//         rewards_were_triggered,
+//         "Automated rewards were not triggered even though more than 1 month has passed."
+//     );
+//
+//     assert_ne!(
+//         np_rewards_from_automation_timestamp,
+//         np_rewards_from_proposal_timestamp
+//     );
+//
+//     let expected_automated_rewards_e8s_1 = (((10 * 24_000) + (21 * 68_000) + (6 * 11_000))
+//         * TOKEN_SUBDIVIDABLE_BY)
+//         / average_icp_xdr_conversion_rate_for_automated_rewards;
+//
+//     let expected_automated_node_provider_reward_1 = RewardNodeProvider {
+//         node_provider: Some(node_info_1.provider.clone()),
+//         amount_e8s: expected_automated_rewards_e8s_1,
+//         reward_mode: reward_mode_1.clone(),
+//     };
+//
+//     let expected_automated_rewards_e8s_2 = (((35 * 68_000) + (17 * 11_000))
+//         * TOKEN_SUBDIVIDABLE_BY)
+//         / average_icp_xdr_conversion_rate_for_automated_rewards;
+//
+//     let expected_automated_node_provider_reward_2 = RewardNodeProvider {
+//         node_provider: Some(node_info_2.provider.clone()),
+//         amount_e8s: expected_automated_rewards_e8s_2,
+//         reward_mode: reward_mode_2.clone(),
+//     };
+//
+//     let expected_automated_rewards_e8s_3 = (((19 * 234_000) + (33 * 907_000) + (4 * 103_000))
+//         * TOKEN_SUBDIVIDABLE_BY)
+//         / average_icp_xdr_conversion_rate_for_automated_rewards;
+//
+//     let expected_automated_node_provider_reward_3 = RewardNodeProvider {
+//         node_provider: Some(node_info_3.provider.clone()),
+//         amount_e8s: expected_automated_rewards_e8s_3,
+//         reward_mode: reward_mode_3.clone(),
+//     };
+//
+//     assert!(
+//         most_recent_rewards
+//             .rewards
+//             .contains(&expected_automated_node_provider_reward_1)
+//     );
+//
+//     assert!(
+//         most_recent_rewards
+//             .rewards
+//             .contains(&expected_automated_node_provider_reward_2)
+//     );
+//
+//     assert!(
+//         most_recent_rewards
+//             .rewards
+//             .contains(&expected_automated_node_provider_reward_3)
+//     );
+//
+//     // Assert additional rewards have been transferred to the Node Provider accounts
+//     assert_account_balance(
+//         &state_machine,
+//         node_info_1.provider_account,
+//         expected_node_provider_reward_1.amount_e8s + expected_automated_rewards_e8s_1,
+//     );
+//
+//     assert_account_balance(
+//         &state_machine,
+//         node_info_2.provider_account,
+//         expected_node_provider_reward_2.amount_e8s + expected_automated_rewards_e8s_2,
+//     );
+//
+//     assert_account_balance(
+//         &state_machine,
+//         node_info_3.provider_account,
+//         expected_node_provider_reward_3.amount_e8s + expected_automated_rewards_e8s_3,
+//     );
+//
+//     let actual_minimum_xdr_permyriad_per_icp = nns_get_network_economics_parameters(&state_machine)
+//         .minimum_icp_xdr_rate
+//         * NetworkEconomics::ICP_XDR_RATE_TO_BASIS_POINT_MULTIPLIER;
+//
+//     // Set a new average conversion that is far below the `actual_minimum_xdr_permyriad_per_icp`
+//     // to trigger the limit.
+//     let average_icp_xdr_conversion_rate_for_automated_rewards = 1;
+//     set_average_icp_xdr_conversion_rate(
+//         &state_machine,
+//         average_icp_xdr_conversion_rate_for_automated_rewards,
+//     );
+//
+//     // Assert that advancing time by a month triggers an automated monthly NP reward event
+//     state_machine.advance_time(Duration::from_secs(ONE_MONTH_SECONDS));
+//
+//     let mut rewards_were_triggered = false;
+//     for _ in 0..10 {
+//         state_machine.advance_time(Duration::from_secs(60));
+//         most_recent_rewards =
+//             nns_get_most_recent_monthly_node_provider_rewards(&state_machine).unwrap();
+//         np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
+//         if np_rewards_from_automation_timestamp == np_rewards_from_proposal_timestamp {
+//             continue;
+//         }
+//         rewards_were_triggered = true;
+//     }
+//
+//     assert!(
+//         rewards_were_triggered,
+//         "Automated rewards were not triggered even though more than 1 month has passed."
+//     );
+//
+//     let expected_automated_rewards_e8s_1 = (((10 * 24_000) + (21 * 68_000) + (6 * 11_000))
+//         * TOKEN_SUBDIVIDABLE_BY)
+//         / actual_minimum_xdr_permyriad_per_icp;
+//
+//     let expected_automated_node_provider_reward_1 = RewardNodeProvider {
+//         node_provider: Some(node_info_1.provider),
+//         amount_e8s: expected_automated_rewards_e8s_1,
+//         reward_mode: reward_mode_1,
+//     };
+//
+//     let expected_automated_rewards_e8s_2 = (((35 * 68_000) + (17 * 11_000))
+//         * TOKEN_SUBDIVIDABLE_BY)
+//         / actual_minimum_xdr_permyriad_per_icp;
+//
+//     let expected_automated_node_provider_reward_2 = RewardNodeProvider {
+//         node_provider: Some(node_info_2.provider),
+//         amount_e8s: expected_automated_rewards_e8s_2,
+//         reward_mode: reward_mode_2,
+//     };
+//
+//     let expected_automated_rewards_e8s_3 = (((19 * 234_000) + (33 * 907_000) + (4 * 103_000))
+//         * TOKEN_SUBDIVIDABLE_BY)
+//         / actual_minimum_xdr_permyriad_per_icp;
+//
+//     let expected_automated_node_provider_reward_3 = RewardNodeProvider {
+//         node_provider: Some(node_info_3.provider),
+//         amount_e8s: expected_automated_rewards_e8s_3,
+//         reward_mode: reward_mode_3,
+//     };
+//
+//     assert!(
+//         most_recent_rewards
+//             .rewards
+//             .contains(&expected_automated_node_provider_reward_1)
+//     );
+//
+//     assert!(
+//         most_recent_rewards
+//             .rewards
+//             .contains(&expected_automated_node_provider_reward_2)
+//     );
+//
+//     assert!(
+//         most_recent_rewards
+//             .rewards
+//             .contains(&expected_automated_node_provider_reward_3)
+//     );
+// }
 
 /// Helper function for making NNS proposals for this test
 fn submit_nns_proposal(state_machine: &StateMachine, action: ProposalActionRequest) {

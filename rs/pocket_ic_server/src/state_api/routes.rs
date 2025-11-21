@@ -10,10 +10,10 @@ use super::state::{
 };
 use crate::pocket_ic::{
     AddCycles, AwaitIngressMessage, CallRequest, CallRequestVersion, CanisterReadStateRequest,
-    DashboardRequest, GetCanisterHttp, GetControllers, GetCyclesBalance, GetStableMemory,
-    GetSubnet, GetTime, GetTopology, IngressMessageStatus, MockCanisterHttp, PubKey, Query,
-    QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest, SubmitIngressMessage,
-    SubnetReadStateRequest, Tick,
+    CanisterSnapshotDownload, DashboardRequest, GetCanisterHttp, GetControllers, GetCyclesBalance,
+    GetStableMemory, GetSubnet, GetTime, GetTopology, IngressMessageStatus, MockCanisterHttp,
+    PubKey, Query, QueryRequest, SetCertifiedTime, SetStableMemory, SetTime, StatusRequest,
+    SubmitIngressMessage, SubnetReadStateRequest, Tick,
 };
 use crate::{BlobStore, InstanceId, OpId, Operation, async_trait, pocket_ic::PocketIc};
 use aide::{
@@ -36,15 +36,15 @@ use backoff::backoff::Backoff;
 use backoff::{ExponentialBackoff, ExponentialBackoffBuilder};
 use ic_boundary::{ErrorClientFacing, MAX_REQUEST_BODY_SIZE};
 use ic_http_endpoints_public::{cors_layer, make_plaintext_response, query, read_state};
-use ic_types::{CanisterId, SubnetId};
+use ic_types::{CanisterId, SnapshotId, SubnetId};
 use pocket_ic::RejectResponse;
 use pocket_ic::common::rest::{
     self, ApiResponse, AutoProgressConfig, ExtendedSubnetConfigSet, HttpGatewayConfig,
     HttpGatewayDetails, IcpConfig, IcpFeatures, InitialTime, InstanceConfig,
     MockCanisterHttpResponse, RawAddCycles, RawCanisterCall, RawCanisterHttpRequest, RawCanisterId,
-    RawCanisterResult, RawCycles, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
-    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime, TickConfigs,
-    Topology,
+    RawCanisterResult, RawCanisterSnapshotDownload, RawCycles, RawIngressStatusArgs, RawMessageId,
+    RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId,
+    RawTime, TickConfigs, Topology,
 };
 use serde::Serialize;
 use slog::Level;
@@ -132,6 +132,10 @@ where
         .directory_route("/set_stable_memory", post(handler_set_stable_memory))
         .directory_route("/tick", post(handler_tick))
         .directory_route("/mock_canister_http", post(handler_mock_canister_http))
+        .directory_route(
+            "/canister_snapshot_download",
+            post(handler_canister_snapshot_download),
+        )
 }
 
 async fn handle_limit_error(req: Request, next: Next) -> Response {
@@ -771,6 +775,50 @@ pub async fn handler_pub_key(
     let op = PubKey { subnet_id };
     let (code, res) = run_operation(api_state, instance_id, timeout, op).await;
     (code, Json(res))
+}
+
+pub async fn handler_canister_snapshot_download(
+    State(AppState { api_state, .. }): State<AppState>,
+    headers: HeaderMap,
+    Path(instance_id): Path<InstanceId>,
+    axum::extract::Json(RawCanisterSnapshotDownload {
+        sender,
+        canister_id,
+        snapshot_id,
+        snapshot_dir,
+    }): axum::extract::Json<RawCanisterSnapshotDownload>,
+) -> (StatusCode, Json<ApiResponse<()>>) {
+    let timeout = timeout_or_default(headers);
+    let canister_id = match CanisterId::try_from(canister_id.canister_id) {
+        Ok(canister_id) => canister_id,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::Error {
+                    message: format!("{e:?}"),
+                }),
+            );
+        }
+    };
+    let snapshot_id = match SnapshotId::try_from(snapshot_id) {
+        Ok(snapshot_id) => snapshot_id,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::Error {
+                    message: format!("{e:?}"),
+                }),
+            );
+        }
+    };
+    let op = CanisterSnapshotDownload {
+        sender: ic_types::PrincipalId(sender.into()),
+        canister_id,
+        snapshot_id,
+        snapshot_dir,
+    };
+    let (code, response) = run_operation(api_state, instance_id, timeout, op).await;
+    (code, Json(response))
 }
 
 pub async fn handler_dashboard(

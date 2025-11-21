@@ -1,3 +1,4 @@
+use crate::AlgorithmVersion;
 use crate::REWARDS_TABLE_DAYS;
 use crate::performance_based_algorithm::results::{
     DailyNodeFailureRate, DailyNodeProviderRewards, DailyNodeRewards, DailyResults,
@@ -85,7 +86,7 @@ pub trait PerformanceBasedAlgorithmInputProvider {
     ) -> Result<BTreeMap<PrincipalId, Vec<RewardableNode>>, String>;
 }
 
-trait PerformanceBasedAlgorithm {
+trait PerformanceBasedAlgorithm: AlgorithmVersion {
     /// The percentile used to calculate the failure rate for a subnet.
     const SUBNET_FAILURE_RATE_PERCENTILE: f64;
 
@@ -133,6 +134,7 @@ trait PerformanceBasedAlgorithm {
         }
 
         Ok(RewardsCalculatorResults {
+            algorithm_version: Self::VERSION,
             total_rewards_xdr_permyriad,
             daily_results,
         })

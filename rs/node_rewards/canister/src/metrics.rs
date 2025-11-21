@@ -126,12 +126,20 @@ where
                             .flat_map(|metrics| &metrics.node_metrics)
                             .map(|m| NodeId::from(PrincipalId::from(m.node_id)))
                             .collect_vec();
-                        ic_cdk::println!("Last metrics for subnet {}: {:?}", subnet_id, node_list);
                         // Update the last timestamp for this subnet.
                         let last_timestamp = subnet_update
                             .last()
                             .map(|metrics| metrics.timestamp_nanos)
                             .expect("Not empty");
+                        let date =
+                            DateTime::from_timestamp_nanos(last_timestamp as i64).date_naive();
+                        ic_cdk::println!(
+                            "Last metrics for subnet {}: {:?} timestamp: {}",
+                            subnet_id,
+                            node_list,
+                            date
+                        );
+
                         self.last_timestamp_per_subnet
                             .borrow_mut()
                             .insert(subnet_id.into(), last_timestamp);

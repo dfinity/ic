@@ -323,8 +323,7 @@ pub fn invariant_compliant_mutation_with_subnet_id(
 
     let (valid_pks, node_id) = new_node_keys_and_node_id();
 
-    println!("Generated node ID: {:?}", node_id.get());
-
+    println!("node id generated {:?}", node_id);
     let mut threshold_pk_and_cup_mutations =
         create_subnet_threshold_signing_pubkey_and_cup_mutations(
             subnet_pid,

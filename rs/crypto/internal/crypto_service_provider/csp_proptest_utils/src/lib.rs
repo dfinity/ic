@@ -625,7 +625,6 @@ mod csp_tls_sign_error {
         SecretKeyNotFound => { key_id in arb_key_id()},
         WrongSecretKeyType => {algorithm in arb_algorithm_id(), secret_key_variant in ".*"},
         MalformedSecretKey => {error in ".*"},
-        SigningFailed => {error in ".*"},
         TransientInternalError => {internal_error in ".*"}
     );
 }

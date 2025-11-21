@@ -1,8 +1,9 @@
-use rust_decimal::Decimal;
-use rust_decimal_macros::dec;
-
 pub mod performance_based_algorithm;
 pub mod types;
+
+pub trait AlgorithmVersion {
+    const VERSION: u32;
+}
 
 /// From constant [NODE_PROVIDER_REWARD_PERIOD_SECONDS]
 /// const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;

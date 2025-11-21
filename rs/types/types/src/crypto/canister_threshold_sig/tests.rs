@@ -513,60 +513,37 @@ fn should_not_create_schnorr_presignature_with_invalid_origin() {
 #[test]
 fn should_create_schnorr_sig_inputs_correctly() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (presignature_transcript_raw, key_transcript) =
-        transcripts_for_schnorr_sig_inputs(common_receivers.clone(), rng);
+    let receivers = set_of_nodes(&[1, 2, 3]);
+    let inputs_owned = valid_tschnorr_inputs_with_receivers(receivers.clone(), rng);
 
-    let presignature_transcript = SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
-        .expect("failed to created presignature transcript");
+    let result: Result<ThresholdSchnorrSigInputs, _> = inputs_owned.to_ref();
+    assert!(result.is_ok());
 
-    let extended_derivation_path = derivation_path();
-    let message = message_in_size_range(0..1_000, rng);
-    let nonce = nonce();
-    let tschnorr_sig_inputs = ThresholdSchnorrSigInputs::new(
-        &extended_derivation_path.caller,
-        &extended_derivation_path.derivation_path,
-        &message,
-        None,
-        &nonce,
-        &presignature_transcript,
-        &key_transcript,
-    )
-    .expect("failed to create threshold Schnorr signature inputs");
-
+    let inputs = result.unwrap();
+    assert_eq!(inputs.caller(), &inputs_owned.caller);
+    assert_eq!(inputs.derivation_path(), &inputs_owned.derivation_path);
+    assert_eq!(inputs.message(), &inputs_owned.message);
+    assert_eq!(inputs.nonce(), &inputs_owned.nonce);
+    assert_eq!(inputs.presig_transcript(), &inputs_owned.presig_transcript);
+    assert_eq!(inputs.key_transcript(), &inputs_owned.key_transcript);
     assert_eq!(
-        tschnorr_sig_inputs.caller(),
-        &extended_derivation_path.caller
+        inputs.reconstruction_threshold(),
+        inputs_owned.key_transcript.reconstruction_threshold()
+    );
+    assert_eq!(inputs.receivers(), &inputs_owned.key_transcript.receivers);
+    assert_eq!(
+        AsRef::<IDkgReceivers>::as_ref(&inputs),
+        &inputs_owned.key_transcript.receivers
     );
     assert_eq!(
-        tschnorr_sig_inputs.derivation_path(),
-        &extended_derivation_path.derivation_path
+        inputs.algorithm_id(),
+        inputs_owned.key_transcript.algorithm_id
     );
-    assert_eq!(tschnorr_sig_inputs.message(), &message);
-    assert_eq!(tschnorr_sig_inputs.nonce(), &nonce);
-    assert_eq!(
-        tschnorr_sig_inputs.presig_transcript(),
-        &presignature_transcript
-    );
-    assert_eq!(tschnorr_sig_inputs.key_transcript(), &key_transcript);
-    assert_eq!(
-        tschnorr_sig_inputs.reconstruction_threshold(),
-        key_transcript.reconstruction_threshold()
-    );
-    assert_eq!(tschnorr_sig_inputs.receivers(), &key_transcript.receivers);
-    assert_eq!(
-        AsRef::<IDkgReceivers>::as_ref(&tschnorr_sig_inputs),
-        &key_transcript.receivers
-    );
-    assert_eq!(
-        tschnorr_sig_inputs.algorithm_id(),
-        key_transcript.algorithm_id
-    );
-    for node_id in common_receivers.iter() {
-        assert!(tschnorr_sig_inputs.index_for_signer_id(*node_id).is_some());
+    for node_id in receivers.iter() {
+        assert!(inputs.index_for_signer_id(*node_id).is_some());
         assert_eq!(
-            tschnorr_sig_inputs.index_for_signer_id(*node_id),
-            key_transcript.index_for_signer_id(*node_id)
+            inputs.index_for_signer_id(*node_id),
+            inputs_owned.key_transcript.index_for_signer_id(*node_id)
         );
     }
 }
@@ -574,55 +551,31 @@ fn should_create_schnorr_sig_inputs_correctly() {
 #[test]
 fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_algorithms() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (presignature_transcript_raw, key_transcript) =
-        transcripts_for_schnorr_sig_inputs(common_receivers, rng);
+    let mut inputs_owned = valid_tschnorr_inputs(rng);
 
-    let mut presignature_transcript =
-        SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
-            .expect("failed to created presignature transcript");
-
-    let derivation_path = derivation_path();
-    let message = message_in_size_range(0..1_000, rng);
-    let nonce = nonce();
-
-    {
-        let mut key_transcript = key_transcript.clone();
-        key_transcript.algorithm_id = AlgorithmId::Tls;
-        assert_eq!(
-            ThresholdSchnorrSigInputs::new(
-                &derivation_path.caller,
-                &derivation_path.derivation_path,
-                &message,
-                None,
-                &nonce,
-                &presignature_transcript,
-                &key_transcript,
-            ),
-            Err(
-                error::ThresholdSchnorrSigInputsCreationError::InconsistentAlgorithmIds(
-                    AlgorithmId::ThresholdSchnorrBip340.to_string(),
-                    AlgorithmId::Tls.to_string()
-                )
-            )
-        );
-    }
-
-    presignature_transcript.blinder_unmasked.algorithm_id = AlgorithmId::Tls;
+    // Mismatch: key transcript uses TLS
+    let mut owned_mismatch_key = inputs_owned.clone();
+    owned_mismatch_key.key_transcript.algorithm_id = AlgorithmId::Tls;
+    let result: Result<ThresholdSchnorrSigInputs, _> = owned_mismatch_key.to_ref();
     assert_eq!(
-        ThresholdSchnorrSigInputs::new(
-            &derivation_path.caller,
-            &derivation_path.derivation_path,
-            &message,
-            None,
-            &nonce,
-            &presignature_transcript,
-            &key_transcript,
-        ),
+        result,
+        Err(
+            error::ThresholdSchnorrSigInputsCreationError::InconsistentAlgorithmIds(
+                AlgorithmId::ThresholdSchnorrBip340.to_string(),
+                AlgorithmId::Tls.to_string()
+            )
+        )
+    );
+
+    // Mismatch: presignature transcript uses TLS
+    inputs_owned.presig_transcript.blinder_unmasked.algorithm_id = AlgorithmId::Tls;
+    let result: Result<ThresholdSchnorrSigInputs, _> = inputs_owned.to_ref();
+    assert_eq!(
+        result,
         Err(
             error::ThresholdSchnorrSigInputsCreationError::InconsistentAlgorithmIds(
                 AlgorithmId::Tls.to_string(),
-                AlgorithmId::ThresholdSchnorrBip340.to_string(),
+                AlgorithmId::ThresholdSchnorrBip340.to_string()
             )
         )
     );
@@ -631,31 +584,15 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_algorithms() {
 #[test]
 fn should_fail_creating_schnorr_sig_inputs_with_unsupported_algorithm() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (presignature_transcript_raw, mut key_transcript) =
-        transcripts_for_schnorr_sig_inputs(common_receivers, rng);
-
-    let mut presignature_transcript =
-        SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
-            .expect("failed to created presignature transcript");
-
-    let derivation_path = derivation_path();
-    let message = message_in_size_range(0..1_000, rng);
-    let nonce = nonce();
+    let mut inputs_owned = valid_tschnorr_inputs(rng);
 
     let unsupported_algorithm = AlgorithmId::ThresholdEcdsaSecp256k1;
-    key_transcript.algorithm_id = unsupported_algorithm;
-    presignature_transcript.blinder_unmasked.algorithm_id = unsupported_algorithm;
+    inputs_owned.key_transcript.algorithm_id = unsupported_algorithm;
+    inputs_owned.presig_transcript.blinder_unmasked.algorithm_id = unsupported_algorithm;
+
+    let result: Result<ThresholdSchnorrSigInputs, _> = inputs_owned.to_ref();
     assert_eq!(
-        ThresholdSchnorrSigInputs::new(
-            &derivation_path.caller,
-            &derivation_path.derivation_path,
-            &message,
-            None,
-            &nonce,
-            &presignature_transcript,
-            &key_transcript,
-        ),
+        result,
         Err(
             error::ThresholdSchnorrSigInputsCreationError::UnsupportedAlgorithm(
                 unsupported_algorithm.to_string()
@@ -702,17 +639,7 @@ fn should_fail_creating_schnorr_sig_inputs_with_inconsistent_receivers() {
 #[test]
 fn should_fail_creating_schnorr_sig_inputs_with_invalid_transcript_origin() {
     let rng = &mut reproducible_rng();
-    let common_receivers = set_of_nodes(&[1, 2, 3]);
-    let (presignature_transcript_raw, key_transcript) =
-        transcripts_for_schnorr_sig_inputs(common_receivers, rng);
-
-    let mut presignature_transcript =
-        SchnorrPreSignatureTranscript::new(presignature_transcript_raw)
-            .expect("failed to created presignature transcript");
-
-    let derivation_path: ExtendedDerivationPath = derivation_path();
-    let message = message_in_size_range(0..1_000, rng);
-    let nonce = nonce();
+    let mut inputs_owned = valid_tschnorr_inputs(rng);
 
     let invalid_transcript_types = [
         IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
@@ -728,17 +655,15 @@ fn should_fail_creating_schnorr_sig_inputs_with_invalid_transcript_origin() {
         )),
     ];
     for invalid_transcript_type in invalid_transcript_types {
-        presignature_transcript.blinder_unmasked.transcript_type = invalid_transcript_type.clone();
+        inputs_owned
+            .presig_transcript
+            .blinder_unmasked
+            .transcript_type = invalid_transcript_type.clone();
+
+        let result: Result<ThresholdSchnorrSigInputs, _> = inputs_owned.to_ref();
+
         assert_matches!(
-            ThresholdSchnorrSigInputs::new(
-                &derivation_path.caller,
-                &derivation_path.derivation_path,
-                &message,
-                None,
-                &nonce,
-                &presignature_transcript,
-                &key_transcript,
-            ),
+            result,
             Err(error::ThresholdSchnorrSigInputsCreationError::InvalidPreSignatureOrigin(internal_error))
             if internal_error == format!("Presignature transcript: {invalid_transcript_type:?}")
         );
@@ -871,21 +796,6 @@ fn transcripts_for_ecdsa_inputs<R: Rng + CryptoRng>(
     )
 }
 
-fn transcripts_for_schnorr_sig_inputs<R: Rng + CryptoRng>(
-    receivers: BTreeSet<NodeId>,
-    rng: &mut R,
-) -> (IDkgTranscript, IDkgTranscript) {
-    let blinder_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random);
-    let blinder_unmasked_transcript = schnorr_transcript(receivers.clone(), blinder_type, rng);
-
-    let key_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
-        random_transcript_id(rng),
-    ));
-    let key_transcript = schnorr_transcript(receivers.clone(), key_type, rng);
-
-    (blinder_unmasked_transcript, key_transcript)
-}
-
 fn derivation_path() -> ExtendedDerivationPath {
     ExtendedDerivationPath {
         caller: Default::default(),
@@ -912,6 +822,9 @@ fn message_in_size_range<R: Rng + CryptoRng>(
 // Copy of ic_crypto_test_utils_canister_threshold_sigs::ThresholdEcdsaSigInputsOwned.
 // The latter cannot be used here because ic-types (this crate here) has a dev-dependency on
 // ic_crypto_test_utils_canister_threshold_sigs, which has a dependency on ic-types.
+// This [quasi-circular dependency](https://mmapped.blog/posts/03-rust-packages-crates-modules#quasi-circular)
+// (and thus the code duplication) could be worked around by turning the unit tests
+// into integration tests.
 #[derive(Clone, Eq, PartialEq, Hash)]
 pub struct ThresholdEcdsaSigInputsOwned {
     pub caller: PrincipalId,
@@ -966,6 +879,73 @@ fn valid_tecdsa_inputs_with_receivers(
         hashed_message,
         nonce,
         presig_quadruple: quadruple,
+        key_transcript,
+    }
+}
+
+// Copy of ic_crypto_test_utils_canister_threshold_sigs::ThresholdSchnorrSigInputsOwned.
+// The latter cannot be used here because ic-types (this crate here) has a dev-dependency on
+// ic_crypto_test_utils_canister_threshold_sigs, which has a dependency on ic-types.
+// This [quasi-circular dependency](https://mmapped.blog/posts/03-rust-packages-crates-modules#quasi-circular)
+// (and thus the code duplication) could be worked around by turning the unit tests
+// into integration tests.
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct ThresholdSchnorrSigInputsOwned {
+    pub caller: PrincipalId,
+    pub derivation_path: Vec<Vec<u8>>,
+    pub message: Vec<u8>,
+    pub taproot_tree_root: Option<Vec<u8>>,
+    pub nonce: [u8; 32],
+    pub presig_transcript: SchnorrPreSignatureTranscript,
+    pub key_transcript: IDkgTranscript,
+}
+
+impl ThresholdSchnorrSigInputsOwned {
+    pub fn to_ref<'a>(
+        &'a self,
+    ) -> Result<ThresholdSchnorrSigInputs<'a>, error::ThresholdSchnorrSigInputsCreationError> {
+        ThresholdSchnorrSigInputs::new(
+            &self.caller,
+            &self.derivation_path,
+            &self.message,
+            None,
+            &self.nonce,
+            &self.presig_transcript,
+            &self.key_transcript,
+        )
+    }
+}
+
+fn valid_tschnorr_inputs(rng: &mut ReproducibleRng) -> ThresholdSchnorrSigInputsOwned {
+    valid_tschnorr_inputs_with_receivers(set_of_nodes(&[1, 2, 3]), rng)
+}
+
+fn valid_tschnorr_inputs_with_receivers(
+    receivers: BTreeSet<NodeId>,
+    rng: &mut ReproducibleRng,
+) -> ThresholdSchnorrSigInputsOwned {
+    let blinder_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::Random);
+    let blinder_unmasked_transcript = schnorr_transcript(receivers.clone(), blinder_type, rng);
+
+    let key_type = IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
+        random_transcript_id(rng),
+    ));
+    let key_transcript = schnorr_transcript(receivers.clone(), key_type, rng);
+
+    let presig_transcript = SchnorrPreSignatureTranscript::new(blinder_unmasked_transcript)
+        .expect("failed to create presignature transcript");
+
+    let extended_derivation_path = derivation_path();
+    let message = message_in_size_range(0..1_000, rng);
+    let nonce = nonce();
+
+    ThresholdSchnorrSigInputsOwned {
+        caller: extended_derivation_path.caller,
+        derivation_path: extended_derivation_path.derivation_path,
+        message,
+        taproot_tree_root: None,
+        nonce,
+        presig_transcript,
         key_transcript,
     }
 }

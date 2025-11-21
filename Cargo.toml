@@ -388,14 +388,12 @@ members = [
     "rs/rust_canisters/dfn_http_metrics",
     "rs/rust_canisters/dfn_json",
     "rs/rust_canisters/dfn_protobuf",
-    "rs/rust_canisters/downstream_calls_test",
     "rs/rust_canisters/ecdsa",
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
     "rs/rust_canisters/messaging_test",
     "rs/rust_canisters/on_wire",
     "rs/rust_canisters/proxy_canister",
-    "rs/rust_canisters/random_traffic_test",
     "rs/rust_canisters/response_payload_test",
     "rs/rust_canisters/stable_memory_integrity",
     "rs/rust_canisters/stable_reader",
@@ -611,7 +609,7 @@ build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
 bytes = "1.9.0"
 canbench-rs = "0.2.1"
-candid = { version = "0.10.17" }
+candid = { version = "0.10.20" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.38", default-features = false, features = [
     "alloc",

@@ -1935,9 +1935,9 @@ dependencies = [
 
 [[package]]
 name = "candid"
-version = "0.10.17"
+version = "0.10.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eaac522d18020d5fbc8320ecb12a9b13b2137ae31133da2d42fa256a825507c4"
+checksum = "8037a01ec09d6c06883a38bad4f47b8d06158ad360b841e0ae5707c9884dfaf6"
 dependencies = [
  "anyhow",
  "binread",
@@ -1967,9 +1967,9 @@ dependencies = [
 
 [[package]]
 name = "candid_derive"
-version = "0.10.17"
+version = "0.10.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a1b4fddbd462182050989068d53604a91a3d0f117c3c8316c6818023df00add"
+checksum = "fb45f4d5eff3805598ee633dd80f8afb306c023249d34b5b7dfdc2080ea1df2e"
 dependencies = [
  "lazy_static",
  "proc-macro2",
@@ -4050,16 +4050,6 @@ name = "downcast"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
-
-[[package]]
-name = "downstream-calls-test"
-version = "0.1.0"
-dependencies = [
- "candid",
- "ic-base-types",
- "ic-cdk",
- "serde",
-]
 
 [[package]]
 name = "drawille"
@@ -8262,6 +8252,7 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-basic-sig",
+ "ic-ed25519 0.5.0",
  "ic-interfaces",
  "ic-logger",
  "ic-management-canister-types-private",
@@ -8505,10 +8496,10 @@ version = "0.9.0"
 dependencies = [
  "assert_matches",
  "hex",
- "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-node-key-validation",
  "ic-crypto-secrets-containers",
  "ic-crypto-test-utils-reproducible-rng",
+ "ic-ed25519 0.5.0",
  "ic-protobuf",
  "ic-types",
  "rand 0.8.5",
@@ -8885,11 +8876,11 @@ dependencies = [
 name = "ic-crypto-test-utils-tls"
 version = "0.9.0"
 dependencies = [
- "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-tls",
+ "ic-ed25519 0.5.0",
  "ic-interfaces",
  "ic-protobuf",
  "ic-registry-client-fake",
@@ -10833,9 +10824,7 @@ name = "ic-messaging"
 version = "0.9.0"
 dependencies = [
  "assert_matches",
- "candid",
  "canister-test",
- "downstream-calls-test",
  "ic-base-types",
  "ic-certification-version",
  "ic-config",
@@ -10880,18 +10869,17 @@ dependencies = [
  "ic-utils-thread",
  "lazy_static",
  "maplit",
+ "messaging-test",
+ "messaging-test-utils",
  "mockall",
  "pretty_assertions",
  "prometheus 0.13.4",
  "proptest",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "random-traffic-test",
- "serde",
  "slog",
  "test-strategy 0.3.1",
  "tracing",
- "xnet-test",
 ]
 
 [[package]]
@@ -20318,22 +20306,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "random-traffic-test"
-version = "0.9.0"
-dependencies = [
- "candid",
- "futures",
- "ic-base-types",
- "ic-cdk",
- "ic-error-types 0.2.0",
- "ic-types",
- "proptest",
- "rand 0.8.5",
- "serde",
- "serde_bytes",
-]
-
-[[package]]
 name = "rangemap"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -25957,6 +25929,7 @@ dependencies = [
  "candid",
  "futures",
  "ic-cdk",
+ "ic-dummy-getrandom-for-wasm",
  "ic-management-canister-types",
  "rand 0.8.5",
  "rand_pcg 0.3.1",
