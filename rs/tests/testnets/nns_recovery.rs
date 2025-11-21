@@ -21,6 +21,10 @@
 //     }
 // ```
 //
+// To recover the latest mainnet NNS subnet backup make sure your testnet is deployed to zh1 (where the backup pod is located)
+// by passing the following to ict `--set-required-host-features=dc=zh1` and pass `--test_env=RECOVER_LATEST_MAINNET_NNS_SUBNET_BACKUP=1`.
+// Note that the NNS backup is over 15GB so it will require around 3 minutes to download, X minutes to unpack and Y GB of disk space.
+//
 // To get access to P8s and Grafana look for the following lines in the ict console output:
 //
 //     prometheus: Prometheus Web UI at http://prometheus.nns-recovery--1758812276301.testnet.farm.dfinity.systems,
@@ -38,16 +42,76 @@ use ic_limits::DKG_INTERVAL_HEIGHT;
 use ic_nested_nns_recovery_common::{
     SetupConfig, grant_backup_access_to_all_nns_nodes, replace_nns_with_unassigned_nodes,
 };
+use ic_system_test_driver::driver::group::SystemTestGroup;
 use ic_system_test_driver::driver::nested::HasNestedVms;
 use ic_system_test_driver::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use ic_system_test_driver::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_system_test_driver::driver::test_env_api::*;
 use ic_system_test_driver::driver::test_setup::GroupSetup;
-use ic_system_test_driver::{driver::group::SystemTestGroup, systest};
 use slog::{info, warn};
-use std::time::Duration;
+use std::{io::Write, process::Command, time::Duration};
+
+const NNS_BACKUP_POD: &str = "zh1-pyr07.zh1.dfinity.network";
+const NNS_BACKUP_POD_USER: &str = "dev";
+const NNS_STATE_DIR_PATH: &str = "recovery/working_dir/data";
+const NNS_STATE_BACKUP_TARBALL_PATH: &str = "nns_state.tar.zst";
+
+fn fetch_nns_state_from_backup_pod(env: TestEnv) {
+    let target = format!(
+        "{NNS_BACKUP_POD_USER}@{NNS_BACKUP_POD}:/home/{NNS_BACKUP_POD_USER}/{NNS_STATE_BACKUP_TARBALL_PATH}"
+    );
+    let logger: slog::Logger = env.logger();
+    let nns_state_backup_path = env.get_path(NNS_STATE_BACKUP_TARBALL_PATH);
+    info!(
+        logger,
+        "Downloading {} to {:?} ...",
+        target,
+        nns_state_backup_path.clone()
+    );
+    // TODO: consider using the ssh2 crate (like we do in prometheus_vm.rs)
+    // instead of shelling out to scp.
+    let mut cmd = Command::new("scp");
+    cmd.arg("-oUserKnownHostsFile=/dev/null")
+        .arg("-oStrictHostKeyChecking=no")
+        .arg(target.clone())
+        .arg(nns_state_backup_path.clone());
+    info!(env.logger(), "{cmd:?} ...");
+    let scp_out = cmd.output().unwrap_or_else(|e| {
+        panic!(
+            "Could not scp the {NNS_STATE_BACKUP_TARBALL_PATH} from the backup pod because: {e:?}!",
+        )
+    });
+    if !scp_out.status.success() {
+        std::io::stdout().write_all(&scp_out.stdout).unwrap();
+        std::io::stderr().write_all(&scp_out.stderr).unwrap();
+        panic!("Could not scp the {NNS_STATE_BACKUP_TARBALL_PATH} from the backup pod!");
+    }
+    info!(
+        logger,
+        "Downloaded {target:} to {:?}, unpacking ...", nns_state_backup_path
+    );
+    let mut cmd = Command::new("tar");
+    cmd.arg("xf")
+        .arg(nns_state_backup_path.clone())
+        .arg("-C")
+        .arg(env.base_path())
+        .arg(format!("--transform=s|nns_state/|{NNS_STATE_DIR_PATH}/|"));
+    info!(env.logger(), "{cmd:?} ...");
+    let tar_out = cmd
+        .output()
+        .expect("Could not unpack {NNS_STATE_BACKUP_TARBALL_PATH}!");
+    if !tar_out.status.success() {
+        std::io::stdout().write_all(&tar_out.stdout).unwrap();
+        std::io::stderr().write_all(&tar_out.stderr).unwrap();
+        panic!("Could not unpack {NNS_STATE_BACKUP_TARBALL_PATH}!");
+    }
+    info!(logger, "Unpacked {:?}", nns_state_backup_path);
+}
 
 fn setup(env: TestEnv) {
+    let recover_latest_mainnet_nns_subnet_backup =
+        std::env::var("RECOVER_LATEST_MAINNET_NNS_SUBNET_BACKUP").is_ok();
+
     let subnet_size = std::env::var("SUBNET_SIZE")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
@@ -57,6 +121,15 @@ fn setup(env: TestEnv) {
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
         .unwrap_or(DKG_INTERVAL_HEIGHT);
+
+    let opt_fetch_nns_backup_thread = if recover_latest_mainnet_nns_subnet_backup {
+        let env_clone = env.clone();
+        Some(std::thread::spawn(move || {
+            fetch_nns_state_from_backup_pod(env_clone);
+        }))
+    } else {
+        None
+    };
 
     PrometheusVm::default()
         .start(&env)
@@ -70,6 +143,14 @@ fn setup(env: TestEnv) {
             dkg_interval,
         },
     );
+
+    log_instructions(env.clone());
+
+    if let Some(fetch_thread) = opt_fetch_nns_backup_thread {
+        fetch_thread
+            .join()
+            .expect("Failed to fetch latest mainnet NNS subnet backup.");
+    }
 }
 
 fn log_instructions(env: TestEnv) {
@@ -185,7 +266,6 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_timeout_per_test(Duration::from_secs(90 * 60))
         .with_setup(setup)
-        .add_test(systest!(log_instructions))
         .execute_from_args()?;
     Ok(())
 }

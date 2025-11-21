@@ -320,6 +320,7 @@ system_test_nns(
 
 system_test_nns(
     name = "nns_recovery",
+    env_inherit = ["SSH_AUTH_SOCK"],
     tags = [
         "dynamic_testnet",
         "manual",
