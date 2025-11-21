@@ -334,7 +334,7 @@ main() {
         log_message "Recovery hash written to $RECOVERY_FILE"
     fi
 
-    log_message "Restarting guestos service after manual upgrade"
+    log_message "Restarting guestos.service after manual upgrade installation"
     systemctl start guestos.service
     log_message "GuestOS service restarted successfully"
 }
