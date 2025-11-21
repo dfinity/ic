@@ -282,8 +282,10 @@ rust_test(
     ],
     deps = [
         ":pocket-ic",
+        "//rs/types/management_canister_types",
         "@crate_index//:candid",
         "@crate_index//:hex",
+        "@crate_index//:serde_json",
         "@crate_index//:tempfile",
     ],
 )

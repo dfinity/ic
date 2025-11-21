@@ -19244,6 +19244,7 @@ dependencies = [
  "ic-certification 3.0.3",
  "ic-error-types 0.2.0",
  "ic-management-canister-types",
+ "ic-management-canister-types-private",
  "ic-migration-canister",
  "ic-nns-governance-api",
  "ic-registry-client",
