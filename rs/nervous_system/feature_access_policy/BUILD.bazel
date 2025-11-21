@@ -13,12 +13,6 @@ rust_library(
     deps = [],
 )
 
-# rust_test_suite(
-#     name = "temporary_integration_test",
-#     srcs = glob(["tests/**/*.rs"]),
-#     deps = [":temporary"] + DEPENDENCIES + DEV_DEPENDENCIES,
-# )
-
 rust_doc_test(
     name = "doc_test",
     crate = ":feature_access_policy",
