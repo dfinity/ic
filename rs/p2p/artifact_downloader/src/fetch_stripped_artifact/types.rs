@@ -77,3 +77,27 @@ impl From<&StrippedMessage> for StrippedMessageId {
         }
     }
 }
+
+#[derive(Copy, Clone)]
+pub(crate) enum StrippedMessageType {
+    Ingress,
+    IDkgDealing,
+}
+
+impl StrippedMessageType {
+    pub(crate) fn as_str(&self) -> &str {
+        match self {
+            StrippedMessageType::Ingress => "ingress",
+            StrippedMessageType::IDkgDealing => "idkg_dealing",
+        }
+    }
+}
+
+impl From<&StrippedMessageId> for StrippedMessageType {
+    fn from(id: &StrippedMessageId) -> Self {
+        match id {
+            StrippedMessageId::Ingress(_) => StrippedMessageType::Ingress,
+            StrippedMessageId::IDkgDealing(_, _) => StrippedMessageType::IDkgDealing,
+        }
+    }
+}

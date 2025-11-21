@@ -185,7 +185,7 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
 
         let timer = self
             .metrics
-            .download_missing_ingress_messages_duration
+            .download_missing_stripped_messages_duration
             .start_timer();
         let mut assembler = BlockProposalAssembler::new(stripped_block_proposal);
 
