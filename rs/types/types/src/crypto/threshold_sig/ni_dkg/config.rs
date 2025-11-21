@@ -67,45 +67,31 @@ impl From<&NiDkgConfig> for pb::NiDkgConfig {
 impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
     type Error = String;
     fn try_from(config: pb::NiDkgConfig) -> Result<Self, Self::Error> {
-        let dkg_id = NiDkgId::from_option_protobuf(config.dkg_id, "NiDkgConfig")?;
-
-        let max_corrupt_dealers = NumberOfNodes::from(config.max_corrupt_dealers);
-
-        let dealers = config
-            .dealers
-            .into_iter()
-            .map(|dealer| crate::node_id_try_from_option(Some(dealer)))
-            .collect::<Result<BTreeSet<_>, _>>()
-            .map_err(|err| format!("Problem loading dealers in NiDkgConfig: {err:?}"))?;
-
-        let max_corrupt_receivers = NumberOfNodes::from(config.max_corrupt_receivers);
-
-        let receivers = config
-            .receivers
-            .into_iter()
-            .map(|receiver| crate::node_id_try_from_option(Some(receiver)))
-            .collect::<Result<BTreeSet<_>, _>>()
-            .map_err(|err| format!("Problem loading receivers in NiDkgConfig: {err:?}"))?;
-
-        let threshold = NumberOfNodes::from(config.threshold);
-        let registry_version = RegistryVersion::from(config.registry_version);
-        let resharing_transcript = config
-            .resharing_transcript
-            .map(|transcript| {
-                NiDkgTranscript::try_from(&transcript)
-                    .map_err(|e| format!("Converting resharing transcript failed: {e:?}"))
-            })
-            .transpose()?;
-
         let data = NiDkgConfigData {
-            dkg_id,
-            max_corrupt_dealers,
-            dealers,
-            max_corrupt_receivers,
-            receivers,
-            threshold,
-            registry_version,
-            resharing_transcript,
+            dkg_id: NiDkgId::from_option_protobuf(config.dkg_id, "NiDkgConfig")?,
+            max_corrupt_dealers: NumberOfNodes::from(config.max_corrupt_dealers),
+            dealers: config
+                .dealers
+                .into_iter()
+                .map(|dealer| crate::node_id_try_from_option(Some(dealer)))
+                .collect::<Result<BTreeSet<_>, _>>()
+                .map_err(|err| format!("Problem loading dealers in NiDkgConfig: {err:?}"))?,
+            max_corrupt_receivers: NumberOfNodes::from(config.max_corrupt_receivers),
+            receivers: config
+                .receivers
+                .into_iter()
+                .map(|receiver| crate::node_id_try_from_option(Some(receiver)))
+                .collect::<Result<BTreeSet<_>, _>>()
+                .map_err(|err| format!("Problem loading receivers in NiDkgConfig: {err:?}"))?,
+            threshold: NumberOfNodes::from(config.threshold),
+            registry_version: RegistryVersion::from(config.registry_version),
+            resharing_transcript: config
+                .resharing_transcript
+                .map(|transcript| {
+                    NiDkgTranscript::try_from(&transcript)
+                        .map_err(|e| format!("Converting resharing transcript failed: {e:?}"))
+                })
+                .transpose()?,
         };
 
         NiDkgConfig::new(data)
