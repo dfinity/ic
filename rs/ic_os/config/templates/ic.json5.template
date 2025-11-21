@@ -488,7 +488,7 @@ table ip6 filter {\n\
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } accept\n\
     ct state invalid drop\n\
     ct state { established, related } accept\n\
-    ct state new tcp dport { 53, 80, 443, 8080 } accept\n\
+    ct state new tcp dport { 53, 80, 443, 4460, 8080 } accept\n\
     ct state new udp dport { 53, 123 } accept\n\
   }\n\
 }\n",

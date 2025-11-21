@@ -15,11 +15,11 @@ use icrc_ledger_types::icrc1::transfer::Memo;
 use scopeguard::{ScopeGuard, guard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
-use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
-use crate::state::{CkBtcMinterState, read_state};
+use crate::fees::{BitcoinFeeEstimator, FeeEstimator};
+use crate::state::{CkBtcMinterState, mutate_state, read_state};
 use crate::updates::get_btc_address;
 use crate::updates::retrieve_btc::BtcAddressCheckStatus;
 pub use ic_btc_checker::CheckTransactionResponse;
@@ -28,6 +28,7 @@ pub use ic_btc_interface::{MillisatoshiPerByte, OutPoint, Page, Satoshi, Txid, U
 
 pub mod address;
 pub mod dashboard;
+pub mod fees;
 pub mod guard;
 pub mod lifecycle;
 pub mod logs;
@@ -64,15 +65,6 @@ pub const MAX_REQUESTS_PER_BATCH: usize = 100;
 /// * For the cycles, we use a lower bound on the price of Bitcoin of 1 BTC = 10_000 XDR, so that 10 sats correspond to 1B cycles.
 pub const REIMBURSEMENT_FEE_FOR_PENDING_WITHDRAWAL_REQUESTS: u64 =
     (MAX_REQUESTS_PER_BATCH as u64) * 10;
-
-/// The constants used to compute the minter's fee to cover its own cycle consumption.
-pub const MINTER_FEE_PER_INPUT: u64 = 146;
-pub const MINTER_FEE_PER_OUTPUT: u64 = 4;
-pub const MINTER_FEE_CONSTANT: u64 = 26;
-/// Dust limit for the minter's address.
-/// The minter's address is of type P2WPKH which means it has a dust limit of 294 sats.
-/// For additional safety, we round that value up.
-pub const MINTER_ADDRESS_DUST_LIMIT: Satoshi = 300;
 
 /// The minimum fee increment for transaction resubmission.
 /// See https://en.bitcoin.it/wiki/Miner_fees#Relaying for more detail.
@@ -239,27 +231,6 @@ async fn fetch_main_utxos<R: CanisterRuntime>(
     })
 }
 
-/// Returns the minimum withdrawal amount based on the current median fee rate (in millisatoshi per byte).
-/// The returned amount is in satoshi.
-fn compute_min_withdrawal_amount(
-    median_fee_rate_e3s: MillisatoshiPerByte,
-    min_withdrawal_amount: u64,
-    check_fee: u64,
-) -> u64 {
-    const PER_REQUEST_RBF_BOUND: u64 = 22_100;
-    const PER_REQUEST_VSIZE_BOUND: u64 = 221;
-    const PER_REQUEST_MINTER_FEE_BOUND: u64 = 305;
-
-    let median_fee_rate = median_fee_rate_e3s / 1_000;
-    ((PER_REQUEST_RBF_BOUND
-        + PER_REQUEST_VSIZE_BOUND * median_fee_rate
-        + PER_REQUEST_MINTER_FEE_BOUND
-        + check_fee)
-        / 50_000)
-        * 50_000
-        + min_withdrawal_amount
-}
-
 /// Returns an estimate for transaction fees in millisatoshi per vbyte. Returns
 /// None if the Bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
@@ -274,14 +245,24 @@ pub async fn estimate_fee_per_vbyte<R: CanisterRuntime>(
         .await
     {
         Ok(fees) => {
-            if btc_network == Network::Regtest {
-                return state::read_state(|s| s.estimate_median_fee_per_vbyte());
+            let fee_estimator = state::read_state(|s| runtime.fee_estimator(s));
+            match fee_estimator.estimate_median_fee(&fees) {
+                Some(median_fee) => {
+                    let fee_based_retrieve_btc_min_amount =
+                        fee_estimator.fee_based_minimum_withdrawal_amount(median_fee);
+                    log!(
+                        Priority::Debug,
+                        "[estimate_fee_per_vbyte]: update median fee per vbyte to {median_fee} and fee-based minimum retrieve amount to {fee_based_retrieve_btc_min_amount} with {fees:?}"
+                    );
+                    mutate_state(|s| {
+                        s.last_fee_per_vbyte = fees;
+                        s.last_median_fee_per_vbyte = Some(median_fee);
+                        s.fee_based_retrieve_btc_min_amount = fee_based_retrieve_btc_min_amount;
+                    });
+                    Some(median_fee)
+                }
+                None => None,
             }
-            log!(
-                Priority::Debug,
-                "[estimate_fee_per_vbyte]: update median fee per vbyte with {fees:?}"
-            );
-            state::mutate_state(|s| s.update_median_fee_per_vbyte(fees))
         }
         Err(err) => {
             log!(
@@ -364,6 +345,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
         Some(fee) => fee,
         None => return,
     };
+    let fee_estimator = read_state(|s| runtime.fee_estimator(s));
 
     let maybe_sign_request = state::mutate_state(|s| {
         let batch = s.build_batch(MAX_REQUESTS_PER_BATCH);
@@ -382,6 +364,7 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             outputs,
             main_address,
             fee_millisatoshi_per_vbyte,
+            &fee_estimator,
         ) {
             Ok((unsigned_tx, change_output, total_fee, utxos)) => {
                 for req in batch.iter() {
@@ -765,6 +748,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
         None => return,
     };
     let key_name = state::read_state(|s| s.ecdsa_key_name.clone());
+    let fee_estimator = state::read_state(|s| runtime.fee_estimator(s));
     resubmit_transactions(
         &key_name,
         fee_per_vbyte,
@@ -780,6 +764,7 @@ async fn finalize_requests<R: CanisterRuntime>(runtime: &R, force_resubmit: bool
             })
         },
         runtime,
+        &fee_estimator,
     )
     .await
 }
@@ -788,6 +773,7 @@ pub async fn resubmit_transactions<
     R: CanisterRuntime,
     F: Fn(&OutPoint) -> Option<Account>,
     G: Fn(Txid, state::SubmittedBtcTransaction, state::eventlog::ReplacedReason),
+    Fee: FeeEstimator,
 >(
     key_name: &str,
     fee_per_vbyte: u64,
@@ -799,6 +785,7 @@ pub async fn resubmit_transactions<
     lookup_outpoint_account: F,
     replace_transaction: G,
     runtime: &R,
+    fee_estimator: &Fee,
 ) {
     for (old_txid, submitted_tx) in transactions {
         let tx_fee_per_vbyte = match submitted_tx.fee_per_vbyte {
@@ -828,6 +815,7 @@ pub async fn resubmit_transactions<
             outputs,
             main_address.clone(),
             tx_fee_per_vbyte,
+            fee_estimator,
         ) {
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
@@ -860,6 +848,7 @@ pub async fn resubmit_transactions<
                     outputs,
                     main_address.clone(),
                     fee_per_vbyte, // Use normal fee
+                    fee_estimator,
                 )
             }
             result => result,
@@ -1157,11 +1146,12 @@ pub enum BuildTxError {
 /// result.is_err() => minter_utxos' == minter_utxos
 /// ```
 ///
-pub fn build_unsigned_transaction(
+pub fn build_unsigned_transaction<F: FeeEstimator>(
     available_utxos: &mut BTreeSet<Utxo>,
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
+    fee_estimator: &F,
 ) -> Result<
     (
         tx::UnsignedTransaction,
@@ -1174,7 +1164,13 @@ pub fn build_unsigned_transaction(
     assert!(!outputs.is_empty());
     let amount = outputs.iter().map(|(_, amount)| amount).sum::<u64>();
     let inputs = utxos_selection(amount, available_utxos, outputs.len());
-    match build_unsigned_transaction_from_inputs(&inputs, outputs, main_address, fee_per_vbyte) {
+    match build_unsigned_transaction_from_inputs(
+        &inputs,
+        outputs,
+        main_address,
+        fee_per_vbyte,
+        fee_estimator,
+    ) {
         Ok((tx, change, total_fee)) => Ok((tx, change, total_fee, inputs)),
         Err(err) => {
             // Undo mutation to available_utxos in the error case
@@ -1186,11 +1182,12 @@ pub fn build_unsigned_transaction(
     }
 }
 
-pub fn build_unsigned_transaction_from_inputs(
+pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     input_utxos: &[Utxo],
     outputs: Vec<(BitcoinAddress, Satoshi)>,
     main_address: BitcoinAddress,
     fee_per_vbyte: u64,
+    fee_estimator: &F,
 ) -> Result<(tx::UnsignedTransaction, state::ChangeOutput, WithdrawalFee), BuildTxError> {
     assert!(!outputs.is_empty());
     /// Having a sequence number lower than (0xffffffff - 1) signals the use of replacement by fee.
@@ -1218,7 +1215,8 @@ pub fn build_unsigned_transaction_from_inputs(
 
     debug_assert!(inputs_value >= amount);
 
-    let minter_fee = evaluate_minter_fee(input_utxos.len() as u64, (outputs.len() + 1) as u64);
+    let minter_fee =
+        fee_estimator.evaluate_minter_fee(input_utxos.len() as u64, (outputs.len() + 1) as u64);
 
     let change = inputs_value - amount;
     let change_output = state::ChangeOutput {
@@ -1257,19 +1255,13 @@ pub fn build_unsigned_transaction_from_inputs(
         lock_time: 0,
     };
 
-    let tx_vsize = fake_sign(&unsigned_tx).vsize();
-    let fee = (tx_vsize as u64 * fee_per_vbyte) / 1000;
+    let fee = fee_estimator.evaluate_transaction_fee(&unsigned_tx, fee_per_vbyte);
 
     if fee + minter_fee > amount {
         return Err(BuildTxError::AmountTooLow);
     }
 
     let fee_shares = distribute(fee + minter_fee, outputs.len() as u64);
-    // The default dustRelayFee is 3 sat/vB,
-    // which translates to a dust threshold of 546 satoshi for P2PKH outputs.
-    // The threshold for other types is lower,
-    // so we simply use 546 satoshi as the minimum amount per output.
-    const MIN_OUTPUT_AMOUNT: u64 = 546;
 
     // The last output has to match the main_address.
     debug_assert!(matches!(unsigned_tx.outputs.iter().last(),
@@ -1281,7 +1273,7 @@ pub fn build_unsigned_transaction_from_inputs(
         .zip(fee_shares.iter())
         .take(num_outputs - 1)
     {
-        if output.value <= *fee_share + MIN_OUTPUT_AMOUNT {
+        if output.value <= *fee_share + F::DUST_LIMIT {
             return Err(BuildTxError::DustOutput {
                 address: output.address.clone(),
                 amount: output.value,
@@ -1303,15 +1295,6 @@ pub fn build_unsigned_transaction_from_inputs(
             minter_fee,
         },
     ))
-}
-
-pub fn evaluate_minter_fee(num_inputs: u64, num_outputs: u64) -> Satoshi {
-    max(
-        MINTER_FEE_PER_INPUT * num_inputs
-            + MINTER_FEE_PER_OUTPUT * num_outputs
-            + MINTER_FEE_CONSTANT,
-        MINTER_ADDRESS_DUST_LIMIT,
-    )
 }
 
 /// Distributes an amount across the specified number of shares as fairly as
@@ -1366,10 +1349,11 @@ pub fn tx_vsize_estimate(input_count: u64, output_count: u64) -> u64 {
 ///   * `available_utxos` - the list of UTXOs available to the minter.
 ///   * `maybe_amount` - the withdrawal amount.
 ///   * `median_fee_millisatoshi_per_vbyte` - the median network fee, in millisatoshi per vbyte.
-pub fn estimate_retrieve_btc_fee(
+pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
     available_utxos: &BTreeSet<Utxo>,
     maybe_amount: Option<u64>,
     median_fee_millisatoshi_per_vbyte: u64,
+    fee_estimator: &F,
 ) -> WithdrawalFee {
     const DEFAULT_INPUT_COUNT: u64 = 2;
     // One output for the caller and one for the change.
@@ -1394,7 +1378,7 @@ pub fn estimate_retrieve_btc_fee(
     };
 
     let vsize = tx_vsize_estimate(input_count, DEFAULT_OUTPUT_COUNT);
-    let minter_fee = evaluate_minter_fee(input_count, DEFAULT_OUTPUT_COUNT);
+    let minter_fee = fee_estimator.evaluate_minter_fee(input_count, DEFAULT_OUTPUT_COUNT);
     // We subtract one from the outputs because the minter's output
     // does not participate in fees distribution.
     let bitcoin_fee =
@@ -1408,6 +1392,9 @@ pub fn estimate_retrieve_btc_fee(
 
 #[async_trait]
 pub trait CanisterRuntime {
+    /// Type used to estimate fees.
+    type Estimator: FeeEstimator;
+
     /// Returns the caller of the current call.
     fn caller(&self) -> Principal {
         ic_cdk::api::msg_caller()
@@ -1451,6 +1438,9 @@ pub trait CanisterRuntime {
 
     /// Returns the frequency at which fee percentiles are refreshed.
     fn refresh_fee_percentiles_frequency(&self) -> Duration;
+
+    /// How to estimate fees.
+    fn fee_estimator(&self, state: &CkBtcMinterState) -> Self::Estimator;
 
     /// Retrieves the current transaction fee percentiles.
     async fn get_current_fee_percentiles(
@@ -1501,9 +1491,15 @@ pub struct IcCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for IcCanisterRuntime {
+    type Estimator = BitcoinFeeEstimator;
+
     fn refresh_fee_percentiles_frequency(&self) -> Duration {
         const ONE_HOUR: Duration = Duration::from_secs(3_600);
         ONE_HOUR
+    }
+
+    fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator {
+        BitcoinFeeEstimator::from_state(state)
     }
 
     async fn get_current_fee_percentiles(
