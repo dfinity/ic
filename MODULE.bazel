@@ -773,8 +773,6 @@ http_archive(
     url = "https://github.com/aquasecurity/trivy/releases/download/v0.35.0/trivy_0.35.0_macOS-64bit.tar.gz",
 )
 
-# even if the macOS version is "x86_64" it runs on ARM chips because of
-# emulation
 http_archive(
     name = "dfx-x86_64-darwin",
     build_file = "@//third_party:BUILD.dfx.bazel",
@@ -787,6 +785,20 @@ http_archive(
     build_file = "@//third_party:BUILD.dfx.bazel",
     sha256 = "d1473ae15ece44e782f0f2f8ac586ead349fe434189df8b587eb738becce0138",
     url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-x86_64-linux.tar.gz",
+)
+
+http_archive(
+    name = "dfx-aarch64-darwin",
+    build_file = "@//third_party:BUILD.dfx.bazel",
+    sha256 = "c97b3975f3c72c20f016f7ef4d394fea5bb7e7d849dd77f6ab0ea0361ad6276c",
+    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-aarch64-darwin.tar.gz",
+)
+
+http_archive(
+    name = "dfx-aarch64-linux",
+    build_file = "@//third_party:BUILD.dfx.bazel",
+    sha256 = "9da909e8a3cbcb938cfe8502afab87ec61e75c5744025cd0a18b621695c38a5e",
+    url = "https://github.com/dfinity/sdk/releases/download/0.29.2/dfx-0.29.2-aarch64-linux.tar.gz",
 )
 
 http_file(

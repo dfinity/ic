@@ -2,7 +2,10 @@
 
 use crate::{
     ReplicaHealthStatus,
-    common::{Cbor, WithTimeout, build_validator, validation_error_to_http_error},
+    common::{
+        Cbor, WithTimeout, build_validator, certified_state_unavailable_error,
+        validation_error_to_http_error,
+    },
 };
 
 use axum::{
@@ -253,9 +256,7 @@ pub(crate) async fn query(
 
     let (response, timestamp) = match query_execution_response {
         Err(QueryExecutionError::CertifiedStateUnavailable) => {
-            let status = StatusCode::SERVICE_UNAVAILABLE;
-            let text = "Certified state unavailable. Please try again.".to_string();
-            return (status, text).into_response();
+            return certified_state_unavailable_error().into_response();
         }
         Ok((response, time)) => (response, time),
     };

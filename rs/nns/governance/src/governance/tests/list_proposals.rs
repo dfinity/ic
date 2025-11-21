@@ -90,6 +90,7 @@ fn make_proposal(governance: &mut Governance, action: Action) {
                 summary: "Summary".to_string(),
                 url: "".to_string(),
                 action: Some(action),
+                self_describing_action: None,
             },
         )
         .now_or_never()
@@ -164,7 +165,7 @@ fn test_get_pending_proposals_removes_execute_nns_function_payload() {
             payload: vec![42; EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX + 1],
         })]);
 
-    let response = governance.get_pending_proposals(&PROPOSER_PRINCIPAL);
+    let response = governance.get_pending_proposals(&PROPOSER_PRINCIPAL, None);
 
     let action = response[0]
         .proposal

@@ -268,6 +268,12 @@ pub(crate) fn validation_error_to_http_error<C: std::fmt::Debug + HttpRequestCon
     }
 }
 
+pub(crate) fn certified_state_unavailable_error() -> HttpError {
+    let status = StatusCode::SERVICE_UNAVAILABLE;
+    let message = "Certified state unavailable. Please try again.".to_string();
+    HttpError { status, message }
+}
+
 pub(crate) async fn get_latest_certified_state(
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
 ) -> Option<Arc<ReplicatedState>> {
