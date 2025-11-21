@@ -1,8 +1,8 @@
 use ic_crypto_sha2::Sha256;
 use ic_wasm;
+use lazy_static::lazy_static;
 use libflate::gzip;
 use std::io::Read;
-use lazy_static::lazy_static;
 
 /// A small, valid WASM suitable for tests.
 pub const SMALLEST_VALID_WASM_BYTES: &[u8; 8] = &[0, 0x61, 0x73, 0x6D, 1, 0, 0, 0];
