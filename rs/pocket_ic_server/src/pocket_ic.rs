@@ -3941,7 +3941,7 @@ impl Operation for CanisterSnapshotUpload {
                         Ok(chunk) => chunk,
                         Err(e) => {
                             return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
-                                "Could not write WASM chunk: {}",
+                                "Could not read WASM chunk: {}",
                                 e
                             )));
                         }
