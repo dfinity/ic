@@ -24,8 +24,11 @@ pub trait FeeEstimator {
 }
 
 pub struct BitcoinFeeEstimator {
+    /// The Bitcoin network that the minter will connect to
     network: Network,
+    /// Minimum amount of bitcoin that can be retrieved
     retrieve_btc_min_amount: u64,
+    /// The fee for a single Bitcoin check request.
     check_fee: u64,
 }
 
