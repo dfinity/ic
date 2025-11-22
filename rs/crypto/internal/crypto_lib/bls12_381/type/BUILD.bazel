@@ -1,7 +1,10 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
 load("//bazel:defs.bzl", "rust_bench")
 
-package(default_visibility = ["//rs/crypto:__subpackages__"])
+package(default_visibility = [
+    "//rs/crypto:__subpackages__",
+    "//rs/tests/crypto:__subpackages__",
+])
 
 DEPENDENCIES = [
     # Keep sorted.
