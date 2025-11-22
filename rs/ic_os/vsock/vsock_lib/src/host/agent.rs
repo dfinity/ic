@@ -50,7 +50,21 @@ fn get_hostos_vsock_version() -> Response {
     Ok(Payload::HostOSVsockVersion(VSOCK_VERSION))
 }
 
+fn is_manual_recovery_running() -> bool {
+    std::process::Command::new("pgrep")
+        .arg("-f")
+        .arg("hostos_tool.*manual-recovery")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
 fn notify(notify_data: &NotifyData) -> Response {
+    // Skip logging if manual recovery TUI is running to avoid interfering with the display
+    if is_manual_recovery_running() {
+        return Ok(Payload::NoPayload);
+    }
+
     let message_output_count = std::cmp::min(notify_data.count, 10);
     let message = notify_data.message.clone();
 

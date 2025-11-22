@@ -238,6 +238,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "async-recursion": crate.spec(
                 version = "^1.0.5",
             ),
+            "atty": crate.spec(
+                version = "^0.2",
+            ),
             "async-stream": crate.spec(
                 version = "^0.3.6",
             ),
@@ -1110,6 +1113,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "ratelimit": crate.spec(
                 version = "^0.9.1",
             ),
+            "ratatui": crate.spec(
+                version = "^0.29",
+            ),
             "rayon": crate.spec(
                 version = "^1.10.0",
             ),
@@ -1406,6 +1412,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "textplots": crate.spec(
                 version = "^0.8",
+            ),
+            "tui-textarea": crate.spec(
+                version = "^0.7",
             ),
             "thiserror": crate.spec(
                 version = "^2.0.3",
