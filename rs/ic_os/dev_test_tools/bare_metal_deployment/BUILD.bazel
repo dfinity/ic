@@ -1,16 +1,35 @@
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_library")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
 rust_library(
     name = "bare_metal_deployment",
-    srcs = ["src/lib.rs"],
+    srcs = [
+        "src/deploy.rs",
+        "src/lib.rs",
+    ],
+    compile_data = ["//ic-os/testing:reload_hostos_cmd"],
+    rustc_env = {
+        "RELOAD_HOSTOS_CMD": "$(execpath //ic-os/testing:reload_hostos_cmd)",
+    },
+    target_compatible_with = ["@platforms//os:linux"],  # requires Linux-specific dependencies
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
     ],
     deps = [
+        ":build_script",
         "@crate_index//:anyhow",
+        "@crate_index//:http",
+        "@crate_index//:rand",
         "@crate_index//:rexpect",
+        "@crate_index//:slog",
+        "@crate_index//:ssh2",
     ],
+)
+
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
 )

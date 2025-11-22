@@ -1,6 +1,6 @@
 load("//ic-os/components:setupos.bzl", "component_files")
 
-package(default_visibility = ["//rs/tests:__subpackages__"])
+package(default_visibility = ["//rs:ic-os-pkg"])
 
 # Components required by the reload_hostos script to reload HostOS
 all_component_files = component_files | {
