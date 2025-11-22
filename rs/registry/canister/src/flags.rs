@@ -1,10 +1,9 @@
 use std::{
     cell::{Cell, RefCell},
-    collections::HashSet,
-    hash::Hash,
     str::FromStr,
 };
 
+use ic_nervous_system_feature_access_policy::FeatureAccessPolicy;
 #[cfg(any(test, feature = "canbench-rs"))]
 use ic_nervous_system_temporary::Temporary;
 use ic_types::{PrincipalId, SubnetId};
@@ -23,7 +22,7 @@ thread_local! {
     // These are needed for the phased rollout approach in order
     // allow granular rolling out of the feature to specific subnets
     // to specific subset of callers.
-    static NODE_SWAPPING_CALLERS_POLICY: RefCell<WhitelistFeatureAccessPolicy<PrincipalId>> = RefCell::new(WhitelistFeatureAccessPolicy::Only(
+    static NODE_SWAPPING_CALLERS_POLICY: RefCell<FeatureAccessPolicy<PrincipalId>> = RefCell::new(FeatureAccessPolicy::allow_only(
         [
             "xph6u-z3z2t-s7hh7-gtlxh-bbgbx-aatlm-eab4o-bsank-nqruh-3ub4q-sae",
             "lgp6d-brhlv-35izu-khc6p-rfszo-zdwng-xbtkh-xyvjg-y3due-7ha7t-uae",
@@ -44,11 +43,10 @@ thread_local! {
                 println!("{LOG_PREFIX}Coudln't parse {p} as a PrincipalId due to error: {e:?}",);
                 None
             }
-        })
-        .collect(),
+        }),
     ));
 
-    static NODE_SWAPPING_SUBNETS_POLICY: RefCell<WhitelistFeatureAccessPolicy<SubnetId>> = RefCell::new(WhitelistFeatureAccessPolicy::Only(
+    static NODE_SWAPPING_SUBNETS_POLICY: RefCell<FeatureAccessPolicy<SubnetId>> = RefCell::new(FeatureAccessPolicy::allow_only(
         [
             "2fq7c-slacv-26cgz-vzbx2-2jrcs-5edph-i5s2j-tck77-c3rlz-iobzx-mqe",
             "2zs4v-uoqha-xsuun-lveyr-i4ktc-5y3ju-aysud-niobd-gxnqa-ctqem-hae",
@@ -102,8 +100,7 @@ thread_local! {
                 println!("{LOG_PREFIX}Coudln't parse {p} as a SubnetId due to error: {e:?}",);
                 None
             }
-        })
-        .collect(),
+        }),
     ));
 }
 
@@ -144,12 +141,12 @@ pub mod temporary_overrides {
     }
 
     pub fn test_set_swapping_whitelisted_callers(override_callers: Vec<PrincipalId>) {
-        let policy = WhitelistFeatureAccessPolicy::Only(override_callers.into_iter().collect());
+        let policy = FeatureAccessPolicy::allow(override_callers);
         NODE_SWAPPING_CALLERS_POLICY.replace(policy);
     }
 
     pub fn test_set_swapping_enabled_subnets(override_subnets: Vec<SubnetId>) {
-        let policy = WhitelistFeatureAccessPolicy::Only(override_subnets.into_iter().collect());
+        let policy = FeatureAccessPolicy::allow(override_subnets);
         NODE_SWAPPING_SUBNETS_POLICY.replace(policy);
     }
 }
@@ -160,61 +157,4 @@ pub(crate) fn is_node_swapping_enabled_on_subnet(subnet_id: SubnetId) -> bool {
 
 pub(crate) fn is_node_swapping_enabled_for_caller(caller: PrincipalId) -> bool {
     NODE_SWAPPING_CALLERS_POLICY.with_borrow(|caller_policy| caller_policy.is_allowed(&caller))
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
-enum WhitelistFeatureAccessPolicy<T>
-where
-    T: Clone + Eq + Hash,
-{
-    Only(HashSet<T>),
-    All,
-}
-
-impl<T> WhitelistFeatureAccessPolicy<T>
-where
-    T: Clone + Eq + Hash,
-{
-    fn is_allowed(&self, item: &T) -> bool {
-        match &self {
-            WhitelistFeatureAccessPolicy::Only(items) => items.contains(item),
-            WhitelistFeatureAccessPolicy::All => true,
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_whitelist_allow_all() {
-        let policy = WhitelistFeatureAccessPolicy::All;
-
-        assert!(policy.is_allowed(&PrincipalId::new_user_test_id(1)));
-        assert!(policy.is_allowed(&PrincipalId::new_anonymous()));
-    }
-
-    #[test]
-    fn test_whitelist_deny_all() {
-        let policy = WhitelistFeatureAccessPolicy::Only(HashSet::new());
-
-        assert!(!policy.is_allowed(&PrincipalId::new_user_test_id(1)));
-        assert!(!policy.is_allowed(&PrincipalId::new_anonymous()));
-    }
-
-    #[test]
-    fn test_whitelist_allow_some() {
-        let user_1 = PrincipalId::new_user_test_id(1);
-        let policy = WhitelistFeatureAccessPolicy::Only(
-            [user_1, PrincipalId::new_user_test_id(2)]
-                .into_iter()
-                .collect(),
-        );
-
-        assert!(policy.is_allowed(&user_1));
-        assert!(!policy.is_allowed(&PrincipalId::new_user_test_id(999)));
-        assert!(!policy.is_allowed(&PrincipalId::new_anonymous()));
-    }
 }

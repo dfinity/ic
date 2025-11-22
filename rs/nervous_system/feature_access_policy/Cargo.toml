@@ -1,0 +1,5 @@
+[package]
+name = "ic-nervous-system-feature-access-policy"
+edition.workspace = true
+version.workspace = true
+
