@@ -1,12 +1,14 @@
 use crate::ProposalTitle;
 use crate::helpers::{
-    get_proposer_and_sender, parse_proposal_url, shortened_pids_string, summary_from_string_or_file,
+    get_proposer_and_identity, parse_proposal_url, shortened_pids_string,
+    summary_from_string_or_file,
 };
 use crate::types::{ProposalMetadata, ProposalPayload};
 use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
-use ic_canister_client::{Agent, Sender};
+use ic_agent::identity::AnonymousIdentity;
+use ic_agent::{Agent, Identity};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_prep_lib::subnet_configuration::get_default_config_params;

@@ -26,9 +26,9 @@ fn impl_proposal_metadata(ast: &syn::DeriveInput) -> TokenStream {
                 parse_proposal_url(&self.proposal_url)
             }
 
-            fn proposer_and_sender(&self, sender: Sender) -> (NeuronId, Sender) {
-                let use_test_neuron = self.test_neuron_proposer || (self.dry_run && matches!(sender, Sender::Anonymous));
-                get_proposer_and_sender(self.proposer.clone(), sender, use_test_neuron)
+            fn proposer_and_identity(&self, identity: std::sync::Arc<dyn Identity>) -> (NeuronId, std::sync::Arc<dyn Identity>) {
+                let use_test_neuron = self.test_neuron_proposer || (self.dry_run && identity.sender().ok().unwrap() == AnonymousIdentity.sender().unwrap());
+                get_proposer_and_identity(self.proposer.clone(), identity, use_test_neuron)
             }
 
             fn is_dry_run(&self) -> bool {

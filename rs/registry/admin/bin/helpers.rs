@@ -2,7 +2,8 @@ use crate::{
     SubnetDescriptor,
     types::{NodeDetails, SubnetRecord},
 };
-use ic_canister_client::Sender;
+use ic_agent::Identity;
+use ic_agent::identity::{AnonymousIdentity, BasicIdentity};
 use ic_nervous_system_common_test_keys::{TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR};
 use ic_nns_common::types::NeuronId;
 use ic_protobuf::registry::{
@@ -15,6 +16,7 @@ use ic_registry_transport::Error;
 use ic_types::{NodeId, PrincipalId, SubnetId};
 use indexmap::IndexMap;
 use prost::Message;
+use std::sync::Arc;
 use std::{convert::TryFrom, fs::read_to_string, path::PathBuf};
 use url::Url;
 
@@ -88,27 +90,34 @@ pub(crate) fn parse_proposal_url(url: &Option<Url>) -> String {
     }
 }
 
-/// Selects a `(NeuronId, Sender)` pair to submit the proposal. If
-/// `use_test_neuron` is true, it returns `TEST_NEURON_1_ID` and a `Sender`
+/// Selects a `(NeuronId, Identity)` pair to submit the proposal. If
+/// `use_test_neuron` is true, it returns `TEST_NEURON_1_ID` and an `Identity`
 /// based on that test neuron's private key, otherwise it validates and returns
-/// the `NeuronId` and `Sender` passed as argument.
-pub(crate) fn get_proposer_and_sender(
+/// the `NeuronId` and `Identity` passed as argument.
+pub(crate) fn get_proposer_and_identity(
     proposer: Option<NeuronId>,
-    sender: Sender,
+    identity: Arc<dyn Identity>,
     use_test_neuron: bool,
-) -> (NeuronId, Sender) {
+) -> (NeuronId, Arc<dyn Identity>) {
     if use_test_neuron {
+        let pem = TEST_NEURON_1_OWNER_KEYPAIR.to_pem();
         return (
             NeuronId(TEST_NEURON_1_ID),
-            Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+            Arc::new(
+                BasicIdentity::from_pem(pem.as_bytes())
+                    .expect("Failed to create BasicIdentity from test keypair"),
+            ),
         );
     }
     let proposer = proposer.expect("A proposal must have a proposer.");
+    let principal = identity
+        .sender()
+        .expect("Identity must have a sender principal");
     assert!(
-        sender.get_principal_id() != Sender::Anonymous.get_principal_id(),
+        principal != AnonymousIdentity.sender().unwrap(),
         "Must specify a keypair to submit a proposal that corresponds to the owner of a neuron."
     );
-    (proposer, sender)
+    (proposer, identity)
 }
 
 /// Shortens the provided `PrincipalId` to make it easier to display.
