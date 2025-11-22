@@ -3797,7 +3797,6 @@ dependencies = [
  "strum_macros 0.26.4",
  "stubborn-io",
  "subtle",
- "syn 1.0.109",
  "syn 2.0.110",
  "sys-mount",
  "syscalls",
