@@ -158,7 +158,7 @@ async fn rpc_handler(State(pools): State<Pools>, payload: Bytes) -> Result<Bytes
 /// Downloads the missing ingress messages from a random peer.
 pub(crate) async fn download_ingress<P: Peers>(
     transport: Arc<dyn Transport>,
-    signed_ingress_id: SignedIngressId,
+    signed_ingress_id: &SignedIngressId,
     block_proposal_id: ConsensusMessageId,
     log: &ReplicaLogger,
     metrics: &FetchStrippedConsensusArtifactMetrics,
@@ -189,7 +189,7 @@ pub(crate) async fn download_ingress<P: Peers>(
             match timeout_at(next_request_at, transport.rpc(&peer, request.clone())).await {
                 Ok(Ok(response)) if response.status() == StatusCode::OK => {
                     if let Some(ingress_message) = parse_response(response.into_body(), metrics) {
-                        if SignedIngressId::from(&ingress_message) == signed_ingress_id {
+                        if SignedIngressId::from(&ingress_message) == *signed_ingress_id {
                             metrics.active_ingress_message_downloads.dec();
                             return (ingress_message, peer);
                         } else {
@@ -475,7 +475,7 @@ mod tests {
 
         let response = download_ingress(
             Arc::new(mock_transport),
-            SignedIngressId::from(&ingress_message),
+            &SignedIngressId::from(&ingress_message),
             ConsensusMessageId::from(&block),
             &no_op_logger(),
             &FetchStrippedConsensusArtifactMetrics::new(&MetricsRegistry::new()),

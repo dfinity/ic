@@ -3652,10 +3652,7 @@ pub mod test {
         block.content.as_mut().payload = Payload::new(
             ic_types::crypto::crypto_hash,
             BlockPayload::Data(DataPayload {
-                batch: BatchPayload {
-                    ingress: IngressPayload::from(vec![]),
-                    ..BatchPayload::default()
-                },
+                batch: BatchPayload::default(),
                 dkg: DkgDataPayload::new_empty(Height::new(0)),
                 idkg: None,
             }),
