@@ -22,6 +22,7 @@ ic-crypto-internal-logmon = { path = "internal/logmon" }
 ic-crypto-internal-seed = { path = "internal/crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-threshold-sig-canister-threshold-sig = { path = "internal/crypto_lib/threshold_sig/canister_threshold_sig" }
+ic-crypto-internal-bls12-381-type = { path = "internal/crypto_lib/bls12_381/type" }
 ic-crypto-internal-bls12-381-vetkd = { path = "internal/crypto_lib/bls12_381/vetkd" }
 ic-crypto-internal-types = { path = "internal/crypto_lib/types" }
 ic-crypto-standalone-sig-verifier = { path = "standalone-sig-verifier" }

@@ -447,6 +447,22 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
         )
     });
 
+    group.bench_function("deserialize_cached", |b| {
+        b.iter_batched_ref(
+            || (G2Affine::generator() * Scalar::from_u32(rng.r#gen::<u32>() % 100)).serialize(),
+            |bytes| G2Affine::deserialize_cached(bytes),
+            BatchSize::SmallInput,
+        )
+    });
+
+    group.bench_function("deserialize_cached_miss", |b| {
+        b.iter_batched_ref(
+            || random_g2(rng).serialize(),
+            |bytes| G2Affine::deserialize_cached(bytes),
+            BatchSize::SmallInput,
+        )
+    });
+
     group.bench_function("hash_32_B", |b| {
         b.iter_batched_ref(
             || rng.r#gen::<[u8; 32]>(),

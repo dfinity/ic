@@ -416,7 +416,7 @@ fn combine_encrypted_key_shares_internal<C: ThresholdSignatureCspClient>(
                     })?;
                     let node_public_key_g2affine = match node_public_key {
                         CspThresholdSigPublicKey::ThresBls12_381(public_key_bytes) => {
-                            G2Affine::deserialize(&public_key_bytes.0)
+                            G2Affine::deserialize_cached(&public_key_bytes.0)
                             .map_err(|_: PairingInvalidPoint| VetKdKeyShareCombinationError::InternalError(
                                 format!("individual public key of node with ID {node_id} in threshold sig data store")
                             ))
@@ -549,7 +549,7 @@ fn master_pubkey_from_coeffs(
         ))
     })?;
     let first_coeff_g2 =
-        G2Affine::deserialize(&first_coeff).map_err(|_: PairingInvalidPoint| {
+        G2Affine::deserialize_cached(&first_coeff).map_err(|_: PairingInvalidPoint| {
             MasterPubkeyFromCoeffsError::InvalidArgumentMasterPublicKey
         })?;
     Ok(first_coeff_g2)

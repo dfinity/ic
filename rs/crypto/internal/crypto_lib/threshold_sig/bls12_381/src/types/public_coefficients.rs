@@ -33,17 +33,16 @@ impl PublicCoefficients {
 
     /// Deserializes a `PublicCoefficients` from a *trusted* source.
     ///
-    /// # Security Notice
-    /// This uses the "unchecked" G2 deserialization (no subgroup check),
-    /// so should only be used on `InternalPublicCoefficients` obtained
-    /// from a known, trusted source.
-    pub fn from_trusted_bytes(
+    /// # Note
+    /// This caches the deserialized points with the expectation that
+    /// at least some of the points will be seen again.
+    pub fn from_bytes_with_caching(
         bytes: &InternalPublicCoefficients,
     ) -> Result<PublicCoefficients, CryptoError> {
         let coefficients: Result<Vec<PublicKey>, ThresholdSigPublicKeyBytesConversionError> = bytes
             .coefficients
             .iter()
-            .map(PublicKey::from_trusted_bytes)
+            .map(PublicKey::from_bytes_with_caching)
             .collect();
         let coefficients = coefficients?;
         Ok(PublicCoefficients { coefficients })
