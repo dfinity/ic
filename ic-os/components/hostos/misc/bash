@@ -1,0 +1,5 @@
+#!/bin/sh
+
+# Create wrapper script to prevent bash escape in restricted shell
+# A symlink won't work because bash checks its invocation name ($0), not the symlink target
+exec /bin/rbash "$@"
