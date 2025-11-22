@@ -4,7 +4,7 @@
 //! process several requests concurrently.
 
 use crate::{
-    CYCLES_COST_PER_MIGRATION, EventType, RequestState, ValidationError,
+    CYCLES_COST_PER_MIGRATION, EventType, RecoveryState, RequestState, ValidationError,
     canister_state::{
         MethodGuard,
         events::insert_event,
@@ -25,7 +25,7 @@ use ic_cdk::{
     api::{canister_self, time},
     println,
 };
-use std::{convert::Infallible, future::Future, iter::zip};
+use std::{future::Future, iter::zip};
 
 /// Given a lock tag, a filter predicate on `RequestState` and a processor function,
 /// invokes the processor on all requests in the given state concurrently and
@@ -69,6 +69,7 @@ pub async fn process_all_by_predicate<F>(
 }
 
 /// Accepts an `Accepted` request, returns `ControllersChanged` on success.
+/// This function is an exception in that it tries to make _two_ effectful calls.
 pub async fn process_accepted(
     request: RequestState,
 ) -> ProcessingResult<RequestState, RequestState> {
@@ -76,6 +77,7 @@ pub async fn process_accepted(
         println!("Error: list_by Accepted returned bad variant");
         return ProcessingResult::NoProgress;
     };
+
     // Set controller of source
     let res = set_exclusive_controller(request.source)
         .await
@@ -84,14 +86,12 @@ pub async fn process_accepted(
         })
         .map_failure(|reason| RequestState::Failed {
             request: request.clone(),
+            recovery_state: RecoveryState::done(),
             reason,
         });
     if !res.is_success() {
         return res;
     }
-    // This function is an exception in that it tries to make _two_ effectful calls. The reason is
-    // that the cleanup after failure must cleanup both source and target controllers in every
-    // case, so we are not making the cleanup worse by attempting both.
 
     // Set controller of target
     set_exclusive_controller(request.target)
@@ -99,7 +99,11 @@ pub async fn process_accepted(
         .map_success(|_| RequestState::ControllersChanged {
             request: request.clone(),
         })
-        .map_failure(|reason| RequestState::Failed { request, reason })
+        .map_failure(|reason| RequestState::Failed {
+            request,
+            recovery_state: RecoveryState::restore_source(),
+            reason,
+        })
 }
 
 pub async fn process_controllers_changed(
@@ -117,12 +121,14 @@ pub async fn process_controllers_changed(
     if source_status.status != CanisterStatusType::Stopped {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
+            recovery_state: RecoveryState::restore_both(),
             reason: "Source is not stopped.".to_string(),
         });
     }
     if !source_status.ready_for_migration {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
+            recovery_state: RecoveryState::restore_both(),
             reason: "Source is not ready for migration.".to_string(),
         });
     }
@@ -130,6 +136,7 @@ pub async fn process_controllers_changed(
     if canister_version > u64::MAX / 2 {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
+            recovery_state: RecoveryState::restore_both(),
             reason: "Source version is too large.".to_string(),
         });
     }
@@ -140,6 +147,7 @@ pub async fn process_controllers_changed(
     if target_status.status != CanisterStatusType::Stopped {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
+            recovery_state: RecoveryState::restore_both(),
             reason: "Target is not stopped.".to_string(),
         });
     }
@@ -149,6 +157,7 @@ pub async fn process_controllers_changed(
         ProcessingResult::FatalFailure(_) => {
             return ProcessingResult::FatalFailure(RequestState::Failed {
                 request,
+                recovery_state: RecoveryState::restore_both(),
                 reason: "Target has snapshots.".to_string(),
             });
         }
@@ -157,6 +166,7 @@ pub async fn process_controllers_changed(
     if source_status.cycles < CYCLES_COST_PER_MIGRATION {
         return ProcessingResult::FatalFailure(RequestState::Failed {
             request,
+            recovery_state: RecoveryState::restore_both(),
             reason: format!(
                 "Source does not have sufficient cycles: {} < {}.",
                 source_status.cycles, CYCLES_COST_PER_MIGRATION
@@ -343,44 +353,64 @@ pub async fn process_all_failed() {
 
 /// Accepts a `Failed` request, returns `Event::Failed`.
 // TODO: Confirm this only occurs before `rename_canister`, otherwise the subnet_id args are wrong.
-async fn process_failed(request: RequestState) -> ProcessingResult<EventType, Infallible> {
-    let RequestState::Failed { request, reason } = request else {
+async fn process_failed(request: RequestState) -> ProcessingResult<EventType, RequestState> {
+    let RequestState::Failed {
+        request,
+        mut recovery_state,
+        reason,
+    } = request
+    else {
         println!("Error: list_failed returned bad variant");
         return ProcessingResult::NoProgress;
     };
 
-    let res1 = set_original_controllers(
-        request.source,
-        request.source_original_controllers.clone(),
-        request.source_subnet,
-    )
-    .await;
-    match res1 {
-        ProcessingResult::Success(_) => (),
-        ProcessingResult::NoProgress => println!(
-            "Error: no progress when restoring controllers of canister {}",
-            request.source
-        ),
-        ProcessingResult::FatalFailure(ref reason) => println!("Error: {}", reason),
-    };
+    if recovery_state.restore_source_controllers {
+        let res1 = set_original_controllers(
+            request.source,
+            request.source_original_controllers.clone(),
+            request.source_subnet,
+        )
+        .await;
+        match res1 {
+            ProcessingResult::Success(_) => {
+                recovery_state.restore_source_controllers = false;
+            }
+            ProcessingResult::NoProgress => println!(
+                "Error: no progress when restoring controllers of canister {}",
+                request.source
+            ),
+            ProcessingResult::FatalFailure(ref reason) => println!("Error: {}", reason),
+        };
+    }
 
-    let res2 = set_original_controllers(
-        request.target,
-        request.target_original_controllers.clone(),
-        request.target_subnet,
-    )
-    .await;
-    match res2 {
-        ProcessingResult::Success(_) => (),
-        ProcessingResult::NoProgress => println!(
-            "Error: no progress when restoring controllers of canister {}",
-            request.target
-        ),
-        ProcessingResult::FatalFailure(ref reason) => println!("Error: {}", reason),
-    };
+    if recovery_state.restore_target_controllers {
+        let res2 = set_original_controllers(
+            request.target,
+            request.target_original_controllers.clone(),
+            request.target_subnet,
+        )
+        .await;
+        match res2 {
+            ProcessingResult::Success(_) => {
+                recovery_state.restore_target_controllers = false;
+            }
+            ProcessingResult::NoProgress => println!(
+                "Error: no progress when restoring controllers of canister {}",
+                request.target
+            ),
+            ProcessingResult::FatalFailure(ref reason) => println!("Error: {}", reason),
+        };
+    }
 
-    // We successfully attempted to return controllership.
-    ProcessingResult::Success(EventType::Failed { request, reason })
+    if recovery_state.is_done() {
+        ProcessingResult::Success(EventType::Failed { request, reason })
+    } else {
+        ProcessingResult::FatalFailure(RequestState::Failed {
+            request,
+            recovery_state,
+            reason,
+        })
+    }
 }
 
 pub async fn process_all_succeeded() {
@@ -485,7 +515,7 @@ impl ProcessingResult<RequestState, RequestState> {
 }
 
 // Processing a `RequestState::Failure` successfully results in an `Event::Failed`.
-impl ProcessingResult<EventType, Infallible> {
+impl ProcessingResult<EventType, RequestState> {
     fn transition(self, old_state: RequestState) {
         match self {
             ProcessingResult::Success(event) => {
@@ -494,7 +524,10 @@ impl ProcessingResult<EventType, Infallible> {
                 insert_event(event);
             }
             ProcessingResult::NoProgress => {}
-            ProcessingResult::FatalFailure(_) => {}
+            ProcessingResult::FatalFailure(fail_state) => {
+                remove_request(&old_state);
+                insert_request(fail_state);
+            }
         }
     }
 }
