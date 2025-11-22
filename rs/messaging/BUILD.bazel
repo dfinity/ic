@@ -49,6 +49,10 @@ rust_library(
 rust_test(
     name = "messaging_test",
     crate = ":messaging",
+    proc_macro_deps = [
+        # Keep sorted.
+        "@crate_index//:test-strategy",
+    ],
     deps = [
         # Keep sorted.
         "//rs/crypto/test_utils/ni-dkg",
@@ -71,6 +75,7 @@ rust_test(
         "@crate_index//:maplit",
         "@crate_index//:mockall",
         "@crate_index//:pretty_assertions",
+        "@crate_index//:proptest",
         "@crate_index//:rand",
         "@crate_index//:rand_chacha",
     ],
