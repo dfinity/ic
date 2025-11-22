@@ -622,7 +622,10 @@ async fn source_deleted_before_migration() {
     let source = sources[0];
     let target = targets[0];
 
-    let args = MigrateCanisterArgs { source, target };
+    let args = MigrateCanisterArgs {
+        canister_id: source,
+        replace_canister_id: target,
+    };
     migrate_canister(&pic, sender, &args).await.unwrap();
 
     // Delete the source right away after requesting its migration.
@@ -655,7 +658,10 @@ async fn target_deleted_before_migration() {
     let source = sources[0];
     let target = targets[0];
 
-    let args = MigrateCanisterArgs { source, target };
+    let args = MigrateCanisterArgs {
+        canister_id: source,
+        replace_canister_id: target,
+    };
     migrate_canister(&pic, sender, &args).await.unwrap();
 
     // Delete the target right away after requesting its migration.
