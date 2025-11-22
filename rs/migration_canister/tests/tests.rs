@@ -609,7 +609,11 @@ async fn concurrent_migration_target() {
     concurrent_migration(&pic, sender, args1, args2, target).await;
 }
 
-async fn canister_deleted_before_migration(setup: &Setup, canister: Principal) {
+async fn canister_changed_before_migration<F, Fut>(setup: &Setup, race: F)
+where
+    F: Fn() -> Fut,
+    Fut: Future<Output = Principal>,
+{
     let Setup {
         pic,
         sources,
@@ -621,17 +625,16 @@ async fn canister_deleted_before_migration(setup: &Setup, canister: Principal) {
     let source = sources[0];
     let target = targets[0];
 
-    assert!(canister == source || canister == target);
-
     let args = MigrateCanisterArgs {
         canister_id: source,
         replace_canister_id: target,
     };
     migrate_canister(pic, sender, &args).await.unwrap();
 
-    // Delete the canister (source or target) right away after requesting its migration;
+    // Change the canister (source or target) right away after requesting its migration;
     // in particular, before the (accepted) request is processed in a timer.
-    pic.delete_canister(canister, Some(sender)).await.unwrap();
+    let canister = race().await;
+    assert!(canister == source || canister == target);
 
     for _ in 0..10 {
         // Advance time so that timers are triggered.
@@ -648,19 +651,63 @@ async fn canister_deleted_before_migration(setup: &Setup, canister: Principal) {
 }
 
 #[tokio::test]
+async fn source_controllers_changed_before_migration() {
+    let setup = setup(Settings::default()).await;
+
+    let pic = &setup.pic;
+    let sender = setup.source_controllers[0];
+    let source = setup.sources[0];
+    let race = || async {
+        pic.set_controllers(source, Some(sender), vec![source])
+            .await
+            .unwrap();
+        source
+    };
+    canister_changed_before_migration(&setup, race).await;
+}
+
+#[tokio::test]
 async fn source_deleted_before_migration() {
     let setup = setup(Settings::default()).await;
 
+    let pic = &setup.pic;
+    let sender = setup.source_controllers[0];
     let source = setup.sources[0];
-    canister_deleted_before_migration(&setup, source).await;
+    let race = || async {
+        pic.delete_canister(source, Some(sender)).await.unwrap();
+        source
+    };
+    canister_changed_before_migration(&setup, race).await;
+}
+
+#[tokio::test]
+async fn target_controllers_changed_before_migration() {
+    let setup = setup(Settings::default()).await;
+
+    let pic = &setup.pic;
+    let sender = setup.source_controllers[0];
+    let target = setup.targets[0];
+    let race = || async {
+        pic.set_controllers(target, Some(sender), vec![target])
+            .await
+            .unwrap();
+        target
+    };
+    canister_changed_before_migration(&setup, race).await;
 }
 
 #[tokio::test]
 async fn target_deleted_before_migration() {
     let setup = setup(Settings::default()).await;
 
+    let pic = &setup.pic;
+    let sender = setup.source_controllers[0];
     let target = setup.targets[0];
-    canister_deleted_before_migration(&setup, target).await;
+    let race = || async {
+        pic.delete_canister(target, Some(sender)).await.unwrap();
+        target
+    };
+    canister_changed_before_migration(&setup, race).await;
 }
 
 #[tokio::test]

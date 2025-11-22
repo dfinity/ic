@@ -86,10 +86,12 @@ rust_test(
         "MIGRATION_CANISTER_WASM_PATH": "$(rootpath //rs/migration_canister:migration-canister)",
         "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
         "UNIVERSAL_CANISTER_WASM_PATH": "$(rootpath //rs/universal_canister/impl:universal_canister.wasm.gz)",
+        "RUST_TEST_THREADS": "4",
     },
     proc_macro_deps = [
         "@crate_index//:strum_macros",
     ],
+    tags = ["cpu:16"],
     deps = [
         # Keep sorted
         "//packages/pocket-ic",
