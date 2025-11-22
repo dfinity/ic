@@ -1,7 +1,8 @@
 use ic_metrics::{MetricsRegistry, buckets::decimal_buckets_with_zero};
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge};
+use prometheus::{Histogram, HistogramVec, IntCounterVec, IntGauge};
 
 const SOURCE_LABEL: &str = "source";
+const STRIPPED_MESSAGE_TYPE_LABEL: &str = "type";
 
 #[derive(Clone)]
 pub(super) struct FetchStrippedConsensusArtifactMetrics {
@@ -81,29 +82,32 @@ impl FetchStrippedConsensusArtifactMetrics {
 }
 
 #[derive(Clone)]
-pub(super) struct IngressSenderMetrics {
-    pub(super) ingress_messages_in_ingress_pool: IntCounter,
-    pub(super) ingress_messages_in_block: IntCounter,
-    pub(super) ingress_messages_not_found: IntCounter,
+pub(super) struct StrippedMessageSenderMetrics {
+    pub(super) stripped_messages_in_pool: IntCounterVec,
+    pub(super) stripped_messages_in_block: IntCounterVec,
+    pub(super) stripped_messages_not_found: IntCounterVec,
 }
 
-impl IngressSenderMetrics {
+impl StrippedMessageSenderMetrics {
     pub(super) fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            ingress_messages_in_ingress_pool: metrics_registry.int_counter(
-                "ic_stripped_consensus_artifact_sender_ingress_messages_in_ingress_pool",
-                "Total number number of handled requests \
-                where the requested ingress message was found in the ingress pool",
+            stripped_messages_in_pool: metrics_registry.int_counter_vec(
+                "ic_stripped_consensus_artifact_sender_stripped_messages_in_pool",
+                "Total number number of handled stripped message requests \
+                where the requested message was found in the respective pool",
+                &[STRIPPED_MESSAGE_TYPE_LABEL],
             ),
-            ingress_messages_in_block: metrics_registry.int_counter(
-                "ic_stripped_consensus_artifact_sender_ingress_messages_in_block",
-                "Total number number of handled requests \
-                where the requested ingress message was found in a block in the consensus pool",
+            stripped_messages_in_block: metrics_registry.int_counter_vec(
+                "ic_stripped_consensus_artifact_sender_stripped_messages_in_block",
+                "Total number number of handled stripped message requests \
+                where the requested message was found in a block in the consensus pool",
+                &[STRIPPED_MESSAGE_TYPE_LABEL],
             ),
-            ingress_messages_not_found: metrics_registry.int_counter(
-                "ic_stripped_consensus_artifact_sender_ingress_messages_not_found",
-                "Total number number of handled requests \
-                where the requested ingress message was not found",
+            stripped_messages_not_found: metrics_registry.int_counter_vec(
+                "ic_stripped_consensus_artifact_sender_stripped_messages_not_found",
+                "Total number number of handled stripped message requests \
+                where the requested message was not found",
+                &[STRIPPED_MESSAGE_TYPE_LABEL],
             ),
         }
     }

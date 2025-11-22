@@ -9,8 +9,9 @@ use ic_types::{
     batch::{BatchPayload, IngressPayload},
     consensus::{
         Block, BlockPayload, BlockProposal, ConsensusMessage, ConsensusMessageHash, DataPayload,
-        Payload, Rank,
+        Payload, Rank, SummaryPayload,
         dkg::{DkgDataPayload, DkgSummary},
+        idkg::IDkgPayload,
     },
     crypto::{CryptoHash, CryptoHashOf},
     messages::{Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress},
@@ -74,20 +75,33 @@ pub(crate) fn fake_ingress_message_with_arg_size_and_sig(
 pub(crate) fn fake_block_proposal_with_ingresses(
     ingress_messages: Vec<SignedIngress>,
 ) -> BlockProposal {
+    fake_block_proposal_with_ingresses_and_idkg(ingress_messages, None, false)
+}
+
+pub(crate) fn fake_block_proposal_with_ingresses_and_idkg(
+    ingress_messages: Vec<SignedIngress>,
+    idkg_payload: Option<IDkgPayload>,
+    is_summary: bool,
+) -> BlockProposal {
     let parent = make_genesis(DkgSummary::fake()).content.block;
+    let payload = if is_summary {
+        BlockPayload::Summary(SummaryPayload {
+            dkg: DkgSummary::fake(),
+            idkg: idkg_payload,
+        })
+    } else {
+        BlockPayload::Data(DataPayload {
+            batch: BatchPayload {
+                ingress: IngressPayload::from(ingress_messages),
+                ..BatchPayload::default()
+            },
+            dkg: DkgDataPayload::new_empty(Height::from(0)),
+            idkg: idkg_payload,
+        })
+    };
     let block = Block::new(
         ic_types::crypto::crypto_hash(parent.as_ref()),
-        Payload::new(
-            ic_types::crypto::crypto_hash,
-            BlockPayload::Data(DataPayload {
-                batch: BatchPayload {
-                    ingress: IngressPayload::from(ingress_messages),
-                    ..BatchPayload::default()
-                },
-                dkg: DkgDataPayload::new_empty(Height::from(0)),
-                idkg: None,
-            }),
-        ),
+        Payload::new(ic_types::crypto::crypto_hash, payload),
         parent.as_ref().height.increment(),
         Rank(0),
         parent.as_ref().context.clone(),
