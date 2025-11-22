@@ -609,76 +609,58 @@ async fn concurrent_migration_target() {
     concurrent_migration(&pic, sender, args1, args2, target).await;
 }
 
-#[tokio::test]
-async fn source_deleted_before_migration() {
+async fn canister_deleted_before_migration(setup: &Setup, canister: Principal) {
     let Setup {
         pic,
         sources,
         targets,
         source_controllers,
         ..
-    } = setup(Settings::default()).await;
+    } = setup;
     let sender = source_controllers[0];
     let source = sources[0];
     let target = targets[0];
+
+    assert!(canister == source || canister == target);
 
     let args = MigrateCanisterArgs {
         canister_id: source,
         replace_canister_id: target,
     };
-    migrate_canister(&pic, sender, &args).await.unwrap();
+    migrate_canister(pic, sender, &args).await.unwrap();
 
-    // Delete the source right away after requesting its migration.
-    pic.delete_canister(source, Some(sender)).await.unwrap();
+    // Delete the canister (source or target) right away after requesting its migration;
+    // in particular, before the (accepted) request is processed in a timer.
+    pic.delete_canister(canister, Some(sender)).await.unwrap();
 
     for _ in 0..10 {
-        // advance time so that timers are triggered
+        // Advance time so that timers are triggered.
         pic.advance_time(Duration::from_secs(1)).await;
         pic.tick().await;
     }
 
-    let status = get_status(&pic, sender, &args).await;
+    let status = get_status(pic, sender, &args).await;
     assert_eq!(status.len(), 1);
     assert!(matches!(
         &status[0],
-        MigrationStatus::Failed {reason, ..} if reason.contains(&format!("Failed to set controller of canister {}", source))
+        MigrationStatus::Failed {reason, ..} if reason.contains(&format!("Failed to set controller of canister {}", canister))
     ));
 }
 
 #[tokio::test]
+async fn source_deleted_before_migration() {
+    let setup = setup(Settings::default()).await;
+
+    let source = setup.sources[0];
+    canister_deleted_before_migration(&setup, source).await;
+}
+
+#[tokio::test]
 async fn target_deleted_before_migration() {
-    let Setup {
-        pic,
-        sources,
-        targets,
-        source_controllers,
-        ..
-    } = setup(Settings::default()).await;
-    let sender = source_controllers[0];
-    let source = sources[0];
-    let target = targets[0];
+    let setup = setup(Settings::default()).await;
 
-    let args = MigrateCanisterArgs {
-        canister_id: source,
-        replace_canister_id: target,
-    };
-    migrate_canister(&pic, sender, &args).await.unwrap();
-
-    // Delete the target right away after requesting its migration.
-    pic.delete_canister(target, Some(sender)).await.unwrap();
-
-    for _ in 0..10 {
-        // advance time so that timers are triggered
-        pic.advance_time(Duration::from_secs(1)).await;
-        pic.tick().await;
-    }
-
-    let status = get_status(&pic, sender, &args).await;
-    assert_eq!(status.len(), 1);
-    assert!(matches!(
-        &status[0],
-        MigrationStatus::Failed {reason, ..} if reason.contains(&format!("Failed to set controller of canister {}", target))
-    ));
+    let target = setup.targets[0];
+    canister_deleted_before_migration(&setup, target).await;
 }
 
 #[tokio::test]
