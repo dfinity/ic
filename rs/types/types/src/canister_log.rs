@@ -101,6 +101,10 @@ impl Records {
         &self.records
     }
 
+    fn get_mut(&mut self) -> &mut VecDeque<CanisterLogRecord> {
+        &mut self.records
+    }
+
     fn used_space(&self) -> usize {
         self.used_space
     }
@@ -200,6 +204,10 @@ impl CanisterLog {
         self.records.get()
     }
 
+    pub fn records_mut(&mut self) -> &mut VecDeque<CanisterLogRecord> {
+        self.records.get_mut()
+    }
+
     /// Clears the canister log records.
     pub fn clear(&mut self) {
         self.records.clear();
@@ -213,6 +221,11 @@ impl CanisterLog {
     /// Returns the used space in the canister log buffer.
     pub fn used_space(&self) -> usize {
         self.records.used_space()
+    }
+
+    /// Returns true if the canister log buffer is empty.
+    pub fn is_empty(&self) -> bool {
+        self.used_space() == 0
     }
 
     /// Returns the remaining space in the canister log buffer.
@@ -238,7 +251,7 @@ impl CanisterLog {
     /// Moves all the logs from `delta_log` to `self`.
     pub fn append_delta_log(&mut self, delta_log: &mut Self) {
         // Record the size of the appended delta log for metrics.
-        self.push_delta_log_size(delta_log.records.used_space());
+        self.push_delta_log_size(delta_log.used_space());
 
         // Assume records sorted cronologically (with increasing idx) and
         // update the system state's next index with the last record's index.

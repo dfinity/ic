@@ -903,8 +903,11 @@ impl From<&[u8]> for PageMap {
 }
 
 /// Buffer provides a file-like interface to a PageMap.
+#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct Buffer {
+    #[validate_eq(Ignore)]
     page_map: PageMap,
+
     /// The map containing pages modified by the caller since this buffer was
     /// created. These pages can be modified in-place by the write method.
     ///
@@ -1002,6 +1005,16 @@ impl Buffer {
         let mut page_map = self.page_map.clone();
         page_map.update(&self.dirty_pages().collect::<Vec<_>>());
         page_map
+    }
+
+    pub fn page_map(&mut self) -> &PageMap {
+        self.page_map = self.into_page_map();
+        &self.page_map
+    }
+
+    pub fn page_map_mut(&mut self) -> &mut PageMap {
+        self.page_map = self.into_page_map();
+        &mut self.page_map
     }
 }
 
