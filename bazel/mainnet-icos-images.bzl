@@ -61,6 +61,7 @@ genrule(
     outs = ["guest-img.tar.zst"],
     tags = [ "manual" ],
     cmd = \"""#!/bin/bash
+        export PATH="/usr/sbin:$$PATH"
         $(location @@//rs/ic_os/build_tools/partition_tools:extract-guestos) --image $< $@
     \""",
     target_compatible_with = ["@platforms//os:linux"],

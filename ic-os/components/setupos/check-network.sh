@@ -119,12 +119,12 @@ function print_network_settings() {
     echo "  IPv6 Prefix : ${ipv6_prefix}"
     echo "  IPv6 Gateway: ${ipv6_gateway}"
 
-    if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
+    if [[ -n "${ipv4_address}" && -n "${ipv4_prefix_length}" && -n "${ipv4_gateway}" ]]; then
         echo "  IPv4 Address: ${ipv4_address}"
         echo "  IPv4 Prefix Length: ${ipv4_prefix_length}"
         echo "  IPv4 Gateway: ${ipv4_gateway}"
     fi
-    if [[ -n ${domain_name} ]]; then
+    if [[ -n "${domain_name}" ]]; then
         echo "  Domain name: ${domain_name}"
     fi
     echo " "
@@ -225,17 +225,17 @@ function query_nns_nodes() {
 # Establish run order
 main() {
     log_start "$(basename $0)"
-    if kernel_cmdline_bool_default_true ic.setupos.check_network; then
+    if check_cmdline_var ic.setupos.run_checks; then
         check_generate_network_config
         read_config_variables
         get_network_settings
         print_network_settings
 
-        if [[ -n ${domain_name} ]]; then
+        if [[ -n "${domain_name}" ]]; then
             validate_domain_name
         fi
 
-        if [[ -n ${ipv4_address} && -n ${ipv4_prefix_length} && -n ${ipv4_gateway} ]]; then
+        if [[ -n "${ipv4_address}" && -n "${ipv4_prefix_length}" && -n "${ipv4_gateway}" ]]; then
             setup_ipv4_network
             ping_ipv4_gateway
         fi

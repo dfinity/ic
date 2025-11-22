@@ -196,6 +196,7 @@ def create_test_img(name, source, **kwargs):
             tmpdir="$$(mktemp -d)"
             trap "rm -rf $$tmpdir" EXIT
             tar -xf $< -C $$tmpdir
+            export PATH="/usr/sbin:$$PATH"
             $(location //rs/ic_os/dev_test_tools/setupos-disable-checks) --image-path $$tmpdir/disk.img
             tar --zstd -Scf $@ -C $$tmpdir disk.img
         """,

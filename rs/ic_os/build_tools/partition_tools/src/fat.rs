@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use crate::exes::mcopy;
 use anyhow::{Context, Result, anyhow, ensure};
 use async_trait::async_trait;
 use tokio::process::Command;
@@ -18,7 +17,6 @@ impl Partition for FatPartition {
     /// Open a fat3 partition for writing, via mtools. There is nothing to do
     /// here, as mtools works in place.
     async fn open(image: PathBuf, index: Option<u32>) -> Result<Self> {
-        let _ = mcopy().context("mcopy is needed to open FAT partitions")?;
         let mut offset = None;
         if let Some(index) = index {
             offset = Some(gpt::get_partition_offset(&image, index)?);
@@ -44,9 +42,8 @@ impl Partition for FatPartition {
 
     /// Copy a file into place
     async fn write_file(&mut self, input: &Path, output: &Path) -> Result<()> {
-        let mcopy = mcopy().context("mcopy is needed to write files")?;
         let out = if let Some(offset) = self.offset_bytes {
-            Command::new(mcopy)
+            Command::new("mcopy")
                 .args([
                     "-o",
                     "-i",
@@ -58,7 +55,7 @@ impl Partition for FatPartition {
                 .await
                 .context("failed to run mcopy")?
         } else {
-            Command::new(mcopy)
+            Command::new("mcopy")
                 .args([
                     "-o",
                     "-i",
@@ -84,15 +81,13 @@ impl Partition for FatPartition {
     }
 
     async fn copy_files_to(&mut self, output: &Path) -> Result<()> {
-        let mcopy = mcopy().context("mcopy is needed to extract contents")?;
-
         ensure!(
             output.exists() && output.is_dir(),
             "output must be an existing directory"
         );
 
         let out = if let Some(offset) = self.offset_bytes {
-            Command::new(mcopy)
+            Command::new("mcopy")
                 .args([
                     "-s", // recursive copy
                     "-o", // overwrite existing files
@@ -105,7 +100,7 @@ impl Partition for FatPartition {
                 .await
                 .context("failed to run mcopy")?
         } else {
-            Command::new(mcopy)
+            Command::new("mcopy")
                 .args([
                     "-s", // recursive copy
                     "-o", // overwrite existing files
@@ -157,10 +152,8 @@ impl Partition for FatPartition {
 impl FatPartition {
     // Capture and return stdout, which may be used to "read" the file directly
     async fn copy_file_inner(&mut self, from: &Path, to: &Path) -> Result<Vec<u8>> {
-        let mcopy = mcopy().context("mcopy is needed to read files")?;
-
         let out = if let Some(offset) = self.offset_bytes {
-            Command::new(mcopy)
+            Command::new("mcopy")
                 .args([
                     "-o",
                     "-i",
@@ -172,7 +165,7 @@ impl FatPartition {
                 .await
                 .context("failed to run mcopy")?
         } else {
-            Command::new(mcopy)
+            Command::new("mcopy")
                 .args([
                     "-o",
                     "-i",

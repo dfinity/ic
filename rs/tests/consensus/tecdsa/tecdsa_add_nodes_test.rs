@@ -43,7 +43,7 @@ use ic_system_test_driver::{
         test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasRegistryVersion, HasTopologySnapshot, IcNodeContainer,
-            NnsInstallationBuilder, SubnetSnapshot, secs,
+            NnsInstallationBuilder, SshSession, SubnetSnapshot, secs,
         },
     },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},

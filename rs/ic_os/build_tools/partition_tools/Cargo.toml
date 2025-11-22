@@ -16,7 +16,6 @@ itertools = { workspace = true }
 pcre2 = "0.2.6"
 tempfile = { workspace = true }
 tokio = { workspace = true }
-which = { workspace = true }
 zstd = { workspace = true }
 
 [[bin]]
