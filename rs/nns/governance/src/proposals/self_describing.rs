@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::pb::v1::{
-    Motion, SelfDescribingProposalAction, Value, ValueMap,
-    value::Value::{Map, Text},
+    ApproveGenesisKyc, Motion, SelfDescribingProposalAction, Value, ValueArray, ValueMap,
+    value::Value::{Array, Map, Text},
 };
 
 /// A proposal action that can be described locally, without having to call `canister_metadata`
@@ -37,6 +37,28 @@ impl LocallyDescribableProposalAction for Motion {
     }
 }
 
+impl LocallyDescribableProposalAction for ApproveGenesisKyc {
+    const TYPE_NAME: &'static str = "Approve Genesis KYC";
+    const TYPE_DESCRIPTION: &'static str = "When new neurons are created at Genesis, they have \
+    GenesisKYC=false. This restricts what actions they can perform. Specifically, they cannot spawn \
+    new neurons, and once their dissolve delays are zero, they cannot be disbursed and their balances \
+    unlocked to new accounts. This proposal sets GenesisKYC=true for batches of principals. \
+    (Special note: The Genesis event disburses all ICP in the form of neurons, whose principals \
+    must be KYCed. Consequently, all neurons created after Genesis have GenesisKYC=true set \
+    automatically since they must have been derived from balances that have already been KYCed.)";
+
+    fn to_value(&self) -> Value {
+        ValueBuilder::new()
+            .add_array_field(
+                "principals".to_string(),
+                self.principals
+                    .iter()
+                    .map(|principal| string_to_value(principal.to_string()))
+                    .collect(),
+            )
+            .build()
+    }
+}
 /// A builder for `Value` objects.
 pub(crate) struct ValueBuilder {
     fields: HashMap<String, Value>,
@@ -56,6 +78,15 @@ impl ValueBuilder {
                 value: Some(Text(value.to_string())),
             },
         );
+    }
+
+    pub fn add_array_field(mut self, key: impl ToString, values: Vec<Value>) -> Self {
+        self.fields.insert(
+            key,
+            Value {
+                value: Some(Array(ValueArray { values })),
+            },
+        );
         self
     }
 
@@ -64,6 +95,13 @@ impl ValueBuilder {
         Value {
             value: Some(Map(ValueMap { values: fields })),
         }
+    }
+}
+
+/// Converts a string to a `Value` object.
+fn string_to_value(value: String) -> Value {
+    Value {
+        value: Some(Text(value)),
     }
 }
 
