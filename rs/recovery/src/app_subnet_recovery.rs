@@ -1,5 +1,5 @@
 use crate::{
-    CUPS_DIR, DataLocation, IC_STATE_DIR, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
+    DataLocation, NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
     cli::{
         consent_given, print_height_info, read_optional, read_optional_data_location,
         read_optional_node_ids, read_optional_subnet_id, read_optional_version,
@@ -48,8 +48,7 @@ pub enum StepType {
     MergeCertificationPools,
     /// In this step we will download all finalized consensus artifacts. For that we should use a
     /// node, that is up to date with the highest finalization height because this node will contain
-    /// all required artifacts for the recovery. It is possible to skip this step and the next one
-    /// (`DownloadState`) will download the consensus pool from the same node as the state.
+    /// all required artifacts for the recovery.
     DownloadConsensusPool,
     /// In this step we will download the subnet state from a node that is sufficiently up to date
     /// with the rest of the subnet, i.e. not behind by more than 1 DKG interval. To avoid
@@ -263,15 +262,15 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
             }
 
             StepType::DownloadConsensusPool => {
-                // We could pick a node with highest finalization height automatically,
-                // but we might have a preference between nodes of the same finalization height.
-                print_height_info(
-                    &self.logger,
-                    &self.recovery.registry_helper,
-                    self.params.subnet_id,
-                );
-
                 if self.params.download_pool_node.is_none() {
+                    // We could pick a node with highest finalization height automatically, but we
+                    // might have a preference between nodes of the same finalization height.
+                    print_height_info(
+                        &self.logger,
+                        &self.recovery.registry_helper,
+                        self.params.subnet_id,
+                    );
+
                     self.params.download_pool_node =
                         read_optional(&self.logger, "Enter consensus pool download IP:");
                 }
@@ -395,44 +394,34 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         (SshUser::Admin, self.recovery.admin_key_file.clone())
                     };
 
-                    Ok(Box::new(self.recovery.get_download_state_step(
-                        node_ip,
-                        ssh_user,
-                        key_file,
-                        /*keep_downloaded_state=*/ false,
-                        /*additional_excludes=*/
-                        vec![CUPS_DIR, IC_STATE_DIR, "orchestrator"], // exclude folders to
-                                                                      // download only the
-                                                                      // consensus pool
-                    )))
+                    Ok(Box::new(self.recovery.get_download_consensus_pool_step(
+                        node_ip, ssh_user, key_file,
+                    )?))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
             }
 
-            StepType::DownloadState => {
-                match self.params.download_state_method {
-                    Some(DataLocation::Local) => {
-                        Ok(Box::new(self.recovery.get_copy_local_state_step()))
-                    }
-                    Some(DataLocation::Remote(node_ip)) => {
-                        let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
-                            (SshUser::Readonly, self.params.readonly_key_file.clone())
-                        } else {
-                            (SshUser::Admin, self.recovery.admin_key_file.clone())
-                        };
-
-                        Ok(Box::new(self.recovery.get_download_state_step(
-                            node_ip,
-                            ssh_user,
-                            key_file,
-                            self.params.keep_downloaded_state == Some(true),
-                            /*additional_excludes=*/ vec![CUPS_DIR],
-                        )))
-                    }
-                    None => Err(RecoveryError::StepSkipped),
+            StepType::DownloadState => match self.params.download_state_method {
+                Some(DataLocation::Local) => {
+                    Ok(Box::new(self.recovery.get_copy_local_state_step()))
                 }
-            }
+                Some(DataLocation::Remote(node_ip)) => {
+                    let (ssh_user, key_file) = if self.params.readonly_pub_key.is_some() {
+                        (SshUser::Readonly, self.params.readonly_key_file.clone())
+                    } else {
+                        (SshUser::Admin, self.recovery.admin_key_file.clone())
+                    };
+
+                    Ok(Box::new(self.recovery.get_download_state_step(
+                        node_ip,
+                        ssh_user,
+                        key_file,
+                        self.params.keep_downloaded_state == Some(true),
+                    )?))
+                }
+                None => Err(RecoveryError::StepSkipped),
+            },
 
             StepType::ICReplay => Ok(Box::new(self.recovery.get_replay_step(
                 self.params.subnet_id,
@@ -449,7 +438,9 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::UploadState => {
                 if let Some(method) = self.params.upload_method {
-                    Ok(Box::new(self.recovery.get_upload_and_restart_step(method)))
+                    Ok(Box::new(
+                        self.recovery.get_upload_state_and_restart_step(method),
+                    ))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
