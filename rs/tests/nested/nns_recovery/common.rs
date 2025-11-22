@@ -506,9 +506,6 @@ async fn simulate_node_provider_action(
         .await
         .expect("Failed to run guestos-recovery-upgrader");
 
-    // Wait 5 seconds to give enough time for the old Guest VM to shut down before spoofing the GuestOS DNS
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-
     // Spoof the GuestOS DNS such that it downloads the recovery artifacts from the UVM
     let guest = host.get_guest_ssh().unwrap();
     info!(
