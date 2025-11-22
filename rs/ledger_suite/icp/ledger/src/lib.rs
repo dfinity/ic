@@ -29,10 +29,9 @@ use lazy_static::lazy_static;
 use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::RwLock;
-use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 
 #[cfg(test)]
@@ -42,8 +41,6 @@ lazy_static! {
     pub static ref LEDGER: RwLock<Ledger> = RwLock::new(Ledger::default());
     // Maximum inter-canister message size in bytes.
     pub static ref MAX_MESSAGE_SIZE_BYTES: RwLock<usize> = RwLock::new(1024 * 1024);
-
-    static ref ARCHIVING_FAILURES: AtomicU64 = AtomicU64::new(0);
 }
 
 // Wasm bytecode of an Archive Node.
@@ -150,6 +147,8 @@ thread_local! {
     // block_index -> block
     pub static BLOCKS_MEMORY: RefCell<StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
+
+    static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -327,11 +326,11 @@ impl LedgerData for Ledger {
     }
 
     fn increment_archiving_failure_metric(&mut self) {
-        ARCHIVING_FAILURES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        ARCHIVING_FAILURES.with(|cell| cell.set(cell.get() + 1));
     }
 
     fn get_archiving_failure_metric(&self) -> u64 {
-        ARCHIVING_FAILURES.load(std::sync::atomic::Ordering::Relaxed)
+        ARCHIVING_FAILURES.get()
     }
 }
 

@@ -56,10 +56,9 @@ use minicbor::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, VecDeque};
 use std::ops::DerefMut;
-use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 
 const TRANSACTION_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
@@ -546,7 +545,7 @@ thread_local! {
     pub static BLOCKS_MEMORY: RefCell<StableBTreeMap<u64, Vec<u8>, VirtualMemory<DefaultMemoryImpl>>> =
         MEMORY_MANAGER.with(|memory_manager| RefCell::new(StableBTreeMap::init(memory_manager.borrow().get(BLOCKS_MEMORY_ID))));
 
-    static ARCHIVING_FAILURES: RefCell<AtomicU64> = const { RefCell::new(AtomicU64::new(0)) };
+    static ARCHIVING_FAILURES: Cell<u64> = Cell::default();
 }
 
 #[derive(Copy, Clone, Serialize, Deserialize, Debug)]
@@ -878,16 +877,11 @@ impl LedgerData for Ledger {
     }
 
     fn increment_archiving_failure_metric(&mut self) {
-        ARCHIVING_FAILURES.with(|failures| {
-            failures
-                .borrow()
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        });
+        ARCHIVING_FAILURES.with(|cell| cell.set(cell.get() + 1));
     }
 
     fn get_archiving_failure_metric(&self) -> u64 {
-        ARCHIVING_FAILURES
-            .with(|failures| failures.borrow().load(std::sync::atomic::Ordering::Relaxed))
+        ARCHIVING_FAILURES.get()
     }
 }
 
