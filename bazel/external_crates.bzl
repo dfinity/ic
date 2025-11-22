@@ -1413,6 +1413,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "textplots": crate.spec(
                 version = "^0.8",
             ),
+            "tui-textarea": crate.spec(
+                version = "^0.7",
+            ),
             "thiserror": crate.spec(
                 version = "^2.0.3",
             ),

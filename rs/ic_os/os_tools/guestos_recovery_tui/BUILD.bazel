@@ -9,5 +9,6 @@ rust_library(
     deps = [
         "@crate_index//:anyhow",
         "@crate_index//:ratatui",
+        "@crate_index//:tui-textarea",
     ],
 )

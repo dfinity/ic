@@ -5,6 +5,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
+use tui_textarea::TextArea;
 
 use crate::{AppState, FailureState, Field, InputState, RecoveryParams, RunningState};
 
@@ -156,8 +157,7 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
             f,
             *field,
             &format!("{}:", meta.name),
-            field.get_value(&state.params),
-            meta.description,
+            &state.inputs[i],
             fields_layout[i],
         );
     }
@@ -213,20 +213,25 @@ fn render_input_field(
     f: &mut Frame,
     field: Field,
     label: &str,
-    value: &str,
-    description: &str,
+    textarea: &TextArea<'static>,
     area: Rect,
 ) {
     let selected = state.current_field() == field;
     let block = create_block(label, selected, false);
-    let input = if selected {
-        format!("{}█", value)
+
+    // Clone textarea to modify styles for rendering without affecting state
+    let mut ta = textarea.clone();
+
+    if selected {
+        ta.set_cursor_style(Style::default().bg(Color::White).fg(Color::Black));
     } else {
-        value.to_string()
-    };
-    let content = vec![Line::from(input), Line::from(""), Line::from(description)];
-    let para = Paragraph::new(content).block(block).fg(Color::Cyan);
-    f.render_widget(para, area);
+        // Hide cursor/line highlight when not selected
+        ta.set_cursor_style(Style::default());
+        ta.set_cursor_line_style(Style::default());
+    }
+
+    ta.set_block(block);
+    f.render_widget(&ta, area);
 }
 
 /// Renders buttons horizontally centered in the given area with spacing between them

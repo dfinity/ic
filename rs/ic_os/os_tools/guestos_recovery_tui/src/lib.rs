@@ -14,6 +14,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use tui_textarea::TextArea;
 
 // ============================================================================
 // Constants
@@ -104,7 +105,6 @@ pub(crate) enum Field {
 
 struct FieldMetadata {
     name: &'static str,
-    description: &'static str,
     short_desc: &'static str,
     required_len: Option<usize>,
     is_input: bool,
@@ -160,15 +160,6 @@ impl Field {
         self.metadata().required_len
     }
 
-    fn get_value_mut<'a>(&self, params: &'a mut RecoveryParams) -> Option<&'a mut String> {
-        match self {
-            Field::Version => Some(&mut params.version),
-            Field::VersionHash => Some(&mut params.version_hash),
-            Field::RecoveryHash => Some(&mut params.recovery_hash),
-            _ => None,
-        }
-    }
-
     fn get_value<'a>(&self, params: &'a RecoveryParams) -> &'a str {
         match self {
             Field::Version => &params.version,
@@ -179,17 +170,41 @@ impl Field {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub(crate) struct InputState {
     pub focused_index: usize,
-    pub params: RecoveryParams,
+    pub inputs: Vec<TextArea<'static>>,
     pub error_message: Option<String>,
     pub exit_message: Option<String>,
+}
+
+impl Default for InputState {
+    fn default() -> Self {
+        let inputs = Field::INPUT_FIELDS
+            .iter()
+            .map(|_| {
+                let mut t = TextArea::default();
+                t.set_cursor_line_style(ratatui::style::Style::default());
+                t
+            })
+            .collect::<Vec<_>>();
+
+        Self {
+            focused_index: 0,
+            inputs,
+            error_message: None,
+            exit_message: None,
+        }
+    }
 }
 
 impl InputState {
     pub fn current_field(&self) -> Field {
         Field::ALL[self.focused_index]
+    }
+
+    pub fn get_input_index(&self, field: Field) -> Option<usize> {
+        Field::INPUT_FIELDS.iter().position(|&f| f == field)
     }
 }
 
@@ -459,12 +474,24 @@ impl GuestOSRecoveryApp {
             KeyCode::Esc => {
                 input_state.exit_message = Some("Recovery cancelled by user".to_string());
                 self.should_quit = true;
+                return Ok(false);
+            }
+            KeyCode::Tab | KeyCode::Down | KeyCode::Up => {
+                self.handle_navigation(input_state, key.code);
+                return Ok(false);
             }
             KeyCode::Enter => return self.handle_submission(input_state),
-            KeyCode::Tab | KeyCode::Down | KeyCode::Up | KeyCode::Left | KeyCode::Right => {
+            _ => {}
+        }
+
+        let current = input_state.current_field();
+        if let Some(idx) = input_state.get_input_index(current) {
+            self.handle_text_input(input_state, idx, key, current);
+        } else {
+            // Button navigation
+            if matches!(key.code, KeyCode::Left | KeyCode::Right) {
                 self.handle_navigation(input_state, key.code);
             }
-            _ => self.handle_text_input(input_state, key.code),
         }
         Ok(false)
     }
@@ -511,12 +538,31 @@ impl GuestOSRecoveryApp {
                     Ok(false)
                 }
                 Field::CheckArtifactsButton => {
+                    // Construct params from inputs
+                    let get_field_text = |target_field: Field| {
+                        if let Some(idx) = input_state.get_input_index(target_field) {
+                            input_state.inputs[idx]
+                                .lines()
+                                .first()
+                                .cloned()
+                                .unwrap_or_default()
+                        } else {
+                            String::new()
+                        }
+                    };
+
+                    let params = RecoveryParams {
+                        version: get_field_text(Field::Version),
+                        version_hash: get_field_text(Field::VersionHash),
+                        recovery_hash: get_field_text(Field::RecoveryHash),
+                    };
+
                     // Validate and transition to running
-                    if let Err(e) = input_state.params.validate() {
+                    if let Err(e) = params.validate() {
                         input_state.error_message = Some(e.to_string());
                         Ok(false)
                     } else {
-                        self.start_recovery_process(input_state.params.clone())?;
+                        self.start_recovery_process(params)?;
                         Ok(true)
                     }
                 }
@@ -525,34 +571,33 @@ impl GuestOSRecoveryApp {
         }
     }
 
-    fn handle_text_input(&mut self, input_state: &mut InputState, key_code: KeyCode) {
-        let current = input_state.current_field();
-        if !current.is_input_field() {
-            return;
-        }
-
-        match key_code {
-            KeyCode::Char(c) => {
-                match (
-                    current.required_length(),
-                    current.get_value_mut(&mut input_state.params),
-                ) {
-                    (Some(max_len), Some(field_value))
-                        if field_value.len() < max_len && is_lowercase_hex(c) =>
-                    {
-                        field_value.push(c);
-                    }
-                    _ => {}
-                }
+    fn handle_text_input(
+        &self,
+        input_state: &mut InputState,
+        idx: usize,
+        key: KeyEvent,
+        field: Field,
+    ) {
+        // Pre-validation for character input (hex only, max length)
+        if let KeyCode::Char(c) = key.code {
+            if !is_lowercase_hex(c) {
+                return;
             }
 
-            KeyCode::Backspace => {
-                if let Some(field_value) = current.get_value_mut(&mut input_state.params) {
-                    field_value.pop();
+            if let Some(max_len) = field.required_length() {
+                let current_len = input_state.inputs[idx]
+                    .lines()
+                    .first()
+                    .map(|l| l.len())
+                    .unwrap_or(0);
+                if current_len >= max_len {
+                    return;
                 }
             }
-            _ => {}
         }
+
+        // Pass input to the focused text area
+        input_state.inputs[idx].input(key);
     }
 
     fn start_recovery_process(&mut self, params: RecoveryParams) -> Result<()> {
