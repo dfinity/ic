@@ -151,6 +151,45 @@ impl Display for Request {
     }
 }
 
+/// Represents the recovery state of a `Request` in `RequestState::Failed`,
+/// i.e., whether controllers of source and target have been successfully restored.
+#[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecoveryState {
+    /// If set to `true`, then the controllers of the source canister
+    /// are still to be restored.
+    pub restore_source_controllers: bool,
+    /// If set to `true`, then the controllers of the target canister
+    /// are still to be restored.
+    pub restore_target_controllers: bool,
+}
+
+impl RecoveryState {
+    pub fn done() -> Self {
+        Self {
+            restore_source_controllers: false,
+            restore_target_controllers: false,
+        }
+    }
+
+    pub fn restore_source() -> Self {
+        Self {
+            restore_source_controllers: true,
+            restore_target_controllers: false,
+        }
+    }
+
+    pub fn restore_both() -> Self {
+        Self {
+            restore_source_controllers: true,
+            restore_target_controllers: true,
+        }
+    }
+
+    pub fn is_done(&self) -> bool {
+        !self.restore_source_controllers && !self.restore_target_controllers
+    }
+}
+
 /// Represents the state a `Request` is currently in and contains all data necessary
 /// to transition to the next state (and sometimes data for a future state).
 ///
@@ -256,7 +295,11 @@ pub enum RequestState {
     /// We stay in this state until the controllers have been restored and then
     /// transition to a `Failed` state in the `HISTORY`.
     #[strum(to_string = "RequestState::Failed {{ request: {request}, reason: {reason} }}")]
-    Failed { request: Request, reason: String },
+    Failed {
+        request: Request,
+        recovery_state: RecoveryState,
+        reason: String,
+    },
 }
 
 impl RequestState {
