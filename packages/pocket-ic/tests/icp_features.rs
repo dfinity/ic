@@ -69,6 +69,7 @@ fn all_icp_features() -> IcpFeatures {
         ii: Some(IcpFeaturesConfig::DefaultConfig),
         nns_ui: Some(IcpFeaturesConfig::DefaultConfig),
         bitcoin: Some(IcpFeaturesConfig::DefaultConfig),
+        dogecoin: Some(IcpFeaturesConfig::DefaultConfig),
         canister_migration: Some(IcpFeaturesConfig::DefaultConfig),
     }
 }
@@ -114,10 +115,10 @@ fn test_canister_migration() {
     assert_eq!(pic.get_subnet(target_canister).unwrap(), subnet_2);
 
     let migrate_canister_args = MigrateCanisterArgs {
-        source: source_canister,
-        target: target_canister,
+        canister_id: source_canister,
+        replace_canister_id: target_canister,
     };
-    let res = update_candid::<_, (Result<(), MigrationValidatonError>,)>(
+    let res = update_candid::<_, (Result<(), Option<MigrationValidatonError>>,)>(
         &pic,
         canister_migration_orchestrator,
         "migrate_canister",
@@ -1054,6 +1055,7 @@ async fn with_all_icp_features_and_nns_subnet_state() {
         icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: Some(all_icp_features()),
         incomplete_state: None,
         initial_time: None,

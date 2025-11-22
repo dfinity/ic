@@ -20,7 +20,7 @@ use ic_config::{
         CANISTER_GUARANTEED_CALLBACK_QUOTA, Config, DEFAULT_WASM_MEMORY_LIMIT,
         MAX_ENVIRONMENT_VARIABLE_NAME_LENGTH, MAX_ENVIRONMENT_VARIABLE_VALUE_LENGTH,
         MAX_ENVIRONMENT_VARIABLES, MAX_NUMBER_OF_SNAPSHOTS_PER_CANISTER,
-        SUBNET_CALLBACK_SOFT_LIMIT,
+        SUBNET_CALLBACK_SOFT_LIMIT, SUBNET_MEMORY_RESERVATION,
     },
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
@@ -2355,6 +2355,7 @@ fn failed_upgrade_hooks_consume_instructions() {
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
             compute_allocation_used: state.total_compute_allocation(),
+            subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
         };
         let sender = canister_test_id(100).get();
         let canister_id = canister_manager
@@ -2394,6 +2395,7 @@ fn failed_upgrade_hooks_consume_instructions() {
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
             compute_allocation_used: state.total_compute_allocation(),
+            subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
         };
         let compilation_cost = wasm_compilation_cost(&upgrade_wasm);
         let (instructions_left, result, _) = install_code(
@@ -2496,6 +2498,7 @@ fn failed_install_hooks_consume_instructions() {
             subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
             subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
             compute_allocation_used: state.total_compute_allocation(),
+            subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
         };
         let sender = canister_test_id(100).get();
         let canister_id = canister_manager
@@ -2581,6 +2584,7 @@ fn install_code_respects_instruction_limit() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let sender = canister_test_id(100).get();
     let canister_id = canister_manager
@@ -2634,6 +2638,7 @@ fn install_code_respects_instruction_limit() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
@@ -2665,6 +2670,7 @@ fn install_code_respects_instruction_limit() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
@@ -2690,6 +2696,7 @@ fn install_code_respects_instruction_limit() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let (instructions_left, result, canister) = install_code(
         &canister_manager,
@@ -2720,6 +2727,7 @@ fn install_code_respects_instruction_limit() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let (instructions_left, result, _) = install_code(
         &canister_manager,
@@ -2778,6 +2786,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
 
     // 1. INSTALL
@@ -2985,6 +2994,7 @@ fn uninstall_code_can_be_invoked_by_governance_canister() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     canister_manager
         .uninstall_code(
@@ -4732,6 +4742,78 @@ fn uninstall_code_on_empty_canister() {
         empty_canister_status.controllers()
     );
     assert!(uninstalled_canister_status.module_hash().is_none());
+}
+
+#[test]
+fn uninstall_code_on_empty_canister_updates_subnet_available_memory() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.create_canister(CYCLES);
+
+    let canister_history_memory_usage = |test: &mut ExecutionTest| {
+        let canister_history_memory_usage = test
+            .canister_state(canister_id)
+            .canister_history_memory_usage()
+            .get();
+        let canister_memory_usage = test.canister_state(canister_id).memory_usage().get();
+        let canister_memory_allocated_bytes = test
+            .canister_state(canister_id)
+            .memory_allocated_bytes()
+            .get();
+        assert_eq!(canister_history_memory_usage, canister_memory_usage);
+        assert_eq!(canister_memory_usage, canister_memory_allocated_bytes);
+        canister_history_memory_usage
+    };
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+    let initial_canister_history_memory_usage = canister_history_memory_usage(&mut test);
+    assert!(initial_canister_history_memory_usage > 0);
+
+    test.uninstall_code(canister_id).unwrap();
+
+    let final_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+    assert!(final_subnet_available_memory < initial_subnet_available_memory);
+    let final_canister_history_memory_usage = canister_history_memory_usage(&mut test);
+    assert!(final_canister_history_memory_usage > initial_canister_history_memory_usage);
+
+    let extra_subnet_memory_usage = initial_subnet_available_memory - final_subnet_available_memory;
+    let extra_canister_history_memory_usage =
+        final_canister_history_memory_usage - initial_canister_history_memory_usage;
+    assert_eq!(
+        extra_subnet_memory_usage,
+        extra_canister_history_memory_usage
+    );
+}
+
+#[test]
+fn uninstall_code_on_empty_canister_updates_subnet_available_memory_for_memory_allocation() {
+    const CYCLES: Cycles = Cycles::new(1_000_000_000_000_000);
+    const MEMORY_ALLOCATION: u64 = 10 * GIB;
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test
+        .create_canister_with_settings(
+            CYCLES,
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(MEMORY_ALLOCATION)
+                .build(),
+        )
+        .unwrap();
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+
+    test.uninstall_code(canister_id).unwrap();
+
+    let final_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+    assert_eq!(
+        final_subnet_available_memory,
+        initial_subnet_available_memory
+    );
 }
 
 #[test]
@@ -6922,6 +7004,7 @@ fn create_canister_with_cycles_sender_in_whitelist() {
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
     let sender = canister_test_id(1).get();
     let canister_id = canister_manager
@@ -6960,6 +7043,7 @@ fn create_canister_with_specified_id(
         subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
         subnet_available_callbacks: SUBNET_CALLBACK_SOFT_LIMIT as i64,
         compute_allocation_used: state.total_compute_allocation(),
+        subnet_memory_reservation: SUBNET_MEMORY_RESERVATION,
     };
 
     let creator = canister_test_id(1).get();
@@ -7309,6 +7393,66 @@ fn create_canister_insufficient_cycles_for_memory_allocation() {
     result.unwrap().assert_contains_reject(
         "Cannot increase memory allocation to 1024.00 MiB due to insufficient cycles.",
     );
+}
+
+#[test]
+fn create_canister_updates_subnet_available_memory() {
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+
+    let canister_id = test.create_canister(Cycles::from(10 * T));
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .memory_allocation()
+            .pre_allocated_bytes()
+            .get(),
+        0,
+    );
+
+    let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
+    assert!(subnet_available_memory < initial_subnet_available_memory);
+    let subnet_memory_usage = initial_subnet_available_memory - subnet_available_memory;
+    let canister_history_memory_usage = test
+        .canister_state(canister_id)
+        .canister_history_memory_usage()
+        .get();
+    assert!(canister_history_memory_usage > 0);
+    assert_eq!(subnet_memory_usage, canister_history_memory_usage);
+}
+
+#[test]
+fn create_canister_updates_subnet_available_memory_for_memory_allocation() {
+    const MEMORY_ALLOCATION: u64 = 10 * GIB;
+
+    let mut test = ExecutionTestBuilder::new().build();
+
+    let initial_subnet_available_memory =
+        test.subnet_available_memory().get_execution_memory() as u64;
+
+    let canister_id = test
+        .create_canister_with_settings(
+            Cycles::from(10 * T),
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(MEMORY_ALLOCATION)
+                .build(),
+        )
+        .unwrap();
+
+    assert_eq!(
+        test.canister_state(canister_id)
+            .memory_allocation()
+            .pre_allocated_bytes()
+            .get(),
+        MEMORY_ALLOCATION,
+    );
+
+    let subnet_available_memory = test.subnet_available_memory().get_execution_memory() as u64;
+    assert!(subnet_available_memory < initial_subnet_available_memory);
+    let subnet_memory_usage = initial_subnet_available_memory - subnet_available_memory;
+    assert_eq!(subnet_memory_usage, MEMORY_ALLOCATION);
 }
 
 #[test]

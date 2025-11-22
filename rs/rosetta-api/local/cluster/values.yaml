@@ -1,22 +1,29 @@
 commonResources: &commonResources
   limits:
-    memory: "256Mi"
+    memory: "1024Mi"
     cpu: "5"
   requests:
-    memory: "128Mi"
+    memory: "512Mi"
     cpu: "500m"
 
-icrcConfig: 
+icrcConfig:
   networkType: mainnet
+  # Comma-separated list of ledger IDs for multi-token support (e.g., "ledger1,ledger2")
   ledgerId: vtrom-gqaaa-aaaaq-aabia-cai
   storeFile: /data/db.sqlite
   useLocallyBuilt: false
+  # Deploy the latest ICRC Rosetta image from Docker Hub
+  deployLatest: true
+  # Flush the database cache and shrink the memory after updating account balances
+  flushCacheShrinkMem: false
 
-icpConfig: 
+icpConfig:
   storeLocation: /data
   tokenSymbol: ICP
   canisterId: xafvr-biaaa-aaaai-aql5q-cai
   useLocallyBuilt: false
+  # Deploy the latest ICP Rosetta image from Docker Hub
+  deployLatest: true
 
 baseService: &baseService
   namespace: "rosetta-api"
@@ -70,3 +77,4 @@ cadvisor:
   nodeSelector: {}
   tolerations: []
   affinity: {}
+

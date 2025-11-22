@@ -1173,6 +1173,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
              network_topology,
              execution_parameters,
              subnet_available_memory,
+             subnet_memory_reservation,
              subnet_available_callbacks,
              ..
          }| {
@@ -1183,6 +1184,7 @@ pub fn execute_update_bench(c: &mut Criterion) {
                 subnet_available_memory,
                 subnet_available_callbacks,
                 compute_allocation_used: 0,
+                subnet_memory_reservation,
             };
             let instructions_before = round_limits.instructions;
             let res = exec_env.execute_canister_input(

@@ -1,4 +1,6 @@
+use crate::only_one;
 use ic_ckdoge_minter::EventType;
+use ic_ckdoge_minter::RetrieveBtcRequest;
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -50,6 +52,26 @@ impl<E> MinterEventAssert<E> {
             self.events
         );
         self
+    }
+
+    pub fn none_satisfy<P>(self, predicate: P) -> Self
+    where
+        P: Fn(&E) -> bool,
+        E: fmt::Debug,
+    {
+        let unexpected = self.events.iter().find(|event| predicate(event));
+        if let Some(unexpected) = unexpected {
+            panic!("Unexpected event: {:?}", unexpected);
+        }
+        self
+    }
+
+    pub fn extract_exactly_one<P>(self, predicate: P) -> E
+    where
+        P: Fn(&E) -> bool,
+        E: fmt::Debug,
+    {
+        only_one(self.events.into_iter().filter(|event| predicate(event)))
     }
 }
 
@@ -126,6 +148,30 @@ impl PartialEq for IgnoreTimestamp {
                     && withdrawal_fee == rhs_withdrawal_fee
                     && reason == rhs_reason
                     && new_utxos == rhs_new_utxos
+            }
+            (
+                EventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
+                    amount,
+                    address,
+                    block_index,
+                    received_at: _,
+                    kyt_provider,
+                    reimbursement_account,
+                }),
+                EventType::AcceptedRetrieveBtcRequest(RetrieveBtcRequest {
+                    amount: rhs_amount,
+                    address: rhs_address,
+                    block_index: rhs_block_index,
+                    received_at: _,
+                    kyt_provider: rhs_kyt_provider,
+                    reimbursement_account: rhs_reimbursement_account,
+                }),
+            ) => {
+                amount == rhs_amount
+                    && address == rhs_address
+                    && block_index == rhs_block_index
+                    && kyt_provider == rhs_kyt_provider
+                    && reimbursement_account == rhs_reimbursement_account
             }
             (_, _) => false,
         }

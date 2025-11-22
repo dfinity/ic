@@ -155,6 +155,7 @@ fn main() -> Result<()> {
                 .add_test(systest!(test_max_url_length_exceeded))
                 // This section tests the transform function scenarios
                 .add_test(systest!(test_transform_function_is_executed))
+                .add_test(systest!(no_data_certificate_in_transform_function))
                 .add_test(systest!(test_composite_transform_function_is_not_allowed))
                 .add_test(systest!(check_caller_id_on_transform_function))
                 .add_test(systest!(
@@ -276,6 +277,42 @@ fn test_transform_function_is_executed(env: TestEnv) {
         "Transform function did not set the body to the provided context."
     );
     assert_eq!(response.status, 202);
+}
+
+fn no_data_certificate_in_transform_function(env: TestEnv) {
+    let handlers = Handlers::new(&env);
+    let webserver_ipv6 = get_universal_vm_address(&env);
+
+    let (response, _) = block_on(submit_outcall(
+        &handlers,
+        RemoteHttpRequest {
+            request: UnvalidatedCanisterHttpRequestArgs {
+                url: format!("https://[{webserver_ipv6}]"),
+                headers: vec![],
+                method: HttpMethod::GET,
+                body: Some("".as_bytes().to_vec()),
+                transform: Some(TransformContext {
+                    function: TransformFunc(candid::Func {
+                        principal: get_proxy_canister_id(&env).into(),
+                        method: "data_certificate_in_transform".to_string(),
+                    }),
+                    context: vec![],
+                }),
+                max_response_bytes: None,
+                is_replicated: None,
+                pricing_version: None,
+            },
+            cycles: HTTP_REQUEST_CYCLE_PAYMENT,
+        },
+    ));
+
+    let response = response.expect("Http call should succeed");
+
+    assert_eq!(response.headers.len(), 2, "Headers: {:?}", response.headers);
+    assert_eq!(response.headers[0].0, "data_certificate_present");
+    assert_eq!(response.headers[0].1, "false");
+    assert_eq!(response.headers[1].0, "in_replicated_execution");
+    assert_eq!(response.headers[1].1, "false");
 }
 
 fn test_non_existent_transform_function(env: TestEnv) {

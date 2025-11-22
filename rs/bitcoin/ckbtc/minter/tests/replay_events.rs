@@ -9,6 +9,7 @@ use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
 use ic_btc_interface::{OutPoint, Utxo};
 use ic_ckbtc_minter::address::BitcoinAddress;
+use ic_ckbtc_minter::fees::BitcoinFeeEstimator;
 use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::state::CkBtcMinterState;
 use ic_ckbtc_minter::state::eventlog::{Event, EventType, replay};
@@ -33,6 +34,7 @@ pub mod mock {
     use ic_btc_checker::CheckTransactionResponse;
     use ic_btc_interface::Utxo;
     use ic_ckbtc_minter::address::BitcoinAddress;
+    use ic_ckbtc_minter::fees::BitcoinFeeEstimator;
     use ic_ckbtc_minter::management::CallError;
     use ic_ckbtc_minter::updates::retrieve_btc::BtcAddressCheckStatus;
     use ic_ckbtc_minter::updates::update_balance::UpdateBalanceError;
@@ -51,14 +53,18 @@ pub mod mock {
 
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
+            type Estimator = BitcoinFeeEstimator;
             fn caller(&self) -> Principal;
             fn id(&self) -> Principal;
             fn time(&self) -> u64;
             fn global_timer_set(&self, timestamp: u64);
             fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
+            fn block_time(&self, network: Network) -> Duration;
             fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
             fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress;
+            fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String;
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
+            fn fee_estimator(&self, state: &CkBtcMinterState) -> BitcoinFeeEstimator;
             async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;
             async fn check_transaction(&self, btc_checker_principal: Option<Principal>, utxo: &Utxo, cycle_payment: u128, ) -> Result<CheckTransactionResponse, CallError>;
@@ -222,11 +228,13 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     )
     .unwrap();
     let tx_fee_per_vbyte = resubmitted_tx.fee_per_vbyte.unwrap();
+    let fee_estimator = BitcoinFeeEstimator::from_state(&state);
     let build_tx_error = build_unsigned_transaction_from_inputs(
         input_utxos,
         outputs,
         main_address.clone(),
         tx_fee_per_vbyte,
+        &fee_estimator,
     )
     .unwrap_err();
 
@@ -256,6 +264,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         arr.push(tx.clone());
         Ok(())
     });
+    let fee_estimator = BitcoinFeeEstimator::from_state(&state);
     resubmit_transactions(
         "mock_key",
         10,
@@ -272,6 +281,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
         },
         |old_txid, new_tx, reason| replaced.borrow_mut().push((old_txid, new_tx, reason)),
         &runtime,
+        &fee_estimator,
     )
     .await;
     let replaced = replaced.borrow();

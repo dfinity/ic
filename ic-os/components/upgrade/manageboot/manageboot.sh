@@ -302,7 +302,7 @@ case "${ACTION}" in
             write_log "${SYSTEM_TYPE} upgrade rebooting now, next slot ${TARGET_ALTERNATIVE}"
             # Ignore termination signals from the following reboot, so that
             # the script exits without error.
-            trap -- '' SIGTERM
+            trap 'write_log "upgrade-commit received SIGTERM"; exit 0' SIGTERM
             reboot
         fi
         ;;

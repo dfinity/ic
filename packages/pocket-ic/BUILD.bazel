@@ -86,7 +86,7 @@ rust_test(
         "//rs/registry/helpers",
         "//rs/registry/proto_data_provider",
         "//rs/types/base_types",
-        "@crate_index//:bitcoin_0_28",
+        "@crate_index//:bitcoin-0.28.2",
         "@crate_index//:candid",
         "@crate_index//:ed25519-dalek",
         "@crate_index//:flate2",
@@ -254,5 +254,38 @@ rust_test(
     deps = [
         ":pocket-ic",
         "@crate_index//:candid",
+    ],
+)
+
+rust_test(
+    name = "canister_snapshots",
+    size = "medium",
+    srcs = ["tests/canister_snapshots.rs"],
+    data = [
+        "//:dfx",
+        "//packages/pocket-ic/test_canister:test_canister.wasm.gz",
+        "//rs/pocket_ic_server:pocket-ic-server",
+        "@mozilla_root_ca_store//file",
+    ],
+    env = {
+        "DFX": "$(rootpath //:dfx)",
+        "POCKET_IC_BIN": "$(rootpath //rs/pocket_ic_server:pocket-ic-server)",
+        "SSL_CERT_FILE": "$(rootpath @mozilla_root_ca_store//file)",
+        "TEST_WASM": "$(rootpath //packages/pocket-ic/test_canister:test_canister.wasm.gz)",
+    },
+    tags = [
+        "cpu:16",
+        # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
+        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+        "requires-network",
+        "test_all_platforms",
+    ],
+    deps = [
+        ":pocket-ic",
+        "//rs/types/management_canister_types",
+        "@crate_index//:candid",
+        "@crate_index//:hex",
+        "@crate_index//:serde_json",
+        "@crate_index//:tempfile",
     ],
 )

@@ -4718,7 +4718,7 @@ fn canister_system_query_method_not_exported() {
             (export "memory" (memory $memory))
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    let result = test.system_query(canister_id, "http_transform", vec![], vec![]);
+    let result = test.system_query(canister_id, "http_transform", vec![]);
     assert_eq!(
         result,
         Err(
@@ -4766,7 +4766,7 @@ fn canister_system_query_transform_http_response() {
         body: vec![0, 1, 2],
     };
     let payload = Encode!(&canister_http_response).unwrap();
-    let result = test.system_query(canister_id, "http_transform", payload, vec![]);
+    let result = test.system_query(canister_id, "http_transform", payload);
     let transformed_canister_http_response = Decode!(
         result.unwrap().bytes().as_slice(),
         CanisterHttpResponsePayload

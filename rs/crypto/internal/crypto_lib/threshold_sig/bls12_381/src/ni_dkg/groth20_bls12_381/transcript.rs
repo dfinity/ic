@@ -20,7 +20,7 @@ use crate::api::ni_dkg_errors::{
     SizeError,
 };
 
-use crate::types::public_coefficients::conversions::pub_key_bytes_from_pub_coeff_bytes;
+use crate::types::public_coefficients::pub_key_bytes_from_pub_coeff_bytes;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 
 /// Creates an NiDKG transcript.

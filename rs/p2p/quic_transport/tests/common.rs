@@ -10,7 +10,7 @@ use rustls::{ClientConfig, ServerConfig};
 
 pub struct PeerRestrictedTlsConfig {
     allowed_peers: Arc<Mutex<Vec<NodeId>>>,
-    crypto: Arc<dyn TlsConfig + Send + Sync>,
+    crypto: Arc<dyn TlsConfig>,
 }
 
 impl PeerRestrictedTlsConfig {
