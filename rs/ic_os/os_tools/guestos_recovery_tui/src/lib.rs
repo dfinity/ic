@@ -46,7 +46,7 @@ pub struct RecoveryParams {
 }
 
 fn is_lowercase_hex(c: char) -> bool {
-    c.is_ascii_digit() || ('a'..='f').contains(&c)
+    matches!(c, '0'..='9' | 'a'..='f')
 }
 
 impl RecoveryParams {
