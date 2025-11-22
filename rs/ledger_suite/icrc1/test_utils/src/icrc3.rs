@@ -1,6 +1,6 @@
-use candid::Nat;
+use candid::{Nat, Principal};
 use ic_ledger_core::tokens::TokensType;
-use icrc_ledger_types::icrc::generic_value::ICRC3Value;
+use icrc_ledger_types::icrc::generic_value::{ICRC3Value, Value};
 use icrc_ledger_types::icrc1::account::Account;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
@@ -21,6 +21,7 @@ pub struct BlockBuilder<Tokens: TokensType> {
     fee_collector_block: Option<u64>,
     fee: Option<Tokens>,
     parent_hash: Option<Vec<u8>>,
+    btype: Option<String>,
 }
 
 impl<Tokens: TokensType> BlockBuilder<Tokens> {
@@ -33,6 +34,7 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
             fee_collector_block: None,
             fee: None,
             parent_hash: None,
+            btype: None,
         }
     }
 
@@ -57,6 +59,12 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
     /// Set a custom parent hash (default is simplified hash for testing)
     pub fn with_parent_hash(mut self, parent_hash: Vec<u8>) -> Self {
         self.parent_hash = Some(parent_hash);
+        self
+    }
+
+    /// Set the block type
+    pub fn with_btype(mut self, btype: String) -> Self {
+        self.btype = Some(btype);
         self
     }
 
@@ -107,6 +115,21 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
         }
     }
 
+    /// Create a fee collector block
+    pub fn fee_collector(
+        self,
+        fee_collector: Option<Account>,
+        caller: Option<Principal>,
+        ts: Option<u64>,
+    ) -> FeeCollectorBuilder<Tokens> {
+        FeeCollectorBuilder {
+            builder: self,
+            fee_collector,
+            caller,
+            ts,
+        }
+    }
+
     /// Build the final ICRC3Value block
     fn build_with_operation(
         self,
@@ -154,6 +177,11 @@ impl<Tokens: TokensType> BlockBuilder<Tokens> {
                 "phash".to_string(),
                 ICRC3Value::Blob(ByteBuf::from(parent_hash)),
             );
+        }
+
+        // Add fee collector block if specified
+        if let Some(btype) = self.btype {
+            block_map.insert("btype".to_string(), ICRC3Value::Text(btype));
         }
 
         ICRC3Value::Map(block_map)
@@ -266,10 +294,7 @@ impl<Tokens: TokensType> ApproveBuilder<Tokens> {
         let mut tx_fields = BTreeMap::new();
         tx_fields.insert("from".to_string(), account_to_icrc3_value(&self.from));
         tx_fields.insert("spender".to_string(), account_to_icrc3_value(&self.spender));
-        tx_fields.insert(
-            "allowance".to_string(),
-            ICRC3Value::Nat(self.allowance.into()),
-        );
+        tx_fields.insert("amt".to_string(), ICRC3Value::Nat(self.allowance.into()));
 
         if let Some(expected_allowance) = self.expected_allowance {
             tx_fields.insert(
@@ -286,6 +311,35 @@ impl<Tokens: TokensType> ApproveBuilder<Tokens> {
         }
 
         self.builder.build_with_operation("approve", tx_fields)
+    }
+}
+
+/// Builder for fee collector operations
+pub struct FeeCollectorBuilder<Tokens: TokensType> {
+    builder: BlockBuilder<Tokens>,
+    fee_collector: Option<Account>,
+    caller: Option<Principal>,
+    ts: Option<u64>,
+}
+
+impl<Tokens: TokensType> FeeCollectorBuilder<Tokens> {
+    /// Build the fee collector block
+    pub fn build(self) -> ICRC3Value {
+        let mut tx_fields = BTreeMap::new();
+        if let Some(fee_collector) = &self.fee_collector {
+            tx_fields.insert(
+                "fee_collector".to_string(),
+                account_to_icrc3_value(fee_collector),
+            );
+        }
+        if let Some(caller) = &self.caller {
+            tx_fields.insert("caller".to_string(), ICRC3Value::from(Value::from(*caller)));
+        }
+        if let Some(ts) = self.ts {
+            tx_fields.insert("ts".to_string(), ICRC3Value::Nat(Nat::from(ts)));
+        }
+        self.builder
+            .build_with_operation("107set_fee_collector", tx_fields)
     }
 }
 

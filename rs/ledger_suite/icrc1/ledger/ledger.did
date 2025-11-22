@@ -224,8 +224,15 @@ type Transaction = record {
   kind : text;
   mint : opt Mint;
   approve : opt Approve;
+  fee_collector : opt FeeCollector;
   timestamp : Timestamp;
   transfer : opt Transfer
+};
+
+type FeeCollector = record {
+  caller : opt principal;
+  fee_collector : opt Account;
+  ts : opt nat64
 };
 
 type Burn = record {

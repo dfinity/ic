@@ -6,7 +6,9 @@ use ic_ledger_core::tokens::TokensType;
 use icrc_ledger_types::icrc1::transfer::TransferError;
 use icrc_ledger_types::icrc2::approve::ApproveError;
 use icrc_ledger_types::icrc2::transfer_from::TransferFromError;
-use icrc_ledger_types::icrc3::transactions::{Approve, Burn, Mint, Transaction, Transfer};
+use icrc_ledger_types::icrc3::transactions::{
+    Approve, Burn, FeeCollector, Mint, Transaction, Transfer,
+};
 use serde::Deserialize;
 
 pub fn convert_transfer_error<Tokens: TokensType>(
@@ -159,6 +161,7 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
             burn: None,
             transfer: None,
             approve: None,
+            fee_collector: None,
             timestamp: b.timestamp,
         };
         let created_at_time = b.transaction.created_at_time;
@@ -229,6 +232,17 @@ impl<Tokens: TokensType> From<Block<Tokens>> for Transaction {
                         .or_else(|| b.effective_fee.map(Into::into)),
                     created_at_time,
                     memo,
+                });
+            }
+            Operation::FeeCollector {
+                fee_collector,
+                caller,
+            } => {
+                tx.kind = "107set_fee_collector".to_string();
+                tx.fee_collector = Some(FeeCollector {
+                    fee_collector,
+                    caller,
+                    ts: created_at_time,
                 });
             }
         }

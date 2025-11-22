@@ -111,6 +111,7 @@ fn test_icrc3_get_blocks() {
                 created_at_time: None,
                 memo: None,
             },
+            btype: None,
         }
     };
 
@@ -265,6 +266,7 @@ fn test_icrc3_get_blocks_number_of_blocks_limit() {
                 created_at_time: None,
                 memo: None,
             },
+            btype: None,
         }
         .encode()
     }

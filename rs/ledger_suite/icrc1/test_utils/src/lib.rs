@@ -223,6 +223,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 Operation::Approve { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Burn { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
                 Operation::Mint { ref fee, .. } => fee.clone().is_none().then_some(arb_fee),
+                Operation::FeeCollector { .. } => None,
             };
 
             Block {
@@ -234,6 +235,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
                         timestamp,
                         fee_collector,
                         fee_collector_block_index: None,
+                        btype: None,
                     }
                     .encode(),
                 )),
@@ -242,6 +244,7 @@ pub fn blocks_strategy<Tokens: TokensType>(
                 timestamp,
                 fee_collector,
                 fee_collector_block_index: None,
+                btype: None,
             }
         })
 }
@@ -577,6 +580,9 @@ impl TransactionsAndBalances {
                     .or_insert(amount);
                 self.debit(from, fee);
             }
+            Operation::FeeCollector { .. } => {
+                panic!("FeeCollector107 not implemented")
+            }
         };
         self.transactions.push(tx);
 
@@ -603,6 +609,9 @@ impl TransactionsAndBalances {
                 // Check if the from account should be added/removed from valid_allowance_from
                 // (allowance was added/modified for this account)
                 self.check_and_update_account_validity(*from, default_fee);
+            }
+            Operation::FeeCollector { .. } => {
+                panic!("FeeCollector107 not implemented")
             }
         }
     }
@@ -1492,6 +1501,7 @@ where
                 timestamp: ts,
                 fee_collector: fee_col,
                 fee_collector_block_index: fee_col_block,
+                btype: None,
             },
         )
 }

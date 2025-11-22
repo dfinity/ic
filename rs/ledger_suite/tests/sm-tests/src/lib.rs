@@ -343,6 +343,7 @@ fn arb_block<Tokens: TokensType>() -> impl Strategy<Value = Block<Tokens>> {
                 timestamp: ts,
                 fee_collector: fee_col,
                 fee_collector_block_index: fee_col_block,
+                btype: None,
             },
         )
 }
