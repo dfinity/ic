@@ -1370,14 +1370,14 @@ fn assert_memories_have_max_limit(wat: &str) {
         let stable_memory = memories.next().unwrap();
         if heap_memory.ty.memory64 {
             assert!(
-                heap_memory.ty.maximum.unwrap() < heap64_limit,
+                heap_memory.ty.maximum.unwrap() <= heap64_limit,
                 "memory limit {} exceeds expected {}",
                 heap_memory.ty.maximum.unwrap(),
                 heap64_limit
             );
         } else {
             assert!(
-                heap_memory.ty.maximum.unwrap() < heap_limit,
+                heap_memory.ty.maximum.unwrap() <= heap_limit,
                 "memory limit {} exceeds expected {}",
                 heap_memory.ty.maximum.unwrap(),
                 heap_limit
@@ -1385,7 +1385,7 @@ fn assert_memories_have_max_limit(wat: &str) {
         }
 
         assert!(
-            stable_memory.ty.maximum.unwrap() < stable_limit,
+            stable_memory.ty.maximum.unwrap() <= stable_limit,
             "memory limit {} exceeds expected {}",
             stable_memory.ty.maximum.unwrap(),
             stable_limit
