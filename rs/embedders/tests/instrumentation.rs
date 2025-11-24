@@ -1033,7 +1033,7 @@ fn test_table_validation(code: &str, is_wasm64: bool) -> String {
             (table $table {execution_mode} 101 funcref)
             (elem func 0)
             (func $f {code})
-            
+
         )"#
     );
 
@@ -1345,52 +1345,47 @@ fn test_wasm64_costs_similar_to_wasm32_for_arithmetic_instructions() {
 /// Checks that heap and injected stable memories always have a maximum limit
 /// which does not exceed the limit set in the configuration
 fn assert_memories_have_max_limit(wat: &str) {
-    use itertools::Itertools;
+    let heap_limit = 4 * GB / WASM_PAGE_SIZE_IN_BYTES as u64;
+    let heap64_limit = 6 * GB / WASM_PAGE_SIZE_IN_BYTES as u64;
+    let stable_limit = 500 * GB / WASM_PAGE_SIZE_IN_BYTES as u64;
 
-    for ((heap_limit, heap64_limit), stable_limit) in [2 * GB, 4 * GB]
-        .into_iter()
-        .cartesian_product([4 * GB, 8 * GB, 20 * GB])
-        .cartesian_product([30 * GB, 100 * GB, 500 * GB])
-    {
-        let wasm = BinaryEncodedWasm::new(wat::parse_str(wat).unwrap());
+    let wasm = BinaryEncodedWasm::new(wat::parse_str(wat).unwrap());
+    let (_, instrumentation_details) = validate_and_instrument_for_testing(
+        &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
+        &wasm,
+    )
+    .unwrap();
+    let module = Module::parse(instrumentation_details.binary.as_slice(), true).unwrap();
+    assert!(
+        module.memories.iter().count() >= 2,
+        "Module should have at least a heap and stable memory"
+    );
 
-        let (_, instrumentation_details) = validate_and_instrument_for_testing(
-            &WasmtimeEmbedder::new(EmbeddersConfig::default(), no_op_logger()),
-            &wasm,
-        )
-        .unwrap();
-        let module = Module::parse(instrumentation_details.binary.as_slice(), true).unwrap();
+    let mut memories = module.memories.iter();
+    let heap_memory = memories.next().unwrap();
+    let stable_memory = memories.next().unwrap();
+    if heap_memory.ty.memory64 {
         assert!(
-            module.memories.iter().count() >= 2,
-            "Module should have at least a heap and stable memory"
-        );
-
-        let mut memories = module.memories.iter();
-        let heap_memory = memories.next().unwrap();
-        let stable_memory = memories.next().unwrap();
-        if heap_memory.ty.memory64 {
-            assert!(
-                heap_memory.ty.maximum.unwrap() < heap64_limit,
-                "memory limit {} exceeds expected {}",
-                heap_memory.ty.maximum.unwrap(),
-                heap64_limit
-            );
-        } else {
-            assert!(
-                heap_memory.ty.maximum.unwrap() < heap_limit,
-                "memory limit {} exceeds expected {}",
-                heap_memory.ty.maximum.unwrap(),
-                heap_limit
-            );
-        }
-
-        assert!(
-            stable_memory.ty.maximum.unwrap() < stable_limit,
+            heap_memory.ty.maximum.unwrap() <= heap64_limit,
             "memory limit {} exceeds expected {}",
-            stable_memory.ty.maximum.unwrap(),
-            stable_limit
+            heap_memory.ty.maximum.unwrap(),
+            heap64_limit
+        );
+    } else {
+        assert!(
+            heap_memory.ty.maximum.unwrap() <= heap_limit,
+            "memory limit {} exceeds expected {}",
+            heap_memory.ty.maximum.unwrap(),
+            heap_limit
         );
     }
+
+    assert!(
+        stable_memory.ty.maximum.unwrap() <= stable_limit,
+        "memory limit {} exceeds expected {}",
+        stable_memory.ty.maximum.unwrap(),
+        stable_limit
+    );
 }
 
 #[test]
