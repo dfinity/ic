@@ -24,7 +24,7 @@ DEPENDENCIES = [
     "@crate_index//:get_if_addrs",
     "@crate_index//:macaddr",
     "@crate_index//:regex",
-    "@crate_index//:rust-ini",
+    "@crate_index//:rust_ini",
     "@crate_index//:serde",
     "@crate_index//:serde_json",
     "@crate_index//:serde_with",
