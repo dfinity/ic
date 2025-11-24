@@ -78,7 +78,7 @@ pub async fn set_original_controllers(
             | ic_cdk::call::CallFailed::CallPerformFailed(_) => ProcessingResult::NoProgress,
             ic_cdk::call::CallFailed::CallRejected(call_rejected) => {
                 ProcessingResult::FatalFailure(format!(
-                    "Failed to restore controllers of canister {canister_id}: {}",
+                    "Failed to restore controllers of canister {canister_id} on subnet {subnet_id}: {}",
                     call_rejected
                 ))
             }

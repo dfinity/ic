@@ -152,7 +152,7 @@ impl Display for Request {
 }
 
 /// Represents the recovery state of a `Request` in `RequestState::Failed`,
-/// i.e., whether controllers of source and target have been successfully restored.
+/// i.e., whether controllers of source and target must still be restored.
 #[derive(Clone, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecoveryState {
     /// If set to `true`, then the controllers of the source canister

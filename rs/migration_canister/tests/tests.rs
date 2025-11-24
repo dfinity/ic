@@ -658,7 +658,7 @@ async fn source_controllers_changed_before_migration() {
     let sender = setup.source_controllers[0];
     let source = setup.sources[0];
     let race = || async {
-        pic.set_controllers(source, Some(sender), vec![source])
+        pic.set_controllers(source, Some(sender), vec![sender])
             .await
             .unwrap();
         source
@@ -688,7 +688,7 @@ async fn target_controllers_changed_before_migration() {
     let sender = setup.source_controllers[0];
     let target = setup.targets[0];
     let race = || async {
-        pic.set_controllers(target, Some(sender), vec![target])
+        pic.set_controllers(target, Some(sender), vec![sender])
             .await
             .unwrap();
         target

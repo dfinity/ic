@@ -351,8 +351,8 @@ pub async fn process_all_failed() {
     );
 }
 
-/// Accepts a `Failed` request, returns `Event::Failed`.
-// TODO: Confirm this only occurs before `rename_canister`, otherwise the subnet_id args are wrong.
+/// Accepts a `Failed` request, returns `EventType::Failed` or
+/// `RequestState::Failed` with updated recovery state.
 async fn process_failed(request: RequestState) -> ProcessingResult<EventType, RequestState> {
     let RequestState::Failed {
         request,
