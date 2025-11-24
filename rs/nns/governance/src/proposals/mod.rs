@@ -175,7 +175,9 @@ impl ValidProposalAction {
         }
     }
 
-    /// Converts the proposal action to a self describing representation of itself.
+    /// Converts the proposal action to a self describing representation of itself. Note that it is
+    /// async because we need to call `ic0.canister_metadata` to get the candid file of an external
+    /// canister.
     pub async fn to_self_describing(
         &self,
         _env: Arc<dyn Environment>,

@@ -25,13 +25,14 @@ pub trait LocallyDescribableProposalAction {
 
 impl LocallyDescribableProposalAction for Motion {
     const TYPE_NAME: &'static str = "Motion";
+
     const TYPE_DESCRIPTION: &'static str = "A motion is a text that can be adopted or rejected. \
     No code is executed when a motion is adopted. An adopted motion should guide the future \
     strategy of the Internet Computer ecosystem.";
 
     fn to_value(&self) -> Value {
         ValueBuilder::new()
-            .add_string_field("motion_text".to_string(), self.motion_text.clone())
+            .add_string_field("motion_text", self.motion_text.clone())
             .build()
     }
 }
@@ -48,11 +49,11 @@ impl ValueBuilder {
         }
     }
 
-    pub fn add_string_field(mut self, key: String, value: String) -> Self {
+    pub fn add_string_field(mut self, key: impl ToString, value: String) -> Self {
         self.fields.insert(
-            key,
+            key.to_string(),
             Value {
-                value: Some(Text(value)),
+                value: Some(Text(value.to_string())),
             },
         );
         self

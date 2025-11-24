@@ -3,6 +3,7 @@ use super::*;
 use ic_nns_governance_api::Value as ApiValue;
 use maplit::hashmap;
 
+#[track_caller]
 fn assert_self_describing_value_is(
     action: impl LocallyDescribableProposalAction,
     expected: ApiValue,
