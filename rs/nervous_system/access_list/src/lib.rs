@@ -99,18 +99,6 @@
 //! }
 //! ```
 //!
-//! ## Design Decisions
-//!
-//! ### Why does empty allowlist become deny-all?
-//!
-//! An empty allowlist means "nothing is explicitly allowed", which semantically means
-//! "deny everything". This is the conservative, secure default.
-//!
-//! ### Why does empty denylist become allow-all?
-//!
-//! An empty denylist means "nothing is explicitly denied", which semantically means
-//! "allow everything". This is the permissive default when no restrictions are specified.
-//!
 //! ## Performance
 //!
 //! - Item lookups are O(1) using `HashSet`
@@ -157,7 +145,10 @@ where
     /// If the collection doesn't contain any elements it will deem it
     /// as `DenyAll`.
     /// If the collection has some elements it will deem it as `AllowOnly`
-    pub fn allow<I: IntoIterator<Item = T>>(items: I) -> Self {
+    pub fn allow<I>(items: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+    {
         let items: HashSet<T> = items.into_iter().collect();
 
         if items.is_empty() {
@@ -177,7 +168,10 @@ where
     /// If the collection doesn't contain any elements it will deem it
     /// as `AllowAll`.
     /// If the collection has some elements it will deem it as `DenyOnly`
-    pub fn deny<I: IntoIterator<Item = T>>(items: I) -> Self {
+    pub fn deny<I>(items: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+    {
         let items: HashSet<T> = items.into_iter().collect();
 
         if items.is_empty() {
