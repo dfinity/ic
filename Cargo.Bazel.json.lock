@@ -1,5 +1,5 @@
 {
-  "checksum": "3fc02a57c26dfd51df685c8aed41cc91a381579f57f8cd6bfcc179a944acde6b",
+  "checksum": "07a520fcb082378853efcfcacf2b2ae351cd54cc5fc3f65af9305ed54abe5eeb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -2181,45 +2181,6 @@
         },
         "edition": "2018",
         "version": "0.2.21"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE-APACHE"
-    },
-    "android-tzdata 0.1.1": {
-      "name": "android-tzdata",
-      "version": "0.1.1",
-      "package_url": "https://github.com/RumovZ/android-tzdata",
-      "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/android-tzdata/0.1.1/download",
-          "sha256": "e999941b234f3131b00bc13c22d06e8c5ff726d1b6318ac7eb276997bbb4fef0"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "android_tzdata",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "android_tzdata",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2018",
-        "version": "0.1.1"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -12454,7 +12415,7 @@
               "target": "base64_url"
             },
             {
-              "id": "chrono 0.4.38",
+              "id": "chrono 0.4.42",
               "target": "chrono"
             },
             {
@@ -12924,14 +12885,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "chrono 0.4.38": {
+    "chrono 0.4.42": {
       "name": "chrono",
-      "version": "0.4.38",
+      "version": "0.4.42",
       "package_url": "https://github.com/chronotope/chrono",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/chrono/0.4.38/download",
-          "sha256": "a21f936df1771bf62b77f047b726c4625ff2e8aa607c01ec06e5a05bd8463401"
+          "url": "https://static.crates.io/crates/chrono/0.4.42/download",
+          "sha256": "145052bdd345b87320e369255277e3fb5152762ad123a901ef5c262dd38fe8d2"
         }
       },
       "targets": [
@@ -12956,7 +12917,6 @@
         "crate_features": {
           "common": [
             "alloc",
-            "android-tzdata",
             "clock",
             "default",
             "iana-time-zone",
@@ -12968,7 +12928,7 @@
             "wasm-bindgen",
             "wasmbind",
             "winapi",
-            "windows-targets"
+            "windows-link"
           ],
           "selects": {}
         },
@@ -13021,63 +12981,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.4.38"
-      },
-      "license": "MIT OR Apache-2.0",
-      "license_ids": [
-        "Apache-2.0",
-        "MIT"
-      ],
-      "license_file": "LICENSE.txt"
-    },
-    "chrono 0.4.41": {
-      "name": "chrono",
-      "version": "0.4.41",
-      "package_url": "https://github.com/chronotope/chrono",
-      "repository": {
-        "Git": {
-          "remote": "https://github.com/chronotope/chrono.git",
-          "commitish": {
-            "Rev": "d1de1d95ead4e59472622761ad545dc4a940992b"
-          }
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "chrono",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        }
-      ],
-      "library_target_name": "chrono",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": {
-          "common": [
-            "alloc"
-          ],
-          "selects": {}
-        },
-        "deps": {
-          "common": [
-            {
-              "id": "num-traits 0.2.19",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2021",
-        "version": "0.4.41"
+        "version": "0.4.42"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -14095,7 +13999,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.38",
+              "id": "chrono 0.4.42",
               "target": "chrono"
             },
             {
@@ -14188,7 +14092,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.38",
+              "id": "chrono 0.4.42",
               "target": "chrono"
             },
             {
@@ -21121,11 +21025,11 @@
               "target": "chacha20poly1305"
             },
             {
-              "id": "chrono 0.4.38",
+              "id": "chrono 0.4.42",
               "target": "chrono"
             },
             {
-              "id": "chrono 0.4.41",
+              "id": "chrono 0.4.42",
               "target": "chrono",
               "alias": "chrono_canisters"
             },
@@ -25635,7 +25539,7 @@
               "target": "bytes"
             },
             {
-              "id": "chrono 0.4.38",
+              "id": "chrono 0.4.42",
               "target": "chrono"
             },
             {
@@ -51375,7 +51279,7 @@
               "target": "bytes"
             },
             {
-              "id": "chrono 0.4.38",
+              "id": "chrono 0.4.42",
               "target": "chrono"
             },
             {
@@ -59576,7 +59480,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.38",
+              "id": "chrono 0.4.42",
               "target": "chrono"
             },
             {
@@ -62947,7 +62851,7 @@
               "target": "bytes"
             },
             {
-              "id": "chrono 0.4.38",
+              "id": "chrono 0.4.42",
               "target": "chrono"
             },
             {
@@ -66487,7 +66391,7 @@
         "deps": {
           "common": [
             {
-              "id": "chrono 0.4.38",
+              "id": "chrono 0.4.42",
               "target": "chrono"
             }
           ],
@@ -68192,7 +68096,7 @@
               "target": "blocking"
             },
             {
-              "id": "chrono 0.4.38",
+              "id": "chrono 0.4.42",
               "target": "chrono"
             },
             {
@@ -86667,7 +86571,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "chrono 0.4.38",
+              "id": "chrono 0.4.42",
               "target": "chrono"
             },
             {
@@ -96947,8 +96851,7 @@
     "cddl 0.9.4",
     "cfg-if 1.0.0",
     "chacha20poly1305 0.10.1",
-    "chrono 0.4.38",
-    "chrono 0.4.41",
+    "chrono 0.4.42",
     "ciborium 0.2.1",
     "cidr 0.2.3",
     "clap 4.5.45",

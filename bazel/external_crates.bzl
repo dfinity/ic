@@ -376,7 +376,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.10.0",
             ),
             "chrono": crate.spec(
-                version = "^0.4.38",
+                version = "^0.4.42",
                 default_features = False,
                 features = [
                     "alloc",
@@ -388,7 +388,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "chrono_canisters": crate.spec(
                 git = "https://github.com/chronotope/chrono.git",
                 package = "chrono",
-                tag = "v0.4.41",
+                tag = "v0.4.42",
                 default_features = False,
                 features = [
                     "alloc",
