@@ -202,6 +202,10 @@ pub fn record_event_v0<R: CanisterRuntime>(payload: EventType, runtime: &R) {
 mod benches {
     use super::*;
     use canbench_rs::bench;
+    use crate::{state, IC_CANISTER_RUNTIME};
+    use crate::state::{CkBtcMinterState, invariants::CheckInvariants};
+    use crate::state::eventlog::replay;
+    use crate::state::replace_state;
 
     #[bench(raw)]
     fn migrate_events_bench() -> canbench_rs::BenchResult {
@@ -215,7 +219,7 @@ mod benches {
                     m.borrow().get(V0_LOG_INDEX_MEMORY_ID),
                     m.borrow().get(V0_LOG_DATA_MEMORY_ID),
                 )
-                .expect("failed to initialize stable log")
+                    .expect("failed to initialize stable log")
             })
         });
         // V1_EVENTS is created as empty (by using `new` than `init`) because
@@ -230,5 +234,78 @@ mod benches {
         });
 
         canbench_rs::bench_fn(migrate_old_events_if_not_empty)
+    }
+
+    pub enum DoNotCheckInvariants {}
+
+    impl CheckInvariants for DoNotCheckInvariants {
+        fn check_invariants(_state: &CkBtcMinterState) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    #[bench(raw)]
+    fn build_unsigned_transaction() -> canbench_rs::BenchResult {
+        // These thread local state must be re-initialized after
+        // canbench loads the stable memory from a file.
+        MEMORY_MANAGER
+            .with(|x| *x.borrow_mut() = MemoryManager::init(DefaultMemoryImpl::default()));
+        V0_EVENTS.with(|x| {
+            *x.borrow_mut() = MEMORY_MANAGER.with(|m| {
+                StableLog::init(
+                    m.borrow().get(V0_LOG_INDEX_MEMORY_ID),
+                    m.borrow().get(V0_LOG_DATA_MEMORY_ID),
+                )
+                    .expect("failed to initialize stable log")
+            })
+        });
+        // V1_EVENTS is created as empty (by using `new` than `init`) because
+        // it might already have an existing init event before running this benchmark.
+        V1_EVENTS.with(|x| {
+            *x.borrow_mut() = MEMORY_MANAGER.with(|m| {
+                StableLog::new(
+                    m.borrow().get(V1_LOG_INDEX_MEMORY_ID),
+                    m.borrow().get(V1_LOG_DATA_MEMORY_ID),
+                )
+            })
+        });
+        migrate_old_events_if_not_empty();
+
+        assert_eq!(count_events(), 551915);
+        let state = replay::<DoNotCheckInvariants>(events()).unwrap_or_else(|e| {
+            ic_cdk::trap(format!("[upgrade]: failed to replay the event log: {e:?}"))
+        });
+
+        state.validate_config();
+
+        replace_state(state);
+
+        state::read_state(|s| {
+            assert_eq!(s.available_utxos.len(), 67231);
+        });
+        let dummy_minter_address = crate::BitcoinAddress::P2wpkhV0([u8::MAX; 20]);
+        let dummy_recipient_address = crate::BitcoinAddress::P2wpkhV0([42_u8; 20]);
+        let withdrawal_amount = 1_000_000_000; //10 BTC
+        let median_fee_millisatoshi_per_vbyte = 1_000; //1 sat/vbyte
+        let fee_estimator = state::read_state(|s| IC_CANISTER_RUNTIME.fee_estimator(s));
+
+        canbench_rs::bench_fn(|| {
+            state::mutate_state(|s| {
+                let _p = canbench_rs::bench_scope("clone_available_utxos");
+                let clone = s.available_utxos.clone();
+
+                let _p = canbench_rs::bench_scope("utxos_selection");
+                let selected_utxos = crate::utxos_selection(withdrawal_amount, &mut s.available_utxos, 1);
+
+                let _p = canbench_rs::bench_scope("build_unsigned_transaction_from_inputs");
+                crate::build_unsigned_transaction_from_inputs(
+                    &selected_utxos,
+                    vec![(dummy_recipient_address, withdrawal_amount)],
+                    dummy_minter_address,
+                    median_fee_millisatoshi_per_vbyte,
+                    &fee_estimator,
+                ).unwrap()
+            });
+        })
     }
 }
