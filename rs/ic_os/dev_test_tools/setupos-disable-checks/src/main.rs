@@ -15,6 +15,10 @@ struct Cli {
     #[arg(long, default_value = "disk.img")]
     /// Path to SetupOS disk image; its GRUB boot partition will be modified.
     image_path: PathBuf,
+
+    #[arg(long)]
+    /// Disable old flags for temporary backwards compatibility
+    compat: bool,
 }
 
 #[tokio::main]
@@ -32,9 +36,10 @@ async fn main() -> Result<(), Error> {
     let temp_boot_args = NamedTempFile::new()?;
     fs::write(
         temp_boot_args.path(),
-        process_cmdline(std::str::from_utf8(
-            &bootfs.read_file(boot_args_path).await?,
-        )?),
+        process_cmdline(
+            std::str::from_utf8(&bootfs.read_file(boot_args_path).await?)?,
+            cli.compat,
+        ),
     )
     .await
     .context("failed to write temporary boot args")?;
@@ -51,7 +56,7 @@ async fn main() -> Result<(), Error> {
 }
 
 /// Disable checks from the kernel command line
-fn process_cmdline(input: &str) -> String {
+fn process_cmdline(input: &str, compat: bool) -> String {
     let boot_args_re = Regex::new(r"(^|\n)BOOT_ARGS=(.*)(\s+#|\n|$)").unwrap();
 
     let left;
@@ -79,10 +84,17 @@ fn process_cmdline(input: &str) -> String {
     };
 
     let requires_space = !boot_args.is_empty();
-    let boot_args = format!(
+    let mut boot_args = format!(
         "{boot_args}{sep}ic.setupos.run_checks=0",
         sep = if requires_space { " " } else { "" }
     );
+
+    // Disable old flags for temporary backwards compatibility
+    if compat {
+        boot_args = format!(
+            "{boot_args} ic.setupos.check_hardware=0 ic.setupos.check_network=0 ic.setupos.check_age=0",
+        );
+    }
 
     format!(
         "# This file has been modified by setupos-disable-checks.\n{file_start}{indent}BOOT_ARGS=\"{boot_args}\"{tail}{file_end}",
@@ -96,7 +108,7 @@ mod tests {
     use super::*;
 
     fn test(input: &str, expected: &str) {
-        let result = process_cmdline(input);
+        let result = process_cmdline(input, false);
 
         assert_eq!(
             expected,

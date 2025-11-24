@@ -43,6 +43,7 @@ create_test_img(
         "manual",
         "no-cache",
     ],
+    compat = True,
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
@@ -57,6 +58,7 @@ create_test_img(
         "manual",
         "no-cache",
     ],
+    compat = True,
     visibility = [
         "//rs:ic-os-pkg",
         "//rs:system-tests-pkg",
