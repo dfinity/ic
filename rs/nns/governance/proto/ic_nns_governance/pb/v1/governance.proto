@@ -625,6 +625,11 @@ message Proposal {
   // 2000 bytes.
   string url = 2;
 
+  // A self-describing action that can be understood without the schema of a specific proposal type.
+  // This is populated and stored at the time of proposal creation and does not change as the
+  // proposal type evolves.
+  SelfDescribingProposalAction self_describing_action = 30;
+
   // This section describes the action that the proposal proposes to
   // take.
   oneof action {
@@ -2246,6 +2251,9 @@ message MonthlyNodeProviderRewards {
   // The registry version used to calculate these rewards at the time the rewards were calculated.
   optional uint64 registry_version = 6;
 
+  // Rewards calculation algorithm version used to calculate rewards.
+  optional uint32 algorithm_version = 10;
+
   // The list of node_provieders at the time when the rewards were calculated.
   repeated NodeProvider node_providers = 7;
 }
@@ -2621,4 +2629,33 @@ message FinalizeDisburseMaturity {
 
   // The account identifer to which to transfer the ICPs.
   ic_ledger.pb.v1.AccountIdentifier to_account_identifier = 5;
+}
+
+// An ICRC-3-like value.
+message Value {
+  oneof value {
+    bytes blob = 1;
+    string text = 2;
+    // nat/int are stored as bytes since candid Nat/Int does not have equivalent protobuf types.
+    bytes nat = 3;
+    bytes int = 4;
+    ValueArray array = 5;
+    ValueMap map = 6;
+  }
+}
+
+message ValueArray {
+  repeated Value values = 1;
+}
+
+message ValueMap {
+  map<string, Value> values = 1;
+}
+
+// Proposal action that is self-describing. It can be understood without the schema of a specific
+// proposal type.
+message SelfDescribingProposalAction {
+  string type_name = 1;
+  string type_description = 2;
+  Value value = 3;
 }

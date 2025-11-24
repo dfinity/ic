@@ -142,7 +142,7 @@ fn run_pick_commit() -> Result<()> {
     let ic = ic_dir();
 
     // Build the absolute path to the cmd.sh script.
-    let cmd_path = ic.join("testnet/tools/nns-tools/cmd.sh");
+    let cmd_path = ic.join("rs/nervous_system/tools/helpers/cmd.sh");
 
     // Run the command with the required argument.
     let output = run_script(cmd_path, &["latest_commit_with_prebuilt_artifacts"], &ic)?;
@@ -150,7 +150,7 @@ fn run_pick_commit() -> Result<()> {
     let commit = if output.status.success() {
         let commit = String::from_utf8_lossy(&output.stdout).trim().to_string();
         println!(
-            "A commit with prebuilt artifacts was found with the following command: `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`."
+            "A commit with prebuilt artifacts was found with the following command: `./rs/nervous_system/tools/helpers/cmd.sh latest_commit_with_prebuilt_artifacts`."
         );
         input_with_default("Commit to release", &commit)?
     } else {
@@ -160,7 +160,7 @@ fn run_pick_commit() -> Result<()> {
         );
         // get input from user for the commit
         input(
-            "Enter the commit hash, which you can find by running `./testnet/tools/nns-tools/cmd.sh latest_commit_with_prebuilt_artifacts`",
+            "Enter the commit hash, which you can find by running `./rs/nervous_system/tools/helpers/cmd.sh latest_commit_with_prebuilt_artifacts`",
         )?
     };
 
@@ -177,7 +177,7 @@ fn run_pick_commit() -> Result<()> {
 fn run_determine_targets(cmd: DetermineTargets) -> Result<()> {
     let DetermineTargets { commit } = cmd;
     println!(
-        "Now choose which canisters to upgrade. You can run ./testnet/tools/nns-tools/list-new-commits.sh to see the changes for each canister."
+        "Now choose which canisters to upgrade. You can run ./rs/nervous_system/tools/helpers/list-new-commits.sh to see the changes for each canister."
     );
 
     // Define the candidate canisters.
@@ -258,7 +258,7 @@ fn run_run_tests(cmd: RunTests) -> Result<()> {
         "Verify the commit you chose at the previous step has a green check on this page: https://github.com/dfinity/ic/actions/workflows/ci-main.yml?query=branch:master+event:push+is:success
 
 If not, you can also run the upgrade tests manually:
-    - Follow instructions in: testnet/tools/nns-tools/README.md#upgrade-testing-via-bazel
+    - Follow instructions in: rs/nervous_system/tools/helpers/README.md#upgrade-testing-via-bazel
 
 2. SNS Testing Note:
    - No manual testing needed for SNS
@@ -312,7 +312,8 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
         // For each NNS canister, run the prepare-nns-upgrade-proposal-text.sh script and write its output to a file.
         for canister in &nns_canisters {
             println!("Creating proposal text for NNS canister: {canister}");
-            let script = ic.join("testnet/tools/nns-tools/prepare-nns-upgrade-proposal-text.sh");
+            let script =
+                ic.join("rs/nervous_system/tools/helpers/prepare-nns-upgrade-proposal-text.sh");
             // cycles minting requires an upgrade arg, usually '()'
             let output = if canister != "cycles-minting" {
                 run_script(script, &[canister, &commit], &ic)
@@ -338,8 +339,8 @@ fn run_create_proposal_texts(cmd: CreateProposalTexts) -> Result<()> {
         // For each SNS canister, run the prepare-publish-sns-wasm-proposal-text.sh script.
         for canister in &sns_canisters {
             println!("Creating proposal text for SNS canister: {canister}");
-            let script =
-                ic.join("testnet/tools/nns-tools/prepare-publish-sns-wasm-proposal-text.sh");
+            let script = ic
+                .join("rs/nervous_system/tools/helpers/prepare-publish-sns-wasm-proposal-text.sh");
             // The SNS script is expected to write directly to the file provided as an argument.
             let file_path = proposals_dir.join(format!("sns-{canister}.md"));
             let file_path_str = file_path.to_str().expect("Invalid file path");
@@ -441,7 +442,8 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     // For each NNS proposal, run the submission script.
     for proposal_path in &nns_proposal_text_paths {
         println!("Submitting NNS proposal: {}", proposal_path.display());
-        let script = ic.join("testnet/tools/nns-tools/submit-mainnet-nns-upgrade-proposal.sh");
+        let script =
+            ic.join("rs/nervous_system/tools/helpers/submit-mainnet-nns-upgrade-proposal.sh");
         let output = run_script_in_current_process(
             script,
             &[
@@ -466,7 +468,8 @@ fn run_submit_proposals(cmd: SubmitProposals) -> Result<()> {
     // For each SNS proposal, run the submission script.
     for proposal_path in &sns_proposal_text_paths {
         println!("Submitting SNS proposal: {}", proposal_path.display());
-        let script = ic.join("testnet/tools/nns-tools/submit-mainnet-publish-sns-wasm-proposal.sh");
+        let script =
+            ic.join("rs/nervous_system/tools/helpers/submit-mainnet-publish-sns-wasm-proposal.sh");
         let output = run_script_in_current_process(
             script,
             &[
@@ -535,7 +538,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
 
     // --- Generate NNS forum post ---
     if !nns_proposal_text_paths.is_empty() {
-        let script = ic.join("testnet/tools/nns-tools/cmd.sh");
+        let script = ic.join("rs/nervous_system/tools/helpers/cmd.sh");
         let mut args = vec!["generate_forum_post_nns_upgrades"];
         let path_strs: Vec<&str> = nns_proposal_text_paths
             .iter()
@@ -577,7 +580,7 @@ fn run_create_forum_post(cmd: CreateForumPost) -> Result<()> {
 
     // --- Generate SNS forum post ---
     if !sns_proposal_text_paths.is_empty() {
-        let script = ic.join("testnet/tools/nns-tools/cmd.sh");
+        let script = ic.join("rs/nervous_system/tools/helpers/cmd.sh");
         let mut args = vec!["generate_forum_post_sns_wasm_publish"];
         let path_strs: Vec<&str> = sns_proposal_text_paths
             .iter()
@@ -739,7 +742,7 @@ SNS: {}",
         // update the changelog for each proposal
         for proposal_id in nns_proposal_ids.iter().chain(sns_proposal_ids.iter()) {
             println!("Updating changelog for proposal {proposal_id}");
-            let script = ic.join("testnet/tools/nns-tools/add-release-to-changelog.sh");
+            let script = ic.join("rs/nervous_system/tools/helpers/add-release-to-changelog.sh");
             let output = run_script(script, &[proposal_id], &ic)?;
 
             if !output.status.success() {
