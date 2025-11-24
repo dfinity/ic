@@ -82,6 +82,7 @@ LIB_DEPENDENCIES = [
     "@crate_index//:hyper",
     "@crate_index//:hyper-util",
     "@crate_index//:ic-agent",
+    "@crate_index//:ic-bn-lib-common",
     "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-cdk",
     "@crate_index//:ic-doge-interface",

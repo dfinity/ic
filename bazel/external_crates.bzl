@@ -253,7 +253,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 features = ["typed-header"],
             ),
             "axum-server": crate.spec(
-                version = "^0.7.2",
+                version = "^0.7.3",
                 features = [
                     "tls-rustls-no-provider",
                 ],
@@ -634,11 +634,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 features = ["pem", "ring"],
             ),
             "ic-bn-lib": crate.spec(
-                git = "https://github.com/dfinity/ic-bn-lib",
-                rev = "620fb49a238b3d8a2caa436b5742ed7ca7012098",
+                version = "0.1",
                 features = [
-                    "acme_alpn",
+                    "acme-alpn",
                 ],
+            ),
+            "ic-bn-lib-common": crate.spec(
+                version = "0.1",
             ),
             "ic-btc-interface": crate.spec(
                 version = "^0.2.3",
@@ -1129,7 +1131,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.1.8",
             ),
             "reqwest": crate.spec(
-                version = "^0.12.15",
+                version = "^0.12.24",
                 default_features = False,
                 features = [
                     "blocking",

@@ -682,7 +682,7 @@ ic-certificate-verification = "3"
 ic-certification = "3"
 ic-doge-interface = { git = "https://github.com/dfinity/dogecoin-canister", rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f" }
 ic-ed25519 = "0.4.0"
-ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
+ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "92ee522a4514584ccf6de487ba40d92063effd9a", default-features = false }
 ic-http-certification = "3.0.3"
 ic-http-gateway = "0.3.0"
 ic-identity-hsm = "0.40.1"

@@ -61,6 +61,7 @@ rust_binary(
         "@crate_index//:humantime",
         "@crate_index//:ic-agent",
         "@crate_index//:ic-bn-lib",
+        "@crate_index//:ic-bn-lib-common",
         "@crate_index//:ipnet",
         "@crate_index//:lazy_static",
         "@crate_index//:little-loadshedder",
