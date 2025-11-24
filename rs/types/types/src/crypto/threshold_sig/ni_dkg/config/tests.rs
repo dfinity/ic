@@ -1,3 +1,5 @@
+use assert_matches::assert_matches;
+
 use super::*;
 use crate::crypto::threshold_sig::ni_dkg::dummy_internal_transcript;
 use crate::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTargetSubnet};
@@ -322,6 +324,24 @@ fn should_correctly_format_config_display_message() {
     );
 }
 
+#[test]
+fn should_correctly_serialize_and_deserialize_nidkg_config() {
+    let config = NiDkgConfig::new(valid_dkg_config_data()).unwrap();
+    let config_proto = pb::NiDkgConfig::from(&config);
+    assert_eq!(Ok(config), NiDkgConfig::try_from(config_proto));
+}
+
+#[test]
+fn should_fail_deserializing_invalid_nidkg_config() {
+    for config in invalid_configs() {
+        let invalid_serialization = pb::NiDkgConfig::from(&config);
+        assert_matches!(
+            NiDkgConfig::try_from(invalid_serialization),
+            Err(e) if e.contains("Invariant check failed while constructing NiDkgConfig")
+        )
+    }
+}
+
 fn dkg_id(i: u64) -> NiDkgId {
     NiDkgId {
         start_block_height: Height::new(i),
@@ -362,6 +382,66 @@ pub(crate) fn valid_dkg_config_data() -> NiDkgConfigData {
         registry_version: REG_V1,
         resharing_transcript: Some(transcript()),
     }
+}
+
+fn valid_config() -> NiDkgConfig {
+    NiDkgConfig::new(valid_dkg_config_data()).unwrap()
+}
+
+fn invalid_configs() -> Vec<NiDkgConfig> {
+    //NiDkgConfig with threshold 0
+    let config_1 = NiDkgConfig {
+        threshold: NiDkgThreshold {
+            threshold: NumberOfNodes::new(0),
+        },
+        ..valid_config()
+    };
+
+    //NiDkgConfig with `threshold` smaller than `max_corrupt_receivers`
+    let config_2 = NiDkgConfig {
+        max_corrupt_receivers: NumberOfNodes::new(2),
+        threshold: dkg_threshold(1),
+        ..valid_config()
+    };
+
+    //NiDkgConfig with fewer `dealers` than allowed `max_corrupt_dealers`
+    let config_3 = NiDkgConfig {
+        max_corrupt_dealers: NumberOfNodes::new(4),
+        dealers: NiDkgDealers::new(set_of(&[node_id(NODE_1), node_id(NODE_2), node_id(NODE_3)]))
+            .unwrap(),
+        ..valid_config()
+    };
+
+    //NiDkgConfig with fewer `receivers` than `max_corrupt_receivers` + `threshold`
+    let config_4 = NiDkgConfig {
+        max_corrupt_receivers: NumberOfNodes::new(1),
+        receivers: NiDkgReceivers::new(set_of(&[node_id(NODE_1)])).unwrap(),
+        threshold: dkg_threshold(2),
+        ..valid_config()
+    };
+
+    //NiDkgConfig with a dealer not in resharing committee
+    let config_5 = NiDkgConfig {
+        dealers: NiDkgDealers::new(set_of(&[node_id(NODE_4), node_id(NODE_2), node_id(NODE_3)]))
+            .unwrap(),
+        resharing_transcript: Some(transcript_with_committee(set_of(&[
+            node_id(NODE_1),
+            node_id(NODE_2),
+            node_id(NODE_3),
+        ]))),
+        ..valid_config()
+    };
+
+    //NiDkgConfig with fewer `dealers` than resharing threshold
+    let config_6 = NiDkgConfig {
+        dealers: NiDkgDealers::new(set_of(&[node_id(NODE_1), node_id(NODE_2)])).unwrap(),
+        resharing_transcript: Some(transcript_with_threshold(
+            NiDkgThreshold::new(3.into()).unwrap(),
+        )),
+        ..valid_config()
+    };
+
+    vec![config_1, config_2, config_3, config_4, config_5, config_6]
 }
 
 fn transcript() -> NiDkgTranscript {
