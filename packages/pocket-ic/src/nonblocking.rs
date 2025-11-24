@@ -5,9 +5,10 @@ use crate::common::rest::{
     HttpGatewayConfig, HttpGatewayInfo, HttpsConfig, IcpConfig, IcpFeatures, InitialTime,
     InstanceConfig, InstanceHttpGatewayConfig, InstanceId, MockCanisterHttpResponse, RawAddCycles,
     RawCanisterCall, RawCanisterHttpRequest, RawCanisterId, RawCanisterResult,
-    RawCanisterSnapshotDownload, RawCycles, RawEffectivePrincipal, RawIngressStatusArgs,
-    RawMessageId, RawMockCanisterHttpResponse, RawPrincipalId, RawSetStableMemory, RawStableMemory,
-    RawSubnetId, RawTime, RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
+    RawCanisterSnapshotDownload, RawCanisterSnapshotId, RawCanisterSnapshotUpload, RawCycles,
+    RawEffectivePrincipal, RawIngressStatusArgs, RawMessageId, RawMockCanisterHttpResponse,
+    RawPrincipalId, RawSetStableMemory, RawStableMemory, RawSubnetId, RawTime,
+    RawVerifyCanisterSigArg, SubnetId, TickConfigs, Topology,
 };
 #[cfg(windows)]
 use crate::wsl_path;
@@ -514,7 +515,7 @@ impl PocketIc {
                 .unwrap()
             }
             CreateHttpGatewayResponse::Error { message } => {
-                panic!("Failed to crate http gateway: {message}")
+                panic!("Failed to create http gateway: {message}")
             }
         }
     }
@@ -1716,6 +1717,35 @@ impl PocketIc {
             snapshot_dir,
         };
         self.post(endpoint, raw_canister_snapshot_download).await
+    }
+
+    /// Upload a canister snapshot from a given snapshot directory.
+    /// The sender must be a controller of the canister.
+    /// Returns the snapshot ID of the uploaded snapshot.
+    #[instrument(ret, skip(self), fields(instance_id=self.instance_id))]
+    pub async fn canister_snapshot_upload(
+        &self,
+        canister_id: CanisterId,
+        sender: Principal,
+        replace_snapshot: Option<Vec<u8>>,
+        snapshot_dir: PathBuf,
+    ) -> Vec<u8> {
+        let endpoint = "update/canister_snapshot_upload";
+        let replace_snapshot =
+            replace_snapshot.map(|snapshot_id| RawCanisterSnapshotId { snapshot_id });
+        #[cfg(not(windows))]
+        let snapshot_dir = snapshot_dir;
+        #[cfg(windows)]
+        let snapshot_dir = wsl_path(&snapshot_dir, "snapshot directory").into();
+        let raw_canister_snapshot_upload = RawCanisterSnapshotUpload {
+            sender: sender.into(),
+            canister_id: canister_id.into(),
+            replace_snapshot,
+            snapshot_dir,
+        };
+        self.post::<RawCanisterSnapshotId, _>(endpoint, raw_canister_snapshot_upload)
+            .await
+            .snapshot_id
     }
 }
 

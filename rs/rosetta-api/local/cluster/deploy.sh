@@ -6,7 +6,9 @@ set -e
 # Options:
 #   --icp-ledger <ledger_id>         Set the ICP Ledger ID (default: xafvr-biaaa-aaaai-aql5q-cai)
 #   --icp-symbol <symbol>            Set the ICP token symbol (default: TESTICP)
-#   --icrc1-ledgers <ledger_ids>      Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
+#   --icrc1-ledgers <ledger_ids>     Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
+#   --sqlite-cache-kb <size>         SQLite cache size in KB (optional, no default)
+#   --flush-cache-shrink-mem         Flush the database cache and shrink the memory after updating account balances
 #   --local-icp-image-tar <path>     Path to local ICP image tar file
 #   --local-icrc1-image-tar <path>   Path to local ICRC1 image tar file
 #   --no-icp-latest                  Don't deploy ICP Rosetta latest image
@@ -19,6 +21,8 @@ set -e
 ICP_LEDGER="xafvr-biaaa-aaaai-aql5q-cai"
 ICP_SYMBOL="TESTICP"
 ICRC1_LEDGER="3jkp5-oyaaa-aaaaj-azwqa-cai"
+SQLITE_CACHE_KB=""
+FLUSH_CACHE_SHRINK_MEM=false
 LOCAL_ICP_IMAGE_TAR=""
 LOCAL_ICRC1_IMAGE_TAR=""
 DEPLOY_ICP_LATEST=true
@@ -42,6 +46,13 @@ while [[ "$#" -gt 0 ]]; do
             ICRC1_LEDGER="$2"
             shift
             ;;
+        --sqlite-cache-kb)
+            SQLITE_CACHE_KB="$2"
+            shift
+            ;;
+        --flush-cache-shrink-mem)
+            FLUSH_CACHE_SHRINK_MEM=true
+            ;;
         --local-icp-image-tar)
             LOCAL_ICP_IMAGE_TAR="$2"
             shift
@@ -59,7 +70,7 @@ while [[ "$#" -gt 0 ]]; do
         --clean) CLEAN=true ;;
         --stop) STOP=true ;;
         --help)
-            sed -n '5,16p' "$0"
+            sed -n '5,18p' "$0"
             exit 0
             ;;
         *)
@@ -237,15 +248,27 @@ echo "Deploying Helm chart..."
 # Deploy or upgrade the Helm chart
 # Escape commas in ICRC1_LEDGER for Helm (commas are interpreted as value separators)
 ESCAPED_ICRC1_LEDGER="${ICRC1_LEDGER//,/\\,}"
-helm upgrade --install local-rosetta . \
-    --set icpConfig.canisterId="$ICP_LEDGER" \
-    --set icpConfig.tokenSymbol="$ICP_SYMBOL" \
-    --set icpConfig.deployLatest="$DEPLOY_ICP_LATEST" \
-    --set-string icrcConfig.multiTokens="$ESCAPED_ICRC1_LEDGER" \
-    --set icrcConfig.deployLatest="$DEPLOY_ICRC1_LATEST" \
-    --set icpConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICP_IMAGE_TAR" ]] && echo "true" || echo "false") \
-    --set icrcConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]] && echo "true" || echo "false") \
+
+# Build helm command with conditional parameters
+HELM_CMD=(helm upgrade --install local-rosetta .
+    --set icpConfig.canisterId="$ICP_LEDGER"
+    --set icpConfig.tokenSymbol="$ICP_SYMBOL"
+    --set icpConfig.deployLatest="$DEPLOY_ICP_LATEST"
+    --set-string icrcConfig.ledgerId="$ESCAPED_ICRC1_LEDGER"
+    --set icrcConfig.deployLatest="$DEPLOY_ICRC1_LATEST"
+    --set icpConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICP_IMAGE_TAR" ]] && echo "true" || echo "false")
+    --set icrcConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]] && echo "true" || echo "false")
     --kube-context="$MINIKUBE_PROFILE"
+)
+
+# Add optional sqlite-cache-kb parameter only if specified
+[[ -n "$SQLITE_CACHE_KB" ]] && HELM_CMD+=(--set icrcConfig.sqliteCacheKb="$SQLITE_CACHE_KB")
+
+# Add flush-cache-shrink-mem parameter
+HELM_CMD+=(--set icrcConfig.flushCacheShrinkMem="$FLUSH_CACHE_SHRINK_MEM")
+
+# Execute the helm command
+"${HELM_CMD[@]}"
 
 # Wait for Grafana server to be ready
 echo "Waiting for Grafana server to be ready..."
