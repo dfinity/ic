@@ -12,7 +12,7 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use candid::Principal;
 use ethnum::u256;
-use ic_bn_lib::tasks::Run;
+use ic_bn_lib_common::traits::Run;
 use ic_crypto_utils_threshold_sig_der::threshold_sig_public_key_to_der;
 use ic_registry_client::client::{RegistryClient, ThresholdSigPublicKey};
 use ic_registry_client_helpers::{
