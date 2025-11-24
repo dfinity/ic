@@ -1,9 +1,10 @@
-use std::collections::HashMap;
-
 use crate::pb::v1::{
     ApproveGenesisKyc, Motion, SelfDescribingProposalAction, Value, ValueArray, ValueMap,
     value::Value::{Array, Map, Text},
 };
+
+use ic_base_types::PrincipalId;
+use std::collections::HashMap;
 
 /// A proposal action that can be described locally, without having to call `canister_metadata`
 /// management canister method to get the candid file of an external canister. Every proposal action
@@ -32,13 +33,14 @@ impl LocallyDescribableProposalAction for Motion {
 
     fn to_value(&self) -> Value {
         ValueBuilder::new()
-            .add_string_field("motion_text", self.motion_text.clone())
+            .add_field("motion_text", self.motion_text.clone())
             .build()
     }
 }
 
 impl LocallyDescribableProposalAction for ApproveGenesisKyc {
     const TYPE_NAME: &'static str = "Approve Genesis KYC";
+
     const TYPE_DESCRIPTION: &'static str = "When new neurons are created at Genesis, they have \
     GenesisKYC=false. This restricts what actions they can perform. Specifically, they cannot spawn \
     new neurons, and once their dissolve delays are zero, they cannot be disbursed and their balances \
@@ -49,16 +51,11 @@ impl LocallyDescribableProposalAction for ApproveGenesisKyc {
 
     fn to_value(&self) -> Value {
         ValueBuilder::new()
-            .add_array_field(
-                "principals".to_string(),
-                self.principals
-                    .iter()
-                    .map(|principal| string_to_value(principal.to_string()))
-                    .collect(),
-            )
+            .add_array_field("principals", self.principals.clone())
             .build()
     }
 }
+
 /// A builder for `Value` objects.
 pub(crate) struct ValueBuilder {
     fields: HashMap<String, Value>,
@@ -71,20 +68,22 @@ impl ValueBuilder {
         }
     }
 
-    pub fn add_string_field(mut self, key: impl ToString, value: String) -> Self {
+    pub fn add_field(mut self, key: impl ToString, value: impl Into<Value>) -> Self {
+        self.fields.insert(key.to_string(), value.into());
+        self
+    }
+
+    pub fn add_array_field(
+        mut self,
+        key: impl ToString,
+        values: impl IntoIterator<Item = impl Into<Value>>,
+    ) -> Self {
         self.fields.insert(
             key.to_string(),
             Value {
-                value: Some(Text(value.to_string())),
-            },
-        );
-    }
-
-    pub fn add_array_field(mut self, key: impl ToString, values: Vec<Value>) -> Self {
-        self.fields.insert(
-            key,
-            Value {
-                value: Some(Array(ValueArray { values })),
+                value: Some(Array(ValueArray {
+                    values: values.into_iter().map(Into::into).collect(),
+                })),
             },
         );
         self
@@ -98,10 +97,19 @@ impl ValueBuilder {
     }
 }
 
-/// Converts a string to a `Value` object.
-fn string_to_value(value: String) -> Value {
-    Value {
-        value: Some(Text(value)),
+impl From<String> for Value {
+    fn from(value: String) -> Self {
+        Value {
+            value: Some(Text(value)),
+        }
+    }
+}
+
+impl From<PrincipalId> for Value {
+    fn from(value: PrincipalId) -> Self {
+        Value {
+            value: Some(Text(value.to_string())),
+        }
     }
 }
 
