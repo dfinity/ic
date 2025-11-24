@@ -175,7 +175,6 @@ impl CryptoConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use tempfile::tempdir as tempdir_deleted_at_end_of_scope;
 
     // TODO(CRP-1338): review the creation/usage of the temp dirs.
