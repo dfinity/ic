@@ -44,7 +44,6 @@ WARNING: The script *doesn't* work when run from this repository's dev container
 ## Deploying Prod Images
 
 To create and set-up the local cluster and install the production containers for ICP-Rosetta and ICRC1-Rosetta pointing at DFINITY's test ledgers, navigate to this directory and run:
-
 ```bash
 cd rs/rosetta-api/local/cluster
 ./deploy.sh [options]
@@ -53,12 +52,13 @@ cd rs/rosetta-api/local/cluster
 **Important:** The script must be run from the `cluster` directory so Helm can properly package the chart files.
 
 You can make the rosetta nodes point to other ledgers by using these flags:
-
 - `--icp-ledger <ledger_id>`: Set the ICP Ledger ID (default: `xafvr-biaaa-aaaai-aql5q-cai`). If `prod`, will point to the official ICP ledger.
 - `--icp-symbol <symbol>`: Set the ICP token symbol (default: `TESTICP`).
 - `--icrc1-ledgers <ledger_ids>`: Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: `3jkp5-oyaaa-aaaaj-azwqa-cai`). Example: `--icrc1-ledgers 'ledger1-id,ledger2-id,ledger3-id'`.
 - `--no-icp-latest`: Skip deploying the ICP Rosetta latest image from Docker Hub (useful when you only want to deploy your local build).
 - `--no-icrc1-latest`: Skip deploying the ICRC1 Rosetta latest image from Docker Hub (useful when you only want to deploy your local build).
+- `--sqlite-cache-kb <size>`: Set the SQLite cache size in KB (optional, no default). Lower values reduce memory usage but may impact performance. Adjust based on the number of ledgers and available pod memory.
+- `--flush-cache-shrink-mem`: Flush the cache and shrink the memory after updating balances. If this flag is present, the feature is enabled; otherwise, it remains disabled.
 - `--use-persistent-volumes`: Use persistent volumes for the `/data` partition. Data will survive pod restarts and the `--clean` flag.
 
 ATTENTION: The first run might take a few minutes to finish as it'll create the cluster and install the necessary charts in it. After that, all the script will do is re-deploy the rosetta images with different configuration if needed.
@@ -66,7 +66,6 @@ ATTENTION: The first run might take a few minutes to finish as it'll create the 
 ## Deploying Local Images
 
 ### Build the local containers
-
 In order to build rosetta containers with local changes, you need to do it from inside the dev container:
 
 ```bash
@@ -232,6 +231,15 @@ Once in Grafana, import a new dashboard. As an option to import, you'll see a te
 
 Services and pods with suffix `-latest` represent jobs running with the prod images while the ones with suffix `-local` are the ones running with the locally built ones.
 
+## Memory Configuration and Tuning
+
+ICRC Rosetta uses SQLite for each ledger's blockchain data storage. When running multiple ledgers, memory usage can increase significantly. The deployment includes several memory optimizations:
+
+### Default Settings
+
+- Pod memory limit: `1024Mi`
+- Pod memory request: `512Mi`
+- SQLite cache per database: `20MB` (20480 KB)
 
 ## Notes
 - The script will automatically install Minikube if they are not found.

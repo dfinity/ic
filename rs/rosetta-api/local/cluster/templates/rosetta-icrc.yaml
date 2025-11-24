@@ -57,32 +57,39 @@ spec:
         app: {{ .name }}
     spec:
       containers:
-      - name: {{ .name }}
-        image: "{{ .image }}"
-        imagePullPolicy: IfNotPresent
-        args:
-          - "--port"
-          - {{ .containerPort | quote}}
-          - "--network-type"
-          - {{ $.Values.icrcConfig.networkType | quote }}
-          - "--multi-tokens"
-          - {{ $.Values.icrcConfig.multiTokens | quote }}
-          - "--multi-tokens-store-dir"
-          - {{ $.Values.icrcConfig.multiTokensStoreDir | quote }}
-        ports:
-        - containerPort: {{ .containerPort }}
-        volumeMounts:
-          {{- range $.Values.volumeMounts }}
-          - name: {{ .name }}
-            mountPath: {{ .mountPath }}
+        - name: {{ .name }}
+          image: "{{ .image }}"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--port"
+            - {{ .containerPort | quote}}
+            - "--network-type"
+            - {{ $.Values.icrcConfig.networkType | quote }}
+            - "--multi-tokens"
+            - {{ $.Values.icrcConfig.ledgerId | quote }}
+            - "--store-file"
+            - {{ $.Values.icrcConfig.storeFile | quote }}
+          {{- if $.Values.icrcConfig.sqliteCacheKb }}
+            - "--sqlite-max-cache-kb"
+            - {{ $.Values.icrcConfig.sqliteCacheKb | quote }}
           {{- end }}
-        resources:
-          limits:
-            memory: {{ .resources.limits.memory }}
-            cpu: {{ .resources.limits.cpu }}
-          requests:
-            memory: {{ .resources.requests.memory }}
-            cpu: {{ .resources.requests.cpu }}
+          {{- if eq (toString $.Values.icrcConfig.flushCacheShrinkMem) "true" }}
+            - "--flush-cache-shrink-mem"
+          {{- end }}
+          ports:
+            - containerPort: {{ .containerPort }}
+          volumeMounts:
+          {{- range $.Values.volumeMounts }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+          {{- end }}
+          resources:
+            limits:
+              memory: {{ .resources.limits.memory }}
+              cpu: {{ .resources.limits.cpu }}
+            requests:
+              memory: {{ .resources.requests.memory }}
+              cpu: {{ .resources.requests.cpu }}
       volumes:
         {{- $serviceName := .name }}
         {{- range $.Values.volumes }}
@@ -91,7 +98,7 @@ spec:
           persistentVolumeClaim:
             claimName: {{ $serviceName }}-pvc
           {{- else }}
-          emptyDir: {}
+          emptyDir: { }
           {{- end }}
         {{- end }}
 ---
