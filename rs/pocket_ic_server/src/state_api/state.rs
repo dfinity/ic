@@ -809,14 +809,19 @@ impl ApiState {
                 args.push("--ic-unsafe-root-key-fetch".to_string());
                 let cli = Cli::parse_from(args);
 
+                let resolver = Resolver::default();
+
                 let http_client_opts: ClientOptions = (&cli.http_client).into();
                 let http_client = Arc::new(
-                    ic_gateway::ic_bn_lib::http::ReqwestClient::new(http_client_opts.clone(), None)
-                        .unwrap(),
+                    ic_gateway::ic_bn_lib::http::ReqwestClient::new(
+                        http_client_opts.clone(),
+                        Some(resolver.clone()),
+                    )
+                    .unwrap(),
                 );
                 let http_client_hyper = Arc::new(ic_gateway::ic_bn_lib::http::HyperClient::new(
                     http_client_opts,
-                    Resolver::default(),
+                    resolver,
                 ));
 
                 let route_provider =
