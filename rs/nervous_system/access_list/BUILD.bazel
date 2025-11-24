@@ -4,22 +4,24 @@ package(default_visibility = ["//visibility:public"])
 
 LIB_SRCS = glob(
     ["src/**"],
+    exclude = ["**/*tests.rs"],
 )
 
 rust_library(
-    name = "feature_access_policy",
+    name = "access_list",
     srcs = LIB_SRCS,
-    crate_name = "ic_nervous_system_feature_access_policy",
+    crate_name = "ic_nervous_system_access_list",
     deps = [],
 )
 
 rust_doc_test(
     name = "doc_test",
-    crate = ":feature_access_policy",
+    crate = ":access_list",
     deps = [],
 )
 
 rust_test(
     name = "test",
-    crate = ":feature_access_policy",
+    srcs = glob(["**/*tests.rs"]),
+    deps = [":access_list"],
 )
