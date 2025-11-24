@@ -44,10 +44,8 @@ pub struct RingBuffer {
 
 impl RingBuffer {
     pub fn new(page_map: PageMap, data_capacity: MemorySize) -> Self {
-        assert!(
-            data_capacity <= DATA_CAPACITY_MAX,
-            "data capacity exceeds maximum"
-        );
+        let msg = "data capacity exceeds maximum";
+        assert!(data_capacity <= DATA_CAPACITY_MAX, "{msg}");
         let mut io = StructIO::new(page_map);
         io.save_header(&Header::new(data_capacity));
 
