@@ -49,7 +49,7 @@ fetch_file() {
         fi
         echo "Using local $name from $source..."
         if [[ "$source" != "$dest" ]]; then
-          mv "$source" "$dest"
+            mv "$source" "$dest"
         fi
     fi
 }
