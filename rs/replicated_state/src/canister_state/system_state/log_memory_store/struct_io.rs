@@ -19,7 +19,7 @@ impl StructIO {
     }
 
     pub fn to_page_map(&self) -> PageMap {
-        self.buffer.into_page_map()
+        self.buffer.to_page_map()
     }
 
     pub fn load_header(&self) -> Header {
