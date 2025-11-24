@@ -65,7 +65,6 @@ fn generate_hostos_config() -> HostOSConfig {
         node_reward_type: Some("type3.1".to_string()),
         mgmt_mac: "00:00:00:00:00:01".parse().unwrap(),
         deployment_environment: DeploymentEnvironment::Mainnet,
-        logging: Logging::default(),
         enable_trusted_execution_environment: false,
         use_nns_public_key: false,
         nns_urls: vec![

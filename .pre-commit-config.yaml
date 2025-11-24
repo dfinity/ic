@@ -29,13 +29,6 @@ repos:
     files: \.proto$
     language: system
 
-  - id: bazel_ormolu_format
-    name: Auto format Haskell files
-    stages: [commit]
-    entry: bazel run //:ormolu-format
-    files: \.hs|\.lhs$
-    language: system
-
   - id: bazel_rust_format
     name: Auto format Rust files
     stages: [commit]
@@ -58,11 +51,3 @@ repos:
     language: system
     always_run: true
     verbose: true
-
-- repo: https://github.com/ansible/ansible-lint.git
-  rev: v24.5.0
-  hooks:
-    - id: ansible-lint
-      always_run: false
-      files: (^|/)testnet/ansible/.+\.(yaml|yml)$
-      args: ['-i', 'testnet/ansible/.ansible-lint-ignore', 'testnet/ansible']

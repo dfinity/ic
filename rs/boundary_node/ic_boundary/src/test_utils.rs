@@ -1,5 +1,4 @@
-// Stuff here used in tests and benchmarks.
-// Since benchmarks use ic-boundary as an external library crate - this has to be public.
+// Stuff here used in tests
 
 use std::{sync::Arc, time::Duration};
 
@@ -7,7 +6,6 @@ use arc_swap::ArcSwapOption;
 use async_trait::async_trait;
 use axum::Router;
 use clap::Parser;
-use http;
 use ic_base_types::NodeId;
 use ic_bn_lib::http::{Client as HttpClient, ConnInfo};
 use ic_bn_lib::prometheus::Registry;
@@ -34,7 +32,6 @@ use ic_types::{
     CanisterId, RegistryVersion, SubnetId, crypto::threshold_sig::ThresholdSigPublicKey,
     replica_version::ReplicaVersion, time::Time,
 };
-use reqwest;
 
 use crate::routes::ProxyRouter;
 use crate::{
@@ -292,9 +289,6 @@ pub fn setup_test_router(
         args.push("104857600");
     }
 
-    #[cfg(not(feature = "tls"))]
-    let cli = Cli::parse_from(args);
-    #[cfg(feature = "tls")]
     let cli = Cli::parse_from({
         args.extend_from_slice(&["--tls-hostname", "foobar"]);
         args

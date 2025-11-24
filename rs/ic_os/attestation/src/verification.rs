@@ -1,7 +1,10 @@
 use crate::custom_data::EncodeSevCustomData;
 use crate::{SevAttestationPackage, SevCertificateChain, VerificationError};
+use sev::Generation;
+use sev::certs::snp::ca::Chain as SevCaChain;
 use sev::certs::snp::{Certificate, Chain, Verifiable, ca};
 use sev::firmware::guest::AttestationReport;
+use sev::parser::ByteParser;
 use std::fmt::Debug;
 
 /// Controls whether the SEV root certificate is verified.
@@ -163,30 +166,9 @@ fn verify_sev_attestation_report_signature(
         SevRootCertificateVerification::TestOnlySkipVerification => false,
     };
 
+    let root_certificate = expected_root_certificate(attestation_report)?;
+
     if verify_amd_root_certificate {
-        // TODO: Replace this with generation-specific ARK when the necessary changes in the SEV lib
-        // land: https://github.com/virtee/sev/pull/322
-        // (See commented out code below for guidance)
-        let root_certificate =
-            sev::certs::snp::builtin::milan::ark().expect("Could not load built-in Milan ARK");
-
-        // let generation = Generation::identify_cpu(
-        //     attestation_report.cpuid_fam_id.ok_or_else(|| {
-        //         VerificationError::invalid_attestation_report(
-        //             "cpuid_fam_id is missing"
-        //         )
-        //     })?,
-        //     attestation_report.cpuid_mod_id.ok_or_else(|| {
-        //         VerificationError::invalid_attestation_report(
-        //             "CPUID model ID is missing"
-        //         )
-        //     })?,
-        // )
-        // .map_err(|err| VerificationError::invalid_attestation_report(
-        //     format!("Failed to determine CPU generation: {err}")
-        // ))?;
-        // let root_certificate = Chain::from(generation).ca.ark;
-
         if ark.public_key_sec1() != root_certificate.public_key_sec1() {
             return Err(VerificationError::invalid_certificate_chain(
                 "ARK public key does not match expected root certificate",
@@ -213,4 +195,24 @@ fn verify_sev_attestation_report_signature(
         .map_err(VerificationError::invalid_signature)?;
 
     Ok(())
+}
+
+fn expected_root_certificate(
+    attestation_report: &AttestationReport,
+) -> Result<Certificate, VerificationError> {
+    let generation = Generation::identify_cpu(
+        attestation_report.cpuid_fam_id.ok_or_else(|| {
+            VerificationError::invalid_attestation_report("cpuid_fam_id is missing")
+        })?,
+        attestation_report.cpuid_mod_id.ok_or_else(|| {
+            VerificationError::invalid_attestation_report("CPUID model ID is missing")
+        })?,
+    )
+    .map_err(|err| {
+        VerificationError::invalid_attestation_report(format!(
+            "Failed to determine CPU generation: {err}"
+        ))
+    })?;
+
+    Ok(SevCaChain::from(generation).ark)
 }

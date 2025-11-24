@@ -92,3 +92,10 @@ impl From<ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcWithApprovalError>
         }
     }
 }
+
+#[derive(CandidType, Deserialize)]
+pub struct RetrieveDogeStatusRequest {
+    pub block_index: u64,
+}
+
+pub type RetrieveDogeStatus = ic_ckbtc_minter::state::RetrieveBtcStatusV2;

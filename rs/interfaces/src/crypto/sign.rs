@@ -40,7 +40,7 @@ pub mod canister_threshold_sig;
 /// Although the exact underlying signature scheme is unspecified and
 /// potentially subject to change, it is guaranteed to be non-malleable,
 /// that is, strongly unforgeable under chosen-message attack.
-pub trait BasicSigner<T: Signable> {
+pub trait BasicSigner<T: Signable>: Send + Sync {
     /// Creates a (non-malleable) basic signature.
     ///
     /// # Errors

@@ -31,10 +31,10 @@ use std::str::FromStr;
 use strum::EnumString;
 use url::Url;
 
-pub const CONFIG_VERSION: &str = "1.8.0";
+pub const CONFIG_VERSION: &str = "1.9.0";
 
 /// List of field paths that have been removed and should not be reused.
-pub static RESERVED_FIELD_PATHS: &[&str] = &[];
+pub static RESERVED_FIELD_PATHS: &[&str] = &["icos_settings.logging"];
 
 pub type ConfigMap = HashMap<String, String>;
 
@@ -115,8 +115,6 @@ pub struct ICOSSettings {
     pub mgmt_mac: MacAddr6,
     #[serde_as(as = "DisplayFromStr")]
     pub deployment_environment: DeploymentEnvironment,
-    #[serde(default)]
-    pub logging: Logging,
     // NODE-1653: remove field after next HostOS/GuestOS upgrade reaches NNS
     #[serde(default)]
     pub use_nns_public_key: bool,
@@ -129,8 +127,8 @@ pub struct ICOSSettings {
     /// SEV-SNP.
     ///
     /// IMPORTANT: This field only controls whether TEE is enabled in config.
-    /// In GuestOS code, to check if SEV is actually active, use `is_sev_active()` from the `ic_sev` crate,
-    /// which queries the CPU and cannot be faked by a malicious HostOS.
+    /// In GuestOS code, check the $SEV_ACTIVE environment variable or use the `is_sev_active()`
+    /// wrapper from the `ic_sev` crate, as this cannot be faked by a malicious HostOS.
     #[serde(default)]
     pub enable_trusted_execution_environment: bool,
     /// This ssh keys directory contains individual files named `admin`, `backup`, `readonly`.
@@ -296,10 +294,6 @@ impl FromStr for DeploymentEnvironment {
     }
 }
 
-// NODE-1681: Leftover from push-based logging. Remove now that it's fully deprecated
-#[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone, Default)]
-pub struct Logging {}
-
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct NetworkSettings {
     pub ipv6_config: Ipv6Config,
@@ -384,7 +378,6 @@ mod tests {
             "icos_settings": {
                 "mgmt_mac": "00:00:00:00:00:00",
                 "deployment_environment": "testnet",
-                "logging": {},
                 "use_nns_public_key": false,
                 "nns_urls": [],
                 "use_node_operator_private_key": false,
@@ -423,7 +416,6 @@ mod tests {
                 node_reward_type: None,
                 mgmt_mac: "00:00:00:00:00:00".parse()?,
                 deployment_environment: DeploymentEnvironment::Testnet,
-                logging: Logging::default(),
                 use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,

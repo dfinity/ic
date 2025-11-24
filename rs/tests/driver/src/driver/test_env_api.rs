@@ -187,6 +187,7 @@ use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
 use itertools::Itertools;
 use prost::Message;
+use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 use serde::{Deserialize, Serialize};
 use slog::{Logger, debug, info, warn};
 use ssh2::Session;
@@ -219,6 +220,8 @@ const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(16
 const TCP_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const SCP_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 const SCP_RETRY_BACKOFF: Duration = Duration::from_secs(5);
+const FW_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
+const FW_RETRY_BACKOFF: Duration = Duration::from_secs(5);
 // Be mindful when modifying this constant, as the event can be consumed by other parties.
 const IC_TOPOLOGY_EVENT_NAME: &str = "ic_topology_created_event";
 const INFRA_GROUP_CREATED_EVENT_NAME: &str = "infra_group_name_created_event";
@@ -464,6 +467,46 @@ impl TopologySnapshot {
         Box::new(
             self.local_registry
                 .get_api_boundary_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    pub fn system_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        let registry_version = self.local_registry.get_latest_version();
+
+        Box::new(
+            self.local_registry
+                .get_system_api_boundary_node_ids(registry_version)
+                .unwrap()
+                .into_iter()
+                .map(|node_id| IcNodeSnapshot {
+                    node_id,
+                    registry_version,
+                    local_registry: self.local_registry.clone(),
+                    env: self.env.clone(),
+                    ic_name: self.ic_name.clone(),
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
+    }
+
+    pub fn app_api_boundary_nodes(&self) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+        let registry_version = self.local_registry.get_latest_version();
+
+        Box::new(
+            self.local_registry
+                .get_app_api_boundary_node_ids(registry_version)
                 .unwrap()
                 .into_iter()
                 .map(|node_id| IcNodeSnapshot {
@@ -1023,6 +1066,82 @@ impl IcNodeSnapshot {
         })
         .expect("Could not install canister")
     }
+
+    pub fn wait_for_orchestrator_fw_rule(&self, logger: &Logger) -> Result<()> {
+        let result = retry_with_msg!(
+            "wait_for_orchestrator_rule",
+            logger.clone(),
+            FW_RETRY_TIMEOUT,
+            FW_RETRY_BACKOFF,
+            || self.wait_for_orchestrator_fw_rule_once(logger)
+        );
+
+        result.context("Timed out waiting for orchestrator rule.".to_string())
+    }
+
+    fn wait_for_orchestrator_fw_rule_once(&self, logger: &Logger) -> Result<()> {
+        // This checks that the rule "meta skuid ic-http-adapter ip6 daddr ::1" was applied
+        // This is a hardcoded rule that is applied regardless of what is in the registry
+        // Hence a change in the registry won't affect this check
+        let script = r#"
+            set -e
+            ADAPTER_UID=$(id -u ic-http-adapter)
+            RULE_PATTERN="meta skuid $ADAPTER_UID ip6 daddr ::1"
+            
+            sudo nft list chain ip6 filter OUTPUT | grep -qF "$RULE_PATTERN"
+        "#;
+
+        match self.block_on_bash_script(script) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                debug!(logger, "Orchestrator rule not yet found.");
+                Err(e)
+            }
+        }
+    }
+
+    pub fn insert_egress_accept_rule_for_outcalls_adapter(
+        &self,
+        target: SocketAddr,
+    ) -> Result<String> {
+        self.insert_egress_rule_for_outcalls_adapter(target, "accept")
+    }
+
+    pub fn insert_egress_reject_rule_for_outcalls_adapter(
+        &self,
+        target: SocketAddr,
+    ) -> Result<String> {
+        self.insert_egress_rule_for_outcalls_adapter(target, "reject")
+    }
+
+    fn insert_egress_rule_for_outcalls_adapter(
+        &self,
+        target: SocketAddr,
+        action: &str,
+    ) -> Result<String> {
+        let ip = target.ip();
+        let port = target.port();
+        let node_id = self.node_id;
+
+        let family = match ip {
+            std::net::IpAddr::V4(_) => "ip",
+            std::net::IpAddr::V6(_) => "ip6",
+        };
+
+        let script = format!(
+            r#"
+            set -e
+            ADAPTER_UID=$(id -u ic-http-adapter)
+            echo "Inserting {action} rule on node {node_id} for destination {target}..."
+
+            sudo nft "insert rule {family} filter OUTPUT meta skuid $ADAPTER_UID {family} daddr {ip} tcp dport {port} {action}"
+            "#
+        );
+
+        self.block_on_bash_script(&script).context(format!(
+            "Failed to insert egress {action} rule on node {node_id} for target {target}"
+        ))
+    }
 }
 
 pub trait HasTopologySnapshot {
@@ -1399,13 +1518,18 @@ pub trait SshSession: HasTestEnv {
             .context("Failed to get SSH session")
     }
 
-    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    /// Convenience wrapper for `block_on_ssh_session_with_timeout` with a default timeout.
     fn block_on_ssh_session(&self) -> Result<Session> {
+        self.block_on_ssh_session_with_timeout(SSH_RETRY_TIMEOUT)
+    }
+
+    /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
+    fn block_on_ssh_session_with_timeout(&self, timeout: Duration) -> Result<Session> {
         let ip = self.get_host_ip()?;
         retry_with_msg!(
             format!("get_ssh_session to {ip}"),
             self.test_env().logger(),
-            SSH_RETRY_TIMEOUT,
+            timeout,
             RETRY_BACKOFF,
             || { self.get_ssh_session() }
         )
@@ -1747,6 +1871,7 @@ pub struct NnsCustomizations {
     pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
     pub neurons: Option<Vec<Neuron>>,
     pub install_at_ids: bool,
+    pub registry_canister_init_payload: RegistryCanisterInitPayload,
 }
 
 impl NnsCustomizations {
@@ -2244,6 +2369,7 @@ pub async fn install_nns_canisters(
         install_at_ids,
         ledger_balances,
         neurons,
+        mut registry_canister_init_payload,
     } = nns_installation_builder.customizations.clone();
 
     let mut init_payloads = NnsInitPayloadsBuilder::new();
@@ -2295,7 +2421,40 @@ pub async fn install_nns_canisters(
 
     let registry_local_store = ic_prep_state_dir.registry_local_store_path();
     let initial_mutations = read_initial_mutations_from_local_store_dir(&registry_local_store);
-    init_payloads.with_initial_mutations(initial_mutations);
+    if !registry_canister_init_payload.mutations.is_empty() {
+        panic!(
+            "Provided registry canister init payload via NnsCustomizations weren't empty! These will be overriden by local store registry mutations"
+        );
+    }
+    registry_canister_init_payload.mutations = initial_mutations;
+    init_payloads.registry = {
+        let mut builder = RegistryCanisterInitPayloadBuilder::new();
+
+        for mutation in registry_canister_init_payload.mutations {
+            builder.push_init_mutate_request(mutation);
+        }
+
+        if registry_canister_init_payload
+            .is_swapping_feature_enabled
+            .unwrap_or_default()
+        {
+            builder.enable_swapping_feature_globally();
+        }
+        for caller in registry_canister_init_payload
+            .swapping_whitelisted_callers
+            .unwrap_or_default()
+        {
+            builder.whitelist_swapping_feature_caller(caller);
+        }
+        for subnet in registry_canister_init_payload
+            .swapping_enabled_subnets
+            .unwrap_or_default()
+        {
+            builder.enable_swapping_feature_for_subnet(subnet);
+        }
+
+        builder
+    };
 
     let agent = InternalAgent::new(
         url,

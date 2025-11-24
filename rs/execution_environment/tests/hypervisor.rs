@@ -1,5 +1,5 @@
 use assert_matches::assert_matches;
-use candid::{Decode, Encode};
+use candid::{CandidType, Decode, Encode};
 use ic_base_types::NumSeconds;
 use ic_config::subnet_config::SchedulerConfig;
 use ic_cycles_account_manager::ResourceSaturation;
@@ -139,29 +139,6 @@ fn ic0_stable_grow_works() {
             )
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    let result = test.ingress(canister_id, "test", vec![]);
-    expect_canister_did_not_reply(result);
-}
-
-#[test]
-fn ic0_stable_grow_returns_neg_one_when_exceeding_memory_limit() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let wat = r#"
-        (module
-            (import "ic0" "stable_size" (func $stable_size (result i32)))
-            (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
-
-            (func (export "canister_update test")
-                ;; Grow the memory by 1000 pages and verify that the return value
-                ;; is -1 because the grow should fail.
-                (if (i32.ne (call $stable_grow (i32.const 1000)) (i32.const -1))
-                    (then (unreachable))
-                )
-            )
-        )"#;
-    let canister_id = test.canister_from_wat(wat).unwrap();
-    test.canister_update_allocations_settings(canister_id, None, Some(30 * 1024 * 1024))
-        .unwrap();
     let result = test.ingress(canister_id, "test", vec![]);
     expect_canister_did_not_reply(result);
 }
@@ -4741,7 +4718,7 @@ fn canister_system_query_method_not_exported() {
             (export "memory" (memory $memory))
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
-    let result = test.system_query(canister_id, "http_transform", vec![], vec![]);
+    let result = test.system_query(canister_id, "http_transform", vec![]);
     assert_eq!(
         result,
         Err(
@@ -4789,7 +4766,7 @@ fn canister_system_query_transform_http_response() {
         body: vec![0, 1, 2],
     };
     let payload = Encode!(&canister_http_response).unwrap();
-    let result = test.system_query(canister_id, "http_transform", payload, vec![]);
+    let result = test.system_query(canister_id, "http_transform", payload);
     let transformed_canister_http_response = Decode!(
         result.unwrap().bytes().as_slice(),
         CanisterHttpResponsePayload
@@ -7870,51 +7847,6 @@ fn call_perform_does_not_check_freezing_threshold_in_reject() {
 }
 
 #[test]
-fn memory_grow_succeeds_in_init_if_canister_has_memory_allocation() {
-    let mut test = ExecutionTestBuilder::new().build();
-    let wat = r#"
-        (module
-            (func (export "canister_init")
-                (if (i32.ne (memory.grow (i32.const 10000)) (i32.const 0))
-                    (then (unreachable))
-                )
-            )
-            (memory 0)
-        )"#;
-    let wasm = wat::parse_str(wat).unwrap();
-    let empty_memory_usage = {
-        let id = test.canister_from_binary(wasm.clone()).unwrap();
-        test.canister_state(id).memory_usage()
-    };
-    let freezing_threshold = NumSeconds::new(1_000_000_000);
-    let memory_allocation = 655360000 + empty_memory_usage.get();
-    let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
-        freezing_threshold,
-        ic_types::MemoryAllocation::Reserved(NumBytes::new(memory_allocation)),
-        NumBytes::new(0),
-        MessageMemoryUsage::ZERO,
-        ComputeAllocation::zero(),
-        test.subnet_size(),
-        CanisterCyclesCostSchedule::Normal,
-        Cycles::zero(),
-    );
-
-    // Overapproximation of the install code message cost.
-    let install_code_cost = Cycles::new(1_000_000_000_000);
-
-    // Install code should be a small fraction of the freezing threshold cycles.
-    // If that's not the case, then we need to increase the freezing threshold.
-    assert!(install_code_cost.get() < freezing_threshold_cycles.get() / 10);
-    let initial_balance = freezing_threshold_cycles + install_code_cost;
-    let canister_id = test
-        .create_canister_with_allocation(initial_balance, None, Some(memory_allocation))
-        .unwrap();
-    test.update_freezing_threshold(canister_id, freezing_threshold)
-        .unwrap();
-    test.install_canister(canister_id, wasm).unwrap();
-}
-
-#[test]
 fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_upgrade() {
     let mut test = ExecutionTestBuilder::new().build();
     let wat = r#"
@@ -7936,7 +7868,7 @@ fn memory_grow_succeeds_in_post_upgrade_if_the_same_amount_is_dropped_after_pre_
     let memory_usage = 655_360_000 + 1_000_000;
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         freezing_threshold,
-        ic_types::MemoryAllocation::BestEffort,
+        ic_types::MemoryAllocation::default(),
         NumBytes::new(memory_usage),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),
@@ -8931,6 +8863,94 @@ fn invoke_cost_http_request() {
     };
     let actual_cost = Cycles::from(&bytes);
     assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn invoke_cost_http_request_v2() {
+    #[derive(CandidType)]
+    struct CostHttpRequestV2Params {
+        request_bytes: u64,
+        http_roundtrip_time_ms: u64,
+        raw_response_bytes: u64,
+        transformed_response_bytes: u64,
+        transform_instructions: u64,
+    }
+    let mut test = ExecutionTestBuilder::new().build();
+    let subnet_size = test.subnet_size();
+    let canister_id = test.universal_canister().unwrap();
+    let request_bytes = 1000;
+    let http_roundtrip_time_ms = 2_000;
+    let raw_response_bytes = 1_000_000;
+    let transformed_response_bytes = 800_000;
+    let transform_instructions = 500_000_000;
+    let params = CostHttpRequestV2Params {
+        request_bytes,
+        http_roundtrip_time_ms,
+        raw_response_bytes,
+        transformed_response_bytes,
+        transform_instructions,
+    };
+    let params_blob = Encode!(&params).unwrap();
+
+    let payload = wasm()
+        .cost_http_request_v2(&params_blob)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+    let expected_cost = test.cycles_account_manager().http_request_fee_v2(
+        request_bytes.into(),
+        Duration::from_millis(http_roundtrip_time_ms),
+        raw_response_bytes.into(),
+        transform_instructions.into(),
+        transformed_response_bytes.into(),
+        subnet_size,
+        CanisterCyclesCostSchedule::Normal,
+    );
+    let bytes = get_reply(res);
+    let actual_cost = Cycles::from(&bytes);
+    assert_eq!(actual_cost, expected_cost,);
+}
+
+#[test]
+fn cost_http_request_v2_fails_with_too_big_candid() {
+    #[derive(CandidType)]
+    struct CostHttpRequestV2ParamsExtended {
+        request_bytes: u64,
+        http_roundtrip_time_ms: u64,
+        raw_response_bytes: u64,
+        transformed_response_bytes: u64,
+        transform_instructions: u64,
+        garbage: Vec<u8>,
+    }
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let request_bytes = 1000;
+    let http_roundtrip_time_ms = 2_000;
+    let raw_response_bytes = 1_000_000;
+    let transformed_response_bytes = 800_000;
+    let transform_instructions = 500_000_000;
+    let garbage = "Some garbage to DoS the System API by making Candid decoding more expensive"
+        .as_bytes()
+        .into();
+    let params = CostHttpRequestV2ParamsExtended {
+        request_bytes,
+        http_roundtrip_time_ms,
+        raw_response_bytes,
+        transformed_response_bytes,
+        transform_instructions,
+        garbage,
+    };
+    let params_blob = Encode!(&params).unwrap();
+
+    let payload = wasm()
+        .cost_http_request_v2(&params_blob)
+        .reply_data_append()
+        .reply()
+        .build();
+    let res = test.ingress(canister_id, "update", payload);
+
+    assert_matches!(res, Err(e) if e.code() == ErrorCode::CanisterContractViolation && e.description().contains("Failed to decode HttpRequestV2CostParams from Candid"));
 }
 
 #[test]

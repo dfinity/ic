@@ -1,0 +1,16 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//rs:ic-os-pkg"])
+
+rust_library(
+    name = "bare_metal_deployment",
+    srcs = ["src/lib.rs"],
+    visibility = [
+        "//rs:ic-os-pkg",
+        "//rs:system-tests-pkg",
+    ],
+    deps = [
+        "@crate_index//:anyhow",
+        "@crate_index//:rexpect",
+    ],
+)

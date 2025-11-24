@@ -42,11 +42,6 @@ alias(
 )
 
 alias(
-    name = "ormolu-format",
-    actual = "//pre-commit:ormolu-format",
-)
-
-alias(
     name = "gen_rust_project",
     actual = "@rules_rust//tools/rust_analyzer:gen_rust_project",
 )
@@ -165,8 +160,10 @@ alias(
 alias(
     name = "dfx",
     actual = select({
-        "@platforms//os:osx": "@dfx-x86_64-darwin//:dfx",  # No arm64 build for this version, use amd64 for now.
+        "@bazel_tools//src/conditions:darwin_x86_64": "@dfx-x86_64-darwin//:dfx",
+        "@bazel_tools//src/conditions:darwin_arm64": "@dfx-aarch64-darwin//:dfx",
         "@bazel_tools//src/conditions:linux_x86_64": "@dfx-x86_64-linux//:dfx",
+        "@bazel_tools//src/conditions:linux_aarch64": "@dfx-aarch64-linux//:dfx",
         "//conditions:default": "@platforms//:incompatible",
     }),
 )
@@ -256,7 +253,6 @@ upload_artifacts(
         "//conditions:default": [
             "//publish/binaries:bundle-legacy",  # avoid overwriting legacy artifacts
             "//publish/canisters:bundle",
-            "//ic-os/guestos/envs/dev:bundle-disk",  # used by icos_deploy testnet script
             "//ic-os/guestos/envs/prod:bundle-update",
             "//ic-os/guestos/envs/dev:bundle-update",  # used by nested tests
             "//ic-os/hostos/envs/prod:bundle-update",

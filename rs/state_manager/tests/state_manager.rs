@@ -3782,7 +3782,7 @@ fn can_group_small_files_in_state_sync() {
         }
 
         // With 1000 controllers' Principal ID serialized to the 'canister.pbuf' file,
-        // the size will be larger than the `MAX_FILE_SIZE_TO_GROUP` and thus it will not be grouped.
+        // the size will be larger than the file grouping limit and thus it will not be grouped.
         insert_canister_with_many_controllers(
             &mut state,
             canister_test_id(100 + num_canisters),

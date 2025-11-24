@@ -1,6 +1,8 @@
 {{- range .Values.icrcRosettaServices }}
-# Only add the service if not locally built or locally built is enabled for it
-{{- if or (not .isLocallyBuilt) $.Values.icrcConfig.useLocallyBuilt }}
+# Only add the service if:
+# - It's the latest image and deployLatest is true, OR
+# - It's a local image and useLocallyBuilt is true
+{{- if or (and (not .isLocallyBuilt) $.Values.icrcConfig.deployLatest) (and .isLocallyBuilt $.Values.icrcConfig.useLocallyBuilt) }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -38,36 +40,43 @@ spec:
         app: {{ .name }}
     spec:
       containers:
-      - name: {{ .name }}
-        image: "{{ .image }}"
-        imagePullPolicy: IfNotPresent
-        args:
-          - "--port"
-          - {{ .containerPort | quote}}
-          - "--network-type"
-          - {{ $.Values.icrcConfig.networkType | quote }}
-          - "--ledger-id"
-          - {{ $.Values.icrcConfig.ledgerId | quote }}
-          - "--store-file"
-          - {{ $.Values.icrcConfig.storeFile | quote }}
-        ports:
-        - containerPort: {{ .containerPort }}
-        volumeMounts:
-          {{- range $.Values.volumeMounts }}
-          - name: {{ .name }}
-            mountPath: {{ .mountPath }}
+        - name: {{ .name }}
+          image: "{{ .image }}"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--port"
+            - {{ .containerPort | quote}}
+            - "--network-type"
+            - {{ $.Values.icrcConfig.networkType | quote }}
+            - "--multi-tokens"
+            - {{ $.Values.icrcConfig.ledgerId | quote }}
+            - "--store-file"
+            - {{ $.Values.icrcConfig.storeFile | quote }}
+          {{- if $.Values.icrcConfig.sqliteCacheKb }}
+            - "--sqlite-max-cache-kb"
+            - {{ $.Values.icrcConfig.sqliteCacheKb | quote }}
           {{- end }}
-        resources:
-          limits:
-            memory: {{ .resources.limits.memory }}
-            cpu: {{ .resources.limits.cpu }}
-          requests:
-            memory: {{ .resources.requests.memory }}
-            cpu: {{ .resources.requests.cpu }}
+          {{- if eq (toString $.Values.icrcConfig.flushCacheShrinkMem) "true" }}
+            - "--flush-cache-shrink-mem"
+          {{- end }}
+          ports:
+            - containerPort: {{ .containerPort }}
+          volumeMounts:
+          {{- range $.Values.volumeMounts }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+          {{- end }}
+          resources:
+            limits:
+              memory: {{ .resources.limits.memory }}
+              cpu: {{ .resources.limits.cpu }}
+            requests:
+              memory: {{ .resources.requests.memory }}
+              cpu: {{ .resources.requests.cpu }}
       volumes:
         {{- range $.Values.volumes }}
         - name: {{ .name }}
-          emptyDir: {}
+          emptyDir: { }
         {{- end }}
 ---
 {{- end }}

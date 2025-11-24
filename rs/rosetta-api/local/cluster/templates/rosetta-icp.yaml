@@ -1,6 +1,8 @@
 {{- range $.Values.icpRosettaServices }}
-# Only add the service if not locally built or locally built is enabled for it
-{{- if or (not .isLocallyBuilt) $.Values.icpConfig.useLocallyBuilt }}
+# Only add the service if:
+# - It's the latest image and deployLatest is true, OR
+# - It's a local image and useLocallyBuilt is true
+{{- if or (and (not .isLocallyBuilt) $.Values.icpConfig.deployLatest) (and .isLocallyBuilt $.Values.icpConfig.useLocallyBuilt) }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -46,7 +48,7 @@ spec:
           - "--expose-metrics"
           - "--store-location"
           - {{ $.Values.icpConfig.storeLocation | quote }}
-          - "--token-sybol"
+          - "--token-symbol"
           - {{ $.Values.icpConfig.tokenSymbol | quote }}
           - "--canister-id"
           - {{ $.Values.icpConfig.canisterId | quote }}

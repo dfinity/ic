@@ -55,7 +55,9 @@ use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsSc
 use ic_types::crypto::threshold_sig::IcRootOfTrust;
 use ic_types::signature::BasicSignatureBatch;
 
-impl<C: CryptoServiceProvider, H: Signable> BasicSigner<H> for CryptoComponentImpl<C> {
+impl<C: CryptoServiceProvider + Send + Sync, H: Signable> BasicSigner<H>
+    for CryptoComponentImpl<C>
+{
     fn sign_basic(
         &self,
         message: &H,

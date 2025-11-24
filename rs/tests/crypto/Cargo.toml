@@ -21,6 +21,7 @@ ic-ed25519 = { path = "../../../packages/ic-ed25519" }
 ic-secp256k1 = { path = "../../../packages/ic-secp256k1" }
 ic-secp256r1 = { path = "../../../packages/ic-secp256r1" }
 k256 = { workspace = true }
+p256 = { workspace = true }
 rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }

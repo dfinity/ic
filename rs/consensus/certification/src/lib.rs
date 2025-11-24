@@ -30,4 +30,4 @@ pub trait CertificationCrypto:
 {
 }
 
-impl<C: Crypto + Send + Sync> CertificationCrypto for C {}
+impl<C: Crypto> CertificationCrypto for C {}

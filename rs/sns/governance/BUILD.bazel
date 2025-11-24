@@ -199,6 +199,7 @@ rust_canister(
     aliases = ALIASES,
     compile_data = [":test_did"],
     crate_features = ["test"],
+    did_check = False,  # we don't check in the did so can't meaningfully check
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":test_did",
     deps = DEPENDENCIES + [

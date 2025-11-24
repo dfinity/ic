@@ -448,6 +448,10 @@ fn eval(ops_bytes: OpsBytes) {
                 let request_size = stack.pop_int64();
                 stack.push_blob(api::cost_http_request(request_size, max_res_bytes));
             }
+            Ops::CostHttpRequestV2 => {
+                let params = stack.pop_blob();
+                stack.push_blob(api::cost_http_request_v2(&params));
+            }
             Ops::CostSignWithEcdsa => {
                 let ecdsa_curve = stack.pop_int();
                 let key_name = stack.pop_blob();

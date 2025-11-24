@@ -4,7 +4,7 @@
 
 use std::fmt::Display;
 
-use candid::{CandidType, Principal};
+use candid::{CandidType, Principal, Reserved};
 use ic_cdk::{api::msg_caller, init, post_upgrade, println, query, update};
 use serde::Deserialize;
 use strum::Display;
@@ -12,7 +12,7 @@ use strum::Display;
 use crate::{
     RequestState, ValidationError,
     canister_state::{
-        caller_allowed,
+        ValidationGuard, caller_allowed,
         events::find_event,
         migrations_disabled,
         requests::{find_request, insert_request},
@@ -23,7 +23,7 @@ use crate::{
 };
 
 #[derive(CandidType, Deserialize)]
-struct MigrationCanisterInitArgs {
+pub(crate) struct MigrationCanisterInitArgs {
     allowlist: Option<Vec<Principal>>,
 }
 
@@ -41,39 +41,47 @@ fn post_upgrade(args: MigrationCanisterInitArgs) {
 
 #[derive(Clone, CandidType, Deserialize)]
 pub struct MigrateCanisterArgs {
-    pub source: Principal,
-    pub target: Principal,
+    pub canister_id: Principal,
+    pub replace_canister_id: Principal,
 }
 
 impl Display for MigrateCanisterArgs {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "MigrateCanisterArgs {{ source: {}, target: {} }}",
-            self.source, self.target
+            "MigrateCanisterArgs {{ canister_id: {}, replace_canister_id: {} }}",
+            self.canister_id, self.replace_canister_id
         )
     }
 }
 
 #[update]
-async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), ValidationError> {
+async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), Option<ValidationError>> {
     if migrations_disabled() {
-        return Err(ValidationError::MigrationsDisabled);
+        return Err(Some(ValidationError::MigrationsDisabled(Reserved)));
     }
+    // Prevent too many interleaved validations.
+    let Ok(_guard) = ValidationGuard::new() else {
+        return Err(Some(ValidationError::RateLimited(Reserved)));
+    };
     if rate_limited() {
-        return Err(ValidationError::RateLimited);
+        return Err(Some(ValidationError::RateLimited(Reserved)));
     }
     let caller = msg_caller();
     // For soft rollout purposes
     if !caller_allowed(&caller) {
-        return Err(ValidationError::MigrationsDisabled);
+        return Err(Some(ValidationError::MigrationsDisabled(Reserved)));
     }
-    match validate_request(args.source, args.target, caller).await {
+    match validate_request(args.canister_id, args.replace_canister_id, caller).await {
         Err(e) => {
             println!("Failed to validate request {}: {}", args, e);
-            return Err(e);
+            return Err(Some(e));
         }
         Ok(request) => {
+            // Need to check the rate limit again
+            if rate_limited() {
+                return Err(Some(ValidationError::RateLimited(Reserved)));
+            }
             println!("Accepted request {}", request);
             insert_request(RequestState::Accepted { request });
         }
@@ -92,16 +100,16 @@ pub enum MigrationStatus {
 }
 
 #[query]
-/// The same (source, target) pair might be present in the `HISTORY`, and valid to process again, so
+/// The same (canister_id, replace_canister_id) pair might be present in the `HISTORY`, and valid to process again, so
 /// we return a vector.
 fn migration_status(args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
-    let mut active: Vec<MigrationStatus> = find_request(args.source, args.target)
+    let mut active: Vec<MigrationStatus> = find_request(args.canister_id, args.replace_canister_id)
         .into_iter()
         .map(|r| MigrationStatus::InProgress {
             status: r.name().to_string(),
         })
         .collect();
-    let events: Vec<MigrationStatus> = find_event(args.source, args.target)
+    let events: Vec<MigrationStatus> = find_event(args.canister_id, args.replace_canister_id)
         .into_iter()
         .map(|event| match event.event {
             crate::EventType::Succeeded { .. } => MigrationStatus::Succeeded { time: event.time },
@@ -116,7 +124,7 @@ fn migration_status(args: MigrateCanisterArgs) -> Vec<MigrationStatus> {
 }
 
 #[derive(Clone, CandidType, Deserialize)]
-struct ListEventsArgs {
+pub(crate) struct ListEventsArgs {
     page_index: u64,
     page_size: u64,
 }

@@ -1,6 +1,6 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
-use ic_ckbtc_minter::queries::RetrieveBtcStatusRequest;
+use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::state::eventlog::{Event, GetEventsArg};
 use ic_ckbtc_minter::updates::{
@@ -110,6 +110,19 @@ impl CkBtcMinterAgent {
         self.query(
             "retrieve_btc_status",
             RetrieveBtcStatusRequest { block_index },
+        )
+        .await
+    }
+
+    pub async fn estimate_withdrawal_fee(
+        &self,
+        amount: u64,
+    ) -> Result<WithdrawalFee, CkBtcMinterAgentError> {
+        self.query(
+            "estimate_withdrawal_fee",
+            EstimateFeeArg {
+                amount: Some(amount),
+            },
         )
         .await
     }

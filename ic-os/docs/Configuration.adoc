@@ -76,7 +76,7 @@ To add a new configuration file/directory:
 3. Add interpretation of configuration file/directory to suitable place, e.g. generate-ic-config.sh
 
 4. Adapt testnet and/or prod deployment config as needed
-** E.g. for testnets, you may need to update link:../../testnet/tools/icos_deploy.sh[icos_deploy.sh]. If you are adding a production deployment config file, you may need to add a file to the SetupOS config partition to be piped through to HostOS.
+** E.g. if you are adding a production deployment config file, you may need to add a file to the SetupOS config partition to be piped through to HostOS.
 
 *Values and defaults*: Please ensure that the system is operational even in the absence of specific configuration bits, and fall back to sane production defaults. Already deployed nodes will by definition lack new configuration variables and need to behave properly. And defaults unsuitable for tests need to be overridden in tests (not the other way around).
 

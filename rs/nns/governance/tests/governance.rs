@@ -88,6 +88,7 @@ use ic_nns_governance::{
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         settle_neurons_fund_participation_request, swap_background_information,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
 use ic_nns_governance::{
     canister_state::{governance_mut, set_governance_for_tests},
@@ -875,6 +876,7 @@ async fn test_manage_network_economics_change_one_deep_subfield() {
                 reject_cost_e8s: 0,
                 ..Default::default()
             })),
+            self_describing_action: None,
         },
     )
     .await
@@ -981,6 +983,7 @@ async fn test_manage_network_economics_reject_invalid() {
                     reject_cost_e8s: 0,
                     ..Default::default()
                 })),
+                self_describing_action: None,
             },
         )
         .await;
@@ -1178,6 +1181,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
                     }),
                     ..Default::default()
                 })),
+                self_describing_action: None,
             },
         )
         .await
@@ -1200,6 +1204,7 @@ async fn test_manage_network_economics_revalidate_at_execution_time(
                     }),
                     ..Default::default()
                 })),
+                self_describing_action: None,
             },
         )
         .await
@@ -1316,6 +1321,9 @@ async fn test_mint_monthly_node_provider_rewards() {
                 maximum_node_provider_rewards_e8s: None,
                 registry_version: None,
                 node_providers: vec![],
+                start_date: None,
+                end_date: None,
+                algorithm_version: None,
             }),
             ..Default::default()
         },
@@ -1340,12 +1348,15 @@ async fn test_mint_monthly_node_provider_rewards() {
     assert_eq!(most_recent_monthly_node_provider_rewards.rewards.len(), 1);
     let MonthlyNodeProviderRewards {
         timestamp: _,
+        start_date: _,
+        end_date: _,
         rewards,
         xdr_conversion_rate,
         minimum_xdr_permyriad_per_icp,
         maximum_node_provider_rewards_e8s,
         registry_version,
         node_providers,
+        algorithm_version: _,
     } = most_recent_monthly_node_provider_rewards;
     let reward = rewards[0].clone();
     assert_eq!(reward.node_provider.unwrap(), node_provider);
@@ -3142,6 +3153,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
                 action: Some(api::proposal::Action::Motion(api::Motion {
                     motion_text: "a motion".to_string(),
                 })),
+                self_describing_action: None,
             }),
             proposal_timestamp_seconds: 2530,
             ballots: [
@@ -6353,6 +6365,7 @@ fn test_staked_maturity() {
                     action: Some(proposal::Action::Motion(Motion {
                         motion_text: "".to_string(),
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -6753,6 +6766,7 @@ async fn test_not_for_profit_neurons() {
                 }))),
                 summary: "".to_string(),
                 url: "".to_string(),
+                self_describing_action: None,
             },
         )
         .await;
@@ -6782,6 +6796,7 @@ async fn test_not_for_profit_neurons() {
                 }))),
                 summary: "".to_string(),
                 url: "".to_string(),
+                self_describing_action: None,
             },
         )
         .await;
@@ -7006,6 +7021,7 @@ fn test_manage_and_reward_node_providers() {
                             to_account: None,
                         })),
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7055,6 +7071,7 @@ fn test_manage_and_reward_node_providers() {
                             })),
                         },
                     )),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7103,6 +7120,7 @@ fn test_manage_and_reward_node_providers() {
                             })),
                         },
                     )),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7135,6 +7153,7 @@ fn test_manage_and_reward_node_providers() {
                             to_account: None,
                         })),
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7185,6 +7204,7 @@ fn test_manage_and_reward_node_providers() {
                             ),
                         })),
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7230,6 +7250,7 @@ fn test_manage_and_reward_node_providers() {
                             dissolve_delay_seconds: 10,
                         })),
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7276,6 +7297,7 @@ fn test_manage_and_reward_node_providers() {
                             })),
                         },
                     )),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7355,6 +7377,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                             to_account: None,
                         })),
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7407,6 +7430,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                                 })),
                             },
                         )),
+                        self_describing_action: None,
                     }))),
                 },
             )
@@ -7457,6 +7481,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                                 })),
                             },
                         )),
+                        self_describing_action: None,
                     }))),
                 },
             )
@@ -7519,6 +7544,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                 ],
                 use_registry_derived_rewards: Some(false),
             })),
+            self_describing_action: None,
         }))),
     };
 
@@ -7584,6 +7610,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                             })),
                         },
                     )),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7621,6 +7648,7 @@ fn test_manage_and_reward_multiple_node_providers() {
                             })),
                         },
                     )),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7745,6 +7773,7 @@ fn test_network_economics_proposal() {
                         }),
                         ..Default::default()
                     })),
+                    self_describing_action: None,
                 }))),
             },
         )
@@ -7969,7 +7998,7 @@ async fn test_max_number_of_proposals_with_ballots() {
         .unwrap();
     }
     assert_eq!(
-        gov.get_pending_proposals(&PrincipalId::new_anonymous())
+        gov.get_pending_proposals(&PrincipalId::new_anonymous(), None)
             .len(),
         MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
     );
@@ -11043,7 +11072,7 @@ impl Environment for MockEnvironment<'_> {
     fn execute_nns_function(
         &self,
         _proposal_id: u64,
-        _update: &ExecuteNnsFunction,
+        _update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         panic!("Unexpected call to Environment::execute_nns_function");
     }
@@ -12910,6 +12939,7 @@ async fn test_proposal_url_not_on_list_fails() {
                 motion_text: "a".to_string(),
             })),
             url: "https://foo.com".to_string(),
+            self_describing_action: None,
         },
     )
     .await
@@ -12927,6 +12957,7 @@ async fn test_proposal_url_not_on_list_fails() {
                 motion_text: "a".to_string(),
             })),
             url: "https://forum.dfinity.org/anything".to_string(),
+            self_describing_action: None,
         },
     )
     .await

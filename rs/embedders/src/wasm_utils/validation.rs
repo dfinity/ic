@@ -793,6 +793,16 @@ fn get_valid_system_apis_common(
             )],
         ),
         (
+            "cost_http_request_v2",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![I, I, I],
+                    return_type: vec![],
+                },
+            )],
+        ),
+        (
             "cost_sign_with_ecdsa",
             vec![(
                 API_VERSION_IC0,
