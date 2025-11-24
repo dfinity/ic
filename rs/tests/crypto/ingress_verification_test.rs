@@ -1,6 +1,7 @@
 /* tag::catalog[]
 end::catalog[] */
 use anyhow::Result;
+use candid::Encode;
 use ic_agent::Identity;
 use ic_agent::export::Principal;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
@@ -10,6 +11,7 @@ use ic_system_test_driver::driver::ic::{InternetComputer, Subnet};
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use ic_system_test_driver::systest;
+use ic_system_test_driver::types::CanisterIdRecord;
 use ic_system_test_driver::util::{
     UniversalCanister, block_on, expiry_time, sign_query, sign_read_state, sign_update,
 };
@@ -34,6 +36,9 @@ fn main() -> Result<()> {
                 .add_test(systest!(requests_with_delegations_with_targets; 3))
                 .add_test(systest!(requests_with_delegation_loop; 2))
                 .add_test(systest!(requests_with_delegation_loop; 3))
+                .add_test(systest!(requests_to_mgmt_canister_with_delegations; 2))
+                .add_test(systest!(requests_to_mgmt_canister_with_delegations; 3))
+                .add_test(systest!(requests_to_mgmt_canister_with_delegations; 4))
                 .add_test(systest!(requests_with_invalid_expiry)),
         )
         .execute_from_args()?;
@@ -364,7 +369,6 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                     "With an empty target intersection of multiple delegations",
                     vec![vec![random_canister_id(rng)], vec![random_canister_id(rng)]],
                 ),
-                // TODO: with an empty set of targets or a set of targets containing the requested canister ID for mgmt canister calls.
             ];
 
             for scenario in &scenarios {
@@ -505,6 +509,114 @@ pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
     });
 }
 
+// Tests delgation handling to requests sent to the management canister
+pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv, api_ver: usize) {
+    let logger = env.logger();
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    let rng = &mut reproducible_rng();
+    block_on({
+        async move {
+            let node_url = node.get_public_url();
+            debug!(logger, "Selected replica"; "url" => format!("{}", node_url));
+
+            let canister =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+
+            debug!(
+                logger,
+                "Installed Universal Canister";
+                "canister_id" => format!("{:?}", canister.canister_id())
+            );
+
+            let canister_id = canister_id_from_principal(&canister.canister_id());
+
+            let mgmt_canister = canister_id_from_principal(&Principal::management_canister());
+
+            let test_info = TestInformation {
+                api_ver,
+                url: node_url,
+                canister_id: mgmt_canister,
+            };
+
+            /*
+            This is testing two different scenarious, one of which should succeed and the
+            other should fail:
+
+            - With the mgmt canister principal as the target for mgmt canister calls
+
+            - With an empty set of targets or a set of targets containing the requested canister ID for mgmt canister calls.
+
+            The only difference is if the management canister's principal is included in the
+            set of delegation targets or not.
+            */
+            for include_mgmt_canister_id in [true, false] {
+                let delegation_count = 4;
+                let targets_per_delegation = 10;
+
+                let mut identities = vec![];
+                let mut targets = vec![];
+
+                for _ in 0..=delegation_count {
+                    let id_type = GenericIdentityType::random(rng);
+                    identities.push(GenericIdentity::new(id_type, rng));
+                    if include_mgmt_canister_id {
+                        targets.push(random_canister_ids_including(
+                            &mgmt_canister,
+                            targets_per_delegation,
+                            1,
+                            rng,
+                        ));
+                    } else {
+                        targets.push(random_canister_ids(targets_per_delegation, rng));
+                    }
+                }
+
+                let delegations = create_delegations_with_targets(&identities, &targets);
+
+                let sender = &identities[0];
+                let signer = &identities[identities.len() - 1];
+
+                let content = HttpCallContent::Call {
+                    update: HttpCanisterUpdate {
+                        canister_id: Blob(mgmt_canister.get().as_slice().to_vec()),
+                        method_name: "canister_status".to_string(),
+                        arg: Blob(
+                            Encode!(&CanisterIdRecord {
+                                canister_id: canister_id.into()
+                            })
+                            .unwrap(),
+                        ),
+                        sender: Blob(sender.principal().as_slice().to_vec()),
+                        ingress_expiry: expiry_time().as_nanos() as u64,
+                        nonce: None,
+                    },
+                };
+
+                let signature = signer.sign_update(&content);
+
+                let update_status = send_request(
+                    &test_info,
+                    "call",
+                    content,
+                    sender.public_key_der(),
+                    Some(delegations.to_vec()),
+                    signature,
+                )
+                .await
+                .status();
+
+                if include_mgmt_canister_id {
+                    assert_eq!(update_status, 200);
+                } else {
+                    assert_eq!(update_status, 400);
+                }
+            }
+        }
+    });
+}
+
 // Tests that expired or too-future ingress_expiry values are rejected
 pub fn requests_with_invalid_expiry(env: TestEnv) {
     let logger = env.logger();
@@ -584,7 +696,11 @@ fn create_delegations(identities: &[GenericIdentity]) -> Vec<SignedDelegation> {
 }
 
 fn canister_id_from_principal(p: &Principal) -> CanisterId {
-    CanisterId::try_from_principal_id(PrincipalId::from(*p)).expect("invalid canister ID")
+    if *p == Principal::management_canister() {
+        CanisterId::ic_00()
+    } else {
+        CanisterId::try_from_principal_id(PrincipalId::from(*p)).expect("invalid canister ID")
+    }
 }
 
 fn create_delegations_with_targets(
@@ -621,6 +737,16 @@ fn random_canister_id<R: Rng + CryptoRng>(rng: &mut R) -> CanisterId {
     CanisterId::from_u64(rng.r#gen::<u64>())
 }
 
+fn random_canister_ids<R: Rng + CryptoRng>(cnt: usize, rng: &mut R) -> Vec<CanisterId> {
+    let mut result = Vec::with_capacity(cnt);
+
+    for _ in 0..cnt {
+        result.push(random_canister_id(rng));
+    }
+
+    result
+}
+
 fn random_canister_ids_including<R: Rng + CryptoRng>(
     canister_id: &CanisterId,
     total_cnt: usize,
@@ -630,11 +756,7 @@ fn random_canister_ids_including<R: Rng + CryptoRng>(
     assert!(total_cnt > 0);
     assert!(include_cnt > 0 && include_cnt < total_cnt);
 
-    let mut result = Vec::with_capacity(total_cnt);
-
-    for _ in 0..total_cnt {
-        result.push(random_canister_id(rng));
-    }
+    let mut result = random_canister_ids(total_cnt, rng);
 
     // Overwrite some of the random canister IDs with our desired target
     for i in rand::seq::index::sample(rng, total_cnt, include_cnt) {
