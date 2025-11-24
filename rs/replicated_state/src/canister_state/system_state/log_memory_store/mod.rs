@@ -75,15 +75,18 @@ impl LogMemoryStore {
         RingBuffer::init(self.page_map.clone(), data_capacity)
     }
 
-    /// Set the ring buffer capacity — preserve existing records by collecting and re-appending them.
+    /// Set the ring buffer capacity — preserves existing records by collecting and re-appending them.
     pub fn set_capacity(&mut self, new_capacity: u64) {
+        // TODO: PageMap cannot be shrunk today; reducing capacity does not free allocated pages
+        // (practical ring buffer max currently ~55 MB). Future improvement: allocate a new PageMap
+        // with the desired capacity, refeed records, then drop the old map or provide a `PageMap::shrink` API.
         let old = self.ring_buffer();
         if old.capacity() == new_capacity {
             return;
         }
 
-        // Collect all records in index order.
-        let mut records = vec![];
+        // `old.records(...)` may return results in batches, so iterate until all records up to `old.next_id()` are collected.
+        let mut records = Vec::new();
         let mut idx = 0;
         while idx < old.next_id() {
             let batch = old.records(Some(FetchCanisterLogsFilter::ByIdx(
