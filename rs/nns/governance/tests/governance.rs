@@ -88,6 +88,7 @@ use ic_nns_governance::{
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         settle_neurons_fund_participation_request, swap_background_information,
     },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
 use ic_nns_governance::{
     canister_state::{governance_mut, set_governance_for_tests},
@@ -1322,6 +1323,7 @@ async fn test_mint_monthly_node_provider_rewards() {
                 node_providers: vec![],
                 start_date: None,
                 end_date: None,
+                algorithm_version: None,
             }),
             ..Default::default()
         },
@@ -1354,6 +1356,7 @@ async fn test_mint_monthly_node_provider_rewards() {
         maximum_node_provider_rewards_e8s,
         registry_version,
         node_providers,
+        algorithm_version: _,
     } = most_recent_monthly_node_provider_rewards;
     let reward = rewards[0].clone();
     assert_eq!(reward.node_provider.unwrap(), node_provider);
@@ -11069,7 +11072,7 @@ impl Environment for MockEnvironment<'_> {
     fn execute_nns_function(
         &self,
         _proposal_id: u64,
-        _update: &ExecuteNnsFunction,
+        _update: &ValidExecuteNnsFunction,
     ) -> Result<(), GovernanceError> {
         panic!("Unexpected call to Environment::execute_nns_function");
     }

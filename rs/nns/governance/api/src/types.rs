@@ -3150,6 +3150,9 @@ pub struct MonthlyNodeProviderRewards {
     pub maximum_node_provider_rewards_e8s: Option<u64>,
     /// The registry version used to calculate these rewards at the time the rewards were calculated.
     pub registry_version: Option<u64>,
+    /// Rewards calculation algorithm version used to calculate rewards.
+    /// See RewardsCalculationAlgorithmVersion for the allowed values.
+    pub algorithm_version: Option<u32>,
     /// The list of node_provieders at the time when the rewards were calculated.
     pub node_providers: Vec<NodeProvider>,
 }

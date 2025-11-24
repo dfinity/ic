@@ -3253,6 +3253,9 @@ pub struct MonthlyNodeProviderRewards {
     /// The registry version used to calculate these rewards at the time the rewards were calculated.
     #[prost(uint64, optional, tag = "6")]
     pub registry_version: ::core::option::Option<u64>,
+    /// Rewards calculation algorithm version used to calculate rewards.
+    #[prost(uint32, optional, tag = "10")]
+    pub algorithm_version: ::core::option::Option<u32>,
     /// The list of node_provieders at the time when the rewards were calculated.
     #[prost(message, repeated, tag = "7")]
     pub node_providers: ::prost::alloc::vec::Vec<NodeProvider>,

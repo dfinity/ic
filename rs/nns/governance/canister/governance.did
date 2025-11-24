@@ -621,6 +621,7 @@ type DateUtc = record {
 type MonthlyNodeProviderRewards = record {
   minimum_xdr_permyriad_per_icp : opt nat64;
   registry_version : opt nat64;
+  algorithm_version : opt nat32;
   node_providers : vec NodeProvider;
   timestamp : nat64;
   start_date : opt DateUtc;

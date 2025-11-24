@@ -3105,6 +3105,7 @@ impl From<pb::MonthlyNodeProviderRewards> for pb_api::MonthlyNodeProviderRewards
             minimum_xdr_permyriad_per_icp: item.minimum_xdr_permyriad_per_icp,
             maximum_node_provider_rewards_e8s: item.maximum_node_provider_rewards_e8s,
             registry_version: item.registry_version,
+            algorithm_version: item.algorithm_version,
             node_providers: item.node_providers.into_iter().map(|x| x.into()).collect(),
         }
     }
@@ -3121,6 +3122,7 @@ impl From<pb_api::MonthlyNodeProviderRewards> for pb::MonthlyNodeProviderRewards
             maximum_node_provider_rewards_e8s: item.maximum_node_provider_rewards_e8s,
             registry_version: item.registry_version,
             node_providers: item.node_providers.into_iter().map(|x| x.into()).collect(),
+            algorithm_version: item.algorithm_version,
         }
     }
 }

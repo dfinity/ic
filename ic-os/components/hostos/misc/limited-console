@@ -35,7 +35,12 @@ execute_command() {
             ;;
         "service-status")
             if [ -n "${2:-}" ]; then
-                systemctl status "$2"
+                # Only allow sane unit names, e.g. letters, digits, `-_.@`
+                if [[ "$2" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
+                    systemctl status "$2"
+                else
+                    echo "Invalid service name"
+                fi
             else
                 echo "Usage: service-status <service-name>"
                 echo "Example: service-status guestos"
@@ -43,7 +48,12 @@ execute_command() {
             ;;
         "view-logs")
             if [ -n "${2:-}" ]; then
-                journalctl -u "$2" --no-pager -n 50
+                # Only allow sane unit names, e.g. letters, digits, `-_.@`
+                if [[ "$2" =~ ^[a-zA-Z0-9_.@-]+$ ]]; then
+                    journalctl -u "$2" --no-pager -n 50
+                else
+                    echo "Invalid service name"
+                fi
             else
                 echo "Usage: view-logs <service-name>"
                 echo "Example: view-logs guestos"
@@ -51,7 +61,11 @@ execute_command() {
             ;;
         "config-json")
             echo "=== /boot/config/config.json ==="
-            PATH="$RESTRICTED_PATH" /bin/rbash -c "less /boot/config/config.json"
+            env -i \
+                TERM="$TERM" \
+                LESSSECURE=1 \
+                PATH="$RESTRICTED_PATH" \
+                /usr/bin/less /boot/config/config.json
             ;;
         "network-config-settings")
             echo "=== Network Settings from Config ==="
@@ -100,7 +114,17 @@ while true; do
         continue
     fi
 
-    # Parse command and arguments
-    read -r cmd args <<< "$command"
-    execute_command "$cmd" $args
+    # Parse command and arguments safely using array to prevent command injection
+    # This safely splits the input while preserving quoted arguments
+    read -ra cmd_array <<< "$command"
+
+    # If parsing produced no tokens, skip
+    if [ "${#cmd_array[@]}" -eq 0 ]; then
+        continue
+    fi
+
+    cmd="${cmd_array[0]}"
+    # Pass remaining arguments as separate array elements to prevent injection
+    execute_command "$cmd" "${cmd_array[@]:1}"
+
 done

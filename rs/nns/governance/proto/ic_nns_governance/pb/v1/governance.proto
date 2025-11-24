@@ -2251,6 +2251,9 @@ message MonthlyNodeProviderRewards {
   // The registry version used to calculate these rewards at the time the rewards were calculated.
   optional uint64 registry_version = 6;
 
+  // Rewards calculation algorithm version used to calculate rewards.
+  optional uint32 algorithm_version = 10;
+
   // The list of node_provieders at the time when the rewards were calculated.
   repeated NodeProvider node_providers = 7;
 }

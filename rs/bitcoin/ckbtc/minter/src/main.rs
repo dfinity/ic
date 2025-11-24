@@ -18,7 +18,7 @@ use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
-use ic_ckbtc_minter::{IC_CANISTER_RUNTIME, MinterInfo};
+use ic_ckbtc_minter::{CanisterRuntime, IC_CANISTER_RUNTIME, MinterInfo};
 use ic_ckbtc_minter::{
     state::eventlog::{EventType, GetEventsArg},
     storage,
@@ -204,11 +204,13 @@ async fn upload_events(events: Vec<Event>) {
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {
+        let fee_estimator = IC_CANISTER_RUNTIME.fee_estimator(s);
         ic_ckbtc_minter::estimate_retrieve_btc_fee(
             &s.available_utxos,
             arg.amount,
-            s.estimate_median_fee_per_vbyte()
+            s.last_median_fee_per_vbyte
                 .expect("Bitcoin current fee percentiles not retrieved yet."),
+            &fee_estimator,
         )
     })
 }

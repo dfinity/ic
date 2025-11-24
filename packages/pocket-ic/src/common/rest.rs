@@ -1098,3 +1098,28 @@ impl From<MockCanisterHttpResponse> for RawMockCanisterHttpResponse {
         }
     }
 }
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotDownload {
+    pub sender: RawPrincipalId,
+    pub canister_id: RawCanisterId,
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub snapshot_id: Vec<u8>,
+    pub snapshot_dir: PathBuf,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotUpload {
+    pub sender: RawPrincipalId,
+    pub canister_id: RawCanisterId,
+    pub replace_snapshot: Option<RawCanisterSnapshotId>,
+    pub snapshot_dir: PathBuf,
+}
+
+#[derive(Clone, Serialize, Deserialize, Debug, JsonSchema)]
+pub struct RawCanisterSnapshotId {
+    #[serde(deserialize_with = "base64::deserialize")]
+    #[serde(serialize_with = "base64::serialize")]
+    pub snapshot_id: Vec<u8>,
+}
