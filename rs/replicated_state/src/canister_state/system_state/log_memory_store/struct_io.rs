@@ -304,16 +304,6 @@ impl StructIO {
         self.write_raw_bytes(address, &value.to_le_bytes())
     }
 
-    fn read_wrapped_u16(
-        &self,
-        position: MemoryPosition,
-        offset: MemoryAddress,
-        capacity: MemorySize,
-    ) -> (u16, MemoryPosition) {
-        let (bytes, position) = self.read_wrapped_bytes::<2>(position, offset, capacity);
-        (u16::from_le_bytes(bytes), position)
-    }
-
     fn read_wrapped_u32(
         &self,
         position: MemoryPosition,
@@ -332,16 +322,6 @@ impl StructIO {
     ) -> (u64, MemoryPosition) {
         let (bytes, position) = self.read_wrapped_bytes::<8>(position, offset, capacity);
         (u64::from_le_bytes(bytes), position)
-    }
-
-    fn write_wrapped_u16(
-        &mut self,
-        position: MemoryPosition,
-        value: u16,
-        offset: MemoryAddress,
-        capacity: MemorySize,
-    ) -> MemoryPosition {
-        self.write_wrapped_bytes(position, &value.to_le_bytes(), offset, capacity)
     }
 
     fn write_wrapped_u32(
