@@ -27,17 +27,23 @@ use http::{
         IF_MODIFIED_SINCE, IF_NONE_MATCH, RANGE, USER_AGENT,
     },
 };
-use ic_agent::agent::route_provider::RoundRobinRouteProvider;
 use ic_bn_lib_common::{
     traits::http::Client,
     types::http::{ClientOptions, ConnInfo},
 };
-use ic_gateway::ic_bn_lib::http::{
-    headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
-    proxy::proxy,
+use ic_gateway::{
+    Cli,
+    ic_bn_lib::{
+        http::{
+            dns::Resolver,
+            headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
+            proxy::proxy,
+        },
+        ic_agent::agent::route_provider::RoundRobinRouteProvider,
+        utils::health_manager::HealthManager,
+    },
+    setup_router,
 };
-use ic_gateway::ic_bn_lib::utils::health_manager::HealthManager;
-use ic_gateway::{Cli, setup_router};
 use ic_types::{CanisterId, NodeId, PrincipalId, SubnetId, canister_http::CanisterHttpRequestId};
 use itertools::Itertools;
 use pocket_ic::RejectResponse;
@@ -766,7 +772,7 @@ impl ApiState {
         let replica_url = match http_gateway_config.forward_to {
             HttpGatewayBackend::Replica(ref replica_url) => replica_url.clone(),
             HttpGatewayBackend::PocketIcInstance(instance_id) => {
-                format!("http://localhost:{pocket_ic_server_port}/instances/{instance_id}/")
+                format!("http://127.0.0.1:{pocket_ic_server_port}/instances/{instance_id}/")
             }
         };
         let agent = ic_agent::Agent::builder()
@@ -808,8 +814,10 @@ impl ApiState {
                     ic_gateway::ic_bn_lib::http::ReqwestClient::new(http_client_opts.clone(), None)
                         .unwrap(),
                 );
-                let http_client_hyper =
-                    ic_gateway::ic_bn_lib::http::HyperClient::new(http_client_opts, None);
+                let http_client_hyper = ic_gateway::ic_bn_lib::http::HyperClient::new(
+                    http_client_opts,
+                    Resolver::default(),
+                );
 
                 let route_provider =
                     RoundRobinRouteProvider::new(vec![replica_url.clone()]).unwrap();
