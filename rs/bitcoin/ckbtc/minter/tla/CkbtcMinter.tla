@@ -115,10 +115,12 @@ CONSTANTS
     \* The ID of the PlusCal process simulating the heartbeat of the ckBTC Ledger
     HEARTBEAT_PROCESS_IDS,
     RETRIEVE_BTC_FEE,
+    TX_HASH(_),
     DEPOSIT_ADDRESS
 
 
 TxHash(tx) == ToString(tx)
+Text_Hash(tx) == ToString(Hash(tx))
 
 \**********************************************************************************************
 \* Constants used when runing the analysis using the TLC tool
@@ -132,6 +134,9 @@ MINTER_CKBTC_ADDRESS == [owner |-> MINTER_PRINCIPAL, subaccount |-> MINTER_SUBAC
 
 \* CK_BTC addresses
 CK_BTC_ADDRESSES == [owner:PRINCIPALS, subaccount: SUBACCOUNTS]
+
+Text_Deposit_Address == [ a \in CK_BTC_ADDRESSES \union {MINTER_CKBTC_ADDRESS} |-> ToString(a) ]   
+Id_Deposit_Address == [ a \in CK_BTC_ADDRESSES \union {MINTER_CKBTC_ADDRESS} |-> a ]
 
 (*
 TLC has support for symmetry reduction: if a state S2 can be obtained from state
@@ -259,7 +264,7 @@ New_Outputs(utxos, requests, change_address) ==
 \* @type: $submission => Set($utxo);
 Utxos_Of(submission) ==
     LET
-        tx_hash == TxHash(submission)
+        tx_hash == TX_HASH(submission)
     IN
         { [id |-> << tx_hash, i >>, owner |-> submission.outputs[i].owner, amount |-> submission.outputs[i].amount] 
             : i \in 1..Len(submission.outputs) }
@@ -723,7 +728,7 @@ variables
     with(response \in { r \in btc_canister_to_minter: Caller(r) = self }; change_index \in {i\in DOMAIN outputs : outputs[i].owner = DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS]}) {
         btc_canister_to_minter := btc_canister_to_minter \ {response};
         if(VariantTag(response.response) = "SubmissionOk") {
-            submitted_transactions := submitted_transactions \union {[requests |-> submitted_ids, txid |-> TxHash(Unwrap_Submission(new_transaction)), used_utxos |-> spent, change_output |-> [vout |-> change_index, vamount |-> outputs[change_index].amount]] } ;
+            submitted_transactions := submitted_transactions \union {[requests |-> submitted_ids, txid |-> TX_HASH(Unwrap_Submission(new_transaction)), used_utxos |-> spent, change_output |-> [vout |-> change_index, vamount |-> outputs[change_index].amount]] } ;
         } else {
             \* This puts the submission at the end of the queue;
             \* this corresponds to the plans for the implementation, though for the model's purposes
@@ -776,7 +781,7 @@ variables
 }
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "9df96585" /\ chksum(tla) = "96936478")
+\* BEGIN TRANSLATION (chksum(pcal) = "3da9ec41" /\ chksum(tla) = "65ef999d")
 VARIABLES pc, btc, btc_canister, utxos_state_addresses, available_utxos, 
           finalized_utxos, locks, pending, submitted_transactions, balance, 
           btc_canister_to_btc, minter_to_btc_canister, btc_canister_to_minter, 
@@ -879,7 +884,7 @@ BTC_Canister_Loop == /\ pc[BTC_CANISTER_PROCESS_ID] = "BTC_Canister_Loop"
                                                                                                    ]
                                                                                                })
                                                        ELSE /\ Assert((FALSE), 
-                                                                      "Failure of assertion at line 501, column 13.")
+                                                                      "Failure of assertion at line 506, column 13.")
                                                             /\ UNCHANGED << btc_canister_to_btc, 
                                                                             btc_canister_to_minter >>
                                    \/ /\ btc_canister_to_minter' = (btc_canister_to_minter \union { BTC_Canister_Error_Response((Caller(req))) })
@@ -923,7 +928,7 @@ Ledger_Loop == /\ pc[LEDGER_PROCESS_ID] = "Ledger_Loop"
                                                               ELSE /\ ledger_to_minter' = (ledger_to_minter \union { [ caller_id |-> (Caller(req)), status |-> Status_Err ] })
                                                                    /\ UNCHANGED balance
                                                  ELSE /\ Assert((FALSE), 
-                                                                "Failure of assertion at line 558, column 29.")
+                                                                "Failure of assertion at line 563, column 29.")
                                                       /\ UNCHANGED << balance, 
                                                                       ledger_to_minter >>
                              \/ /\ ledger_to_minter' = (ledger_to_minter \union { [ caller_id |-> (req.caller_id), status |-> Status_System_Err ] })
@@ -1143,7 +1148,7 @@ Conclude_Submission(self) == /\ pc[self] = "Conclude_Submission"
                                   \E change_index \in {i\in DOMAIN outputs[self] : outputs[self][i].owner = DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS]}:
                                     /\ btc_canister_to_minter' = btc_canister_to_minter \ {response}
                                     /\ IF VariantTag(response.response) = "SubmissionOk"
-                                          THEN /\ submitted_transactions' = (submitted_transactions \union {[requests |-> submitted_ids[self], txid |-> TxHash(Unwrap_Submission(new_transaction[self])), used_utxos |-> spent[self], change_output |-> [vout |-> change_index, vamount |-> outputs[self][change_index].amount]] })
+                                          THEN /\ submitted_transactions' = (submitted_transactions \union {[requests |-> submitted_ids[self], txid |-> TX_HASH(Unwrap_Submission(new_transaction[self])), used_utxos |-> spent[self], change_output |-> [vout |-> change_index, vamount |-> outputs[self][change_index].amount]] })
                                                /\ pc' = [pc EXCEPT ![self] = "Finalize_Requests"]
                                                /\ UNCHANGED << available_utxos, 
                                                                pending, 

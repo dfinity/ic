@@ -1,6 +1,8 @@
 ---- MODULE CkbtcMinter_Apalache ----
 
-EXTENDS TLC, Sequences, FiniteSets, TypeAliases
+EXTENDS TLC, Sequences, FiniteSets, TypeAliases, TLC
+
+
 
 \* CODE_LINK_INSERT_CONSTANTS
 
@@ -100,6 +102,6 @@ VARIABLES
     submitted_transactions
 
 INSTANCE CkbtcMinter
-
+  WITH TX_HASH <- ToString
 
 ====
