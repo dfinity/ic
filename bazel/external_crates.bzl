@@ -678,7 +678,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
-                rev = "b78562340bd00f05f9c055dcba3ec0f74758c927",
+                rev = "92ee522a4514584ccf6de487ba40d92063effd9a",
                 default_features = False,
             ),
             "ic-http-certification": crate.spec(
@@ -895,7 +895,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.13.0",
             ),
             "mockall": crate.spec(
-                version = "^0.13.0",
+                version = "^0.13.1",
             ),
             "mockito": crate.spec(
                 version = "^1.6.1",
