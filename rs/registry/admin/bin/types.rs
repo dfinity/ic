@@ -3,7 +3,7 @@
 use crate::helpers::get_subnet_ids;
 use async_trait::async_trait;
 use candid::CandidType;
-use ic_canister_client::{Agent, Sender};
+use ic_agent::{Agent, Identity};
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance_api::ProposalActionRequest;
 use ic_protobuf::registry::{
@@ -18,6 +18,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{PrincipalId, SubnetId};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::{
     convert::{From, TryFrom, TryInto},
     net::{Ipv4Addr, Ipv6Addr},
@@ -197,7 +198,7 @@ impl From<ProvisionalWhitelistProto> for ProvisionalWhitelistRecord {
 pub trait ProposalMetadata {
     fn summary(&self) -> String;
     fn url(&self) -> String;
-    fn proposer_and_sender(&self, sender: Sender) -> (NeuronId, Sender);
+    fn proposer_and_identity(&self, identity: Arc<dyn Identity>) -> (NeuronId, Arc<dyn Identity>);
     fn is_dry_run(&self) -> bool;
     fn is_json(&self) -> bool;
 }

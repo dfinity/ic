@@ -4,7 +4,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
-    "//rs/canister_client",
     "//rs/certification",
     "//rs/crypto/tree_hash",
     "//rs/interfaces/registry",
@@ -15,9 +14,11 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:candid",
     "@crate_index//:chrono",
+    "@crate_index//:ic-agent",
     "@crate_index//:mockall",
     "@crate_index//:prost",
     "@crate_index//:rand",
+    "@crate_index//:reqwest",
     "@crate_index//:serde",
     "@crate_index//:url",
 ]

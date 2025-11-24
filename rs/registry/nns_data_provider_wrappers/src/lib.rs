@@ -38,6 +38,16 @@ impl NnsDataProvider {
             registry_canister: Arc::new(RegistryCanister::new(urls)),
         }
     }
+
+    pub fn new_with_canister(
+        rt_handle: tokio::runtime::Handle,
+        registry_canister: RegistryCanister,
+    ) -> NnsDataProvider {
+        NnsDataProvider {
+            rt_handle,
+            registry_canister: Arc::new(registry_canister),
+        }
+    }
 }
 
 impl RegistryDataProvider for NnsDataProvider {
@@ -71,6 +81,18 @@ impl CertifiedNnsDataProvider {
         Self {
             rt_handle,
             registry_canister: Arc::new(RegistryCanister::new(urls)),
+            nns_public_key: Arc::new(nns_public_key),
+        }
+    }
+
+    pub fn new_with_canister(
+        rt_handle: tokio::runtime::Handle,
+        registry_canister: RegistryCanister,
+        nns_public_key: ThresholdSigPublicKey,
+    ) -> Self {
+        Self {
+            rt_handle,
+            registry_canister: Arc::new(registry_canister),
             nns_public_key: Arc::new(nns_public_key),
         }
     }

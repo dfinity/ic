@@ -1,5 +1,5 @@
 use crate::helpers::{
-    get_proposer_and_sender, get_subnet_record, parse_proposal_url, shortened_subnet_string,
+    get_proposer_and_identity, get_subnet_record, parse_proposal_url, shortened_subnet_string,
     summary_from_string_or_file,
 };
 use crate::types::{ProposalMetadata, ProposalPayload, SubnetRecord};
@@ -7,7 +7,8 @@ use crate::{ProposalTitle, SubnetDescriptor};
 use async_trait::async_trait;
 use clap::Parser;
 use ic_admin_derive::derive_common_proposal_fields;
-use ic_canister_client::{Agent, Sender};
+use ic_agent::identity::AnonymousIdentity;
+use ic_agent::{Agent, Identity};
 use ic_management_canister_types_private::MasterPublicKeyId;
 use ic_nns_common::types::NeuronId;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
