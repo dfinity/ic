@@ -13,9 +13,8 @@ set -e
 #   --local-icrc1-image-tar <path>   Path to local ICRC1 image tar file
 #   --no-icp-latest                  Don't deploy ICP Rosetta latest image
 #   --no-icrc1-latest                Don't deploy ICRC1 Rosetta latest image
-#   --use-persistent-volumes         Use persistent volumes for /data partition (survives --clean)
-#   --clean                          Clean up Minikube cluster and Helm chart before deploying (keeps persistent volumes)
-#   --purge                          Like --clean but also deletes persistent volumes
+#   --use-persistent-volumes         Use persistent volumes for /data partition
+#   --clean                          Clean up Minikube cluster and Helm chart before deploying
 #   --stop                           Stop the Minikube cluster
 #   --help                           Display this help message
 
@@ -31,7 +30,6 @@ DEPLOY_ICP_LATEST=true
 DEPLOY_ICRC1_LATEST=true
 USE_PERSISTENT_VOLUMES=false
 CLEAN=false
-PURGE=false
 STOP=false
 MINIKUBE_PROFILE="local-rosetta"
 
@@ -75,13 +73,9 @@ while [[ "$#" -gt 0 ]]; do
             USE_PERSISTENT_VOLUMES=true
             ;;
         --clean) CLEAN=true ;;
-        --purge)
-            PURGE=true
-            CLEAN=true
-            ;;
         --stop) STOP=true ;;
         --help)
-            sed -n '5,20p' "$0"
+            sed -n '5,19p' "$0"
             exit 0
             ;;
         *)
@@ -179,11 +173,9 @@ command -v helm &>/dev/null || {
     fi
 }
 
-# Clean up Minikube cluster and Helm chart if --clean or --purge flag is set
+# Clean up Minikube cluster and Helm chart if --clean flag is set
 [[ "$CLEAN" == true ]] && {
     echo "Cleaning up Helm chart..."
-
-    # Uninstall the Helm chart
     helm uninstall local-rosetta --kube-context="$MINIKUBE_PROFILE" 2>/dev/null || true
 
     # Wait for pods to be deleted after helm uninstall
@@ -192,19 +184,8 @@ command -v helm &>/dev/null || {
         kubectl wait --for=delete pod --all -n rosetta-api --timeout=60s --context="$MINIKUBE_PROFILE" 2>/dev/null || true
     fi
 
-    # If --purge is set, also delete persistent volumes
-    if [[ "$PURGE" == true ]]; then
-        echo "Purging persistent volumes..."
-        kubectl delete pvc --all -n rosetta-api --context="$MINIKUBE_PROFILE" 2>/dev/null || true
-        echo "Deleting Minikube cluster..."
-        minikube delete -p "$MINIKUBE_PROFILE"
-    elif [[ "$USE_PERSISTENT_VOLUMES" == false ]]; then
-        # Only delete the cluster if not using persistent volumes (for backward compatibility)
-        echo "Deleting Minikube cluster..."
-        minikube delete -p "$MINIKUBE_PROFILE"
-    else
-        echo "Persistent volumes preserved. Use --purge to delete them."
-    fi
+    echo "Deleting Minikube cluster..."
+    minikube delete -p "$MINIKUBE_PROFILE"
 }
 
 # Start Minikube with the specified profile if not already running

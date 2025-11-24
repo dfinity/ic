@@ -59,7 +59,7 @@ You can make the rosetta nodes point to other ledgers by using these flags:
 - `--no-icrc1-latest`: Skip deploying the ICRC1 Rosetta latest image from Docker Hub (useful when you only want to deploy your local build).
 - `--sqlite-cache-kb <size>`: Set the SQLite cache size in KB (optional, no default). Lower values reduce memory usage but may impact performance. Adjust based on the number of ledgers and available pod memory.
 - `--flush-cache-shrink-mem`: Flush the cache and shrink the memory after updating balances. If this flag is present, the feature is enabled; otherwise, it remains disabled.
-- `--use-persistent-volumes`: Use persistent volumes for the `/data` partition. Data will survive pod restarts and the `--clean` flag.
+- `--use-persistent-volumes`: Use persistent volumes for the `/data` partition. Data will survive pod restarts and Helm chart upgrades.
 
 ATTENTION: The first run might take a few minutes to finish as it'll create the cluster and install the necessary charts in it. After that, all the script will do is re-deploy the rosetta images with different configuration if needed.
 
@@ -133,7 +133,7 @@ Example that only deploys the local ICP Rosetta build (no latest ICP Rosetta, no
 
 By default, the Rosetta services use ephemeral storage (emptyDir volumes) for their `/data` partition, which means data is lost when pods are deleted or the cluster is cleaned.
 
-To enable persistent storage that survives pod restarts and cluster cleanups, use the `--use-persistent-volumes` flag:
+To enable persistent storage that survives pod restarts, use the `--use-persistent-volumes` flag:
 
 ```bash
 ./deploy.sh --use-persistent-volumes
@@ -147,19 +147,14 @@ This creates separate persistent volumes for each Rosetta service:
 
 Each volume is 50Gi by default and uses the `standard` storage class. Data stored in these volumes will persist across:
 - Pod restarts and updates
-- Helm chart upgrades
-- Cluster cleanups using the `--clean` flag
+- Helm chart upgrades (e.g., `helm upgrade`)
+
+**Note**: The `--clean` flag deletes the entire Minikube cluster, which will also remove persistent volumes and their data.
 
 Example deploying with persistent volumes:
 
 ```bash
 ./deploy.sh --use-persistent-volumes --local-icrc1-image-tar /tmp/icrc_rosetta_image.tar
-```
-
-Example cleaning up while preserving data:
-
-```bash
-./deploy.sh --clean --use-persistent-volumes
 ```
 
 ### Updating a Single Local Instance
@@ -189,37 +184,16 @@ The script will:
 
 ### Cleaning up
 
-The script provides two cleanup options:
-
 #### `--clean` flag
 
-Uninstalls the Helm chart and redeploys from scratch. Behavior depends on whether you're using persistent volumes:
+Uninstalls the Helm chart and deletes the entire Minikube cluster. This will remove all deployments, services, and the cluster itself.
 
-- **Without persistent volumes**: Deletes the entire Minikube cluster (old behavior for backward compatibility)
-- **With persistent volumes**: Only uninstalls the Helm chart, preserving the cluster and all persistent volumes
-
-Example with persistent volumes (data is preserved):
-```bash
-./deploy.sh --clean --use-persistent-volumes
-```
-
-Example without persistent volumes (cluster is deleted):
+Example:
 ```bash
 ./deploy.sh --clean
 ```
 
-#### `--purge` flag
-
-Performs a complete cleanup including:
-- Uninstalls the Helm chart
-- Deletes all persistent volumes
-- Deletes the entire Minikube cluster
-
-```bash
-./deploy.sh --purge
-```
-
-Use `--purge` when you want to start completely fresh, removing all data.
+**Note**: When using `--use-persistent-volumes`, the persistent volumes are tied to the Minikube cluster, so using `--clean` will also delete the persistent data when the cluster is removed.
 
 ## Monitoring with Grafana
 

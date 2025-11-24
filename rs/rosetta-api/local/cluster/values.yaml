@@ -1,7 +1,7 @@
 # Number of replicas for each deployment
 replicaCount: 1
 
-# Use persistent volumes for /data partition (survives pod restarts and --clean)
+# Use persistent volumes for /data partition
 usePersistentVolumes: false
 
 # Volume configuration
