@@ -327,21 +327,30 @@ fn should_correctly_format_config_display_message() {
 #[test]
 fn should_correctly_serialize_and_deserialize_nidkg_config() {
     let config = NiDkgConfig::new(valid_dkg_config_data()).unwrap();
-    let proto = pb::NiDkgConfig::from(&config);
-    let parsing_result = NiDkgConfig::try_from(proto);
-    assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
-    let parsed = parsing_result.unwrap();
-    assert_eq!(config, parsed);
+
+    // Serialization/deserialization with protobuf
+    let config_proto = pb::NiDkgConfig::from(&config);
+    assert_eq!(Ok(config.clone()), NiDkgConfig::try_from(config_proto));
+
+    // Serialization/deserialization with serde
+    let config_cbor = serde_cbor::to_vec(&config).unwrap();
+    assert_eq!(config, serde_cbor::from_slice(&config_cbor).unwrap());
 }
 
 #[test]
 fn should_fail_deserializing_invalid_nidkg_config() {
     for config in invalid_configs() {
-        let invalid_serialization = pb::NiDkgConfig::from(&config);
+        let invalid_serialization_proto = pb::NiDkgConfig::from(&config);
         assert_matches!(
-            NiDkgConfig::try_from(invalid_serialization),
+            NiDkgConfig::try_from(invalid_serialization_proto),
             Err(e) if e.contains("Invariant check failed while constructing NiDkgConfig")
-        )
+        );
+
+        let invalid_serialization_serde: Vec<u8> = serde_cbor::to_vec(&config).unwrap();
+        assert_matches!(
+            serde_cbor::from_slice::<NiDkgConfig>(&invalid_serialization_serde),
+            Err(e) if e.to_string().contains("Invariant check failed while constructing NiDkgConfig")
+        );
     }
 }
 
