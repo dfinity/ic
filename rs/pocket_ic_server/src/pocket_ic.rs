@@ -2492,6 +2492,7 @@ impl GetChunk for PocketIcSubnets {
 pub struct PocketIc {
     range_gen: RangeGen,
     runtime: Arc<Runtime>,
+    mainnet_routing_table: RoutingTable,
     state_label: StateLabel,
     subnets: PocketIcSubnets,
     default_effective_canister_id: Principal,
@@ -2571,6 +2572,7 @@ impl PocketIc {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn try_new(
         runtime: Arc<Runtime>,
+        mainnet_routing_table: RoutingTable,
         seed: u64,
         subnet_configs: ExtendedSubnetConfigSet,
         state_dir: Option<PathBuf>,
@@ -2873,6 +2875,7 @@ impl PocketIc {
         Ok(Self {
             range_gen,
             runtime,
+            mainnet_routing_table,
             state_label,
             subnets,
             default_effective_canister_id,
@@ -5072,42 +5075,29 @@ fn route(
                         .unwrap())
                 } else if is_provisional_create_canister {
                     // We create a new subnet with the IC mainnet configuration containing the effective canister ID.
-                    // NNS and II subnets cannot be created at this point though because NNS is the root subnet
-                    // and both NNS and II subnets on the IC mainnet do not have a single canister range
-                    // (the PocketIC instance must be created with those subnets if applicable).
+                    // NNS subnet cannot be created at this point though because NNS is the root subnet
+                    // and the root subnet cannot be created after its PocketIC instance has already been created.
                     let subnet_kind = subnet_kind_from_canister_id(canister_id);
-                    if matches!(subnet_kind, SubnetKind::NNS)
-                        || matches!(subnet_kind, SubnetKind::II)
-                    {
+                    if matches!(subnet_kind, SubnetKind::NNS) {
                         return Err(format!(
-                            "The effective canister ID {canister_id} belongs to the NNS or II subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
+                            "The effective canister ID {canister_id} belongs to the NNS subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
                         ));
                     }
                     let instruction_config = SubnetInstructionConfig::Production;
-                    // The binary representation of canister IDs on the IC mainnet consists of exactly 10 bytes.
-                    let canister_id_slice: &[u8] = canister_id.as_ref();
-                    if canister_id_slice.len() != 10 {
-                        return Err(format!(
-                            "The binary representation {} of effective canister ID {canister_id} should consist of 10 bytes.",
-                            hex::encode(canister_id_slice)
-                        ));
-                    }
-                    // The first 8 bytes of the binary representation of a canister ID on the IC mainnet represent:
-                    // - the sequence number of the canister's subnet on the IC mainnet (all but the last 20 bits);
-                    // - the sequence number of the canister within its subnet (the last 20 bits).
-                    let canister_id_u64: u64 =
-                        u64::from_be_bytes(canister_id_slice[..8].try_into().unwrap());
-                    if (canister_id_u64 >> 20) >= MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET {
-                        return Err(format!(
-                            "The effective canister ID {canister_id} does not belong to an existing subnet and it is not a mainnet canister ID."
-                        ));
-                    }
-                    // Hence, we derive the canister range of the canister ID on the IC mainnet by masking in/out the last 20 bits.
-                    // This works for all IC mainnet subnets that have not been split.
-                    let range = CanisterIdRange {
-                        start: CanisterId::from_u64(canister_id_u64 & 0xFFFFFFFFFFF00000),
-                        end: CanisterId::from_u64(canister_id_u64 | 0xFFFFF),
+                    let subnet_id = match pic.mainnet_routing_table.lookup_entry(canister_id) {
+                        Some((_, subnet_id)) => subnet_id,
+                        None => {
+                            return Err(format!(
+                                "The effective canister ID {canister_id} does not belong to an existing subnet and it is not a mainnet canister ID."
+                            ));
+                        }
                     };
+                    let ranges = pic
+                        .mainnet_routing_table
+                        .ranges(subnet_id)
+                        .iter()
+                        .cloned()
+                        .collect();
                     // The canister allocation range must be disjoint from the canister ranges on the IC mainnet
                     // and all existing canister ranges within the PocketIC instance and thus we use
                     // `RangeGen::next_range()` to produce such a canister range.
@@ -5116,7 +5106,7 @@ fn route(
                     let update_registry_and_system_canisters = true;
                     pic.subnets.create_subnet(
                         SubnetConfigInfo {
-                            ranges: vec![range],
+                            ranges,
                             alloc_range: Some(canister_allocation_range),
                             subnet_id: None,
                             subnet_state_dir: None,
@@ -5221,6 +5211,7 @@ mod tests {
             // State label changes.
             let mut pic0 = PocketIc::try_new(
                 runtime.clone(),
+                RoutingTable::new(),
                 0,
                 ExtendedSubnetConfigSet {
                     application: vec![SubnetSpec::default()],
@@ -5240,6 +5231,7 @@ mod tests {
             .unwrap();
             let mut pic1 = PocketIc::try_new(
                 runtime.clone(),
+                RoutingTable::new(),
                 1,
                 ExtendedSubnetConfigSet {
                     application: vec![SubnetSpec::default()],
