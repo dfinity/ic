@@ -2187,8 +2187,8 @@ impl StateMachine {
                 return Err("No certified state available.".to_string());
             }
         };
-        // TODO(CON-1487): return the `canister_ranges/{subnet_id}` path as well
         let paths = vec![
+            LabeledTreePath::new(vec![b"canister_ranges".into(), subnet_id.get().into()]),
             LabeledTreePath::new(vec![
                 b"subnet".into(),
                 subnet_id.get().into(),

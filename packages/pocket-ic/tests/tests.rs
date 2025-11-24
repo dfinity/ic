@@ -2264,7 +2264,7 @@ fn call_ingress_expiry() {
     let time = Time::from_nanos_since_unix_epoch(unix_time_nanos);
     pic.set_certified_time(time);
     let ingress_expiry = pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000;
-    let (resp, msg_id) = call_request(&pic, ingress_expiry, canister_id);
+    let (resp, msg_id) = call_request(&pic, ingress_expiry, canister_id, "v2");
     assert_eq!(resp.status(), reqwest::StatusCode::ACCEPTED);
 
     // execute a round on the PocketIC instance to process that update call
@@ -2285,7 +2285,7 @@ fn call_ingress_expiry() {
         .unwrap()
         .as_nanos() as u64
         + 240_000_000_000;
-    let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id);
+    let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id, "v2");
     assert_eq!(resp.status(), reqwest::StatusCode::BAD_REQUEST);
     let err = String::from_utf8(resp.bytes().unwrap().to_vec()).unwrap();
     assert!(
@@ -2297,6 +2297,7 @@ fn call_request(
     pic: &PocketIc,
     ingress_expiry: u64,
     canister_id: Principal,
+    version: &str,
 ) -> (reqwest::blocking::Response, [u8; 32]) {
     let content = Call {
         nonce: None,
@@ -2319,8 +2320,9 @@ fn call_request(
     envelope.serialize(&mut serializer).unwrap();
 
     let endpoint = format!(
-        "instances/{}/api/v2/canister/{}/call",
+        "instances/{}/api/{}/canister/{}/call",
         pic.instance_id(),
+        version,
         canister_id.to_text()
     );
     let client = reqwest::blocking::Client::new();
@@ -2331,6 +2333,30 @@ fn call_request(
         .send()
         .unwrap();
     (resp, *content.to_request_id())
+}
+
+#[test]
+fn call_request_versions() {
+    let pic = PocketIcBuilder::new()
+        .with_nns_subnet()
+        .with_application_subnet()
+        .with_auto_progress()
+        .build();
+    let canister_id = pic.create_canister();
+    pic.add_cycles(canister_id, INIT_CYCLES);
+    pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+
+    // submit an update call via /api/<version>/canister/.../call
+    for version in ["v2", "v3", "v4"] {
+        let ingress_expiry = pic.get_time().as_nanos_since_unix_epoch() + 240_000_000_000;
+        let (resp, _msg_id) = call_request(&pic, ingress_expiry, canister_id, version);
+        let status = resp.status();
+        if version == "v2" {
+            assert_eq!(status, reqwest::StatusCode::ACCEPTED);
+        } else {
+            assert_eq!(status, reqwest::StatusCode::OK);
+        }
+    }
 }
 
 #[test]
