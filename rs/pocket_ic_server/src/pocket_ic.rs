@@ -239,10 +239,6 @@ fn default_timestamp(icp_features: &Option<IcpFeatures>) -> SystemTime {
 /// The response type for `/api` IC endpoint operations.
 pub(crate) type ApiResponse = BoxFuture<'static, (StatusCode, BTreeMap<String, Vec<u8>>, Vec<u8>)>;
 
-/// We assume that the maximum number of subnets on the mainnet is 1024.
-/// Used for generating canister ID ranges that do not appear on mainnet.
-pub const MAXIMUM_NUMBER_OF_SUBNETS_ON_MAINNET: u64 = 1024;
-
 fn wasm_result_to_canister_result(
     res: ic_state_machine_tests::WasmResult,
     certified: bool,
