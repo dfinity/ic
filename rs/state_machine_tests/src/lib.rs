@@ -2187,8 +2187,8 @@ impl StateMachine {
                 return Err("No certified state available.".to_string());
             }
         };
-        // TODO(CON-1487): return the `canister_ranges/{subnet_id}` path as well
         let paths = vec![
+            LabeledTreePath::new(vec![b"canister_ranges".into(), subnet_id.get().into()]),
             LabeledTreePath::new(vec![
                 b"subnet".into(),
                 subnet_id.get().into(),
@@ -2229,6 +2229,11 @@ impl StateMachine {
     pub fn set_checkpoints_enabled(&self, enabled: bool) {
         let checkpoint_interval_length = if enabled { 0 } else { u64::MAX };
         self.set_checkpoint_interval_length(checkpoint_interval_length);
+        // Finish any asynchronous state manager operations.
+        self.state_manager.flush_tip_channel();
+        self.state_manager
+            .state_layout()
+            .flush_checkpoint_removal_channel();
     }
 
     /// Set current interval length. The typical interval length

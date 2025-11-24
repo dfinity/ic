@@ -623,8 +623,7 @@ impl SnsRootCanister {
             // Remove extension_canister_id from self.extensions.
             //
             // (This might result in no actual changes. In that case, we still
-            // power through with the rest of this method; we do not return
-            // early if there are no changes.)
+            // power through with the rest of this method.)
             self_ref.with_borrow_mut(|state| {
                 let Some(extensions) = state.extensions.as_mut() else {
                     return;

@@ -1138,7 +1138,10 @@ name = "bare_metal_deployment"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "http 1.3.1",
+ "rand 0.8.5",
  "rexpect",
+ "ssh2",
 ]
 
 [[package]]
@@ -8397,6 +8400,7 @@ dependencies = [
 name = "ic-crypto-internal-sha2"
 version = "0.9.0"
 dependencies = [
+ "hex",
  "sha2 0.10.9",
 ]
 
@@ -10900,7 +10904,7 @@ dependencies = [
 
 [[package]]
 name = "ic-metrics-assert"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "candid",
@@ -11142,11 +11146,13 @@ dependencies = [
  "candid",
  "dfn_core",
  "futures",
+ "ic-crypto-sha2",
  "ic-nervous-system-canisters",
  "ic-nervous-system-common",
  "ic-wasm",
  "icp-ledger",
  "icrc-ledger-types",
+ "lazy_static",
  "libflate",
  "prometheus-parse",
 ]
@@ -11210,16 +11216,6 @@ dependencies = [
  "ic-nervous-system-histogram",
  "itertools 0.12.1",
  "lazy_static",
-]
-
-[[package]]
-name = "ic-nervous-system-instruction-stats-update-attribute"
-version = "0.0.1"
-dependencies = [
- "candid",
- "ic-cdk",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -15223,16 +15219,6 @@ dependencies = [
  "serde_json",
  "thiserror 1.0.69",
  "walrus 0.21.3",
-]
-
-[[package]]
-name = "ic-wasm-transform"
-version = "0.9.0"
-dependencies = [
- "wasm-encoder 0.240.0",
- "wasmparser 0.240.0",
- "wasmprinter 0.240.0",
- "wat",
 ]
 
 [[package]]
@@ -19243,6 +19229,7 @@ dependencies = [
  "ic-certification 3.0.3",
  "ic-error-types 0.2.0",
  "ic-management-canister-types",
+ "ic-management-canister-types-private",
  "ic-migration-canister",
  "ic-nns-governance-api",
  "ic-registry-client",
