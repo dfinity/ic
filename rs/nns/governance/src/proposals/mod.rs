@@ -1,6 +1,13 @@
 use crate::{
     governance::LOG_PREFIX,
-    pb::v1::{GovernanceError, ProposalData, Topic, Vote, governance_error::ErrorType},
+    pb::v1::{
+        AddOrRemoveNodeProvider, ApproveGenesisKyc, CreateServiceNervousSystem,
+        DeregisterKnownNeuron, FulfillSubnetRentalRequest, GovernanceError, InstallCode,
+        KnownNeuron, ManageNeuron, Motion, NetworkEconomics, ProposalData, RewardNodeProvider,
+        RewardNodeProviders, StopOrStartCanister, Topic, UpdateCanisterSettings, Vote,
+        governance_error::ErrorType, proposal::Action,
+    },
+    proposals::execute_nns_function::ValidExecuteNnsFunction,
 };
 use ic_base_types::CanisterId;
 use ic_cdk::println;
@@ -11,11 +18,159 @@ use std::collections::HashMap;
 pub mod call_canister;
 pub mod create_service_nervous_system;
 pub mod deregister_known_neuron;
+pub mod execute_nns_function;
 pub mod fulfill_subnet_rental_request;
 pub mod install_code;
 pub mod register_known_neuron;
 pub mod stop_or_start_canister;
 pub mod update_canister_settings;
+
+/// Represents a valid proposal action that has passed initial validation.
+/// Unlike the protobuf Action enum, this enum only includes non-obsolete actions.
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, PartialEq)]
+pub enum ValidProposalAction {
+    ManageNeuron(Box<ManageNeuron>),
+    ManageNetworkEconomics(NetworkEconomics),
+    Motion(Motion),
+    ExecuteNnsFunction(ValidExecuteNnsFunction),
+    ApproveGenesisKyc(ApproveGenesisKyc),
+    AddOrRemoveNodeProvider(AddOrRemoveNodeProvider),
+    RewardNodeProvider(RewardNodeProvider),
+    RewardNodeProviders(RewardNodeProviders),
+    RegisterKnownNeuron(KnownNeuron),
+    DeregisterKnownNeuron(DeregisterKnownNeuron),
+    CreateServiceNervousSystem(CreateServiceNervousSystem),
+    InstallCode(InstallCode),
+    StopOrStartCanister(StopOrStartCanister),
+    UpdateCanisterSettings(UpdateCanisterSettings),
+    FulfillSubnetRentalRequest(FulfillSubnetRentalRequest),
+}
+
+impl TryFrom<Option<Action>> for ValidProposalAction {
+    type Error = GovernanceError;
+
+    fn try_from(action: Option<Action>) -> Result<Self, Self::Error> {
+        let action = action.ok_or(GovernanceError::new_with_message(
+            ErrorType::InvalidProposal,
+            "Action is required",
+        ))?;
+        match action {
+            Action::ManageNeuron(manage_neuron) => {
+                Ok(ValidProposalAction::ManageNeuron(manage_neuron))
+            }
+            Action::ManageNetworkEconomics(network_economics) => Ok(
+                ValidProposalAction::ManageNetworkEconomics(network_economics),
+            ),
+            Action::Motion(motion) => Ok(ValidProposalAction::Motion(motion)),
+            Action::ExecuteNnsFunction(execute_nns_function) => {
+                ValidExecuteNnsFunction::try_from(execute_nns_function)
+                    .map(ValidProposalAction::ExecuteNnsFunction)
+            }
+            Action::ApproveGenesisKyc(approve_genesis_kyc) => {
+                Ok(ValidProposalAction::ApproveGenesisKyc(approve_genesis_kyc))
+            }
+            Action::AddOrRemoveNodeProvider(add_or_remove_node_provider) => Ok(
+                ValidProposalAction::AddOrRemoveNodeProvider(add_or_remove_node_provider),
+            ),
+            Action::RewardNodeProvider(reward_node_provider) => Ok(
+                ValidProposalAction::RewardNodeProvider(reward_node_provider),
+            ),
+            Action::RewardNodeProviders(reward_node_providers) => Ok(
+                ValidProposalAction::RewardNodeProviders(reward_node_providers),
+            ),
+            Action::RegisterKnownNeuron(register_known_neuron) => Ok(
+                ValidProposalAction::RegisterKnownNeuron(register_known_neuron),
+            ),
+            Action::DeregisterKnownNeuron(deregister_known_neuron) => Ok(
+                ValidProposalAction::DeregisterKnownNeuron(deregister_known_neuron),
+            ),
+            Action::CreateServiceNervousSystem(create_service_nervous_system) => Ok(
+                ValidProposalAction::CreateServiceNervousSystem(create_service_nervous_system),
+            ),
+            Action::InstallCode(install_code) => Ok(ValidProposalAction::InstallCode(install_code)),
+            Action::StopOrStartCanister(stop_or_start_canister) => Ok(
+                ValidProposalAction::StopOrStartCanister(stop_or_start_canister),
+            ),
+            Action::UpdateCanisterSettings(update_canister_settings) => Ok(
+                ValidProposalAction::UpdateCanisterSettings(update_canister_settings),
+            ),
+            Action::FulfillSubnetRentalRequest(fulfill_subnet_rental_request) => Ok(
+                ValidProposalAction::FulfillSubnetRentalRequest(fulfill_subnet_rental_request),
+            ),
+
+            // Obsolete actions
+            Action::SetDefaultFollowees(_) => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "Se tDefaultFollowees is obsolete",
+            )),
+            Action::OpenSnsTokenSwap(_) => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "OpenSnsTokenSwap is obsolete",
+            )),
+            Action::SetSnsTokenSwapOpenTimeWindow(_) => Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "SetSnsTokenSwapOpenTimeWindow is obsolete",
+            )),
+        }
+    }
+}
+
+impl ValidProposalAction {
+    /// Computes a topic to a given proposal action at the creation time.
+    pub fn topic(&self) -> Result<Topic, GovernanceError> {
+        let topic = match self {
+            ValidProposalAction::ManageNeuron(_) => Topic::NeuronManagement,
+            ValidProposalAction::ManageNetworkEconomics(_) => Topic::NetworkEconomics,
+            ValidProposalAction::Motion(_)
+            | ValidProposalAction::RegisterKnownNeuron(_)
+            | ValidProposalAction::DeregisterKnownNeuron(_) => Topic::Governance,
+            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
+                execute_nns_function.topic()
+            }
+            ValidProposalAction::ApproveGenesisKyc(_) => Topic::Kyc,
+            ValidProposalAction::AddOrRemoveNodeProvider(_) => Topic::ParticipantManagement,
+            ValidProposalAction::RewardNodeProvider(_)
+            | ValidProposalAction::RewardNodeProviders(_) => Topic::NodeProviderRewards,
+            ValidProposalAction::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
+            ValidProposalAction::InstallCode(install_code) => install_code.valid_topic()?,
+            ValidProposalAction::StopOrStartCanister(stop_or_start) => {
+                stop_or_start.valid_topic()?
+            }
+            ValidProposalAction::UpdateCanisterSettings(update_settings) => {
+                update_settings.valid_topic()?
+            }
+            ValidProposalAction::FulfillSubnetRentalRequest(_) => Topic::SubnetRental,
+        };
+        Ok(topic)
+    }
+
+    /// Returns whether proposals with such an action should be allowed to
+    /// be submitted when the heap growth potential is low.
+    pub fn allowed_when_resources_are_low(&self) -> bool {
+        match self {
+            ValidProposalAction::ExecuteNnsFunction(execute_nns_function) => {
+                execute_nns_function.allowed_when_resources_are_low()
+            }
+            ValidProposalAction::InstallCode(install_code) => {
+                install_code.allowed_when_resources_are_low()
+            }
+            ValidProposalAction::UpdateCanisterSettings(update_settings) => {
+                update_settings.allowed_when_resources_are_low()
+            }
+            _ => false,
+        }
+    }
+
+    /// Returns the ManageNeuron action if this is a ManageNeuron proposal.
+    pub fn manage_neuron(&self) -> Option<&ManageNeuron> {
+        if let ValidProposalAction::ManageNeuron(manage_neuron) = self {
+            Some(manage_neuron)
+        } else {
+            None
+        }
+    }
+}
 
 const SNS_RELATED_CANISTER_IDS: [&CanisterId; 2] =
     [&SNS_WASM_CANISTER_ID, &SNS_AGGREGATOR_CANISTER_ID];
