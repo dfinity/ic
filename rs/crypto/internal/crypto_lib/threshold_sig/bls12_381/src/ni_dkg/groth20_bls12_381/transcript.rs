@@ -182,19 +182,17 @@ fn compute_transcript(
         .iter()
         .map(|(dealer_index, dealing)| {
             // Type conversion from crypto internal type.
-            threshold_types::PublicCoefficients::deserialize_cached(
-                &dealing.public_coefficients,
-            )
-            .map(|public_coefficients| (*dealer_index, public_coefficients))
-            .map_err(|crypto_error| {
-                let error = InvalidArgumentError {
-                    message: format!("Invalid dealing: {crypto_error:?}"),
-                };
-                CspDkgCreateTranscriptError::InvalidDealingError {
-                    dealer_index: *dealer_index,
-                    error,
-                }
-            })
+            threshold_types::PublicCoefficients::deserialize_cached(&dealing.public_coefficients)
+                .map(|public_coefficients| (*dealer_index, public_coefficients))
+                .map_err(|crypto_error| {
+                    let error = InvalidArgumentError {
+                        message: format!("Invalid dealing: {crypto_error:?}"),
+                    };
+                    CspDkgCreateTranscriptError::InvalidDealingError {
+                        dealer_index: *dealer_index,
+                        error,
+                    }
+                })
         })
         .collect();
     let individual_public_coefficients = individual_public_coefficients?;
