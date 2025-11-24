@@ -325,7 +325,7 @@ fn print_success_summary(message: &str) {
     const GREEN: &str = "\x1b[32m";
     const BOLD: &str = "\x1b[1m";
     const RESET: &str = "\x1b[0m";
-    const SEPARATOR_CHAR: &str = "═";
+    const SEPARATOR_CHAR: &str = "=";
 
     let width = size().map(|(w, _)| w as usize).unwrap_or(80).min(100);
 
@@ -335,7 +335,7 @@ fn print_success_summary(message: &str) {
     // The extra blank lines help separate it from subsequent service logs
     let _ = writeln!(
         handle,
-        "\n\n{}{}{}\n{}{}✓ {}{}{}\n{}{}{}\n\n",
+        "\n\n{}{}{}\n{}{}SUCCESS: {}{}{}\n{}{}{}\n\n",
         GREEN, separator, RESET, GREEN, BOLD, message, RESET, RESET, GREEN, separator, RESET
     );
     let _ = handle.flush();
