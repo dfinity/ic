@@ -88,6 +88,15 @@ execute_command() {
             read -r confirm
             if [ "$confirm" == "y" ]; then
                 # Launch the NNS recovery TUI tool via hostos_tool
+
+                # Fix for serial console where size might be reported as 0 0
+                if size=$(stty size 2>/dev/null); then
+                     read -r rows cols <<< "$size"
+                     if [ "${rows:-0}" -eq 0 ] || [ "${cols:-0}" -eq 0 ]; then
+                         stty rows 36 cols 120
+                     fi
+                fi
+
                 /opt/ic/bin/hostos_tool manual-recovery
             fi
             ;;
