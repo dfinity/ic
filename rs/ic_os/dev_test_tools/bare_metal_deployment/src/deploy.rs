@@ -5,7 +5,7 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-// The reload_hostos tool to be copied to the baremetal host, defines RELOAD_HOSTOS_CMD
+// Defines RELOAD_HOSTOS_CMD, the tool to reload the HostOS that is copied to the baremetal host.
 include!(concat!(env!("OUT_DIR"), "/reload_hostos_cmd.rs"));
 
 const SSH_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
