@@ -284,10 +284,12 @@ impl IndexTable {
         }
     }
 
+    #[cfg(test)]
     fn segment_size(&self) -> MemorySize {
         self.segment_size
     }
 
+    #[cfg(test)]
     fn result_max_size(&self) -> MemorySize {
         self.result_max_size
     }

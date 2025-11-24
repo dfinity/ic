@@ -74,6 +74,10 @@ impl RingBuffer {
         self.io.load_header().data_size.get() as usize
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.used_space() == 0
+    }
+
     pub fn next_id(&self) -> u64 {
         self.io.load_header().next_idx
     }

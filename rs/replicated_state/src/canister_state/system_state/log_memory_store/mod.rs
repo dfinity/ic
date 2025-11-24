@@ -108,6 +108,10 @@ impl LogMemoryStore {
         self.load_ring_buffer().next_id()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.load_ring_buffer().is_empty()
+    }
+
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
         self.load_ring_buffer().records(filter)
     }
