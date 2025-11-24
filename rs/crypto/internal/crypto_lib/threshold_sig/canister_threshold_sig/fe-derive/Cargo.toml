@@ -15,4 +15,4 @@ num-bigint-dig = { version = "0.8", features = ["prime"] }
 num-traits = { workspace = true }
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
-syn = { version = "1.0.109", features = ["parsing", "derive"] }
+syn = { workspace = true }

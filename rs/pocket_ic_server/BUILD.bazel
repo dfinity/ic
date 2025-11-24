@@ -349,15 +349,7 @@ rust_test(
         tags = [
             "cpu:8",
             # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
-            #  ---- test_http_gateway stdout ----
-            #  thread 'test_http_gateway' panicked at rs/pocket_ic_server/tests/test.rs:383:48:
-            #  called `Result::unwrap()` on an `Err` value: reqwest::Error {
-            #    kind: Request, url: "http://7tjcv-pp777-77776-qaaaa-cai.raw.localhost:49380/",
-            #    source: hyper_util::client::legacy::Error(
-            #      Connect,
-            #      ConnectError("tcp connect error", Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" })
-            #    )
-            #  }
+            # Failed to bind PocketIC server to address 127.0.0.1:0
             "requires-network",
             "test_all_platforms",
         ],

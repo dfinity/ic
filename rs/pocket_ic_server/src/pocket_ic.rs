@@ -65,9 +65,11 @@ use ic_limits::MAX_P2P_IO_CHANNEL_SIZE;
 use ic_logger::{ReplicaLogger, no_op_logger};
 use ic_management_canister_types_private::{
     BoundedVec, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs,
-    CanisterSnapshotDataKind, EcdsaCurve, EcdsaKeyId, LogVisibilityV2, MasterPublicKeyId,
-    Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs, ReadCanisterSnapshotDataArgs,
-    ReadCanisterSnapshotMetadataArgs, SchnorrAlgorithm, SchnorrKeyId, VetKdCurve, VetKdKeyId,
+    CanisterSnapshotDataKind, CanisterSnapshotDataOffset, EcdsaCurve, EcdsaKeyId, LogVisibilityV2,
+    MasterPublicKeyId, Method as Ic00Method, ProvisionalCreateCanisterWithCyclesArgs,
+    ReadCanisterSnapshotDataArgs, ReadCanisterSnapshotMetadataArgs,
+    ReadCanisterSnapshotMetadataResponse, SchnorrAlgorithm, SchnorrKeyId,
+    UploadCanisterSnapshotDataArgs, UploadCanisterSnapshotMetadataArgs, VetKdCurve, VetKdKeyId,
 };
 use ic_metrics::MetricsRegistry;
 use ic_nervous_system_common::ONE_YEAR_SECONDS;
@@ -2271,7 +2273,7 @@ impl PocketIcSubnets {
             // Install the Dogecoin mainnet canister configured for the regtest network.
             let args = DogecoinInitConfig {
                 network: Some(DogecoinNetwork::Regtest),
-                fees: Some(DogecoinFees::testnet()),
+                fees: Some(DogecoinFees::mainnet()),
                 ..Default::default()
             };
             btc_subnet
@@ -3794,6 +3796,183 @@ impl Operation for CanisterSnapshotDownload {
             self.sender,
             self.canister_id,
             self.snapshot_id,
+            self.snapshot_dir.display()
+        ))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct CanisterSnapshotUpload {
+    pub sender: PrincipalId,
+    pub canister_id: CanisterId,
+    pub replace_snapshot: Option<SnapshotId>,
+    pub snapshot_dir: PathBuf,
+}
+
+fn upload_blob_from_file(
+    subnet: Arc<StateMachine>,
+    canister_id: CanisterId,
+    snapshot_id: SnapshotId,
+    blob_kind: BlobKind,
+    length: u64,
+    file: PathBuf,
+) -> Result<(), String> {
+    let mut offset = 0;
+    let mut file = File::open(file)
+        .map_err(|e| format!("Could not open {} file: {}", blob_kind.description(), e))?;
+    while offset < length {
+        let chunk_size = std::cmp::min(length - offset, MAX_CHUNK_SIZE);
+        let mut chunk = vec![0u8; chunk_size as usize];
+        file.read_exact(&mut chunk)
+            .map_err(|e| format!("Could not read {} file: {}", blob_kind.description(), e))?;
+        let kind = match blob_kind {
+            BlobKind::WasmModule => CanisterSnapshotDataOffset::WasmModule { offset },
+            BlobKind::WasmMemory => CanisterSnapshotDataOffset::WasmMemory { offset },
+            BlobKind::StableMemory => CanisterSnapshotDataOffset::StableMemory { offset },
+        };
+        let data_args = UploadCanisterSnapshotDataArgs {
+            canister_id: canister_id.into(),
+            snapshot_id,
+            kind,
+            chunk,
+        };
+        subnet
+            .upload_canister_snapshot_data(&data_args)
+            .map_err(|e| e.description().to_string())?;
+        offset += chunk_size;
+    }
+    Ok(())
+}
+
+impl Operation for CanisterSnapshotUpload {
+    fn compute(&self, pic: &mut PocketIc) -> OpOut {
+        let effective_principal = EffectivePrincipal::CanisterId(self.canister_id);
+        let subnet = route(pic, effective_principal, false);
+        match subnet {
+            Ok(subnet) => {
+                // Upload snapshot metadata.
+                let metadata_path = self.snapshot_dir.join("metadata.json");
+                let metadata_bytes = match std::fs::read(metadata_path) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                            "Could not read metadata file: {}",
+                            e
+                        )));
+                    }
+                };
+                let metadata: ReadCanisterSnapshotMetadataResponse =
+                    match serde_json::from_slice(&metadata_bytes) {
+                        Ok(metadata) => metadata,
+                        Err(e) => {
+                            return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                                "Could not parse metadata file: {}",
+                                e
+                            )));
+                        }
+                    };
+                let metadata_args = UploadCanisterSnapshotMetadataArgs {
+                    canister_id: self.canister_id.into(),
+                    replace_snapshot: self.replace_snapshot,
+                    wasm_module_size: metadata.wasm_module_size,
+                    globals: metadata.globals,
+                    wasm_memory_size: metadata.wasm_memory_size,
+                    stable_memory_size: metadata.stable_memory_size,
+                    certified_data: metadata.certified_data,
+                    global_timer: metadata.global_timer,
+                    on_low_wasm_memory_hook_status: metadata.on_low_wasm_memory_hook_status,
+                };
+                let snapshot_id = match subnet.upload_canister_snapshot_metadata(&metadata_args) {
+                    Ok(upload_response) => upload_response.snapshot_id,
+                    Err(e) => {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(
+                            e.description().to_string(),
+                        ));
+                    }
+                };
+
+                // Upload WASM binary.
+                let wasm_module_path = self.snapshot_dir.join("wasm_module.bin");
+                if let Err(e) = upload_blob_from_file(
+                    subnet.clone(),
+                    self.canister_id,
+                    snapshot_id,
+                    BlobKind::WasmModule,
+                    metadata.wasm_module_size,
+                    wasm_module_path,
+                ) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                }
+
+                // Upload WASM memory.
+                let wasm_memory_path = self.snapshot_dir.join("wasm_memory.bin");
+                if let Err(e) = upload_blob_from_file(
+                    subnet.clone(),
+                    self.canister_id,
+                    snapshot_id,
+                    BlobKind::WasmMemory,
+                    metadata.wasm_memory_size,
+                    wasm_memory_path,
+                ) {
+                    return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                }
+
+                // Upload stable memory.
+                if metadata.stable_memory_size != 0 {
+                    let stable_memory_path = self.snapshot_dir.join("stable_memory.bin");
+                    if let Err(e) = upload_blob_from_file(
+                        subnet.clone(),
+                        self.canister_id,
+                        snapshot_id,
+                        BlobKind::StableMemory,
+                        metadata.stable_memory_size,
+                        stable_memory_path,
+                    ) {
+                        return OpOut::Error(PocketIcError::CanisterSnapshotError(e));
+                    }
+                }
+
+                // Upload WASM chunk store.
+                for hash in metadata.wasm_chunk_store {
+                    let hash_str = hex::encode(hash.hash);
+                    let chunk_store_path = self.snapshot_dir.join("wasm_chunk_store");
+                    let chunk_file = chunk_store_path.join(format!("{hash_str}.bin"));
+                    let chunk = match std::fs::read(chunk_file) {
+                        Ok(chunk) => chunk,
+                        Err(e) => {
+                            return OpOut::Error(PocketIcError::CanisterSnapshotError(format!(
+                                "Could not read WASM chunk: {}",
+                                e
+                            )));
+                        }
+                    };
+                    let data_args = UploadCanisterSnapshotDataArgs {
+                        canister_id: self.canister_id.into(),
+                        snapshot_id,
+                        kind: CanisterSnapshotDataOffset::WasmChunk,
+                        chunk,
+                    };
+                    match subnet.upload_canister_snapshot_data(&data_args) {
+                        Ok(_) => (),
+                        Err(e) => {
+                            return OpOut::Error(PocketIcError::CanisterSnapshotError(
+                                e.description().to_string(),
+                            ));
+                        }
+                    };
+                }
+
+                OpOut::CanisterSnapshotId(snapshot_id.to_vec())
+            }
+            Err(e) => OpOut::Error(PocketIcError::CanisterRequestRoutingError(e)),
+        }
+    }
+
+    fn id(&self) -> OpId {
+        OpId(format!(
+            "canister_snapshot_upload(sender={},canister_id={},snapshot_dir='{}')",
+            self.sender,
+            self.canister_id,
             self.snapshot_dir.display()
         ))
     }
