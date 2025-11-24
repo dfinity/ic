@@ -271,9 +271,23 @@ pub(crate) struct FailureState {
     pub error_messages: Vec<String>,
 }
 
+#[derive(Clone)]
+pub(crate) struct ConfirmationState {
+    pub input_state: InputState,
+    pub params: RecoveryParams,
+    pub selected_option: ConfirmationOption,
+}
+
+#[derive(Clone, PartialEq)]
+pub(crate) enum ConfirmationOption {
+    Yes,
+    No,
+}
+
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum AppState {
     Input(InputState),
+    InputConfirmation(ConfirmationState),
     Running(RunningState),
     /// There is no "Success" state because on success, the TUI exits immediately
     /// to allow the GuestOSRecoveryApp to print a success message to stdout (outside the TUI),
@@ -496,6 +510,15 @@ impl GuestOSRecoveryApp {
                     }
                 }
             }
+            Some(AppState::InputConfirmation(mut confirmation_state)) => {
+                if self.handle_confirmation_key_event(&mut confirmation_state, key)? {
+                    // Transition occurred, state already updated
+                    Ok(())
+                } else {
+                    self.state = Some(AppState::InputConfirmation(confirmation_state));
+                    Ok(())
+                }
+            }
             Some(AppState::Running(s)) => {
                 self.state = Some(AppState::Running(s));
                 Ok(())
@@ -507,6 +530,45 @@ impl GuestOSRecoveryApp {
                 Ok(())
             }
             None => Ok(()),
+        }
+    }
+
+    fn handle_confirmation_key_event(
+        &mut self,
+        state: &mut ConfirmationState,
+        key: KeyEvent,
+    ) -> Result<bool> {
+        match key.code {
+            KeyCode::Esc => {
+                self.state = Some(AppState::Input(state.input_state.clone()));
+                Ok(true)
+            }
+            KeyCode::Left => {
+                state.selected_option = ConfirmationOption::Yes;
+                Ok(false)
+            }
+            KeyCode::Right => {
+                state.selected_option = ConfirmationOption::No;
+                Ok(false)
+            }
+            KeyCode::Tab => {
+                state.selected_option = match state.selected_option {
+                    ConfirmationOption::Yes => ConfirmationOption::No,
+                    ConfirmationOption::No => ConfirmationOption::Yes,
+                };
+                Ok(false)
+            }
+            KeyCode::Enter => match state.selected_option {
+                ConfirmationOption::Yes => {
+                    self.start_recovery_process(state.params.clone())?;
+                    Ok(true)
+                }
+                ConfirmationOption::No => {
+                    self.state = Some(AppState::Input(state.input_state.clone()));
+                    Ok(true)
+                }
+            },
+            _ => Ok(false),
         }
     }
 
@@ -610,7 +672,11 @@ impl GuestOSRecoveryApp {
                         input_state.error_message = Some(e.to_string());
                         Ok(false)
                     } else {
-                        self.start_recovery_process(params)?;
+                        self.state = Some(AppState::InputConfirmation(ConfirmationState {
+                            input_state: input_state.clone(),
+                            params,
+                            selected_option: ConfirmationOption::Yes,
+                        }));
                         Ok(true)
                     }
                 }

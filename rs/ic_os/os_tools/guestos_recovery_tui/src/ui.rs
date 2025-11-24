@@ -8,7 +8,10 @@ use ratatui::{
 };
 use tui_textarea::TextArea;
 
-use crate::{AppState, FailureState, Field, InputState, RecoveryParams, RunningState};
+use crate::{
+    AppState, ConfirmationOption, ConfirmationState, FailureState, Field, InputState,
+    RecoveryParams, RunningState,
+};
 
 // ============================================================================
 // Constants
@@ -65,6 +68,38 @@ fn create_block<'a>(title: &'a str, active: bool, is_error: bool) -> Block<'a> {
     block
 }
 
+/// Helper to create a centered rect with fixed height and constrained width
+fn centered_rect(width: Constraint, height: u16, area: Rect) -> Rect {
+    let vertical = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(height),
+            Constraint::Min(0),
+        ])
+        .split(area)[1];
+
+    match width {
+        Constraint::Percentage(p) => {
+            let p = p.min(100);
+            Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([
+                    Constraint::Percentage((100 - p) / 2),
+                    Constraint::Percentage(p),
+                    Constraint::Percentage((100 - p) / 2),
+                ])
+                .split(vertical)[1]
+        }
+        Constraint::Length(l) => {
+            let l = l.min(vertical.width);
+            let start_x = vertical.x + (vertical.width.saturating_sub(l)) / 2;
+            Rect::new(start_x, vertical.y, l, height)
+        }
+        _ => vertical,
+    }
+}
+
 fn is_terminal_too_small(size: Rect) -> bool {
     size.width < MIN_TERMINAL_WIDTH || size.height < MIN_TERMINAL_HEIGHT
 }
@@ -117,9 +152,74 @@ pub(crate) fn render(f: &mut Frame, state: &AppState) {
 
     match state {
         AppState::Input(s) => render_input_screen(f, s, size),
+        AppState::InputConfirmation(s) => render_input_confirmation_screen(f, s, size),
         AppState::Running(s) => render_logs_screen(f, s, size),
         AppState::Failure(s) => render_failure_screen(f, s, size),
     }
+}
+
+// ============================================================================
+// Screen: Input Confirmation
+// ============================================================================
+
+fn render_input_confirmation_screen(f: &mut Frame, state: &ConfirmationState, size: Rect) {
+    // 1. Render the underlying input screen (background)
+    render_input_screen(f, &state.input_state, size);
+
+    // 2. Render the popup overlay
+    let area = centered_rect(Constraint::Percentage(85), 16, size);
+
+    f.render_widget(Clear, area);
+
+    let block = create_block("Confirm Parameters", true, false);
+
+    let layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(2), // Header spacing
+            Constraint::Min(1),    // Parameters (Takes remaining space)
+            Constraint::Length(1), // Spacer
+            Constraint::Length(1), // Question
+            Constraint::Length(1), // Buttons
+        ])
+        .margin(1)
+        .split(area);
+
+    f.render_widget(block, area);
+
+    let params_text = create_parameter_lines(&state.params);
+    let params_para = Paragraph::new(params_text).wrap(Wrap { trim: true });
+    f.render_widget(params_para, layout[1]);
+
+    let question = Paragraph::new(
+        "Please confirm: do these input values match the recovery coordinator's information?",
+    )
+    .alignment(Alignment::Center)
+    .style(Style::default().fg(Color::White).bold());
+    f.render_widget(question, layout[3]);
+
+    let yes_selected = state.selected_option == ConfirmationOption::Yes;
+    let no_selected = state.selected_option == ConfirmationOption::No;
+
+    let yes_style = if yes_selected {
+        Style::default().bg(Color::White).fg(Color::Blue)
+    } else {
+        Style::default().fg(Color::White)
+    };
+    let no_style = if no_selected {
+        Style::default().bg(Color::White).fg(Color::Blue)
+    } else {
+        Style::default().fg(Color::White)
+    };
+
+    let buttons = Line::from(vec![
+        Span::styled(" < Yes > ", yes_style),
+        Span::raw("   "),
+        Span::styled(" < No > ", no_style),
+    ]);
+
+    let buttons_para = Paragraph::new(buttons).alignment(Alignment::Center);
+    f.render_widget(buttons_para, layout[4]);
 }
 
 // ============================================================================
@@ -205,17 +305,7 @@ fn render_input_screen(f: &mut Frame, state: &InputState, size: Rect) {
         let error_text_width = error.len().min(u16::MAX as usize) as u16;
         let box_width = error_text_width.clamp(MIN_BOX_WIDTH, max_width) + BORDER_PADDING;
 
-        let vertical_area = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Percentage(50),
-                Constraint::Length(BOX_HEIGHT),
-                Constraint::Percentage(50),
-            ])
-            .split(size)[1];
-
-        let start_x = vertical_area.x + (vertical_area.width.saturating_sub(box_width)) / 2;
-        let error_area = Rect::new(start_x, vertical_area.y, box_width, BOX_HEIGHT);
+        let error_area = centered_rect(Constraint::Length(box_width), BOX_HEIGHT, size);
 
         let error_para = Paragraph::new(error.as_str())
             .block(create_block("Error", false, true))
