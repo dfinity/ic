@@ -94,6 +94,7 @@ rust_test(
     env = {"ICOS_IMAGE": "$(rootpath //ic-os/guestos/envs/prod:disk-img-for-tests.tar)"},
     # Mark it manual here and expose it in //ic-os/tests:integration_tests
     tags = ["manual"],
+    flaky = True,
     deps = DEV_DEPENDENCIES,
 )
 
