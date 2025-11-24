@@ -186,6 +186,12 @@ command -v helm &>/dev/null || {
     # Uninstall the Helm chart
     helm uninstall local-rosetta --kube-context="$MINIKUBE_PROFILE" 2>/dev/null || true
 
+    # Wait for pods to be deleted after helm uninstall
+    if kubectl get namespace rosetta-api --context="$MINIKUBE_PROFILE" &>/dev/null; then
+        echo "Waiting for resources to be cleaned up..."
+        kubectl wait --for=delete pod --all -n rosetta-api --timeout=60s --context="$MINIKUBE_PROFILE" 2>/dev/null || true
+    fi
+
     # If --purge is set, also delete persistent volumes
     if [[ "$PURGE" == true ]]; then
         echo "Purging persistent volumes..."
