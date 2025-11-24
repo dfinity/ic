@@ -6,12 +6,8 @@ use crate::canister_state::system_state::log_memory_store::{
     ring_buffer::{DATA_REGION_OFFSET, HEADER_OFFSET, INDEX_TABLE_OFFSET, RESULT_MAX_SIZE},
 };
 use crate::page_map::{Buffer, PageMap};
-use ic_validate_eq::ValidateEq;
-use ic_validate_eq_derive::ValidateEq;
 
-#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct StructIO {
-    #[validate_eq(Ignore)]
     buffer: Buffer,
 }
 
@@ -22,12 +18,8 @@ impl StructIO {
         }
     }
 
-    pub fn into_page_map(&self) -> PageMap {
+    pub fn to_page_map(&self) -> PageMap {
         self.buffer.into_page_map()
-    }
-
-    pub fn page_map_mut(&mut self) -> &mut PageMap {
-        self.buffer.page_map_mut()
     }
 
     pub fn load_header(&self) -> Header {

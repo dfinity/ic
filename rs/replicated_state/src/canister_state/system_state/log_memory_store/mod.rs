@@ -94,12 +94,15 @@ impl LogMemoryStore {
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.used_space());
 
-        let records: Vec<CanisterLogRecord> = delta_log
-            .records_mut()
-            .iter_mut()
-            .map(std::mem::take)
-            .collect();
-        self.ring_buffer().append_log(records);
+        let mut ring_buffer = self.ring_buffer();
+        ring_buffer.append_log(
+            delta_log
+                .records_mut()
+                .iter_mut()
+                .map(std::mem::take)
+                .collect(),
+        );
+        self.page_map = ring_buffer.to_page_map();
     }
 
     /// Records the size of the appended delta log.

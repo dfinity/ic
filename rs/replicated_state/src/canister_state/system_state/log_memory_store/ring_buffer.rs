@@ -36,9 +36,7 @@ const DATA_SEGMENT_SIZE_MAX: u64 = DATA_CAPACITY_MAX.get() / INDEX_ENTRY_COUNT_M
 // Ensure data segment size is significantly smaller than max result size, say 20%.
 const _: () = assert!(5 * DATA_SEGMENT_SIZE_MAX <= RESULT_MAX_SIZE.get());
 
-#[derive(Clone, Eq, PartialEq, Debug, ValidateEq)]
 pub struct RingBuffer {
-    #[validate_eq(Ignore)]
     io: StructIO,
 }
 
@@ -61,21 +59,9 @@ impl RingBuffer {
         Self { io }
     }
 
-    pub fn into_page_map(&self) -> PageMap {
-        self.io.into_page_map()
+    pub fn to_page_map(&self) -> PageMap {
+        self.io.to_page_map()
     }
-
-    pub fn page_map_mut(&mut self) -> &mut PageMap {
-        self.io.page_map_mut()
-    }
-
-    // pub fn dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
-    //     self.io.dirty_pages()
-    // }
-
-    // pub fn into_page_map(self) -> PageMap {
-    //     self.io.into_page_map()
-    // }
 
     pub fn capacity(&self) -> usize {
         self.io.load_header().data_capacity.get() as usize
@@ -412,6 +398,11 @@ mod tests {
     }
 
     /*
+    bazel test //rs/replicated_state:replicated_state_test \
+      --test_output=streamed \
+      --test_arg=--nocapture \
+      --test_arg=log_memory_store
+
     bazel test //rs/replicated_state:replicated_state_test \
       --test_output=streamed \
       --test_arg=--nocapture \
