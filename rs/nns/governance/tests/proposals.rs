@@ -2,7 +2,7 @@ use ic_base_types::PrincipalId;
 use ic_nervous_system_common::{E8, ONE_DAY_SECONDS};
 use ic_nervous_system_timers::test::run_pending_timers_every_interval_for_count;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_nns_governance::canister_state::{governance_mut, set_governance_for_tests};
+use ic_nns_governance::canister_state::{legacy_governance_mut, set_governance_for_tests};
 use ic_nns_governance::timer_tasks::schedule_tasks;
 use ic_nns_governance::{
     governance::{Governance, REWARD_DISTRIBUTION_PERIOD_SECONDS},
@@ -227,7 +227,7 @@ async fn test_distribute_rewards_with_total_potential_voting_power() {
     governance.heap_data.proposals = PROPOSALS.clone();
 
     set_governance_for_tests(governance);
-    let governance = governance_mut();
+    let governance = legacy_governance_mut();
     schedule_tasks();
 
     // Step 2: Call code under test.

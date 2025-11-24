@@ -57,7 +57,7 @@ impl PeriodicSyncTask for DistributeRewardsTask {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::canister_state::{GOVERNANCE, governance_mut, set_governance_for_tests};
+    use crate::canister_state::{GOVERNANCE, legacy_governance_mut, set_governance_for_tests};
     use crate::governance::Governance;
     use crate::reward::distribution::RewardsDistribution;
     use crate::test_utils::{MockEnvironment, MockRandomness, StubCMC, StubIcpLedger};
@@ -83,7 +83,7 @@ mod tests {
         );
 
         set_governance_for_tests(governance);
-        let governance = governance_mut();
+        let governance = legacy_governance_mut();
 
         // In this test, we don't care that rewards are actually distributed, only that the
         // timer is scheduled and then cancelled.  Other tests cover that the rewards are distributed.
