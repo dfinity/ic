@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ github.ref_name }}
@@ -429,19 +429,19 @@ jobs:
           # Only use previous tag if it exists and is valid
           if [[ -n "${{ steps.prev_tag.outputs.prev_tag }}" && "${{ steps.prev_tag.outputs.prev_tag_valid }}" == "true" ]]; then
             LOG_RANGE="${{ steps.prev_tag.outputs.prev_tag }}..${{ steps.parse_tag.outputs.tag_name }}"
-            GIT_COMMAND="git log --format=\"%C(auto) %h %s\" $LOG_RANGE -- ${{ steps.variables.outputs.log_paths_string }}"
+            GIT_COMMAND="git log --format=\"%C(auto) %h %s\" $LOG_RANGE -- \"${{ steps.variables.outputs.log_paths_string }}\""
             echo "Generating git log from ${{ steps.prev_tag.outputs.prev_tag }} to ${{ steps.parse_tag.outputs.tag_name }}"
           else
             # If no previous tag or invalid previous tag, get all commits
             LOG_RANGE=""
-            GIT_COMMAND="git log --format=\"%C(auto) %h %s\" -- ${{ steps.variables.outputs.log_paths_string }}"
+            GIT_COMMAND="git log --format=\"%C(auto) %h %s\" -- \"${{ steps.variables.outputs.log_paths_string }}\""
             echo "Generating git log for all commits (no valid previous release found)"
           fi
 
           if [[ -n "$LOG_RANGE" ]]; then
-            GIT_LOG=$(git log --format="%C(auto) %h %s" $LOG_RANGE -- ${{ steps.variables.outputs.log_paths_string }})
+            GIT_LOG=$(git log --format="%C(auto) %h %s" $LOG_RANGE -- "${{ steps.variables.outputs.log_paths_string }}")
           else
-            GIT_LOG=$(git log --format="%C(auto) %h %s" -- ${{ steps.variables.outputs.log_paths_string }})
+            GIT_LOG=$(git log --format="%C(auto) %h %s" -- "${{ steps.variables.outputs.log_paths_string }}")
           fi
 
           # Create temporary directory for metadata
@@ -634,7 +634,7 @@ jobs:
             }
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@5be0e66d93ac7ed76da52eca8bb058f665c3a5fe # v2.4.2
         with:
           tag_name: ${{ steps.parse_tag.outputs.tag_name }}
           name: ${{ steps.parse_tag.outputs.tag_name }}
