@@ -27,15 +27,14 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(setup)
         .add_parallel(
-            SystemTestSubGroup::new().add_test(systest!(requests_with_delegations_with_targets; 2)),
-            /*
-                        SystemTestSubGroup::new().add_test(systest!(requests_with_delegations; 2)),
-            .add_test(systest!(requests_with_delegations; 3))
-                        .add_test(systest!(requests_with_delegations_with_targets; 3))
-                        .add_test(systest!(requests_with_delegation_loop; 2))
-                        .add_test(systest!(requests_with_delegation_loop; 3))
-                        .add_test(systest!(requests_with_invalid_expiry)),
-                        */
+            SystemTestSubGroup::new()
+                .add_test(systest!(requests_with_delegations; 2))
+                .add_test(systest!(requests_with_delegations; 3))
+                .add_test(systest!(requests_with_delegations_with_targets; 2))
+                .add_test(systest!(requests_with_delegations_with_targets; 3))
+                .add_test(systest!(requests_with_delegation_loop; 2))
+                .add_test(systest!(requests_with_delegation_loop; 3))
+                .add_test(systest!(requests_with_invalid_expiry)),
         )
         .execute_from_args()?;
     Ok(())
@@ -386,14 +385,9 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                 let query_result =
                     perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
                         .await;
-                let read_state_result = perform_read_state_with_delegations(
-                    &test_info,
-                    sender,
-                    signer,
-                    &delegations,
-                    &canister,
-                )
-                .await;
+                let read_state_result =
+                    perform_read_state_with_delegations(&test_info, sender, signer, &delegations)
+                        .await;
                 let update_result =
                     perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
                         .await;
@@ -414,7 +408,8 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                     assert_eq!(update_result, expected_update_result);
                 } else {
                     assert_eq!(query_result, 400);
-                    assert_eq!(read_state_result, 400);
+                    // Which error code is returned depends on API version and the specific scenario
+                    assert!(read_state_result == 400 || read_state_result == 403);
                     assert_eq!(update_result, 400);
                 }
             }
@@ -452,32 +447,60 @@ pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
             };
 
             // Test case: A self-loop in delegations should be detected and rejected
+            {
+                let mut identities = vec![];
 
-            let mut identities = vec![];
+                for _ in 0..4 {
+                    let id_type = GenericIdentityType::random(rng);
+                    identities.push(GenericIdentity::new(id_type, rng));
+                }
 
-            for _ in 0..4 {
-                let id_type = GenericIdentityType::random(rng);
-                identities.push(GenericIdentity::new(id_type, rng));
+                // Duplicate the last identity, causing a delegation loop
+                identities.push(identities[identities.len() - 1].clone());
+
+                let delegations = create_delegations(&identities);
+
+                let sender = &identities[0];
+                let signer = &identities[identities.len() - 1];
+
+                let query_result =
+                    perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
+                        .await;
+                let update_result =
+                    perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
+                        .await;
+
+                assert_eq!(query_result, 400);
+                assert_eq!(update_result, 400);
             }
 
-            // Duplicate the identity, causing a delegation loop
-            identities.push(identities[identities.len() - 1].clone());
+            // Test case: An indirect cycle in delegations should be detected and rejected
+            {
+                let mut identities = vec![];
 
-            let delegations = create_delegations(&identities);
+                for _ in 0..4 {
+                    let id_type = GenericIdentityType::random(rng);
+                    identities.push(GenericIdentity::new(id_type, rng));
+                }
 
-            let sender = &identities[0];
-            let signer = &identities[identities.len() - 1];
+                // Duplicate the second identity, causing an indirect loop
+                identities.push(identities[1].clone());
 
-            let query_result =
-                perform_query_call_with_delegations(&test_info, sender, signer, &delegations).await;
-            let update_result =
-                perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
-                    .await;
+                let delegations = create_delegations(&identities);
 
-            assert_eq!(query_result, 400);
-            assert_eq!(update_result, 400);
+                let sender = &identities[0];
+                let signer = &identities[identities.len() - 1];
 
-            // TODO Test case: An indirect cycle in delegations should be detected and rejected
+                let query_result =
+                    perform_query_call_with_delegations(&test_info, sender, signer, &delegations)
+                        .await;
+                let update_result =
+                    perform_update_call_with_delegations(&test_info, sender, signer, &delegations)
+                        .await;
+
+                assert_eq!(query_result, 400);
+                assert_eq!(update_result, 400);
+            }
         }
     });
 }
@@ -688,10 +711,7 @@ async fn perform_query_call_with_delegations(
     )
     .await;
 
-    let status = response.status();
-    //println!("Xyzzy Response = {:?}", response);
-    //println!("Xyzzy Body = {}", hex::encode(response.bytes().await.unwrap()));
-    status
+    response.status()
 }
 
 async fn perform_update_call_with_delegations(
@@ -730,9 +750,7 @@ async fn perform_read_state_with_delegations(
     sender: &GenericIdentity,
     signer: &GenericIdentity,
     delegations: &[SignedDelegation],
-    canister: &UniversalCanister<'_>,
 ) -> StatusCode {
-    println!("READ STATE TEST");
     /*
      * In order to properly test read state request we must have another
      * call to check the status of.
@@ -752,8 +770,17 @@ async fn perform_read_state_with_delegations(
         let signature = sender.sign_update(&content);
         let request_id = MessageId::from(content.representation_independent_hash());
 
+        // Always use a v3 call to test read state request since the call is sync,
+        // otherwise we have to wait until the call executes before checking the read state, which
+        // requires a potentially flaky retry loop.
+        let test_v3 = {
+            let mut tv3 = test.clone();
+            tv3.api_ver = 3;
+            tv3
+        };
+
         let response = send_request(
-            test,
+            &test_v3,
             "call",
             content,
             sender.public_key_der(),
@@ -761,12 +788,6 @@ async fn perform_read_state_with_delegations(
             signature,
         )
         .await;
-
-        println!("Stub status {}", response.status());
-        println!(
-            "Stub resp {:?}",
-            hex::encode(response.bytes().await.unwrap())
-        );
 
         request_id
     };
@@ -794,12 +815,7 @@ async fn perform_read_state_with_delegations(
     )
     .await;
 
-    let status = response.status();
-    println!(
-        "Read state resp {:?}",
-        hex::encode(response.bytes().await.unwrap())
-    );
-    status
+    response.status()
 }
 
 async fn perform_query_with_expiry(
