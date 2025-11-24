@@ -814,10 +814,10 @@ impl ApiState {
                     ic_gateway::ic_bn_lib::http::ReqwestClient::new(http_client_opts.clone(), None)
                         .unwrap(),
                 );
-                let http_client_hyper = ic_gateway::ic_bn_lib::http::HyperClient::new(
+                let http_client_hyper = Arc::new(ic_gateway::ic_bn_lib::http::HyperClient::new(
                     http_client_opts,
                     Resolver::default(),
-                );
+                ));
 
                 let route_provider =
                     RoundRobinRouteProvider::new(vec![replica_url.clone()]).unwrap();
