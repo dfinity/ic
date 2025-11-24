@@ -1,9 +1,10 @@
+use crate::pb::proposal_conversions::{ProposalDisplayOptions, convert_proposal};
 use crate::pb::v1 as pb;
+
+use candid::{Int, Nat};
 use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api as pb_api;
-
-use crate::pb::proposal_conversions::convert_proposal;
-use crate::pb::v1::DateUtc;
+use std::collections::HashMap;
 
 #[cfg(test)]
 mod tests;
@@ -385,6 +386,7 @@ impl From<pb_api::Proposal> for pb::Proposal {
             summary: item.summary,
             url: item.url,
             action: item.action.map(|x| x.into()),
+            self_describing_action: None,
         }
     }
 }
@@ -395,6 +397,7 @@ impl From<pb_api::MakeProposalRequest> for pb::Proposal {
             summary: item.summary,
             url: item.url,
             action: item.action.map(|x| x.into()),
+            self_describing_action: None,
         }
     }
 }
@@ -1127,7 +1130,7 @@ impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::ManageNeuronPro
                 // easily removed until the `manage_neuron` canister method no longer uses
                 // `pb::manage_neuron::Command`.
                 pb_api::manage_neuron::ManageNeuronProposalCommand::MakeProposal(Box::new(
-                    convert_proposal(&v, false),
+                    convert_proposal(&v, ProposalDisplayOptions::for_get_proposal_info()),
                 ))
             }
             pb::manage_neuron::Command::RegisterVote(v) => {
@@ -1446,36 +1449,6 @@ impl From<pb_api::Tally> for pb::Tally {
     }
 }
 
-impl From<pb::ProposalData> for pb_api::ProposalData {
-    fn from(item: pb::ProposalData) -> Self {
-        Self {
-            id: item.id,
-            proposer: item.proposer,
-            reject_cost_e8s: item.reject_cost_e8s,
-            proposal: item.proposal.map(|x| convert_proposal(&x, false)),
-            proposal_timestamp_seconds: item.proposal_timestamp_seconds,
-            ballots: item
-                .ballots
-                .into_iter()
-                .map(|(k, v)| (k, v.into()))
-                .collect(),
-            latest_tally: item.latest_tally.map(|x| x.into()),
-            decided_timestamp_seconds: item.decided_timestamp_seconds,
-            executed_timestamp_seconds: item.executed_timestamp_seconds,
-            failed_timestamp_seconds: item.failed_timestamp_seconds,
-            failure_reason: item.failure_reason.map(|x| x.into()),
-            reward_event_round: item.reward_event_round,
-            wait_for_quiet_state: item.wait_for_quiet_state.map(|x| x.into()),
-            original_total_community_fund_maturity_e8s_equivalent: item
-                .original_total_community_fund_maturity_e8s_equivalent,
-            sns_token_swap_lifecycle: item.sns_token_swap_lifecycle,
-            derived_proposal_information: item.derived_proposal_information.map(|x| x.into()),
-            neurons_fund_data: item.neurons_fund_data.map(|x| x.into()),
-            total_potential_voting_power: item.total_potential_voting_power,
-            topic: item.topic,
-        }
-    }
-}
 impl From<pb_api::ProposalData> for pb::ProposalData {
     fn from(item: pb_api::ProposalData) -> Self {
         Self {
@@ -3046,7 +3019,7 @@ impl From<pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics>
     }
 }
 
-impl TryFrom<ic_node_rewards_canister_api::DateUtc> for DateUtc {
+impl TryFrom<ic_node_rewards_canister_api::DateUtc> for pb::DateUtc {
     type Error = String;
 
     fn try_from(value: ic_node_rewards_canister_api::DateUtc) -> Result<Self, Self::Error> {
@@ -4101,6 +4074,71 @@ impl From<pb::MaturityDisbursement> for pb_api::MaturityDisbursement {
             finalize_disbursement_timestamp_seconds: Some(
                 item.finalize_disbursement_timestamp_seconds,
             ),
+        }
+    }
+}
+
+impl From<pb::Value> for pb_api::Value {
+    fn from(item: pb::Value) -> Self {
+        let Some(value) = item.value else {
+            return Self::Map(HashMap::new());
+        };
+        match value {
+            pb::value::Value::Blob(v) => Self::Blob(v),
+            pb::value::Value::Text(v) => Self::Text(v),
+            pb::value::Value::Nat(v) => {
+                let nat = Nat::decode(&mut v.as_slice()).unwrap();
+                Self::Nat(nat)
+            }
+            pb::value::Value::Int(v) => {
+                let int = Int::decode(&mut v.as_slice()).unwrap();
+                Self::Int(int)
+            }
+            pb::value::Value::Array(v) => {
+                Self::Array(v.values.into_iter().map(Self::from).collect())
+            }
+            pb::value::Value::Map(v) => Self::Map(
+                v.values
+                    .into_iter()
+                    .map(|(k, v)| (k, Self::from(v)))
+                    .collect(),
+            ),
+        }
+    }
+}
+
+impl From<pb_api::Value> for pb::Value {
+    fn from(item: pb_api::Value) -> Self {
+        let value = match item {
+            pb_api::Value::Blob(v) => pb::value::Value::Blob(v),
+            pb_api::Value::Text(v) => pb::value::Value::Text(v),
+            pb_api::Value::Nat(v) => {
+                let mut bytes = Vec::new();
+                v.encode(&mut bytes).unwrap();
+                pb::value::Value::Nat(bytes)
+            }
+            pb_api::Value::Int(v) => {
+                let mut bytes = Vec::new();
+                v.encode(&mut bytes).unwrap();
+                pb::value::Value::Int(bytes)
+            }
+            pb_api::Value::Array(v) => pb::value::Value::Array(pb::ValueArray {
+                values: v.into_iter().map(Self::from).collect(),
+            }),
+            pb_api::Value::Map(v) => pb::value::Value::Map(pb::ValueMap {
+                values: v.into_iter().map(|(k, v)| (k, Self::from(v))).collect(),
+            }),
+        };
+        Self { value: Some(value) }
+    }
+}
+
+impl From<pb::SelfDescribingProposalAction> for pb_api::SelfDescribingProposalAction {
+    fn from(item: pb::SelfDescribingProposalAction) -> Self {
+        Self {
+            type_name: Some(item.type_name),
+            type_description: Some(item.type_description),
+            value: item.value.map(pb_api::Value::from),
         }
     }
 }

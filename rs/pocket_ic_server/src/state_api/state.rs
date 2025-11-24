@@ -247,6 +247,7 @@ pub enum OpOut {
     MessageId((EffectivePrincipal, Vec<u8>)),
     Topology(Topology),
     CanisterHttp(Vec<CanisterHttpRequest>),
+    CanisterSnapshotId(Vec<u8>),
 }
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug, Deserialize, Serialize)]
@@ -264,6 +265,8 @@ pub enum PocketIcError {
     Forbidden(String),
     BlockmakerNotFound(NodeId),
     BlockmakerContainedInFailed(NodeId),
+    InvalidCanisterSnapshotDirectory(String),
+    CanisterSnapshotError(String),
 }
 
 impl std::fmt::Debug for OpOut {
@@ -329,6 +332,12 @@ impl std::fmt::Debug for OpOut {
             OpOut::Error(PocketIcError::Forbidden(msg)) => {
                 write!(f, "Forbidden({msg})")
             }
+            OpOut::Error(PocketIcError::InvalidCanisterSnapshotDirectory(msg)) => {
+                write!(f, "InvalidSnapshotDirectory({msg})")
+            }
+            OpOut::Error(PocketIcError::CanisterSnapshotError(msg)) => {
+                write!(f, "CanisterSnapshotError({msg})")
+            }
             OpOut::Bytes(bytes) => write!(f, "Bytes({})", base64::encode(bytes)),
             OpOut::StableMemBytes(bytes) => write!(f, "StableMemory({})", base64::encode(bytes)),
             OpOut::MaybeSubnetId(Some(subnet_id)) => write!(f, "SubnetId({subnet_id})"),
@@ -355,6 +364,9 @@ impl std::fmt::Debug for OpOut {
             }
             OpOut::CanisterHttp(canister_http_reqeusts) => {
                 write!(f, "CanisterHttp({canister_http_reqeusts:?})")
+            }
+            OpOut::CanisterSnapshotId(snapshot_id) => {
+                write!(f, "CanisterSnapshotId({})", hex::encode(snapshot_id))
             }
         }
     }

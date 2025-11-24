@@ -1328,6 +1328,7 @@ mod test {
                 action: Some(Action::Motion(Motion {
                     motion_text: "".to_string(),
                 })),
+                self_describing_action: None,
             }),
             ..Default::default()
         };
@@ -1429,6 +1430,7 @@ mod test {
                 action: Some(Action::Motion(Motion {
                     motion_text: "".to_string(),
                 })),
+                self_describing_action: None,
             }),
             wait_for_quiet_state: Some(WaitForQuietState {
                 current_deadline_timestamp_seconds: now - 100,
