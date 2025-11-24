@@ -94,7 +94,7 @@ pub async fn migrate_canister(
         target_subnet_id: target_subnet,
     };
 
-    match Call::bounded_wait(
+    match Call::unbounded_wait(
         Principal::from_text(REGISTRY_CANISTER_ID).unwrap(),
         "migrate_canisters",
     )
