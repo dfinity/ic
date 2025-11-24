@@ -685,7 +685,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "3.0.3",
             ),
             "ic-http-gateway": crate.spec(
-                version = "0.3.0",
+                git = "https://github.com/dfinity/http-gateway",
+                rev = "c17ad1b378df3a85441ce2c6853ec61b6f83f730",
             ),
             "ic-identity-hsm": crate.spec(
                 version = "^0.40.1",

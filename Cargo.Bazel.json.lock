@@ -1,5 +1,5 @@
 {
-  "checksum": "074eab12e3dd63a8d170ee7c1a8d628268bf7300abf4ec721c5d369085b0b365",
+  "checksum": "a3c3bf4f14b152523b6be66438405724bc46e8a22e9b8fc0208695eba5f247ba",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -36811,9 +36811,12 @@
       "version": "0.3.0",
       "package_url": "https://github.com/dfinity/http-gateway",
       "repository": {
-        "Http": {
-          "url": "https://static.crates.io/crates/ic-http-gateway/0.3.0/download",
-          "sha256": "21905509b6250e81dc9731f3360c282884d36e98196b514d58116b3dbb4683cd"
+        "Git": {
+          "remote": "https://github.com/dfinity/http-gateway",
+          "commitish": {
+            "Rev": "c17ad1b378df3a85441ce2c6853ec61b6f83f730"
+          },
+          "strip_prefix": "packages/ic-http-gateway"
         }
       },
       "targets": [
@@ -36862,7 +36865,7 @@
               "target": "http_body_util"
             },
             {
-              "id": "ic-agent 0.40.1",
+              "id": "ic-agent 0.44.3",
               "target": "ic_agent"
             },
             {
@@ -36874,7 +36877,7 @@
               "target": "ic_response_verification"
             },
             {
-              "id": "ic-utils 0.40.1",
+              "id": "ic-utils 0.44.3",
               "target": "ic_utils"
             },
             {

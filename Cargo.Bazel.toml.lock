@@ -3664,7 +3664,7 @@ dependencies = [
  "ic-doge-interface",
  "ic-gateway",
  "ic-http-certification",
- "ic-http-gateway 0.3.0",
+ "ic-http-gateway",
  "ic-identity-hsm",
  "ic-management-canister-types 0.3.3",
  "ic-metrics-encoder",
@@ -6408,7 +6408,7 @@ dependencies = [
  "ic-bn-lib-common",
  "ic-custom-domains-backend",
  "ic-custom-domains-base",
- "ic-http-gateway 0.3.0",
+ "ic-http-gateway",
  "ic-transport-types 0.44.3",
  "itertools 0.14.0",
  "lazy_static",
@@ -6455,25 +6455,6 @@ dependencies = [
  "serde_cbor",
  "thiserror 1.0.68",
  "urlencoding",
-]
-
-[[package]]
-name = "ic-http-gateway"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21905509b6250e81dc9731f3360c282884d36e98196b514d58116b3dbb4683cd"
-dependencies = [
- "bytes",
- "candid",
- "futures",
- "http 1.3.1",
- "http-body 1.0.1",
- "http-body-util",
- "ic-agent 0.40.1",
- "ic-http-certification",
- "ic-response-verification",
- "ic-utils 0.40.1",
- "thiserror 1.0.68",
 ]
 
 [[package]]
