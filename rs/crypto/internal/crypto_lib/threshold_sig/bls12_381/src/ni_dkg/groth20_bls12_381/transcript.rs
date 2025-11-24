@@ -182,7 +182,7 @@ fn compute_transcript(
         .iter()
         .map(|(dealer_index, dealing)| {
             // Type conversion from crypto internal type.
-            threshold_types::PublicCoefficients::from_bytes_with_caching(
+            threshold_types::PublicCoefficients::deserialize_cached(
                 &dealing.public_coefficients,
             )
             .map(|public_coefficients| (*dealer_index, public_coefficients))

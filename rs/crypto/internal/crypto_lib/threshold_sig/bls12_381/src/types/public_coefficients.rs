@@ -36,13 +36,13 @@ impl PublicCoefficients {
     /// # Note
     /// This caches the deserialized points with the expectation that
     /// at least some of the points will be seen again.
-    pub fn from_bytes_with_caching(
+    pub fn deserialize_cached(
         bytes: &InternalPublicCoefficients,
     ) -> Result<PublicCoefficients, CryptoError> {
         let coefficients: Result<Vec<PublicKey>, ThresholdSigPublicKeyBytesConversionError> = bytes
             .coefficients
             .iter()
-            .map(PublicKey::from_bytes_with_caching)
+            .map(PublicKey::deserialize_cached)
             .collect();
         let coefficients = coefficients?;
         Ok(PublicCoefficients { coefficients })

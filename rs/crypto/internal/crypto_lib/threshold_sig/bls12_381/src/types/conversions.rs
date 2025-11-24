@@ -33,7 +33,7 @@ impl PublicKey {
     ///
     /// This is useful if it is expected that the same point will
     /// be seen again, for example a peer's public key
-    pub fn from_bytes_with_caching(
+    pub fn deserialize_cached(
         bytes: &PublicKeyBytes,
     ) -> Result<Self, ThresholdSigPublicKeyBytesConversionError> {
         G2Projective::deserialize_unchecked(&bytes.0)

@@ -99,7 +99,7 @@ pub fn individual_public_key(
     public_coefficients: &PublicCoefficientsBytes,
     index: NodeIndex,
 ) -> CryptoResult<PublicKeyBytes> {
-    let public_coefficients = PublicCoefficients::from_bytes_with_caching(public_coefficients)?;
+    let public_coefficients = PublicCoefficients::deserialize_cached(public_coefficients)?;
     let public_key: PublicKey = crypto::individual_public_key(&public_coefficients, index);
     Ok(PublicKeyBytes::from(public_key))
 }
@@ -197,7 +197,7 @@ pub fn verify_individual_signature(
     public_key: PublicKeyBytes,
 ) -> CryptoResult<()> {
     let signature = (&signature).try_into()?;
-    let pk = PublicKey::from_bytes_with_caching(&public_key)?;
+    let pk = PublicKey::deserialize_cached(&public_key)?;
     crypto::verify_individual_sig(message, &signature, &pk)
 }
 
@@ -219,7 +219,7 @@ pub fn verify_combined_signature(
     public_key: PublicKeyBytes,
 ) -> CryptoResult<()> {
     let signature = (&signature).try_into()?;
-    let pk = PublicKey::from_bytes_with_caching(&public_key)?;
+    let pk = PublicKey::deserialize_cached(&public_key)?;
     crypto::verify_combined_sig(message, &signature, &pk)
 }
 
