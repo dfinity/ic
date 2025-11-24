@@ -779,7 +779,7 @@ async fn perform_read_state_with_delegations(
             tv3
         };
 
-        let response = send_request(
+        let _response = send_request(
             &test_v3,
             "call",
             content,
