@@ -428,7 +428,7 @@ fn test_unresponsive_gateway_backend() {
             Url::parse(&format!("http://localhost:{port}/")).unwrap()
         }
         CreateHttpGatewayResponse::Error { message } => {
-            panic!("Failed to crate http gateway: {message}")
+            panic!("Failed to create http gateway: {message}")
         }
     };
 
