@@ -9,7 +9,9 @@ use crate::canister_state::system_state::log_memory_store::{
     memory::MemorySize, ring_buffer::RingBuffer,
 };
 use crate::page_map::{PageAllocatorFileDescriptor, PageMap};
-use ic_management_canister_types_private::{CanisterLogRecord, FetchCanisterLogsFilter};
+use ic_management_canister_types_private::{
+    CanisterLogRecord, FetchCanisterLogsFilter, FetchCanisterLogsRange,
+};
 use ic_types::CanisterLog;
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -50,7 +52,6 @@ impl LogMemoryStore {
     }
 
     pub fn new_inner(page_map: PageMap) -> Self {
-        let data_capacity = MemorySize::new(10_000_000); // TODO: populate it properly
         Self {
             page_map,
             delta_log_sizes: VecDeque::new(),
@@ -74,22 +75,34 @@ impl LogMemoryStore {
         RingBuffer::init(self.page_map.clone(), data_capacity)
     }
 
-    pub fn capacity(&self) -> usize {
-        self.ring_buffer().capacity()
-    }
+    /// Set the ring buffer capacity — preserve existing records by collecting and re-appending them.
+    pub fn set_capacity(&mut self, new_capacity: u64) {
+        let old = self.ring_buffer();
+        if old.capacity() == new_capacity {
+            return;
+        }
 
-    pub fn set_capacity(&mut self, new_capacity: usize) {
-        let mut ring_buffer = self.ring_buffer();
-        ring_buffer.set_capacity(new_capacity);
-        self.page_map = ring_buffer.to_page_map();
-    }
+        // Collect all records in index order.
+        let mut records = vec![];
+        let mut idx = 0;
+        while idx < old.next_id() {
+            let batch = old.records(Some(FetchCanisterLogsFilter::ByIdx(
+                FetchCanisterLogsRange {
+                    start: idx,
+                    end: u64::MAX,
+                },
+            )));
+            if batch.is_empty() {
+                break;
+            }
+            idx = batch.last().unwrap().idx + 1;
+            records.extend(batch);
+        }
 
-    pub fn used_space(&self) -> usize {
-        self.ring_buffer().used_space()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.used_space() == 0
+        // Recreate ring buffer with new capacity and restore records.
+        let mut new = RingBuffer::new(old.to_page_map(), MemorySize::new(new_capacity));
+        new.append_log(records);
+        self.page_map = new.to_page_map();
     }
 
     pub fn next_id(&self) -> u64 {

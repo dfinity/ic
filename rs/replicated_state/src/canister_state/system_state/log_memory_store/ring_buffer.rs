@@ -39,17 +39,24 @@ pub struct RingBuffer {
 }
 
 impl RingBuffer {
+    /// Creates a new ring buffer with the given data capacity.
+    pub fn new(page_map: PageMap, data_capacity: MemorySize) -> Self {
+        assert!(
+            data_capacity <= DATA_CAPACITY_MAX,
+            "data capacity exceeds maximum"
+        );
+        let mut io = StructIO::new(page_map);
+        io.save_header(&Header::new(data_capacity));
+
+        Self { io }
+    }
+
     /// Returns an existing ring buffer if present, or initializes a new one.
     pub fn init(page_map: PageMap, data_capacity: MemorySize) -> Self {
-        let mut io = StructIO::new(page_map);
-
+        let io = StructIO::new(page_map);
         if io.load_header().magic != *MAGIC {
             // Not initialized yet — set up a new header.
-            assert!(
-                data_capacity <= DATA_CAPACITY_MAX,
-                "data capacity exceeds maximum"
-            );
-            io.save_header(&Header::new(data_capacity));
+            return Self::new(io.to_page_map(), data_capacity);
         }
 
         Self { io }
@@ -59,12 +66,8 @@ impl RingBuffer {
         self.io.to_page_map()
     }
 
-    pub fn capacity(&self) -> usize {
-        self.io.load_header().data_capacity.get() as usize
-    }
-
-    pub fn set_capacity(&mut self, capacity: usize) {
-        unimplemented!();
+    pub fn capacity(&self) -> u64 {
+        self.io.load_header().data_capacity.get()
     }
 
     pub fn used_space(&self) -> usize {
@@ -93,7 +96,7 @@ impl RingBuffer {
             }
 
             let added_size = MemorySize::new(record.bytes_len() as u64);
-            let capacity = MemorySize::new(self.capacity() as u64);
+            let capacity = MemorySize::new(self.capacity());
             if added_size > capacity {
                 debug_assert!(false, "log record size exceeds ring buffer capacity",);
                 return;
@@ -119,7 +122,7 @@ impl RingBuffer {
     }
 
     fn make_free_space(&mut self, added_size: MemorySize) {
-        let capacity = MemorySize::new(self.capacity() as u64);
+        let capacity = MemorySize::new(self.capacity());
         while MemorySize::new(self.used_space() as u64) + added_size > capacity {
             if self.pop_front().is_none() {
                 break; // No more records to pop, limit reached.
@@ -252,7 +255,7 @@ mod tests {
 
         let rb = RingBuffer::init(page_map, data_capacity);
 
-        assert_eq!(rb.capacity(), data_capacity.get() as usize);
+        assert_eq!(rb.capacity(), data_capacity.get());
         assert_eq!(rb.used_space(), 0);
         assert_eq!(rb.next_id(), 0);
     }
@@ -340,7 +343,7 @@ mod tests {
         for i in 0..1_000 {
             let record = log_record(i, i * 100, "12345");
             // Free space until the new record fits, popped records are collected.
-            while rb.used_space() + bytes_len(&record) > rb.capacity() {
+            while rb.used_space() + bytes_len(&record) > rb.capacity() as usize {
                 popped.push(rb.pop_front().expect("expected record to pop"));
             }
             rb.append(&record);
