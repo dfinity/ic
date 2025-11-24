@@ -131,7 +131,9 @@ fn test_create_canister_with_id() {
         .get(&ii_subnet_id)
         .unwrap()
         .canister_ranges;
-    // The II subnet has 3 canister ranges.
+    // The II subnet has 3 canister ranges
+    // (2 mainnet ranges and 1 custom allocation range
+    // in which new canisters can be created).
     assert_eq!(ii_canister_ranges.len(), 3);
     // And the II canister ID is a singleton range.
     let ii_canister_range = CanisterIdRange {
