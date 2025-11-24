@@ -266,7 +266,7 @@ fn render_action_buttons(
 // ============================================================================
 
 fn render_logs_screen(f: &mut Frame, state: &RunningState, size: Rect) {
-    let logs = state.log_lines.lock().unwrap();
+    let logs = state.task.get_logs();
 
     let block = create_block("GuestOS Recovery Upgrader", false, false);
 

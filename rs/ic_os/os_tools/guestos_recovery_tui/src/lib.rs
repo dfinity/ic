@@ -209,10 +209,58 @@ impl InputState {
 }
 
 pub(crate) struct RunningState {
-    pub child: std::process::Child,
-    pub stdout_handle: Option<thread::JoinHandle<()>>,
-    pub log_lines: Arc<Mutex<Vec<String>>>,
+    pub task: RecoveryTask,
     pub params: RecoveryParams,
+}
+
+pub struct RecoveryTask {
+    child: std::process::Child,
+    stdout_handle: Option<thread::JoinHandle<()>>,
+    log_lines: Arc<Mutex<Vec<String>>>,
+}
+
+impl RecoveryTask {
+    pub fn start(params: &RecoveryParams) -> Result<Self> {
+        let mut cmd = build_upgrader_command(params);
+        cmd.stdout(Stdio::piped());
+        // Redirect stderr to null to avoid cluttering the TUI output
+        cmd.stderr(Stdio::null());
+
+        let mut child = cmd.spawn().context("Failed to spawn recovery upgrader")?;
+
+        let log_lines = Arc::new(Mutex::new(Vec::<String>::new()));
+
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("Failed to get stdout handle"))?;
+
+        let stdout_handle = start_log_capture(stdout, Arc::clone(&log_lines));
+
+        Ok(Self {
+            child,
+            stdout_handle: Some(stdout_handle),
+            log_lines,
+        })
+    }
+
+    pub fn get_logs(&self) -> Vec<String> {
+        self.log_lines.lock().unwrap().clone()
+    }
+
+    pub fn check_status(&mut self) -> Result<Option<std::process::ExitStatus>> {
+        match self.child.try_wait() {
+            Ok(Some(status)) => {
+                // Process finished
+                if let Some(handle) = self.stdout_handle.take() {
+                    handle.join().ok();
+                }
+                Ok(Some(status))
+            }
+            Ok(None) => Ok(None), // Still running
+            Err(e) => Err(anyhow::anyhow!("Error waiting for process: {}", e)),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -601,43 +649,19 @@ impl GuestOSRecoveryApp {
     }
 
     fn start_recovery_process(&mut self, params: RecoveryParams) -> Result<()> {
-        let mut cmd = build_upgrader_command(&params);
-        cmd.stdout(Stdio::piped());
-        // Redirect stderr to null to avoid cluttering the TUI output
-        cmd.stderr(Stdio::null());
+        let task = RecoveryTask::start(&params)?;
 
-        let mut child = cmd.spawn().context("Failed to spawn recovery upgrader")?;
-
-        let log_lines = Arc::new(Mutex::new(Vec::<String>::new()));
-
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| anyhow::anyhow!("Failed to get stdout handle"))?;
-
-        let stdout_handle = start_log_capture(stdout, Arc::clone(&log_lines));
-
-        self.state = Some(AppState::Running(RunningState {
-            child,
-            stdout_handle: Some(stdout_handle),
-            log_lines,
-            params,
-        }));
+        self.state = Some(AppState::Running(RunningState { task, params }));
 
         Ok(())
     }
 
     fn tick(&mut self) -> Result<()> {
         let finished_state = if let Some(AppState::Running(running_state)) = &mut self.state {
-            match running_state.child.try_wait() {
-                Ok(Some(status)) => {
-                    // Process finished
-                    if let Some(handle) = running_state.stdout_handle.take() {
-                        handle.join().ok();
-                    }
-
+            match running_state.task.check_status()? {
+                Some(status) => {
                     // Collect logs
-                    let logs = running_state.log_lines.lock().unwrap().clone();
+                    let logs = running_state.task.get_logs();
 
                     if status.success() {
                         self.result = Some(Ok(()));
@@ -654,8 +678,7 @@ impl GuestOSRecoveryApp {
                         })
                     }
                 }
-                Ok(None) => None, // Still running
-                Err(e) => return Err(anyhow::anyhow!("Error waiting for process: {}", e)),
+                None => None, // Still running
             }
         } else {
             None
