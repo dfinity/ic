@@ -77,7 +77,7 @@ async fn migrate_canister(args: MigrateCanisterArgs) -> Result<(), Option<Valida
             println!("Failed to validate request {}: {}", args, e);
             return Err(Some(e));
         }
-        Ok(request) => {
+        Ok((request, _guards)) => {
             // Need to check the rate limit again
             if rate_limited() {
                 return Err(Some(ValidationError::RateLimited(Reserved)));
