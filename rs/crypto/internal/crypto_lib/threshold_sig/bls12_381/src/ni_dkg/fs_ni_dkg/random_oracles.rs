@@ -1,6 +1,6 @@
 //! Hashing to group elements (fields, curves)
 use ic_crypto_internal_bls12_381_type::{G1Affine, G2Affine, Scalar};
-use ic_crypto_sha2::{Context, DomainSeparationContext, Sha256};
+use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 use std::collections::BTreeMap;
 
 const DOMAIN_RO_INT: &str = "ic-random-oracle-integer";

@@ -5,7 +5,7 @@ use ic_crypto_internal_threshold_sig_canister_threshold_sig::{
 };
 use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
-use ic_crypto_sha2::{Context, DomainSeparationContext, Sha256};
+use ic_crypto_sha2::{DomainSeparationContext, Sha256};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::AlgorithmId;
 use std::fmt;
@@ -106,7 +106,7 @@ impl<B: AsRef<[u8]>> From<(AlgorithmId, &B)> for KeyId {
 
 impl From<&CspPublicKey> for KeyId {
     fn from(public_key: &CspPublicKey) -> Self {
-        KeyId::from((public_key.algorithm_id(), &public_key.pk_bytes()))
+        KeyId::from((AlgorithmId::from(public_key), public_key))
     }
 }
 
