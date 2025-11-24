@@ -161,7 +161,10 @@ pub mod mock {
             fn time(&self) -> u64;
             fn global_timer_set(&self, timestamp: u64);
             fn parse_address(&self, address: &str, network: Network) -> Result<BitcoinAddress, String>;
+            fn block_time(&self, network: Network) -> Duration;
             fn derive_user_address(&self, state: &CkBtcMinterState, account: &Account) -> String;
+            fn derive_minter_address(&self, state: &CkBtcMinterState) -> BitcoinAddress;
+            fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String;
             fn refresh_fee_percentiles_frequency(&self) -> Duration;
             async fn get_current_fee_percentiles(&self, request: &GetCurrentFeePercentilesRequest) -> Result<Vec<u64>, CallError>;
             async fn get_utxos(&self, request: &GetUtxosRequest) -> Result<GetUtxosResponse, CallError>;

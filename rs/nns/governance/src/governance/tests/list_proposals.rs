@@ -5,8 +5,8 @@ use crate::{
     },
     neuron::{DissolveStateAndAge, NeuronBuilder},
     pb::v1::{
-        ExecuteNnsFunction, Followees, ListProposalInfo, ManageNeuron, Motion, NetworkEconomics,
-        NnsFunction, Proposal, ProposalRewardStatus, ProposalStatus, Topic, WaitForQuietState,
+        ExecuteNnsFunction, Followees, ManageNeuron, Motion, NetworkEconomics, NnsFunction,
+        Proposal, ProposalRewardStatus, ProposalStatus, Topic, WaitForQuietState,
         manage_neuron::{Command, NeuronIdOrSubaccount, RegisterVote},
         proposal::Action,
     },
@@ -19,8 +19,8 @@ use futures::FutureExt;
 use ic_nervous_system_common::{E8, ONE_YEAR_SECONDS};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance_api::{
-    Governance as ApiGovernance, ListProposalInfoResponse, NetworkEconomics as ApiNetworkEconomics,
-    ProposalInfo, Vote, proposal::Action as ApiAction,
+    Governance as ApiGovernance, ListProposalInfoRequest, ListProposalInfoResponse,
+    NetworkEconomics as ApiNetworkEconomics, ProposalInfo, Vote, proposal::Action as ApiAction,
 };
 use ic_types::PrincipalId;
 use lazy_static::lazy_static;
@@ -116,7 +116,8 @@ fn test_list_proposals_removes_execute_nns_function_payload() {
             payload: vec![42; EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX + 1],
         })]);
 
-    let response = governance.list_proposals(&PROPOSER_PRINCIPAL, &ListProposalInfo::default());
+    let response =
+        governance.list_proposals(&PROPOSER_PRINCIPAL, ListProposalInfoRequest::default());
 
     let action = response.proposal_info[0]
         .proposal
@@ -139,7 +140,8 @@ fn test_list_proposals_retains_execute_nns_function_payload() {
             payload: vec![42; EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX],
         })]);
 
-    let response = governance.list_proposals(&PROPOSER_PRINCIPAL, &ListProposalInfo::default());
+    let response =
+        governance.list_proposals(&PROPOSER_PRINCIPAL, ListProposalInfoRequest::default());
 
     let action = response.proposal_info[0]
         .proposal
@@ -197,13 +199,14 @@ fn test_list_proposals_paging() {
     let governance = governance_with_proposals(proposal_actions);
 
     // Listing proposals without a limit should return all 100 proposals.
-    let response = governance.list_proposals(&PROPOSER_PRINCIPAL, &ListProposalInfo::default());
+    let response =
+        governance.list_proposals(&PROPOSER_PRINCIPAL, ListProposalInfoRequest::default());
     assert_eq!(proposal_ids(&response), (1..=100).rev().collect::<Vec<_>>());
 
     // First page should return the last 50 proposals.
     let first_page = governance.list_proposals(
         &PROPOSER_PRINCIPAL,
-        &ListProposalInfo {
+        ListProposalInfoRequest {
             limit: 50,
             ..Default::default()
         },
@@ -216,7 +219,7 @@ fn test_list_proposals_paging() {
     // Second page should return the first 50 proposals.
     let second_page = governance.list_proposals(
         &PROPOSER_PRINCIPAL,
-        &ListProposalInfo {
+        ListProposalInfoRequest {
             limit: 50,
             before_proposal: first_page.proposal_info.last().and_then(|x| x.id),
             ..Default::default()
@@ -230,7 +233,7 @@ fn test_list_proposals_paging() {
     // Third page should return an empty list.
     let third_page = governance.list_proposals(
         &PROPOSER_PRINCIPAL,
-        &ListProposalInfo {
+        ListProposalInfoRequest {
             limit: 50,
             before_proposal: second_page.proposal_info.last().and_then(|x| x.id),
             ..Default::default()
@@ -292,22 +295,28 @@ fn test_filter_proposals_manage_neuron_proposal_visibility() {
 
     // The controller of the manager can see the proposal.
     assert_eq!(
-        proposal_ids(
-            &governance.list_proposals(&neuron_manager.controller(), &ListProposalInfo::default())
-        ),
+        proposal_ids(&governance.list_proposals(
+            &neuron_manager.controller(),
+            ListProposalInfoRequest::default()
+        )),
         vec![1]
     );
 
     // The hot key of the manager can see the proposal.
     assert_eq!(
-        proposal_ids(&governance.list_proposals(&hot_key_of_manager, &ListProposalInfo::default())),
+        proposal_ids(
+            &governance.list_proposals(&hot_key_of_manager, ListProposalInfoRequest::default())
+        ),
         vec![1]
     );
 
     // The controller of the managed neuron cannot see the proposal.
     assert_eq!(
         governance
-            .list_proposals(&managed_neuron.controller(), &ListProposalInfo::default())
+            .list_proposals(
+                &managed_neuron.controller(),
+                ListProposalInfoRequest::default()
+            )
             .proposal_info,
         vec![]
     );
@@ -317,7 +326,7 @@ fn test_filter_proposals_manage_neuron_proposal_visibility() {
         governance
             .list_proposals(
                 &some_other_neuron.controller(),
-                &ListProposalInfo::default()
+                ListProposalInfoRequest::default()
             )
             .proposal_info,
         vec![]
@@ -328,7 +337,7 @@ fn test_filter_proposals_manage_neuron_proposal_visibility() {
         governance
             .list_proposals(
                 &PrincipalId::new_self_authenticating(b"some_principal"),
-                &ListProposalInfo::default()
+                ListProposalInfoRequest::default()
             )
             .proposal_info,
         vec![]
@@ -338,7 +347,7 @@ fn test_filter_proposals_manage_neuron_proposal_visibility() {
     assert_eq!(
         proposal_ids(&governance.list_proposals(
             &PrincipalId::new_self_authenticating(b"some_principal"),
-            &ListProposalInfo {
+            ListProposalInfoRequest {
                 include_all_manage_neuron_proposals: Some(true),
                 ..Default::default()
             }
@@ -351,7 +360,7 @@ fn test_filter_proposals_manage_neuron_proposal_visibility() {
         governance
             .list_proposals(
                 &PrincipalId::new_self_authenticating(b"some_principal"),
-                &ListProposalInfo {
+                ListProposalInfoRequest {
                     exclude_topic: vec![Topic::NeuronManagement as i32],
                     include_all_manage_neuron_proposals: Some(true),
                     ..Default::default()
@@ -375,7 +384,7 @@ fn test_filter_proposals_by_status() {
     // Make sure the proposal ids are expected before using them to modifty the status.
     assert_eq!(
         proposal_ids(
-            &governance.list_proposals(&PROPOSER_PRINCIPAL, &ListProposalInfo::default(),)
+            &governance.list_proposals(&PROPOSER_PRINCIPAL, ListProposalInfoRequest::default(),)
         ),
         vec![3, 2, 1]
     );
@@ -390,7 +399,7 @@ fn test_filter_proposals_by_status() {
     assert_eq!(
         proposal_ids(&governance.list_proposals(
             &PrincipalId::new_anonymous(),
-            &ListProposalInfo {
+            ListProposalInfoRequest {
                 include_status: vec![ProposalStatus::Open as i32],
                 ..Default::default()
             },
@@ -400,7 +409,7 @@ fn test_filter_proposals_by_status() {
     assert_eq!(
         proposal_ids(&governance.list_proposals(
             &PrincipalId::new_anonymous(),
-            &ListProposalInfo {
+            ListProposalInfoRequest {
                 include_status: vec![ProposalStatus::Executed as i32],
                 ..Default::default()
             },
@@ -410,7 +419,7 @@ fn test_filter_proposals_by_status() {
     assert_eq!(
         proposal_ids(&governance.list_proposals(
             &PrincipalId::new_anonymous(),
-            &ListProposalInfo {
+            ListProposalInfoRequest {
                 include_status: vec![ProposalStatus::Failed as i32],
                 ..Default::default()
             },
@@ -432,7 +441,7 @@ fn test_filter_proposals_by_reward_status() {
     // Make sure the proposal ids are expected before using them to modifty the status.
     assert_eq!(
         proposal_ids(
-            &governance.list_proposals(&PROPOSER_PRINCIPAL, &ListProposalInfo::default(),)
+            &governance.list_proposals(&PROPOSER_PRINCIPAL, ListProposalInfoRequest::default(),)
         ),
         vec![3, 2, 1]
     );
@@ -454,7 +463,7 @@ fn test_filter_proposals_by_reward_status() {
     assert_eq!(
         proposal_ids(&governance.list_proposals(
             &PrincipalId::new_anonymous(),
-            &ListProposalInfo {
+            ListProposalInfoRequest {
                 include_reward_status: vec![ProposalRewardStatus::Settled as i32],
                 ..Default::default()
             },
@@ -464,7 +473,7 @@ fn test_filter_proposals_by_reward_status() {
     assert_eq!(
         proposal_ids(&governance.list_proposals(
             &PrincipalId::new_anonymous(),
-            &ListProposalInfo {
+            ListProposalInfoRequest {
                 include_reward_status: vec![ProposalRewardStatus::AcceptVotes as i32],
                 ..Default::default()
             },
@@ -474,7 +483,7 @@ fn test_filter_proposals_by_reward_status() {
     assert_eq!(
         proposal_ids(&governance.list_proposals(
             &PrincipalId::new_anonymous(),
-            &ListProposalInfo {
+            ListProposalInfoRequest {
                 include_reward_status: vec![ProposalRewardStatus::ReadyToSettle as i32],
                 ..Default::default()
             },
@@ -499,7 +508,7 @@ fn test_filter_proposals_excluding_topics() {
     assert_eq!(
         proposal_ids(&governance.list_proposals(
             &PrincipalId::new_anonymous(),
-            &ListProposalInfo {
+            ListProposalInfoRequest {
                 exclude_topic: vec![Topic::Governance as i32],
                 ..Default::default()
             },
@@ -509,7 +518,7 @@ fn test_filter_proposals_excluding_topics() {
     assert_eq!(
         proposal_ids(&governance.list_proposals(
             &PrincipalId::new_anonymous(),
-            &ListProposalInfo {
+            ListProposalInfoRequest {
                 exclude_topic: vec![
                     Topic::ProtocolCanisterManagement as i32,
                     Topic::NetworkEconomics as i32
@@ -573,7 +582,7 @@ fn test_filter_proposal_ballots() {
     assert_eq!(
         proposal_ballot_votes(
             &governance
-                .list_proposals(&neuron_1_controller, &ListProposalInfo::default())
+                .list_proposals(&neuron_1_controller, ListProposalInfoRequest::default())
                 .proposal_info[0]
         ),
         hashmap! {
@@ -583,7 +592,7 @@ fn test_filter_proposal_ballots() {
     assert_eq!(
         proposal_ballot_votes(
             &governance
-                .list_proposals(&neuron_2_controller, &ListProposalInfo::default())
+                .list_proposals(&neuron_2_controller, ListProposalInfoRequest::default())
                 .proposal_info[0]
         ),
         hashmap! {
@@ -593,7 +602,7 @@ fn test_filter_proposal_ballots() {
     assert_eq!(
         proposal_ballot_votes(
             &governance
-                .list_proposals(&neuron_2_hot_key, &ListProposalInfo::default())
+                .list_proposals(&neuron_2_hot_key, ListProposalInfoRequest::default())
                 .proposal_info[0]
         ),
         hashmap! {
@@ -625,9 +634,9 @@ fn test_omit_large_fields() {
 
     let response = governance.list_proposals(
         &PrincipalId::new_anonymous(),
-        &ListProposalInfo {
+        ListProposalInfoRequest {
             omit_large_fields: Some(false),
-            ..ListProposalInfo::default()
+            ..ListProposalInfoRequest::default()
         },
     );
     assert!(
@@ -637,9 +646,9 @@ fn test_omit_large_fields() {
 
     let response = governance.list_proposals(
         &PrincipalId::new_anonymous(),
-        &ListProposalInfo {
+        ListProposalInfoRequest {
             omit_large_fields: None,
-            ..ListProposalInfo::default()
+            ..ListProposalInfoRequest::default()
         },
     );
     assert!(
@@ -649,9 +658,9 @@ fn test_omit_large_fields() {
 
     let response = governance.list_proposals(
         &PrincipalId::new_anonymous(),
-        &ListProposalInfo {
+        ListProposalInfoRequest {
             omit_large_fields: Some(true),
-            ..ListProposalInfo::default()
+            ..ListProposalInfoRequest::default()
         },
     );
     assert!(

@@ -197,7 +197,7 @@ impl SchedulerTest {
         self.create_canister_with(
             self.initial_canister_cycles,
             ComputeAllocation::zero(),
-            MemoryAllocation::BestEffort,
+            MemoryAllocation::default(),
             None,
             None,
             None,
@@ -241,7 +241,7 @@ impl SchedulerTest {
             .with_cycles(cycles)
             .with_controller(controller)
             .with_compute_allocation(compute_allocation)
-            .with_memory_allocation(memory_allocation.bytes())
+            .with_memory_allocation(memory_allocation.pre_allocated_bytes())
             .with_wasm(wasm_source.clone())
             .with_freezing_threshold(100)
             .with_time_of_last_allocation_charge(time_of_last_allocation_charge)
@@ -572,6 +572,7 @@ impl SchedulerTest {
                 .scaled_subnet_available_memory(&state),
             subnet_available_callbacks: self.scheduler.exec_env.subnet_available_callbacks(&state),
             compute_allocation_used,
+            subnet_memory_reservation: self.scheduler.exec_env.scaled_subnet_memory_reservation(),
         };
         let measurements = MeasurementScope::root(&self.scheduler.metrics.round_subnet_queue);
         self.scheduler.drain_subnet_queues(

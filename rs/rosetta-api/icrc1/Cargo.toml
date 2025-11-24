@@ -2,7 +2,7 @@
 name = "ic-icrc-rosetta"
 description = "Build Once. Integrate Your Blockchain Everywhere. "
 default-run = "ic-icrc-rosetta"
-version = "1.2.6"
+version = "1.2.7"
 authors.workspace = true
 edition.workspace = true
 documentation.workspace = true

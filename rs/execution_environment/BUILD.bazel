@@ -180,6 +180,7 @@ rust_ic_test_suite(
         "@crate_index//:libflate",
         "@crate_index//:maplit",
         "@crate_index//:more-asserts",
+        "@crate_index//:num-traits",
         "@crate_index//:proptest",
         "@crate_index//:regex",
         "@crate_index//:rstest",
@@ -279,7 +280,9 @@ rust_ic_bench(
         "//rs/execution_environment/benches/lib:execution_environment_bench",
         "//rs/limits",
         "//rs/types/types",
+        "@crate_index//:candid",
         "@crate_index//:criterion",
+        "@crate_index//:serde",
     ],
 )
 

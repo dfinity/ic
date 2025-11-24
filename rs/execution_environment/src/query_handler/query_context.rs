@@ -96,7 +96,7 @@ pub(super) struct QueryContext<'a> {
     state: Labeled<Arc<ReplicatedState>>,
     network_topology: Arc<NetworkTopology>,
     // Certificate for certified queries + canister ID of the root query of this context
-    data_certificate: (Vec<u8>, CanisterId),
+    data_certificate: Option<(Vec<u8>, CanisterId)>,
     max_instructions_per_query: NumInstructions,
     max_query_call_graph_depth: usize,
     instruction_overhead_per_query_call: RoundInstructions,
@@ -126,9 +126,10 @@ impl<'a> QueryContext<'a> {
         hypervisor: &'a Hypervisor,
         own_subnet_type: SubnetType,
         state: Labeled<Arc<ReplicatedState>>,
-        data_certificate: Vec<u8>,
+        data_certificate: Option<Vec<u8>>,
         subnet_available_memory: SubnetAvailableMemory,
         subnet_available_callbacks: i64,
+        subnet_memory_reservation: NumBytes,
         canister_guaranteed_callback_quota: u64,
         max_instructions_per_query: NumInstructions,
         max_query_call_graph_depth: usize,
@@ -148,6 +149,7 @@ impl<'a> QueryContext<'a> {
             subnet_available_callbacks,
             // Ignore compute allocation
             compute_allocation_used: 0,
+            subnet_memory_reservation,
         };
         Self {
             log,
@@ -155,7 +157,8 @@ impl<'a> QueryContext<'a> {
             own_subnet_type,
             state,
             network_topology,
-            data_certificate: (data_certificate, canister_id),
+            data_certificate: data_certificate
+                .map(|data_certificate| (data_certificate, canister_id)),
             max_instructions_per_query,
             max_query_call_graph_depth,
             instruction_overhead_per_query_call: as_round_instructions(
@@ -1086,11 +1089,15 @@ impl<'a> QueryContext<'a> {
     }
 
     fn get_data_certificate(&self, canister_id: &CanisterId) -> Option<Vec<u8>> {
-        if canister_id != &self.data_certificate.1 {
-            None
-        } else {
-            Some(self.data_certificate.0.clone())
-        }
+        self.data_certificate.as_ref().and_then(
+            |(data_certificate, data_certificate_canister_id)| {
+                if canister_id != data_certificate_canister_id {
+                    None
+                } else {
+                    Some(data_certificate.clone())
+                }
+            },
+        )
     }
 
     /// Returns how many times each tracked System API call was invoked.

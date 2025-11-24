@@ -3,6 +3,7 @@ use ic_crypto_sha2::Sha256;
 use ic_nns_governance_api as pb_api;
 
 use crate::pb::proposal_conversions::convert_proposal;
+use crate::pb::v1::DateUtc;
 
 #[cfg(test)]
 mod tests;
@@ -515,7 +516,7 @@ impl From<pb_api::Empty> for pb::Empty {
     }
 }
 
-impl From<pb::ManageNeuron> for pb_api::ManageNeuron {
+impl From<pb::ManageNeuron> for pb_api::ManageNeuronProposal {
     fn from(item: pb::ManageNeuron) -> Self {
         Self {
             id: item.id,
@@ -524,8 +525,8 @@ impl From<pb::ManageNeuron> for pb_api::ManageNeuron {
         }
     }
 }
-impl From<pb_api::ManageNeuron> for pb::ManageNeuron {
-    fn from(item: pb_api::ManageNeuron) -> Self {
+impl From<pb_api::ManageNeuronProposal> for pb::ManageNeuron {
+    fn from(item: pb_api::ManageNeuronProposal) -> Self {
         Self {
             id: item.id,
             neuron_id_or_subaccount: item.neuron_id_or_subaccount.map(|x| x.into()),
@@ -1103,91 +1104,111 @@ impl From<pb_api::manage_neuron::NeuronIdOrSubaccount> for pb::manage_neuron::Ne
     }
 }
 
-impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::Command {
+// TODO: Remove this once the proposals exposed by Governance API no longer includes `Action` but
+// only the self-describing version.
+impl From<pb::manage_neuron::Command> for pb_api::manage_neuron::ManageNeuronProposalCommand {
     fn from(item: pb::manage_neuron::Command) -> Self {
         match item {
             pb::manage_neuron::Command::Configure(v) => {
-                pb_api::manage_neuron::Command::Configure(v.into())
+                pb_api::manage_neuron::ManageNeuronProposalCommand::Configure(v.into())
             }
             pb::manage_neuron::Command::Disburse(v) => {
-                pb_api::manage_neuron::Command::Disburse(v.into())
+                pb_api::manage_neuron::ManageNeuronProposalCommand::Disburse(v.into())
             }
-            pb::manage_neuron::Command::Spawn(v) => pb_api::manage_neuron::Command::Spawn(v.into()),
+            pb::manage_neuron::Command::Spawn(v) => {
+                pb_api::manage_neuron::ManageNeuronProposalCommand::Spawn(v.into())
+            }
             pb::manage_neuron::Command::Follow(v) => {
-                pb_api::manage_neuron::Command::Follow(v.into())
+                pb_api::manage_neuron::ManageNeuronProposalCommand::Follow(v.into())
             }
             pb::manage_neuron::Command::MakeProposal(v) => {
-                pb_api::manage_neuron::Command::MakeProposal(Box::new(convert_proposal(&v, false)))
+                // Note: this case is actually impossible since we no longer allow creating
+                // proposals through another ManageNeuron proposal. However this case cannot be
+                // easily removed until the `manage_neuron` canister method no longer uses
+                // `pb::manage_neuron::Command`.
+                pb_api::manage_neuron::ManageNeuronProposalCommand::MakeProposal(Box::new(
+                    convert_proposal(&v, false),
+                ))
             }
             pb::manage_neuron::Command::RegisterVote(v) => {
-                pb_api::manage_neuron::Command::RegisterVote(v.into())
+                pb_api::manage_neuron::ManageNeuronProposalCommand::RegisterVote(v.into())
             }
-            pb::manage_neuron::Command::Split(v) => pb_api::manage_neuron::Command::Split(v.into()),
+            pb::manage_neuron::Command::Split(v) => {
+                pb_api::manage_neuron::ManageNeuronProposalCommand::Split(v.into())
+            }
             pb::manage_neuron::Command::DisburseToNeuron(v) => {
-                pb_api::manage_neuron::Command::DisburseToNeuron(v.into())
+                pb_api::manage_neuron::ManageNeuronProposalCommand::DisburseToNeuron(v.into())
             }
             pb::manage_neuron::Command::ClaimOrRefresh(v) => {
-                pb_api::manage_neuron::Command::ClaimOrRefresh(v.into())
+                pb_api::manage_neuron::ManageNeuronProposalCommand::ClaimOrRefresh(v.into())
             }
             pb::manage_neuron::Command::MergeMaturity(v) => {
-                pb_api::manage_neuron::Command::MergeMaturity(v.into())
+                pb_api::manage_neuron::ManageNeuronProposalCommand::MergeMaturity(v.into())
             }
-            pb::manage_neuron::Command::Merge(v) => pb_api::manage_neuron::Command::Merge(v.into()),
+            pb::manage_neuron::Command::Merge(v) => {
+                pb_api::manage_neuron::ManageNeuronProposalCommand::Merge(v.into())
+            }
             pb::manage_neuron::Command::StakeMaturity(v) => {
-                pb_api::manage_neuron::Command::StakeMaturity(v.into())
+                pb_api::manage_neuron::ManageNeuronProposalCommand::StakeMaturity(v.into())
             }
             pb::manage_neuron::Command::RefreshVotingPower(v) => {
-                pb_api::manage_neuron::Command::RefreshVotingPower(v.into())
+                pb_api::manage_neuron::ManageNeuronProposalCommand::RefreshVotingPower(v.into())
             }
             pb::manage_neuron::Command::DisburseMaturity(v) => {
-                pb_api::manage_neuron::Command::DisburseMaturity(v.into())
+                pb_api::manage_neuron::ManageNeuronProposalCommand::DisburseMaturity(v.into())
             }
             pb::manage_neuron::Command::SetFollowing(v) => {
-                pb_api::manage_neuron::Command::SetFollowing(v.into())
+                pb_api::manage_neuron::ManageNeuronProposalCommand::SetFollowing(v.into())
             }
         }
     }
 }
-impl From<pb_api::manage_neuron::Command> for pb::manage_neuron::Command {
-    fn from(item: pb_api::manage_neuron::Command) -> Self {
+impl From<pb_api::manage_neuron::ManageNeuronProposalCommand> for pb::manage_neuron::Command {
+    fn from(item: pb_api::manage_neuron::ManageNeuronProposalCommand) -> Self {
         match item {
-            pb_api::manage_neuron::Command::Configure(v) => {
+            pb_api::manage_neuron::ManageNeuronProposalCommand::Configure(v) => {
                 pb::manage_neuron::Command::Configure(v.into())
             }
-            pb_api::manage_neuron::Command::Disburse(v) => {
+            pb_api::manage_neuron::ManageNeuronProposalCommand::Disburse(v) => {
                 pb::manage_neuron::Command::Disburse(v.into())
             }
-            pb_api::manage_neuron::Command::Spawn(v) => pb::manage_neuron::Command::Spawn(v.into()),
-            pb_api::manage_neuron::Command::Follow(v) => {
+            pb_api::manage_neuron::ManageNeuronProposalCommand::Spawn(v) => {
+                pb::manage_neuron::Command::Spawn(v.into())
+            }
+            pb_api::manage_neuron::ManageNeuronProposalCommand::Follow(v) => {
                 pb::manage_neuron::Command::Follow(v.into())
             }
-            pb_api::manage_neuron::Command::MakeProposal(v) => {
+            pb_api::manage_neuron::ManageNeuronProposalCommand::MakeProposal(v) => {
                 pb::manage_neuron::Command::MakeProposal(Box::new((*v).into()))
             }
-            pb_api::manage_neuron::Command::RegisterVote(v) => {
+            pb_api::manage_neuron::ManageNeuronProposalCommand::RegisterVote(v) => {
                 pb::manage_neuron::Command::RegisterVote(v.into())
             }
-            pb_api::manage_neuron::Command::Split(v) => pb::manage_neuron::Command::Split(v.into()),
-            pb_api::manage_neuron::Command::DisburseToNeuron(v) => {
+            pb_api::manage_neuron::ManageNeuronProposalCommand::Split(v) => {
+                pb::manage_neuron::Command::Split(v.into())
+            }
+            pb_api::manage_neuron::ManageNeuronProposalCommand::DisburseToNeuron(v) => {
                 pb::manage_neuron::Command::DisburseToNeuron(v.into())
             }
-            pb_api::manage_neuron::Command::ClaimOrRefresh(v) => {
+            pb_api::manage_neuron::ManageNeuronProposalCommand::ClaimOrRefresh(v) => {
                 pb::manage_neuron::Command::ClaimOrRefresh(v.into())
             }
-            pb_api::manage_neuron::Command::MergeMaturity(v) => {
+            pb_api::manage_neuron::ManageNeuronProposalCommand::MergeMaturity(v) => {
                 pb::manage_neuron::Command::MergeMaturity(v.into())
             }
-            pb_api::manage_neuron::Command::Merge(v) => pb::manage_neuron::Command::Merge(v.into()),
-            pb_api::manage_neuron::Command::StakeMaturity(v) => {
+            pb_api::manage_neuron::ManageNeuronProposalCommand::Merge(v) => {
+                pb::manage_neuron::Command::Merge(v.into())
+            }
+            pb_api::manage_neuron::ManageNeuronProposalCommand::StakeMaturity(v) => {
                 pb::manage_neuron::Command::StakeMaturity(v.into())
             }
-            pb_api::manage_neuron::Command::RefreshVotingPower(v) => {
+            pb_api::manage_neuron::ManageNeuronProposalCommand::RefreshVotingPower(v) => {
                 pb::manage_neuron::Command::RefreshVotingPower(v.into())
             }
-            pb_api::manage_neuron::Command::DisburseMaturity(v) => {
+            pb_api::manage_neuron::ManageNeuronProposalCommand::DisburseMaturity(v) => {
                 pb::manage_neuron::Command::DisburseMaturity(v.into())
             }
-            pb_api::manage_neuron::Command::SetFollowing(v) => {
+            pb_api::manage_neuron::ManageNeuronProposalCommand::SetFollowing(v) => {
                 pb::manage_neuron::Command::SetFollowing(v.into())
             }
         }
@@ -3025,6 +3046,35 @@ impl From<pb_api::governance::governance_cached_metrics::NeuronSubsetMetrics>
     }
 }
 
+impl TryFrom<ic_node_rewards_canister_api::DateUtc> for DateUtc {
+    type Error = String;
+
+    fn try_from(value: ic_node_rewards_canister_api::DateUtc) -> Result<Self, Self::Error> {
+        let year = value.year.ok_or("Missing field: year")?;
+        let month = value.month.ok_or("Missing field: month")?;
+        let day = value.day.ok_or("Missing field: day")?;
+
+        Ok(Self { year, month, day })
+    }
+}
+impl From<pb::DateUtc> for pb_api::DateUtc {
+    fn from(item: pb::DateUtc) -> Self {
+        Self {
+            year: item.year,
+            month: item.month,
+            day: item.day,
+        }
+    }
+}
+impl From<pb_api::DateUtc> for pb::DateUtc {
+    fn from(item: pb_api::DateUtc) -> Self {
+        Self {
+            year: item.year,
+            month: item.month,
+            day: item.day,
+        }
+    }
+}
 impl From<pb::XdrConversionRate> for pb_api::XdrConversionRate {
     fn from(item: pb::XdrConversionRate) -> Self {
         Self {
@@ -3038,33 +3088,6 @@ impl From<pb_api::XdrConversionRate> for pb::XdrConversionRate {
         Self {
             timestamp_seconds: item.timestamp_seconds,
             xdr_permyriad_per_icp: item.xdr_permyriad_per_icp,
-        }
-    }
-}
-
-impl From<pb::ListProposalInfo> for pb_api::ListProposalInfo {
-    fn from(item: pb::ListProposalInfo) -> Self {
-        Self {
-            limit: item.limit,
-            before_proposal: item.before_proposal,
-            exclude_topic: item.exclude_topic,
-            include_reward_status: item.include_reward_status,
-            include_status: item.include_status,
-            include_all_manage_neuron_proposals: item.include_all_manage_neuron_proposals,
-            omit_large_fields: item.omit_large_fields,
-        }
-    }
-}
-impl From<pb_api::ListProposalInfo> for pb::ListProposalInfo {
-    fn from(item: pb_api::ListProposalInfo) -> Self {
-        Self {
-            limit: item.limit,
-            before_proposal: item.before_proposal,
-            exclude_topic: item.exclude_topic,
-            include_reward_status: item.include_reward_status,
-            include_status: item.include_status,
-            include_all_manage_neuron_proposals: item.include_all_manage_neuron_proposals,
-            omit_large_fields: item.omit_large_fields,
         }
     }
 }
@@ -3098,11 +3121,12 @@ impl From<pb_api::ListNodeProvidersResponse> for pb::ListNodeProvidersResponse {
         }
     }
 }
-
 impl From<pb::MonthlyNodeProviderRewards> for pb_api::MonthlyNodeProviderRewards {
     fn from(item: pb::MonthlyNodeProviderRewards) -> Self {
         Self {
             timestamp: item.timestamp,
+            start_date: item.start_date.map(|x| x.into()),
+            end_date: item.end_date.map(|x| x.into()),
             rewards: item.rewards.into_iter().map(|x| x.into()).collect(),
             xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
             minimum_xdr_permyriad_per_icp: item.minimum_xdr_permyriad_per_icp,
@@ -3116,6 +3140,8 @@ impl From<pb_api::MonthlyNodeProviderRewards> for pb::MonthlyNodeProviderRewards
     fn from(item: pb_api::MonthlyNodeProviderRewards) -> Self {
         Self {
             timestamp: item.timestamp,
+            start_date: item.start_date.map(|x| x.into()),
+            end_date: item.end_date.map(|x| x.into()),
             rewards: item.rewards.into_iter().map(|x| x.into()).collect(),
             xdr_conversion_rate: item.xdr_conversion_rate.map(|x| x.into()),
             minimum_xdr_permyriad_per_icp: item.minimum_xdr_permyriad_per_icp,

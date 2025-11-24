@@ -615,7 +615,7 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
     let canister_history_memory_usage = size_of::<CanisterChange>() + size_of::<PrincipalId>();
     let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
         ic_config::execution_environment::Config::default().default_freeze_threshold,
-        MemoryAllocation::BestEffort,
+        MemoryAllocation::default(),
         NumBytes::new(canister_history_memory_usage as u64),
         MessageMemoryUsage::ZERO,
         ComputeAllocation::zero(),

@@ -129,8 +129,11 @@ pub struct Type3RegionBaseRewards {
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 pub struct DailyNodeProviderRewards {
-    /// Total rewards across all nodes for this provider in XDR permyriad
-    pub rewards_total_xdr_permyriad: Decimal,
+    /// Total daily base rewards across all nodes for this provider in XDR permyriad
+    pub total_base_rewards_xdr_permyriad: u64,
+
+    /// Total daily rewards adjusted across all nodes for this provider in XDR permyriad
+    pub total_adjusted_rewards_xdr_permyriad: u64,
 
     /// Base rewards broken down by node type and region
     pub base_rewards: Vec<NodeTypeRegionBaseRewards>,

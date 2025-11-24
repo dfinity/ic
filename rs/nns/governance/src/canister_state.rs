@@ -10,7 +10,7 @@ use ic_nervous_system_canisters::ledger::IcpLedgerCanister;
 use ic_nervous_system_runtime::CdkRuntime;
 use ic_nervous_system_runtime::Runtime;
 use ic_nervous_system_time_helpers::now_seconds;
-use ic_nns_common::types::CallCanisterProposal;
+use ic_nns_common::types::CallCanisterRequest;
 use ic_nns_common::types::ProposalId;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance_api::bitcoin::BitcoinNetwork;
@@ -310,7 +310,7 @@ fn get_effective_payload(
                 BitcoinNetwork::Testnet => BITCOIN_TESTNET_CANISTER_ID,
             }).expect("bitcoin canister id must be valid.");
 
-            let encoded_payload = Encode!(&CallCanisterProposal {
+            let encoded_payload = Encode!(&CallCanisterRequest {
                 canister_id,
                 method_name: BITCOIN_SET_CONFIG_METHOD_NAME.to_string(),
                 payload: payload.payload

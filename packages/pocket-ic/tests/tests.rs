@@ -1314,18 +1314,7 @@ fn test_vetkd() {
     }
 }
 
-#[test]
-fn test_canister_http() {
-    let pic = PocketIc::new();
-
-    // Create a canister and charge it with initial cycles.
-    let canister_id = pic.create_canister();
-    pic.add_cycles(canister_id, INIT_CYCLES);
-
-    // Install the test canister wasm file on the canister.
-    let test_wasm = test_canister_wasm();
-    pic.install_canister(canister_id, test_wasm, vec![], None);
-
+fn test_canister_http(pic: &PocketIc, canister_id: Principal) {
     // Submit an update call to the test canister making a canister http outcall
     // and mock a canister http outcall response.
     let call_id = pic
@@ -1368,6 +1357,48 @@ fn test_canister_http() {
     let http_response: Result<HttpRequestResult, (RejectionCode, String)> =
         decode_one(&reply).unwrap();
     assert_eq!(http_response.unwrap().body, body);
+}
+
+#[test]
+fn test_canister_http_on_fresh_and_resumed_instance() {
+    // create an empty PocketIC state to be used:
+    // - initially by a fresh PocketIC instance;
+    // - later by a PocketIC instance resumed from that state.
+    let state = PocketIcState::new();
+
+    // create a fresh PocketIC instance with two application subnets
+    // so that the latest registry version is different
+    // from the registry version at which one of the subnets was created
+    // (this scenario led to a bug in PocketIC canister http outcalls)
+    let pic = PocketIcBuilder::new()
+        .with_application_subnet()
+        .with_application_subnet()
+        .with_state(state)
+        .build();
+
+    // create a test canister on every subnet
+    let topology = pic.topology();
+    let mut canisters = vec![];
+    for app_subnet in topology.get_app_subnets() {
+        let canister_id = pic.create_canister_on_subnet(None, None, app_subnet);
+        pic.add_cycles(canister_id, INIT_CYCLES);
+        pic.install_canister(canister_id, test_canister_wasm(), vec![], None);
+        canisters.push(canister_id);
+    }
+    // ensure that canister http outcalls work on every subnet
+    for canister_id in &canisters {
+        test_canister_http(&pic, *canister_id);
+    }
+
+    // drop the first PocketIC instance and serialize its state
+    let state = pic.drop_and_take_state().unwrap();
+
+    // create the second PocketIC instance resuming from the existing state
+    let pic = PocketIcBuilder::new().with_state(state).build();
+    // ensure that canister http outcalls still work on every subnet
+    for canister_id in &canisters {
+        test_canister_http(&pic, *canister_id);
+    }
 }
 
 #[test]
@@ -2930,6 +2961,7 @@ async fn with_http_gateway_config_invalid_instance_config() {
         icp_config: None,
         log_level: Some("invalid".to_string()),
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: None,
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
@@ -2993,6 +3025,7 @@ async fn with_http_gateway_config_invalid_gateway_port() {
         icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: None,
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),
@@ -3043,6 +3076,7 @@ async fn with_http_gateway_config_invalid_gateway_https_config() {
         icp_config: None,
         log_level: None,
         bitcoind_addr: None,
+        dogecoind_addr: None,
         icp_features: None,
         incomplete_state: None,
         initial_time: Some(InitialTime::AutoProgress(auto_progress_config)),

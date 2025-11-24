@@ -19,6 +19,7 @@ candid = { workspace = true }
 futures = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
+ic-http-types = { path = "../../../packages/ic-http-types" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-management-canister-types = { workspace = true }
 ic-metrics-encoder = "1.1.1"

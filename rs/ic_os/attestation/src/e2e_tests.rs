@@ -6,6 +6,7 @@ use config_types::TrustedExecutionEnvironmentConfig;
 use ic_sev::guest::firmware::MockSevGuestFirmware;
 use ic_sev::guest::testing::{FakeAttestationReportSigner, MockSevGuestFirmwareBuilder};
 use sev::firmware::guest::AttestationReport;
+use sev::parser::ByteParser;
 
 const CHIP_ID: [u8; 64] = [3; 64];
 const MEASUREMENT: [u8; 48] = [42; 48];

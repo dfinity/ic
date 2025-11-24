@@ -11,6 +11,54 @@ here were moved from the adjacent `unreleased_changelog.md` file.
 INSERT NEW RELEASES HERE
 
 
+# 2025-11-14: Proposal 139405
+
+http://dashboard.internetcomputer.org/proposal/139405
+
+## Added
+
+### Node Swaps
+
+DFINITY's node operators can now swap nodes on non-system subnets; later, swapping nodes will gradually become available to all node operators.
+
+
+# 2025-11-07: Proposal 139312
+
+http://dashboard.internetcomputer.org/proposal/139312
+
+## Changed
+
+* `max_rewardable_nodes` is used to limit the number of nodes that
+   a node provider can have in the system instead of `node_allowance`.
+   The main differences between these are
+
+    1. In the new way, each type of node has a separate limit.
+
+    2. The old way kept track of how many AVAILABLE slots there are.
+       The new way specifies how many slots there are IN TOTAL,
+       regardless of whether those slots are currently used.
+
+##  Added
+
+* Added rate limiting for add_node based on IP address.
+
+
+# 2025-10-31: Proposal 139210
+
+http://dashboard.internetcomputer.org/proposal/139210
+
+## Changed
+
+* Allow unassigned nodes to have nonempty ssh_node_state_write_access.
+
+  * Why: Previously, it was believed that there is no way that a nonempty
+    ssh_node_state_write_access could be used constructively, but after
+    consulting the Consensus team, we (the Governance team) learned that this is
+    not true. In particular, it could be useful during a subnet recovery, even
+    though this capability generally wouldn't be used during a "typical" subnet
+    recovery.
+
+
 # 2025-10-24: Proposal 139085
 
 http://dashboard.internetcomputer.org/proposal/139085

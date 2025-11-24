@@ -1316,6 +1316,8 @@ async fn test_mint_monthly_node_provider_rewards() {
                 maximum_node_provider_rewards_e8s: None,
                 registry_version: None,
                 node_providers: vec![],
+                start_date: None,
+                end_date: None,
             }),
             ..Default::default()
         },
@@ -1340,6 +1342,8 @@ async fn test_mint_monthly_node_provider_rewards() {
     assert_eq!(most_recent_monthly_node_provider_rewards.rewards.len(), 1);
     let MonthlyNodeProviderRewards {
         timestamp: _,
+        start_date: _,
+        end_date: _,
         rewards,
         xdr_conversion_rate,
         minimum_xdr_permyriad_per_icp,

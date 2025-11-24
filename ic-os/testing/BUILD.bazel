@@ -1,0 +1,69 @@
+load("//ic-os/components:setupos.bzl", "component_files")
+
+package(default_visibility = ["//rs/tests:__subpackages__"])
+
+# Components required by the reload_hostos script to reload HostOS
+all_component_files = component_files | {
+    "//ic-os/testing:reload_hostos.sh": "/opt/ic/bin/reload_hostos.sh",
+    "//ic-os/components:upgrade/grub.sh": "/opt/ic/bin/grub.sh",
+    "//rs/ic_os/config:config_dev": "/opt/ic/bin/config",
+    "//ic-os/components:upgrade/manageboot/manageboot.sh": "/opt/ic/bin/manageboot.sh",
+    "//ic-os/components:misc/metrics.sh": "/opt/ic/bin/metrics.sh",
+}
+
+script = """
+components=$$(mktemp -d)
+trap 'rm -rf $$components' EXIT
+""" + "".join([
+    "mkdir -p $$(dirname '$$components/{}')\n".format(target_path) +
+    "install -m 0755 '$(execpath {})' '$$components/{}'\n".format(
+        label,
+        target_path.replace("/opt/ic/bin/", ""),
+    )
+    for label, target_path in all_component_files.items()
+    if "/opt/ic/bin/" in target_path
+]) + "tar -cf $@ -C '$$components' .\n"
+
+genrule(
+    name = "reload_hostos_tar",
+    srcs = all_component_files.keys(),
+    outs = ["reload_hostos.tar"],
+    cmd = script,
+)
+
+# Self-extracting bash script containing all dependencies to reload a HostOS (and the GuestOS in it)
+# Usage:
+# ./reload_hostos_cmd --setupos-config-img=<path-to-setupos-config-image> --hostos-upgrade-img=<path-to-hostos-upgrade-image> --guestos-img=<path-to-guestos-image>
+genrule(
+    name = "reload_hostos",
+    srcs = [":reload_hostos_tar"],
+    outs = ["reload_hostos_cmd"],
+    cmd = """
+tar_in="$(execpath :reload_hostos_tar)"
+
+# Build the self-extracting script stub
+cat > $@ <<'SFX_STUB'
+#!/bin/sh
+set -eu
+
+tmpdir="$$(mktemp -d)"
+trap 'rm -rf "$$tmpdir"' EXIT
+
+# Determine payload offset and extract into temp directory
+payload_offset="$$(awk '/^__TAR_PAYLOAD_BELOW__$$/ { print NR + 1; exit 0; }' "$$0")"
+tail -n +"$$payload_offset" "$$0" | tar -C "$$tmpdir" -xf -
+
+# Execute the injector script from the extracted payload, forwarding CLI args
+cd "$$tmpdir"
+sudo ./reload_hostos.sh "$$@"
+
+exit
+__TAR_PAYLOAD_BELOW__
+SFX_STUB
+# End of script stub
+
+# Append the tar payload
+cat "$$tar_in" >> $@
+""",
+    executable = True,
+)

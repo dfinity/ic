@@ -43,21 +43,29 @@ WARNING: The script *doesn't* work when run from this repository's dev container
 
 ## Deploying Prod Images
 
-To create and set-up the local cluster and install the production containers for ICP-Rosetta and ICRC1-Rosetta pointing at DFINITY's test ledgers, simply do:
+To create and set-up the local cluster and install the production containers for ICP-Rosetta and ICRC1-Rosetta pointing at DFINITY's test ledgers, navigate to this directory and run:
+
 ```bash
+cd rs/rosetta-api/local/cluster
 ./deploy.sh [options]
 ```
 
+**Important:** The script must be run from the `cluster` directory so Helm can properly package the chart files.
+
 You can make the rosetta nodes point to other ledgers by using these flags:
+
 - `--icp-ledger <ledger_id>`: Set the ICP Ledger ID (default: `xafvr-biaaa-aaaai-aql5q-cai`). If `prod`, will point to the official ICP ledger.
 - `--icp-symbol <symbol>`: Set the ICP token symbol (default: `TESTICP`).
-- `--icrc1-ledger <ledger_id>`: Set the ICRC1 Ledger ID (default: `3jkp5-oyaaa-aaaaj-azwqa-cai`).
+- `--icrc1-ledgers <ledger_ids>`: Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: `3jkp5-oyaaa-aaaaj-azwqa-cai`). Example: `--icrc1-ledgers 'ledger1-id,ledger2-id,ledger3-id'`.
+- `--no-icp-latest`: Skip deploying the ICP Rosetta latest image from Docker Hub (useful when you only want to deploy your local build).
+- `--no-icrc1-latest`: Skip deploying the ICRC1 Rosetta latest image from Docker Hub (useful when you only want to deploy your local build).
 
 ATTENTION: The first run might take a few minutes to finish as it'll create the cluster and install the necessary charts in it. After that, all the script will do is re-deploy the rosetta images with different configuration if needed.
 
 ## Deploying Local Images
 
 ### Build the local containers
+
 In order to build rosetta containers with local changes, you need to do it from inside the dev container:
 
 ```bash
@@ -90,8 +98,36 @@ Example that deploys local versions for both:
 ./deploy.sh --local-icp-image-tar /tmp/rosetta_image.tar --local-icrc1-image-tar /tmp/icrc_rosetta_image.tar
 ```
 
+Example that deploys local ICRC1 Rosetta with multiple ledgers:
+
+```bash
+./deploy.sh --local-icrc1-image-tar ~/workspaces/ic/ic-master/bazel-bin/rs/rosetta-api/icrc1/icrc_rosetta_image.tar --icrc1-ledgers 'lkwrt-vyaaa-aaaaq-aadhq-cai,xsi2v-cyaaa-aaaaq-aabfq-cai'
+```
+
+Example that deploys **only** your local ICRC1 Rosetta build (skipping the latest image):
+
+```bash
+./deploy.sh --local-icrc1-image-tar ~/workspaces/ic/ic-master/bazel-bin/rs/rosetta-api/icrc1/icrc_rosetta_image.tar --icrc1-ledgers 'lkwrt-vyaaa-aaaaq-aadhq-cai,xsi2v-cyaaa-aaaaq-aabfq-cai' --no-icrc1-latest
+```
+
 The services and pods deployed with those images will have a `-local` in their names.
 
+### Deploying Only Local or Latest Versions
+
+By default, the script deploys both the latest Docker Hub images and your local builds (if provided). You can use the
+`--no-*-latest` flags to skip the latest images:
+
+Example that only deploys the local ICRC1 Rosetta build (no latest ICRC1 Rosetta, no ICP Rosetta)
+
+```bash
+./deploy.sh --local-icrc1-image-tar /path/to/image.tar --no-icrc1-latest
+```
+
+Example that only deploys the local ICP Rosetta build (no latest ICP Rosetta, no ICRC1 Rosetta)
+
+```bash
+./deploy.sh --local-icp-image-tar /path/to/icp.tar --local-icrc1-image-tar /path/to/icrc1.tar --no-icp-latest --no-icrc1-latest
+```
 
 ### Cleaning up
 

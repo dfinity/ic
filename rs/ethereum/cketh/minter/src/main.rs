@@ -762,7 +762,7 @@ fn get_events(arg: GetEventsArg) -> GetEventsResult {
                     transaction,
                 } => EP::SignedTransaction {
                     withdrawal_id: withdrawal_id.get().into(),
-                    raw_transaction: transaction.raw_transaction_hex(),
+                    raw_transaction: transaction.raw_transaction_hex_string(),
                 },
                 EventType::ReplacedTransaction {
                     withdrawal_id,

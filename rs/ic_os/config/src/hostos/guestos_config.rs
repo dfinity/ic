@@ -176,7 +176,6 @@ mod tests {
                 node_reward_type: None,
                 mgmt_mac: Default::default(),
                 deployment_environment: DeploymentEnvironment::Testnet,
-                logging: Default::default(),
                 use_nns_public_key: false,
                 nns_urls: vec![],
                 use_node_operator_private_key: false,

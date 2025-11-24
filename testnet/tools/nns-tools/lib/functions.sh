@@ -156,6 +156,7 @@ get_nns_canister_code_location() {
     code_location__nns_ui="$RUST_DIR/nns/nns-ui"
     code_location__sns_wasm="$RUST_DIR/nns/sns-wasm $SNS_INIT"
     code_location__node_rewards="$RUST_DIR/node_rewards/canister $RUST_DIR/node_rewards $RUST_DIR/registry/node_provider_rewards"
+    code_location__migration="$RUST_DIR/migration_canister"
 
     UNDERSCORED_CANISTER_NAME=$(echo "$CANISTER_NAME" | tr "-" "_")
     n=code_location__${UNDERSCORED_CANISTER_NAME}

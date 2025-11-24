@@ -1,3 +1,4 @@
+use candid::{CandidType, DecoderConfig, decode_one_with_config};
 use ic_base_types::{InternalAddress, PrincipalIdBlobParseError};
 use ic_config::embedders::{Config as EmbeddersConfig, StableMemoryPageLimit};
 use ic_config::flag_status::FlagStatus;
@@ -34,6 +35,7 @@ use request_in_prep::{RequestInPrep, into_request};
 use sandbox_safe_system_state::{SandboxSafeSystemState, SystemStateModifications};
 use serde::{Deserialize, Serialize};
 use stable_memory::StableMemory;
+use std::time::Duration;
 use std::{
     collections::BTreeMap,
     convert::{From, TryFrom},
@@ -881,12 +883,14 @@ struct MemoryUsage {
     /// The current amount of message memory that the canister is using.
     current_message_usage: MessageMemoryUsage,
 
-    // This is the amount of memory that the subnet has available. Any
-    // expansions in the canister's memory need to be deducted from here.
+    /// This is the amount of memory that the subnet has available.
+    /// New memory allocations (memory usage growth beyond
+    /// the memory allocation of the canister) need to be deducted from here.
     subnet_available_memory: SubnetAvailableMemory,
 
-    /// Execution memory allocated during this message execution, i.e. the canister
-    /// memory (Wasm binary, Wasm memory, stable memory) without message memory.
+    /// Execution memory allocated during this message execution, i.e.,
+    /// wasm/stable memory usage growth beyond
+    /// the memory allocation of the canister.
     allocated_execution_memory: NumBytes,
 
     /// Message memory allocated during this message execution.
@@ -969,19 +973,20 @@ impl MemoryUsage {
 
     /// Tries to allocate the requested amount of the Wasm or stable memory.
     ///
-    /// If the canister has memory allocation, then this function doesn't allocate
-    /// bytes, but only increases `current_usage`.
+    /// If the canister has memory allocation, then this function only allocates
+    /// bytes for memory usage growth beyond the memory allocation.
+    /// Nevertheless, this function always increases `current_usage`
+    /// by the full amount of memory usage growth.
     ///
     /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
-    /// if either the canister memory limit or the subnet memory limit would be
-    /// exceeded.
+    /// if the subnet memory limit would be exceeded.
     ///
     /// Returns `Err(HypervisorError::InsufficientCyclesInMemoryGrow)` and
     /// leaves `self` unchanged if freezing threshold check is needed for the
     /// given API type and canister would be frozen after the allocation.
     fn allocate_execution_memory(
         &mut self,
-        execution_bytes: NumBytes,
+        usage_growth_bytes: NumBytes,
         api_type: &ApiType,
         sandbox_safe_system_state: &mut SandboxSafeSystemState,
         subnet_memory_saturation: &ResourceSaturation,
@@ -990,69 +995,47 @@ impl MemoryUsage {
         let (new_usage, overflow) = self
             .current_usage
             .get()
-            .overflowing_add(execution_bytes.get());
+            .overflowing_add(usage_growth_bytes.get());
         if overflow {
             return Err(HypervisorError::OutOfMemory);
         }
 
+        let old_allocated_bytes = self.memory_allocation.allocated_bytes(self.current_usage);
+        let new_allocated_bytes = self
+            .memory_allocation
+            .allocated_bytes(NumBytes::new(new_usage));
+        debug_assert!(old_allocated_bytes <= new_allocated_bytes);
+        let allocated_bytes = new_allocated_bytes - old_allocated_bytes; // subtraction on `NumBytes` is already saturating
+
         sandbox_safe_system_state.check_freezing_threshold_for_memory_grow(
             api_type,
             self.current_message_usage,
-            self.current_usage,
-            NumBytes::new(new_usage),
+            old_allocated_bytes,
+            new_allocated_bytes,
         )?;
 
-        match self.memory_allocation {
-            MemoryAllocation::BestEffort => {
-                if api_type.should_update_available_memory_and_reserved_cycles() {
-                    self.subnet_available_memory
-                        .try_decrement(execution_bytes, NumBytes::new(0), NumBytes::new(0))
-                        .map_err(|_err| HypervisorError::OutOfMemory)?;
+        if api_type.should_update_available_memory_and_reserved_cycles() {
+            self.subnet_available_memory
+                .try_decrement(allocated_bytes, NumBytes::new(0), NumBytes::new(0))
+                .map_err(|_err| HypervisorError::OutOfMemory)?;
 
-                    sandbox_safe_system_state.reserve_storage_cycles(
-                        execution_bytes,
-                        &subnet_memory_saturation.add(self.allocated_execution_memory.get()),
-                    )?;
-                }
-
-                self.current_usage = NumBytes::new(new_usage);
-                self.allocated_execution_memory += execution_bytes;
-
-                self.add_execution_memory(execution_bytes, execution_memory_type)?;
-
-                sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
-                    None,
-                    self.wasm_memory_limit,
-                    self.current_usage,
-                    self.wasm_memory_usage,
-                );
-
-                Ok(())
-            }
-            MemoryAllocation::Reserved(reserved_bytes) => {
-                // The canister can increase its memory usage up to the reserved bytes
-                // without decrementing the subnet available memory and without
-                // reserving cycles because it has already done that during the
-                // original reservation.
-                if new_usage > reserved_bytes.get() {
-                    // Note that this branch should be unreachable because
-                    // `self.limit` should already be set to `reserved_bytes` and
-                    // the guard above should have returned an error. In order to
-                    // keep code robust, we repeat the check here again.
-                    return Err(HypervisorError::OutOfMemory);
-                }
-                self.current_usage = NumBytes::new(new_usage);
-                self.add_execution_memory(execution_bytes, execution_memory_type)?;
-
-                sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
-                    Some(reserved_bytes),
-                    self.wasm_memory_limit,
-                    self.current_usage,
-                    self.wasm_memory_usage,
-                );
-                Ok(())
-            }
+            sandbox_safe_system_state.reserve_storage_cycles(
+                allocated_bytes,
+                &subnet_memory_saturation.add(self.allocated_execution_memory.get()),
+            )?;
         }
+
+        self.current_usage = NumBytes::new(new_usage);
+        self.allocated_execution_memory += allocated_bytes;
+
+        self.add_execution_memory(usage_growth_bytes, execution_memory_type)?;
+
+        sandbox_safe_system_state.update_status_of_low_wasm_memory_hook_condition(
+            self.wasm_memory_limit,
+            self.wasm_memory_usage,
+        );
+
+        Ok(())
     }
 
     fn add_execution_memory(
@@ -1370,7 +1353,9 @@ impl SystemApiImpl {
         self.memory_usage.current_message_usage
     }
 
-    /// Bytes allocated in the Wasm/stable memory.
+    /// Execution memory allocated during this message execution, i.e.,
+    /// wasm/stable memory usage growth beyond
+    /// the memory allocation of the canister.
     pub fn get_allocated_bytes(&self) -> NumBytes {
         self.memory_usage.allocated_execution_memory
     }
@@ -4233,6 +4218,59 @@ impl SystemApi for SystemApiImpl {
             );
         copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request")?;
         trace_syscall!(self, CostHttpRequest, cost);
+        Ok(())
+    }
+
+    fn ic0_cost_http_request_v2(
+        &self,
+        params_src: usize,
+        params_size: usize,
+        dst: usize,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        #[derive(CandidType, Deserialize)]
+        struct CostHttpRequestV2Params {
+            request_bytes: u64,
+            http_roundtrip_time_ms: u64,
+            raw_response_bytes: u64,
+            transformed_response_bytes: u64,
+            transform_instructions: u64,
+        }
+
+        let params_bytes = valid_subslice(
+            "ic0.cost_http_request_v2 heap",
+            InternalAddress::new(params_src),
+            InternalAddress::new(params_size),
+            heap,
+        )?;
+        let mut decoder_config = DecoderConfig::new();
+        decoder_config.set_skipping_quota(0);
+
+        let cost_params_v2: CostHttpRequestV2Params =
+            decode_one_with_config(params_bytes, &decoder_config).map_err(|e| {
+                HypervisorError::ToolchainContractViolation {
+                    error: format!(
+                        "Failed to decode HttpRequestV2CostParams from Candid: {}",
+                        e
+                    ),
+                }
+            })?;
+
+        let subnet_size = self.sandbox_safe_system_state.subnet_size;
+        let cost = self
+            .sandbox_safe_system_state
+            .get_cycles_account_manager()
+            .http_request_fee_v2(
+                cost_params_v2.request_bytes.into(),
+                Duration::from_millis(cost_params_v2.http_roundtrip_time_ms),
+                cost_params_v2.raw_response_bytes.into(),
+                cost_params_v2.transform_instructions.into(),
+                cost_params_v2.transformed_response_bytes.into(),
+                subnet_size,
+                self.get_cost_schedule(),
+            );
+        copy_cycles_to_heap(cost, dst, heap, "ic0_cost_http_request_v2")?;
+        trace_syscall!(self, CostHttpRequestV2, cost);
         Ok(())
     }
 

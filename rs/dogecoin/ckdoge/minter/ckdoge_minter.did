@@ -155,6 +155,59 @@ type Utxo = record {
     height : nat32;
 };
 
+// Represents an account on the ckDOGE ledger.
+type Account = record { owner : principal; subaccount : opt blob };
+
+type ReimbursementReason = variant {
+    CallFailed;
+    TaintedDestination : record {
+        kyt_fee : nat64;
+        kyt_provider: principal;
+    };
+};
+
+type ReimbursementRequest = record {
+  account : Account;
+  amount : nat64;
+  reason : ReimbursementReason;
+};
+
+type ReimbursedDeposit = record {
+  account : Account;
+  mint_block_index : nat64;
+  amount : nat64;
+  reason : ReimbursementReason;
+};
+
+type RetrieveDogeStatus = variant {
+    // The minter does not have any information on the specified
+    // retrieval request.  It can be that nobody submitted the
+    // request or the minter pruned the relevant information from the
+    // history to save space.
+    Unknown;
+    // The minter did not send a Dogecoin transaction for this request yet.
+    Pending;
+    // The minter is obtaining all required ECDSA signatures on the
+    // Dogecoin transaction for this request.
+    Signing;
+    // The minter signed the transaction and is waiting for a reply
+    // from the Dogecoin canister.
+    Sending : record { txid : blob };
+    // The minter sent a transaction for the retrieve request.
+    // The payload contains the identifier of the transaction on the Dogecoin network.
+    Submitted : record { txid : blob };
+    // The amount was too low to cover the transaction fees.
+    AmountTooLow;
+    // The minter received enough confirmations for the Dogecoin
+    // transaction for this request.  The payload contains the
+    // identifier of the transaction on the Dogecoin network.
+    Confirmed : record { txid : blob };
+    /// The retrieve Dogecoin request has been reimbursed.
+    Reimbursed : ReimbursedDeposit;
+    /// The minter will try to reimburse this transaction.
+    WillReimburse : ReimbursementRequest;
+};
+
 service : (minter_arg : MinterArg) -> {
     // Returns the Dogecoin address to which the owner should send DOGE
     // before converting the amount to ckDOGE using the [update_balance]
@@ -163,6 +216,13 @@ service : (minter_arg : MinterArg) -> {
     // If the owner is not set, it defaults to the caller's principal.
     // The resolved owner must be a non-anonymous principal.
     get_doge_address : (record { owner: opt principal; subaccount : opt blob }) -> (text);
+
+    // Returns UTXOs of the given account known by the minter (with no
+    // guarantee in the ordering of the returned values).
+    //
+    // If the owner is not set, it defaults to the caller's principal.
+    get_known_utxos: (record { owner: opt principal; subaccount : opt blob }) -> (vec Utxo) query;
+
 
     // Mints ckDOGE for newly deposited UTXOs.
     //
@@ -188,4 +248,7 @@ service : (minter_arg : MinterArg) -> {
     // * The caller allowed the minter's principal to spend its funds
     //   using [icrc2_approve] on the ckDOGE ledger.
     retrieve_doge_with_approval : (RetrieveDogeWithApprovalArgs) -> (variant { Ok : RetrieveDogeOk; Err : RetrieveDogeWithApprovalError });
+
+    /// Returns the status of a withdrawal request.
+    retrieve_doge_status : (record { block_index : nat64 }) -> (RetrieveDogeStatus) query;
 }

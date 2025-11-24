@@ -1,11 +1,12 @@
 use crate::manifest::{
     BaseManifestInfo, ChunkAction, ChunkValidationError, DEFAULT_CHUNK_SIZE, DiffScript,
-    FileWithSize, MAX_FILE_SIZE_TO_GROUP, ManifestMetrics, ManifestValidationError, RehashManifest,
-    StateSyncVersion, build_chunk_table_parallel, build_file_group_chunks, build_meta_manifest,
-    compute_manifest, diff_manifest, file_chunk_range, files_with_same_inodes, files_with_sizes,
-    filter_out_zero_chunks, hash::ManifestHash, hash_plan, manifest_hash, manifest_hash_v1,
-    manifest_hash_v2, meta_manifest_hash, validate_chunk, validate_manifest,
-    validate_manifest_internal_consistency, validate_meta_manifest, validate_sub_manifest,
+    FileWithSize, MAX_FILE_SIZE_TO_GROUP_V3, MAX_FILE_SIZE_TO_GROUP_V4, ManifestMetrics,
+    ManifestValidationError, RehashManifest, StateSyncVersion, build_chunk_table_parallel,
+    build_file_group_chunks, build_meta_manifest, compute_manifest, diff_manifest,
+    file_chunk_range, files_with_same_inodes, files_with_sizes, filter_out_zero_chunks,
+    hash::ManifestHash, hash_plan, manifest_hash, manifest_hash_v1, manifest_hash_v2,
+    meta_manifest_hash, validate_chunk, validate_manifest, validate_manifest_internal_consistency,
+    validate_meta_manifest, validate_sub_manifest,
 };
 use crate::state_sync::types::{
     ChunkInfo, FILE_GROUP_CHUNK_ID_OFFSET, FileGroupChunks, FileInfo, Manifest, MetaManifest,
@@ -1235,20 +1236,41 @@ fn test_build_file_group_chunks() {
         chunk_table.extend(normal_chunk_info(id))
     }
 
-    // A "canister.pbuf" file larger than `MAX_FILE_SIZE_TO_GROUP` bytes will not be grouped.
+    // A "canister.pbuf" file larger than `MAX_FILE_SIZE_TO_GROUP_V3` bytes will not be grouped when using V3 manifest.
+    // However, since it is smaller than `MAX_FILE_SIZE_TO_GROUP_V4`, it will be grouped when using V4 manifest.
+    let medium_file_index = file_table.len() as u32;
+    let medium_chunk_index = chunk_table.len() as u32;
     file_table.push(FileInfo {
-        relative_path: std::path::PathBuf::from(10_000.to_string()).join(CANISTER_FILE),
-        size_bytes: MAX_FILE_SIZE_TO_GROUP as u64 + 1,
+        relative_path: std::path::PathBuf::from(medium_file_index.to_string()).join(CANISTER_FILE),
+        size_bytes: MAX_FILE_SIZE_TO_GROUP_V3 as u64 + 1,
         hash: dummy_file_hash,
     });
     chunk_table.push(ChunkInfo {
-        file_index: 30_000,
-        size_bytes: 500,
-        offset: MAX_FILE_SIZE_TO_GROUP as u64 + 1,
+        file_index: medium_file_index,
+        size_bytes: MAX_FILE_SIZE_TO_GROUP_V3 + 1,
+        offset: 0,
         hash: dummy_chunk_hash,
     });
 
-    let manifest = Manifest::new(CURRENT_STATE_SYNC_VERSION, file_table, chunk_table);
+    // A "canister.pbuf" file larger than `MAX_FILE_SIZE_TO_GROUP_V4` bytes will not be grouped when using V4 manifest.
+    let large_file_index = file_table.len() as u32;
+    file_table.push(FileInfo {
+        relative_path: std::path::PathBuf::from(large_file_index.to_string()).join(CANISTER_FILE),
+        size_bytes: MAX_FILE_SIZE_TO_GROUP_V4 as u64 + 1,
+        hash: dummy_file_hash,
+    });
+    chunk_table.push(ChunkInfo {
+        file_index: large_file_index,
+        size_bytes: MAX_FILE_SIZE_TO_GROUP_V4 + 1,
+        offset: 0,
+        hash: dummy_chunk_hash,
+    });
+
+    let manifest = Manifest::new(
+        StateSyncVersion::V3,
+        file_table.clone(),
+        chunk_table.clone(),
+    );
     let computed_file_group_chunks = build_file_group_chunks(&manifest);
 
     // Each chunk is expected to have 2097 files in it. Note: floor(1MiB / 500B) = 2097
@@ -1256,17 +1278,30 @@ fn test_build_file_group_chunks() {
     let indices_1: Vec<u32> = (2097..2097 * 2).map(|i| i * 4).collect();
     let indices_2: Vec<u32> = (2097 * 2..2097 * 3).map(|i| i * 4).collect();
     let indices_3: Vec<u32> = (2097 * 3..2097 * 4).map(|i| i * 4).collect();
-    let indices_4: Vec<u32> = (2097 * 4..total_num).map(|i| i * 4).collect();
+    let mut indices_4: Vec<u32> = (2097 * 4..total_num).map(|i| i * 4).collect();
 
-    let expected = FileGroupChunks::new(maplit::btreemap! {
+    let expected_v3 = FileGroupChunks::new(maplit::btreemap! {
+        FILE_GROUP_CHUNK_ID_OFFSET => indices_0.clone(),
+        FILE_GROUP_CHUNK_ID_OFFSET + 1 => indices_1.clone(),
+        FILE_GROUP_CHUNK_ID_OFFSET + 2 => indices_2.clone(),
+        FILE_GROUP_CHUNK_ID_OFFSET + 3 => indices_3.clone(),
+        FILE_GROUP_CHUNK_ID_OFFSET + 4 => indices_4.clone(),
+    });
+    assert_eq!(computed_file_group_chunks, expected_v3);
+
+    let manifest = Manifest::new(StateSyncVersion::V4, file_table, chunk_table);
+    let computed_file_group_chunks = build_file_group_chunks(&manifest);
+
+    // Update the last file group chunk index to the medium file chunk index.
+    indices_4.push(medium_chunk_index);
+    let expected_v4 = FileGroupChunks::new(maplit::btreemap! {
         FILE_GROUP_CHUNK_ID_OFFSET => indices_0,
         FILE_GROUP_CHUNK_ID_OFFSET + 1 => indices_1,
         FILE_GROUP_CHUNK_ID_OFFSET + 2 => indices_2,
         FILE_GROUP_CHUNK_ID_OFFSET + 3 => indices_3,
         FILE_GROUP_CHUNK_ID_OFFSET + 4 => indices_4,
     });
-
-    assert_eq!(computed_file_group_chunks, expected);
+    assert_eq!(computed_file_group_chunks, expected_v4);
 }
 
 #[test]

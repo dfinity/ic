@@ -5,9 +5,8 @@
 # [Misc]
 /.devcontainer/           @dfinity/idx
 .rclone*                  @dfinity/idx
-/buf.yaml                 @dfinity/ic-message-routing-owners
+/buf.yaml                 @dfinity/team-dsm
 /cpp/                     @dfinity/node
-/hs/spec_compliance       @dfinity/research
 /licenses/                @dfinity/idx
 /bin/ict                  @dfinity/idx
 /bin/                     @dfinity/idx
@@ -50,26 +49,26 @@ go_deps.bzl               @dfinity/idx
 /packages/icrc-ledger-client-cdk/               @dfinity/finint
 /packages/icrc-ledger-types/                    @dfinity/finint
 /packages/ic-ledger-hash-of/                    @dfinity/finint
-/packages/pocket-ic/                            @dfinity/execution
-/packages/ic-error-types/                       @dfinity/execution
-/packages/ic-dummy-getrandom-for-wasm/          @dfinity/crypto-team
-/packages/ic-ed25519/                           @dfinity/crypto-team
+/packages/pocket-ic/                            @dfinity/team-dsm
+/packages/ic-error-types/                       @dfinity/team-dsm
+/packages/ic-dummy-getrandom-for-wasm/          @dfinity/consensus
+/packages/ic-ed25519/                           @dfinity/consensus
 /packages/ic-ethereum-types/                    @dfinity/cross-chain-team
-/packages/ic-heap-bytes/                        @dfinity/execution
-/packages/ic-heap-bytes-derive/                 @dfinity/execution
-/packages/ic-hpke/                              @dfinity/crypto-team
+/packages/ic-heap-bytes/                        @dfinity/team-dsm
+/packages/ic-heap-bytes-derive/                 @dfinity/team-dsm
+/packages/ic-hpke/                              @dfinity/consensus
 /packages/ic-http-types/                        @dfinity/cross-chain-team
 /packages/ic-metrics-assert/                    @dfinity/cross-chain-team
-/packages/ic-pub-key/                           @dfinity/crypto-team
-/packages/ic-secp256k1/                         @dfinity/crypto-team
-/packages/ic-secp256r1/                         @dfinity/crypto-team
-/packages/ic-sha3/                              @dfinity/crypto-team
-/packages/ic-signature-verification/            @dfinity/crypto-team
-/packages/ic-vetkd-utils/                       @dfinity/crypto-team
+/packages/ic-pub-key/                           @dfinity/consensus
+/packages/ic-secp256k1/                         @dfinity/consensus
+/packages/ic-secp256r1/                         @dfinity/consensus
+/packages/ic-sha3/                              @dfinity/consensus
+/packages/ic-signature-verification/            @dfinity/consensus
+/packages/ic-vetkd-utils/                       @dfinity/consensus
 
 # [IC-OS]
 /ic-os/                                                                 @dfinity/node
-/ic-os/components/ic/share/ic-boundary.env                              @dfinity/boundary-node @dfinity/node
+/ic-os/components/ic/share/ic-boundary.env                              @dfinity/node
 /toolchains/                                                            @dfinity/node
 
 # [metrics-proxy]
@@ -107,172 +106,170 @@ go_deps.bzl               @dfinity/idx
 /rs/bitcoin/ckbtc/                                      @dfinity/cross-chain-team
 /rs/bitcoin/mock/                                       @dfinity/cross-chain-team
 /rs/bitcoin/client/                                     @dfinity/consensus
-/rs/bitcoin/consensus/                                  @dfinity/execution @dfinity/consensus
+/rs/bitcoin/consensus/                                  @dfinity/team-dsm @dfinity/consensus
 /rs/bitcoin/checker/                                    @dfinity/cross-chain-team
 /rs/bitcoin/service/                                    @dfinity/consensus
-/rs/bitcoin/replica_types/                              @dfinity/execution
-/rs/bitcoin/validation                                  @dfinity/consensus @dfinity/execution
-/rs/boundary_node/                                      @dfinity/boundary-node
+/rs/bitcoin/replica_types/                              @dfinity/team-dsm
+/rs/bitcoin/validation                                  @dfinity/consensus @dfinity/team-dsm
+/rs/boundary_node/                                      @dfinity/node
 /rs/canister_client/                                    @dfinity/consensus
-/rs/canister_sandbox/                                   @dfinity/execution
-/rs/canonical_state/                                    @dfinity/ic-message-routing-owners
-/rs/canonical_state/tree_hash/                          @dfinity/ic-message-routing-owners @dfinity/crypto-team
-/rs/certification/                                      @dfinity/ic-message-routing-owners @dfinity/crypto-team
+/rs/canister_sandbox/                                   @dfinity/team-dsm
+/rs/canonical_state/                                    @dfinity/team-dsm
+/rs/canonical_state/tree_hash/                          @dfinity/team-dsm @dfinity/consensus
+/rs/certification/                                      @dfinity/team-dsm @dfinity/consensus
 /rs/config/                                             @dfinity/consensus
-/rs/config/src/embedders.rs                             @dfinity/execution
-/rs/config/src/execution_environment.rs                 @dfinity/execution
-/rs/config/src/message_routing.rs                       @dfinity/ic-message-routing-owners
-/rs/config/src/state_manager.rs                         @dfinity/ic-message-routing-owners
-/rs/config/src/subnet_config.rs                         @dfinity/execution
+/rs/config/src/embedders.rs                             @dfinity/team-dsm
+/rs/config/src/execution_environment.rs                 @dfinity/team-dsm
+/rs/config/src/message_routing.rs                       @dfinity/team-dsm
+/rs/config/src/state_manager.rs                         @dfinity/team-dsm
+/rs/config/src/subnet_config.rs                         @dfinity/team-dsm
 /rs/consensus/                                          @dfinity/consensus
 /rs/criterion_time/                                     @dfinity/ic-interface-owners
 /rs/cross-chain/                                        @dfinity/cross-chain-team
-/rs/crypto/                                             @dfinity/crypto-team
-/rs/crypto/tree_hash/                                   @dfinity/ic-message-routing-owners @dfinity/crypto-team
+/rs/crypto/                                             @dfinity/consensus
+/rs/crypto/tree_hash/                                   @dfinity/team-dsm @dfinity/consensus
 /rs/cup_explorer                                        @dfinity/consensus
-/rs/cycles_account_manager/                             @dfinity/execution
+/rs/cycles_account_manager/                             @dfinity/team-dsm
 /rs/depcheck/                                           @dfinity/ic-interface-owners
-/rs/determinism_test/                                   @dfinity/execution
+/rs/determinism_test/                                   @dfinity/team-dsm
 /rs/dogecoin/                                           @dfinity/cross-chain-team
-/rs/embedders/                                          @dfinity/execution
+/rs/embedders/                                          @dfinity/team-dsm
 /rs/ethereum/                                           @dfinity/cross-chain-team
-/rs/execution_environment/                              @dfinity/execution
+/rs/execution_environment/                              @dfinity/team-dsm
 /rs/fuzzers/                                            @dfinity/product-security
 /rs/http_endpoints/                                     @dfinity/consensus
 /rs/http_endpoints/fuzz/                                @dfinity/product-security
-/rs/http_endpoints/xnet/                                @dfinity/consensus @dfinity/ic-message-routing-owners
+/rs/http_endpoints/xnet/                                @dfinity/consensus @dfinity/team-dsm
 /rs/http_utils/                                         @dfinity/consensus
 /rs/https_outcalls/                                     @dfinity/consensus
 /rs/https_outcalls/consensus/                           @dfinity/consensus
 /rs/ic_os/                                              @dfinity/node
-/rs/ic_os/fstrim_tool/                                  @dfinity/node @dfinity/crypto-team
+/rs/ic_os/fstrim_tool/                                  @dfinity/node @dfinity/consensus
 /rs/ic_os/nss_icos/                                     @dfinity/dre
 /rs/ingress_manager/                                    @dfinity/consensus
 /rs/interfaces/                                         @dfinity/ic-interface-owners
 /rs/interfaces/adapter_client/                          @dfinity/consensus
-/rs/interfaces/certified_stream_store/                  @dfinity/ic-message-routing-owners
+/rs/interfaces/certified_stream_store/                  @dfinity/team-dsm
 /rs/interfaces/mocks/src/payload_builder                @dfinity/consensus
 /rs/interfaces/registry/                                @dfinity/governance-team
 /rs/interfaces/src/canister_http.rs                     @dfinity/consensus
 /rs/interfaces/src/consensus.rs                         @dfinity/consensus
 /rs/interfaces/src/consensus/                           @dfinity/consensus
 /rs/interfaces/src/consensus_pool.rs                    @dfinity/consensus
-/rs/interfaces/src/crypto.rs                            @dfinity/crypto-team
-/rs/interfaces/src/crypto/                              @dfinity/crypto-team
+/rs/interfaces/src/crypto.rs                            @dfinity/consensus
+/rs/interfaces/src/crypto/                              @dfinity/consensus
 /rs/interfaces/src/dkg.rs                               @dfinity/consensus
-/rs/interfaces/src/execution_environment/               @dfinity/execution
-/rs/interfaces/src/execution_environment.rs             @dfinity/execution
-/rs/interfaces/src/messaging.rs                         @dfinity/ic-message-routing-owners
+/rs/interfaces/src/execution_environment/               @dfinity/team-dsm
+/rs/interfaces/src/execution_environment.rs             @dfinity/team-dsm
+/rs/interfaces/src/messaging.rs                         @dfinity/team-dsm
 /rs/interfaces/src/p2p.rs                               @dfinity/consensus
 /rs/interfaces/src/p2p/                                 @dfinity/consensus
 /rs/interfaces/src/vetkd.rs                             @dfinity/consensus
-/rs/interfaces/state_manager/                           @dfinity/ic-message-routing-owners
+/rs/interfaces/state_manager/                           @dfinity/team-dsm
 /rs/ledger_suite/                                       @dfinity/finint
 /rs/limits/                                             @dfinity/ic-interface-owners
-/rs/memory_tracker/                                     @dfinity/execution
-/rs/messaging/                                          @dfinity/ic-message-routing-owners
-/rs/migration_canister/                                 @dfinity/execution
+/rs/memory_tracker/                                     @dfinity/team-dsm
+/rs/messaging/                                          @dfinity/team-dsm
+/rs/migration_canister/                                 @dfinity/team-dsm
 /rs/monitoring/                                         @dfinity/consensus
-/rs/monitoring/metrics                                  @dfinity/consensus @dfinity/ic-message-routing-owners
-/rs/monitoring/pprof/                                   @dfinity/consensus @dfinity/ic-message-routing-owners
+/rs/monitoring/metrics                                  @dfinity/consensus @dfinity/team-dsm
+/rs/monitoring/pprof/                                   @dfinity/consensus @dfinity/team-dsm
 /rs/nervous_system/                                     @dfinity/governance-team
 /rs/nns/                                                @dfinity/governance-team
-/rs/node_rewards/                                       @dfinity/governance-team @dfinity/dre
+/rs/node_rewards/                                       @dfinity/dre
 /rs/orchestrator/                                       @dfinity/consensus
 /rs/orchestrator/src/hostos_upgrade.rs                  @dfinity/consensus @dfinity/node
 /rs/p2p/                                                @dfinity/consensus
 /rs/phantom_newtype/                                    @dfinity/ic-interface-owners
-/rs/pocket_ic_server/                                   @dfinity/execution
+/rs/pocket_ic_server/                                   @dfinity/team-dsm
 /rs/prep/                                               @dfinity/utopia
 /rs/protobuf/                                           @dfinity/ic-interface-owners
-/rs/protobuf/def/bitcoin/                               @dfinity/execution
-/rs/protobuf/def/crypto/                                @dfinity/crypto-team
-/rs/protobuf/def/messaging/                             @dfinity/ic-message-routing-owners
+/rs/protobuf/def/bitcoin/                               @dfinity/team-dsm
+/rs/protobuf/def/crypto/                                @dfinity/consensus
+/rs/protobuf/def/messaging/                             @dfinity/team-dsm
 /rs/protobuf/def/p2p/                                   @dfinity/consensus
 /rs/protobuf/def/registry/                              @dfinity/governance-team
-/rs/protobuf/def/state/                                 @dfinity/execution @dfinity/ic-message-routing-owners
-/rs/protobuf/src/gen/bitcoin/                           @dfinity/execution
-/rs/protobuf/src/gen/crypto/                            @dfinity/crypto-team
-/rs/protobuf/src/gen/messaging/                         @dfinity/ic-message-routing-owners
+/rs/protobuf/def/state/                                 @dfinity/team-dsm
+/rs/protobuf/src/gen/bitcoin/                           @dfinity/team-dsm
+/rs/protobuf/src/gen/crypto/                            @dfinity/consensus
+/rs/protobuf/src/gen/messaging/                         @dfinity/team-dsm
 /rs/protobuf/src/gen/p2p/                               @dfinity/consensus
 /rs/protobuf/src/gen/registry/                          @dfinity/governance-team
-/rs/protobuf/src/gen/state/                             @dfinity/execution @dfinity/ic-message-routing-owners
-/rs/query_stats/                                        @dfinity/execution @dfinity/consensus
+/rs/protobuf/src/gen/state/                             @dfinity/team-dsm
+/rs/query_stats/                                        @dfinity/team-dsm @dfinity/consensus
 /rs/recovery/                                           @dfinity/consensus
 /rs/registry/                                           @dfinity/governance-team
-/rs/registry/helpers/src/crypto.rs                      @dfinity/crypto-team
-/rs/registry/helpers/src/crypto/                        @dfinity/crypto-team
+/rs/registry/helpers/src/crypto.rs                      @dfinity/consensus
+/rs/registry/helpers/src/crypto/                        @dfinity/consensus
 /rs/registry/helpers/src/firewall.rs                    @dfinity/consensus
 /rs/registry/helpers/src/node.rs                        @dfinity/node
-/rs/registry/helpers/src/provisional_whitelist.rs       @dfinity/execution
-/rs/registry/helpers/src/routing_table.rs               @dfinity/execution @dfinity/ic-message-routing-owners
+/rs/registry/helpers/src/provisional_whitelist.rs       @dfinity/team-dsm
+/rs/registry/helpers/src/routing_table.rs               @dfinity/team-dsm
 /rs/registry/helpers/src/subnet.rs                      @dfinity/consensus
 /rs/registry/helpers/src/unassigned_nodes.rs            @dfinity/consensus
-/rs/registry/helpers/tests/root_of_trust.rs             @dfinity/crypto-team
+/rs/registry/helpers/tests/root_of_trust.rs             @dfinity/consensus
 /rs/replay/                                             @dfinity/consensus
 /rs/replica/                                            @dfinity/consensus
-/rs/replica_tests/                                      @dfinity/execution
-/rs/replicated_state/                                   @dfinity/execution @dfinity/ic-message-routing-owners
-/rs/replicated_state/src/canister_state/queues.rs       @dfinity/ic-message-routing-owners
-/rs/replicated_state/src/canister_state/queues          @dfinity/ic-message-routing-owners
-/rs/replicated_state/src/page_map.rs                    @dfinity/ic-message-routing-owners @dfinity/execution
-/rs/replicated_state/src/page_map/                      @dfinity/ic-message-routing-owners @dfinity/execution
+/rs/replica_tests/                                      @dfinity/team-dsm
+/rs/replicated_state/                                   @dfinity/team-dsm
+/rs/replicated_state/src/canister_state/queues.rs       @dfinity/team-dsm
+/rs/replicated_state/src/canister_state/queues          @dfinity/team-dsm
+/rs/replicated_state/src/page_map.rs                    @dfinity/team-dsm
+/rs/replicated_state/src/page_map/                      @dfinity/team-dsm
 /rs/rosetta-api/                                        @dfinity/finint
 /rs/rust_canisters/                                     @dfinity/governance-team
-/rs/rust_canisters/backtrace_canister                   @dfinity/execution
-/rs/rust_canisters/call_loop_canister                   @dfinity/execution
-/rs/rust_canisters/memory_test/                         @dfinity/execution
-/rs/rust_canisters/call_tree_test/                      @dfinity/execution
+/rs/rust_canisters/backtrace_canister                   @dfinity/team-dsm
+/rs/rust_canisters/call_loop_canister                   @dfinity/team-dsm
+/rs/rust_canisters/call_tree_test/                      @dfinity/team-dsm
+/rs/rust_canisters/canister_creator                     @dfinity/team-dsm
+/rs/rust_canisters/downstream_calls_test/               @dfinity/team-dsm
+/rs/rust_canisters/load_simulator                       @dfinity/team-dsm
+/rs/rust_canisters/memory_test/                         @dfinity/team-dsm
+/rs/rust_canisters/messaging_test/                      @dfinity/team-dsm
 /rs/rust_canisters/proxy_canister/                      @dfinity/consensus
-/rs/rust_canisters/response_payload_test/               @dfinity/execution
-/rs/rust_canisters/stable_structures/                   @dfinity/execution
-/rs/rust_canisters/stable_memory_integrity              @dfinity/execution
-/rs/rust_canisters/statesync_test                       @dfinity/ic-message-routing-owners
-/rs/rust_canisters/canister_creator                     @dfinity/execution
-/rs/rust_canisters/load_simulator                       @dfinity/execution
-/rs/rust_canisters/xnet_test/                           @dfinity/ic-message-routing-owners
+/rs/rust_canisters/random_traffic_test/                 @dfinity/team-dsm
+/rs/rust_canisters/response_payload_test/               @dfinity/team-dsm
+/rs/rust_canisters/stable_memory_integrity              @dfinity/team-dsm
+/rs/rust_canisters/stable_structures/                   @dfinity/team-dsm
+/rs/rust_canisters/statesync_test                       @dfinity/team-dsm
+/rs/rust_canisters/xnet_test/                           @dfinity/team-dsm
 /rs/rust_canisters/xrc_mock/                            @dfinity/finint
-/rs/rust_canisters/downstream_calls_test/               @dfinity/ic-message-routing-owners
-/rs/rust_canisters/random_traffic_test/                 @dfinity/ic-message-routing-owners
 /rs/sns/                                                @dfinity/governance-team
-/rs/state_layout/                                       @dfinity/ic-message-routing-owners
-/rs/state_machine_tests/                                @dfinity/ic-message-routing-owners @dfinity/execution
-/rs/state_manager/                                      @dfinity/ic-message-routing-owners
-/rs/state_tool/                                         @dfinity/ic-message-routing-owners
-/rs/sys/                                                @dfinity/ic-message-routing-owners @dfinity/execution
+/rs/state_layout/                                       @dfinity/team-dsm
+/rs/state_machine_tests/                                @dfinity/team-dsm
+/rs/state_manager/                                      @dfinity/team-dsm
+/rs/state_tool/                                         @dfinity/team-dsm
+/rs/sys/                                                @dfinity/team-dsm
 /rs/test_utilities/                                     @dfinity/ic-interface-owners
 /rs/test_utilities/artifact_pool/                       @dfinity/consensus
 /rs/test_utilities/consensus/                           @dfinity/consensus
-/rs/test_utilities/embedders/                           @dfinity/execution
-/rs/test_utilities/execution_environment/               @dfinity/execution
-/rs/test_utilities/in_memory_logger/                    @dfinity/crypto-team
-/rs/test_utilities/metrics                              @dfinity/consensus @dfinity/ic-message-routing-owners
-/rs/test_utilities/src/crypto.rs                        @dfinity/crypto-team
-/rs/test_utilities/src/crypto/                          @dfinity/crypto-team
-/rs/test_utilities/src/cycles_account_manager.rs        @dfinity/execution
-/rs/test_utilities/state/                               @dfinity/execution @dfinity/ic-message-routing-owners
+/rs/test_utilities/embedders/                           @dfinity/team-dsm
+/rs/test_utilities/execution_environment/               @dfinity/team-dsm
+/rs/test_utilities/in_memory_logger/                    @dfinity/consensus
+/rs/test_utilities/metrics                              @dfinity/consensus @dfinity/team-dsm
+/rs/test_utilities/src/cycles_account_manager.rs        @dfinity/team-dsm
+/rs/test_utilities/state/                               @dfinity/team-dsm
 /rs/test_utilities/types/src/batch/                     @dfinity/consensus
 /rs/tests/                                              @dfinity/idx
 /rs/tests/idx/                                          @dfinity/idx
 /rs/tests/testnets/                                     @dfinity/idx
 /rs/tests/testnets/nns_recovery.rs                      @dfinity/consensus
-/rs/tests/research                                      @dfinity/research
 /rs/tests/driver/src/driver/simulate_network.rs         @dfinity/consensus @dfinity/idx
-/rs/tests/boundary_nodes/                               @dfinity/boundary-node
+/rs/tests/boundary_nodes/                               @dfinity/node
 /rs/tests/ckbtc/                                        @dfinity/cross-chain-team
 /rs/tests/consensus/                                    @dfinity/consensus
 /rs/tests/cross_chain/                                  @dfinity/cross-chain-team
-/rs/tests/crypto/                                       @dfinity/crypto-team
+/rs/tests/crypto/                                       @dfinity/consensus
 /rs/tests/dre/                                          @dfinity/dre
-/rs/tests/execution/                                    @dfinity/execution
+/rs/tests/execution/                                    @dfinity/team-dsm
 /rs/tests/financial_integrations/                       @dfinity/finint
-/rs/tests/message_routing/                              @dfinity/ic-message-routing-owners
+/rs/tests/message_routing/                              @dfinity/team-dsm
 /rs/tests/nested/                                       @dfinity/node
 /rs/tests/nested/nns_recovery/                          @dfinity/consensus @dfinity/node
 /rs/tests/networking/                                   @dfinity/consensus
 /rs/tests/nns/                                          @dfinity/governance-team
 /rs/tests/node/                                         @dfinity/node
-/rs/tests/query_stats/                                  @dfinity/execution @dfinity/consensus
+/rs/tests/query_stats/                                  @dfinity/team-dsm @dfinity/consensus
 /rs/tests/sdk/                                          @dfinity/sdk
 /rs/tests/src/ledger_tests/                             @dfinity/finint
 /rs/tests/src/rosetta_test.rs                           @dfinity/finint
@@ -280,30 +277,30 @@ go_deps.bzl               @dfinity/idx
 /rs/tla_instrumentation/                                @dfinity/research @dfinity/formal-models
 /rs/tools/                                              @dfinity/ic-interface-owners
 /rs/tools/check_did/                                    @dfinity/finint
-/rs/tree_deserializer/                                  @dfinity/ic-message-routing-owners
+/rs/tree_deserializer/                                  @dfinity/team-dsm
 /rs/types/                                              @dfinity/ic-interface-owners
 /rs/types/exhaustive_derive/                            @dfinity/consensus
-/rs/types/management_canister_types/                    @dfinity/execution
+/rs/types/management_canister_types/                    @dfinity/team-dsm
 /rs/types/types/src/artifact.rs                         @dfinity/consensus
 /rs/types/types/src/batch.rs                            @dfinity/consensus
 /rs/types/types/src/batch/                              @dfinity/consensus
-/rs/types/types/src/canister_http.rs                    @dfinity/execution @dfinity/consensus
+/rs/types/types/src/canister_http.rs                    @dfinity/team-dsm @dfinity/consensus
 /rs/types/types/src/consensus.rs                        @dfinity/consensus
 /rs/types/types/src/consensus/                          @dfinity/consensus
-/rs/types/types/src/crypto.rs                           @dfinity/crypto-team
-/rs/types/types/src/crypto/                             @dfinity/crypto-team
+/rs/types/types/src/crypto.rs                           @dfinity/consensus
+/rs/types/types/src/crypto/                             @dfinity/consensus
 /rs/types/types/src/exhaustive.rs                       @dfinity/consensus
 /rs/types/types/src/signature.rs                        @dfinity/consensus
 /rs/types/types/src/signature/                          @dfinity/consensus
-/rs/types/wasm_types/                                   @dfinity/execution
-/rs/universal_canister/                                 @dfinity/execution
+/rs/types/wasm_types/                                   @dfinity/team-dsm
+/rs/universal_canister/                                 @dfinity/team-dsm
 /rs/utils/                                              @dfinity/ic-interface-owners
 /rs/utils/ensure/                                       @dfinity/finint
-/rs/utils/lru_cache/                                    @dfinity/execution
-/rs/utils/thread/                                       @dfinity/ic-message-routing-owners
-/rs/validator/                                          @dfinity/crypto-team
-/rs/wasm_transform/                                     @dfinity/execution
-/rs/xnet/                                               @dfinity/ic-message-routing-owners
+/rs/utils/lru_cache/                                    @dfinity/team-dsm
+/rs/utils/thread/                                       @dfinity/team-dsm
+/rs/validator/                                          @dfinity/consensus
+/rs/wasm_transform/                                     @dfinity/team-dsm
+/rs/xnet/                                               @dfinity/team-dsm
 
 # [No-Approvals]
 # Ghost is a group with no direct members. GitHub will bypass codeowners for files that match ghost ownership.

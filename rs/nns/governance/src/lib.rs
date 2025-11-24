@@ -206,9 +206,6 @@ thread_local! {
 
     static ENABLE_NEURON_FOLLOW_RESTRICTIONS: Cell<bool>
         = const { Cell::new(true) };
-
-    static ENABLE_SET_SUBNET_OPERATIONAL_LEVEL: Cell<bool>
-        = const { Cell::new(true) };
 }
 
 thread_local! {
@@ -216,6 +213,14 @@ thread_local! {
     // begun. (This occurs in one of the prune_some_following functions.)
     static CURRENT_PRUNE_FOLLOWING_FULL_CYCLE_START_TIMESTAMP_SECONDS: Cell<u64> =
         const { Cell::new(0) };
+}
+
+thread_local! {
+    static ARE_PERFORMANCE_BASED_REWARDS_ENABLED: Cell<bool> = const { Cell::new(false) };
+}
+
+pub(crate) fn are_performance_based_rewards_enabled() -> bool {
+    ARE_PERFORMANCE_BASED_REWARDS_ENABLED.get()
 }
 
 pub fn are_nf_fund_proposals_disabled() -> bool {
@@ -260,20 +265,6 @@ pub fn temporarily_enable_neuron_follow_restrictions() -> Temporary {
 #[cfg(any(test, feature = "canbench-rs", feature = "test"))]
 pub fn temporarily_disable_neuron_follow_restrictions() -> Temporary {
     Temporary::new(&ENABLE_NEURON_FOLLOW_RESTRICTIONS, false)
-}
-
-pub fn is_set_subnet_operational_level_enabled() -> bool {
-    ENABLE_SET_SUBNET_OPERATIONAL_LEVEL.get()
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_enable_set_subnet_operational_level() -> Temporary {
-    Temporary::new(&ENABLE_SET_SUBNET_OPERATIONAL_LEVEL, true)
-}
-
-#[cfg(any(test, feature = "canbench-rs", feature = "test"))]
-pub fn temporarily_disable_set_subnet_operational_level() -> Temporary {
-    Temporary::new(&ENABLE_SET_SUBNET_OPERATIONAL_LEVEL, false)
 }
 
 pub fn decoder_config() -> DecoderConfig {

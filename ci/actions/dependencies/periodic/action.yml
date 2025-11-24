@@ -18,6 +18,7 @@ runs:
         cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
         cargo install wasm-pack --version "${CARGO_WASMPACK_VERSION}"
         source "${NVM_DIR}/nvm.sh"
+        nvm install ${NODE_VERSION_24}
         nvm install ${NODE_VERSION_22}
         nvm install-latest-npm
         # for oisy we use a separate node version for which we won't bump npm to v11 (not supported by oisy)
@@ -30,6 +31,7 @@ runs:
         CARGO_WASMPACK_VERSION: "0.12.1"
         NODE_VERSION_20: "20.19.5"
         NODE_VERSION_22: "22.12.0"
+        NODE_VERSION_24: "24.11.0"
         OISY_NODE_VERSION: "22.13.0"
     - name: Run Dependency Scan Nightly
       id: dependency-scan-nightly

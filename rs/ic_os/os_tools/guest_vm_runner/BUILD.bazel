@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "@crate_index//:devicemapper",
     "@crate_index//:gpt",
     "@crate_index//:macaddr",
+    "@crate_index//:memchr",
     "@crate_index//:nix",
     "@crate_index//:regex",
     "@crate_index//:systemd",

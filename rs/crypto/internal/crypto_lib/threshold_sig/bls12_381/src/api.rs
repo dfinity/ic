@@ -40,7 +40,7 @@ use super::types::{
 };
 use crate::api::threshold_sign_error::ClibThresholdSignError;
 use crate::types::PublicKey;
-use crate::types::public_coefficients::conversions::pub_key_bytes_from_pub_coeff_bytes;
+use crate::types::public_coefficients::pub_key_bytes_from_pub_coeff_bytes;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::PublicCoefficientsBytes;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;

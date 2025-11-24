@@ -1,18 +1,21 @@
+use crate::MAX_TIME_IN_QUEUE;
 use crate::events::MinterEventAssert;
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
-use ic_ckdoge_minter::Event;
-use ic_ckdoge_minter::Priority;
-use ic_ckdoge_minter::UtxoStatus;
-use ic_ckdoge_minter::candid_api::GetDogeAddressArgs;
-use ic_ckdoge_minter::candid_api::{
-    RetrieveDogeOk, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
+use ic_ckdoge_minter::{
+    Event, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo, UtxoStatus,
+    candid_api::{
+        GetDogeAddressArgs, RetrieveDogeOk, RetrieveDogeStatus, RetrieveDogeStatusRequest,
+        RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
+    },
 };
-use ic_ckdoge_minter::{UpdateBalanceArgs, UpdateBalanceError};
 use ic_management_canister_types::CanisterId;
 use ic_metrics_assert::{MetricsAssert, PocketIcHttpQuery};
+use icrc_ledger_types::icrc1::account::Account;
+use pocket_ic::common::rest::RawMessageId;
 use pocket_ic::{PocketIc, RejectResponse};
 use std::sync::Arc;
+use std::time::Duration;
 
 pub struct MinterCanister {
     pub(crate) env: Arc<PocketIc>,
@@ -25,7 +28,17 @@ impl MinterCanister {
         sender: Principal,
         args: &RetrieveDogeWithApprovalArgs,
     ) -> Result<std::vec::Vec<u8>, RejectResponse> {
-        self.env.update_call(
+        let msg_id = self
+            .submit_retrieve_doge_with_approval(sender, args)
+            .expect("BUG: failed to call retrieve_doge_with_approval");
+        self.env.await_call(msg_id)
+    }
+    pub fn submit_retrieve_doge_with_approval(
+        &self,
+        sender: Principal,
+        args: &RetrieveDogeWithApprovalArgs,
+    ) -> Result<RawMessageId, RejectResponse> {
+        self.env.submit_call(
             self.id,
             sender,
             "retrieve_doge_with_approval",
@@ -60,6 +73,24 @@ impl MinterCanister {
         Decode!(&call_result, String).unwrap()
     }
 
+    pub fn get_known_utxos<A: Into<Account>>(&self, args: A) -> Vec<Utxo> {
+        let Account { owner, subaccount } = args.into();
+        let call_result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "get_known_utxos",
+                Encode!(&UpdateBalanceArgs {
+                    owner: Some(owner),
+                    subaccount
+                })
+                .unwrap(),
+            )
+            .expect("BUG: failed to call get_known_utxos");
+        Decode!(&call_result, Vec<Utxo>).unwrap()
+    }
+
     pub fn update_balance(
         &self,
         sender: Principal,
@@ -78,6 +109,81 @@ impl MinterCanister {
     ) -> Result<std::vec::Vec<u8>, RejectResponse> {
         self.env
             .update_call(self.id, sender, "update_balance", Encode!(args).unwrap())
+    }
+
+    pub fn retrieve_doge_status(&self, ledger_burn_index: u64) -> RetrieveDogeStatus {
+        let call_result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "retrieve_doge_status",
+                Encode!(&RetrieveDogeStatusRequest {
+                    block_index: ledger_burn_index
+                })
+                .unwrap(),
+            )
+            .expect("BUG: failed to call retrieve_doge_status");
+        Decode!(&call_result, RetrieveDogeStatus).unwrap()
+    }
+
+    pub fn self_check(&self) {
+        let call_result = self
+            .env
+            .query_call(
+                self.id,
+                Principal::anonymous(),
+                "self_check",
+                Encode!().unwrap(),
+            )
+            .expect("BUG: failed to call self_check");
+        Decode!(&call_result, Result<(), String>)
+            .unwrap()
+            .expect("BUG: minter self-check failed")
+    }
+
+    pub fn await_submitted_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
+        self.env
+            .advance_time(MAX_TIME_IN_QUEUE + Duration::from_nanos(1));
+        let status = self.await_doge_transaction_with_status(ledger_burn_index, |tx_status| {
+            matches!(tx_status, RetrieveDogeStatus::Submitted { .. })
+        });
+        match status {
+            RetrieveDogeStatus::Submitted { txid, .. } => txid,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn await_finalized_doge_transaction(&self, ledger_burn_index: u64) -> Txid {
+        let status = self.await_doge_transaction_with_status(ledger_burn_index, |tx_status| {
+            matches!(tx_status, RetrieveDogeStatus::Confirmed { .. })
+        });
+        match status {
+            RetrieveDogeStatus::Confirmed { txid, .. } => txid,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn await_doge_transaction_with_status<F>(
+        &self,
+        ledger_burn_index: u64,
+        filter: F,
+    ) -> RetrieveDogeStatus
+    where
+        F: Fn(&RetrieveDogeStatus) -> bool,
+    {
+        let mut last_status = None;
+        let max_ticks = 10;
+        for _ in 0..max_ticks {
+            let status = self.retrieve_doge_status(ledger_burn_index);
+            if filter(&status) {
+                return status;
+            }
+            last_status = Some(status);
+            self.env.tick();
+        }
+        dbg!(self.get_logs());
+        panic!("Unexpected transaction status in {max_ticks} ticks; last status {last_status:?}")
     }
 
     pub fn get_logs(&self) -> Vec<LogEntry<Priority>> {
@@ -104,9 +210,13 @@ impl MinterCanister {
             .entries
     }
 
-    pub fn assert_that_events(&self) -> MinterEventAssert {
+    pub fn assert_that_events(&self) -> MinterEventAssert<EventType> {
         MinterEventAssert {
-            events: self.get_all_events(),
+            events: self
+                .get_all_events()
+                .into_iter()
+                .map(|e| e.payload)
+                .collect(),
         }
     }
 
@@ -140,6 +250,10 @@ impl MinterCanister {
             )
             .expect("BUG: failed to call get_events");
         Decode!(&call_result, Vec<Event>).unwrap()
+    }
+
+    pub fn id(&self) -> CanisterId {
+        self.id
     }
 }
 

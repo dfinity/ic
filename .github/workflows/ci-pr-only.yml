@@ -2,44 +2,58 @@ name: CI PR Only
 # Jobs that run on PRs, but no other pipelines
 
 on:
-  merge_group:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  workflow_call:
+    inputs:
+      commit-sha:
+        description: The commit sha to run the CI on
+        required: true
+        type: string
 
-concurrency:
-  # only triggered on PR, so head_ref will always be set
-  group: ${{ github.workflow }}-${{ github.head_ref }}
-  cancel-in-progress: true
 env:
   CI_PROJECT_DIR: ${{ github.workspace }}
-  MERGE_BRANCH: ${{ github.event.pull_request.base.ref }}
   ORG: ${{ github.repository_owner }}
 
 jobs:
-  # This job is not run, but just used to set anchor references for other jobs
-  anchor-setup:
-    if: false
-    name: Anchor Setup
-    runs-on: &dind-large-setup
-      labels: dind-large
+
+  # Run didc compatibility checks against the merge base
+  didc_checks:
+    name: Candid compatibility checks
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'CI_OVERRIDE_DIDC_CHECK') }}
+    runs-on: &dind-small-setup
+      labels: dind-small
     container: &container-setup
-      image: ghcr.io/dfinity/ic-build@sha256:19aa596f49db34ece26a1a2903e6fabcd8766025b3dc543546fbef341ef910a2
+      image: ghcr.io/dfinity/ic-build@sha256:86c24b5b717519527920d3b720906f91723514d63acddcbaeb27ecf4144aeb37
       options: >-
          -e NODE_NAME
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # ensures we checkout out the latest base, which we
+          # compare against (pull_request.base.sha)
+          fetch-depth: 0
+          ref: ${{ inputs.commit-sha }}
+      - name: Run candid compatibility checks
+        uses: ./.github/actions/bazel
+        with:
+          run: |
+            DID_CHECK_REV='${{ github.event.pull_request.base.sha }}' \
+              bazel test //... \
+                --build_tag_filters="didc" \
+                --test_tag_filters="didc"
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+  insta-tests:
+    name: Quick Feedback Tests
+    runs-on: *dind-small-setup
+    container: *container-setup
+    timeout-minutes: 30
     steps:
       - &checkout
         name: Checkout
         uses: actions/checkout@v4
-
-  insta-tests:
-    name: Quick Feedback Tests
-    runs-on: &dind-small-setup
-      labels: dind-small
-    container: *container-setup
-    timeout-minutes: 30
-    if: ${{ github.event_name != 'merge_group' }}
-    steps:
-      - *checkout
+        with:
+          ref: ${{ inputs.commit-sha }}
       - name: Run insta-tests
         uses: ./.github/actions/bazel
         with:
@@ -48,10 +62,10 @@ jobs:
 
   bazel-build-fuzzers-archives:
     name: Bazel Build Fuzzers Archives
-    runs-on: *dind-large-setup
+    runs-on: &dind-large-setup
+      labels: dind-large
     container: *container-setup
     timeout-minutes: 90
-    if: ${{ github.event_name != 'merge_group' }}
     steps:
       - *checkout
       - name: Filter Relevant Files
@@ -76,7 +90,6 @@ jobs:
     name: Lock Generate
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: ${{ github.event_name != 'merge_group' }}
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     steps:
@@ -116,7 +129,6 @@ jobs:
     runs-on: ubuntu-latest
     container: *container-setup
     timeout-minutes: 30
-    if: ${{ github.event_name != 'merge_group' }}
     env:
       CI_EVENT_NAME: ${{ github.event_name }}
     steps:
@@ -149,7 +161,6 @@ jobs:
     name: Dependency Scan for PR
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: ${{ github.event_name != 'merge_group' }}
     permissions:
       contents: read
       pull-requests: write
@@ -168,7 +179,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 256
+          ref: ${{ inputs.commit-sha }}
       - name: Filter Relevant Files
         uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         id: filter

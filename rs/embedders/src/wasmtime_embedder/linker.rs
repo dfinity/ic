@@ -1230,6 +1230,24 @@ pub fn syscalls<
         .unwrap();
 
     linker
+        .func_wrap("ic0", "cost_http_request_v2", {
+            move |mut caller: Caller<'_, StoreData>, params_src: I, params_size: I, dst: I| {
+                charge_for_cpu(&mut caller, overhead::COST_HTTP_REQUEST_V2)?;
+                with_memory_and_system_api(&mut caller, |s, memory| {
+                    let params_src: usize =
+                        params_src.try_into().expect("Failed to convert I to usize");
+                    let params_size: usize = params_size
+                        .try_into()
+                        .expect("Failed to convert I to usize");
+                    let dst: usize = dst.try_into().expect("Failed to convert I to usize");
+                    s.ic0_cost_http_request_v2(params_src, params_size, dst, memory)
+                })
+                .map_err(|e| anyhow::Error::msg(format!("ic0_cost_http_request_v2 failed: {e}")))
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "cost_sign_with_ecdsa", {
             move |mut caller: Caller<'_, StoreData>, src: I, size: I, curve: u32, dst: I| {
                 let src: usize = src.try_into().expect("Failed to convert I to usize");

@@ -21,7 +21,7 @@ use ic_system_test_driver::util::{self, create_and_install, create_and_install_w
 pub use ic_types::{CanisterId, Cycles, PrincipalId};
 use slog::info;
 use std::env;
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
@@ -106,14 +106,13 @@ pub fn setup(env: TestEnv) {
                 .enable_ipv4()
                 .start(&env)
                 .expect("failed to set up universal VM");
-
-            start_httpbin_on_uvm(&env);
         });
     });
+
+    start_httpbin_on_uvm(&env);
 }
 
 pub fn stress_setup(env: TestEnv) {
-    let logger = env.logger();
     PrometheusVm::default()
         .start(&env)
         .expect("Failed to start prometheus VM");
@@ -124,9 +123,6 @@ pub fn stress_setup(env: TestEnv) {
         ))
         .start(&env)
         .expect("failed to set up universal VM");
-
-    start_httpbin_on_uvm(&env);
-    info!(&logger, "Started Universal VM!");
 
     let mut ic = InternetComputer::new()
         .with_required_host_features(vec![HostFeature::Performance])
@@ -147,6 +143,8 @@ pub fn stress_setup(env: TestEnv) {
 
     await_nodes_healthy(&env);
     install_nns_canisters(&env);
+
+    start_httpbin_on_uvm(&env);
 
     env.topology_snapshot()
         .subnets()
@@ -177,11 +175,15 @@ pub fn get_universal_vm_ipv4_address(env: &TestEnv) -> Ipv4Addr {
     }
 }
 
+/// This function starts the httpbin service on the universal VM and creates firewall rules on all nodes to
+/// allow access to it. This means that this must only be called after all nodes are up and healthy.
 pub fn start_httpbin_on_uvm(env: &TestEnv) {
     let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
     let vm = deployed_universal_vm.get_vm().unwrap();
     let ipv6 = vm.ipv6.to_string();
     let ipv4 = vm.ipv4.map_or("".to_string(), |ipv4| ipv4.to_string());
+    // We need to use port 443 as it's among the only ports that the Dante socks server can proxy to.
+    let http_bin_port = 443;
     info!(
         &env.logger(),
         "Starting httpbin service on UVM '{UNIVERSAL_VM_NAME}' ..."
@@ -192,6 +194,9 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
         set -e -o pipefail
         ipv6="{ipv6}"
         ipv4="{ipv4}"
+
+        nip_io_hostname="${{ipv6//:/-}}.ipv6.nip.io"
+        echo "Calculated nip.io hostname: $nip_io_hostname"
 
         if [[ "$ipv4" == "" ]] && ip link show dev enp2s0 >/dev/null; then
             count=0
@@ -208,7 +213,7 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
         fi
         echo "IPv4 is ${{ipv4:-disabled}}"
 
-        echo "Generate ipv6 service cert with root cert and key, using `minica` ..."
+        echo "Generate ipv6 service cert with root cert and key, using minica ..."
         mkdir certs
         cd certs
         cp /config/cert.pem minica.pem
@@ -220,25 +225,90 @@ pub fn start_httpbin_on_uvm(env: &TestEnv) {
         docker run \
             -v "$(pwd)":/output \
             minica:image \
-            -ip-addresses="$ipv6${{ipv4:+,$ipv4}}"
+            -ip-addresses="$ipv6${{ipv4:+,$ipv4}}" \
+            -domains="$nip_io_hostname"
 
         echo "Updating service certificate folder name so it can be fed to ssl-proxy container ..."
-        sudo mv "$ipv6" ipv6
-        sudo chmod -R 755 ipv6
 
-        echo "Setting up httpbin on port 20443 ..."
+        if [ -d "$nip_io_hostname" ]; then
+            sudo mv "$nip_io_hostname" service_cert
+        elif [ -d "$ipv6" ]; then
+            sudo mv "$ipv6" service_cert
+        elif [ ! -z "$ipv4" ] && [ -d "$ipv4" ]; then
+            sudo mv "$ipv4" service_cert
+        else
+            echo "Error: Could not find minica output directory!"
+            exit 1
+        fi
+
+        sudo chmod -R 755 service_cert
+
+        echo "Setting up httpbin on port {http_bin_port} ..."
         docker load -i /config/httpbin.tar
         sudo docker run \
             --rm \
             -d \
-            -p 20443:80 \
-            -v "$(pwd)/ipv6":/certs \
+            --network host \
+            -u root \
+            -v "$(pwd)/service_cert":/certs \
             --name httpbin \
             httpbin:image \
-            --cert-file /certs/cert.pem --key-file /certs/key.pem --port 80
+            --cert-file /certs/cert.pem --key-file /certs/key.pem --port {http_bin_port}
     "#
         ))
         .unwrap_or_else(|e| panic!("Could not start httpbin on {UNIVERSAL_VM_NAME} because {e:?}"));
+
+    wait_for_orchestrator_fw_rules(env);
+
+    // Allow list all nodes to access the UVM httpbin service.
+    create_accept_fw_rules(env, SocketAddr::new(IpAddr::V6(vm.ipv6), http_bin_port));
+
+    info!(&env.logger(), "httpbin service started on UVM");
+}
+
+/// This waits for the orchestrator to apply the firewall rules on all nodes.
+fn wait_for_orchestrator_fw_rules(env: &TestEnv) {
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            node.wait_for_orchestrator_fw_rule(&env.logger())
+                .expect("Orchestrator rule did not appear in time.");
+        }
+    }
+}
+
+/// Create firewall rules on all nodes to allow connections from canister http adapter to the target socket address.
+/// This is usually called because by default outbound connections from the ic-http-adapter to most internal
+/// IPv6 ranges are blocked.
+fn create_accept_fw_rules(env: &TestEnv, target_socket_addr: SocketAddr) {
+    for subnet in env.topology_snapshot().subnets() {
+        for node in subnet.nodes() {
+            node.insert_egress_accept_rule_for_outcalls_adapter(target_socket_addr)
+                .expect(
+                    "Failed to add accept firewall rule to allow access to UVM httpbin service",
+                );
+        }
+    }
+}
+
+/// Create firewall rules on all nodes to allow connections from canister http adapter to the API BN.
+/// This is necessary because by default outbound connections from the ic-http-adapter to most internal
+/// IPv6 ranges are blocked.
+/// API BNs are used as proxies to reach the UVM from the canister http adapter when the direct request
+/// fails.
+/// This should be called only after all nodes are up and healthy.
+pub fn whitelist_nodes_access_to_apibns(env: &TestEnv) {
+    let api_bns = env.topology_snapshot().api_boundary_nodes();
+
+    for apibn in api_bns {
+        let apibn_ip = apibn.get_ip_addr();
+        let apibn_socket_addr = SocketAddr::new(apibn_ip, 1080);
+        create_accept_fw_rules(env, apibn_socket_addr);
+    }
+
+    info!(
+        &env.logger(),
+        "Firewall rules to allow access to API BNs successfully applied on all nodes."
+    );
 }
 
 pub fn get_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
