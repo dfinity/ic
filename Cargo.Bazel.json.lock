@@ -1,5 +1,5 @@
 {
-  "checksum": "26f0ae89d1b17650c10ccd30e9b4f934eb088eac8caf5d9748e01b006d8dbb59",
+  "checksum": "def7844c3cf394e6bd277eedd32b85bb3ff463ee88104eb5600021a13f01ab62",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -22103,11 +22103,6 @@
             {
               "id": "subtle 2.6.1",
               "target": "subtle"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn",
-              "alias": "syn_old"
             },
             {
               "id": "syn 2.0.110",
@@ -75293,41 +75288,17 @@
             "clone-impls",
             "default",
             "derive",
+            "extra-traits",
+            "fold",
+            "full",
             "parsing",
             "printing",
             "proc-macro",
-            "quote"
+            "quote",
+            "visit",
+            "visit-mut"
           ],
-          "selects": {
-            "aarch64-apple-darwin": [
-              "extra-traits",
-              "fold",
-              "full",
-              "visit",
-              "visit-mut"
-            ],
-            "aarch64-unknown-linux-gnu": [
-              "extra-traits",
-              "fold",
-              "full",
-              "visit",
-              "visit-mut"
-            ],
-            "x86_64-apple-darwin": [
-              "extra-traits",
-              "fold",
-              "full",
-              "visit",
-              "visit-mut"
-            ],
-            "x86_64-unknown-linux-gnu": [
-              "extra-traits",
-              "fold",
-              "full",
-              "visit",
-              "visit-mut"
-            ]
-          }
+          "selects": {}
         },
         "deps": {
           "common": [
@@ -95236,7 +95207,6 @@
     "strum_macros 0.26.4",
     "stubborn-io 0.3.2",
     "subtle 2.6.1",
-    "syn 1.0.109",
     "syn 2.0.110",
     "sys-mount 3.0.1",
     "syscalls 0.6.18",
