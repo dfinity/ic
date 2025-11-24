@@ -1,7 +1,6 @@
 use crate::serialize_and_write_config;
 use anyhow::{Context, Result, bail};
 use config_types::GuestOSConfig;
-use std::env;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::process::Command;
