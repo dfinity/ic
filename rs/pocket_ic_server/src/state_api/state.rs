@@ -28,9 +28,11 @@ use http::{
     },
 };
 use ic_agent::agent::route_provider::RoundRobinRouteProvider;
-use ic_bn_lib_common::types::http::ClientOptions;
+use ic_bn_lib_common::{
+    traits::http::Client,
+    types::http::{ClientOptions, ConnInfo},
+};
 use ic_gateway::ic_bn_lib::http::{
-    Client, ConnInfo,
     headers::{X_IC_CANISTER_ID, X_REQUEST_ID, X_REQUESTED_WITH},
     proxy::proxy,
 };
