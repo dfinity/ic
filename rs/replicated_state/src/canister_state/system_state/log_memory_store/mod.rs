@@ -74,20 +74,30 @@ impl LogMemoryStore {
         RingBuffer::init(self.page_map.clone(), data_capacity)
     }
 
-    pub fn capacity(&mut self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.ring_buffer().capacity()
     }
 
-    pub fn used_space(&mut self) -> usize {
+    pub fn set_capacity(&mut self, new_capacity: usize) {
+        let mut ring_buffer = self.ring_buffer();
+        ring_buffer.set_capacity(new_capacity);
+        self.page_map = ring_buffer.to_page_map();
+    }
+
+    pub fn used_space(&self) -> usize {
         self.ring_buffer().used_space()
     }
 
-    pub fn is_empty(&mut self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.used_space() == 0
     }
 
-    pub fn next_id(&mut self) -> u64 {
+    pub fn next_id(&self) -> u64 {
         self.ring_buffer().next_id()
+    }
+
+    pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
+        self.ring_buffer().records(filter)
     }
 
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
@@ -116,10 +126,6 @@ impl LogMemoryStore {
     /// Atomically snapshot and clear the per-round delta_log sizes — use at end of round.
     pub fn take_delta_log_sizes(&mut self) -> Vec<usize> {
         self.delta_log_sizes.drain(..).collect()
-    }
-
-    pub fn records(&mut self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
-        self.ring_buffer().records(filter)
     }
 }
 

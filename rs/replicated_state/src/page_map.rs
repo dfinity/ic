@@ -905,7 +905,6 @@ impl From<&[u8]> for PageMap {
 /// Buffer provides a file-like interface to a PageMap.
 pub struct Buffer {
     page_map: PageMap,
-
     /// The map containing pages modified by the caller since this buffer was
     /// created. These pages can be modified in-place by the write method.
     ///
