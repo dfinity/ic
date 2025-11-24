@@ -2,6 +2,7 @@ use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style, Stylize},
+    symbols,
     text::{Line, Span},
     widgets::{Block, Borders, Clear, Paragraph, Wrap},
 };
@@ -29,9 +30,25 @@ const COMPLETION_SCREEN_OVERHEAD: u16 = 16;
 // Shared UI Components & Helpers
 // ============================================================================
 
+// We use ASCII characters for borders to ensure compatibility with all terminal types,
+// specifically serial consoles (e.g. "linux" or "vt100") which may default to non-UTF-8 encodings.
+// This avoids rendering corruption where Unicode box-drawing characters appear as garbage.
+const ASCII_BORDER_SET: symbols::border::Set = symbols::border::Set {
+    top_left: "+",
+    top_right: "+",
+    bottom_left: "+",
+    bottom_right: "+",
+    vertical_left: "|",
+    vertical_right: "|",
+    horizontal_top: "-",
+    horizontal_bottom: "-",
+};
+
 /// Unified helper to create consistent UI blocks
 fn create_block<'a>(title: &'a str, active: bool, is_error: bool) -> Block<'a> {
-    let mut block = Block::default().borders(Borders::ALL);
+    let mut block = Block::default()
+        .borders(Borders::ALL)
+        .border_set(ASCII_BORDER_SET);
 
     if is_error {
         block = block.fg(Color::Red).bg(Color::Black).title(title);
@@ -369,7 +386,7 @@ fn build_failure_text<'a>(
 ) -> Vec<Line<'a>> {
     let mut text = Vec::new();
     let create_separator =
-        || "─".repeat((size.width.saturating_sub(TEXT_PADDING)).max(10) as usize);
+        || "-".repeat((size.width.saturating_sub(TEXT_PADDING)).max(10) as usize);
 
     text.push(Line::from(""));
     text.push(
