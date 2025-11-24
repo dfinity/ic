@@ -15232,16 +15232,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-wasm-transform"
-version = "0.9.0"
-dependencies = [
- "wasm-encoder 0.240.0",
- "wasmparser 0.240.0",
- "wasmprinter 0.240.0",
- "wat",
-]
-
-[[package]]
 name = "ic-wasm-types"
 version = "0.9.0"
 dependencies = [
