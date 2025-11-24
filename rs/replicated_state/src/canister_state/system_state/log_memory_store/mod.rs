@@ -66,9 +66,9 @@ impl LogMemoryStore {
         &mut self.page_map
     }
 
-    fn ring_buffer(&self) -> RingBuffer {
-        let data_capacity = MemorySize::new(10_000_000); // TODO: populate it properly
-        RingBuffer::init(self.page_map.clone(), data_capacity)
+    fn load_ring_buffer(&self) -> RingBuffer {
+        let default_data_capacity = MemorySize::new(10_000_000); // TODO: populate it properly
+        RingBuffer::load_or_new(self.page_map.clone(), default_data_capacity)
     }
 
     /// Set the ring buffer capacity — preserves existing records by collecting and re-appending them.
@@ -76,7 +76,7 @@ impl LogMemoryStore {
         // TODO: PageMap cannot be shrunk today; reducing capacity does not free allocated pages
         // (practical ring buffer max currently ~55 MB). Future improvement: allocate a new PageMap
         // with the desired capacity, refeed records, then drop the old map or provide a `PageMap::shrink` API.
-        let old = self.ring_buffer();
+        let old = self.load_ring_buffer();
         if old.capacity() == new_capacity {
             return;
         }
@@ -105,18 +105,18 @@ impl LogMemoryStore {
     }
 
     pub fn next_id(&self) -> u64 {
-        self.ring_buffer().next_id()
+        self.load_ring_buffer().next_id()
     }
 
     pub fn records(&self, filter: Option<FetchCanisterLogsFilter>) -> Vec<CanisterLogRecord> {
-        self.ring_buffer().records(filter)
+        self.load_ring_buffer().records(filter)
     }
 
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
         // Record the size of the appended delta log for metrics.
         self.push_delta_log_size(delta_log.used_space());
 
-        let mut ring_buffer = self.ring_buffer();
+        let mut ring_buffer = self.load_ring_buffer();
         ring_buffer.append_log(
             delta_log
                 .records_mut()

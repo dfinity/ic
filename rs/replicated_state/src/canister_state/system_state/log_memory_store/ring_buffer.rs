@@ -52,7 +52,7 @@ impl RingBuffer {
     }
 
     /// Returns an existing ring buffer if present, or initializes a new one.
-    pub fn init(page_map: PageMap, data_capacity: MemorySize) -> Self {
+    pub fn load_or_new(page_map: PageMap, data_capacity: MemorySize) -> Self {
         let io = StructIO::new(page_map);
         if io.load_header().magic != *MAGIC {
             // Not initialized yet — set up a new header.
@@ -253,7 +253,7 @@ mod tests {
         let page_map = PageMap::new_for_testing();
         let data_capacity = TEST_DATA_CAPACITY;
 
-        let rb = RingBuffer::init(page_map, data_capacity);
+        let rb = RingBuffer::new(page_map, data_capacity);
 
         assert_eq!(rb.capacity(), data_capacity.get());
         assert_eq!(rb.used_space(), 0);
@@ -264,7 +264,7 @@ mod tests {
     fn test_push_and_pop_order_preserved() {
         let page_map = PageMap::new_for_testing();
         let data_capacity = TEST_DATA_CAPACITY;
-        let mut rb = RingBuffer::init(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
 
         let r0 = log_record(0, 100, "a");
         let r1 = log_record(1, 200, "bb");
@@ -282,7 +282,7 @@ mod tests {
         let record_size: usize = 25;
         let page_map = PageMap::new_for_testing();
         let data_capacity = MemorySize::new(3 * record_size as u64);
-        let mut rb = RingBuffer::init(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
 
         let r0 = log_record(0, 100, "12345");
         assert_eq!(bytes_len(&r0), record_size);
@@ -309,7 +309,7 @@ mod tests {
         let record_size: usize = 25;
         let page_map = PageMap::new_for_testing();
         let data_capacity = MemorySize::new(3 * record_size as u64);
-        let mut rb = RingBuffer::init(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
 
         let r0 = log_record(0, 100, "12345");
         assert_eq!(bytes_len(&r0), record_size);
@@ -335,7 +335,7 @@ mod tests {
     fn test_wraps_without_eviction() {
         let page_map = PageMap::new_for_testing();
         let data_capacity = MemorySize::new(137);
-        let mut rb = RingBuffer::init(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
 
         // Push many records to cause wrap-around without eviction.
         let mut pushed: Vec<CanisterLogRecord> = vec![];
@@ -362,7 +362,7 @@ mod tests {
     fn test_lookup_table_and_records_filtering() {
         let page_map = PageMap::new_for_testing();
         let data_capacity = TEST_DATA_CAPACITY;
-        let mut rb = RingBuffer::init(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
         let r0 = log_record(0, 1000, "alpha");
         let r1 = log_record(1, 2000, "beta");
         let r2 = log_record(2, 3000, "gamma");
@@ -419,7 +419,7 @@ mod tests {
         let page_map = PageMap::new_for_testing();
         let data_capacity = MemorySize::new(51_000_000);
         let data_size = MemorySize::new(50_000_000);
-        let mut rb = RingBuffer::init(page_map, data_capacity);
+        let mut rb = RingBuffer::new(page_map, data_capacity);
         let msg = "a".repeat(32_000);
 
         let start = std::time::Instant::now();
