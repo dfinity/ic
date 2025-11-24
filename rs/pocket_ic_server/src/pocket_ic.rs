@@ -2273,7 +2273,7 @@ impl PocketIcSubnets {
             // Install the Dogecoin mainnet canister configured for the regtest network.
             let args = DogecoinInitConfig {
                 network: Some(DogecoinNetwork::Regtest),
-                fees: Some(DogecoinFees::testnet()),
+                fees: Some(DogecoinFees::mainnet()),
                 ..Default::default()
             };
             btc_subnet
