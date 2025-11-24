@@ -66,10 +66,6 @@ impl LogMemoryStore {
         &mut self.page_map
     }
 
-    pub fn clear(&mut self) {
-        // TODO.
-    }
-
     fn ring_buffer(&self) -> RingBuffer {
         let data_capacity = MemorySize::new(10_000_000); // TODO: populate it properly
         RingBuffer::init(self.page_map.clone(), data_capacity)
@@ -85,7 +81,7 @@ impl LogMemoryStore {
             return;
         }
 
-        // `old.records(...)` may return results in batches, so iterate until all records up to `old.next_id()` are collected.
+        // `old.records(...)` may return results in batches, so iterate until all available records are collected.
         let mut records = Vec::new();
         let mut idx = 0;
         while idx < old.next_id() {
