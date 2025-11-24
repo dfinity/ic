@@ -47,9 +47,9 @@ scopeguard = "1.1.0"
 serde = { workspace = true }
 serde_bytes = { workspace = true }
 serde_json = { workspace = true }
-local_key = { path = "../../tla_instrumentation/local_key", optional = true }
-tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation", optional = true }
-tla_instrumentation_proc_macros = { path = "../../tla_instrumentation/tla_instrumentation_proc_macros", optional = true }
+local_key = { path = "../../../tla_instrumentation/local_key", optional = true }
+tla_instrumentation = { path = "../../../tla_instrumentation/tla_instrumentation", optional = true }
+tla_instrumentation_proc_macros = { path = "../../../tla_instrumentation/tla_instrumentation_proc_macros", optional = true }
 
 [dev-dependencies]
 assert_matches = { workspace = true }
@@ -71,9 +71,6 @@ pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }
 simple_asn1 = { workspace = true }
 tokio = { workspace = true }
-local_key = { path = "../../tla_instrumentation/local_key" }
-tla_instrumentation = { path = "../../tla_instrumentation/tla_instrumentation" }
-tla_instrumentation_proc_macros = { path = "../../tla_instrumentation/tla_instrumentation_proc_macros" }
 
 [features]
 self_check = []
