@@ -327,11 +327,8 @@ fn should_correctly_format_config_display_message() {
 #[test]
 fn should_correctly_serialize_and_deserialize_nidkg_config() {
     let config = NiDkgConfig::new(valid_dkg_config_data()).unwrap();
-    let proto = pb::NiDkgConfig::from(&config);
-    let parsing_result = NiDkgConfig::try_from(proto);
-    assert!(parsing_result.is_ok(), "{:?}", parsing_result.err());
-    let parsed = parsing_result.unwrap();
-    assert_eq!(config, parsed);
+    let config_proto = pb::NiDkgConfig::from(&config);
+    assert_eq!(Ok(config), NiDkgConfig::try_from(config_proto));
 }
 
 #[test]
