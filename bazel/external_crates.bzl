@@ -1370,10 +1370,6 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                     "full",
                 ],
             ),
-            "syn-old": crate.spec(
-                package = "syn",
-                version = "^1.0.109",
-            ),
             "syscalls": crate.spec(
                 version = "^0.6.18",
             ),
