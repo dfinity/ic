@@ -11219,16 +11219,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-nervous-system-instruction-stats-update-attribute"
-version = "0.0.1"
-dependencies = [
- "candid",
- "ic-cdk",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "ic-nervous-system-integration-tests"
 version = "0.9.0"
 dependencies = [
@@ -15580,6 +15570,11 @@ dependencies = [
  "anyhow",
  "candid",
  "ic-agent",
+ "ic-certification 3.0.3",
+ "ic-crypto-internal-basic-sig-der-utils",
+ "ic-crypto-internal-bls12-381-type",
+ "ic-crypto-sha2",
+ "ic-crypto-test-utils",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-ed25519 0.5.0",
  "ic-fstrim-tool",
@@ -15597,6 +15592,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "serde_cbor",
+ "simple_asn1",
  "slog",
  "tokio",
 ]

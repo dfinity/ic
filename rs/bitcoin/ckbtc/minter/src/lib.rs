@@ -1329,20 +1329,6 @@ pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
     }
 }
 
-/// Computes an estimate for the size of transaction (in vbytes) with the given number of inputs and outputs.
-pub fn tx_vsize_estimate(input_count: u64, output_count: u64) -> u64 {
-    // See
-    // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
-    // for the transaction structure and
-    // https://bitcoin.stackexchange.com/questions/92587/calculate-transaction-fee-for-external-addresses-which-doesnt-belong-to-my-loca/92600#92600
-    // for transaction size estimate.
-    const INPUT_SIZE_VBYTES: u64 = 68;
-    const OUTPUT_SIZE_VBYTES: u64 = 31;
-    const TX_OVERHEAD_VBYTES: u64 = 11;
-
-    input_count * INPUT_SIZE_VBYTES + output_count * OUTPUT_SIZE_VBYTES + TX_OVERHEAD_VBYTES
-}
-
 /// Computes an estimate for the retrieve_btc fee.
 ///
 /// Arguments:
@@ -1351,43 +1337,34 @@ pub fn tx_vsize_estimate(input_count: u64, output_count: u64) -> u64 {
 ///   * `median_fee_millisatoshi_per_vbyte` - the median network fee, in millisatoshi per vbyte.
 pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
     available_utxos: &BTreeSet<Utxo>,
-    maybe_amount: Option<u64>,
+    withdrawal_amount: u64,
     median_fee_millisatoshi_per_vbyte: u64,
     fee_estimator: &F,
-) -> WithdrawalFee {
-    const DEFAULT_INPUT_COUNT: u64 = 2;
-    // One output for the caller and one for the change.
-    const DEFAULT_OUTPUT_COUNT: u64 = 2;
-    let input_count = match maybe_amount {
-        Some(amount) => {
-            // We simulate the algorithm that selects UTXOs for the
-            // specified amount. If the withdrawal rate is low, we
-            // should get the exact number of inputs that the minter
-            // will use.
-            let mut utxos = available_utxos.clone();
-            let selected_utxos =
-                utxos_selection(amount, &mut utxos, DEFAULT_OUTPUT_COUNT as usize - 1);
+) -> Result<WithdrawalFee, BuildTxError> {
+    // We simulate the algorithm that selects UTXOs for the
+    // specified amount.
+    let mut utxos = available_utxos.clone();
+    let selected_utxos = utxos_selection(withdrawal_amount, &mut utxos, 1);
+    // Only the address type matters for the amount of vbytes, not the actual bytes in the address.
+    let dummy_minter_address = BitcoinAddress::P2wpkhV0([u8::MAX; 20]);
+    let dummy_recipient_address = BitcoinAddress::P2wpkhV0([42_u8; 20]);
 
-            if !selected_utxos.is_empty() {
-                selected_utxos.len() as u64
-            } else {
-                DEFAULT_INPUT_COUNT
-            }
-        }
-        None => DEFAULT_INPUT_COUNT,
-    };
-
-    let vsize = tx_vsize_estimate(input_count, DEFAULT_OUTPUT_COUNT);
-    let minter_fee = fee_estimator.evaluate_minter_fee(input_count, DEFAULT_OUTPUT_COUNT);
-    // We subtract one from the outputs because the minter's output
-    // does not participate in fees distribution.
-    let bitcoin_fee =
-        vsize * median_fee_millisatoshi_per_vbyte / 1000 / (DEFAULT_OUTPUT_COUNT - 1).max(1);
-    let minter_fee = minter_fee / (DEFAULT_OUTPUT_COUNT - 1).max(1);
-    WithdrawalFee {
-        minter_fee,
-        bitcoin_fee,
-    }
+    build_unsigned_transaction_from_inputs(
+        &selected_utxos,
+        vec![(dummy_recipient_address, withdrawal_amount)],
+        dummy_minter_address,
+        median_fee_millisatoshi_per_vbyte,
+        fee_estimator,
+    )
+    .map(|(unsigned_tx, _change_output, fee)| {
+        assert_eq!(
+            unsigned_tx.outputs.len(),
+            2,
+            "BUG: expected 1 output to the recipient and one change output to the minter, \
+                so that the totality of the fee is paid in full by the recipient"
+        );
+        fee
+    })
 }
 
 #[async_trait]

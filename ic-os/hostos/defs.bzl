@@ -84,18 +84,18 @@ def image_deps(mode, _malicious = False):
         deps["rootfs"].update({"//rs/ic_os/release:guest_vm_runner_dev": "/opt/ic/bin/guest_vm_runner:0755"})
 
         # Allow root console access on dev
-        console_override_label = Label("//ic-os/components:misc/console-getty@/hostos-dev/override.conf")
+        console_override_label_1 = Label("//ic-os/hostos:console-override-dev")
+        console_override_label_2 = Label("//ic-os/hostos:console-override-dev-alias")
     else:
         # Allow limited-console access on prod
-        console_override_label = Label("//ic-os/components:misc/console-getty@/hostos-prod/override.conf")
+        console_override_label_1 = Label("//ic-os/hostos:console-override-prod")
+        console_override_label_2 = Label("//ic-os/hostos:console-override-prod-alias")
 
     # Note: We install the same override file to both serial-getty@ and getty@ service directories
     # because HostOS needs infogetty for both serial consoles (ttyS0, etc.) and VGA consoles (tty1, etc.)
     deps["component_files"].update({
-        console_override_label: "/etc/systemd/system/serial-getty@.service.d/override.conf",
-    })
-    deps["component_files"].update({
-        console_override_label: "/etc/systemd/system/getty@.service.d/override.conf",
+        console_override_label_1: "/etc/systemd/system/serial-getty@.service.d/override.conf",
+        console_override_label_2: "/etc/systemd/system/getty@.service.d/override.conf",
     })
 
     return deps

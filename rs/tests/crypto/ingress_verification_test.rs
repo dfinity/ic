@@ -21,9 +21,13 @@ use ic_types::messages::{
 };
 use ic_types::{CanisterId, PrincipalId, Time};
 use ic_universal_canister::wasm;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, Rng, SeedableRng, rngs::StdRng};
 use reqwest::{StatusCode, Url};
 use slog::{debug, info};
+
+const ALL_QUERY_API_VERSIONS: &[usize] = &[2, 3];
+const ALL_UPDATE_API_VERSIONS: &[usize] = &[2, 3, 4];
+const ALL_READ_STATE_API_VERSIONS: &[usize] = &[2, 3];
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
@@ -39,7 +43,8 @@ fn main() -> Result<()> {
                 .add_test(systest!(requests_to_mgmt_canister_with_delegations; 2))
                 .add_test(systest!(requests_to_mgmt_canister_with_delegations; 3))
                 .add_test(systest!(requests_to_mgmt_canister_with_delegations; 4))
-                .add_test(systest!(requests_with_invalid_expiry)),
+                .add_test(systest!(requests_with_invalid_expiry))
+                .add_test(systest!(requests_with_canister_signature)),
         )
         .execute_from_args()?;
     Ok(())
@@ -60,41 +65,47 @@ struct TestInformation {
     canister_id: CanisterId,
 }
 
-#[derive(Copy, Clone, Debug)]
-enum GenericIdentityType {
+#[derive(Copy, Clone)]
+enum GenericIdentityType<'a> {
     Ed25519,
     EcdsaSecp256k1,
     EcdsaSecp256r1,
+    Canister(&'a UniversalCanister<'a>),
     // TODO webauthn RSA
     // TODO webauthn EC
 }
 
-impl GenericIdentityType {
-    fn random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        match rng.r#gen::<usize>() % 3 {
+impl<'a> GenericIdentityType<'a> {
+    fn random_incl_canister<R: Rng + CryptoRng>(
+        canister: &'a UniversalCanister<'a>,
+        rng: &mut R,
+    ) -> Self {
+        match rng.r#gen::<usize>() % 4 {
             0 => Self::EcdsaSecp256k1,
             1 => Self::EcdsaSecp256r1,
+            2 => Self::Canister(canister),
             _ => Self::Ed25519,
         }
     }
 }
 
 #[derive(Clone)]
-enum GenericIdentityInner {
+enum GenericIdentityInner<'a> {
     K256(ic_secp256k1::PrivateKey),
     P256(ic_secp256r1::PrivateKey),
     Ed25519(ic_ed25519::PrivateKey),
+    Canister(CanisterSigner<'a>),
 }
 
 #[derive(Clone)]
-struct GenericIdentity {
-    inner: GenericIdentityInner,
+struct GenericIdentity<'a> {
+    inner: GenericIdentityInner<'a>,
     public_key_der: Vec<u8>,
     principal: Principal,
 }
 
-impl GenericIdentity {
-    fn new<R: Rng + CryptoRng>(typ: GenericIdentityType, rng: &mut R) -> Self {
+impl<'a> GenericIdentity<'a> {
+    fn new<R: Rng + CryptoRng>(typ: GenericIdentityType<'a>, rng: &mut R) -> Self {
         let (inner, public_key_der) = match typ {
             GenericIdentityType::Ed25519 => {
                 let sk = ic_ed25519::PrivateKey::generate_using_rng(rng);
@@ -111,6 +122,12 @@ impl GenericIdentity {
                 let pk = sk.public_key().serialize_der();
                 (GenericIdentityInner::P256(sk), pk)
             }
+            GenericIdentityType::Canister(canister) => {
+                let seed = random_n_bytes(32, rng); // Different seed means different identity/public key.
+                let signer = CanisterSigner::new(canister, seed);
+                let pk = signer.public_key_der();
+                (GenericIdentityInner::Canister(signer), pk)
+            }
         };
 
         let principal = Principal::self_authenticating(&public_key_der);
@@ -118,6 +135,16 @@ impl GenericIdentity {
         Self {
             inner,
             public_key_der,
+            principal,
+        }
+    }
+
+    fn new_canister(canister_signer: CanisterSigner<'a>) -> Self {
+        let pk = canister_signer.public_key_der();
+        let principal = Principal::self_authenticating(&pk);
+        Self {
+            inner: GenericIdentityInner::Canister(canister_signer),
+            public_key_der: pk,
             principal,
         }
     }
@@ -156,11 +183,25 @@ impl GenericIdentity {
             GenericIdentityInner::Ed25519(sk) => sk.sign_message(bytes).to_vec(),
             GenericIdentityInner::K256(sk) => sk.sign_message_with_ecdsa(bytes).to_vec(),
             GenericIdentityInner::P256(sk) => sk.sign_message(bytes).to_vec(),
+            GenericIdentityInner::Canister(canister_signer) => {
+                let sign_future = canister_signer.sign(bytes);
+                // We are in a sync method and need to call the async `CanisterSigner::sign`,
+                // which can be done with `tokio::runtime::Handle::block_on`. However, we
+                // cannot call `block_on` directly because the containing method itself is
+                // (directly) executed within a `block_on`, i.e,. without, e.g., any
+                // `spawn_blocking`s in between. Therefore, we need to wrap the call to
+                // `block_on` in a `block_in_place` as a workaround (which is usually discouraged,
+                // because it points to a design flaw in the overall architecture).
+                #[allow(clippy::disallowed_methods)]
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(sign_future)
+                })
+            }
         }
     }
 }
 
-impl Identity for GenericIdentity {
+impl Identity for GenericIdentity<'_> {
     fn sender(&self) -> Result<Principal, String> {
         Ok(self.principal)
     }
@@ -191,6 +232,100 @@ impl Identity for GenericIdentity {
             signature: Some(signature),
             delegations: None,
         })
+    }
+}
+
+#[derive(Clone)]
+struct CanisterSigner<'a> {
+    canister: &'a UniversalCanister<'a>,
+    seed: Vec<u8>,
+    // If set, this RNG seed will be used to create a random BLS12-381
+    // signature for the canister signature's certificate. We use a
+    // seed for simplicity instead of an RNG to avoid further generics.
+    random_certificate_signature_rng_seed: Option<[u8; 32]>,
+}
+
+impl<'a> CanisterSigner<'a> {
+    pub fn new(canister: &'a UniversalCanister<'a>, seed: Vec<u8>) -> Self {
+        Self {
+            canister,
+            seed,
+            random_certificate_signature_rng_seed: None,
+        }
+    }
+
+    pub fn with_random_certificate_signature(self, seed: [u8; 32]) -> Self {
+        Self {
+            random_certificate_signature_rng_seed: Some(seed),
+            ..self
+        }
+    }
+
+    pub fn canister_id(&self) -> CanisterId {
+        canister_id_from_principal(&self.canister.canister_id())
+    }
+
+    pub fn public_key_raw(&self) -> Vec<u8> {
+        use ic_crypto_test_utils::canister_signatures::canister_sig_pub_key_to_bytes;
+        canister_sig_pub_key_to_bytes(self.canister_id(), &self.seed)
+    }
+
+    pub fn public_key_der(&self) -> Vec<u8> {
+        use ic_crypto_internal_basic_sig_der_utils::subject_public_key_info_der;
+        use simple_asn1::oid;
+        // OID 1.3.6.1.4.1.56387.1.2
+        // (iso.org.dod.internet.private.enterprise.dfinity.mechanisms.canister-signature)
+        // See https://internetcomputer.org/docs/current/references/ic-interface-spec#canister-signatures
+        let oid_canister_signature = oid!(1, 3, 6, 1, 4, 1, 56387, 1, 2);
+        subject_public_key_info_der(oid_canister_signature, &self.public_key_raw()).unwrap()
+    }
+
+    pub async fn sign(&self, message: &[u8]) -> Vec<u8> {
+        use ic_certification::{HashTree, labeled, leaf};
+        use ic_crypto_sha2::Sha256;
+        use serde::Serialize;
+        use serde_bytes::ByteBuf;
+
+        let seed_hash = Sha256::hash(&self.seed);
+        let msg_hash = Sha256::hash(message);
+        let sig_tree = labeled(b"sig", labeled(seed_hash, labeled(msg_hash, leaf(b""))));
+
+        let mut certificate_cbor = self.certify_variable(&sig_tree.digest()).await;
+
+        if let Some(rng_seed) = self.random_certificate_signature_rng_seed {
+            let rng = &mut StdRng::from_seed(rng_seed);
+            certificate_cbor = resign_certificate_with_random_signature(&certificate_cbor, rng);
+        }
+
+        #[derive(serde::Serialize)]
+        struct CanisterSignature {
+            certificate: ByteBuf,
+            tree: HashTree,
+        }
+        let canister_sig = CanisterSignature {
+            certificate: ByteBuf::from(certificate_cbor),
+            tree: sig_tree,
+        };
+        // serialize to self-describing CBOR
+        let mut serializer = serde_cbor::Serializer::new(Vec::new());
+        serializer.self_describe().unwrap();
+        canister_sig.serialize(&mut serializer).unwrap();
+        serializer.into_inner()
+    }
+
+    async fn certify_variable(&self, variable_data: &[u8]) -> Vec<u8> {
+        use ic_universal_canister::wasm;
+
+        let _ = self
+            .canister
+            .update(wasm().certified_data_set(variable_data).reply().build())
+            .await
+            .expect("failed to call universal canister to set certified data");
+
+        self.canister
+            .query(wasm().data_certificate().append_and_reply().build())
+            .await
+            .expect("failed to call universal canister to get data certificate")
     }
 }
 
@@ -227,7 +362,7 @@ pub fn requests_with_delegations(env: TestEnv, api_ver: usize) {
                 let mut identities = Vec::with_capacity(delegation_count + 1);
 
                 for _ in 0..=delegation_count {
-                    let id_type = GenericIdentityType::random(rng);
+                    let id_type = GenericIdentityType::random_incl_canister(&canister, rng);
                     identities.push(GenericIdentity::new(id_type, rng));
                 }
 
@@ -377,7 +512,7 @@ pub fn requests_with_delegations_with_targets(env: TestEnv, api_ver: usize) {
                 let mut identities = Vec::with_capacity(delegation_count + 1);
 
                 for _ in 0..=delegation_count {
-                    let id_type = GenericIdentityType::random(rng);
+                    let id_type = GenericIdentityType::random_incl_canister(&canister, rng);
                     identities.push(GenericIdentity::new(id_type, rng));
                 }
 
@@ -455,7 +590,7 @@ pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
                 let mut identities = vec![];
 
                 for _ in 0..4 {
-                    let id_type = GenericIdentityType::random(rng);
+                    let id_type = GenericIdentityType::random_incl_canister(&canister, rng);
                     identities.push(GenericIdentity::new(id_type, rng));
                 }
 
@@ -483,7 +618,7 @@ pub fn requests_with_delegation_loop(env: TestEnv, api_ver: usize) {
                 let mut identities = vec![];
 
                 for _ in 0..4 {
-                    let id_type = GenericIdentityType::random(rng);
+                    let id_type = GenericIdentityType::random_incl_canister(&canister, rng);
                     identities.push(GenericIdentity::new(id_type, rng));
                 }
 
@@ -559,7 +694,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv, api_ver: usize) 
                 let mut targets = vec![];
 
                 for _ in 0..=delegation_count {
-                    let id_type = GenericIdentityType::random(rng);
+                    let id_type = GenericIdentityType::random_incl_canister(&canister_id, rng);
                     identities.push(GenericIdentity::new(id_type, rng));
                     if include_mgmt_canister_id {
                         targets.push(random_canister_ids_including(
@@ -645,7 +780,7 @@ pub fn requests_with_invalid_expiry(env: TestEnv) {
 
             // Single identity for sender and signer, no delegations
             let rng = &mut reproducible_rng();
-            let id_type = GenericIdentityType::random(rng);
+            let id_type = GenericIdentityType::random_incl_canister(&canister, rng);
             let id = GenericIdentity::new(id_type, rng);
 
             for expiry in [0_u64, u64::MAX] {
@@ -673,6 +808,151 @@ pub fn requests_with_invalid_expiry(env: TestEnv) {
                         "read_state should be rejected for expiry={expiry} and api_ver={api_ver}"
                     );
                 }
+            }
+        }
+    });
+}
+
+pub fn requests_with_canister_signature(env: TestEnv) {
+    let logger = env.logger();
+    let node = env.get_first_healthy_node_snapshot();
+    let agent = node.build_default_agent();
+    let rng = &mut reproducible_rng();
+    block_on({
+        async move {
+            let node_url = node.get_public_url();
+            debug!(logger, "Selected replica"; "url" => format!("{}", node_url));
+
+            let c1 =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+            debug!(
+                logger,
+                "Installed Universal Canister 1";
+                "canister_id" => format!("{:?}", c1.canister_id())
+            );
+
+            ///////////////////////////////////////////////////////////////////
+            // Empty and non-empty seeds should work
+            for seed in [vec![], random_n_bytes(rng.gen_range(1..=32), rng)] {
+                // Single canister identity for sender and signer, no delegations
+                let id = GenericIdentity::new_canister(CanisterSigner::new(&c1, seed.clone()));
+                let mut test_info = TestInformation {
+                    api_ver: 999, // To be set later...
+                    url: node_url.clone(),
+                    canister_id: canister_id_from_principal(&c1.canister_id()),
+                };
+                for api_ver in ALL_QUERY_API_VERSIONS {
+                    test_info.api_ver = *api_ver;
+                    assert_eq!(
+                        perform_query_call_with_delegations(&test_info, &id, &id, &[]).await,
+                        200,
+                        "query should succeed for api_ver={api_ver} and seed={seed:?}"
+                    );
+                }
+                for &api_ver in ALL_UPDATE_API_VERSIONS {
+                    test_info.api_ver = api_ver;
+                    assert_eq!(
+                        perform_update_call_with_delegations(&test_info, &id, &id, &[]).await,
+                        if api_ver == 2 { 202 } else { 200 },
+                        "update should succeed for api_ver={api_ver} and seed={seed:?}"
+                    );
+                }
+                for api_ver in ALL_READ_STATE_API_VERSIONS {
+                    test_info.api_ver = *api_ver;
+                    assert_eq!(
+                        perform_read_state_call_with_delegations(&test_info, &id, &id, &[]).await,
+                        200,
+                        "read_state should succeed for api_ver={api_ver} and seed={seed:?}"
+                    );
+                }
+            }
+
+            ///////////////////////////////////////////////////////////////////
+            // Using wrong seed or canister ID for deriving the sender should fail
+            let c2 =
+                UniversalCanister::new_with_retries(&agent, node.effective_canister_id(), &logger)
+                    .await;
+            debug!(
+                logger,
+                "Installed Universal Canister 2";
+                "canister_id" => format!("{:?}", c2.canister_id())
+            );
+            let seed = b"seed";
+            let id = GenericIdentity::new_canister(CanisterSigner::new(&c1, seed.to_vec()));
+            let wrong_seed = b"wrong_seed";
+            assert_ne!(seed.to_vec(), wrong_seed.to_vec());
+            for sender in [
+                GenericIdentity::new_canister(CanisterSigner::new(&c1, wrong_seed.to_vec())),
+                GenericIdentity::new_canister(CanisterSigner::new(&c2, seed.to_vec())), // wrong canister
+            ] {
+                let mut test_info = TestInformation {
+                    api_ver: 999, // To be set later...
+                    url: node_url.clone(),
+                    canister_id: canister_id_from_principal(&c1.canister_id()),
+                };
+                for api_ver in ALL_QUERY_API_VERSIONS {
+                    test_info.api_ver = *api_ver;
+                    assert_eq!(
+                        perform_query_call_with_delegations(&test_info, &sender, &id, &[]).await,
+                        400,
+                        "query should be rejected for api_ver={api_ver}"
+                    );
+                }
+                for &api_ver in ALL_UPDATE_API_VERSIONS {
+                    test_info.api_ver = api_ver;
+                    assert_eq!(
+                        perform_update_call_with_delegations(&test_info, &sender, &id, &[]).await,
+                        400,
+                        "update should be rejected for api_ver={api_ver}"
+                    );
+                }
+                for api_ver in ALL_READ_STATE_API_VERSIONS {
+                    test_info.api_ver = *api_ver;
+                    assert_eq!(
+                        perform_read_state_call_with_delegations(&test_info, &sender, &id, &[])
+                            .await,
+                        400,
+                        "read_state should be rejected for api_ver={api_ver}"
+                    );
+                }
+            }
+
+            ///////////////////////////////////////////////////////////////////
+            // Requests should fail when the canister signature certificate is
+            // signed by an invalid root key
+            let id = GenericIdentity::new_canister(
+                CanisterSigner::new(&c1, b"seed".to_vec())
+                    .with_random_certificate_signature(rng.r#gen()),
+            );
+            let mut test_info = TestInformation {
+                api_ver: 999, // To be set later...
+                url: node_url.clone(),
+                canister_id: canister_id_from_principal(&c1.canister_id()),
+            };
+            for api_ver in ALL_QUERY_API_VERSIONS {
+                test_info.api_ver = *api_ver;
+                assert_eq!(
+                    perform_query_call_with_delegations(&test_info, &id, &id, &[]).await,
+                    400,
+                    "query should be rejected for api_ver={api_ver} with invalid certificate signature"
+                );
+            }
+            for &api_ver in ALL_UPDATE_API_VERSIONS {
+                test_info.api_ver = api_ver;
+                assert_eq!(
+                    perform_update_call_with_delegations(&test_info, &id, &id, &[]).await,
+                    400,
+                    "update should be rejected for api_ver={api_ver} with invalid certificate signature"
+                );
+            }
+            for api_ver in ALL_READ_STATE_API_VERSIONS {
+                test_info.api_ver = *api_ver;
+                assert_eq!(
+                    perform_read_state_call_with_delegations(&test_info, &id, &id, &[]).await,
+                    400,
+                    "read_state should be rejected for api_ver={api_ver} with invalid certificate signature"
+                );
             }
         }
     });
@@ -806,8 +1086,8 @@ async fn send_request<C: serde::ser::Serialize>(
 
 async fn perform_query_call_with_delegations(
     test: &TestInformation,
-    sender: &GenericIdentity,
-    signer: &GenericIdentity,
+    sender: &GenericIdentity<'_>,
+    signer: &GenericIdentity<'_>,
     delegations: &[SignedDelegation],
 ) -> StatusCode {
     let content = HttpQueryContent::Query {
@@ -838,8 +1118,8 @@ async fn perform_query_call_with_delegations(
 
 async fn perform_update_call_with_delegations(
     test: &TestInformation,
-    sender: &GenericIdentity,
-    signer: &GenericIdentity,
+    sender: &GenericIdentity<'_>,
+    signer: &GenericIdentity<'_>,
     delegations: &[SignedDelegation],
 ) -> StatusCode {
     let content = HttpCallContent::Call {
@@ -940,10 +1220,38 @@ async fn perform_read_state_with_delegations(
     response.status()
 }
 
+async fn perform_read_state_call_with_delegations(
+    test: &TestInformation,
+    sender: &GenericIdentity<'_>,
+    signer: &GenericIdentity<'_>,
+    delegations: &[SignedDelegation],
+) -> StatusCode {
+    let content = HttpReadStateContent::ReadState {
+        read_state: HttpReadState {
+            sender: Blob(sender.principal().as_slice().to_vec()),
+            paths: vec![],
+            ingress_expiry: expiry_time().as_nanos() as u64,
+            nonce: None,
+        },
+    };
+
+    let signature = signer.sign_read_state(&content);
+
+    send_request(
+        test,
+        "read_state",
+        content,
+        sender.public_key_der(),
+        Some(delegations.to_vec()),
+        signature,
+    )
+    .await
+}
+
 async fn perform_query_with_expiry(
     test: &TestInformation,
-    sender: &GenericIdentity,
-    signer: &GenericIdentity,
+    sender: &GenericIdentity<'_>,
+    signer: &GenericIdentity<'_>,
     ingress_expiry: u64,
 ) -> StatusCode {
     let content = HttpQueryContent::Query {
@@ -973,8 +1281,8 @@ async fn perform_query_with_expiry(
 
 async fn perform_update_with_expiry(
     test: &TestInformation,
-    sender: &GenericIdentity,
-    signer: &GenericIdentity,
+    sender: &GenericIdentity<'_>,
+    signer: &GenericIdentity<'_>,
     ingress_expiry: u64,
 ) -> StatusCode {
     let content = HttpCallContent::Call {
@@ -1004,8 +1312,8 @@ async fn perform_update_with_expiry(
 
 async fn perform_read_state_with_expiry(
     test: &TestInformation,
-    sender: &GenericIdentity,
-    signer: &GenericIdentity,
+    sender: &GenericIdentity<'_>,
+    signer: &GenericIdentity<'_>,
     ingress_expiry: u64,
 ) -> StatusCode {
     let content = HttpReadStateContent::ReadState {
@@ -1029,4 +1337,38 @@ async fn perform_read_state_with_expiry(
     )
     .await
     .status()
+}
+
+fn random_n_bytes<R: Rng + CryptoRng>(n: u32, rng: &mut R) -> Vec<u8> {
+    (0..n).map(|_| rng.r#gen::<u8>()).collect()
+}
+
+fn resign_certificate_with_random_signature<R: Rng + CryptoRng>(
+    certificate_cbor: &[u8],
+    rng: &mut R,
+) -> Vec<u8> {
+    use ic_crypto_internal_bls12_381_type::G1Affine;
+    // sanity check for self-describing CBOR tag
+    // 0xd9d9f7 (cf. https://tools.ietf.org/html/rfc7049#section-2.4.5) is the
+    // self-describing CBOR tag required to be present by the interface spec.
+    if certificate_cbor.len() < 3 || certificate_cbor[0..3] != [0xd9, 0xd9, 0xf7] {
+        panic!("certificate CBOR doesn't have a self-describing tag");
+    }
+    let mut certificate: ic_certification::Certificate =
+        serde_cbor::from_slice(certificate_cbor).expect("failed to parse certificate CBOR");
+
+    let previous_signature = certificate.signature.clone();
+    assert_eq!(previous_signature.len(), 48);
+
+    let random_g1 = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
+    certificate.signature = random_g1.serialize().to_vec();
+    assert_eq!(certificate.signature.len(), 48);
+    assert_ne!(certificate.signature, previous_signature);
+
+    // serialize back to self-describing CBOR
+    use serde::Serialize;
+    let mut serializer = serde_cbor::Serializer::new(Vec::new());
+    serializer.self_describe().unwrap();
+    certificate.serialize(&mut serializer).unwrap();
+    serializer.into_inner()
 }
