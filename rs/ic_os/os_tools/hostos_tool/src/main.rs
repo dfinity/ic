@@ -42,7 +42,7 @@ pub enum Commands {
         /// Fails if directory doesn't exist.
         output_path: String,
     },
-    /// Launch the NNS recovery TUI tool for manual node recovery
+    /// Launch the Recovery TUI tool for manual node recovery
     ManualRecovery,
 }
 

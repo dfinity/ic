@@ -3559,7 +3559,6 @@ dependencies = [
  "async-recursion",
  "async-stream",
  "async-trait",
- "atty",
  "axum 0.8.4",
  "axum-extra",
  "axum-server",

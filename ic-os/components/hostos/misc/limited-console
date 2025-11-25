@@ -17,7 +17,7 @@ show_menu() {
     echo "  view-logs               - View service logs (usage: view-logs <service-name>)"
     echo "  config-json             - Show /boot/config/config.json"
     echo "  network-config-settings - Show network settings from config"
-    echo "  manual-recovery         - Manual node recovery (use with caution)"
+    echo "  manual-recovery         - Manual node recovery (ONLY FOR EMERGENCY USE)"
     echo "  rbash-console           - Drop into restricted bash console"
     echo "  clear                   - Clear the console"
     echo "  exit                    - Exit console"
