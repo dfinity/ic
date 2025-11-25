@@ -1055,12 +1055,6 @@ fn test_automated_node_provider_remuneration() {
         reward_mode: reward_mode_3,
     };
 
-    ic_cdk::println!(
-        "Expected automated NP reward 1: {:?}",
-        expected_automated_node_provider_reward_1
-    );
-    ic_cdk::println!("most recent rewards: {:?}", most_recent_rewards.rewards);
-
     assert!(
         most_recent_rewards
             .rewards

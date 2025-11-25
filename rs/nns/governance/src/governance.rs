@@ -7621,11 +7621,6 @@ impl Governance {
         let end_date = DateUtc::from_unix_timestamp_seconds(end_date_timestamp_seconds);
 
         // Maps node providers to their rewards in XDR
-        ic_cdk::println!(
-            "Fetching node provider rewards from {:?} to {:?}",
-            start_date,
-            end_date
-        );
         let (rewards_per_node_provider, algorithm_version) = self
             .get_node_providers_xdr_permyriad_rewards(start_date, end_date)
             .await?;
