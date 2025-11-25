@@ -140,6 +140,12 @@ struct State {
     /// index. Lower values will result in a more responsive UI, but higher costs due to increased
     /// cycle burn for the index, ledger and archive(s).
     retrieve_blocks_from_ledger_interval: Option<Duration>,
+
+    /// The ICRC-107 fee collector. Example values:
+    /// - `None` - legacy fee collector is used.
+    /// - `Some(None)` - 107 fee collector is enabled but fees are burned.
+    /// - `Some(Some(account1))` - 107 fee collector is enabled, `account1` collects the fees.
+    fee_collector_107: Option<Option<Account>>,
 }
 
 impl State {
@@ -161,6 +167,7 @@ impl Default for State {
             fee_collectors: Default::default(),
             last_fee: None,
             retrieve_blocks_from_ledger_interval: None,
+            fee_collector_107: None,
         }
     }
 }
@@ -783,8 +790,11 @@ fn append_block(block_index: BlockIndex64, block: GenericBlock) -> Result<(), Sy
             }
         });
 
+        // change the fee collector if block is a 107 block
+        process_fee_collector_block(&decoded_block);
+
         // add the block to the fee_collector if one is set
-        index_fee_collector(block_index, &decoded_block);
+        index_fee_collector(block_index);
 
         // change the balance of the involved accounts
         process_balance_changes(block_index, &decoded_block);
@@ -828,8 +838,18 @@ fn append_icrc3_blocks(new_blocks: Vec<BlockWithId>) -> Result<(), SyncError> {
     Ok(())
 }
 
-fn index_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) {
-    if let Some(fee_collector) = get_fee_collector(block_index, block) {
+fn process_fee_collector_block(block: &Block<Tokens>) {
+    if let Operation::FeeCollector {
+        fee_collector,
+        caller: _,
+    } = block.transaction.operation
+    {
+        mutate_state(|s| s.fee_collector_107 = Some(fee_collector));
+    }
+}
+
+fn index_fee_collector(block_index: BlockIndex64) {
+    if let Some(fee_collector) = get_fee_collector() {
         mutate_state(|s| {
             s.fee_collectors
                 .entry(fee_collector)
@@ -875,7 +895,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                         ))
                     });
                     mutate_state(|s| s.last_fee = Some(fee));
-                    if let Some(fee_collector) = get_fee_collector(block_index, block) {
+                    if let Some(fee_collector) = get_fee_collector() {
                         credit(block_index, fee_collector, fee);
                     }
                 }
@@ -891,7 +911,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                         ))
                     });
                     mutate_state(|s| s.last_fee = Some(fee));
-                    if let Some(fee_collector) = get_fee_collector(block_index, block) {
+                    if let Some(fee_collector) = get_fee_collector() {
                         credit(block_index, fee_collector, fee);
                     }
                 }
@@ -920,7 +940,7 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                     }),
                 );
                 credit(block_index, to, amount);
-                if let Some(fee_collector) = get_fee_collector(block_index, block) {
+                if let Some(fee_collector) = get_fee_collector() {
                     credit(block_index, fee_collector, fee);
                 }
             }
@@ -954,6 +974,16 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block<Tokens>) {
                 change_balance(spender, |balance| balance);
 
                 debit(block_index, from, fee);
+
+                if let Some(fee_collector_107) = get_fee_collector_107().flatten() {
+                    credit(block_index, fee_collector_107, fee);
+                }
+            }
+            Operation::FeeCollector {
+                fee_collector: _,
+                caller: _,
+            } => {
+                // Does not affect the balance
             }
         },
     );
@@ -983,25 +1013,49 @@ fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) 
     })
 }
 
+/// Get the accounts whose balances are affected by the transaction in a block. Any affected
+/// block is returned at most once - in particular, this applies to self-transfers.
 fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
     match block.transaction.operation {
         Operation::Burn { from, .. } => vec![from],
         Operation::Mint { to, .. } => vec![to],
-        Operation::Transfer { from, to, .. } => vec![from, to],
+        Operation::Transfer { from, to, .. } => {
+            match from == to {
+                // For self-transfers, only return the affected account once.
+                true => vec![from],
+                false => vec![from, to],
+            }
+        }
         Operation::Approve { from, .. } => vec![from],
+        Operation::FeeCollector { .. } => vec![],
     }
 }
 
-fn get_fee_collector(block_index: BlockIndex64, block: &Block<Tokens>) -> Option<Account> {
+fn get_fee_collector() -> Option<Account> {
+    get_fee_collector_107().unwrap_or_else(get_legacy_fee_collector)
+}
+
+fn get_fee_collector_107() -> Option<Option<Account>> {
+    with_state(|s| s.fee_collector_107)
+}
+
+fn get_legacy_fee_collector() -> Option<Account> {
+    let chain_length = with_blocks(|blocks| blocks.len());
+    if chain_length == 0 {
+        return None;
+    }
+    let last_block_index = chain_length - 1;
+    let block = get_decoded_block(last_block_index)
+        .expect("chain_length is positive, should have at least one block");
     if block.fee_collector.is_some() {
         block.fee_collector
     } else if let Some(fee_collector_block_index) = block.fee_collector_block_index {
         let block = get_decoded_block(fee_collector_block_index)
             .unwrap_or_else(||
-                ic_cdk::trap(format!("Block at index {block_index} has fee_collector_block_index {fee_collector_block_index} but there is no block at that index")));
+                ic_cdk::trap(format!("Block at index {last_block_index} has fee_collector_block_index {fee_collector_block_index} but there is no block at that index")));
         if block.fee_collector.is_none() {
             ic_cdk::trap(format!(
-                "Block at index {block_index} has fee_collector_block_index {fee_collector_block_index} but that block has no fee_collector set"
+                "Block at index {last_block_index} has fee_collector_block_index {fee_collector_block_index} but that block has no fee_collector set"
             ))
         } else {
             block.fee_collector

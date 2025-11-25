@@ -29,13 +29,11 @@ impl From<PublicKey> for PublicKeyBytes {
 }
 
 impl PublicKey {
-    /// Deserializes a `PublicKey` from a *trusted* source.
+    /// Deserializes a `PublicKey` with caching
     ///
-    /// # Security Notice
-    /// This uses the "unchecked" G2 deserialization (no subgroup check),
-    /// so should only be used on `PublicKeyBytes` obtained
-    /// from a known, trusted source.
-    pub fn from_trusted_bytes(
+    /// This is useful if it is expected that the same point will
+    /// be seen again, for example a peer's public key
+    pub fn deserialize_cached(
         bytes: &PublicKeyBytes,
     ) -> Result<Self, ThresholdSigPublicKeyBytesConversionError> {
         G2Projective::deserialize_unchecked(&bytes.0)
