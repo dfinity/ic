@@ -279,8 +279,10 @@ HELM_CMD+=(--set icrcConfig.flushCacheShrinkMem="$FLUSH_CACHE_SHRINK_MEM")
 echo "Waiting for Grafana server to be ready..."
 wait_for_ready pod app.kubernetes.io/name=grafana monitoring 300
 
-# Forward Grafana port if not already forwarded
-port_forward monitoring kube-prometheus-grafana 3000:80
+# Forward Grafana port if not already forwarded (skip if external-ports is enabled, as it will be handled later)
+if [[ "$EXTERNAL_PORTS" != true ]]; then
+    port_forward monitoring kube-prometheus-grafana 3000:80
+fi
 
 # Function to check if a service exists and print its URL
 print_service_url() {
@@ -326,6 +328,9 @@ fi
 if [[ "$EXTERNAL_PORTS" == true ]]; then
     echo ""
     echo "Setting up external port forwarding..."
+
+    # Kill any localhost-only Grafana forward on port 3000 (to avoid conflicts)
+    pkill -f "kubectl port-forward.*-n monitoring svc/kube-prometheus-grafana 3000:80.*--context=$MINIKUBE_PROFILE" 2>/dev/null || true
 
     # Forward ICP Rosetta to external port 8080
     if kubectl get -n rosetta-api svc icp-rosetta-latest --context="$MINIKUBE_PROFILE" &>/dev/null; then
