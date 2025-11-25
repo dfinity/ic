@@ -1013,11 +1013,19 @@ fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) 
     })
 }
 
+/// Get the accounts whose balances are affected by the transaction in a block. Any affected
+/// block is returned at most once - in particular, this applies to self-transfers.
 fn get_accounts(block: &Block<Tokens>) -> Vec<Account> {
     match block.transaction.operation {
         Operation::Burn { from, .. } => vec![from],
         Operation::Mint { to, .. } => vec![to],
-        Operation::Transfer { from, to, .. } => vec![from, to],
+        Operation::Transfer { from, to, .. } => {
+            match from == to {
+                // For self-transfers, only return the affected account once.
+                true => vec![from],
+                false => vec![from, to],
+            }
+        }
         Operation::Approve { from, .. } => vec![from],
         Operation::FeeCollector { .. } => vec![],
     }
