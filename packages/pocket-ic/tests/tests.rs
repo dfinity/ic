@@ -3201,7 +3201,7 @@ fn canister_not_found() {
     let (client, url) = frontend_canister(&pic, canister_id_not_found, false, "/index.html");
     let resp = client.get(url).send().unwrap();
 
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
 }
 
 #[test]
