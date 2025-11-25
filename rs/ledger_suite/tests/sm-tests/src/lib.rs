@@ -595,7 +595,7 @@ pub fn check_icrc3_supported_block_types(
     supports_107: bool,
 ) {
     let mut block_types = vec![];
-    for supported_block_type in supported_block_types(&env, canister_id) {
+    for supported_block_type in supported_block_types(env, canister_id) {
         block_types.push(supported_block_type.block_type);
     }
     block_types.sort();
