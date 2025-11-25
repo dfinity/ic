@@ -7,6 +7,7 @@ use errors::{NiDkgConfigValidationError, NiDkgThresholdZeroError};
 use ic_protobuf::types::v1 as pb;
 use receivers::NiDkgReceivers;
 use serde::{Deserialize, Serialize};
+use serde::{Deserializer, de::Error};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::num::TryFromIntError;
@@ -21,7 +22,7 @@ pub mod receivers;
 /// A validated configuration for non-interactive DKG. This configuration can
 /// only exist if all configuration invariants are satisfied. See
 /// `NiDkgConfig::new` for a description of the invariants.
-#[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
+#[derive(Clone, Eq, PartialEq, Hash, Debug, Serialize)]
 pub struct NiDkgConfig {
     pub(crate) dkg_id: NiDkgId,
     max_corrupt_dealers: NumberOfNodes,
@@ -96,6 +97,40 @@ impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
 
         NiDkgConfig::new(data)
             .map_err(|e| format!("Invariant check failed while constructing NiDkgConfig: {e:?}"))
+    }
+}
+
+impl<'de> Deserialize<'de> for NiDkgConfig {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct NiDkgConfigUnchecked {
+            dkg_id: NiDkgId,
+            max_corrupt_dealers: NumberOfNodes,
+            dealers: NiDkgDealers,
+            max_corrupt_receivers: NumberOfNodes,
+            receivers: NiDkgReceivers,
+            threshold: NiDkgThreshold,
+            registry_version: RegistryVersion,
+            resharing_transcript: Option<NiDkgTranscript>,
+        }
+        let unchecked = NiDkgConfigUnchecked::deserialize(deserializer)?;
+
+        let config_data = NiDkgConfigData {
+            dkg_id: unchecked.dkg_id,
+            max_corrupt_dealers: unchecked.max_corrupt_dealers,
+            dealers: unchecked.dealers.get().clone(),
+            max_corrupt_receivers: unchecked.max_corrupt_receivers,
+            receivers: unchecked.receivers.get().clone(),
+            threshold: unchecked.threshold.get(),
+            registry_version: unchecked.registry_version,
+            resharing_transcript: unchecked.resharing_transcript,
+        };
+
+        NiDkgConfig::new(config_data).map_err(|e| {
+            D::Error::custom(format!(
+                "Invariant check failed while constructing NiDkgConfig: {e:?}"
+            ))
+        })
     }
 }
 

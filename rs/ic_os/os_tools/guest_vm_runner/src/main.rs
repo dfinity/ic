@@ -840,16 +840,17 @@ mod tests {
         }
 
         async fn wait_for_console_contains(&self, expected_parts: &[&str]) {
-            'retry: for i in (0..10).rev() {
+            const MAX_ATTEMPTS: u64 = 20;
+            'retry: for attempt in 1..=MAX_ATTEMPTS {
                 let console_content = self.read_console();
                 for part in expected_parts {
                     if !console_content.contains(part) {
-                        if i == 0 {
+                        if attempt == MAX_ATTEMPTS {
                             panic!(
                                 "Console content does not contain '{part}'\nConsole content:\n{console_content}"
                             );
                         }
-                        sleep(Duration::from_millis(50)).await;
+                        sleep(Duration::from_millis(attempt * 50)).await;
                         continue 'retry;
                     };
                 }
