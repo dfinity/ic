@@ -115,7 +115,7 @@ async fn should_replay_events_for_mainnet() {
         .expect("Failed to check invariants");
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 43_366_185_379);
+    assert_eq!(state.get_total_btc_managed(), 40_431_602_885);
 }
 
 #[tokio::test]
@@ -158,7 +158,7 @@ async fn should_not_resubmit_tx_87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8
     let mut state = MAINNET_STATE.clone();
 
     assert_eq!(state.btc_network, Network::Mainnet);
-    assert_eq!(state.get_total_btc_managed(), 43_366_185_379);
+    assert_eq!(state.get_total_btc_managed(), 40_431_602_885);
 
     let txid = "87ebf46e400a39e5ec22b28515056a3ce55187dba9669de8300160ac08f64c30";
 
