@@ -13,7 +13,7 @@ set -e
 #   --local-icrc1-image-tar <path>   Path to local ICRC1 image tar file
 #   --no-icp-latest                  Don't deploy ICP Rosetta latest image
 #   --no-icrc1-latest                Don't deploy ICRC1 Rosetta latest image
-#   --external-ports                 Forward external connections to TCP/8080 (ICP) and TCP/8888 (ICRC) for latest Rosetta instances
+#   --external-ports                 Forward external connections to TCP/80 (Grafana), TCP/8080 (ICP) and TCP/8888 (ICRC) for latest Rosetta instances
 #   --clean                          Clean up Minikube cluster and Helm chart before deploying
 #   --stop                           Stop the Minikube cluster
 #   --help                           Display this help message
@@ -310,11 +310,13 @@ for service in icp-rosetta-local icp-rosetta-latest icrc-rosetta-local icrc-rose
     fi
 done
 
-# Kill any existing external port forwards on 8080 and 8888 if they exist
-if pgrep -f "kubectl port-forward.*--address 0.0.0.0.*8080:3000" &>/dev/null || \
+# Kill any existing external port forwards on 80, 8080 and 8888 if they exist
+if pgrep -f "kubectl port-forward.*--address 0.0.0.0.*80:80" &>/dev/null || \
+   pgrep -f "kubectl port-forward.*--address 0.0.0.0.*8080:3000" &>/dev/null || \
    pgrep -f "kubectl port-forward.*--address 0.0.0.0.*8888:3000" &>/dev/null; then
     echo ""
-    echo "Cleaning up external port forwards (8080, 8888)..."
+    echo "Cleaning up external port forwards (80, 8080, 8888)..."
+    pkill -f "kubectl port-forward.*--address 0.0.0.0.*80:80" 2>/dev/null || true
     pkill -f "kubectl port-forward.*--address 0.0.0.0.*8080:3000" 2>/dev/null || true
     pkill -f "kubectl port-forward.*--address 0.0.0.0.*8888:3000" 2>/dev/null || true
     echo "External port forwards removed."
@@ -338,6 +340,18 @@ if [[ "$EXTERNAL_PORTS" == true ]]; then
         kubectl port-forward --address 0.0.0.0 -n rosetta-api svc/icrc-rosetta-latest 8888:3000 --context="$MINIKUBE_PROFILE" &>/dev/null &
         sleep 1
     fi
+
+    # Forward Grafana to external port 80
+    if kubectl get -n monitoring svc kube-prometheus-grafana --context="$MINIKUBE_PROFILE" &>/dev/null; then
+        echo "Forwarding Grafana to 0.0.0.0:80..."
+        kubectl port-forward --address 0.0.0.0 -n monitoring svc/kube-prometheus-grafana 80:80 --context="$MINIKUBE_PROFILE" &>/dev/null &
+        sleep 1
+    fi
+
+    echo "External ports configured:"
+    echo "  ICP Rosetta:  0.0.0.0:8080"
+    echo "  ICRC Rosetta: 0.0.0.0:8888"
+    echo "  Grafana:      0.0.0.0:80"
 fi
 
 # Print the URLs
@@ -356,6 +370,7 @@ if [[ "$EXTERNAL_PORTS" == true ]]; then
     echo "External access enabled:"
     echo "  ICP Rosetta:  <your-hostname>:8080"
     echo "  ICRC Rosetta: <your-hostname>:8888"
+    echo "  Grafana:      <your-hostname>:80"
 fi
 
 echo "************************************"
