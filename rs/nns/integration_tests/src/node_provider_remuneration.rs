@@ -1,10 +1,8 @@
 use candid::{Decode, Encode};
 use chrono::DateTime;
-use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use ic_base_types::NodeId;
 use ic_canister_client_sender::Sender;
-use ic_management_canister_types_private::NodeMetrics;
-use ic_nervous_system_common::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
+use ic_nervous_system_common::ONE_DAY_SECONDS;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_ID, TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL,
     TEST_USER3_PRINCIPAL, TEST_USER4_PRINCIPAL, TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL,
@@ -18,14 +16,12 @@ use ic_nns_constants::{
 use ic_nns_governance::governance::NODE_PROVIDER_REWARD_PERIOD_SECONDS;
 use ic_nns_governance_api::{
     AddOrRemoveNodeProvider, DateRangeFilter, ExecuteNnsFunction, GovernanceError,
-    ListNodeProviderRewardsRequest, MakeProposalRequest, MonthlyNodeProviderRewards,
-    NetworkEconomics, NnsFunction, NodeProvider, ProposalActionRequest, RewardNodeProvider,
-    RewardNodeProviders,
+    ListNodeProviderRewardsRequest, MakeProposalRequest, NetworkEconomics, NnsFunction,
+    NodeProvider, ProposalActionRequest, RewardNodeProvider, RewardNodeProviders,
     add_or_remove_node_provider::Change,
     manage_neuron_response::Command as CommandResponse,
     reward_node_provider::{RewardMode, RewardToAccount},
 };
-use ic_nns_governance_init::GovernanceCanisterInitPayloadBuilder;
 use ic_nns_test_utils::registry::{TEST_ID, prepare_add_node_payload};
 use ic_nns_test_utils::state_test_helpers::setup_nns_canisters_with_features;
 use ic_nns_test_utils::{
@@ -48,22 +44,16 @@ use ic_protobuf::registry::{
     dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     node_rewards::v2::{NodeRewardRate, NodeRewardRates, UpdateNodeRewardsTableProposalPayload},
 };
-use ic_registry_canister_api::AddNodePayload;
 use ic_state_machine_tests::{PayloadBuilder, StateMachine};
 use ic_types::PrincipalId;
 use ic_types::batch::BlockmakerMetrics;
-use ic_types::time::current_time;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, TOKEN_SUBDIVIDABLE_BY, Tokens};
 use maplit::btreemap;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
 use rewards_calculation::REWARDS_TABLE_DAYS;
 use rewards_calculation::types::NodeMetricsDailyRaw;
-use std::time::SystemTime;
-use std::{
-    collections::BTreeMap,
-    time::{Duration, UNIX_EPOCH},
-};
+use std::{collections::BTreeMap, time::Duration};
 
 struct NodeInfo {
     pub operator_id: PrincipalId,
