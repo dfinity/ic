@@ -772,7 +772,7 @@ prost = "0.13.3"
 prost-build = "0.13.3"
 protobuf = "2.28.0"
 ring = { version = "^0.17.7", features = ["std"] }
-quinn = { version = "0.11.5", default-features = false, features = [
+quinn = { version = "0.11.9", default-features = false, features = [
     "ring",
     "log",
     "runtime-tokio",
