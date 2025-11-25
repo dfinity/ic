@@ -2702,24 +2702,26 @@ impl StateMachine {
             batch_summary,
             requires_full_state_hash,
             blockmaker_metrics,
-            content: BatchContent::Data(BatchMessages {
-                signed_ingress_msgs: payload.ingress_messages,
-                certified_stream_slices: payload.xnet_payload.stream_slices,
-                bitcoin_adapter_responses: payload
-                    .self_validating
-                    .map(|p| p.get().to_vec())
-                    .unwrap_or_default(),
-                query_stats: payload.query_stats,
-            }),
-            randomness: Randomness::from(seed),
-            chain_key_data: ChainKeyData {
-                master_public_keys: self.chain_key_subnet_public_keys.clone(),
-                idkg_pre_signatures: BTreeMap::new(),
-                nidkg_ids: self.ni_dkg_ids.clone(),
+            content: BatchContent::Data {
+                batch_messages: BatchMessages {
+                    signed_ingress_msgs: payload.ingress_messages,
+                    certified_stream_slices: payload.xnet_payload.stream_slices,
+                    bitcoin_adapter_responses: payload
+                        .self_validating
+                        .map(|p| p.get().to_vec())
+                        .unwrap_or_default(),
+                    query_stats: payload.query_stats,
+                },
+                chain_key_data: ChainKeyData {
+                    master_public_keys: self.chain_key_subnet_public_keys.clone(),
+                    idkg_pre_signatures: BTreeMap::new(),
+                    nidkg_ids: self.ni_dkg_ids.clone(),
+                },
+                consensus_responses: payload.consensus_responses,
             },
+            randomness: Randomness::from(seed),
             registry_version: self.registry_client.get_latest_version(),
             time: time_of_next_round,
-            consensus_responses: payload.consensus_responses,
             replica_version: ReplicaVersion::default(),
         };
 

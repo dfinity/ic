@@ -72,9 +72,13 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
 
     let mut seq = Sequence::new();
 
-    let messages = match &provided_batch.content {
-        BatchContent::Data(batch_messages) => batch_messages.clone(),
-        BatchContent::Splitting { .. } => BatchMessages::default(),
+    let (messages, chain_key_data) = match &provided_batch.content {
+        BatchContent::Data {
+            batch_messages,
+            chain_key_data,
+            ..
+        } => (batch_messages.clone(), chain_key_data.clone()),
+        BatchContent::Splitting { .. } => unimplemented!(),
     };
 
     let mut demux = Box::new(MockDemux::new());
@@ -93,7 +97,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .with(
             always(),
             eq(provided_batch.randomness),
-            eq(provided_batch.chain_key_data.clone()),
+            eq(chain_key_data.clone()),
             eq(provided_batch.replica_version.clone()),
             eq(round),
             eq(None),

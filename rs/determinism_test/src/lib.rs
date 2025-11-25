@@ -27,15 +27,17 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
         batch_number: message_routing.expected_batch_height(),
         batch_summary: None,
         requires_full_state_hash: false,
-        content: BatchContent::Data(BatchMessages {
-            signed_ingress_msgs: msgs,
-            ..BatchMessages::default()
-        }),
+        content: BatchContent::Data {
+            batch_messages: BatchMessages {
+                signed_ingress_msgs: msgs,
+                ..BatchMessages::default()
+            },
+            chain_key_data: Default::default(),
+            consensus_responses: vec![],
+        },
         randomness: Randomness::from([0; 32]),
-        chain_key_data: Default::default(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
-        consensus_responses: vec![],
         blockmaker_metrics: BlockmakerMetrics::new_for_test(),
         replica_version: ReplicaVersion::default(),
     }
@@ -46,12 +48,14 @@ fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Bat
         batch_number: message_routing.expected_batch_height(),
         batch_summary: None,
         requires_full_state_hash: true,
-        content: BatchContent::Data(BatchMessages::default()),
+        content: BatchContent::Data {
+            batch_messages: BatchMessages::default(),
+            chain_key_data: Default::default(),
+            consensus_responses: vec![],
+        },
         randomness: Randomness::from([0; 32]),
-        chain_key_data: Default::default(),
         registry_version: RegistryVersion::from(1),
         time: UNIX_EPOCH,
-        consensus_responses: vec![],
         blockmaker_metrics: BlockmakerMetrics::new_for_test(),
         replica_version: ReplicaVersion::default(),
     }

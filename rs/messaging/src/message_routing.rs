@@ -1428,8 +1428,8 @@ impl BatchProcessor for FakeBatchProcessorImpl {
 
         // Get only ingress out of the batch_messages
         let signed_ingress_msgs = match batch.content {
-            BatchContent::Data(batch_messages) => batch_messages.signed_ingress_msgs,
-            BatchContent::Splitting { .. } => vec![],
+            BatchContent::Data { batch_messages, .. } => batch_messages.signed_ingress_msgs,
+            BatchContent::Splitting { .. } => unimplemented!("Subnet splitting is not yet enabled"),
         };
 
         // Treat all ingress messages as already executed.

@@ -279,12 +279,18 @@ fn consensus_produces_expected_batches() {
 
         assert_matches!(
             &batches[0].content,
-            BatchContent::Data(data) if data.signed_ingress_msgs.last() == Some(&ingress0)
+            BatchContent::Data {
+                batch_messages,
+                ..
+            } if batch_messages.signed_ingress_msgs.last() == Some(&ingress0)
         );
 
         assert_matches!(
             &batches[1].content,
-            BatchContent::Data(data) if data.signed_ingress_msgs.last() == Some(&ingress1)
+            BatchContent::Data{
+                batch_messages,
+                ..
+            } if batch_messages.signed_ingress_msgs.last() == Some(&ingress1)
         );
     })
 }

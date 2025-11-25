@@ -16,12 +16,14 @@ impl Default for BatchBuilder {
                 batch_number: Height::from(0),
                 batch_summary: None,
                 requires_full_state_hash: false,
-                content: BatchContent::Data(BatchMessages::default()),
+                content: BatchContent::Data {
+                    batch_messages: BatchMessages::default(),
+                    chain_key_data: Default::default(),
+                    consensus_responses: vec![],
+                },
                 randomness: Randomness::from([0; 32]),
-                chain_key_data: Default::default(),
                 registry_version: RegistryVersion::from(1),
                 time: UNIX_EPOCH,
-                consensus_responses: vec![],
                 blockmaker_metrics: BlockmakerMetrics::new_for_test(),
                 replica_version: ReplicaVersion::default(),
             },
@@ -43,7 +45,11 @@ impl BatchBuilder {
 
     /// Sets the `messages` field.
     pub fn messages(mut self, messages: BatchMessages) -> Self {
-        self.batch.content = BatchContent::Data(messages);
+        self.batch.content = BatchContent::Data {
+            batch_messages: messages,
+            chain_key_data: Default::default(),
+            consensus_responses: vec![],
+        };
         self
     }
 

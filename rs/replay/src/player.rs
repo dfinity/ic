@@ -765,39 +765,37 @@ impl Player {
             }
         };
 
-        let context_time = time;
-        let extra_msgs = extra(self, context_time);
+        let extra_msgs = extra(self, time);
         if extra_msgs.is_empty() {
-            return (context_time, None);
+            return (time, None);
         }
 
-        let extra_ingresses = if !extra_msgs.is_empty() {
-            println!("extra_batch created with new ingress");
-            extra_msgs
-                .iter()
-                .map(|fm| fm.ingress.clone())
-                .collect::<Vec<_>>()
-        } else {
-            vec![]
-        };
+        let extra_ingresses = extra_msgs
+            .iter()
+            .map(|fm| fm.ingress.clone())
+            .collect::<Vec<_>>();
 
         let mut extra_batch = Batch {
             batch_number: message_routing.expected_batch_height(),
             batch_summary: None,
             requires_full_state_hash: false,
-            content: BatchContent::Data(BatchMessages {
-                signed_ingress_msgs: extra_ingresses,
-                ..BatchMessages::default()
-            }),
+            content: BatchContent::Data {
+                batch_messages: BatchMessages {
+                    signed_ingress_msgs: extra_ingresses,
+                    ..BatchMessages::default()
+                },
+                chain_key_data: Default::default(),
+                consensus_responses: Vec::new(),
+            },
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
-            chain_key_data: Default::default(),
             registry_version,
-            time: context_time,
-            consensus_responses: Vec::new(),
+            time,
             blockmaker_metrics: BlockmakerMetrics::new_for_test(),
             replica_version,
         };
+
+        println!("extra_batch created with new ingress");
 
         loop {
             match message_routing.deliver_batch(extra_batch.clone()) {
@@ -823,7 +821,11 @@ impl Player {
                             });
 
                     extra_batch = extra_batch.clone();
-                    extra_batch.content = BatchContent::Data(BatchMessages::default());
+                    extra_batch.content = BatchContent::Data {
+                        batch_messages: BatchMessages::default(),
+                        chain_key_data: Default::default(),
+                        consensus_responses: Vec::new(),
+                    };
                     extra_batch.batch_number = message_routing.expected_batch_height();
                     extra_batch.time += Duration::from_nanos(1);
 
@@ -840,7 +842,7 @@ impl Player {
                 }
             }
         }
-        (context_time, Some((extra_batch.batch_number, extra_msgs)))
+        (time, Some((extra_batch.batch_number, extra_msgs)))
     }
 
     fn certify_state_with_dummy_certification(&self) {
