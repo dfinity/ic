@@ -25,7 +25,7 @@ use ic_cdk::{
     api::{canister_self, time},
     println,
 };
-use ic_limits::MAX_INGRESS_TTL;
+use ic_limits::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
 use std::{convert::Infallible, future::Future, iter::zip};
 
 /// Given a lock tag, a filter predicate on `RequestState` and a processor function,
@@ -296,12 +296,18 @@ pub async fn process_source_deleted(
         println!("Error: list_by SourceDeleted returned bad variant");
         return ProcessingResult::NoProgress;
     };
-    // We must wait for at least `MAX_INGRESS_TTL` and also additionally account
-    // for a clock drift between the source and target subnet
+    // The protocol ensures the following:
+    // "The ingress expiry of an ingress message that is actually executed
+    // is never more than `MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR` into the future
+    // w.r.t. the subnet time that executed the ingress message.
+    // Hence, we must wait for at least `MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR`
+    // and also additionally account for a clock drift between the source and target subnet
     // that we bound by 30 seconds.
-    let max_clock_drift_nanos = 30 * 1_000_000_000;
+    let max_subnet_clock_drift_nanos = 30 * 1_000_000_000;
     if time().saturating_sub(stopped_since)
-        < MAX_INGRESS_TTL.as_nanos() as u64 + max_clock_drift_nanos
+        < MAX_INGRESS_TTL.as_nanos() as u64
+            + PERMITTED_DRIFT_AT_VALIDATOR.as_nanos() as u64
+            + max_subnet_clock_drift_nanos
     {
         return ProcessingResult::NoProgress;
     }

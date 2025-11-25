@@ -1215,7 +1215,7 @@ async fn status_correct() {
             status: "SourceDeleted".to_string()
         }
     );
-    pic.advance_time(Duration::from_secs(330)).await;
+    pic.advance_time(Duration::from_secs(360)).await;
     advance(&pic).await;
     let status = get_status(&pic, sender, &args).await;
     assert_eq!(
@@ -1425,7 +1425,7 @@ async fn success_controllers_restored() {
     for _ in 0..10 {
         advance(&pic).await;
     }
-    pic.advance_time(Duration::from_secs(330)).await;
+    pic.advance_time(Duration::from_secs(360)).await;
     for _ in 0..10 {
         advance(&pic).await;
     }
