@@ -21,7 +21,7 @@ const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
 /// Upper bound on how many delta log sizes is retained.
 /// Prevents unbounded growth of `delta_log_sizes`.
-const DELTA_LOG_SIZES_CAP: usize = 100;
+const DELTA_LOG_SIZES_CAP: usize = 10_000;
 
 /// Maximum number of response bytes for a canister http request.
 pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
