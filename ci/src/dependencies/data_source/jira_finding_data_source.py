@@ -62,17 +62,16 @@ JIRA_OWNER_GROUP_BY_TEAM = {
     Team.NODE_TEAM: {"name": "dept-Node"},
     Team.BOUNDARY_NODE_TEAM: {"name": "dept-Boundary Nodes"},
     Team.TRUST_TEAM: {"name": "dept-Trust"},
-    Team.GIX_TEAM: {"name": "dept-GIX"},
+    Team.OISY_TEAM: {"name": "dept-Oisy"},
     Team.SDK_TEAM: {"name": "dept-SDK"},
-    Team.FINANCIAL_INTEGRATIONS_TEAM: {"name": "dept-Financial Integrations"},
-    Team.EXECUTION_TEAM: {"name": "dept-Execution"},
-    Team.NNS_TEAM: {"name": "dept-NNS"},
-    Team.CRYPTO_TEAM: {"name": "dept-Crypto Library"},
+    Team.DEFI_TEAM: {"name": "dept-DeFi"},
+    Team.DSM_TEAM: {"name": "dept-Deterministic State Machine"},
+    Team.GOVERNANCE_TEAM: {"name": "dept-Governance"},
+    Team.CONSENSUS_TEAM: {"name": "dept-Consensus"},
     Team.IDENTITY_TEAM: {"name": "dept-Identity"},
     Team.INTEGRATIONS_TEAM: {"name": "dept-Integrations"},
     Team.PRODUCT_ENABLEMENT_TEAM: {"name": "dept-Product Enablement"},
     Team.UTOPIA_RND_TEAM: {"name": "div-Utopia R&D"},
-    Team.CROSS_CHAIN_TEAM: {"name": "dept-Cross-Chain"},
 }
 JIRA_LABEL_PATCH_VULNDEP_PUBLISHED = "patch_published_vulndep"
 JIRA_LABEL_PATCH_ALLDEP_PUBLISHED = "patch_published_alldep"

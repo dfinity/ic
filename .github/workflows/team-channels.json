@@ -1,10 +1,9 @@
 {
     "boundary-node": "eng-boundary-nodes",
     "Consensus": "eng-consensus-prs",
-    "cross-chain-team": "eng-defi-prs",
     "crypto-team": "eng-crypto-mr",
+    "defi-team": "eng-defi-prs",
     "DRE": "eng-release-bots",
-    "FinInt": "eng-defi-prs",
     "ic-support": "ic-support-notifications",
     "ic-interface-owners": "interface-owners",
     "ic-owners-owners": "owners-owners",
@@ -17,7 +16,7 @@
     "pocket-ic": "pocket-ic",
     "Product Security": "eng-prodsec",
     "research": "team-research",
-    "sdk": "sdk",
+    "sdk": "eng-sdk",
     "team-dsm": "eng-dsm-prs",
     "utopia": "eng-utopia"
 }

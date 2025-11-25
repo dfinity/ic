@@ -357,7 +357,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.4.0",
             ),
             "candid": crate.spec(
-                version = "^0.10.17",
+                version = "^0.10.20",
             ),
             "cargo_metadata": crate.spec(
                 version = "^0.14.2",
@@ -673,6 +673,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "ic-certificate-verification": crate.spec(
                 version = "3.0.3",
+            ),
+            "ic-doge-interface": crate.spec(
+                git = "https://github.com/dfinity/dogecoin-canister",
+                rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f",
             ),
             "ic-gateway": crate.spec(
                 git = "https://github.com/dfinity/ic-gateway",
@@ -1000,7 +1004,8 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^0.2.6",
             ),
             "pem": crate.spec(
-                version = "^1.0.1",
+                version = "^3",
+                features = ["std"],
                 default_features = False,
             ),
             "pin-project-lite": crate.spec(
@@ -1108,6 +1113,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "ratelimit": crate.spec(
                 version = "^0.9.1",
+            ),
+            "ratatui": crate.spec(
+                version = "^0.29",
             ),
             "rayon": crate.spec(
                 version = "^1.10.0",
@@ -1363,15 +1371,11 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^2.6.1",
             ),
             "syn": crate.spec(
-                version = "^1.0.109",
+                version = "^2.0.110",
                 features = [
                     "fold",
                     "full",
                 ],
-            ),
-            "syn2": crate.spec(
-                package = "syn",
-                version = "^2.0.101",
             ),
             "syscalls": crate.spec(
                 version = "^0.6.18",
@@ -1405,6 +1409,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             ),
             "textplots": crate.spec(
                 version = "^0.8",
+            ),
+            "tui-textarea": crate.spec(
+                version = "^0.7",
             ),
             "thiserror": crate.spec(
                 version = "^2.0.3",

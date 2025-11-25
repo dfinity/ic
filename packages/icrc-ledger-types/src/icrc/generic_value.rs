@@ -334,6 +334,21 @@ impl From<Account> for Value {
     }
 }
 
+impl TryFrom<Value> for Principal {
+    type Error = String;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        Principal::try_from_slice(value.as_blob()?.as_slice())
+            .map_err(|err| format!("Unable to decode the principal, error {err}"))
+    }
+}
+
+impl From<Principal> for Value {
+    fn from(principal: Principal) -> Self {
+        Self::blob(principal.as_slice())
+    }
+}
+
 impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

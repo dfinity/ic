@@ -1,7 +1,7 @@
 //! This module contains types and internal methods.
 //!
 //!
-use candid::{CandidType, Principal};
+use candid::{CandidType, Principal, Reserved};
 use ic_cdk_timers::set_timer_interval;
 use ic_stable_structures::{Storable, storable::Bound};
 use serde::{Deserialize, Serialize};
@@ -43,8 +43,8 @@ const CYCLES_COST_PER_MIGRATION: u64 = 10_000_000_000_000;
 
 #[derive(Clone, Display, Debug, CandidType, Deserialize)]
 pub enum ValidationError {
-    MigrationsDisabled,
-    RateLimited,
+    MigrationsDisabled(Reserved),
+    RateLimited(Reserved),
     #[strum(to_string = "ValidationError::ValidationInProgress {{ canister: {canister} }}")]
     ValidationInProgress {
         canister: Principal,
@@ -57,7 +57,7 @@ pub enum ValidationError {
     CanisterNotFound {
         canister: Principal,
     },
-    SameSubnet,
+    SameSubnet(Reserved),
     #[strum(to_string = "ValidationError::CallerNotController {{ canister: {canister} }}")]
     CallerNotController {
         canister: Principal,
@@ -66,11 +66,11 @@ pub enum ValidationError {
     NotController {
         canister: Principal,
     },
-    SourceNotStopped,
-    SourceNotReady,
-    TargetNotStopped,
-    TargetHasSnapshots,
-    SourceInsufficientCycles,
+    SourceNotStopped(Reserved),
+    SourceNotReady(Reserved),
+    TargetNotStopped(Reserved),
+    TargetHasSnapshots(Reserved),
+    SourceInsufficientCycles(Reserved),
     #[strum(to_string = "ValidationError::CallFailed {{ reason: {reason} }}")]
     CallFailed {
         reason: String,

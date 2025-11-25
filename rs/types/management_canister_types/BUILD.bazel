@@ -39,6 +39,7 @@ permanent_whitelist = [
 # These crates depend on this library directly for historical reasons
 # and must move to the published version of this library on crates.io.
 temporary_whitelist = [
+    "//packages/pocket-ic:__subpackages__",
     "//rs/bitcoin:__subpackages__",
     "//rs/determinism_test:__subpackages__",
     "//rs/ethereum:__subpackages__",

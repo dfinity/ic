@@ -3,11 +3,13 @@ mod tests;
 
 pub mod address;
 pub mod candid_api;
+pub mod fees;
 pub mod lifecycle;
 pub mod updates;
 
 use crate::address::DogecoinAddress;
 use crate::dogecoin_canister::MillikoinuPerByte;
+use crate::fees::DogecoinFeeEstimator;
 use crate::lifecycle::init::Network;
 use async_trait::async_trait;
 use candid::Principal;
@@ -19,11 +21,13 @@ use ic_ckbtc_minter::{
     updates::retrieve_btc::BtcAddressCheckStatus,
 };
 pub use ic_ckbtc_minter::{
-    OutPoint, Page, Txid, Utxo,
+    MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RESUBMISSION_DELAY, OutPoint, Page, Txid,
+    UTXOS_COUNT_THRESHOLD, Utxo,
     address::BitcoinAddress,
     logs::Priority,
     memo::{BurnMemo, MintMemo, encode as memo_encode},
     queries::WithdrawalFee,
+    reimbursement::{InvalidTransactionError, WithdrawalReimbursementReason},
     state::eventlog::{Event, EventType, GetEventsArg},
     state::{ChangeOutput, RetrieveBtcRequest},
     updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
@@ -38,6 +42,12 @@ pub struct DogeCanisterRuntime {}
 
 #[async_trait]
 impl CanisterRuntime for DogeCanisterRuntime {
+    type Estimator = DogecoinFeeEstimator;
+
+    fn fee_estimator(&self, state: &CkBtcMinterState) -> DogecoinFeeEstimator {
+        DogecoinFeeEstimator::from_state(state)
+    }
+
     fn refresh_fee_percentiles_frequency(&self) -> Duration {
         const SIX_MINUTES: Duration = Duration::from_secs(360);
         SIX_MINUTES
@@ -110,6 +120,23 @@ impl CanisterRuntime for DogeCanisterRuntime {
         .map_err(|err| CallError::from_cdk_call_error("dogecoin_send_transaction", err))
     }
 
+    fn block_time(&self, network: ic_ckbtc_minter::Network) -> Duration {
+        match network {
+            ic_ckbtc_minter::Network::Mainnet => {
+                //https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/chainparams.cpp#L90
+                Duration::from_secs(60)
+            }
+            ic_ckbtc_minter::Network::Testnet => {
+                //https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/chainparams.cpp#L250
+                Duration::from_secs(60)
+            }
+            ic_ckbtc_minter::Network::Regtest => {
+                //https://github.com/dogecoin/dogecoin/blob/2c513d0172e8bc86fe9a337693b26f2fdf68a013/src/chainparams.cpp#L394
+                Duration::from_secs(1)
+            }
+        }
+    }
+
     fn validate_config(&self, state: &CkBtcMinterState) {
         if state.check_fee > state.retrieve_btc_min_amount {
             ic_cdk::trap("check_fee cannot be greater than retrieve_btc_min_amount");
@@ -161,6 +188,15 @@ impl CanisterRuntime for DogeCanisterRuntime {
             DogecoinAddress::P2pkh(p2pkh) => BitcoinAddress::P2pkh(p2pkh),
             DogecoinAddress::P2sh(p2sh) => BitcoinAddress::P2sh(p2sh),
         }
+    }
+
+    fn derive_minter_address_str(&self, state: &CkBtcMinterState) -> String {
+        let main_account = Account {
+            owner: ic_cdk::api::canister_self(),
+            subaccount: None,
+        };
+        let minter_address = updates::account_to_p2pkh_address_from_state(state, &main_account);
+        minter_address.display(&Network::from(state.btc_network))
     }
 
     async fn check_address(

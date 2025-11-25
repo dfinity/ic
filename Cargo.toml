@@ -256,7 +256,6 @@ members = [
     "rs/nervous_system/humanize",
     "rs/nervous_system/initial_supply",
     "rs/nervous_system/instruction_stats",
-    "rs/nervous_system/instruction_stats_update_attribute",
     "rs/nervous_system/integration_tests",
     "rs/nervous_system/linear_map",
     "rs/nervous_system/lock",
@@ -388,13 +387,12 @@ members = [
     "rs/rust_canisters/dfn_http_metrics",
     "rs/rust_canisters/dfn_json",
     "rs/rust_canisters/dfn_protobuf",
-    "rs/rust_canisters/downstream_calls_test",
     "rs/rust_canisters/ecdsa",
     "rs/rust_canisters/load_simulator",
     "rs/rust_canisters/memory_test",
+    "rs/rust_canisters/messaging_test",
     "rs/rust_canisters/on_wire",
     "rs/rust_canisters/proxy_canister",
-    "rs/rust_canisters/random_traffic_test",
     "rs/rust_canisters/response_payload_test",
     "rs/rust_canisters/stable_memory_integrity",
     "rs/rust_canisters/stable_reader",
@@ -523,7 +521,6 @@ members = [
     "rs/validator/http_request_test_utils",
     "rs/validator/ingress_message",
     "rs/validator/ingress_message/test_canister",
-    "rs/wasm_transform",
     "rs/xnet/hyper",
     "rs/xnet/payload_builder",
     "rs/xnet/uri",
@@ -610,7 +607,7 @@ build-info = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696
 build-info-build = { git = "https://github.com/dfinity-lab/build-info", rev = "701a696844fba5c87df162fbbc1ccef96f27c9d7", default-features = false }
 bytes = "1.9.0"
 canbench-rs = "0.4.0"
-candid = { version = "0.10.17" }
+candid = { version = "0.10.20" }
 candid_parser = { version = "0.1.2" }
 chrono = { version = "0.4.38", default-features = false, features = [
     "alloc",
@@ -684,6 +681,7 @@ ic-cdk = "0.19.0"
 ic-cdk-timers = "1.0.0"
 ic-certificate-verification = "3"
 ic-certification = "3"
+ic-doge-interface = { git = "https://github.com/dfinity/dogecoin-canister", rev = "74e6dc9a10ba64d2dbad013282c26d74cd49863f" }
 ic-ed25519 = "0.4.0"
 ic-gateway = { git = "https://github.com/dfinity/ic-gateway", rev = "b78562340bd00f05f9c055dcba3ec0f74758c927", default-features = false }
 ic-http-certification = "3.0.3"
@@ -757,7 +755,7 @@ p384 = "0.13"
 pairing = "0.23"
 parking_lot = "0.12.3"
 paste = "1.0.15"
-pem = { version = "^1.0.1", default-features = false }
+pem = { version = "^3", default-features = false, features = ["std"] }
 ping = "0.5.0"
 pkcs8 = "0.10.2"
 pprof = { version = "0.14.0", default-features = false, features = [
@@ -767,6 +765,7 @@ pprof = { version = "0.14.0", default-features = false, features = [
 ] }
 predicates = "3.1.2"
 pretty_assertions = "1.4.0"
+procfs = { version = "^0.9" }
 proc-macro2 = "1.0.89"
 prometheus = { version = "0.13.4", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
@@ -786,6 +785,7 @@ quinn-udp = "0.5.5"
 quote = "1.0.37"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
+ratatui = "0.29"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"
@@ -844,7 +844,7 @@ static_assertions = "1.1.0"
 strum = { version = "0.26.3", features = ["derive"] }
 strum_macros = "0.26.4"
 subtle = "2.6.1"
-syn = { version = "1.0.109", features = ["fold", "full"] }
+syn = { version = "2.0.110", features = ["fold", "full"] }
 sys-mount = "3.0"
 systemd = "0.10"
 tar = "0.4.39"

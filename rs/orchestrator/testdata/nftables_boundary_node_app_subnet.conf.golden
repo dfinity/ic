@@ -106,7 +106,7 @@ ip6 saddr {::ffff:6.6.6.6} ct state { new } tcp dport {1006} accept # global
     icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, echo-request, echo-reply, nd-router-solicit, nd-neighbor-solicit, nd-neighbor-advert } accept
     ct state invalid drop
     ct state { established, related } accept
-    ct state new tcp dport { 53, 80, 443, 8080 } accept
+    ct state new tcp dport { 53, 80, 443, 4460, 8080 } accept
     ct state new udp dport { 53, 123 } accept
   }
 }
