@@ -18,6 +18,9 @@ const MAX_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 /// The default size of a canister log buffer.
 const DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
+/// The maximum allowed size of a canister log record.
+const MAX_ALLOWED_LOG_RECORD_SIZE: usize = 4 * KiB;
+
 /// Upper bound on how many delta log sizes is retained.
 /// Prevents unbounded growth of `delta_log_sizes`.
 const DELTA_LOG_SIZES_CAP: usize = 100;
@@ -47,8 +50,9 @@ pub fn default_log_memory_limit() -> NumBytes {
 
 /// Truncates the content of a log record so that the record fits within the allowed size.
 fn truncate_content(byte_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {
-    let max_content_bytes = byte_capacity.saturating_sub(std::mem::size_of::<CanisterLogRecord>());
-    record.content.truncate(max_content_bytes);
+    let max_record_size = std::cmp::min(byte_capacity, MAX_ALLOWED_LOG_RECORD_SIZE);
+    let max_content_size = max_record_size - std::mem::size_of::<CanisterLogRecord>();
+    record.content.truncate(max_content_size);
     record
 }
 
