@@ -451,7 +451,7 @@ fn test_no_dust_in_change_output() {
             ]
         );
         assert!(
-            change_output.value >= change + BitcoinFeeEstimator::MINTER_ADDRESS_P2PWPKH_DUST_LIMIT
+            change_output.value >= change + BitcoinFeeEstimator::MINTER_ADDRESS_P2WPKH_DUST_LIMIT
         );
     }
 }
@@ -1016,7 +1016,7 @@ proptest! {
         fee_per_vbyte in 2000..10000u64,
     ) {
         const SMALLEST_TX_SIZE_VBYTES: u64 = 140; // one input, two outputs
-        const MIN_MINTER_FEE: u64 = BitcoinFeeEstimator::MINTER_ADDRESS_P2PWPKH_DUST_LIMIT;
+        const MIN_MINTER_FEE: u64 = BitcoinFeeEstimator::MINTER_ADDRESS_P2WPKH_DUST_LIMIT;
 
         let fee_estimator = bitcoin_fee_estimator();
         let amount = max(amount, fee_estimator.fee_based_minimum_withdrawal_amount(fee_per_vbyte));

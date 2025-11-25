@@ -35,7 +35,7 @@ pub struct BitcoinFeeEstimator {
 impl BitcoinFeeEstimator {
     /// The minter's address is of type P2WPKH which means it has a dust limit of 294 sats.
     /// For additional safety, we round that value up.
-    pub const MINTER_ADDRESS_P2PWPKH_DUST_LIMIT: Satoshi = 300;
+    pub const MINTER_ADDRESS_P2WPKH_DUST_LIMIT: Satoshi = 300;
 
     pub fn new(network: Network, retrieve_btc_min_amount: u64, check_fee: u64) -> Self {
         Self {
@@ -100,7 +100,7 @@ impl FeeEstimator for BitcoinFeeEstimator {
             MINTER_FEE_PER_INPUT * num_inputs
                 + MINTER_FEE_PER_OUTPUT * num_outputs
                 + MINTER_FEE_CONSTANT,
-            Self::MINTER_ADDRESS_P2PWPKH_DUST_LIMIT,
+            Self::MINTER_ADDRESS_P2WPKH_DUST_LIMIT,
         )
     }
 
