@@ -2,7 +2,7 @@ use crate::MAX_TIME_IN_QUEUE;
 use crate::events::MinterEventAssert;
 use candid::{Decode, Encode, Principal};
 use canlog::LogEntry;
-use ic_ckdoge_minter::candid_api::WithdrawalFee;
+use ic_ckdoge_minter::candid_api::{EstimateWithdrawalFeeError, WithdrawalFee};
 use ic_ckdoge_minter::{
     EstimateFeeArg, Event, EventType, Priority, Txid, UpdateBalanceArgs, UpdateBalanceError, Utxo,
     UtxoStatus,
@@ -113,7 +113,10 @@ impl MinterCanister {
             .update_call(self.id, sender, "update_balance", Encode!(args).unwrap())
     }
 
-    pub fn estimate_withdrawal_fee(&self, withdrawal_amount: u64) -> WithdrawalFee {
+    pub fn estimate_withdrawal_fee(
+        &self,
+        withdrawal_amount: u64,
+    ) -> Result<WithdrawalFee, EstimateWithdrawalFeeError> {
         let call_result = self
             .env
             .query_call(
@@ -126,7 +129,7 @@ impl MinterCanister {
                 .unwrap(),
             )
             .expect("BUG: failed to call estimate_withdrawal_fee");
-        Decode!(&call_result, WithdrawalFee).unwrap()
+        Decode!(&call_result, Result<WithdrawalFee, EstimateWithdrawalFeeError>).unwrap()
     }
 
     pub fn retrieve_doge_status(&self, ledger_burn_index: u64) -> RetrieveDogeStatus {

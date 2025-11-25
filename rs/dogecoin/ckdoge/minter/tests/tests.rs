@@ -438,10 +438,10 @@ fn should_refresh_fee_percentiles() {
 
     assert_eq!(
         minter.estimate_withdrawal_fee(DOGE),
-        WithdrawalFee {
+        Ok(WithdrawalFee {
             dogecoin_fee: 0,
             minter_fee: 0
-        }
+        })
     );
 }
 

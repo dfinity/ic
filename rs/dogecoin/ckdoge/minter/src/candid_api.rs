@@ -105,3 +105,17 @@ pub struct WithdrawalFee {
     pub minter_fee: u64,
     pub dogecoin_fee: u64,
 }
+
+#[derive(Copy, Clone, Eq, PartialEq, Debug, CandidType, Serialize, Deserialize)]
+pub enum EstimateWithdrawalFeeError {
+    /// The given withdrawal amount is too low to pay for the minter and transaction fee.
+    AmountTooLow {
+        /// The current minimum withdrawal amount.
+        /// Its value may vary depending on the current transaction fees.
+        min_amount: u64,
+    },
+    /// The current withdrawal amount is too high so that either the minter does not have enough
+    /// funds to satisfy that request; or, it would use too many UTXOs so that the transaction may be
+    /// non-standard.
+    AmountTooHigh,
+}
