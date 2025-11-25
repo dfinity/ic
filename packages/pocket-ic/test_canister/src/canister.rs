@@ -390,7 +390,6 @@ async fn call_with_large_blob(canister: Principal, blob_len: usize) -> usize {
         .await
         .unwrap()
         .0
-        .1
 }
 
 #[derive(CandidType, Deserialize)]

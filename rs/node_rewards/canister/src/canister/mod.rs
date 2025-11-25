@@ -27,7 +27,6 @@ use ic_registry_node_provider_rewards::{RewardsPerNodeProvider, calculate_reward
 use ic_stable_structures::StableCell;
 use ic_types::{RegistryVersion, Time};
 use rewards_calculation::AlgorithmVersion;
-use itertools::Itertools;
 use rewards_calculation::performance_based_algorithm::results::RewardsCalculatorResults;
 use rewards_calculation::performance_based_algorithm::v1::RewardsCalculationV1;
 use rewards_calculation::types::{NodeMetricsDailyRaw, RewardableNode};
@@ -137,17 +136,9 @@ impl NodeRewardsCanister {
         from_date: NaiveDate,
         to_date: NaiveDate,
     ) -> Result<(), String> {
-        let version = self.get_registry_client().get_latest_version();
-        let metrics = self
-            .metrics_manager
-            .last_timestamp_per_subnet
-            .borrow()
-            .iter()
-            .collect_vec();
-        let last_day_synced = self.get_last_day_synced().ok_or(format!(
-            "Metrics and registry are not synced up last reg: {} last metrics {:?} ",
-            version, metrics
-        ))?;
+        let last_day_synced = self
+            .get_last_day_synced()
+            .ok_or("Metrics and registry are not synced up")?;
 
         if last_day_synced < to_date {
             return Err("Metrics and registry are not synced up to to_date".to_string());

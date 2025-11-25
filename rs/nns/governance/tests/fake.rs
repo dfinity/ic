@@ -47,6 +47,7 @@ use ic_nns_governance::governance::tla::{
     self, Destination, TLA_INSTRUMENTATION_STATE, ToTla, account_to_tla, tla_function,
 };
 use ic_nns_governance::{tla_log_request, tla_log_response};
+use ic_node_rewards_canister_api::RewardsCalculationAlgorithmVersion;
 use ic_node_rewards_canister_api::monthly_rewards::GetNodeProvidersMonthlyXdrRewardsResponse;
 use ic_node_rewards_canister_api::providers_rewards::{
     GetNodeProvidersRewardsResponse, NodeProvidersRewards,
@@ -621,6 +622,7 @@ impl Environment for FakeDriver {
                 rewards_xdr_permyriad: btreemap! {
                     PrincipalId::new_user_test_id(1).0 => NODE_PROVIDER_REWARD,
                 },
+                algorithm_version: RewardsCalculationAlgorithmVersion::default(),
             });
 
             return Ok(Encode!(&response).unwrap());

@@ -127,7 +127,6 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_stable_structures::{Storable, storable::Bound};
 use ic_types::Time;
-use ic_types::time::current_time;
 use icp_ledger::{AccountIdentifier, Subaccount, TOKEN_SUBDIVIDABLE_BY, Tokens};
 use itertools::Itertools;
 use maplit::hashmap;
@@ -267,7 +266,7 @@ pub(crate) const LOG_PREFIX: &str = "[Governance] ";
 
 /// The number of seconds between automated Node Provider reward events
 /// Currently 1/12 of a year: 2629800 = 86400 * 365.25 / 12
-const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
+pub const NODE_PROVIDER_REWARD_PERIOD_SECONDS: u64 = 2629800;
 
 const VALID_MATURITY_MODULATION_BASIS_POINTS_RANGE: RangeInclusive<i32> = -500..=500;
 
@@ -4234,9 +4233,7 @@ impl Governance {
         }
 
         let monthly_node_provider_rewards = if are_performance_based_rewards_enabled() {
-            let res = self.get_node_providers_rewards().await;
-            ic_cdk::println!("result automatic distribution: {:?}", res);
-            res?
+            self.get_node_providers_rewards().await?
         } else {
             self.get_monthly_node_provider_rewards().await?
         };

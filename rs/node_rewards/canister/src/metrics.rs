@@ -5,7 +5,7 @@ use crate::pb::v1::{SubnetIdKey, SubnetMetricsKey, SubnetMetricsValue};
 use async_trait::async_trait;
 use candid::Principal;
 use chrono::{DateTime, NaiveDate};
-use ic_base_types::{NodeId, PrincipalId, SubnetId};
+use ic_base_types::{NodeId, SubnetId};
 use ic_cdk::api::call::CallResult;
 use ic_management_canister_types::{NodeMetricsHistoryArgs, NodeMetricsHistoryRecord};
 use ic_stable_structures::StableBTreeMap;
@@ -121,25 +121,11 @@ where
                     if subnet_update.is_empty() {
                         ic_cdk::println!("No updates for subnet {}", subnet_id);
                     } else {
-                        let node_list = subnet_update
-                            .iter()
-                            .flat_map(|metrics| &metrics.node_metrics)
-                            .map(|m| NodeId::from(PrincipalId::from(m.node_id)))
-                            .collect_vec();
                         // Update the last timestamp for this subnet.
                         let last_timestamp = subnet_update
                             .last()
                             .map(|metrics| metrics.timestamp_nanos)
                             .expect("Not empty");
-                        let date =
-                            DateTime::from_timestamp_nanos(last_timestamp as i64).date_naive();
-                        ic_cdk::println!(
-                            "Last metrics for subnet {}: {:?} timestamp: {}",
-                            subnet_id,
-                            node_list,
-                            date
-                        );
-
                         self.last_timestamp_per_subnet
                             .borrow_mut()
                             .insert(subnet_id.into(), last_timestamp);
@@ -162,6 +148,14 @@ where
                                 },
                             );
                         }
+
+                        let date =
+                            DateTime::from_timestamp_nanos(last_timestamp as i64).date_naive();
+                        ic_cdk::println!(
+                            "Successfully updated subnet {} metrics for date: {}",
+                            subnet_id,
+                            date
+                        );
                     }
                 }
                 Err((_, e)) => {

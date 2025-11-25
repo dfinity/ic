@@ -127,6 +127,7 @@ DEV_DEPENDENCIES = [
     "//rs/node_rewards/rewards_calculation",
     "//rs/test_utilities/metrics",
     "//rs/types/types_test_utils",
+    "@crate_index//:chrono_canisters",
     "@crate_index//:ic-cbor",
     "@crate_index//:ic-certificate-verification",
     "@crate_index//:ic-certification",

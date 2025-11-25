@@ -11953,6 +11953,7 @@ dependencies = [
  "bytes",
  "candid",
  "canister-test",
+ "chrono",
  "crossbeam-channel",
  "cycles-minting-canister",
  "dfn_candid",
