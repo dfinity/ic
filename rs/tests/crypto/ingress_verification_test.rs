@@ -694,7 +694,7 @@ pub fn requests_to_mgmt_canister_with_delegations(env: TestEnv, api_ver: usize) 
                 let mut targets = vec![];
 
                 for _ in 0..=delegation_count {
-                    let id_type = GenericIdentityType::random_incl_canister(&canister_id, rng);
+                    let id_type = GenericIdentityType::random_incl_canister(&canister, rng);
                     identities.push(GenericIdentity::new(id_type, rng));
                     if include_mgmt_canister_id {
                         targets.push(random_canister_ids_including(
@@ -1046,7 +1046,7 @@ fn random_canister_ids_including<R: Rng + CryptoRng>(
     result
 }
 
-fn sign_delegation(delegation: Delegation, identity: &GenericIdentity) -> SignedDelegation {
+fn sign_delegation(delegation: Delegation, identity: &GenericIdentity<'_>) -> SignedDelegation {
     use ic_types::crypto::Signable;
     let signature = identity.sign_bytes(&delegation.as_signed_bytes());
     SignedDelegation::new(delegation, signature)
@@ -1149,8 +1149,8 @@ async fn perform_update_call_with_delegations(
 
 async fn perform_read_state_with_delegations(
     test: &TestInformation,
-    sender: &GenericIdentity,
-    signer: &GenericIdentity,
+    sender: &GenericIdentity<'_>,
+    signer: &GenericIdentity<'_>,
     delegations: &[SignedDelegation],
 ) -> StatusCode {
     /*
@@ -1246,6 +1246,7 @@ async fn perform_read_state_call_with_delegations(
         signature,
     )
     .await
+    .status()
 }
 
 async fn perform_query_with_expiry(
