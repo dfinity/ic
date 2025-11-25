@@ -132,6 +132,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_mint_reevaluated_ignored_utxo() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
@@ -268,6 +269,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_not_evaluate_mint_unknown_utxo() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
