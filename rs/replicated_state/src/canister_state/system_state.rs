@@ -39,7 +39,7 @@ use ic_types::nominal_cycles::NominalCycles;
 use ic_types::time::CoarseTime;
 use ic_types::{
     CanisterId, CanisterLog, CanisterTimer, Cycles, MemoryAllocation, NumBytes, NumInstructions,
-    PrincipalId, Time, default_log_memory_limit,
+    PrincipalId, Time, default_total_log_memory_limit,
 };
 use ic_validate_eq::ValidateEq;
 use ic_validate_eq_derive::ValidateEq;
@@ -503,6 +503,7 @@ impl SystemState {
         wasm_chunk_store: WasmChunkStore,
         log_memory_store: LogMemoryStore,
     ) -> Self {
+        let log_memory_limit = default_total_log_memory_limit();
         Self {
             canister_id,
             controllers: btreeset! {controller},
@@ -524,8 +525,8 @@ impl SystemState {
             canister_history: CanisterHistory::default(),
             wasm_chunk_store,
             log_visibility: Default::default(),
-            log_memory_limit: default_log_memory_limit(),
-            canister_log: Default::default(),
+            log_memory_limit,
+            canister_log: CanisterLog::default_with_byte_capacity(log_memory_limit.get() as usize),
             log_memory_store,
             wasm_memory_limit: None,
             next_snapshot_id: 0,
@@ -2206,6 +2207,7 @@ pub mod testing {
         //
         // DO NOT MODIFY WITHOUT READING DOC COMMENT!
         //
+        let log_memory_limit = default_total_log_memory_limit();
         let _system_state = SystemState {
             controllers: Default::default(),
             canister_id: 0.into(),
@@ -2226,8 +2228,8 @@ pub mod testing {
             canister_history: Default::default(),
             wasm_chunk_store: WasmChunkStore::new_for_testing(),
             log_visibility: Default::default(),
-            log_memory_limit: default_log_memory_limit(),
-            canister_log: Default::default(),
+            log_memory_limit,
+            canister_log: CanisterLog::default_with_byte_capacity(log_memory_limit.get() as usize),
             log_memory_store: LogMemoryStore::new_for_testing(),
             wasm_memory_limit: Default::default(),
             next_snapshot_id: Default::default(),

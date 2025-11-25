@@ -117,7 +117,7 @@ impl LogMemoryStore {
 
     pub fn append_delta_log(&mut self, delta_log: &mut CanisterLog) {
         // Record the size of the appended delta log for metrics.
-        self.push_delta_log_size(delta_log.used_space());
+        self.push_delta_log_size(delta_log.bytes_used());
 
         let mut ring_buffer = self.load_ring_buffer();
         ring_buffer.append_log(

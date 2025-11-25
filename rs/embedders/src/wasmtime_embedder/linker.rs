@@ -302,8 +302,8 @@ pub fn syscalls<
         caller: &mut Caller<'_, StoreData>,
         message_num_bytes: usize,
     ) -> Result<usize, anyhow::Error> {
-        let capacity = with_system_api(caller, |s| Ok(s.canister_log().capacity()))?;
-        let remaining_space = with_system_api(caller, |s| Ok(s.canister_log().remaining_space()))?;
+        let capacity = with_system_api(caller, |s| Ok(s.canister_log().byte_capacity()))?;
+        let remaining_space = with_system_api(caller, |s| Ok(s.canister_log().remaining_bytes()))?;
         let allocated_num_bytes = message_num_bytes.min(capacity);
         let transmitted_num_bytes = message_num_bytes.min(remaining_space);
         // LINT.IfChange

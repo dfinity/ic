@@ -6,7 +6,7 @@ use ic_protobuf::{
         canister_state_bits::v1 as pb_canister_state_bits,
     },
 };
-use ic_types::default_log_memory_limit;
+use ic_types::default_total_log_memory_limit;
 
 impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
     fn from(item: CanisterStateBits) -> Self {
@@ -128,6 +128,10 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
 
         let task_queue = TaskQueue::try_from(tasks)?;
 
+        // TODO(EXC-2118): remove this temporary code of setting the log memory limit to default value,
+        // read properly from `NumBytes::from(value.log_memory_limit)`.
+        let log_memory_limit = default_total_log_memory_limit();
+
         Ok(Self {
             controllers,
             last_full_execution_round: value.last_full_execution_round.into(),
@@ -193,9 +197,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                 "CanisterStateBits::log_visibility_v2",
             )
             .unwrap_or_default(),
-            // TODO(EXC-2118): remove this temporary code of setting the log memory limit to default value,
-            // read properly from `NumBytes::from(value.log_memory_limit)`.
-            log_memory_limit: default_log_memory_limit(),
+            log_memory_limit,
             canister_log: CanisterLog::new(
                 value.next_canister_log_record_idx,
                 value
@@ -203,6 +205,7 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                     .into_iter()
                     .map(|record| record.into())
                     .collect(),
+                log_memory_limit.get() as usize,
             ),
             wasm_memory_limit: value.wasm_memory_limit.map(NumBytes::from),
             next_snapshot_id: value.next_snapshot_id,
