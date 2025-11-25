@@ -153,15 +153,12 @@ fn test_list_node_provider_rewards() {
         wait_for_nrc_metrics_sync(&state_machine);
     }
 
-    let mut rewards_days = 30;
+    let now_seconds = state_machine.get_time().as_secs_since_unix_epoch();
 
-    let seconds_since_day_start =
-        state_machine.get_time().as_secs_since_unix_epoch() % ONE_DAY_SECONDS;
+    let start_timestamp_1 = now_seconds - NODE_PROVIDER_REWARD_PERIOD_SECONDS;
+    let end_timestamp_1 = now_seconds;
+    let rewards_days = calculate_expected_rewards_days(start_timestamp_1, end_timestamp_1);
 
-    // If we are before the decimal point in REWARDS_TABLE_DAYS, rewarding period is of 31 days
-    if (seconds_since_day_start as f64) < REWARDS_TABLE_DAYS % 30.0 * 24.0 * 3600.0 {
-        rewards_days += 1;
-    };
     // Call nns_get_node_provider_rewards assert the value is as expected
     let monthly_node_provider_rewards_result: Result<RewardNodeProviders, GovernanceError> =
         nns_get_node_provider_rewards(&state_machine);
