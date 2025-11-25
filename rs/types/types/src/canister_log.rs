@@ -19,9 +19,6 @@ const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 /// The maximum size of a delta (per message) canister log buffer.
 const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
-/// The maximum allowed size of a canister log record.
-const MAX_ALLOWED_LOG_RECORD_SIZE: usize = 4 * KiB;
-
 /// Upper bound on how many delta log sizes is retained.
 /// Prevents unbounded growth of `delta_log_sizes`.
 const DELTA_LOG_SIZES_CAP: usize = 100;
@@ -36,7 +33,6 @@ const _: () = assert!(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_ME
 const _: () = assert!(MIN_AGGREGATE_LOG_MEMORY_LIMIT <= MAX_DELTA_LOG_MEMORY_LIMIT);
 const _: () = assert!(MAX_DELTA_LOG_MEMORY_LIMIT <= MAX_AGGREGATE_LOG_MEMORY_LIMIT);
 
-const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MAX_ALLOWED_LOG_RECORD_SIZE);
 const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MIN_AGGREGATE_LOG_MEMORY_LIMIT);
 
 /// Returns the minimum size of an aggregate canister log buffer.
@@ -61,8 +57,7 @@ pub fn max_delta_log_memory_limit() -> NumBytes {
 
 /// Truncates the content of a log record so that the record fits within the allowed size.
 fn truncate_content(byte_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {
-    let max_record_size = std::cmp::min(byte_capacity, MAX_ALLOWED_LOG_RECORD_SIZE);
-    let max_content_size = max_record_size - std::mem::size_of::<CanisterLogRecord>();
+    let max_content_size = byte_capacity - std::mem::size_of::<CanisterLogRecord>();
     record.content.truncate(max_content_size);
     record
 }
