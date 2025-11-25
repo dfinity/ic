@@ -168,6 +168,7 @@ impl CanisterLog {
     /// Creates a new log that is supposed to be used as an aggregate (total) canister log.
     /// Aggregate canister log of this type does not store records efficiently,
     /// so it should be limited in size.
+    /// TODO(EXC-2118): remove this after migration is done.
     pub fn new_aggregate(next_idx: u64, records: Vec<CanisterLogRecord>) -> Self {
         Self::new_inner(next_idx, records, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT)
     }
