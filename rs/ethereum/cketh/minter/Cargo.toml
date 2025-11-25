@@ -24,6 +24,7 @@ futures = { workspace = true }
 hex = { workspace = true }
 hex-literal = "0.4.1"
 ic-canister-log = "0.2.0"
+ic-canister-runtime = { workspace = true }
 ic-cdk = { workspace = true }
 ic-cdk-timers = { workspace = true }
 ic-http-types = { path = "../../../../packages/ic-http-types" }

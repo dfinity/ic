@@ -1,5 +1,5 @@
 {
-  "checksum": "106d1faf23d1a38ad152c57ce75849ee6b98e050439f7b83c9ada624eaeac169",
+  "checksum": "e0d51c312ace5238a625ad644bdd262a7de9c79ee70d70a846fc04e26dfd6c1d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -329,7 +329,7 @@
               "target": "encoding_rs"
             },
             {
-              "id": "flate2 1.1.2",
+              "id": "flate2 1.1.5",
               "target": "flate2"
             },
             {
@@ -458,7 +458,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -537,7 +537,7 @@
               "target": "regex_lite"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -973,7 +973,7 @@
               "target": "regex_lite"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -1072,11 +1072,11 @@
               "target": "actix_router"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -1969,7 +1969,7 @@
               "target": "schemars"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -1977,7 +1977,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -3134,7 +3134,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -3224,15 +3224,15 @@
               "target": "mime_guess"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -3488,7 +3488,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -3557,11 +3557,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -3617,11 +3617,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -3677,11 +3677,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -3733,7 +3733,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -4069,7 +4069,7 @@
               "target": "brotli"
             },
             {
-              "id": "flate2 1.1.2",
+              "id": "flate2 1.1.5",
               "target": "flate2"
             },
             {
@@ -4416,11 +4416,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -4584,11 +4584,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -4685,11 +4685,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -4984,11 +4984,11 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -5199,7 +5199,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -5380,7 +5380,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -5740,7 +5740,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -5814,11 +5814,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -5875,11 +5875,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -6853,7 +6853,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -7080,7 +7080,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -7202,11 +7202,11 @@
               "target": "prettyplease"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -7339,11 +7339,11 @@
               "target": "lazycell"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -7475,11 +7475,11 @@
               "target": "prettyplease"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -7645,11 +7645,11 @@
               "target": "either"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -8107,7 +8107,7 @@
               "target": "secp256k1"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -8255,7 +8255,7 @@
               "target": "secp256k1"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde",
               "alias": "actual_serde"
             }
@@ -8364,7 +8364,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -8480,7 +8480,7 @@
               "alias": "internals"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -8534,7 +8534,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -8600,7 +8600,7 @@
               "alias": "hex"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -8695,11 +8695,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -9260,11 +9260,11 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -10139,11 +10139,11 @@
         "deps": {
           "common": [
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -10238,11 +10238,11 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -10459,7 +10459,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -10593,11 +10593,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -10782,7 +10782,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -11267,11 +11267,11 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -11383,7 +11383,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -11410,17 +11410,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "canbench 0.3.0": {
+    "canbench 0.4.0": {
       "name": "canbench",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/canbench.git",
-          "commitish": {
-            "Rev": "cdb84aee8ce7aa758df786bb4787e4e2b3bb5675"
-          },
-          "strip_prefix": "canbench-bin"
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench/0.4.0/download",
+          "sha256": "83f64957491f613da3541e93a0228fa95bf75e9e4eaaccc1c8848975d98757ec"
         }
       },
       "targets": [
@@ -11457,7 +11454,7 @@
         "deps": {
           "common": [
             {
-              "id": "canbench-rs 0.3.0",
+              "id": "canbench-rs 0.4.0",
               "target": "canbench_rs"
             },
             {
@@ -11465,7 +11462,7 @@
               "target": "candid"
             },
             {
-              "id": "clap 4.5.45",
+              "id": "clap 4.5.53",
               "target": "clap"
             },
             {
@@ -11473,7 +11470,7 @@
               "target": "colored"
             },
             {
-              "id": "flate2 1.1.2",
+              "id": "flate2 1.1.5",
               "target": "flate2"
             },
             {
@@ -11489,7 +11486,7 @@
               "target": "pocket_ic"
             },
             {
-              "id": "reqwest 0.12.23",
+              "id": "reqwest 0.12.24",
               "target": "reqwest"
             },
             {
@@ -11497,11 +11494,11 @@
               "target": "rustc_demangle"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -11513,7 +11510,7 @@
               "target": "sha256"
             },
             {
-              "id": "tempfile 3.20.0",
+              "id": "tempfile 3.23.0",
               "target": "tempfile"
             },
             {
@@ -11528,7 +11525,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.0"
+        "version": "0.4.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11536,17 +11533,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs 0.3.0": {
+    "canbench-rs 0.4.0": {
       "name": "canbench-rs",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/canbench.git",
-          "commitish": {
-            "Rev": "cdb84aee8ce7aa758df786bb4787e4e2b3bb5675"
-          },
-          "strip_prefix": "canbench-rs"
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench-rs/0.4.0/download",
+          "sha256": "0dfe0fee0135b3face2ff259fddc28fff3c28e7acd84ae7746e25972f11230f9"
         }
       },
       "targets": [
@@ -11575,11 +11569,11 @@
               "target": "candid"
             },
             {
-              "id": "ic-cdk 0.19.0-beta.3",
+              "id": "ic-cdk 0.19.0",
               "target": "ic_cdk"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -11589,13 +11583,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "canbench-rs-macros 0.3.0",
+              "id": "canbench-rs-macros 0.4.0",
               "target": "canbench_rs_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.3.0"
+        "version": "0.4.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11603,17 +11597,14 @@
       ],
       "license_file": null
     },
-    "canbench-rs-macros 0.3.0": {
+    "canbench-rs-macros 0.4.0": {
       "name": "canbench-rs-macros",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "package_url": "https://github.com/dfinity/canbench",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/canbench.git",
-          "commitish": {
-            "Rev": "cdb84aee8ce7aa758df786bb4787e4e2b3bb5675"
-          },
-          "strip_prefix": "canbench-rs-macros"
+        "Http": {
+          "url": "https://static.crates.io/crates/canbench-rs-macros/0.4.0/download",
+          "sha256": "237e2e5d914039918eee4bdf141e976ff34cf4130c6760808a047c081710e0a8"
         }
       },
       "targets": [
@@ -11638,11 +11629,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -11653,7 +11644,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.0"
+        "version": "0.4.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -11740,7 +11731,7 @@
               "target": "pretty"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -11844,11 +11835,11 @@
               "target": "lazy_static"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -12040,7 +12031,7 @@
               "target": "regex"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -12104,11 +12095,11 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -12159,7 +12150,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -12221,11 +12212,11 @@
               "target": "cargo_platform"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -12515,7 +12506,7 @@
               "target": "regex_syntax"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -12988,7 +12979,7 @@
               "target": "num_traits"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -13142,7 +13133,7 @@
               "target": "ciborium_ll"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -13596,14 +13587,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "clap 4.5.45": {
+    "clap 4.5.53": {
       "name": "clap",
-      "version": "4.5.45",
+      "version": "4.5.53",
       "package_url": "https://github.com/clap-rs/clap",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/clap/4.5.45/download",
-          "sha256": "1fc0e74a703892159f5ae7d3aac52c8e6c392f5ae5f359c70b5881d60aaac318"
+          "url": "https://static.crates.io/crates/clap/4.5.53/download",
+          "sha256": "c9e340e012a1bf4935f5282ed1436d1489548e8f72308207ea5df0e23d2d03f8"
         }
       },
       "targets": [
@@ -13644,7 +13635,7 @@
         "deps": {
           "common": [
             {
-              "id": "clap_builder 4.5.44",
+              "id": "clap_builder 4.5.53",
               "target": "clap_builder"
             }
           ],
@@ -13654,13 +13645,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "clap_derive 4.5.45",
+              "id": "clap_derive 4.5.49",
               "target": "clap_derive"
             }
           ],
           "selects": {}
         },
-        "version": "4.5.45"
+        "version": "4.5.53"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -13669,14 +13660,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "clap_builder 4.5.44": {
+    "clap_builder 4.5.53": {
       "name": "clap_builder",
-      "version": "4.5.44",
+      "version": "4.5.53",
       "package_url": "https://github.com/clap-rs/clap",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/clap_builder/4.5.44/download",
-          "sha256": "b3e7f4214277f3c7aa526a59dd3fbe306a370daee1f8b7b8c987069cd8e888a8"
+          "url": "https://static.crates.io/crates/clap_builder/4.5.53/download",
+          "sha256": "d76b5d13eaa18c901fd2f7fca939fefe3a0727a953561fefdf3b2922b8569d00"
         }
       },
       "targets": [
@@ -13734,7 +13725,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "4.5.44"
+        "version": "4.5.53"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -13789,11 +13780,11 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -13813,14 +13804,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "clap_derive 4.5.45": {
+    "clap_derive 4.5.49": {
       "name": "clap_derive",
-      "version": "4.5.45",
+      "version": "4.5.49",
       "package_url": "https://github.com/clap-rs/clap",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/clap_derive/4.5.45/download",
-          "sha256": "14cb31bb0a7d536caef2639baa7fad459e15c3144efefa6dbd1c84562c4739f6"
+          "url": "https://static.crates.io/crates/clap_derive/4.5.49/download",
+          "sha256": "2a0b5487afeab2deb2ff4e03a807ad1a03ac532ff5a2cee5d86884440c7f7671"
         }
       },
       "targets": [
@@ -13855,11 +13846,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -13870,7 +13861,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "4.5.45"
+        "version": "4.5.49"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -14120,7 +14111,7 @@
               "target": "reqwest"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -14523,7 +14514,7 @@
               "target": "pretty_assertions"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -14588,11 +14579,11 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -14648,11 +14639,11 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -15810,7 +15801,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -15820,7 +15811,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_derive 1.0.219",
+              "id": "serde_derive 1.0.228",
               "target": "serde_derive"
             }
           ],
@@ -16198,7 +16189,7 @@
               "target": "cranelift_bitset"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -16208,7 +16199,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_derive 1.0.219",
+              "id": "serde_derive 1.0.228",
               "target": "serde_derive"
             }
           ],
@@ -16694,7 +16685,7 @@
               "target": "ciborium"
             },
             {
-              "id": "clap 4.5.45",
+              "id": "clap 4.5.53",
               "target": "clap"
             },
             {
@@ -16738,7 +16729,7 @@
               "target": "regex"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -16764,7 +16755,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_derive 1.0.219",
+              "id": "serde_derive 1.0.228",
               "target": "serde_derive"
             }
           ],
@@ -17756,7 +17747,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -17870,7 +17861,7 @@
               "target": "ryu"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -18228,11 +18219,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -18543,11 +18534,11 @@
               "target": "ident_case"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -18617,11 +18608,11 @@
               "target": "ident_case"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -18680,7 +18671,7 @@
               "target": "darling_core"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -18735,7 +18726,7 @@
               "target": "darling_core"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -19057,11 +19048,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -19608,11 +19599,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -19677,7 +19668,7 @@
               "target": "powerfmt"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -19725,11 +19716,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -19788,11 +19779,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -19843,11 +19834,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -19934,11 +19925,11 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -20037,11 +20028,11 @@
               "target": "retry"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -20067,7 +20058,7 @@
               "target": "devicemapper_sys"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             }
           ],
@@ -20223,7 +20214,7 @@
               "target": "candid"
             },
             {
-              "id": "clap 4.5.45",
+              "id": "clap 4.5.53",
               "target": "clap"
             },
             {
@@ -20239,7 +20230,7 @@
               "target": "dunce"
             },
             {
-              "id": "flate2 1.1.2",
+              "id": "flate2 1.1.5",
               "target": "flate2"
             },
             {
@@ -20283,7 +20274,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "reqwest 0.12.23",
+              "id": "reqwest 0.12.24",
               "target": "reqwest"
             },
             {
@@ -20299,11 +20290,11 @@
               "target": "sec1"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -20323,7 +20314,7 @@
               "target": "tar"
             },
             {
-              "id": "tempfile 3.20.0",
+              "id": "tempfile 3.23.0",
               "target": "tempfile"
             },
             {
@@ -20404,7 +20395,7 @@
               "target": "shell_words"
             },
             {
-              "id": "tempfile 3.20.0",
+              "id": "tempfile 3.23.0",
               "target": "tempfile"
             },
             {
@@ -20809,11 +20800,11 @@
               "target": "cached"
             },
             {
-              "id": "canbench 0.3.0",
+              "id": "canbench 0.4.0",
               "target": "canbench"
             },
             {
-              "id": "canbench-rs 0.3.0",
+              "id": "canbench-rs 0.4.0",
               "target": "canbench_rs"
             },
             {
@@ -20862,7 +20853,7 @@
               "target": "cidr"
             },
             {
-              "id": "clap 4.5.45",
+              "id": "clap 4.5.53",
               "target": "clap"
             },
             {
@@ -20966,11 +20957,11 @@
               "target": "ethnum"
             },
             {
-              "id": "evm_rpc_client 0.2.0",
+              "id": "evm_rpc_client 0.3.0",
               "target": "evm_rpc_client"
             },
             {
-              "id": "evm_rpc_types 3.0.0",
+              "id": "evm_rpc_types 3.1.0",
               "target": "evm_rpc_types"
             },
             {
@@ -20986,7 +20977,7 @@
               "target": "ff"
             },
             {
-              "id": "flate2 1.1.2",
+              "id": "flate2 1.1.5",
               "target": "flate2"
             },
             {
@@ -21106,6 +21097,10 @@
               "target": "ic_canister_log"
             },
             {
+              "id": "ic-canister-runtime 0.1.0",
+              "target": "ic_canister_runtime"
+            },
+            {
               "id": "ic-canister-sig-creation 1.3.0",
               "target": "ic_canister_sig_creation"
             },
@@ -21114,15 +21109,15 @@
               "target": "ic_cbor"
             },
             {
-              "id": "ic-cdk 0.19.0-beta.3",
+              "id": "ic-cdk 0.19.0",
               "target": "ic_cdk"
             },
             {
-              "id": "ic-cdk-executor 2.0.0-beta.1",
+              "id": "ic-cdk-executor 2.0.0",
               "target": "ic_cdk_executor"
             },
             {
-              "id": "ic-cdk-timers 1.0.0-beta.1",
+              "id": "ic-cdk-timers 1.0.0",
               "target": "ic_cdk_timers"
             },
             {
@@ -21154,7 +21149,7 @@
               "target": "ic_identity_hsm"
             },
             {
-              "id": "ic-management-canister-types 0.4.1",
+              "id": "ic-management-canister-types 0.5.0",
               "target": "ic_management_canister_types"
             },
             {
@@ -21195,7 +21190,7 @@
               "target": "ic_verify_bls_signature"
             },
             {
-              "id": "ic-vetkeys 0.5.0",
+              "id": "ic-vetkeys 0.6.0",
               "target": "ic_vetkeys"
             },
             {
@@ -21495,7 +21490,7 @@
               "target": "priority_queue"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
@@ -21548,7 +21543,7 @@
               "target": "quinn_udp"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -21588,7 +21583,7 @@
               "target": "regex_lite"
             },
             {
-              "id": "reqwest 0.12.23",
+              "id": "reqwest 0.12.24",
               "target": "reqwest"
             },
             {
@@ -21688,11 +21683,11 @@
               "target": "secp256k1"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -21841,7 +21836,7 @@
               "target": "tarpc"
             },
             {
-              "id": "tempfile 3.20.0",
+              "id": "tempfile 3.23.0",
               "target": "tempfile"
             },
             {
@@ -21853,7 +21848,7 @@
               "target": "textplots"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -22589,11 +22584,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -22998,7 +22993,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -23327,7 +23322,7 @@
               "target": "rand_core"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -23497,11 +23492,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -24062,11 +24057,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -24122,11 +24117,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -24186,11 +24181,11 @@
               "target": "num_traits"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -24565,11 +24560,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -24682,7 +24677,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -25010,7 +25005,7 @@
               "target": "once_cell"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -25103,7 +25098,7 @@
               "target": "regex"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -25391,7 +25386,7 @@
               "target": "rlp"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -25418,7 +25413,7 @@
           "selects": {
             "cfg(not(target_arch = \"wasm32\"))": [
               {
-                "id": "tempfile 3.20.0",
+                "id": "tempfile 3.23.0",
                 "target": "tempfile"
               }
             ]
@@ -25472,7 +25467,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -25812,17 +25807,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "evm_rpc_client 0.2.0": {
+    "evm_rpc_client 0.3.0": {
       "name": "evm_rpc_client",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "package_url": "https://github.com/dfinity/evm-rpc-canister",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/evm-rpc-canister.git",
-          "commitish": {
-            "Rev": "67bfb7e3831e29ebc636791f33f75495997815c0"
-          },
-          "strip_prefix": "evm_rpc_client"
+        "Http": {
+          "url": "https://static.crates.io/crates/evm_rpc_client/0.3.0/download",
+          "sha256": "11d6b4ecbd21ee4f46919e9640838a54517fe36bad263a3778d8117eb284b44e"
         }
       },
       "targets": [
@@ -25851,19 +25843,15 @@
               "target": "candid"
             },
             {
-              "id": "evm_rpc_types 3.0.0",
+              "id": "evm_rpc_types 3.1.0",
               "target": "evm_rpc_types"
             },
             {
-              "id": "ic-cdk 0.19.0-beta.3",
-              "target": "ic_cdk"
+              "id": "ic-canister-runtime 0.1.0",
+              "target": "ic_canister_runtime"
             },
             {
-              "id": "ic-error-types 0.2.0",
-              "target": "ic_error_types"
-            },
-            {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -25871,12 +25859,8 @@
               "target": "serde_json"
             },
             {
-              "id": "strum 0.27.1",
+              "id": "strum 0.27.2",
               "target": "strum"
-            },
-            {
-              "id": "thiserror 2.0.12",
-              "target": "thiserror"
             }
           ],
           "selects": {}
@@ -25891,7 +25875,7 @@
           ],
           "selects": {}
         },
-        "version": "0.2.0"
+        "version": "0.3.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -25899,17 +25883,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "evm_rpc_types 3.0.0": {
+    "evm_rpc_types 3.1.0": {
       "name": "evm_rpc_types",
-      "version": "3.0.0",
+      "version": "3.1.0",
       "package_url": "https://github.com/dfinity/evm-rpc-canister",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/evm-rpc-canister.git",
-          "commitish": {
-            "Rev": "67bfb7e3831e29ebc636791f33f75495997815c0"
-          },
-          "strip_prefix": "evm_rpc_types"
+        "Http": {
+          "url": "https://static.crates.io/crates/evm_rpc_types/3.1.0/download",
+          "sha256": "75922b95f9ccc305d90df9dc4dca69d6935c2d961528b8a4916900de1880135b"
         }
       },
       "targets": [
@@ -25950,7 +25931,7 @@
               "target": "ic_error_types"
             },
             {
-              "id": "ic-management-canister-types 0.4.1",
+              "id": "ic-management-canister-types 0.5.0",
               "target": "ic_management_canister_types"
             },
             {
@@ -25958,15 +25939,15 @@
               "target": "num_bigint"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
-              "id": "strum 0.27.1",
+              "id": "strum 0.27.2",
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -25977,7 +25958,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "3.0.0"
+        "version": "3.1.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -26889,14 +26870,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "flate2 1.1.2": {
+    "flate2 1.1.5": {
       "name": "flate2",
-      "version": "1.1.2",
+      "version": "1.1.5",
       "package_url": "https://github.com/rust-lang/flate2-rs",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/flate2/1.1.2/download",
-          "sha256": "4a3d7db9596fecd151c5f638c0ee5d5bd487b6e0ea232e5dc96d5250f6f94b1d"
+          "url": "https://static.crates.io/crates/flate2/1.1.5/download",
+          "sha256": "bfe33edd8e85a12a67454e37f8c75e730830d83e313556ab9ebf9ee7fbeb3bfb"
         }
       },
       "targets": [
@@ -26941,7 +26922,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.1.2"
+        "version": "1.1.5"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -27239,11 +27220,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -27533,7 +27514,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -28259,11 +28240,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -29487,7 +29468,7 @@
               "target": "similar_asserts"
             },
             {
-              "id": "tempfile 3.20.0",
+              "id": "tempfile 3.23.0",
               "target": "tempfile"
             },
             {
@@ -30063,7 +30044,7 @@
               "target": "pest"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -30191,7 +30172,7 @@
               "target": "allocator_api2"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -30250,7 +30231,7 @@
               "target": "foldhash"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -30905,7 +30886,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -31273,7 +31254,7 @@
               "target": "rustls_pki_types"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -31417,7 +31398,7 @@
               "target": "smallvec"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -31910,11 +31891,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -32466,7 +32447,7 @@
               "target": "humantime"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -33571,7 +33552,7 @@
               "target": "rangemap"
             },
             {
-              "id": "reqwest 0.12.23",
+              "id": "reqwest 0.12.24",
               "target": "reqwest"
             },
             {
@@ -33583,7 +33564,7 @@
               "target": "sec1"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -33607,7 +33588,7 @@
               "target": "stop_token"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -33727,7 +33708,7 @@
               "target": "chacha20poly1305"
             },
             {
-              "id": "clap 4.5.45",
+              "id": "clap 4.5.53",
               "target": "clap"
             },
             {
@@ -33803,7 +33784,7 @@
               "target": "rand"
             },
             {
-              "id": "reqwest 0.12.23",
+              "id": "reqwest 0.12.24",
               "target": "reqwest"
             },
             {
@@ -33827,7 +33808,7 @@
               "target": "scopeguard"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -33839,7 +33820,7 @@
               "target": "sha1"
             },
             {
-              "id": "strum 0.27.1",
+              "id": "strum 0.27.2",
               "target": "strum"
             },
             {
@@ -33847,7 +33828,7 @@
               "target": "systemstat"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -33969,7 +33950,7 @@
               "target": "datasize"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -34020,7 +34001,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -34028,6 +34009,78 @@
         },
         "edition": "2021",
         "version": "0.2.0"
+      },
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE"
+    },
+    "ic-canister-runtime 0.1.0": {
+      "name": "ic-canister-runtime",
+      "version": "0.1.0",
+      "package_url": "https://github.com/dfinity/canhttp",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-canister-runtime/0.1.0/download",
+          "sha256": "01a81a68bc6825ab81142a4e176ee04d0cc73deeed69753603e90e57b3ddcd3f"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "ic_canister_runtime",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "ic_canister_runtime",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "candid 0.10.20",
+              "target": "candid"
+            },
+            {
+              "id": "ic-cdk 0.19.0",
+              "target": "ic_cdk"
+            },
+            {
+              "id": "ic-error-types 0.2.0",
+              "target": "ic_error_types"
+            },
+            {
+              "id": "serde 1.0.228",
+              "target": "serde"
+            },
+            {
+              "id": "thiserror 2.0.17",
+              "target": "thiserror"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [
+            {
+              "id": "async-trait 0.1.89",
+              "target": "async_trait"
+            }
+          ],
+          "selects": {}
+        },
+        "version": "0.1.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34093,7 +34146,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -34109,7 +34162,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             }
           ],
@@ -34187,17 +34240,14 @@
       ],
       "license_file": null
     },
-    "ic-cdk 0.19.0-beta.3": {
+    "ic-cdk 0.19.0": {
       "name": "ic-cdk",
-      "version": "0.19.0-beta.3",
+      "version": "0.19.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/cdk-rs.git",
-          "commitish": {
-            "Rev": "cd516011d96c6e1abd239f706a2d42029737d5cc"
-          },
-          "strip_prefix": "ic-cdk"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk/0.19.0/download",
+          "sha256": "818d6d5416a8f0212e1b132703b0da51e36c55f2b96677e96f2bbe7702e1bd85"
         }
       },
       "targets": [
@@ -34226,7 +34276,7 @@
               "target": "candid"
             },
             {
-              "id": "ic-cdk-executor 2.0.0-beta.1",
+              "id": "ic-cdk-executor 2.0.0",
               "target": "ic_cdk_executor"
             },
             {
@@ -34234,7 +34284,7 @@
               "target": "ic_error_types"
             },
             {
-              "id": "ic-management-canister-types 0.4.1",
+              "id": "ic-management-canister-types 0.5.0",
               "target": "ic_management_canister_types"
             },
             {
@@ -34246,7 +34296,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -34258,7 +34308,7 @@
               "target": "slotmap"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             }
           ],
@@ -34268,13 +34318,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.19.0-beta.3",
+              "id": "ic-cdk-macros 0.19.0",
               "target": "ic_cdk_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.19.0-beta.3"
+        "version": "0.19.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34282,17 +34332,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk-executor 2.0.0-beta.1": {
+    "ic-cdk-executor 2.0.0": {
       "name": "ic-cdk-executor",
-      "version": "2.0.0-beta.1",
+      "version": "2.0.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/cdk-rs.git",
-          "commitish": {
-            "Rev": "cd516011d96c6e1abd239f706a2d42029737d5cc"
-          },
-          "strip_prefix": "ic-cdk-executor"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-executor/2.0.0/download",
+          "sha256": "33716b730ded33690b8a704bff3533fda87d229e58046823647d28816e9bcee7"
         }
       },
       "targets": [
@@ -34329,7 +34376,7 @@
         "deps": {
           "common": [
             {
-              "id": "ic-cdk-executor 2.0.0-beta.1",
+              "id": "ic-cdk-executor 2.0.0",
               "target": "build_script_build"
             },
             {
@@ -34348,7 +34395,7 @@
           "selects": {}
         },
         "edition": "2024",
-        "version": "2.0.0-beta.1"
+        "version": "2.0.0"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -34368,17 +34415,14 @@
       ],
       "license_file": null
     },
-    "ic-cdk-macros 0.19.0-beta.3": {
+    "ic-cdk-macros 0.19.0": {
       "name": "ic-cdk-macros",
-      "version": "0.19.0-beta.3",
+      "version": "0.19.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/cdk-rs.git",
-          "commitish": {
-            "Rev": "cd516011d96c6e1abd239f706a2d42029737d5cc"
-          },
-          "strip_prefix": "ic-cdk-macros"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-macros/0.19.0/download",
+          "sha256": "66dad91a214945cb3605bc9ef6901b87e2ac41e3624284c2cabba49d43aa4f43"
         }
       },
       "targets": [
@@ -34411,11 +34455,11 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -34426,7 +34470,7 @@
           "selects": {}
         },
         "edition": "2024",
-        "version": "0.19.0-beta.3"
+        "version": "0.19.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34434,17 +34478,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-cdk-timers 1.0.0-beta.1": {
+    "ic-cdk-timers 1.0.0": {
       "name": "ic-cdk-timers",
-      "version": "1.0.0-beta.1",
+      "version": "1.0.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/cdk-rs.git",
-          "commitish": {
-            "Rev": "cd516011d96c6e1abd239f706a2d42029737d5cc"
-          },
-          "strip_prefix": "ic-cdk-timers"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-cdk-timers/1.0.0/download",
+          "sha256": "6852b9c1d4a82ff50fc7318599298aee8bfb082bd7e9fe7e5c1420692b2170f7"
         }
       },
       "targets": [
@@ -34452,6 +34493,18 @@
           "Library": {
             "crate_name": "ic_cdk_timers",
             "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -34469,8 +34522,12 @@
         "deps": {
           "common": [
             {
-              "id": "ic-cdk-executor 2.0.0-beta.1",
+              "id": "ic-cdk-executor 2.0.0",
               "target": "ic_cdk_executor"
+            },
+            {
+              "id": "ic-cdk-timers 1.0.0",
+              "target": "build_script_build"
             },
             {
               "id": "ic0 1.0.1",
@@ -34484,7 +34541,28 @@
           "selects": {}
         },
         "edition": "2024",
-        "version": "1.0.0-beta.1"
+        "version": "1.0.0"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ],
+        "link_deps": {
+          "common": [
+            {
+              "id": "ic-cdk-executor 2.0.0",
+              "target": "ic_cdk_executor"
+            }
+          ],
+          "selects": {}
+        },
+        "links": "ic-cdk-timers (canister_global_timer), see https://github.com/dfinity/cdk-rs/blob/links-pin/TROUBLESHOOTING.md"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -34622,7 +34700,7 @@
               "target": "hex"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -34677,7 +34755,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -34732,7 +34810,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -34826,7 +34904,7 @@
               "target": "candid"
             },
             {
-              "id": "clap 4.5.45",
+              "id": "clap 4.5.53",
               "target": "clap"
             },
             {
@@ -34918,7 +34996,7 @@
               "target": "regex"
             },
             {
-              "id": "reqwest 0.12.23",
+              "id": "reqwest 0.12.24",
               "target": "reqwest"
             },
             {
@@ -34926,7 +35004,7 @@
               "target": "rustls"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -34938,11 +35016,11 @@
               "target": "sha2"
             },
             {
-              "id": "strum 0.27.1",
+              "id": "strum 0.27.2",
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -35084,7 +35162,7 @@
               "target": "ic_representation_independent_hash"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -35250,7 +35328,7 @@
               "target": "simple_asn1"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             }
           ],
@@ -35301,7 +35379,7 @@
               "target": "candid"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -35320,17 +35398,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "ic-management-canister-types 0.4.1": {
+    "ic-management-canister-types 0.5.0": {
       "name": "ic-management-canister-types",
-      "version": "0.4.1",
+      "version": "0.5.0",
       "package_url": "https://github.com/dfinity/cdk-rs",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/cdk-rs.git",
-          "commitish": {
-            "Rev": "cd516011d96c6e1abd239f706a2d42029737d5cc"
-          },
-          "strip_prefix": "ic-management-canister-types"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-management-canister-types/0.5.0/download",
+          "sha256": "3149217e24186df3f13dc45eee14cdb3e5cad07d0b2b67bd53555c1c55462957"
         }
       },
       "targets": [
@@ -35359,7 +35434,7 @@
               "target": "candid"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -35370,7 +35445,7 @@
           "selects": {}
         },
         "edition": "2024",
-        "version": "0.4.1"
+        "version": "0.5.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -35507,7 +35582,7 @@
               "target": "candid"
             },
             {
-              "id": "flate2 1.1.2",
+              "id": "flate2 1.1.5",
               "target": "flate2"
             },
             {
@@ -35805,7 +35880,7 @@
               "target": "ciborium"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -35872,7 +35947,7 @@
               "target": "leb128"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -35888,7 +35963,7 @@
               "target": "sha2"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             }
           ],
@@ -35966,11 +36041,11 @@
               "target": "once_cell"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -35986,7 +36061,7 @@
               "target": "strum"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -36171,17 +36246,14 @@
       ],
       "license_file": null
     },
-    "ic-vetkeys 0.5.0": {
+    "ic-vetkeys 0.6.0": {
       "name": "ic-vetkeys",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "package_url": "https://github.com/dfinity/vetkeys",
       "repository": {
-        "Git": {
-          "remote": "https://github.com/dfinity/vetkeys.git",
-          "commitish": {
-            "Rev": "f9e958a34303dc067fdacd3323e9b042b709afbc"
-          },
-          "strip_prefix": "backend/rs/ic_vetkeys"
+        "Http": {
+          "url": "https://static.crates.io/crates/ic-vetkeys/0.6.0/download",
+          "sha256": "fc87ee136e49cc95d9883d2b2c4fedadd6b286b17dd90ce531e7c56ebc36dc6e"
         }
       },
       "targets": [
@@ -36230,7 +36302,7 @@
               "target": "hkdf"
             },
             {
-              "id": "ic-cdk 0.19.0-beta.3",
+              "id": "ic-cdk 0.19.0",
               "target": "ic_cdk"
             },
             {
@@ -36258,7 +36330,7 @@
               "target": "rand_chacha"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -36278,7 +36350,7 @@
               "target": "sha3"
             },
             {
-              "id": "strum 0.27.1",
+              "id": "strum 0.27.2",
               "target": "strum"
             },
             {
@@ -36302,7 +36374,7 @@
           ],
           "selects": {}
         },
-        "version": "0.5.0"
+        "version": "0.6.0"
       },
       "license": "Apache-2.0",
       "license_ids": [
@@ -36371,7 +36443,7 @@
               "target": "candid"
             },
             {
-              "id": "clap 4.5.45",
+              "id": "clap 4.5.53",
               "target": "clap"
             },
             {
@@ -36383,7 +36455,7 @@
               "target": "rustc_demangle"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -36446,7 +36518,7 @@
               "target": "candid"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -36645,7 +36717,7 @@
               "target": "data_encoding"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -36711,7 +36783,7 @@
               "target": "candid"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -37431,11 +37503,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -37943,7 +38015,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -37991,11 +38063,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -38198,7 +38270,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -38483,7 +38555,7 @@
               "target": "ahash"
             },
             {
-              "id": "clap 4.5.45",
+              "id": "clap 4.5.53",
               "target": "clap"
             },
             {
@@ -38792,7 +38864,7 @@
               "target": "rustls_pki_types"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -38862,7 +38934,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -39041,7 +39113,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -39096,7 +39168,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -39342,7 +39414,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -39958,7 +40030,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -40018,7 +40090,7 @@
               "target": "pest"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -40087,7 +40159,7 @@
               "target": "base64"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -41911,7 +41983,7 @@
               "target": "pkg_config"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             }
           ],
@@ -42002,7 +42074,7 @@
               "target": "pkg_config"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             }
           ],
@@ -44230,11 +44302,11 @@
               "target": "fnv"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -44298,11 +44370,11 @@
               "target": "fnv"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -45244,7 +45316,7 @@
               "target": "memchr"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -45309,11 +45381,11 @@
               "target": "memchr"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             }
           ],
@@ -45913,7 +45985,7 @@
               "target": "axum_otel_metrics"
             },
             {
-              "id": "clap 4.5.45",
+              "id": "clap 4.5.53",
               "target": "clap"
             },
             {
@@ -46005,7 +46077,7 @@
               "target": "rustls_pemfile"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -46304,11 +46376,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -46452,6 +46524,8 @@
         ],
         "crate_features": {
           "common": [
+            "simd",
+            "simd-adler32",
             "with-alloc"
           ],
           "selects": {}
@@ -46461,6 +46535,10 @@
             {
               "id": "adler2 2.0.1",
               "target": "adler2"
+            },
+            {
+              "id": "simd-adler32 0.3.7",
+              "target": "simd_adler32"
             }
           ],
           "selects": {}
@@ -46818,11 +46896,11 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -47437,15 +47515,15 @@
               "target": "either"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -47534,7 +47612,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -48562,7 +48640,7 @@
               "target": "num_traits"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -48667,7 +48745,7 @@
               "target": "rand"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -49381,11 +49459,11 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -49629,7 +49707,7 @@
               "target": "crc32fast"
             },
             {
-              "id": "flate2 1.1.2",
+              "id": "flate2 1.1.5",
               "target": "flate2"
             },
             {
@@ -49776,7 +49854,7 @@
               "target": "rasn_pkix"
             },
             {
-              "id": "reqwest 0.12.23",
+              "id": "reqwest 0.12.24",
               "target": "reqwest"
             },
             {
@@ -50276,11 +50354,11 @@
               "target": "bytes"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -50509,11 +50587,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -52480,7 +52558,7 @@
               "target": "byte_slice_cast"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -52550,11 +52628,11 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -53873,11 +53951,11 @@
               "target": "pest_meta"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -54423,11 +54501,11 @@
               "target": "phf_shared"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -54671,11 +54749,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -55371,7 +55449,7 @@
               "target": "candid"
             },
             {
-              "id": "flate2 1.1.2",
+              "id": "flate2 1.1.5",
               "target": "flate2"
             },
             {
@@ -55391,7 +55469,7 @@
               "target": "ic_transport_types"
             },
             {
-              "id": "reqwest 0.12.23",
+              "id": "reqwest 0.12.24",
               "target": "reqwest"
             },
             {
@@ -55399,7 +55477,7 @@
               "target": "schemars"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -55427,11 +55505,11 @@
               "target": "strum"
             },
             {
-              "id": "tempfile 3.20.0",
+              "id": "tempfile 3.23.0",
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -55806,7 +55884,7 @@
               "target": "embedded_io"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -56032,7 +56110,7 @@
               "target": "symbolic_demangle"
             },
             {
-              "id": "tempfile 3.20.0",
+              "id": "tempfile 3.23.0",
               "target": "tempfile"
             },
             {
@@ -56639,7 +56717,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
@@ -56862,7 +56940,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -57054,11 +57132,11 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -57155,11 +57233,11 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             }
           ],
@@ -57227,11 +57305,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             }
           ],
@@ -57286,11 +57364,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -57390,14 +57468,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "proc-macro2 1.0.95": {
+    "proc-macro2 1.0.103": {
       "name": "proc-macro2",
-      "version": "1.0.95",
+      "version": "1.0.103",
       "package_url": "https://github.com/dtolnay/proc-macro2",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/proc-macro2/1.0.95/download",
-          "sha256": "02b3e5e68a3a1a02aad3ec490a98007cbc13c37cbe84a3cd7b8e406d76e7f778"
+          "url": "https://static.crates.io/crates/proc-macro2/1.0.103/download",
+          "sha256": "5ee95bc4ef87b8d5ba32e8b7714ccc834865276eab0aed5c9958d00ec45f49e8"
         }
       },
       "targets": [
@@ -57441,7 +57519,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "build_script_build"
             },
             {
@@ -57452,7 +57530,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.0.95"
+        "version": "1.0.103"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -57512,7 +57590,7 @@
               "target": "byteorder"
             },
             {
-              "id": "flate2 1.1.2",
+              "id": "flate2 1.1.5",
               "target": "flate2"
             },
             {
@@ -57887,7 +57965,7 @@
               "target": "protobuf"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             }
           ],
@@ -58058,7 +58136,7 @@
               "target": "rusty_fork"
             },
             {
-              "id": "tempfile 3.20.0",
+              "id": "tempfile 3.23.0",
               "target": "tempfile"
             },
             {
@@ -58110,11 +58188,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -58352,7 +58430,7 @@
               "target": "syn"
             },
             {
-              "id": "tempfile 3.20.0",
+              "id": "tempfile 3.23.0",
               "target": "tempfile"
             },
             {
@@ -58458,7 +58536,7 @@
               "target": "syn"
             },
             {
-              "id": "tempfile 3.20.0",
+              "id": "tempfile 3.23.0",
               "target": "tempfile"
             }
           ],
@@ -58513,11 +58591,11 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -58576,11 +58654,11 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -59103,11 +59181,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -59293,11 +59371,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -59868,14 +59946,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "quote 1.0.40": {
+    "quote 1.0.42": {
       "name": "quote",
-      "version": "1.0.40",
+      "version": "1.0.42",
       "package_url": "https://github.com/dtolnay/quote",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/quote/1.0.40/download",
-          "sha256": "1885c039570dc00dcb4ff087a89e185fd56bae234ddc7f056a945bf36467248d"
+          "url": "https://static.crates.io/crates/quote/1.0.42/download",
+          "sha256": "a338cc41d27e6cc6dce6cefc13a0729dfbb81c262b1f519331575dd80ef3067f"
         }
       },
       "targets": [
@@ -59883,6 +59961,18 @@
           "Library": {
             "crate_name": "quote",
             "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -59907,14 +59997,29 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
+            },
+            {
+              "id": "quote 1.0.42",
+              "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.40"
+        "version": "1.0.42"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -61417,11 +61522,11 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -62169,7 +62274,7 @@
               "target": "libredox"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             }
           ],
@@ -62972,7 +63077,7 @@
               "target": "http"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -63205,14 +63310,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "reqwest 0.12.23": {
+    "reqwest 0.12.24": {
       "name": "reqwest",
-      "version": "0.12.23",
+      "version": "0.12.24",
       "package_url": "https://github.com/seanmonstar/reqwest",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/reqwest/0.12.23/download",
-          "sha256": "d429f34c8092b2d42c7c93cec323bb4adeb7c67698f70839adec842ec10c7ceb"
+          "url": "https://static.crates.io/crates/reqwest/0.12.24/download",
+          "sha256": "9d0946410b9f7b082a427e4ef5c8ff541a88b357bc6c637c40db3a68ac70a36f"
         }
       },
       "targets": [
@@ -63285,7 +63390,7 @@
               "target": "mime_guess"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -63299,10 +63404,6 @@
             {
               "id": "sync_wrapper 1.0.1",
               "target": "sync_wrapper"
-            },
-            {
-              "id": "tower-service 0.3.3",
-              "target": "tower_service"
             },
             {
               "id": "url 2.5.4",
@@ -63458,6 +63559,10 @@
               {
                 "id": "tower-http 0.6.6",
                 "target": "tower_http"
+              },
+              {
+                "id": "tower-service 0.3.3",
+                "target": "tower_service"
               }
             ],
             "cfg(target_arch = \"wasm32\")": [
@@ -63595,7 +63700,7 @@
           }
         },
         "edition": "2021",
-        "version": "0.12.23"
+        "version": "0.12.24"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -63751,11 +63856,11 @@
               "target": "regex"
             },
             {
-              "id": "tempfile 3.20.0",
+              "id": "tempfile 3.23.0",
               "target": "tempfile"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             }
           ],
@@ -64375,11 +64480,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -64539,11 +64644,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -64896,11 +65001,11 @@
               "target": "glob"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -65238,7 +65343,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -65302,7 +65407,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -65529,7 +65634,7 @@
         "deps": {
           "common": [
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             }
           ],
@@ -66382,7 +66487,7 @@
               "target": "ring"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -66390,7 +66495,7 @@
               "target": "serde_json"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -67186,7 +67291,7 @@
               "target": "quick_error"
             },
             {
-              "id": "tempfile 3.20.0",
+              "id": "tempfile 3.23.0",
               "target": "tempfile"
             },
             {
@@ -67506,11 +67611,11 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -67643,7 +67748,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -67714,11 +67819,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -68317,7 +68422,7 @@
               "target": "secp256k1_sys"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -68388,7 +68493,7 @@
               "target": "secp256k1_sys"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -68921,14 +69026,14 @@
       ],
       "license_file": null
     },
-    "semver 1.0.26": {
+    "semver 1.0.27": {
       "name": "semver",
-      "version": "1.0.26",
+      "version": "1.0.27",
       "package_url": "https://github.com/dtolnay/semver",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/semver/1.0.26/download",
-          "sha256": "56e6fa9c48d24d85fb3de5ad847117517440f6beceb7798af16b4a87d616b8d0"
+          "url": "https://static.crates.io/crates/semver/1.0.27/download",
+          "sha256": "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
         }
       },
       "targets": [
@@ -68936,18 +69041,6 @@
           "Library": {
             "crate_name": "semver",
             "crate_root": "src/lib.rs",
-            "srcs": {
-              "allow_empty": true,
-              "include": [
-                "**/*.rs"
-              ]
-            }
-          }
-        },
-        {
-          "BuildScript": {
-            "crate_name": "build_script_build",
-            "crate_root": "build.rs",
             "srcs": {
               "allow_empty": true,
               "include": [
@@ -68973,29 +69066,15 @@
         "deps": {
           "common": [
             {
-              "id": "semver 1.0.26",
-              "target": "build_script_build"
-            },
-            {
-              "id": "serde 1.0.219",
-              "target": "serde"
+              "id": "serde_core 1.0.228",
+              "target": "serde_core",
+              "alias": "serde"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.26"
-      },
-      "build_script_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "compile_data_glob_excludes": [
-          "**/*.rs"
-        ],
-        "data_glob": [
-          "**"
-        ]
+        "version": "1.0.27"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -69004,14 +69083,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde 1.0.219": {
+    "serde 1.0.228": {
       "name": "serde",
-      "version": "1.0.219",
+      "version": "1.0.228",
       "package_url": "https://github.com/serde-rs/serde",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/serde/1.0.219/download",
-          "sha256": "5f0e2c6ed6606019b4e29e69dbaba95b11854410e5347d525002456dbbb786b6"
+          "url": "https://static.crates.io/crates/serde/1.0.228/download",
+          "sha256": "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"
         }
       },
       "targets": [
@@ -69059,23 +69138,27 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "build_script_build"
+            },
+            {
+              "id": "serde_core 1.0.228",
+              "target": "serde_core"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
+        "edition": "2021",
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_derive 1.0.219",
+              "id": "serde_derive 1.0.228",
               "target": "serde_derive"
             }
           ],
           "selects": {}
         },
-        "version": "1.0.219"
+        "version": "1.0.228"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -69135,7 +69218,7 @@
               "target": "hex"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -69186,7 +69269,7 @@
               "target": "js_sys"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -69244,7 +69327,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -69303,7 +69386,7 @@
               "target": "half"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -69319,14 +69402,105 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "serde_derive 1.0.219": {
-      "name": "serde_derive",
-      "version": "1.0.219",
+    "serde_core 1.0.228": {
+      "name": "serde_core",
+      "version": "1.0.228",
       "package_url": "https://github.com/serde-rs/serde",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/serde_derive/1.0.219/download",
-          "sha256": "5b0276cf7f2c73365f7157c8123c21cd9a50fbbd844757af28ca1f5925fc2a00"
+          "url": "https://static.crates.io/crates/serde_core/1.0.228/download",
+          "sha256": "41d385c7d4ca58e59fc732af25c3983b67ac852c1a25000afe1175de458b67ad"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "serde_core",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "serde_core",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": {
+          "common": [
+            "alloc",
+            "rc",
+            "result",
+            "std"
+          ],
+          "selects": {}
+        },
+        "deps": {
+          "common": [
+            {
+              "id": "serde_core 1.0.228",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "proc_macro_deps": {
+          "common": [],
+          "selects": {
+            "cfg(any())": [
+              {
+                "id": "serde_derive 1.0.228",
+                "target": "serde_derive"
+              }
+            ]
+          }
+        },
+        "version": "1.0.228"
+      },
+      "build_script_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "compile_data_glob_excludes": [
+          "**/*.rs"
+        ],
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT OR Apache-2.0",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "license_file": "LICENSE-APACHE"
+    },
+    "serde_derive 1.0.228": {
+      "name": "serde_derive",
+      "version": "1.0.228",
+      "package_url": "https://github.com/serde-rs/serde",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/serde_derive/1.0.228/download",
+          "sha256": "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
         }
       },
       "targets": [
@@ -69357,11 +69531,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -69371,8 +69545,8 @@
           ],
           "selects": {}
         },
-        "edition": "2015",
-        "version": "1.0.219"
+        "edition": "2021",
+        "version": "1.0.228"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -69413,11 +69587,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -69503,7 +69677,7 @@
               "target": "ryu"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -69570,7 +69744,7 @@
               "target": "itoa"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -69622,11 +69796,11 @@
               "target": "percent_encoding"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             }
           ],
@@ -69678,7 +69852,7 @@
               "target": "regex"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -69726,11 +69900,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -69794,7 +69968,7 @@
               "target": "ryu"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -69850,7 +70024,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -69921,7 +70095,7 @@
               "target": "base64"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -69982,11 +70156,11 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -70042,11 +70216,11 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -70106,7 +70280,7 @@
               "target": "ryu"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -70170,7 +70344,7 @@
               "target": "ryu"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -71197,6 +71371,44 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
+    "simd-adler32 0.3.7": {
+      "name": "simd-adler32",
+      "version": "0.3.7",
+      "package_url": "https://github.com/mcountryman/simd-adler32",
+      "repository": {
+        "Http": {
+          "url": "https://static.crates.io/crates/simd-adler32/0.3.7/download",
+          "sha256": "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "simd_adler32",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "allow_empty": true,
+              "include": [
+                "**/*.rs"
+              ]
+            }
+          }
+        }
+      ],
+      "library_target_name": "simd_adler32",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "0.3.7"
+      },
+      "license": "MIT",
+      "license_ids": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.md"
+    },
     "simdutf8 0.1.5": {
       "name": "simdutf8",
       "version": "0.1.5",
@@ -72081,7 +72293,7 @@
               "target": "erased_serde"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -72423,7 +72635,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -72471,11 +72683,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -72656,11 +72868,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -72722,11 +72934,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -72924,7 +73136,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -73642,7 +73854,7 @@
               "target": "precomputed_hash"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -73698,11 +73910,11 @@
               "target": "phf_shared"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             }
           ],
@@ -73826,11 +74038,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -73891,11 +74103,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -74027,14 +74239,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "strum 0.27.1": {
+    "strum 0.27.2": {
       "name": "strum",
-      "version": "0.27.1",
+      "version": "0.27.2",
       "package_url": "https://github.com/Peternator7/strum",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/strum/0.27.1/download",
-          "sha256": "f64def088c51c9510a8579e3c5d67c65349dcf755e5479ad3d010aa6454e2c32"
+          "url": "https://static.crates.io/crates/strum/0.27.2/download",
+          "sha256": "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
         }
       },
       "targets": [
@@ -74075,7 +74287,7 @@
           ],
           "selects": {}
         },
-        "version": "0.27.1"
+        "version": "0.27.2"
       },
       "license": "MIT",
       "license_ids": [
@@ -74119,11 +74331,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -74187,11 +74399,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -74255,11 +74467,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -74649,11 +74861,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -74751,11 +74963,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -74906,11 +75118,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -75063,7 +75275,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -75635,11 +75847,11 @@
               "target": "proc_macro_error2"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -76011,7 +76223,7 @@
               "target": "rand"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -76101,11 +76313,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -76124,14 +76336,14 @@
       ],
       "license_file": "LICENSE"
     },
-    "tempfile 3.20.0": {
+    "tempfile 3.23.0": {
       "name": "tempfile",
-      "version": "3.20.0",
+      "version": "3.23.0",
       "package_url": "https://github.com/Stebalien/tempfile",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/tempfile/3.20.0/download",
-          "sha256": "e8a64e3985349f2441a1a9ef0b853f869006c3855f2cda6862a94d26ebb9d6a1"
+          "url": "https://static.crates.io/crates/tempfile/3.23.0/download",
+          "sha256": "2d31c77bdf42a745371d260a26ca7163f1e0924b64afa0b688e61b5a9fa02f16"
         }
       },
       "targets": [
@@ -76192,7 +76404,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.59.0",
+                "id": "windows-sys 0.60.2",
                 "target": "windows_sys"
               }
             ],
@@ -76211,7 +76423,7 @@
           }
         },
         "edition": "2021",
-        "version": "3.20.0"
+        "version": "3.23.0"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -76693,11 +76905,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -76999,14 +77211,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror 2.0.12": {
+    "thiserror 2.0.17": {
       "name": "thiserror",
-      "version": "2.0.12",
+      "version": "2.0.17",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror/2.0.12/download",
-          "sha256": "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
+          "url": "https://static.crates.io/crates/thiserror/2.0.17/download",
+          "sha256": "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
         }
       },
       "targets": [
@@ -77050,7 +77262,7 @@
         "deps": {
           "common": [
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "build_script_build"
             }
           ],
@@ -77060,13 +77272,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "thiserror-impl 2.0.12",
+              "id": "thiserror-impl 2.0.17",
               "target": "thiserror_impl"
             }
           ],
           "selects": {}
         },
-        "version": "2.0.12"
+        "version": "2.0.17"
       },
       "build_script_attrs": {
         "compile_data_glob": [
@@ -77118,11 +77330,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -77142,14 +77354,14 @@
       ],
       "license_file": "LICENSE-APACHE"
     },
-    "thiserror-impl 2.0.12": {
+    "thiserror-impl 2.0.17": {
       "name": "thiserror-impl",
-      "version": "2.0.12",
+      "version": "2.0.17",
       "package_url": "https://github.com/dtolnay/thiserror",
       "repository": {
         "Http": {
-          "url": "https://static.crates.io/crates/thiserror-impl/2.0.12/download",
-          "sha256": "7f7cf42b4507d8ea322120659672cf1b9dbb93f8f2d4ecfd6e51350ff5b17a1d"
+          "url": "https://static.crates.io/crates/thiserror-impl/2.0.17/download",
+          "sha256": "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
         }
       },
       "targets": [
@@ -77174,11 +77386,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -77189,7 +77401,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.12"
+        "version": "2.0.17"
       },
       "license": "MIT OR Apache-2.0",
       "license_ids": [
@@ -77635,7 +77847,7 @@
               "target": "powerfmt"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -78101,7 +78313,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -78298,11 +78510,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -78564,11 +78776,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -78910,7 +79122,7 @@
               "target": "pin_project"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -79398,7 +79610,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -79772,7 +79984,7 @@
               "target": "prettyplease"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
@@ -79784,7 +79996,7 @@
               "target": "prost_types"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -80589,7 +80801,7 @@
               "target": "pin_project"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -80778,11 +80990,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -81170,7 +81382,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -81221,7 +81433,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -81375,7 +81587,7 @@
               "target": "regex_automata"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -81950,7 +82162,7 @@
               "target": "sha1"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -82412,7 +82624,7 @@
               "target": "regex_filtered"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -83304,7 +83516,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -83644,7 +83856,7 @@
               "target": "getrandom"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -84010,7 +84222,7 @@
               "target": "chrono"
             },
             {
-              "id": "clap 4.5.45",
+              "id": "clap 4.5.53",
               "target": "clap"
             },
             {
@@ -84026,7 +84238,7 @@
               "target": "regex"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -84486,11 +84698,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -84546,11 +84758,11 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -84718,7 +84930,7 @@
               "target": "scoped_tls"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -84993,11 +85205,11 @@
               "target": "log"
             },
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -85116,7 +85328,7 @@
         "deps": {
           "common": [
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -85168,11 +85380,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -85737,11 +85949,11 @@
               "target": "indexmap"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -85813,11 +86025,11 @@
               "target": "indexmap"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             }
           ],
@@ -85901,11 +86113,11 @@
               "target": "indexmap"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -86005,11 +86217,11 @@
               "target": "indexmap"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -86109,11 +86321,11 @@
               "target": "indexmap"
             },
             {
-              "id": "semver 1.0.26",
+              "id": "semver 1.0.27",
               "target": "semver"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -86381,7 +86593,7 @@
               "target": "rayon"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -86481,7 +86693,7 @@
               "target": "async_trait"
             },
             {
-              "id": "serde_derive 1.0.219",
+              "id": "serde_derive 1.0.228",
               "target": "serde_derive"
             },
             {
@@ -86628,7 +86840,7 @@
               "target": "postcard"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -86658,7 +86870,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "serde_derive 1.0.219",
+              "id": "serde_derive 1.0.228",
               "target": "serde_derive"
             }
           ],
@@ -86768,7 +86980,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -87318,11 +87530,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -88474,7 +88686,7 @@
               "target": "target_lexicon"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -91811,7 +92023,7 @@
               "target": "serde_json"
             },
             {
-              "id": "tempfile 3.20.0",
+              "id": "tempfile 3.23.0",
               "target": "tempfile"
             },
             {
@@ -92110,7 +92322,7 @@
               "target": "data_encoding"
             },
             {
-              "id": "serde 1.0.219",
+              "id": "serde 1.0.228",
               "target": "serde"
             },
             {
@@ -92404,7 +92616,7 @@
               "target": "rusticata_macros"
             },
             {
-              "id": "thiserror 2.0.12",
+              "id": "thiserror 2.0.17",
               "target": "thiserror"
             },
             {
@@ -92818,11 +93030,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -93023,11 +93235,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -93080,11 +93292,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -93191,11 +93403,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -93307,11 +93519,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -93430,11 +93642,11 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.95",
+              "id": "proc-macro2 1.0.103",
               "target": "proc_macro2"
             },
             {
-              "id": "quote 1.0.40",
+              "id": "quote 1.0.42",
               "target": "quote"
             },
             {
@@ -93838,7 +94050,7 @@
     }
   },
   "binary_crates": [
-    "canbench 0.3.0",
+    "canbench 0.4.0",
     "ic-wasm 0.8.4",
     "metrics-proxy 0.1.0"
   ],
@@ -94167,8 +94379,8 @@
     "byteorder 1.5.0",
     "bytes 1.10.1",
     "cached 0.49.2",
-    "canbench 0.3.0",
-    "canbench-rs 0.3.0",
+    "canbench 0.4.0",
+    "canbench-rs 0.4.0",
     "candid 0.10.20",
     "candid_parser 0.1.4",
     "cargo_metadata 0.14.2",
@@ -94180,7 +94392,7 @@
     "chrono 0.4.41",
     "ciborium 0.2.1",
     "cidr 0.2.3",
-    "clap 4.5.45",
+    "clap 4.5.53",
     "cloudflare 0.12.0",
     "colored 2.0.4",
     "comparable 0.5.4",
@@ -94209,12 +94421,12 @@
     "escargot 0.5.7",
     "ethers-core 2.0.8",
     "ethnum 1.3.2",
-    "evm_rpc_client 0.2.0",
-    "evm_rpc_types 3.0.0",
+    "evm_rpc_client 0.3.0",
+    "evm_rpc_types 3.1.0",
     "exec 0.3.1",
     "eyre 0.6.8",
     "ff 0.12.1",
-    "flate2 1.1.2",
+    "flate2 1.1.5",
     "form_urlencoded 1.2.1",
     "fqdn 0.3.11",
     "fs_extra 1.3.0",
@@ -94244,11 +94456,12 @@
     "ic-bn-lib 0.1.0",
     "ic-btc-interface 0.2.3",
     "ic-canister-log 0.2.0",
+    "ic-canister-runtime 0.1.0",
     "ic-canister-sig-creation 1.3.0",
     "ic-cbor 3.0.3",
-    "ic-cdk 0.19.0-beta.3",
-    "ic-cdk-executor 2.0.0-beta.1",
-    "ic-cdk-timers 1.0.0-beta.1",
+    "ic-cdk 0.19.0",
+    "ic-cdk-executor 2.0.0",
+    "ic-cdk-timers 1.0.0",
     "ic-certificate-verification 3.0.3",
     "ic-certification 3.0.3",
     "ic-certified-map 0.3.4",
@@ -94256,7 +94469,7 @@
     "ic-http-certification 3.0.3",
     "ic-http-gateway 0.3.0",
     "ic-identity-hsm 0.40.1",
-    "ic-management-canister-types 0.4.1",
+    "ic-management-canister-types 0.5.0",
     "ic-metrics-encoder 1.1.1",
     "ic-response-verification 3.0.3",
     "ic-sha3 1.0.0",
@@ -94266,7 +94479,7 @@
     "ic-transport-types 0.40.1",
     "ic-utils 0.40.1",
     "ic-verify-bls-signature 0.6.0",
-    "ic-vetkeys 0.5.0",
+    "ic-vetkeys 0.6.0",
     "ic-wasm 0.8.4",
     "ic-xrc-types 1.2.0",
     "ic0 1.0.1",
@@ -94344,7 +94557,7 @@
     "pretty-bytes 0.2.2",
     "pretty_assertions 1.4.0",
     "priority-queue 1.3.2",
-    "proc-macro2 1.0.95",
+    "proc-macro2 1.0.103",
     "procfs 0.9.1",
     "prometheus 0.13.4",
     "prometheus-parse 0.2.4",
@@ -94358,7 +94571,7 @@
     "quickcheck 1.0.3",
     "quinn 0.11.5",
     "quinn-udp 0.5.5",
-    "quote 1.0.40",
+    "quote 1.0.42",
     "rand 0.8.5",
     "rand_chacha 0.3.1",
     "rand_distr 0.4.3",
@@ -94368,7 +94581,7 @@
     "rcgen 0.13.1",
     "regex 1.11.1",
     "regex-lite 0.1.8",
-    "reqwest 0.12.23",
+    "reqwest 0.12.24",
     "rexpect 0.6.2",
     "rgb 0.8.37",
     "ring 0.17.14",
@@ -94395,8 +94608,8 @@
     "scraper 0.17.1",
     "scrypt 0.11.0",
     "secp256k1 0.22.2",
-    "semver 1.0.26",
-    "serde 1.0.219",
+    "semver 1.0.27",
+    "serde 1.0.228",
     "serde-bytes-repr 0.1.5",
     "serde_bytes 0.11.15",
     "serde_cbor 0.11.2",
@@ -94434,11 +94647,11 @@
     "tabled 0.20.0",
     "tar 0.4.39",
     "tarpc 0.34.0",
-    "tempfile 3.20.0",
+    "tempfile 3.23.0",
     "test-strategy 0.3.1",
     "tester 0.7.0",
     "textplots 0.8.4",
-    "thiserror 2.0.12",
+    "thiserror 2.0.17",
     "thousands 0.2.0",
     "threadpool 1.8.1",
     "tikv-jemalloc-ctl 0.6.0",

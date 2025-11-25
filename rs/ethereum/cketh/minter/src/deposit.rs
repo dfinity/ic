@@ -16,9 +16,10 @@ use crate::{
         mutate_state, read_state,
     },
 };
-use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient, IcRuntime};
+use evm_rpc_client::{CandidResponseConverter, DoubleCycles, EvmRpcClient};
 use evm_rpc_types::{Hex32, LogEntry};
 use ic_canister_log::log;
+use ic_canister_runtime::IcRuntime;
 use ic_ethereum_types::Address;
 use num_traits::ToPrimitive;
 use scopeguard::ScopeGuard;

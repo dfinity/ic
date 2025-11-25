@@ -351,12 +351,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "canbench": crate.spec(
-                git = "https://github.com/dfinity/canbench.git",
-                rev = "cdb84aee8ce7aa758df786bb4787e4e2b3bb5675",
+                version = "^0.4.0",
             ),
             "canbench-rs": crate.spec(
-                git = "https://github.com/dfinity/canbench.git",
-                rev = "cdb84aee8ce7aa758df786bb4787e4e2b3bb5675",
+                version = "^0.4.0",
             ),
             "candid": crate.spec(
                 version = "^0.10.17",
@@ -513,12 +511,10 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 features = ["serde"],
             ),
             "evm_rpc_client": crate.spec(
-                git = "https://github.com/dfinity/evm-rpc-canister.git",
-                rev = "67bfb7e3831e29ebc636791f33f75495997815c0",
+                version = "^0.3.0",
             ),
             "evm_rpc_types": crate.spec(
-                git = "https://github.com/dfinity/evm-rpc-canister.git",
-                rev = "67bfb7e3831e29ebc636791f33f75495997815c0",
+                version = "^3.1.0",
             ),
             "exec": crate.spec(
                 version = "^0.3.1",
@@ -650,6 +646,9 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
             "ic-canister-log": crate.spec(
                 version = "^0.2.0",
             ),
+            "ic-canister-runtime": crate.spec(
+                version = "^0.1.0",
+            ),
             "ic-canister-sig-creation": crate.spec(
                 git = "https://github.com/dfinity/ic-canister-sig-creation.git",
                 rev = "c790e58434be9bf30e656b418c14f7862353a476",
@@ -658,16 +657,13 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "3.0.3",
             ),
             "ic-cdk": crate.spec(
-                git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "cd516011d96c6e1abd239f706a2d42029737d5cc",
+                version = "^0.19.0",
             ),
             "ic-cdk-executor": crate.spec(
-                git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "cd516011d96c6e1abd239f706a2d42029737d5cc",
+                version = "^2.0.0",
             ),
             "ic-cdk-timers": crate.spec(
-                git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "cd516011d96c6e1abd239f706a2d42029737d5cc",
+                version = "^1.0.0",
             ),
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
@@ -696,8 +692,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 version = "^1.1.1",
             ),
             "ic-management-canister-types": crate.spec(
-                git = "https://github.com/dfinity/cdk-rs.git",
-                rev = "cd516011d96c6e1abd239f706a2d42029737d5cc",
+                version = "^0.5.0",
             ),
             "ic_principal": crate.spec(
                 version = "^0.1.1",
@@ -742,8 +737,7 @@ def external_crates_repository(name, cargo_lockfile, lockfile):
                 default_features = False,
             ),
             "ic-vetkeys": crate.spec(
-                git = "https://github.com/dfinity/vetkeys.git",
-                rev = "f9e958a34303dc067fdacd3323e9b042b709afbc",
+                version = "^0.6.0",
             ),
             "ic-wasm": crate.spec(
                 version = "^0.8.4",
