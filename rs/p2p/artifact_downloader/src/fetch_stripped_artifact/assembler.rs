@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -13,22 +14,26 @@ use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::types::v1 as pb;
 use ic_quic_transport::Transport;
 use ic_types::{
-    CountBytes, NodeId,
+    CountBytes, NodeId, NodeIndex,
     artifact::{ConsensusMessageId, IdentifiableArtifact, IngressMessageId},
     batch::IngressPayload,
-    consensus::{BlockProposal, ConsensusMessage, idkg::IDkgMessage},
+    consensus::{
+        BlockProposal, ConsensusMessage,
+        idkg::{IDkgArtifactId, IDkgMessage},
+    },
+    crypto::canister_threshold_sig::idkg::SignedIDkgDealing,
     messages::SignedIngress,
 };
 
 use crate::{
     FetchArtifact,
-    fetch_stripped_artifact::types::{StrippedMessage, StrippedMessageId},
+    fetch_stripped_artifact::types::{StrippedMessage, StrippedMessageId, StrippedMessageType},
 };
 
 use super::{
     download::download_stripped_message,
     metrics::{
-        FetchStrippedConsensusArtifactMetrics, IngressMessageSource, StrippedMessageSenderMetrics,
+        FetchStrippedConsensusArtifactMetrics, StrippedMessageSenderMetrics, StrippedMessageSource,
     },
     stripper::Strippable,
     types::{
@@ -206,27 +211,28 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
             ));
         }
 
-        let mut ingress_messages_from_ingress_pool = 0;
-        let mut ingress_messages_from_peers = 0;
+        let mut messages_from_pool = BTreeMap::new();
+        let mut messages_from_peers = BTreeMap::new();
 
         while let Some(join_result) = join_set.join_next().await {
-            let Ok((StrippedMessage::Ingress(ingress_id, ingress), peer_id)) = join_result else {
+            let Ok((message, peer_id)) = join_result else {
                 return AssembleResult::Unwanted;
             };
 
+            let message_type = StrippedMessageType::from(&message);
+
             if peer_id == self.node_id {
-                ingress_messages_from_ingress_pool += 1;
+                *messages_from_pool.entry(message_type).or_default() += 1;
             } else {
                 self.metrics
-                    .missing_ingress_messages_bytes
-                    .observe(ingress.count_bytes() as f64);
-                ingress_messages_from_peers += 1;
+                    .report_missing_stripped_messages_bytes(message_type, message.count_bytes());
+                *messages_from_peers.entry(message_type).or_default() += 1;
             }
 
-            if let Err(err) = assembler.try_insert_ingress_message(ingress, ingress_id) {
+            if let Err(err) = assembler.try_insert_stripped_message(message) {
                 warn!(
                     self.log,
-                    "Failed to ingress message {}. This is a bug.", err
+                    "Failed to insert stripped message {}. This is a bug.", err
                 );
 
                 return AssembleResult::Unwanted;
@@ -234,19 +240,26 @@ impl ArtifactAssembler<ConsensusMessage, MaybeStrippedConsensusMessage>
         }
 
         // Only report the metric if we actually downloaded some ingresses from peers
-        if ingress_messages_from_peers > 0 {
+        if messages_from_peers.len() > 0 {
             timer.stop_and_record();
         } else {
             timer.stop_and_discard();
         }
 
-        self.metrics
-            .report_ingress_messages_count(IngressMessageSource::Peer, ingress_messages_from_peers);
-
-        self.metrics.report_ingress_messages_count(
-            IngressMessageSource::IngressPool,
-            ingress_messages_from_ingress_pool,
-        );
+        for (message_type, count) in messages_from_peers.iter() {
+            self.metrics.report_stripped_messages_count(
+                StrippedMessageSource::Peer,
+                *message_type,
+                *count,
+            );
+        }
+        for (message_type, count) in messages_from_pool.iter() {
+            self.metrics.report_stripped_messages_count(
+                StrippedMessageSource::Pool,
+                *message_type,
+                *count,
+            );
+        }
 
         match assembler.try_assemble() {
             Ok(reconstructed_block_proposal) => AssembleResult::Done {
@@ -348,6 +361,7 @@ pub(crate) enum AssemblyError {
 struct BlockProposalAssembler {
     stripped_block_proposal: StrippedBlockProposal,
     ingress_messages: Vec<(SignedIngressId, Option<SignedIngress>)>,
+    signed_dealings: Vec<((NodeIndex, IDkgArtifactId), Option<SignedIDkgDealing>)>,
 }
 
 impl BlockProposalAssembler {
@@ -359,13 +373,15 @@ impl BlockProposalAssembler {
                 .iter()
                 .map(|signed_ingress_id| (signed_ingress_id.clone(), None))
                 .collect(),
+            signed_dealings: vec![],
             stripped_block_proposal,
         }
     }
 
     /// Returns the list of ingress messages which have been stripped from the block.
     pub(crate) fn missing_stripped_messages(&self) -> Vec<StrippedMessageId> {
-        self.ingress_messages
+        let ingress = self
+            .ingress_messages
             .iter()
             .filter_map(|(signed_ingress_id, maybe_ingress)| {
                 if maybe_ingress.is_none() {
@@ -375,12 +391,42 @@ impl BlockProposalAssembler {
                 }
             })
             .cloned()
-            .map(StrippedMessageId::Ingress)
-            .collect()
+            .map(StrippedMessageId::Ingress);
+
+        let idkg_dealings =
+            self.signed_dealings
+                .iter()
+                .filter_map(|((node_index, dealing_id), maybe_dealing)| {
+                    if maybe_dealing.is_none() {
+                        Some(StrippedMessageId::IDkgDealing(
+                            dealing_id.clone(),
+                            *node_index,
+                        ))
+                    } else {
+                        None
+                    }
+                });
+
+        ingress.chain(idkg_dealings).collect()
+    }
+
+    /// Tries to insert a missing stripped message into the block.
+    pub(crate) fn try_insert_stripped_message(
+        &mut self,
+        message: StrippedMessage,
+    ) -> Result<(), InsertionError> {
+        match message {
+            StrippedMessage::Ingress(signed_ingress_id, signed_ingress) => {
+                self.try_insert_ingress_message(signed_ingress, signed_ingress_id)
+            }
+            StrippedMessage::IDkgDealing(dealing_id, _, signed_dealing) => {
+                self.try_insert_idkg_dealing_message(dealing_id, signed_dealing)
+            }
+        }
     }
 
     /// Tries to insert a missing ingress message into the block.
-    pub(crate) fn try_insert_ingress_message(
+    fn try_insert_ingress_message(
         &mut self,
         ingress_message: SignedIngress,
         signed_ingress_id: SignedIngressId,
@@ -397,6 +443,30 @@ impl BlockProposalAssembler {
             Err(InsertionError::AlreadyInserted)
         } else {
             *ingress = Some(ingress_message);
+            Ok(())
+        }
+    }
+
+    /// Tries to insert a missing IDKG dealing into the block.
+    fn try_insert_idkg_dealing_message(
+        &mut self,
+        signed_dealing_id: IDkgArtifactId,
+        signed_dealing: SignedIDkgDealing,
+    ) -> Result<(), InsertionError> {
+        let IDkgArtifactId::Dealing(_, _) = &signed_dealing_id else {
+            return Err(InsertionError::NotNeeded);
+        };
+
+        let (_, dealing) = self
+            .signed_dealings
+            .iter_mut()
+            .find(|((_, id), _maybe_dealing)| *id == signed_dealing_id)
+            .ok_or(InsertionError::NotNeeded)?;
+
+        if dealing.is_some() {
+            Err(InsertionError::AlreadyInserted)
+        } else {
+            *dealing = Some(signed_dealing);
             Ok(())
         }
     }
