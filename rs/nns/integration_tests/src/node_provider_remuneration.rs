@@ -1004,7 +1004,6 @@ fn test_automated_node_provider_remuneration() {
     state_machine.tick();
 
     let mut rewards_were_triggered = false;
-    let mut np_rewards_from_automation_timestamp = most_recent_rewards.timestamp;
     for _ in 0..10 {
         state_machine.advance_time(Duration::from_secs(60));
         most_recent_rewards =
@@ -1212,43 +1211,6 @@ fn submit_nns_proposal(state_machine: &StateMachine, action: ProposalActionReque
     // No proposals should be pending now.
     let pending_proposals = get_pending_proposals(state_machine);
     assert_eq!(pending_proposals, vec![]);
-}
-
-/// Set the average ICP/XDR conversion rate
-fn set_average_icp_xdr_conversion_rate(
-    state_machine: &StateMachine,
-    average_icp_xdr_conversion_rate: u64,
-) {
-    // Add conversion rate proposals for the past 31 days.
-    for _ in 0..31 {
-        let current_timestamp_seconds = state_machine
-            .time()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let payload = UpdateIcpXdrConversionRatePayload {
-            timestamp_seconds: current_timestamp_seconds,
-            xdr_permyriad_per_icp: average_icp_xdr_conversion_rate,
-            ..Default::default()
-        };
-        set_icp_xdr_conversion_rate(state_machine, payload);
-        state_machine.advance_time(Duration::from_secs(ONE_DAY_SECONDS));
-    }
-
-    let actual_average_icp_xdr_conversion_rate: u64 = query(
-        state_machine,
-        CYCLES_MINTING_CANISTER_ID,
-        "get_average_icp_xdr_conversion_rate",
-        Encode!().unwrap(),
-    )
-    .map(|response| Decode!(&response, IcpXdrConversionRateCertifiedResponse).unwrap())
-    .map(|response| response.data.xdr_permyriad_per_icp)
-    .expect("Could not query the average_icp_xdr_conversion_rate from the CMC Canister");
-
-    assert_eq!(
-        actual_average_icp_xdr_conversion_rate,
-        average_icp_xdr_conversion_rate
-    );
 }
 
 /// Submit and execute a proposal to set the given conversion rate
