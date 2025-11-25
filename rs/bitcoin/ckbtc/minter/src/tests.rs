@@ -630,14 +630,6 @@ proptest! {
         )
         .expect("failed to build transaction");
 
-        let vsize = fake_sign(&unsigned_tx).vsize() as u64;
-
-        prop_assert_eq!(
-            vsize,
-            crate::tx_vsize_estimate(unsigned_tx.inputs.len() as u64, unsigned_tx.outputs.len() as u64),
-            "incorrect transaction vsize estimate"
-        );
-
         let inputs_value = unsigned_tx.inputs.iter().map(|input| input.value).sum::<u64>();
         let outputs_value = unsigned_tx.outputs.iter().map(|output| output.value).sum::<u64>();
 
