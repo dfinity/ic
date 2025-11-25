@@ -6,9 +6,6 @@ rust_library(
     name = "device",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_device",
-    proc_macro_deps = [
-        "@crate_index//:async-trait",
-    ],
     target_compatible_with = [
         "@platforms//os:linux",
     ],
