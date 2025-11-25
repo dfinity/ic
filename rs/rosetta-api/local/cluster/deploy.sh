@@ -311,9 +311,9 @@ for service in icp-rosetta-local icp-rosetta-latest icrc-rosetta-local icrc-rose
 done
 
 # Kill any existing external port forwards on 3000, 8080 and 8888 if they exist
-if pgrep -f "kubectl port-forward.*--address 0.0.0.0.*3000:80" &>/dev/null || \
-   pgrep -f "kubectl port-forward.*--address 0.0.0.0.*8080:3000" &>/dev/null || \
-   pgrep -f "kubectl port-forward.*--address 0.0.0.0.*8888:3000" &>/dev/null; then
+if pgrep -f "kubectl port-forward.*--address 0.0.0.0.*3000:80" &>/dev/null \
+    || pgrep -f "kubectl port-forward.*--address 0.0.0.0.*8080:3000" &>/dev/null \
+    || pgrep -f "kubectl port-forward.*--address 0.0.0.0.*8888:3000" &>/dev/null; then
     echo ""
     echo "Cleaning up external port forwards (3000, 8080, 8888)..."
     pkill -f "kubectl port-forward.*--address 0.0.0.0.*3000:80" 2>/dev/null || true
