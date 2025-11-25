@@ -98,7 +98,7 @@ impl Default for SystemStateModifications {
             request_slots_used: BTreeMap::new(),
             requests: vec![],
             new_global_timer: None,
-            canister_log: Default::default(),
+            canister_log: CanisterLog::default_delta(),
             on_low_wasm_memory_hook_condition_check_result: None,
             should_bump_canister_version: false,
         }
@@ -1383,7 +1383,7 @@ impl SandboxSafeSystemState {
 
     /// Takes collected canister log records.
     pub fn take_canister_log(&mut self) -> CanisterLog {
-        std::mem::take(&mut self.system_state_modifications.canister_log)
+        self.system_state_modifications.canister_log.take()
     }
 
     /// Returns collected canister log records.
