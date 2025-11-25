@@ -106,20 +106,4 @@ impl FeeEstimator for DogecoinFeeEstimator {
         let tx_size = ic_ckbtc_minter::fake_sign(unsigned_tx).serialized_len();
         (tx_size as u64 * fee_per_byte) / 1000
     }
-
-    fn evaluate_approximate_transaction_fee(
-        &self,
-        num_inputs: u64,
-        num_outputs: u64,
-        fee_rate: u64,
-    ) -> u64 {
-        //minter uses P2PKH addresses.
-        const TXID_SIZE_BYTES: u64 = 32;
-        const VOUT_SIZE_BYTES: u64 = 4;
-        const SCRIPT_SIG_SIZE_BYTES: u64 = 1;
-        const P2PKH_SCRIPT_SIG_SIZE_BYTES: u64 = 2;
-        const SEQUENCE_SIZE_BYTES: u64 = 4;
-        const P2PKH_INPUT_SIZE_BYTES: u64 = 32 + 4 + 73 + 4;
-        todo!()
-    }
 }

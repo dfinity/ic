@@ -1354,7 +1354,7 @@ pub fn timer<R: CanisterRuntime + 'static>(runtime: R) {
 }
 
 /// Computes an estimate for the size of transaction (in vbytes) with the given number of inputs and outputs.
-pub fn  tx_vsize_estimate(input_count: u64, output_count: u64) -> u64 {
+pub fn tx_vsize_estimate(input_count: u64, output_count: u64) -> u64 {
     // See
     // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
     // for the transaction structure and

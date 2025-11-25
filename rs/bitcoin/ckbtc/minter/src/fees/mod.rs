@@ -16,16 +16,6 @@ pub trait FeeEstimator {
     /// Evaluate transaction fee with the given fee rate (in milli base unit per vbyte/byte)
     fn evaluate_transaction_fee(&self, tx: &UnsignedTransaction, fee_rate: u64) -> u64;
 
-    /// Evaluate an approximate transaction fee for a transaction with a given number of inputs/oputs.
-    ///
-    ///
-    fn evaluate_approximate_transaction_fee(
-        &self,
-        num_inputs: u64,
-        num_outputs: u64,
-        fee_rate: u64,
-    ) -> u64;
-
     /// Compute a new minimum withdrawal amount based on the current fee rate
     fn fee_based_minimum_withrawal_amount(&self, median_fee: MillisatoshiPerByte) -> Satoshi;
 }
@@ -127,27 +117,6 @@ impl FeeEstimator for BitcoinFeeEstimator {
         fee_per_vbyte: u64,
     ) -> u64 {
         let tx_vsize = fake_sign(unsigned_tx).vsize();
-        (tx_vsize as u64 * fee_per_vbyte) / 1000
-    }
-
-    fn evaluate_approximate_transaction_fee(
-        &self,
-        num_inputs: u64,
-        num_outputs: u64,
-        fee_per_vbyte: u64,
-    ) -> u64 {
-        // See
-        // https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
-        // for the transaction structure and
-        // https://bitcoin.stackexchange.com/questions/92587/calculate-transaction-fee-for-external-addresses-which-doesnt-belong-to-my-loca/92600#92600
-        // for transaction size estimate.
-        const INPUT_SIZE_VBYTES: u64 = 68;
-        const OUTPUT_SIZE_VBYTES: u64 = 31;
-        const TX_OVERHEAD_VBYTES: u64 = 11;
-
-        let tx_vsize = num_inputs * INPUT_SIZE_VBYTES
-            + num_outputs * OUTPUT_SIZE_VBYTES
-            + TX_OVERHEAD_VBYTES;
         (tx_vsize as u64 * fee_per_vbyte) / 1000
     }
 }
