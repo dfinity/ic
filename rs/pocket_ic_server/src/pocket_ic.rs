@@ -168,6 +168,17 @@ use tower::{service_fn, util::ServiceExt};
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 
+const MAINNET_NNS_SUBNET_ID: &str =
+    "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe";
+const MAINNET_II_SUBNET_ID: &str =
+    "uzr34-akd3s-xrdag-3ql62-ocgoh-ld2ao-tamcv-54e7j-krwgb-2gm4z-oqe";
+const MAINNET_BITCOIN_SUBNET_ID: &str =
+    "w4rem-dv5e3-widiz-wbpea-kbttk-mnzfm-tzrc7-svcj3-kbxyb-zamch-hqe";
+const MAINNET_FIDUCIARY_SUBNET_ID: &str =
+    "pzp6e-ekpqk-3c5x7-2h6so-njoeq-mt45d-h3h6c-q3mxf-vpeq5-fk5o7-yae";
+const MAINNET_SNS_SUBNET_ID: &str =
+    "x33ed-h457x-bsgyx-oqxqf-6pzwv-wkhzr-rm2j3-npodi-purzm-n66cg-gae";
+
 const REGISTRY_CANISTER_WASM: &[u8] = include_bytes!(env!("REGISTRY_CANISTER_WASM_PATH"));
 const CYCLES_MINTING_CANISTER_WASM: &[u8] =
     include_bytes!(env!("CYCLES_MINTING_CANISTER_WASM_PATH"));
@@ -2763,7 +2774,9 @@ impl PocketIc {
                     // We validate the given canister ranges.
                     let mut sorted_ranges = ranges.clone();
                     sorted_ranges.sort();
-                    if let Some(mut subnet_kind_ranges) = subnet_kind_canister_range(subnet_kind) {
+                    if let Some(mut subnet_kind_ranges) =
+                        subnet_kind_canister_ranges(&mainnet_routing_table, subnet_kind)
+                    {
                         subnet_kind_ranges.sort();
                         if !is_subset_of(subnet_kind_ranges.iter(), sorted_ranges.iter()) {
                             return Err(format!(
@@ -2773,8 +2786,10 @@ impl PocketIc {
                     }
                     for other_subnet_kind in SubnetKind::iter() {
                         if subnet_kind != other_subnet_kind
-                            && let Some(mut other_subnet_kind_ranges) =
-                                subnet_kind_canister_range(other_subnet_kind)
+                            && let Some(mut other_subnet_kind_ranges) = subnet_kind_canister_ranges(
+                                &mainnet_routing_table,
+                                other_subnet_kind,
+                            )
                         {
                             other_subnet_kind_ranges.sort();
                             if !are_disjoint(other_subnet_kind_ranges.iter(), sorted_ranges.iter())
@@ -2791,7 +2806,7 @@ impl PocketIc {
                     let RangeConfig {
                         canister_id_ranges: ranges,
                         canister_allocation_range: alloc_range,
-                    } = get_range_config(subnet_kind, &mut range_gen)?;
+                    } = get_range_config(&mainnet_routing_table, subnet_kind, &mut range_gen)?;
 
                     (ranges, alloc_range, None)
                 };
@@ -2945,51 +2960,91 @@ fn from_range(range: &CanisterIdRange) -> rest::CanisterIdRange {
     rest::CanisterIdRange { start, end }
 }
 
-fn subnet_kind_canister_range(subnet_kind: SubnetKind) -> Option<Vec<CanisterIdRange>> {
+fn subnet_kind_canister_ranges(
+    mainnet_routing_table: &RoutingTable,
+    subnet_kind: SubnetKind,
+) -> Option<Vec<CanisterIdRange>> {
     use rest::SubnetKind::*;
     match subnet_kind {
         Application | VerifiedApplication | System => None,
-        NNS => Some(vec![
-            gen_range("rwlgt-iiaaa-aaaaa-aaaaa-cai", "renrk-eyaaa-aaaaa-aaada-cai"),
-            gen_range("qoctq-giaaa-aaaaa-aaaea-cai", "n5n4y-3aaaa-aaaaa-p777q-cai"),
-        ]),
-        II => Some(vec![
-            gen_range("rdmx6-jaaaa-aaaaa-aaadq-cai", "rdmx6-jaaaa-aaaaa-aaadq-cai"),
-            gen_range("uc7f6-kaaaa-aaaaq-qaaaa-cai", "ijz7v-ziaaa-aaaaq-7777q-cai"),
-        ]),
-        Bitcoin => Some(vec![gen_range(
-            "g3wsl-eqaaa-aaaan-aaaaa-cai",
-            "2qqia-xyaaa-aaaan-p777q-cai",
-        )]),
-        Fiduciary => Some(vec![gen_range(
-            "mf7xa-laaaa-aaaar-qaaaa-cai",
-            "qoznl-yiaaa-aaaar-7777q-cai",
-        )]),
-        SNS => Some(vec![gen_range(
-            "ybpmr-kqaaa-aaaaq-aaaaa-cai",
-            "ekjw2-zyaaa-aaaaq-p777q-cai",
-        )]),
+        NNS => {
+            let nns_subnet_id = PrincipalId::from_str(MAINNET_NNS_SUBNET_ID).unwrap().into();
+            Some(
+                mainnet_routing_table
+                    .ranges(nns_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
+        II => {
+            let ii_subnet_id = PrincipalId::from_str(MAINNET_II_SUBNET_ID).unwrap().into();
+            Some(
+                mainnet_routing_table
+                    .ranges(ii_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
+        Bitcoin => {
+            let bitcoin_subnet_id = PrincipalId::from_str(MAINNET_BITCOIN_SUBNET_ID)
+                .unwrap()
+                .into();
+            Some(
+                mainnet_routing_table
+                    .ranges(bitcoin_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
+        Fiduciary => {
+            let fiduciary_subnet_id = PrincipalId::from_str(MAINNET_FIDUCIARY_SUBNET_ID)
+                .unwrap()
+                .into();
+            Some(
+                mainnet_routing_table
+                    .ranges(fiduciary_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
+        SNS => {
+            let sns_subnet_id = PrincipalId::from_str(MAINNET_SNS_SUBNET_ID).unwrap().into();
+            Some(
+                mainnet_routing_table
+                    .ranges(sns_subnet_id)
+                    .iter()
+                    .cloned()
+                    .collect(),
+            )
+        }
     }
 }
 
-fn subnet_kind_from_canister_id(canister_id: CanisterId) -> SubnetKind {
-    use rest::SubnetKind::*;
-    for subnet_kind in [NNS, II, Bitcoin, Fiduciary, SNS] {
-        if let Some(ranges) = subnet_kind_canister_range(subnet_kind)
+fn subnet_kind_from_canister_id(
+    mainnet_routing_table: &RoutingTable,
+    canister_id: CanisterId,
+) -> SubnetKind {
+    for subnet_kind in SubnetKind::iter() {
+        if let Some(ranges) = subnet_kind_canister_ranges(mainnet_routing_table, subnet_kind)
             && ranges.iter().any(|r| r.contains(&canister_id))
         {
             return subnet_kind;
         }
     }
-    Application
+    SubnetKind::Application
 }
 
 fn get_range_config(
+    mainnet_routing_table: &RoutingTable,
     subnet_kind: rest::SubnetKind,
     range_gen: &mut RangeGen,
 ) -> Result<RangeConfig, String> {
     let (canister_id_ranges, canister_allocation_range) =
-        match subnet_kind_canister_range(subnet_kind) {
+        match subnet_kind_canister_ranges(mainnet_routing_table, subnet_kind) {
             Some(ranges) => {
                 range_gen.add_assigned(ranges.clone())?;
                 (ranges, Some(range_gen.next_range()))
@@ -3039,13 +3094,6 @@ impl RangeGen {
                 break range;
             }
         }
-    }
-}
-
-fn gen_range(start: &str, end: &str) -> CanisterIdRange {
-    CanisterIdRange {
-        start: CanisterId::from_str(start).unwrap(),
-        end: CanisterId::from_str(end).unwrap(),
     }
 }
 
@@ -5072,14 +5120,7 @@ fn route(
                 } else if is_provisional_create_canister {
                     // We create a new subnet with the IC mainnet configuration containing the effective canister ID.
                     // NNS subnet cannot be created at this point though because NNS is the root subnet
-                    // and the root subnet cannot be created after its PocketIC instance has already been created.
-                    let subnet_kind = subnet_kind_from_canister_id(canister_id);
-                    if matches!(subnet_kind, SubnetKind::NNS) {
-                        return Err(format!(
-                            "The effective canister ID {canister_id} belongs to the NNS subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
-                        ));
-                    }
-                    let instruction_config = SubnetInstructionConfig::Production;
+                    // and the root subnet cannot be changed after its PocketIC instance has already been created.
                     let subnet_id = match pic.mainnet_routing_table.lookup_entry(canister_id) {
                         Some((_, subnet_id)) => subnet_id,
                         None => {
@@ -5088,6 +5129,14 @@ fn route(
                             ));
                         }
                     };
+                    let subnet_kind =
+                        subnet_kind_from_canister_id(&pic.mainnet_routing_table, canister_id);
+                    if matches!(subnet_kind, SubnetKind::NNS) {
+                        return Err(format!(
+                            "The effective canister ID {canister_id} belongs to the NNS subnet on the IC mainnet for which PocketIC provides a `SubnetKind`: please set up your PocketIC instance with a subnet of that `SubnetKind`."
+                        ));
+                    }
+                    let instruction_config = SubnetInstructionConfig::Production;
                     let ranges = pic
                         .mainnet_routing_table
                         .ranges(subnet_id)

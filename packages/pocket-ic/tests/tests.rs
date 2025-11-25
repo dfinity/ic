@@ -125,7 +125,7 @@ fn test_create_canister_with_id() {
     assert_eq!(actual_canister_id, canister_id);
     let topology = pic.topology();
     let ii_subnet_id = topology.get_ii().unwrap();
-    assert_eq!(pic.get_subnet(canister_id).unwrap(), ii_subnet_id,);
+    assert_eq!(pic.get_subnet(canister_id).unwrap(), ii_subnet_id);
     let ii_canister_ranges = &topology
         .subnet_configs
         .get(&ii_subnet_id)
