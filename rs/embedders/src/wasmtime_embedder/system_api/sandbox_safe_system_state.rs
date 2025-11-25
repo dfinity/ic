@@ -1490,6 +1490,7 @@ mod tests {
         CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
         Time,
         batch::CanisterCyclesCostSchedule,
+        default_aggregate_log_memory_limit,
         messages::{NO_DEADLINE, RequestMetadata},
         time::CoarseTime,
     };
@@ -1594,6 +1595,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            default_aggregate_log_memory_limit().get() as usize,
             // Wasm32 execution environment. Sufficient in testing.
             false,
             NetworkTopology::default(),
@@ -1647,6 +1649,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            default_aggregate_log_memory_limit().get() as usize,
             // Wasm32 execution environment. Sufficient in testing.
             false,
             NetworkTopology::default(),
