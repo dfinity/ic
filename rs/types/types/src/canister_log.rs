@@ -21,6 +21,11 @@ const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 /// The maximum size of a delta (per message) canister log buffer.
 const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 2 * MiB;
 
+/// Upper bound on stored delta-log sizes used for metrics.
+/// Limits memory growth, 10k covers expected per-round
+/// number of messages per canister (and so delta log appends).
+const DELTA_LOG_SIZES_CAP: usize = 10_000;
+
 /// Maximum number of response bytes for a fetch canister logs request.
 pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
 
@@ -55,8 +60,8 @@ pub fn max_delta_log_memory_limit() -> NumBytes {
 
 /// Truncates the content of a log record so that the record fits within the allowed size.
 fn truncate_content(byte_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {
-    let max_content_bytes = byte_capacity.saturating_sub(std::mem::size_of::<CanisterLogRecord>());
-    record.content.truncate(max_content_bytes);
+    let max_content_size = byte_capacity - std::mem::size_of::<CanisterLogRecord>();
+    record.content.truncate(max_content_size);
     record
 }
 
@@ -169,6 +174,7 @@ impl CanisterLog {
     /// Creates a new log that is supposed to be used as an aggregate (total) canister log.
     /// Aggregate canister log of this type does not store records efficiently,
     /// so it should be limited in size.
+    /// TODO(EXC-2118): remove this after migration is done.
     pub fn new_aggregate(next_idx: u64, records: Vec<CanisterLogRecord>) -> Self {
         Self::new_inner(next_idx, records, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT)
     }
@@ -260,6 +266,9 @@ impl CanisterLog {
 
     /// Records the size of the appended delta log.
     fn push_delta_log_size(&mut self, size: usize) {
+        if self.delta_log_sizes.len() >= DELTA_LOG_SIZES_CAP {
+            self.delta_log_sizes.pop_front();
+        }
         self.delta_log_sizes.push_back(size);
     }
 
