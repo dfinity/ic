@@ -680,6 +680,7 @@ impl SandboxSafeSystemState {
         is_wasm64_execution: bool,
         network_topology: NetworkTopology,
     ) -> Self {
+        // Limit the delta canister log memory to the maximum allowed.
         let delta_log_memory_limit =
             canister_log_memory_limit.min(max_delta_log_memory_limit().get() as usize);
         Self {
