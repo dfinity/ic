@@ -1359,6 +1359,7 @@ pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
     // specified amount.
     let mut utxos = available_utxos.clone();
     let selected_utxos = utxos_selection(withdrawal_amount, &mut utxos, 1);
+    // Only the address type matters for the amount of vbytes, not the actual bytes in the address.
     let dummy_minter_address = BitcoinAddress::P2wpkhV0([u8::MAX; 20]);
     let dummy_recipient_address = BitcoinAddress::P2wpkhV0([42_u8; 20]);
 
