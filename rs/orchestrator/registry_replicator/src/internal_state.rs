@@ -396,8 +396,8 @@ pub async fn write_certified_changes_to_local_store(
             .entry(record.version)
             .or_default()
             .push(KeyMutation {
-                key: record.key.clone(),
-                value: record.value.clone(),
+                key: record.key,
+                value: record.value,
             });
     }
 
