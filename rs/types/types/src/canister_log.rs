@@ -18,9 +18,6 @@ const MAX_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 /// The default size of a canister log buffer.
 const DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
-/// The maximum allowed size of a canister log record.
-const MAX_ALLOWED_LOG_RECORD_SIZE: usize = 4 * KiB;
-
 /// Upper bound on how many delta log sizes is retained.
 /// Prevents unbounded growth of `delta_log_sizes`.
 const DELTA_LOG_SIZES_CAP: usize = 100;
@@ -31,7 +28,6 @@ pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
 // Compile-time assertions to ensure the constants are within valid ranges.
 const _: () = assert!(DEFAULT_LOG_MEMORY_LIMIT >= MIN_ALLOWED_LOG_MEMORY_LIMIT);
 const _: () = assert!(DEFAULT_LOG_MEMORY_LIMIT <= MAX_ALLOWED_LOG_MEMORY_LIMIT);
-const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MAX_ALLOWED_LOG_RECORD_SIZE);
 const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MIN_ALLOWED_LOG_MEMORY_LIMIT);
 
 /// Returns the minimum allowed size of a canister log buffer.
@@ -50,10 +46,9 @@ pub fn default_log_memory_limit() -> NumBytes {
 }
 
 /// Truncates the content of a log record so that the record fits within the allowed size.
-fn truncate_content(records_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {
-    let max_record_size = std::cmp::min(records_capacity, MAX_ALLOWED_LOG_RECORD_SIZE);
-    let max_content_size = max_record_size - std::mem::size_of::<CanisterLogRecord>();
-    record.content.truncate(max_content_size);
+fn truncate_content(byte_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {
+    let max_content_bytes = byte_capacity.saturating_sub(std::mem::size_of::<CanisterLogRecord>());
+    record.content.truncate(max_content_bytes);
     record
 }
 
@@ -63,16 +58,16 @@ fn truncate_content(records_capacity: usize, mut record: CanisterLogRecord) -> C
 struct Records {
     #[validate_eq(Ignore)]
     records: VecDeque<CanisterLogRecord>,
-    capacity: usize,
-    used_space: usize,
+    byte_capacity: usize,
+    bytes_used: usize,
 }
 
 impl Records {
     fn new_with_capacity(capacity: usize) -> Self {
         Self {
             records: VecDeque::new(),
-            capacity,
-            used_space: 0,
+            byte_capacity: capacity,
+            bytes_used: 0,
         }
     }
 
@@ -81,11 +76,11 @@ impl Records {
             .into_iter()
             .map(|r| truncate_content(capacity, r)) // Apply size limit to each record's content.
             .collect();
-        let used_space = records.iter().map(|r| r.data_size()).sum();
+        let bytes_used = records.iter().map(|r| r.data_size()).sum();
         let mut result = Self {
             records: records.into(),
-            capacity,
-            used_space,
+            byte_capacity: capacity,
+            bytes_used,
         };
         // Make sure the buffer is within limit.
         result.make_free_space_within_limit(0);
@@ -94,15 +89,11 @@ impl Records {
 
     fn clear(&mut self) {
         self.records.clear();
-        self.used_space = 0;
+        self.bytes_used = 0;
     }
 
     fn get(&self) -> &VecDeque<CanisterLogRecord> {
         &self.records
-    }
-
-    fn used_space(&self) -> usize {
-        self.used_space
     }
 
     fn push_back(&mut self, record: CanisterLogRecord) {
@@ -113,13 +104,13 @@ impl Records {
         self.make_free_space_within_limit(added_size);
         self.records.push_back(record);
         // LINT.ThenChange(logging_charge_bytes_rule)
-        self.used_space += added_size;
+        self.bytes_used += added_size;
     }
 
     fn pop_front(&mut self) -> Option<usize> {
         if let Some(record) = self.records.pop_front() {
             let removed_size = record.data_size();
-            self.used_space = self.used_space().saturating_sub(removed_size);
+            self.bytes_used = self.bytes_used.saturating_sub(removed_size);
             Some(removed_size)
         } else {
             None
@@ -127,20 +118,16 @@ impl Records {
     }
 
     fn append(&mut self, other: &mut Self) {
-        self.make_free_space_within_limit(other.used_space());
+        self.make_free_space_within_limit(other.bytes_used);
         self.records.append(&mut other.records);
-        self.used_space += other.used_space();
+        self.bytes_used += other.bytes_used;
         other.clear();
-    }
-
-    fn capacity(&self) -> usize {
-        self.capacity
     }
 
     fn make_free_space_within_limit(&mut self, new_data_size: usize) {
         // Removes old records to make enough free space for new data within the limit.
-        let mut total_size = new_data_size + self.used_space();
-        while total_size > self.capacity() {
+        let mut total_size = new_data_size + self.bytes_used;
+        while total_size > self.byte_capacity {
             if let Some(removed_size) = self.pop_front() {
                 total_size = total_size.saturating_sub(removed_size);
             } else {
@@ -206,26 +193,26 @@ impl CanisterLog {
     }
 
     /// Returns the maximum allowed size of a canister log buffer.
-    pub fn capacity(&self) -> usize {
-        self.records.capacity()
+    pub fn byte_capacity(&self) -> usize {
+        self.records.byte_capacity
     }
 
     /// Returns the used space in the canister log buffer.
-    pub fn used_space(&self) -> usize {
-        self.records.used_space()
+    pub fn bytes_used(&self) -> usize {
+        self.records.bytes_used
     }
 
     /// Returns the remaining space in the canister log buffer.
-    pub fn remaining_space(&self) -> usize {
+    pub fn remaining_bytes(&self) -> usize {
         let records = &self.records;
-        records.capacity().saturating_sub(records.used_space())
+        records.byte_capacity.saturating_sub(records.bytes_used)
     }
 
     /// Adds a new log record.
     pub fn add_record(&mut self, timestamp_nanos: u64, content: Vec<u8>) {
         // Add record and update the next index.
         self.records.push_back(truncate_content(
-            self.capacity(),
+            self.byte_capacity(),
             CanisterLogRecord {
                 idx: self.next_idx,
                 timestamp_nanos,
@@ -285,9 +272,9 @@ mod tests {
         let log = CanisterLog::default();
         // Assert log has no records and memory usage is zero.
         assert_eq!(log.records().len(), 0);
-        assert_eq!(log.used_space(), 0);
-        assert_eq!(log.remaining_space(), TEST_MAX_ALLOWED_SIZE);
-        assert_eq!(log.capacity(), TEST_MAX_ALLOWED_SIZE);
+        assert_eq!(log.bytes_used(), 0);
+        assert_eq!(log.remaining_bytes(), TEST_MAX_ALLOWED_SIZE);
+        assert_eq!(log.byte_capacity(), TEST_MAX_ALLOWED_SIZE);
     }
 
     #[test]
@@ -302,9 +289,9 @@ mod tests {
         );
         // Assert log has only one record and it's size is within limit.
         assert_eq!(log.records().len(), 1);
-        assert_eq!(log.used_space(), TEST_MAX_ALLOWED_SIZE);
-        assert_eq!(log.remaining_space(), 0);
-        assert_eq!(log.capacity(), TEST_MAX_ALLOWED_SIZE);
+        assert_eq!(log.bytes_used(), TEST_MAX_ALLOWED_SIZE);
+        assert_eq!(log.remaining_bytes(), 0);
+        assert_eq!(log.byte_capacity(), TEST_MAX_ALLOWED_SIZE);
     }
 
     #[test]
@@ -315,9 +302,9 @@ mod tests {
         log.add_record(100, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
         // Assert log has only one record and it's size is within limit.
         assert_eq!(log.records().len(), 1);
-        assert_eq!(log.used_space(), TEST_MAX_ALLOWED_SIZE);
-        assert_eq!(log.remaining_space(), 0);
-        assert_eq!(log.capacity(), TEST_MAX_ALLOWED_SIZE);
+        assert_eq!(log.bytes_used(), TEST_MAX_ALLOWED_SIZE);
+        assert_eq!(log.remaining_bytes(), 0);
+        assert_eq!(log.byte_capacity(), TEST_MAX_ALLOWED_SIZE);
     }
 
     #[test]
@@ -331,9 +318,9 @@ mod tests {
         log.clear();
         // Assert log has no records and memory usage is zero.
         assert_eq!(log.records().len(), 0);
-        assert_eq!(log.used_space(), 0);
-        assert_eq!(log.remaining_space(), TEST_MAX_ALLOWED_SIZE);
-        assert_eq!(log.capacity(), TEST_MAX_ALLOWED_SIZE);
+        assert_eq!(log.bytes_used(), 0);
+        assert_eq!(log.remaining_bytes(), TEST_MAX_ALLOWED_SIZE);
+        assert_eq!(log.byte_capacity(), TEST_MAX_ALLOWED_SIZE);
     }
 
     #[test]
@@ -442,14 +429,14 @@ mod tests {
                 (2, 102, b"main_ #2"),
             ]),
         );
-        assert_eq!(main.used_space(), size_a);
+        assert_eq!(main.bytes_used(), size_a);
 
         // Batch B.
         let mut delta = CanisterLog::new_with_next_index(main.next_idx());
         delta.add_record(200, b"delta #0".to_vec());
         delta.add_record(201, b"delta #1".to_vec());
         delta.add_record(202, b"delta #2".to_vec());
-        assert_eq!(delta.used_space(), size_b);
+        assert_eq!(delta.bytes_used(), size_b);
         main.append_delta_log(&mut delta);
 
         // Batch C.
@@ -458,7 +445,7 @@ mod tests {
         delta.add_record(301, b"delta #4".to_vec());
         delta.add_record(302, b"delta #5".to_vec());
         delta.add_record(303, b"delta #6".to_vec());
-        assert_eq!(delta.used_space(), size_c);
+        assert_eq!(delta.bytes_used(), size_c);
         main.append_delta_log(&mut delta);
 
         // Assert main log has all records and correct used space.
@@ -479,6 +466,6 @@ mod tests {
         );
         assert_eq!(main.take_delta_log_sizes(), vec![size_b, size_c]);
         assert_eq!(main.take_delta_log_sizes(), Vec::<usize>::new()); // Second call returns empty.
-        assert_eq!(main.used_space(), size_a + size_b + size_c);
+        assert_eq!(main.bytes_used(), size_a + size_b + size_c);
     }
 }
