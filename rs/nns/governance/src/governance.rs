@@ -4033,28 +4033,25 @@ impl Governance {
     }
 
     fn next_start_date_node_providers_rewards(&self) -> DateUtc {
-        let rewards_option = self.get_most_recent_monthly_node_provider_rewards();
+        if let Some(rewards) = self.get_most_recent_monthly_node_provider_rewards() {
+            if let Some(end_date) = rewards.end_date {
+                // Case 1a: end_date exists → next start date is the day after
+                let naive_date =
+                    NaiveDate::from_ymd(end_date.year as i32, end_date.month, end_date.day);
+                return DateUtc::from(naive_date.succ());
+            }
 
-        rewards_option
-            .map(|rewards| {
-                rewards
-                    .end_date
-                    .map(|end_date| {
-                        // If end_date is present, calculate the day after it.
+            // Case 1b: end_date is None → fall back to the timestamp of the reward
+            return DateUtc::from_unix_timestamp_seconds(rewards.timestamp);
+        }
 
-                        let naive_date =
-                            NaiveDate::from_ymd(end_date.year as i32, end_date.month, end_date.day);
-                        DateUtc::from(naive_date.succ())
-                    })
-                    .unwrap_or_else(|| DateUtc::from_unix_timestamp_seconds(rewards.timestamp))
-            })
-            .unwrap_or_else(|| {
-                let default_timestamp_seconds =
-                    Time::from_nanos_since_unix_epoch(ic_cdk::api::time())
-                        .as_secs_since_unix_epoch()
-                        .saturating_sub(NODE_PROVIDER_REWARD_PERIOD_SECONDS);
-                DateUtc::from_unix_timestamp_seconds(default_timestamp_seconds)
-            })
+        // Case 2: No previous rewards → default start date
+        // This is only used for test environments where there are no previous rewards.
+        let default_ts = Time::from_nanos_since_unix_epoch(ic_cdk::api::time())
+            .as_secs_since_unix_epoch()
+            .saturating_sub(NODE_PROVIDER_REWARD_PERIOD_SECONDS);
+
+        DateUtc::from_unix_timestamp_seconds(default_ts)
     }
 
     async fn perform_action(&mut self, pid: u64, action: ValidProposalAction) {
