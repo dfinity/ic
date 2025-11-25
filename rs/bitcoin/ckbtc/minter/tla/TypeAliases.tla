@@ -13,10 +13,11 @@ EXTENDS TLC
 @typeAlias: utxo = {id: $utxoId, owner: $btcAddress, amount: $amount};
 $typeAlias: requestId = Int;
 @typeAlias: withdrawalReq = {request_id: Int, address: $btcAddress, amount: $amount};
-@typeAlias: submission = {consumed_utxos: Set($utxo), outputs: Seq({owner: $btcAddress, amount: $amount})};
+@typeAlias: outputEntry = {owner: $btcAddress, amount: $amount};
+@typeAlias: submission = {consumed_utxos: Set($utxo), outputs: Seq($outputEntry)};
+@typeAlias: txHashOp = TextHash(UNIT) | OtherHash($submission -> $txid);
 @typeAlias: ckbtcAddress = { owner: $principal, subaccount: $subaccount };
 @typeAlias: addressState = {discovered_utxos: Set($utxo), processed_utxos: Set($utxo), spent_utxos: Set($utxo)};
-@typeAlias: outputEntry = {owner: $btcAddress, amount: $amount};
 @typeAlias: submittedTx = {requests: Seq(Int), txid: $txid, used_utxos: Set($utxo), change_output: {vout: Int, vamount: $amount}};
 @typeAlias: btcTransaction = {txid: $txid, consumed_utxos: Set($utxo), outputs: Seq($outputEntry)};
 @typeAlias: minterToLedgerRequestType = Mint({to: $ckbtcAddress, amount: $amount}) | Burn({address: $ckbtcAddress, amount: $amount});

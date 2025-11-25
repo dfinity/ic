@@ -31,13 +31,12 @@ CONSTANTS
     \* The ID of the PlusCal process simulating the heartbeat of the ckBTC Ledger
     HEARTBEAT_PROCESS_IDS,
     RETRIEVE_BTC_FEE,
-    TX_HASH(_),
     DEPOSIT_ADDRESS
 
 \* @type: $submission => Set($utxo);
 Utxos_Of(submission) ==
     LET
-        tx_hash == TX_HASH(submission)
+        tx_hash == Tx_Hash(submission)
     IN
         { [id |-> << tx_hash, i >>, owner |-> submission.outputs[i].owner, amount |-> submission.outputs[i].amount] 
             : i \in 1..Len(submission.outputs) }
@@ -248,7 +247,7 @@ Ledger_Loop:
 }
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "205982a4" /\ chksum(tla) = "ba52fc66")
+\* BEGIN TRANSLATION (chksum(pcal) = "205982a4" /\ chksum(tla) = "f737ad74")
 VARIABLES btc, btc_canister, balance, btc_canister_to_btc, 
           minter_to_btc_canister, btc_canister_to_minter, minter_to_ledger, 
           ledger_to_minter, nr_user_transfers
@@ -309,7 +308,7 @@ BTC_Canister == /\ \/ /\ btc_canister' = btc
                                                                                               ]
                                                                                           })
                                                   ELSE /\ Assert((FALSE), 
-                                                                 "Failure of assertion at line 181, column 13.")
+                                                                 "Failure of assertion at line 180, column 13.")
                                                        /\ UNCHANGED << btc_canister_to_btc, 
                                                                        btc_canister_to_minter >>
                               \/ /\ btc_canister_to_minter' = (btc_canister_to_minter \union { BTC_Canister_Error_Response((Caller(req))) })
@@ -342,7 +341,7 @@ Ledger == /\ \/ /\ \E src_address \in DOMAIN balance \intersect CK_BTC_ADDRESSES
                                                          ELSE /\ ledger_to_minter' = (ledger_to_minter \union { [ caller_id |-> (Caller(req)), status |-> Status_Err ] })
                                                               /\ UNCHANGED balance
                                             ELSE /\ Assert((FALSE), 
-                                                           "Failure of assertion at line 238, column 29.")
+                                                           "Failure of assertion at line 237, column 29.")
                                                  /\ UNCHANGED << balance, 
                                                                  ledger_to_minter >>
                         \/ /\ ledger_to_minter' = (ledger_to_minter \union { [ caller_id |-> (req.caller_id), status |-> Status_System_Err ] })

@@ -42,51 +42,101 @@ Finished in 20h 37min at (2022-07-09 10:21:40)
 
 
 ---- MODULE CkbtcMinter ----
-EXTENDS TLC, Sequences, Integers, FiniteSets, FiniteSetsExt, SequencesExt, Functions, Variants, Apalache, TLA_Hash, TypeAliases, Ckbtc_Common
+EXTENDS TLC, Sequences, Integers, FiniteSets, FiniteSetsExt, SequencesExt, Functions, Variants, Apalache,  TypeAliases, Ckbtc_Common \* TLA_Hash
 
-
-\**********************************************************************************************
-(* Constants of the model *)
-\**********************************************************************************************
 CONSTANTS
-    \**********************************************************************************************
-    \* Constants determining the model size
-    \**********************************************************************************************
-    MAX_USER_BTC_TRANSFERS,
+    \* @type: Int;
     \* Initial "supply" of BTC (all allocated to the user account initially)
+    MAX_USER_BTC_TRANSFERS,
+    \* @type: $amount;
     BTC_SUPPLY,
-    \* Initial BTCs controlled by the minter; this is needed to guarantee the existence of change
+    \* @type: $amount;
     MINTER_INITIAL_SUPPLY,
-    \* The set of process IDs for the update balance processes.
-    \* The cardinality of the set effectively determines the number of concurrent calls
-    \* to the update_balance method on the minter canister.
+    \* @type: Set($pid);
     UPDATE_BALANCE_PROCESS_IDS,
-    \* The set of process IDs for Retrieve_BTC process.
-    \* This roughly, corresponding to the set of call contexts for the retrieve_btc method,
-    \* and limits the number of times that retrieve_btc can be called.
+    \* @type: Set($pid);
     RETRIEVE_BTC_PROCESS_IDS,
-    \* Same as for retrieve_btc, just for the resubmit_retrieve_btc minter method.
+    \* @type: Set($pid);
     RESUBMIT_RETRIEVE_BTC_PROCESS_IDS,
-    \**********************************************************************************************
-    \* Other constants
-    \**********************************************************************************************
-    \* The "user-controlled" BTC address; we assume just one such address in this model.
+    \* @type: $btcAddress;
     USER_BTC_ADDRESS,
-    \* The ID of the PlusCal process simulating the BTC network
+    \* @type: $pid;
     BTC_PROCESS_ID,
-    \* The ID of the PlusCal process simulating the ckBTC Ledger
+    \* @type: $pid;
     LEDGER_PROCESS_ID,
-    \* The ID of the PlusCal process simulating the BTC canister
+    \* @type: $pid;
     BTC_CANISTER_PROCESS_ID,
-    \* The ID of the PlusCal process simulating the heartbeat of the ckBTC Ledger
+    \* @type: Set($pid);
     HEARTBEAT_PROCESS_IDS,
+    \* @type: $amount;
     RETRIEVE_BTC_FEE,
-    TX_HASH(_),
+    \* @type: $ckbtcAddress -> $btcAddress;
     DEPOSIT_ADDRESS
+
+(*
+@typeAlias: requestId = Int;
+*)
+_dummy == TRUE
+
+Use_Tostring_For_Hashing == Variant("TextHash", UNIT)
+
+VARIABLES
+    \* @type: Set($utxo);
+    btc,
+    \* @type: Set($utxo);
+    btc_canister,
+    \* @type: $ckbtcAddress -> Set($utxo);
+    utxos_state_addresses,
+    \* @type: Set($principal);
+    locks,
+    \* @type: $ckbtcAddress -> $amount;
+    balance,
+    \* @type: Set($submission);
+    btc_canister_to_btc,
+    \* @type: Seq($minterToBtcCanisterRequest);
+    minter_to_btc_canister,
+    \* @type: Set($btcCanisterToMinterResponse);
+    btc_canister_to_minter,
+    \* @type: Seq($minterToLedgerRequest);
+    minter_to_ledger,
+    \* @type: Set($ledgerToMinterResponse);
+    ledger_to_minter,
+    \* @type: Int;
+    next_request_id,
+    \* @type: $pc;
+    pc,
+    \* @type: $pid -> Seq($withdrawalReq);
+    submitted,
+    \* @type: $pid -> Seq($requestId);
+    submitted_ids,
+    \* @type: $pid -> Set($utxo);
+    spent,
+    \* @type: $pid -> Seq({ owner: $btcAddress, amount: $amount});
+    outputs,
+    \* @type: Int;
+    nr_user_transfers,
+    \* @type: $pid -> $amount;
+    amount,
+    \* @type: $pid -> $ckbtcAddress;
+    caller_account,
+    \* @type: $pid -> Set($utxo);
+    new_utxos,
+    \* @type: $pid -> $optSubmission;
+    new_transaction,
+    \* @type: Seq($withdrawalReq);
+    pending,
+    \* @type: $principal -> Set($utxo);
+    finalized_utxos,
+    \* @type: Set($utxo);
+    available_utxos,
+    \* @type: Set($submittedTx);
+    submitted_transactions
+
+
 
 
 TxHash(tx) == ToString(tx)
-Text_Hash(tx) == ToString(Hash(tx))
+\* Text_Hash(tx) == ToString(Hash(tx))
 
 \**********************************************************************************************
 \* Constants used when runing the analysis using the TLC tool
@@ -119,33 +169,6 @@ Symmetry_Permutations == UNION { Permutations(S) : S \in Symmetry_Sets }
 \**********************************************************************************************
 
 \* Compute the new outputs needed to transfer the BTCs to an array of destinations
-
-VARIABLES
-    btc,
-    btc_canister,
-    utxos_state_addresses,
-    locks,
-    balance,
-    btc_canister_to_btc,
-    minter_to_btc_canister,
-    btc_canister_to_minter,
-    minter_to_ledger,
-    ledger_to_minter,
-    next_request_id,
-    pc,
-    submitted,
-    submitted_ids,
-    spent,
-    outputs,
-    nr_user_transfers,
-    amount,
-    caller_account,
-    new_utxos,
-    new_transaction,
-    pending,
-    finalized_utxos,
-    available_utxos,
-    submitted_transactions
 
 vars == <<
     btc,

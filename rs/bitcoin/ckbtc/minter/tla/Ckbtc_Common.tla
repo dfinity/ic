@@ -6,16 +6,23 @@ CONSTANTS
     \* Constants determining the model size
     \**********************************************************************************************
     \* Principals that hold ckBTC
+    \* @type: Set($principal);
     PRINCIPALS,
     \* Subaccounts for the ck_btc_addresses
+    \* @type: Set($subaccount);
     SUBACCOUNTS,
     \* Every BTC transfer allocates a new UTXO id. Allowing an infinite number of transfers
     \* would thus require infinite state. So we bound the number of BTC transfers a user is
     \* allowed to make.
     \* Minter principal
+    \* @type: $principal;
     MINTER_PRINCIPAL,
     \* Minter change subaccount
-    MINTER_SUBACCOUNT
+    \* @type: $subaccount;
+    MINTER_SUBACCOUNT,
+    \* @type: $txHashOp;
+    TX_HASH_OP
+
 
 MINTER_CKBTC_ADDRESS == [owner |-> MINTER_PRINCIPAL, subaccount |-> MINTER_SUBACCOUNT]
 
@@ -138,5 +145,9 @@ Is_Get_Utxos_Ok_Response(resp) == VariantTag(resp.response) = "GetUtxosOk"
 \* @type: $btcCanisterToMinterResponse => Set($utxo);
 Get_Utxos_Result(resp) == VariantGetUnsafe("GetUtxosOk", resp.response)
 
+\* @type: $submission => $txid;
+Tx_Hash(tx) == IF VariantTag(TX_HASH_OP) = "TextHash" 
+                THEN ToString(tx) 
+                ELSE VariantGetUnsafe("OtherHash", TX_HASH_OP)[tx]
 
 ====

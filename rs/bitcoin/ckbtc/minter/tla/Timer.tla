@@ -31,7 +31,6 @@ CONSTANTS
     \* The ID of the PlusCal process simulating the heartbeat of the ckBTC Ledger
     HEARTBEAT_PROCESS_IDS,
     RETRIEVE_BTC_FEE,
-    TX_HASH(_),
     DEPOSIT_ADDRESS
 
 No_Submission == Variant("NoSubmission", UNIT)
@@ -217,7 +216,7 @@ variables
         {
             btc_canister_to_minter := btc_canister_to_minter \ {response};
             if(VariantTag(response.response) = "SubmissionOk") {
-                submitted_transactions := submitted_transactions \union {[requests |-> submitted_ids, txid |-> TX_HASH(Unwrap_Submission(new_transaction)), used_utxos |-> spent, change_output |-> [vout |-> change_index, vamount |-> outputs[change_index].amount]] } ;
+                submitted_transactions := submitted_transactions \union {[requests |-> submitted_ids, txid |-> Tx_Hash(Unwrap_Submission(new_transaction)), used_utxos |-> spent, change_output |-> [vout |-> change_index, vamount |-> outputs[change_index].amount]] } ;
             } else {
                 \* This puts the submission at the end of the queue;
                 \* this corresponds to the plans for the implementation, though for the model's purposes
@@ -268,7 +267,7 @@ variables
 }
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "bc907a55" /\ chksum(tla) = "38d1bd17")
+\* BEGIN TRANSLATION (chksum(pcal) = "5f389fd" /\ chksum(tla) = "f0225d1c")
 VARIABLES pc, btc, btc_canister, utxos_state_addresses, available_utxos, 
           finalized_utxos, locks, pending, submitted_transactions, balance, 
           btc_canister_to_btc, minter_to_btc_canister, btc_canister_to_minter, 
@@ -362,7 +361,7 @@ Conclude_Submission(self) == /\ pc[self] = "Conclude_Submission"
                                   \E change_index \in {i\in DOMAIN outputs[self] : outputs[self][i].owner = DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS]}:
                                     /\ btc_canister_to_minter' = btc_canister_to_minter \ {response}
                                     /\ IF VariantTag(response.response) = "SubmissionOk"
-                                          THEN /\ submitted_transactions' = (submitted_transactions \union {[requests |-> submitted_ids[self], txid |-> TX_HASH(Unwrap_Submission(new_transaction[self])), used_utxos |-> spent[self], change_output |-> [vout |-> change_index, vamount |-> outputs[self][change_index].amount]] })
+                                          THEN /\ submitted_transactions' = (submitted_transactions \union {[requests |-> submitted_ids[self], txid |-> Tx_Hash(Unwrap_Submission(new_transaction[self])), used_utxos |-> spent[self], change_output |-> [vout |-> change_index, vamount |-> outputs[self][change_index].amount]] })
                                                /\ pc' = [pc EXCEPT ![self] = "Finalize_Requests"]
                                                /\ UNCHANGED << available_utxos, 
                                                                pending, 
