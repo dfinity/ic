@@ -31,6 +31,7 @@ pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
 // Compile-time assertions to ensure the constants are within valid ranges.
 const _: () = assert!(DEFAULT_LOG_MEMORY_LIMIT >= MIN_ALLOWED_LOG_MEMORY_LIMIT);
 const _: () = assert!(DEFAULT_LOG_MEMORY_LIMIT <= MAX_ALLOWED_LOG_MEMORY_LIMIT);
+const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MAX_ALLOWED_LOG_RECORD_SIZE);
 const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MIN_ALLOWED_LOG_MEMORY_LIMIT);
 
 /// Returns the minimum allowed size of a canister log buffer.
@@ -229,7 +230,7 @@ impl CanisterLog {
     /// Moves all the logs from `delta_log` to `self`.
     pub fn append_delta_log(&mut self, delta_log: &mut Self) {
         // Record the size of the appended delta log for metrics.
-        self.push_delta_log_size(delta_log.records.used_space());
+        self.push_delta_log_size(delta_log.records.bytes_used);
 
         // Assume records sorted cronologically (with increasing idx) and
         // update the system state's next index with the last record's index.
