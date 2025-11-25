@@ -4,7 +4,7 @@ use ic_certification::{Certificate, HashTree, LookupResult, SubtreeLookupResult}
 use std::{
     collections::HashSet,
     fs,
-    io::{Read, Write, stdin},
+    io::{Read, Write, stdin, stdout},
     time::Duration,
 };
 
@@ -40,10 +40,13 @@ enum Subcommand {
 
 impl Subcommand {
     async fn execute(self) {
+        let stdout = stdout();
+        let mut stdout = stdout.lock();
+
         #[rustfmt::skip] // Keep alignment, because it strongly triggers the human brain.
         match self {
-            Self::CallCanister (ok) => ok.execute().await,
-            Self::LoadFromFile (ok) => ok.execute(),
+            Self::CallCanister (ok) => ok.execute(&mut stdout).await,
+            Self::LoadFromFile (ok) => ok.execute(&mut stdout),
         };
     }
 }
@@ -65,7 +68,7 @@ struct CallCanister {
 }
 
 impl CallCanister {
-    async fn execute(self) {
+    async fn execute(self, stdout: &mut impl Write) {
         let Self {
             callee,
             method,
@@ -77,10 +80,8 @@ impl CallCanister {
         let signed_proposal = download_signed_proposal(callee, &method, arg).await;
         let signed_proposal = serde_cbor::to_vec(&signed_proposal).unwrap();
 
-        let stdout = std::io::stdout();
-        let mut handle = stdout.lock();
-        handle.write_all(&signed_proposal).unwrap();
-        handle.flush().unwrap();
+        stdout.write_all(&signed_proposal).unwrap();
+        stdout.flush().unwrap();
 
         eprintln!("👍 Done outputing the certificate from read_state to stdout.");
     }
@@ -99,7 +100,7 @@ struct LoadFromFile {
 }
 
 impl LoadFromFile {
-    fn execute(self) {
+    fn execute(self, stdout: &mut impl Write) {
         let Self { signed_reply_path } = self;
 
         let content = read_flag_path(&signed_reply_path);
@@ -110,7 +111,7 @@ impl LoadFromFile {
             .into_iter()
             .map(|element| format!("{:02X}", element))
             .collect::<String>();
-        println!("{reply}");
+        write!(stdout, "{reply}").unwrap();
     }
 }
 
@@ -271,3 +272,6 @@ impl RequestStatus {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;

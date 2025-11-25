@@ -8,9 +8,13 @@ documentation.workspace = true
 
 [dependencies]
 base64 = { workspace = true }
-candid = { workspace = true }
 clap = { workspace = true }
 ic-agent = { workspace = true }
 ic-certification = { workspace = true }
 serde_cbor = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true }
+
+[dev-dependencies]
+candid = { workspace = true }
+hex = { workspace = true }
