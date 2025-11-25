@@ -25,6 +25,8 @@ use ic_canister_sandbox_backend_lib::{
 use ic_crypto_iccsa::{public_key_bytes_from_der, types::SignatureBytes, verify};
 use ic_crypto_sha2::Sha256;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
+use ic_types::SubnetId;
 use libc::{RLIMIT_NOFILE, getrlimit, rlimit, setrlimit};
 use pocket_ic::common::rest::{BinaryBlob, BlobCompression, BlobId, RawVerifyCanisterSigArg};
 use pocket_ic_server::BlobStore;
@@ -34,7 +36,7 @@ use pocket_ic_server::state_api::{
     state::{ApiState, PocketIcApiStateBuilder},
 };
 use std::cmp::max;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::Write;
 use std::io::{self, Error};
@@ -56,6 +58,8 @@ const TTL_SEC: u64 = 60;
 const DEFAULT_LOG_LEVELS: &str = "pocket_ic_server=info,tower_http=info,axum::rejection=trace";
 const LOG_DIR_PATH_ENV_NAME: &str = "POCKET_IC_LOG_DIR";
 const LOG_DIR_LEVELS_ENV_NAME: &str = "POCKET_IC_LOG_DIR_LEVELS";
+
+static MAINNET_ROUTING_TABLE: &[u8] = include_bytes!("mainnet_routing_table.json");
 
 #[derive(Parser)]
 #[clap(name = "pocket-ic-server")]
@@ -205,11 +209,20 @@ async fn start(runtime: Arc<Runtime>) {
             .unwrap()
             .as_nanos() as u64,
     ));
+    let mainnet_routing_table_vec: Vec<(CanisterIdRange, SubnetId)> =
+        serde_json::from_slice(MAINNET_ROUTING_TABLE).unwrap();
+    let mainnet_routing_table = RoutingTable::try_from(
+        mainnet_routing_table_vec
+            .into_iter()
+            .collect::<BTreeMap<_, _>>(),
+    )
+    .unwrap();
     let app_state = AppState {
         api_state,
         pending_requests: Arc::new(AtomicU64::new(0)),
         min_alive_until,
         runtime,
+        mainnet_routing_table,
         blob_store: Arc::new(InMemoryBlobStore::new()),
     };
 
