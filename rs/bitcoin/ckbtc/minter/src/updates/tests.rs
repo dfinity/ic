@@ -26,6 +26,7 @@ mod update_balance {
     use tla_instrumentation_proc_macros::with_tla_trace_check;
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_not_add_event_when_reevaluated_utxo_still_ignored() {
         mock_constant_time(&mut MockCanisterRuntime::new(), NOW, 1);
 
@@ -79,6 +80,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_do_btc_check_when_reevaluating_ignored_utxo() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
@@ -198,6 +200,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_not_add_event_when_reevaluated_utxo_still_tainted() {
         mock_constant_time(&mut MockCanisterRuntime::new(), NOW, 1);
 
@@ -209,6 +212,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_mint_reevaluated_tainted_utxo() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();
