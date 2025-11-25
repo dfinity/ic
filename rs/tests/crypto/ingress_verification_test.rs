@@ -1126,12 +1126,12 @@ fn resign_certificate_with_random_signature<R: Rng + CryptoRng>(
         serde_cbor::from_slice(certificate_cbor).expect("failed to parse certificate CBOR");
 
     let previous_signature = certificate.signature.clone();
-    assert!(previous_signature.len() == 48);
-
+    assert_eq!(previous_signature.len(), 48);
+ 
     let random_g1 = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
     certificate.signature = random_g1.serialize().to_vec();
-    assert!(certificate.signature.len() == 48);
-    assert!(certificate.signature != previous_signature);
+    assert_eq!(certificate.signature.len(), 48);
+    assert_ne!(certificate.signature, previous_signature);
 
     // serialize back to self-describing CBOR
     use serde::Serialize;
