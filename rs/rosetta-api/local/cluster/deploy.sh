@@ -81,7 +81,7 @@ while [[ "$#" -gt 0 ]]; do
         --clean) CLEAN=true ;;
         --stop) STOP=true ;;
         --help)
-            sed -n '5,19p' "$0"
+            sed -n '5,20p' "$0"
             exit 0
             ;;
         *)
