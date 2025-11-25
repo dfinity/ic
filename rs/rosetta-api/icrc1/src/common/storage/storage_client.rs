@@ -423,7 +423,7 @@ impl StorageClient {
         block_idx: u64,
     ) -> anyhow::Result<Option<Nat>> {
         let conn = Arc::clone(&self.storage_connection);
-        let account = account.clone();
+        let account = *account;
         tokio::task::spawn_blocking(move || {
             let open_connection = conn.lock().unwrap();
             storage_operations::get_account_balance_at_block_idx(
@@ -439,7 +439,7 @@ impl StorageClient {
     // Returns None if the account does not exist in the database
     pub async fn get_account_balance(&self, account: &Account) -> anyhow::Result<Option<Nat>> {
         let conn = Arc::clone(&self.storage_connection);
-        let account = account.clone();
+        let account = *account;
         tokio::task::spawn_blocking(move || {
             let open_connection = conn.lock().unwrap();
             storage_operations::get_account_balance_at_highest_block_idx(&open_connection, &account)

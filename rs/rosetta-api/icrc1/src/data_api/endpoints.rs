@@ -15,7 +15,7 @@ pub async fn ready(State(state): State<Arc<MultiTokenAppState>>) -> (StatusCode,
     for token_state in state.token_states.values() {
         let storage = Arc::clone(&token_state.storage);
         let synched = Arc::clone(&token_state.synched);
-        if !initial_sync_is_completed(&*storage, synched).await {
+        if !initial_sync_is_completed(&storage, synched).await {
             return (StatusCode::SERVICE_UNAVAILABLE, Json(()));
         }
     }
