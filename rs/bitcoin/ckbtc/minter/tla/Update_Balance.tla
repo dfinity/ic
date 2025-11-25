@@ -65,18 +65,18 @@ macro send_minter_to_ledger_mint(caller_id, address, value) {
     minter_to_ledger := Append(minter_to_ledger, Mint_Request(caller_id, address, value));
 }
 
-macro process_next_utxo(utxos) {
-    if(utxos = {}) {
+macro process_next_utxo(nutxos) {
+    if(nutxos = {}) {
         return_from_update_balance();
     } else {
-        with(utxos_failing_checks \in SUBSET utxos) {
+        with(nutxos_failing_checks \in SUBSET nutxos) {
             either {
-                await(utxos_failing_checks = utxos);
+                await(nutxos_failing_checks = nutxos);
                 return_from_update_balance();
             } or {
                 \* Non-deterministically pick a UTXO that passes all checks
-                with(ok_utxo \in utxos \ utxos_failing_checks) {
-                    utxos := (utxos \ utxos_failing_checks) \ {ok_utxo};
+                with(ok_utxo \in nutxos \ nutxos_failing_checks) {
+                    utxos := (nutxos \ nutxos_failing_checks) \ {ok_utxo};
                     utxo := ok_utxo;
                     send_minter_to_ledger_mint(self, caller_account, utxo.value - CHECK_FEE);
                     goto Update_Balance_Mark_Minted;
@@ -136,8 +136,7 @@ Update_Balance_Receive_Utxos:
         ) {
           finalized_utxos := Remove_Argument(finalized_utxos,caller_account.owner);
           if(discovered_value > 0) {
-            utxos := nutxos;
-            send_minter_to_ledger_mint(self, caller_account, discovered_value);
+            process_next_utxo(nutxos);
           } else {
             \* If nothing new has been discovered, release the lock and finish
             return_from_update_balance();
@@ -161,7 +160,7 @@ Update_Balance_Mark_Minted:
 };
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "f660aff0" /\ chksum(tla) = "5f1ec994")
+\* BEGIN TRANSLATION (chksum(pcal) = "42c26389" /\ chksum(tla) = "e6415c91")
 VARIABLES pc, utxos_state_addresses, available_utxos, finalized_utxos, 
           update_balance_locks, retrieve_btc_locks, locks, pending, 
           submitted_transactions, minter_to_btc_canister, 
@@ -228,12 +227,27 @@ Update_Balance_Receive_Utxos(self) == /\ pc[self] = "Update_Balance_Receive_Utxo
                                                              LET discovered_value == Sum_Utxos(nutxos) IN
                                                                /\ finalized_utxos' = Remove_Argument(finalized_utxos,caller_account[self].owner)
                                                                /\ IF discovered_value > 0
-                                                                     THEN /\ utxos' = [utxos EXCEPT ![self] = nutxos]
-                                                                          /\ minter_to_ledger' = Append(minter_to_ledger, Mint_Request(self, caller_account[self], discovered_value))
-                                                                          /\ pc' = [pc EXCEPT ![self] = "Update_Balance_Mark_Minted"]
-                                                                          /\ UNCHANGED << update_balance_locks, 
-                                                                                          caller_account, 
-                                                                                          utxo >>
+                                                                     THEN /\ IF nutxos = {}
+                                                                                THEN /\ update_balance_locks' = update_balance_locks \ {caller_account[self].owner}
+                                                                                     /\ caller_account' = [caller_account EXCEPT ![self] = MINTER_CKBTC_ADDRESS]
+                                                                                     /\ utxos' = [utxos EXCEPT ![self] = {}]
+                                                                                     /\ utxo' = [utxo EXCEPT ![self] = DUMMY_UTXO]
+                                                                                     /\ pc' = [pc EXCEPT ![self] = "Update_Balance_Start"]
+                                                                                     /\ UNCHANGED minter_to_ledger
+                                                                                ELSE /\ \E nutxos_failing_checks \in SUBSET nutxos:
+                                                                                          \/ /\ (nutxos_failing_checks = nutxos)
+                                                                                             /\ update_balance_locks' = update_balance_locks \ {caller_account[self].owner}
+                                                                                             /\ caller_account' = [caller_account EXCEPT ![self] = MINTER_CKBTC_ADDRESS]
+                                                                                             /\ utxos' = [utxos EXCEPT ![self] = {}]
+                                                                                             /\ utxo' = [utxo EXCEPT ![self] = DUMMY_UTXO]
+                                                                                             /\ pc' = [pc EXCEPT ![self] = "Update_Balance_Start"]
+                                                                                             /\ UNCHANGED minter_to_ledger
+                                                                                          \/ /\ \E ok_utxo \in nutxos \ nutxos_failing_checks:
+                                                                                                  /\ utxos' = [utxos EXCEPT ![self] = (nutxos \ nutxos_failing_checks) \ {ok_utxo}]
+                                                                                                  /\ utxo' = [utxo EXCEPT ![self] = ok_utxo]
+                                                                                                  /\ minter_to_ledger' = Append(minter_to_ledger, Mint_Request(self, caller_account[self], (utxo'[self].value - CHECK_FEE)))
+                                                                                                  /\ pc' = [pc EXCEPT ![self] = "Update_Balance_Mark_Minted"]
+                                                                                             /\ UNCHANGED <<update_balance_locks, caller_account>>
                                                                      ELSE /\ update_balance_locks' = update_balance_locks \ {caller_account[self].owner}
                                                                           /\ caller_account' = [caller_account EXCEPT ![self] = MINTER_CKBTC_ADDRESS]
                                                                           /\ utxos' = [utxos EXCEPT ![self] = {}]
@@ -271,16 +285,16 @@ Update_Balance_Mark_Minted(self) == /\ pc[self] = "Update_Balance_Mark_Minted"
                                                /\ utxo' = [utxo EXCEPT ![self] = DUMMY_UTXO]
                                                /\ pc' = [pc EXCEPT ![self] = "Update_Balance_Start"]
                                                /\ UNCHANGED minter_to_ledger
-                                          ELSE /\ \E utxos_failing_checks \in SUBSET utxos[self]:
-                                                    \/ /\ (utxos_failing_checks = utxos[self])
+                                          ELSE /\ \E nutxos_failing_checks \in SUBSET utxos[self]:
+                                                    \/ /\ (nutxos_failing_checks = utxos[self])
                                                        /\ update_balance_locks' = update_balance_locks \ {caller_account[self].owner}
                                                        /\ caller_account' = [caller_account EXCEPT ![self] = MINTER_CKBTC_ADDRESS]
                                                        /\ utxos' = [utxos EXCEPT ![self] = {}]
                                                        /\ utxo' = [utxo EXCEPT ![self] = DUMMY_UTXO]
                                                        /\ pc' = [pc EXCEPT ![self] = "Update_Balance_Start"]
                                                        /\ UNCHANGED minter_to_ledger
-                                                    \/ /\ \E ok_utxo \in utxos[self] \ utxos_failing_checks:
-                                                            /\ utxos' = [utxos EXCEPT ![self] = (utxos[self] \ utxos_failing_checks) \ {ok_utxo}]
+                                                    \/ /\ \E ok_utxo \in utxos[self] \ nutxos_failing_checks:
+                                                            /\ utxos' = [utxos EXCEPT ![self] = (utxos[self] \ nutxos_failing_checks) \ {ok_utxo}]
                                                             /\ utxo' = [utxo EXCEPT ![self] = ok_utxo]
                                                             /\ minter_to_ledger' = Append(minter_to_ledger, Mint_Request(self, caller_account[self], (utxo'[self].value - CHECK_FEE)))
                                                             /\ pc' = [pc EXCEPT ![self] = "Update_Balance_Mark_Minted"]

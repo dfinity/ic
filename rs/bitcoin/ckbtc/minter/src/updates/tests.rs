@@ -14,12 +14,16 @@ mod update_balance {
         SuspendedUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
     };
     use crate::{CanisterRuntime, GetUtxosResponse, Timestamp, storage};
+    #[cfg(feature = "tla")]
+    use crate::tla::{TLA_TRACES_LKEY, check_traces as tla_check_traces};
     use ic_btc_checker::{CheckTransactionResponse, CheckTransactionStatus};
     use ic_btc_interface::Utxo;
     use ic_management_canister_types_private::BoundedVec;
     use icrc_ledger_types::icrc1::account::Account;
     use std::iter;
     use std::time::Duration;
+    #[cfg(feature = "tla")]
+    use tla_instrumentation_proc_macros::with_tla_trace_check;
 
     #[tokio::test]
     async fn should_not_add_event_when_reevaluated_utxo_still_ignored() {
@@ -33,6 +37,7 @@ mod update_balance {
     }
 
     #[tokio::test]
+    #[cfg_attr(feature = "tla", with_tla_trace_check)]
     async fn should_call_check_transaction_again_when_cycles_not_enough() {
         init_state_with_ecdsa_public_key();
         let account = ledger_account();

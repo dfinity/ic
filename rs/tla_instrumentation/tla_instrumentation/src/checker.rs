@@ -40,7 +40,7 @@ impl std::fmt::Debug for ApalacheError {
                     {
                         f.write_str("This is most likely a mismatch between the code and the model")
                     }
-                    _ => f.write_str("This is most likely a problem with the model itself."),
+                    _ => f.write_str("This is most likely a problem with the model itself, or the TLA annotations (e.g., failing to log the values of some variables)"),
                 }
             }
             ApalacheError::CheckFailed(None, s) => {

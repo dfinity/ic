@@ -1,6 +1,6 @@
 ---- MODULE Update_Balance_Apalache ----
 
-EXTENDS Apalache, TypeAliases
+EXTENDS Apalache, TypeAliases, Variants, TLA_Hash
 
 \* CODE_LINK_INSERT_CONSTANTS
 

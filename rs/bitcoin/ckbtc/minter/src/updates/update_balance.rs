@@ -13,6 +13,8 @@ use icrc_ledger_types::icrc1::transfer::Memo;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use num_traits::ToPrimitive;
 use serde::Serialize;
+#[cfg(feature = "tla")]
+use std::collections::BTreeMap;
 
 // Max number of times of calling check_transaction with cycle payment, to avoid spending too
 // many cycles.
@@ -28,6 +30,20 @@ use crate::{
     state,
     tx::{DisplayAmount, DisplayOutpoint},
 };
+#[cfg(feature = "tla")]
+use crate::tla::{
+    account_to_tla, btc_address_to_tla, utxo_set_to_tla, utxo_to_tla, UPDATE_BALANCE_DESC,
+    UPDATE_BALANCE_START, dummy_utxo
+};
+#[cfg(feature = "tla")]
+use crate::{
+    tla::TLA_INSTRUMENTATION_STATE, tla::TLA_TRACES_LKEY, tla::TLA_TRACES_MUTEX,
+    tla_log_label, tla_log_locals, tla_log_request, tla_log_response, tla_snapshotter,
+};
+#[cfg(feature = "tla")]
+use tla_instrumentation::{Destination, InstrumentationState, TlaValue, ToTla};
+#[cfg(feature = "tla")]
+use tla_instrumentation_proc_macros::tla_update_method;
 
 /// The argument of the [update_balance] endpoint.
 #[derive(Clone, Eq, PartialEq, Debug, CandidType, Deserialize, Serialize)]
@@ -140,10 +156,17 @@ impl From<CallError> for UpdateBalanceError {
 }
 
 /// Notifies the ckBTC minter to update the balance of the user subaccount.
+#[cfg_attr(
+    feature = "tla",
+    tla_update_method(UPDATE_BALANCE_DESC.clone(), tla_snapshotter!())
+)]
 pub async fn update_balance<R: CanisterRuntime>(
     args: UpdateBalanceArgs,
     runtime: &R,
 ) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
+    #[cfg(feature = "tla")]
+    tla_log_label!(UPDATE_BALANCE_START);
+
     let caller = runtime.caller();
     if args.owner.unwrap_or(caller) == runtime.id() {
         ic_cdk::trap("cannot update minter's balance");
@@ -166,7 +189,23 @@ pub async fn update_balance<R: CanisterRuntime>(
     };
     let _guard = balance_update_guard(caller_account)?;
 
-    let address = state::read_state(|s| runtime.derive_user_address(s, &caller_account));
+   let address = state::read_state(|s| runtime.derive_user_address(s, &caller_account));
+
+    #[cfg(feature = "tla")]
+    {
+        tla_log_locals! {
+            caller_account: account_to_tla(&caller_account),
+            btc_address: btc_address_to_tla(&address),
+            utxo: dummy_utxo(),
+            utxos: std::collections::BTreeSet::<u32>::new()
+        };
+        tla_log_request!(
+            "Update_Balance_Receive_Utxos",
+            Destination::new("btc_canister"),
+            "GetUtxos",
+            btc_address_to_tla(&address)
+        );
+    }
 
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));
@@ -180,6 +219,17 @@ pub async fn update_balance<R: CanisterRuntime>(
     )
     .await?
     .utxos;
+
+    #[cfg(feature = "tla")]
+    {
+        tla_log_response!(
+            Destination::new("btc_canister"),
+            TlaValue::Variant {
+                tag: "GetUtxosOk".to_string(),
+                value: Box::new(utxo_set_to_tla(&utxos, &address)),
+            }
+        );
+    }
 
     let now = Timestamp::from(runtime.time());
     let (processable_utxos, suspended_utxos) =
@@ -247,6 +297,8 @@ pub async fn update_balance<R: CanisterRuntime>(
 
     let check_fee = read_state(|s| s.check_fee);
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
+    #[cfg(feature="tla")]
+    let mut utxos_shadow: Vec<Utxo> = processable_utxos.iter().cloned().collect();
     for utxo in processable_utxos {
         if utxo.value <= check_fee {
             mutate_state(|s| {
@@ -265,7 +317,13 @@ pub async fn update_balance<R: CanisterRuntime>(
         let status = check_utxo(&utxo, &args, runtime).await?;
         match status {
             // Skip utxos that are already checked but has unknown mint status
-            UtxoCheckStatus::CleanButMintUnknown => continue,
+            UtxoCheckStatus::CleanButMintUnknown => {
+                #[cfg(feature="tla")]
+                {
+                    utxos_shadow.retain(|u| u != &utxo);
+                }
+                continue
+            },
             UtxoCheckStatus::Clean => {
                 mutate_state(|s| {
                     state::audit::mark_utxo_checked(s, utxo.clone(), caller_account, runtime)
@@ -299,6 +357,25 @@ pub async fn update_balance<R: CanisterRuntime>(
             });
         });
 
+        #[cfg(feature = "tla")]
+        {
+            utxos_shadow.retain(|u| u != &utxo);
+            tla_log_locals! {
+                utxo: utxo_to_tla(&utxo, &address),
+                utxos: utxo_set_to_tla(&utxos_shadow, &address),
+                caller_account: account_to_tla(&caller_account)
+            };
+            tla_log_request!(
+                "Update_Balance_Mark_Minted",
+                Destination::new("ledger"),
+                "Mint",
+                TlaValue::Record(BTreeMap::from([
+                    ("to".to_string(), account_to_tla(&caller_account)),
+                    ("amount".to_string(), amount.to_tla_value()),
+                ]))
+            );
+        }
+
         match runtime
             .mint_ckbtc(amount, caller_account, crate::memo::encode(&memo).into())
             .await
@@ -324,6 +401,14 @@ pub async fn update_balance<R: CanisterRuntime>(
                     utxo,
                     minted_amount: amount,
                 });
+                #[cfg(feature = "tla")]
+                tla_log_response!(
+                    Destination::new("ledger"),
+                    TlaValue::Variant {
+                        tag: "OK".to_string(),
+                        value: Box::new(TlaValue::Constant("UNIT".to_string())),
+                    }
+                );
             }
             Err(err) => {
                 log!(
@@ -333,6 +418,14 @@ pub async fn update_balance<R: CanisterRuntime>(
                     err
                 );
                 utxo_statuses.push(UtxoStatus::Checked(utxo));
+                #[cfg(feature = "tla")]
+                tla_log_response!(
+                    Destination::new("ledger"),
+                    TlaValue::Variant {
+                        tag: "Err".to_string(),
+                        value: Box::new(TlaValue::Constant("UNIT".to_string())),
+                    }
+                );
             }
         }
         // Defuse the guard. Note that In case of a panic (either before or after this point)
