@@ -19,8 +19,9 @@ const DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 /// The maximum size of a delta (per message) canister log buffer.
 const MAX_DELTA_LOG_MEMORY_LIMIT: usize = 4 * KiB;
 
-/// Upper bound on how many delta log sizes is retained.
-/// Prevents unbounded growth of `delta_log_sizes`.
+/// Upper bound on stored delta-log sizes used for metrics.
+/// Limits memory growth, 10k covers expected per-round
+/// number of messages per canister (and so delta log appends).
 const DELTA_LOG_SIZES_CAP: usize = 10_000;
 
 /// Maximum number of response bytes for a canister http request.
