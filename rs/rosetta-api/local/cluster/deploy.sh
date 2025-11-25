@@ -13,6 +13,7 @@ set -e
 #   --local-icrc1-image-tar <path>   Path to local ICRC1 image tar file
 #   --no-icp-latest                  Don't deploy ICP Rosetta latest image
 #   --no-icrc1-latest                Don't deploy ICRC1 Rosetta latest image
+#   --external-ports                 Forward external connections to TCP/8080 (ICP) and TCP/8888 (ICRC) for latest Rosetta instances
 #   --clean                          Clean up Minikube cluster and Helm chart before deploying
 #   --stop                           Stop the Minikube cluster
 #   --help                           Display this help message
@@ -27,6 +28,7 @@ LOCAL_ICP_IMAGE_TAR=""
 LOCAL_ICRC1_IMAGE_TAR=""
 DEPLOY_ICP_LATEST=true
 DEPLOY_ICRC1_LATEST=true
+EXTERNAL_PORTS=false
 CLEAN=false
 STOP=false
 MINIKUBE_PROFILE="local-rosetta"
@@ -67,10 +69,13 @@ while [[ "$#" -gt 0 ]]; do
         --no-icrc1-latest)
             DEPLOY_ICRC1_LATEST=false
             ;;
+        --external-ports)
+            EXTERNAL_PORTS=true
+            ;;
         --clean) CLEAN=true ;;
         --stop) STOP=true ;;
         --help)
-            sed -n '5,18p' "$0"
+            sed -n '5,19p' "$0"
             exit 0
             ;;
         *)
@@ -305,6 +310,34 @@ for service in icp-rosetta-local icp-rosetta-latest icrc-rosetta-local icrc-rose
     fi
 done
 
+# Set up external port forwarding if --external-ports flag is set
+if [[ "$EXTERNAL_PORTS" == true ]]; then
+    echo ""
+    echo "Setting up external port forwarding..."
+
+    # Kill any existing port forwards on 8080 and 8888
+    pkill -f "kubectl port-forward.*8080:3000" 2>/dev/null || true
+    pkill -f "kubectl port-forward.*8888:3000" 2>/dev/null || true
+
+    # Forward ICP Rosetta to external port 8080
+    if kubectl get -n rosetta-api svc icp-rosetta-latest --context="$MINIKUBE_PROFILE" &>/dev/null; then
+        echo "Forwarding icp-rosetta-latest to 0.0.0.0:8080..."
+        kubectl port-forward --address 0.0.0.0 -n rosetta-api svc/icp-rosetta-latest 8080:3000 --context="$MINIKUBE_PROFILE" &>/dev/null &
+        sleep 1
+    fi
+
+    # Forward ICRC Rosetta to external port 8888
+    if kubectl get -n rosetta-api svc icrc-rosetta-latest --context="$MINIKUBE_PROFILE" &>/dev/null; then
+        echo "Forwarding icrc-rosetta-latest to 0.0.0.0:8888..."
+        kubectl port-forward --address 0.0.0.0 -n rosetta-api svc/icrc-rosetta-latest 8888:3000 --context="$MINIKUBE_PROFILE" &>/dev/null &
+        sleep 1
+    fi
+
+    echo "External ports configured:"
+    echo "  ICP Rosetta:  0.0.0.0:8080"
+    echo "  ICRC Rosetta: 0.0.0.0:8888"
+fi
+
 # Print the URLs
 echo ""
 echo "************************************"
@@ -315,4 +348,12 @@ print_service_url rosetta-api icrc-rosetta-local
 print_service_url rosetta-api icrc-rosetta-latest
 echo "Prometheus: http://localhost:9090"
 echo "Grafana: http://localhost:3000"
+
+if [[ "$EXTERNAL_PORTS" == true ]]; then
+    echo ""
+    echo "External access enabled:"
+    echo "  ICP Rosetta:  <your-hostname>:8080"
+    echo "  ICRC Rosetta: <your-hostname>:8888"
+fi
+
 echo "************************************"
