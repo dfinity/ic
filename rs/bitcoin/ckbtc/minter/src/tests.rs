@@ -1,10 +1,12 @@
 use crate::{
     BuildTxError, CacheWithExpiration, Network,
     address::BitcoinAddress,
-    build_unsigned_transaction, estimate_retrieve_btc_fee, fake_sign,
+    build_unsigned_transaction, build_unsigned_transaction_from_inputs, estimate_retrieve_btc_fee,
+    fake_sign,
     fees::{BitcoinFeeEstimator, FeeEstimator},
     greedy,
     lifecycle::init::InitArgs,
+    select_utxos_to_consolidate,
     state::invariants::CheckInvariantsImpl,
     state::{
         ChangeOutput, CkBtcMinterState, Mode, RetrieveBtcRequest, RetrieveBtcStatus,
@@ -13,6 +15,7 @@ use crate::{
     test_fixtures::{arbitrary, bitcoin_fee_estimator, build_bitcoin_unsigned_transaction},
     tx,
 };
+use assert_matches::assert_matches;
 use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use candid::Principal;
@@ -782,7 +785,7 @@ proptest! {
         }
         for req in requests {
             let block_index = req.block_index;
-            state.push_back_pending_request(req);
+            state.push_back_pending_request(req.into());
             prop_assert_eq!(state.retrieve_btc_status(block_index), RetrieveBtcStatus::Pending);
         }
 
@@ -1041,7 +1044,7 @@ fn can_form_a_batch_conditions() {
         kyt_provider: None,
         reimbursement_account: None,
     };
-    state.pending_retrieve_btc_requests.push(req);
+    state.pending_btc_requests.push(req.into());
     // One request, >= min_pending, pass.
     assert!(state.can_form_a_batch(1, 10));
 
@@ -1067,7 +1070,7 @@ fn can_form_a_batch_conditions() {
         kyt_provider: None,
         reimbursement_account: None,
     };
-    state.pending_retrieve_btc_requests.push(req);
+    state.pending_btc_requests.push(req.into());
     // Two request, long enough since last_transaction_submission_time, pass.
     assert!(state.can_form_a_batch(10, 10600));
 }
@@ -1206,6 +1209,46 @@ fn test_cache_expiration_two() {
     assert_eq!(cache.len(), 2);
     assert_eq!(cache.get(&2, 6), Some(&2));
     assert_eq!(cache.get(&4, 6), Some(&4));
+}
+
+#[test]
+fn test_build_consolidation_transaction() {
+    use proptest::strategy::{Strategy, ValueTree};
+    use proptest::test_runner::{Config, TestRunner};
+
+    let main_address = BitcoinAddress::P2wpkhV0([0; 20]);
+    let fee_estimator = bitcoin_fee_estimator();
+    let fee_millisatoshi_per_vbyte = 10;
+
+    // Randomly generate a utxo set from proptest strategy
+    let strategy = btree_set(arbitrary::utxo(1_000_000u64..1_000_000_000), 1000..2000);
+    let mut runner = TestRunner::new(Config::default());
+    let mut utxos: BTreeSet<Utxo> = strategy.new_tree(&mut runner).unwrap().current();
+
+    let input_utxos = select_utxos_to_consolidate(&utxos);
+    let max_input_value: u64 = input_utxos.iter().map(|x| x.value).max().unwrap();
+    for utxo in &input_utxos {
+        utxos.remove(utxo);
+    }
+    assert!(utxos.iter().all(|x| x.value > max_input_value));
+
+    let total_amount = input_utxos.iter().map(|u| u.value).sum::<u64>();
+    let result = build_unsigned_transaction_from_inputs(
+        &input_utxos,
+        vec![(main_address.clone(), total_amount / 2)],
+        main_address.clone(),
+        fee_millisatoshi_per_vbyte,
+        &fee_estimator,
+    );
+    assert_matches!(result, Ok(_));
+    let (unsigned_tx, _change_output, fee) = result.unwrap();
+    let outputs = &unsigned_tx.outputs;
+    assert_eq!(outputs.len(), 2);
+    assert!(outputs.iter().all(|x| &x.address == &main_address));
+    assert_eq!(
+        total_amount,
+        outputs.iter().map(|x| x.value).sum::<u64>() + fee.bitcoin_fee
+    );
 }
 
 proptest! {

@@ -66,6 +66,7 @@ maplit = "1.0.2"
 mockall = { workspace = true }
 pocket-ic = { path = "../../../../packages/pocket-ic" }
 proptest = { workspace = true }
+rand = { workspace = true }
 simple_asn1 = { workspace = true }
 tokio = { workspace = true }
 

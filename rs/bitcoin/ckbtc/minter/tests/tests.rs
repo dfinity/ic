@@ -29,8 +29,8 @@ use ic_ckbtc_minter::updates::update_balance::{
     PendingUtxo, UpdateBalanceArgs, UpdateBalanceError, UtxoStatus,
 };
 use ic_ckbtc_minter::{
-    CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RESUBMISSION_DELAY, MinterInfo,
-    Network, UTXOS_COUNT_THRESHOLD,
+    CKBTC_LEDGER_MEMO_SIZE, FEE_COLLECTOR_SUBACCOUNT, MAX_NUM_INPUTS_IN_TRANSACTION,
+    MIN_RESUBMISSION_DELAY, MinterInfo, Network, UTXOS_COUNT_THRESHOLD,
 };
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
@@ -934,6 +934,20 @@ impl CkBtcSetup {
         .unwrap();
     }
 
+    pub fn consolidate_utxos(&self, threshold: usize) -> Result<u64, String> {
+        let message_id = self
+            .env
+            .send_ingress_safe(
+                self.caller,
+                self.minter_id,
+                "consolidate_utxos",
+                Encode!(&threshold).unwrap(),
+            )
+            .expect("failed to submit consolidate_utxos ingress");
+        let result = self.env.await_ingress(message_id, 100_000).unwrap();
+        Decode!(&assert_reply(result), Result<u64, String>).unwrap()
+    }
+
     pub fn estimate_withdrawal_fee(&self, amount: Option<u64>) -> WithdrawalFee {
         self.refresh_fee_percentiles();
         Decode!(
@@ -1045,6 +1059,22 @@ impl CkBtcSetup {
                     .expect("failed to query get_transactions on the ledger")
             ),
             GetTransactionsResponse
+        )
+        .unwrap()
+    }
+
+    pub fn get_available_utxos_count(&self) -> usize {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .query(
+                        self.minter_id,
+                        "get_available_utxos_count",
+                        Encode!().unwrap()
+                    )
+                    .expect("failed to query balance on the ledger")
+            ),
+            usize
         )
         .unwrap()
     }
@@ -1325,12 +1355,13 @@ impl CkBtcSetup {
                 }
                 status => {
                     last_status = Some(status);
+                    self.env.advance_time(Duration::from_secs(1));
                     self.env.tick();
                 }
             }
         }
         panic!(
-            "the minter did not finalize the transaction in {max_ticks} ticks; last status: {last_status:?}"
+            "the minter did not finalize the transaction in {max_ticks} ticks; last status: {last_status:?}",
         )
     }
 
@@ -1345,17 +1376,21 @@ impl CkBtcSetup {
         self.env
             .advance_time(MIN_CONFIRMATIONS * Duration::from_secs(600) + Duration::from_secs(1));
         let txid_bytes: [u8; 32] = tx.txid().to_vec().try_into().unwrap();
-        self.push_utxos(
-            vec![Utxo {
-                value: change_utxo.value,
-                height: 0,
-                outpoint: OutPoint {
-                    txid: txid_bytes.into(),
-                    vout: 1,
-                },
-            }],
-            change_address.to_string(),
-        );
+        for (i, utxo) in tx.output.iter().enumerate() {
+            let address =
+                BtcAddress::from_script(&utxo.script_pubkey, BtcNetwork::Bitcoin).unwrap();
+            self.push_utxos(
+                vec![Utxo {
+                    value: utxo.value,
+                    height: 0,
+                    outpoint: OutPoint {
+                        txid: txid_bytes.into(),
+                        vout: i as u32,
+                    },
+                }],
+                address.to_string(),
+            );
+        }
     }
 
     pub fn mempool(&self) -> BTreeMap<Txid, bitcoin::Transaction> {
@@ -1832,6 +1867,67 @@ fn test_transaction_resubmission_finalize_middle() {
     ckbtc.finalize_transaction(second_tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), second_txid);
     ckbtc.minter_self_check();
+}
+
+#[test]
+fn test_utxo_consolidation() {
+    const COUNT: usize = MAX_NUM_INPUTS_IN_TRANSACTION * 2;
+    const THRESHOLD: usize = MAX_NUM_INPUTS_IN_TRANSACTION + 1;
+
+    let ckbtc = CkBtcSetup::new();
+    let user = Principal::from(ckbtc.caller);
+
+    // Test failure due to too few available utxos.
+    assert_matches!(ckbtc.consolidate_utxos(THRESHOLD), Err(err) if err == "TooFewAvailableUtxos");
+
+    // Step 1: create many Utxos to trigger consolidation
+    let mut utxo_values: [u64; COUNT] = [0; COUNT];
+    let mut rng = rand::thread_rng();
+    for x in utxo_values.iter_mut() {
+        use rand::Rng;
+        *x = rng.gen_range(BitcoinFeeEstimator::MINTER_ADDRESS_P2WPKH_DUST_LIMIT..100_000_000);
+    }
+    ckbtc.deposit_utxos_with_value(user, &utxo_values);
+    assert_eq!(ckbtc.get_available_utxos_count(), COUNT);
+
+    // Test failure due to fee account having insufficient funds.
+    assert_matches!(ckbtc.consolidate_utxos(THRESHOLD), Err(err) if err.contains("InsufficientFunds"));
+    // Mint some ckbtc to fee account.
+    let _ = ckbtc.transfer(
+        Principal::from(ckbtc.minter_id),
+        Account {
+            owner: ckbtc.minter_id.into(),
+            subaccount: Some(FEE_COLLECTOR_SUBACCOUNT),
+        },
+        1_000_000,
+    );
+
+    // Step 2: trigger consolidation
+    let block_index = ckbtc.consolidate_utxos(THRESHOLD).unwrap();
+    ckbtc.env.advance_time(MAX_TIME_IN_QUEUE);
+
+    // Step 3: wait for the consolidation transaction to be submitted
+    let txid = ckbtc.await_btc_transaction(block_index, 10);
+    let mempool = ckbtc.mempool();
+    let tx = mempool
+        .get(&txid)
+        .expect("the mempool does not contain the original transaction");
+    assert_eq!(
+        tx.input.len(),
+        MAX_NUM_INPUTS_IN_TRANSACTION,
+        "expect {MAX_NUM_INPUTS_IN_TRANSACTION} input utxos: {tx:?}"
+    );
+    assert_eq!(tx.output.len(), 2, "expect 2 output utxos: {tx:?}");
+
+    // Step 4: finalize the new transaction
+    ckbtc.finalize_transaction(tx);
+    assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+    ckbtc.minter_self_check();
+
+    assert_eq!(
+        ckbtc.get_available_utxos_count(),
+        COUNT - MAX_NUM_INPUTS_IN_TRANSACTION + 2
+    );
 }
 
 #[test]

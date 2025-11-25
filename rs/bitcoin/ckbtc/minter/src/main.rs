@@ -67,7 +67,7 @@ fn check_invariants() -> Result<(), String> {
 
         let events: Vec<_> = storage::events().collect();
         let recovered_state = replay::<CheckInvariantsImpl>(events.clone().into_iter())
-            .unwrap_or_else(|e| panic!("failed to replay log {events:?}: {e:?}"));
+            .unwrap_or_else(|e| panic!("failed to replay log ({e:?}): {events:?}"));
 
         recovered_state.check_invariants()?;
 
@@ -92,6 +92,24 @@ async fn refresh_fee_percentiles() {
         None => return,
     };
     let _ = ic_ckbtc_minter::estimate_fee_per_vbyte(&IC_CANISTER_RUNTIME).await;
+}
+
+#[cfg(feature = "self_check")]
+#[update]
+async fn consolidate_utxos(threshold: usize) -> Result<u64, String> {
+    let _guard = match ic_ckbtc_minter::guard::TimerLogicGuard::new() {
+        Some(guard) => guard,
+        None => return Err("guard rejection".to_string()),
+    };
+    ic_ckbtc_minter::consolidate_utxos(&IC_CANISTER_RUNTIME, threshold)
+        .await
+        .map_err(|err| format!("{:?}", err))
+}
+
+#[cfg(feature = "self_check")]
+#[query]
+async fn get_available_utxos_count() -> usize {
+    read_state(|s| s.available_utxos.len())
 }
 
 fn check_postcondition<T>(t: T) -> T {

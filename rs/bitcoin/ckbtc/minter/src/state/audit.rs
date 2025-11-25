@@ -1,8 +1,9 @@
 //! State modifications that should end up in the event log.
 
 use super::{
-    CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, LedgerBurnIndex, RetrieveBtcRequest,
-    SubmittedBtcTransaction, SuspendedReason, WithdrawalCancellation,
+    CkBtcMinterState, ConsolidateUtxosRequest, FinalizedBtcRequest, FinalizedStatus,
+    LedgerBurnIndex, RetrieveBtcRequest, SubmittedBtcTransaction, SuspendedReason,
+    WithdrawalCancellation,
     eventlog::{EventType, ReplacedReason},
 };
 use crate::reimbursement::{ReimburseWithdrawalTask, WithdrawalReimbursementReason};
@@ -22,7 +23,7 @@ pub fn accept_retrieve_btc_request<R: CanisterRuntime>(
         EventType::AcceptedRetrieveBtcRequest(request.clone()),
         runtime,
     );
-    state.pending_retrieve_btc_requests.push(request.clone());
+    state.pending_btc_requests.push(request.clone().into());
     if let Some(account) = request.reimbursement_account {
         state
             .retrieve_btc_account_to_block_indices
@@ -67,8 +68,8 @@ pub fn remove_retrieve_btc_request<R: CanisterRuntime>(
         runtime,
     );
 
-    state.push_finalized_request(FinalizedBtcRetrieval {
-        request,
+    state.push_finalized_request(FinalizedBtcRequest {
+        request: request.into(),
         state: status,
     });
 }
@@ -80,7 +81,7 @@ pub fn sent_transaction<R: CanisterRuntime>(
 ) {
     record_event(
         EventType::SentBtcTransaction {
-            request_block_indices: tx.requests.iter().map(|r| r.block_index).collect(),
+            request_block_indices: tx.requests.iter_block_index().collect(),
             txid: tx.txid,
             utxos: tx.used_utxos.clone(),
             change_output: tx.change_output.clone(),
@@ -296,4 +297,14 @@ pub fn reimburse_withdrawal_completed<R: CanisterRuntime>(
         runtime,
     );
     state.reimburse_withdrawal_completed(burn_block_index, mint_block_index);
+}
+
+pub fn accept_consolidate_utxos_request<R: CanisterRuntime>(
+    request: ConsolidateUtxosRequest,
+    runtime: &R,
+) {
+    record_event(
+        EventType::AcceptedConsolidateUtxosRequest(request.clone()),
+        runtime,
+    );
 }

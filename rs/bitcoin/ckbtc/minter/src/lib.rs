@@ -10,7 +10,7 @@ use canlog::log;
 use ic_cdk::bitcoin_canister;
 use ic_cdk::management_canister::SignWithEcdsaArgs;
 use ic_management_canister_types_private::DerivationPath;
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::Memo;
 use scopeguard::{ScopeGuard, guard};
 use serde::Serialize;
@@ -70,6 +70,12 @@ pub const UTXOS_COUNT_THRESHOLD: usize = 1_000;
 /// Maximum number of inputs that can be used for a Bitcoin transaction (ckBTC -> BTC)
 /// to ensure that the resulting signed transaction is standard.
 pub const MAX_NUM_INPUTS_IN_TRANSACTION: usize = 1_000;
+
+/// Fee collector subaccount
+pub const FEE_COLLECTOR_SUBACCOUNT: Subaccount = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x0f,
+    0xee,
+];
 
 pub const IC_CANISTER_RUNTIME: IcCanisterRuntime = IcCanisterRuntime {};
 
@@ -158,16 +164,13 @@ struct SignTxRequest {
     ecdsa_public_key: ECDSAPublicKey,
     unsigned_tx: tx::UnsignedTransaction,
     change_output: state::ChangeOutput,
-    /// The original requests that we keep around to place back to the queue
-    /// if the signature fails.
-    requests: BTreeSet<state::RetrieveBtcRequest>,
-    /// The list of UTXOs we use as transaction inputs.
+    requests: state::SubmittedWithdrawalRequests,
     utxos: Vec<Utxo>,
 }
 
 /// Undoes changes we make to the ckBTC state when we construct a pending transaction.
 /// We call this function if we fail to sign or send a Bitcoin transaction.
-fn undo_sign_request(requests: BTreeSet<state::RetrieveBtcRequest>, utxos: Vec<Utxo>) {
+fn undo_sign_request(requests: state::SubmittedWithdrawalRequests, utxos: Vec<Utxo>) {
     state::mutate_state(|s| {
         for utxo in utxos {
             assert!(s.available_utxos.insert(utxo));
@@ -350,24 +353,20 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
             fee_millisatoshi_per_vbyte,
             &fee_estimator,
         ) {
-            Ok((unsigned_tx, change_output, total_fee, utxos)) => {
-                for req in batch.iter() {
-                    s.push_in_flight_request(req.block_index, state::InFlightStatus::Signing);
-                }
-
-                Some((
-                    SignTxRequest {
-                        key_name: s.ecdsa_key_name.clone(),
-                        ecdsa_public_key,
-                        change_output,
-                        network: s.btc_network,
-                        unsigned_tx,
+            Ok((unsigned_tx, change_output, total_fee, utxos)) => Some((
+                SignTxRequest {
+                    key_name: s.ecdsa_key_name.clone(),
+                    ecdsa_public_key,
+                    change_output,
+                    network: s.btc_network,
+                    unsigned_tx,
+                    requests: state::SubmittedWithdrawalRequests::ToConfirm {
                         requests: batch.into_iter().collect(),
-                        utxos,
                     },
-                    total_fee,
-                ))
-            }
+                    utxos,
+                },
+                total_fee,
+            )),
             Err(BuildTxError::InvalidTransaction(err)) => {
                 log!(
                     Priority::Info,
@@ -429,7 +428,11 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                     }
                 }
 
-                s.push_from_in_flight_to_pending_requests(requests_to_put_back);
+                s.push_from_in_flight_to_pending_requests(
+                    state::SubmittedWithdrawalRequests::ToConfirm {
+                        requests: requests_to_put_back,
+                    },
+                );
 
                 None
             }
@@ -444,99 +447,109 @@ async fn submit_pending_requests<R: CanisterRuntime>(runtime: &R) {
                         .join(",")
                 );
 
-                s.push_from_in_flight_to_pending_requests(batch);
+                s.push_from_in_flight_to_pending_requests(
+                    state::SubmittedWithdrawalRequests::ToConfirm {
+                        requests: batch.into_iter().collect(),
+                    },
+                );
                 None
             }
         }
     });
-
     if let Some((req, total_fee)) = maybe_sign_request {
-        log!(
-            Priority::Debug,
-            "[submit_pending_requests]: signing a new transaction: {}",
-            hex::encode(tx::encode_into(&req.unsigned_tx, Vec::new()))
-        );
-
-        // This guard ensures that we return pending requests and UTXOs back to
-        // the state if the signing or sending a transaction fails or panics.
-        let requests_guard = guard((req.requests, req.utxos), |(reqs, utxos)| {
-            undo_sign_request(reqs, utxos);
-        });
-
-        let txid = req.unsigned_tx.txid();
-        match sign_transaction(
-            req.key_name,
-            &req.ecdsa_public_key,
-            |outpoint| state::read_state(|s| s.outpoint_account.get(outpoint).cloned()),
-            req.unsigned_tx,
-            runtime,
-        )
-        .await
-        {
-            Ok(signed_tx) => {
-                state::mutate_state(|s| {
-                    for retrieve_req in requests_guard.0.iter() {
-                        s.push_in_flight_request(
-                            retrieve_req.block_index,
-                            state::InFlightStatus::Sending { txid },
-                        );
-                    }
-                });
-
-                log!(
-                    Priority::Info,
-                    "[submit_pending_requests]: sending a signed transaction {}",
-                    hex::encode(tx::encode_into(&signed_tx, Vec::new()))
-                );
-                match runtime.send_transaction(&signed_tx, req.network).await {
-                    Ok(()) => {
-                        log!(
-                            Priority::Debug,
-                            "[submit_pending_requests]: successfully sent transaction {}",
-                            &txid,
-                        );
-
-                        // Defuse the guard because we sent the transaction
-                        // successfully.
-                        let (requests, used_utxos) = ScopeGuard::into_inner(requests_guard);
-
-                        state::mutate_state(|s| {
-                            s.last_transaction_submission_time_ns = Some(runtime.time());
-                            state::audit::sent_transaction(
-                                s,
-                                state::SubmittedBtcTransaction {
-                                    requests: state::SubmittedWithdrawalRequests::ToConfirm {
-                                        requests,
-                                    },
-                                    txid,
-                                    used_utxos,
-                                    change_output: Some(req.change_output),
-                                    submitted_at: runtime.time(),
-                                    fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
-                                    withdrawal_fee: Some(total_fee),
-                                },
-                                runtime,
-                            );
-                        });
-                    }
-                    Err(err) => {
-                        log!(
-                            Priority::Info,
-                            "[submit_pending_requests]: failed to send a Bitcoin transaction: {}",
-                            err
-                        );
-                    }
-                }
-            }
-            Err(err) => {
-                log!(
-                    Priority::Info,
-                    "[submit_pending_requests]: failed to sign a Bitcoin transaction: {}",
-                    err
-                );
-            }
-        }
+        let _ = submit_unsigned_request(req, fee_millisatoshi_per_vbyte, total_fee, runtime).await;
     }
+}
+
+async fn submit_unsigned_request<R: CanisterRuntime>(
+    req: SignTxRequest,
+    fee_millisatoshi_per_vbyte: u64,
+    total_fee: WithdrawalFee,
+    runtime: &R,
+) -> Result<(), CallError> {
+    log!(
+        Priority::Debug,
+        "[submit_pending_requests]: signing a new transaction: {}",
+        hex::encode(tx::encode_into(&req.unsigned_tx, Vec::new()))
+    );
+
+    state::mutate_state(|s| {
+        for block_index in req.requests.iter_block_index() {
+            s.push_in_flight_request(block_index, state::InFlightStatus::Signing);
+        }
+    });
+
+    // This guard ensures that we return pending requests and UTXOs back to
+    // the state if the signing or sending a transaction fails or panics.
+    let requests_guard = guard((req.requests, req.utxos), |(reqs, utxos)| {
+        undo_sign_request(reqs, utxos);
+    });
+
+    let txid = req.unsigned_tx.txid();
+    let signed_tx = sign_transaction(
+        req.key_name,
+        &req.ecdsa_public_key,
+        |outpoint| state::read_state(|s| s.outpoint_account.get(outpoint).cloned()),
+        req.unsigned_tx,
+        runtime,
+    )
+    .await
+    .inspect_err(|err| {
+        log!(
+            Priority::Info,
+            "[submit_pending_requests]: failed to sign a Bitcoin transaction: {}",
+            err
+        );
+    })?;
+
+    state::mutate_state(|s| {
+        for block_index in requests_guard.0.iter_block_index() {
+            s.push_in_flight_request(block_index, state::InFlightStatus::Sending { txid });
+        }
+    });
+
+    log!(
+        Priority::Info,
+        "[submit_pending_requests]: sending a signed transaction {}",
+        hex::encode(tx::encode_into(&signed_tx, Vec::new()))
+    );
+    runtime
+        .send_transaction(&signed_tx, req.network)
+        .await
+        .inspect_err(|err| {
+            log!(
+                Priority::Info,
+                "[submit_pending_requests]: failed to send a Bitcoin transaction: {}",
+                err
+            );
+        })?;
+    log!(
+        Priority::Debug,
+        "[submit_pending_requests]: successfully sent transaction {}",
+        &txid,
+    );
+
+    // Defuse the guard because we sent the transaction
+    // successfully.
+    let (requests, used_utxos) = ScopeGuard::into_inner(requests_guard);
+
+    state::mutate_state(|s| {
+        s.last_transaction_submission_time_ns = Some(runtime.time());
+        state::audit::sent_transaction(
+            s,
+            state::SubmittedBtcTransaction {
+                requests,
+                txid,
+                used_utxos,
+                change_output: Some(req.change_output),
+                submitted_at: runtime.time(),
+                fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
+                withdrawal_fee: Some(total_fee),
+            },
+            runtime,
+        );
+    });
+    Ok(())
 }
 
 fn finalization_time_estimate<R: CanisterRuntime>(
@@ -785,6 +798,9 @@ pub async fn resubmit_transactions<
             state::SubmittedWithdrawalRequests::ToCancel { .. } => {
                 vec![(main_address.clone(), retrieve_btc_min_amount)]
             }
+            state::SubmittedWithdrawalRequests::ToConsolidate { request } => {
+                vec![(main_address.clone(), request.amount)]
+            }
         };
 
         let mut input_utxos = submitted_tx.used_utxos;
@@ -815,6 +831,9 @@ pub async fn resubmit_transactions<
                     state::SubmittedWithdrawalRequests::ToConfirm { requests } => requests,
                     state::SubmittedWithdrawalRequests::ToCancel { .. } => {
                         unreachable!("cancellation tx never has too many inputs!")
+                    }
+                    state::SubmittedWithdrawalRequests::ToConsolidate { .. } => {
+                        unreachable!("consolidation tx never has too many inputs!")
                     }
                 };
                 let reason = reimbursement::WithdrawalReimbursementReason::InvalidTransaction(err);
@@ -1182,6 +1201,7 @@ pub fn build_unsigned_transaction_from_inputs<F: FeeEstimator>(
     let _scope = canbench_rs::bench_scope("build_unsigned_transaction_from_inputs");
 
     assert!(!outputs.is_empty());
+
     /// Having a sequence number lower than (0xffffffff - 1) signals the use of replacement by fee.
     /// It allows us to increase the fee of a transaction already sent to the mempool.
     /// The rbf option is used in `resubmit_retrieve_btc`.
@@ -1349,6 +1369,166 @@ pub fn estimate_retrieve_btc_fee<F: FeeEstimator>(
         dummy_recipient_address,
         fee_estimator,
     )
+}
+
+#[derive(Debug)]
+pub enum ConsolidateUtxoError {
+    TooSoon,
+    TooFewAvailableUtxos,
+    EstimateFeeNotAvailable,
+    BuildTx(BuildTxError),
+    BurnCkbtc(updates::retrieve_btc::RetrieveBtcError, u64),
+    SubmitRequest(CallError),
+}
+
+/// Consolidate UTXOs.
+///
+/// If there are more than 10,000 UTXOs, combine the smallest 1000 UTXOs.
+/// A lower fee rate can be used, e.g. the 25th fee percentile.
+///
+/// This function can be called any time to check if a consolidation is required, but
+/// the consolidation process will only take place after a minimum interval since the last
+/// consolidation submission.
+///
+/// A Consolidation request is like a special retrieve_btc transaction:
+/// - Inputs are 1000 UTXOs with small values.
+/// - Output (including change output) goes to minter address.
+/// - Transaction fee (in ckBTC) is burned from the fee collector account.
+///
+/// Such a request is constructed differently but the remaining signing and sending
+/// shares the same logic as retrieve_btc request.
+pub async fn consolidate_utxos<R: CanisterRuntime>(
+    runtime: &R,
+    min_consolidation_utxo_required: usize,
+) -> Result<u64, ConsolidateUtxoError> {
+    // TODO: make this configurable
+    const MIN_CONSOLIDATION_INTERVAL: Duration = Duration::from_secs(24 * 3600);
+
+    assert!(min_consolidation_utxo_required > MAX_NUM_INPUTS_IN_TRANSACTION);
+    // Return early if number of available UTXOs is below consolidation threshold.
+    if read_state(|s| s.available_utxos.len() < min_consolidation_utxo_required) {
+        return Err(ConsolidateUtxoError::TooFewAvailableUtxos);
+    }
+
+    // Return early if MIN_CONSOLIDATION_INTERVAL is not met since last submission.
+    let now = runtime.time();
+    let last_submission = read_state(|s| s.last_consolidate_utxos_request_created_time_ns);
+    if Timestamp::new(now)
+        .checked_duration_since(Timestamp::new(last_submission.unwrap_or_default()))
+        < Some(MIN_CONSOLIDATION_INTERVAL)
+    {
+        return Err(ConsolidateUtxoError::TooSoon);
+    }
+    mutate_state(|s| s.last_consolidate_utxos_request_created_time_ns = Some(now));
+    // In case of any error, restore the last request created time.
+    let request_created_guard = guard(last_submission, |last_submission| {
+        mutate_state(|s| s.last_consolidate_utxos_request_created_time_ns = last_submission);
+    });
+
+    // TODO: use 25% percentile
+    let fee_millisatoshi_per_vbyte = estimate_fee_per_vbyte(runtime)
+        .await
+        .ok_or(ConsolidateUtxoError::EstimateFeeNotAvailable)?;
+
+    // Select UTXOs to consolidate. Note that they are not removed from available_utxos yet.
+    let input_utxos = read_state(|s| select_utxos_to_consolidate(&s.available_utxos));
+    // There will be two outputs: 1 normal output and 1 change output, each about
+    // half of the total value of the input UTXOs.
+    let total_amount = input_utxos.iter().map(|x| x.value).sum::<u64>();
+    let output_amount = total_amount / 2;
+    let main_address = read_state(|s| runtime.derive_minter_address(s));
+    let fee_estimator = read_state(|s| runtime.fee_estimator(s));
+    let (unsigned_tx, change_output, total_fee) = build_unsigned_transaction_from_inputs(
+        &input_utxos,
+        vec![(main_address.clone(), output_amount)],
+        main_address,
+        fee_millisatoshi_per_vbyte,
+        &fee_estimator,
+    )
+    .map_err(|err| {
+        log!(
+            Priority::Info,
+            "[consolidate_utxos]: failed to build conslidation transaction {:?}",
+            err
+        );
+        ConsolidateUtxoError::BuildTx(err)
+    })?;
+
+    // Remove input_utxos from available_utxos.
+    mutate_state(|s| {
+        for utxo in &input_utxos {
+            s.available_utxos.remove(utxo);
+        }
+    });
+    // In case of any error, revert the above state change by putting the utxos back.
+    let utxos_guard = guard(input_utxos, |utxos| {
+        mutate_state(|s| {
+            for utxo in utxos {
+                s.available_utxos.insert(utxo);
+            }
+        })
+    });
+
+    let ecdsa_public_key = updates::get_btc_address::init_ecdsa_public_key().await;
+
+    // Burn transaction fee (bitcoin_fee) from fee collector's account.
+    let burn_memo = memo::BurnMemo::Convert {
+        address: None,
+        kyt_fee: None,
+        status: None,
+    };
+    let block_index = updates::retrieve_btc::burn_ckbtcs_from_subaccount(
+        FEE_COLLECTOR_SUBACCOUNT,
+        total_fee.bitcoin_fee,
+        crate::memo::encode(&burn_memo).into(),
+    )
+    .await
+    .map_err(|err| {
+        log!(
+            Priority::Info,
+            "[consolidate_utxos]: failed to burn ckbtc from fee account {:?}",
+            err
+        );
+        ConsolidateUtxoError::BurnCkbtc(err, total_fee.bitcoin_fee)
+    })?;
+
+    let utxos = ScopeGuard::into_inner(utxos_guard);
+    let _ = ScopeGuard::into_inner(request_created_guard);
+
+    let request = state::ConsolidateUtxosRequest {
+        block_index,
+        amount: total_amount,
+        received_at: now,
+    };
+    state::audit::accept_consolidate_utxos_request(request.clone(), runtime);
+
+    let request = read_state(|s| SignTxRequest {
+        key_name: s.ecdsa_key_name.clone(),
+        ecdsa_public_key,
+        change_output,
+        network: s.btc_network,
+        unsigned_tx,
+        requests: state::SubmittedWithdrawalRequests::ToConsolidate { request },
+        utxos,
+    });
+
+    submit_unsigned_request(request, fee_millisatoshi_per_vbyte, total_fee, runtime)
+        .await
+        .map_err(ConsolidateUtxoError::SubmitRequest)?;
+
+    Ok(block_index)
+}
+
+fn select_utxos_to_consolidate(available_utxos: &BTreeSet<Utxo>) -> Vec<Utxo> {
+    let mut available_utxos: Vec<_> = available_utxos.iter().collect();
+    available_utxos.sort_by_key(|u| u.value);
+    let input_utxos = available_utxos
+        .into_iter()
+        .take(MAX_NUM_INPUTS_IN_TRANSACTION)
+        .cloned()
+        .collect::<Vec<_>>();
+    assert!(input_utxos.len() == MAX_NUM_INPUTS_IN_TRANSACTION);
+    input_utxos
 }
 
 #[async_trait]

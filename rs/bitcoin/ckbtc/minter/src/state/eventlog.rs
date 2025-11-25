@@ -4,8 +4,9 @@ use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::reimbursement::ReimburseWithdrawalTask;
 use crate::state::invariants::CheckInvariants;
 use crate::state::{
-    ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
-    RetrieveBtcRequest, SubmittedBtcTransaction, SubmittedWithdrawalRequests, SuspendedReason,
+    BtcTransactionRequest, ChangeOutput, CkBtcMinterState, ConsolidateUtxosRequest,
+    FinalizedBtcRequest, FinalizedStatus, Overdraft, RetrieveBtcRequest, SubmittedBtcTransaction,
+    SubmittedWithdrawalRequests, SuspendedReason,
 };
 use crate::state::{ReimburseDepositTask, ReimbursedDeposit, ReimbursementReason};
 use candid::Principal;
@@ -268,6 +269,11 @@ mod event {
             /// The mint block on the ledger.
             mint_block_index: u64,
         },
+        /// Indicates that the minter consolidates UTXOs with transaction
+        /// fee corresponding to burning ckbtc from the fee subaccount
+        /// at the given ledger index.
+        #[serde(rename = "accepted_consolidate_utxos_request")]
+        AcceptedConsolidateUtxosRequest(ConsolidateUtxosRequest),
     }
 }
 
@@ -334,7 +340,7 @@ pub fn replay<I: CheckInvariants>(
                         .and_modify(|entry| entry.push(req.block_index))
                         .or_insert(vec![req.block_index]);
                 }
-                state.push_back_pending_request(req);
+                state.push_back_pending_request(req.into());
             }
             EventType::RemovedRetrieveBtcRequest { block_index } => {
                 let request = state.remove_pending_request(block_index).ok_or_else(|| {
@@ -343,8 +349,8 @@ pub fn replay<I: CheckInvariants>(
                     ))
                 })?;
 
-                state.push_finalized_request(FinalizedBtcRetrieval {
-                    request,
+                state.push_finalized_request(FinalizedBtcRequest {
+                    request: request.into(),
                     state: FinalizedStatus::AmountTooLow,
                 })
             }
@@ -358,21 +364,35 @@ pub fn replay<I: CheckInvariants>(
                 withdrawal_fee,
             } => {
                 let mut retrieve_btc_requests = BTreeSet::new();
+                let mut consolidate_utxos_request = None;
                 for block_index in request_block_indices {
-                    let request = state.remove_pending_request(block_index).ok_or_else(|| {
-                        ReplayLogError::InconsistentLog(format!(
+                    if let Some(request) = state.remove_pending_request(block_index) {
+                        match request {
+                            BtcTransactionRequest::RetrieveBtc(request) => {
+                                retrieve_btc_requests.insert(request);
+                            }
+                            BtcTransactionRequest::ConsolidateUtxos(request) => {
+                                consolidate_utxos_request = Some(request);
+                            }
+                        }
+                    } else {
+                        return Err(ReplayLogError::InconsistentLog(format!(
                             "Attempted to send a non-pending retrieve_btc request {block_index}"
-                        ))
-                    })?;
-                    retrieve_btc_requests.insert(request);
+                        )));
+                    }
                 }
+                let requests = if let Some(request) = consolidate_utxos_request {
+                    SubmittedWithdrawalRequests::ToConsolidate { request }
+                } else {
+                    SubmittedWithdrawalRequests::ToConfirm {
+                        requests: retrieve_btc_requests,
+                    }
+                };
                 for utxo in utxos.iter() {
                     state.available_utxos.remove(utxo);
                 }
                 state.push_submitted_transaction(SubmittedBtcTransaction {
-                    requests: SubmittedWithdrawalRequests::ToConfirm {
-                        requests: retrieve_btc_requests,
-                    },
+                    requests,
                     txid,
                     used_utxos: utxos,
                     fee_per_vbyte,
@@ -406,6 +426,9 @@ pub fn replay<I: CheckInvariants>(
                 };
                 let requests = match reason {
                     Some(ReplacedReason::ToCancel { reason }) => match old_requests {
+                        SubmittedWithdrawalRequests::ToConsolidate { .. } => {
+                            panic!("Cannot cancel a consolidation request")
+                        }
                         SubmittedWithdrawalRequests::ToCancel { .. } => {
                             panic!("Cannot cancel a cancelation request")
                         }
@@ -551,6 +574,9 @@ pub fn replay<I: CheckInvariants>(
                 mint_block_index,
             } => {
                 state.reimburse_withdrawal_completed(burn_block_index, mint_block_index);
+            }
+            EventType::AcceptedConsolidateUtxosRequest(req) => {
+                state.push_back_pending_request(req.into());
             }
         }
     }
