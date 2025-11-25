@@ -1,5 +1,5 @@
 use crate::io::retry_if_busy;
-use anyhow::{Context, Error, Result};
+use anyhow::{Context, Result};
 use gpt::GptDisk;
 use std::fs::File;
 use std::path::{Path, PathBuf};
