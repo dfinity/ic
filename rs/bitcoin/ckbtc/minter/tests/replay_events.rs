@@ -142,12 +142,10 @@ async fn should_have_not_many_transactions_with_many_used_utxos() {
         ))
     );
 
-    assert_eq!(
-        iter.next(),
-        Some((
-            Reverse(725),
-            vec!["201e83d0f5b35bd658b4dc87a70936d8d750532da46f5a635d403246d41cc032".to_string()]
-        ))
+    let (second_biggest_num_utxos, tx_ids) = iter.next().unwrap();
+    assert!(
+        second_biggest_num_utxos.0 <= 1_000,
+        "Expected exactly one non-standard transaction, while all other transactions {tx_ids:?} must use at most 1_000 UTXOs"
     );
 }
 
