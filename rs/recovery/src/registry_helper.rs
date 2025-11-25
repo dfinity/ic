@@ -18,7 +18,7 @@ use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_features::ChainKeyConfig;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use prost::Message;
-use slog::{Logger, info, warn};
+use slog::{Logger, error, info, warn};
 use url::Url;
 
 use std::{
@@ -60,7 +60,9 @@ impl RegistryHelper {
         nns_pem_path: &Path,
         polling_strategy: RegistryPollingStrategy,
     ) -> Self {
-        let nns_pub_key = get_nns_public_key(&nns_url, nns_pem_path, &logger).ok();
+        let nns_pub_key = get_nns_public_key(&nns_url, nns_pem_path, &logger)
+            .inspect_err(|err| error!(logger, "Failed getting the NNS public key: {}", err))
+            .ok();
         let registry_replicator = Arc::new(block_on(RegistryReplicator::new(
             logger.clone().into(),
             &local_store_path,
