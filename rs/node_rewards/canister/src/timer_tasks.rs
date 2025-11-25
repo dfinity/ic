@@ -51,9 +51,11 @@ impl RecurringSyncTask for HourlySyncTask {
                     ic_cdk::println!("Successfully synced local registry");
                     match NodeRewardsCanister::schedule_metrics_sync(self.canister).await {
                         Ok(_) => {
-                            telemetry::PROMETHEUS_METRICS
-                                .with_borrow_mut(|m| m.mark_last_sync_success());
-                            ic_cdk::println!("Successfully synced subnets metrics")
+                            telemetry::PROMETHEUS_METRICS.with_borrow_mut(|m| {
+                                m.mark_last_sync_success();
+                                m.record_last_sync_instructions(instruction_counter.sum());
+                            });
+                            ic_cdk::println!("Successfully synced subnets metrics");
                         }
                         Err(e) => {
                             telemetry::PROMETHEUS_METRICS
@@ -68,9 +70,6 @@ impl RecurringSyncTask for HourlySyncTask {
                 }
             };
         });
-
-        telemetry::PROMETHEUS_METRICS
-            .with_borrow_mut(|m| m.record_last_sync_instructions(instruction_counter.sum()));
 
         (Self::default_delay(), self)
     }
