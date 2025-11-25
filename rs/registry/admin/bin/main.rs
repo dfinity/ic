@@ -4255,7 +4255,13 @@ async fn main() {
             .await;
         }
         SubCommand::GetRoutingTable => {
-            print_routing_table(reachable_nns_urls);
+            let (routing_table, version) = get_routing_table(reachable_nns_urls);
+            if opts.json {
+                let routing_table_json = serde_json::to_string_pretty(&routing_table).unwrap();
+                println!("{}", routing_table_json);
+            } else {
+                print_routing_table(&routing_table, version);
+            }
         }
         SubCommand::GetEcdsaSigningSubnets => {
             let registry_client = make_registry_client(
@@ -6012,7 +6018,7 @@ fn get_api_boundary_node_ids(nns_url: Vec<Url>) -> Vec<String> {
         .collect::<Vec<_>>()
 }
 
-fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {
+fn get_routing_table(nns_urls: Vec<Url>) -> (Vec<(CanisterIdRange, SubnetId)>, RegistryVersion) {
     let registry_client = RegistryClientImpl::new(
         Arc::new(NnsDataProvider::new(
             tokio::runtime::Handle::current(),
@@ -6027,44 +6033,12 @@ fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {
 
     let latest_version = registry_client.get_latest_version();
 
-    println!("Routing table. Most recent version is {latest_version}");
-
     let keys = registry_client
         .get_key_family(CANISTER_RANGES_PREFIX, latest_version)
         .unwrap();
 
-    for routing_table_key in keys.iter() {
-        let routing_table_value = registry_client
-            .get_versioned_value(routing_table_key, latest_version)
-            .unwrap()
-            .value
-            .unwrap();
-        let routing_table = RoutingTable::decode(&routing_table_value[..]).unwrap();
-
-        for RoutingTableEntry { range, subnet_id } in routing_table.entries {
-            let subnet_id = subnet_id_try_from_protobuf(
-                subnet_id.expect("subnet_id is missing from routing table entry"),
-            )
-            .unwrap();
-            println!("Subnet: {subnet_id}");
-            let range = CanisterIdRange::try_from(
-                range.expect("range is missing from routing table entry"),
-            )
-            .expect("failed to parse range");
-            println!(
-                "    Range start: {} (0x{})",
-                range.start,
-                hex::encode(range.start.get_ref().as_slice())
-            );
-            println!(
-                "    Range end:   {} (0x{})",
-                range.end,
-                hex::encode(range.end.get_ref().as_slice())
-            );
-        }
-    }
-
-    keys.iter()
+    let routing_table = keys
+        .iter()
         .flat_map(|key| {
             let value = registry_client
                 .get_versioned_value(key, latest_version)
@@ -6083,9 +6057,28 @@ fn print_routing_table(nns_urls: Vec<Url>) -> Vec<(SubnetId, CanisterIdRange)> {
                 range.expect("range is missing from routing table entry"),
             )
             .expect("failed to parse range");
-            (subnet_id, range)
+            (range, subnet_id)
         })
-        .collect()
+        .collect();
+    (routing_table, latest_version)
+}
+
+fn print_routing_table(routing_table: &Vec<(CanisterIdRange, SubnetId)>, version: RegistryVersion) {
+    println!("Routing table. Most recent version is {version}");
+
+    for (range, subnet_id) in routing_table {
+        println!("Subnet: {subnet_id}");
+        println!(
+            "    Range start: {} (0x{})",
+            range.start,
+            hex::encode(range.start.get_ref().as_slice())
+        );
+        println!(
+            "    Range end:   {} (0x{})",
+            range.end,
+            hex::encode(range.end.get_ref().as_slice())
+        );
+    }
 }
 
 /// Writes a threshold signing public key to the given path.

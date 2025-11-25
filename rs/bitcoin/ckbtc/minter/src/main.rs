@@ -4,6 +4,7 @@ use ic_cdk::{init, post_upgrade, query, update};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
+use ic_ckbtc_minter::reimbursement::InvalidTransactionError;
 use ic_ckbtc_minter::state::eventlog::Event;
 use ic_ckbtc_minter::state::{
     BtcRetrievalStatusV2, RetrieveBtcStatus, RetrieveBtcStatusV2, read_state,
@@ -18,7 +19,7 @@ use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
-use ic_ckbtc_minter::{CanisterRuntime, IC_CANISTER_RUNTIME, MinterInfo};
+use ic_ckbtc_minter::{BuildTxError, CanisterRuntime, IC_CANISTER_RUNTIME, MinterInfo};
 use ic_ckbtc_minter::{
     state::eventlog::{EventType, GetEventsArg},
     storage,
@@ -203,16 +204,31 @@ async fn upload_events(events: Vec<Event>) {
 
 #[query]
 fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
-    read_state(|s| {
+    match read_state(|s| {
         let fee_estimator = IC_CANISTER_RUNTIME.fee_estimator(s);
+        let withdrawal_amount = arg.amount.unwrap_or(s.fee_based_retrieve_btc_min_amount);
         ic_ckbtc_minter::estimate_retrieve_btc_fee(
             &s.available_utxos,
-            arg.amount,
+            withdrawal_amount,
             s.last_median_fee_per_vbyte
                 .expect("Bitcoin current fee percentiles not retrieved yet."),
             &fee_estimator,
         )
-    })
+    }) {
+        Ok(fee) => fee,
+        Err(BuildTxError::NotEnoughFunds) => {
+            panic!("ERROR: withdrawal amount is too large for the minter")
+        }
+        Err(e @ BuildTxError::DustOutput { .. } | e @ BuildTxError::AmountTooLow) => panic!(
+            "BUG: withdrawal amount is too low ({e:?}), but the withdrawal amount should be large enough to prevent this"
+        ),
+        Err(BuildTxError::InvalidTransaction(
+            e @ InvalidTransactionError::TooManyInputs { .. },
+        )) => panic!(
+            "ERROR: the minter cannot currently process such a large withdrawal amount because it would require too many inputs ({e:?}), \
+            resulting in the transaction being potentially non-standard"
+        ),
+    }
 }
 
 #[query]
