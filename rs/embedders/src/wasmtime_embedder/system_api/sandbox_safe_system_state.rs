@@ -99,7 +99,7 @@ impl Default for SystemStateModifications {
             request_slots_used: BTreeMap::new(),
             requests: vec![],
             new_global_timer: None,
-            canister_log: CanisterLog::default_delta_log(),
+            canister_log: CanisterLog::default_delta(),
             on_low_wasm_memory_hook_condition_check_result: None,
             should_bump_canister_version: false,
         }
