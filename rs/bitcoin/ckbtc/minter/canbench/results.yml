@@ -1,8 +1,9 @@
 benches:
   migrate_events_bench:
     total:
-      instructions: 14718763837
-      heap_increase: 1
-      stable_memory_increase: 0
+      calls: 1
+      instructions: 54826790356
+      heap_increase: 15
+      stable_memory_increase: 2816
     scopes: {}
-version: 0.1.9
+version: 0.2.1
