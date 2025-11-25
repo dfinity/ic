@@ -2,8 +2,8 @@ benches:
   bench_example:
     total:
       calls: 1
-      instructions: 15240
+      instructions: 15241
       heap_increase: 0
       stable_memory_increase: 0
     scopes: {}
-version: 0.1.15
+version: 0.4.0
