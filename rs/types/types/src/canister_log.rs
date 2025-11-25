@@ -11,27 +11,21 @@ const KiB: usize = 1024;
 
 /// The minimum allowed size of a canister log buffer.
 const MIN_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * KiB;
-
 /// The maximum allowed size of a canister log buffer.
 const MAX_ALLOWED_LOG_MEMORY_LIMIT: usize = 4 * KiB;
-
 /// The default size of a canister log buffer.
 const DEFAULT_LOG_MEMORY_LIMIT: usize = 4 * KiB;
-
-/// The maximum allowed size of a canister log record.
-const MAX_ALLOWED_LOG_RECORD_SIZE: usize = 4 * KiB;
 
 /// Upper bound on how many delta log sizes is retained.
 /// Prevents unbounded growth of `delta_log_sizes`.
 const DELTA_LOG_SIZES_CAP: usize = 100;
 
-/// Maximum number of response bytes for a canister http request.
+/// Maximum number of response bytes for a fetch canister logs request.
 pub const MAX_FETCH_CANISTER_LOGS_RESPONSE_BYTES: usize = 2_000_000;
 
 // Compile-time assertions to ensure the constants are within valid ranges.
 const _: () = assert!(DEFAULT_LOG_MEMORY_LIMIT >= MIN_ALLOWED_LOG_MEMORY_LIMIT);
 const _: () = assert!(DEFAULT_LOG_MEMORY_LIMIT <= MAX_ALLOWED_LOG_MEMORY_LIMIT);
-const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MAX_ALLOWED_LOG_RECORD_SIZE);
 const _: () = assert!(std::mem::size_of::<CanisterLogRecord>() <= MIN_ALLOWED_LOG_MEMORY_LIMIT);
 
 /// Returns the minimum allowed size of a canister log buffer.
@@ -51,8 +45,8 @@ pub fn default_log_memory_limit() -> NumBytes {
 
 /// Truncates the content of a log record so that the record fits within the allowed size.
 fn truncate_content(records_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {
-    let max_record_size = std::cmp::min(records_capacity, MAX_ALLOWED_LOG_RECORD_SIZE);
-    let max_content_size = max_record_size - std::mem::size_of::<CanisterLogRecord>();
+    let max_content_size =
+        records_capacity.saturating_sub(std::mem::size_of::<CanisterLogRecord>());
     record.content.truncate(max_content_size);
     record
 }
@@ -177,19 +171,19 @@ pub struct CanisterLog {
 
 impl CanisterLog {
     /// Creates a new `CanisterLog` with the given next index and records.
-    pub fn new(next_idx: u64, records: Vec<CanisterLogRecord>) -> Self {
+    pub fn new(next_idx: u64, records: Vec<CanisterLogRecord>, memory_limit: usize) -> Self {
         Self {
             next_idx,
-            records: Records::from(DEFAULT_LOG_MEMORY_LIMIT, records),
+            records: Records::from(memory_limit, records),
             delta_log_sizes: VecDeque::new(),
         }
     }
 
     /// Creates a new `CanisterLog` with the given next index and an empty records list.
-    pub fn new_with_next_index(next_idx: u64) -> Self {
+    pub fn new_with_next_index(next_idx: u64, memory_limit: usize) -> Self {
         Self {
             next_idx,
-            records: Records::new_with_capacity(DEFAULT_LOG_MEMORY_LIMIT),
+            records: Records::new_with_capacity(memory_limit),
             delta_log_sizes: VecDeque::new(),
         }
     }
