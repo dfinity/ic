@@ -310,14 +310,20 @@ for service in icp-rosetta-local icp-rosetta-latest icrc-rosetta-local icrc-rose
     fi
 done
 
+# Kill any existing external port forwards on 8080 and 8888 if they exist
+if pgrep -f "kubectl port-forward.*--address 0.0.0.0.*8080:3000" &>/dev/null || \
+   pgrep -f "kubectl port-forward.*--address 0.0.0.0.*8888:3000" &>/dev/null; then
+    echo ""
+    echo "Cleaning up external port forwards (8080, 8888)..."
+    pkill -f "kubectl port-forward.*--address 0.0.0.0.*8080:3000" 2>/dev/null || true
+    pkill -f "kubectl port-forward.*--address 0.0.0.0.*8888:3000" 2>/dev/null || true
+    echo "External port forwards removed."
+fi
+
 # Set up external port forwarding if --external-ports flag is set
 if [[ "$EXTERNAL_PORTS" == true ]]; then
     echo ""
     echo "Setting up external port forwarding..."
-
-    # Kill any existing port forwards on 8080 and 8888
-    pkill -f "kubectl port-forward.*8080:3000" 2>/dev/null || true
-    pkill -f "kubectl port-forward.*8888:3000" 2>/dev/null || true
 
     # Forward ICP Rosetta to external port 8080
     if kubectl get -n rosetta-api svc icp-rosetta-latest --context="$MINIKUBE_PROFILE" &>/dev/null; then
