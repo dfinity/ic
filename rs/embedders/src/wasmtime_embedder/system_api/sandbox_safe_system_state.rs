@@ -680,9 +680,6 @@ impl SandboxSafeSystemState {
         is_wasm64_execution: bool,
         network_topology: NetworkTopology,
     ) -> Self {
-        // Limit the delta canister log memory to the maximum allowed.
-        let delta_log_memory_limit =
-            canister_log_memory_limit.min(max_delta_log_memory_limit().get() as usize);
         Self {
             canister_id,
             status,
@@ -696,10 +693,11 @@ impl SandboxSafeSystemState {
             wasm_memory_threshold,
             compute_allocation,
             system_state_modifications: SystemStateModifications {
-                // Start indexing new batch of canister log records from the given index.
                 canister_log: CanisterLog::new_with_next_index(
+                    // Start indexing new batch of canister log records from the given index.
                     next_canister_log_record_idx,
-                    delta_log_memory_limit,
+                    // Limit the delta canister log memory to the maximum allowed.
+                    canister_log_memory_limit.min(max_delta_log_memory_limit().get() as usize),
                 ),
                 call_context_balance_taken: call_context_id
                     .map(|call_context_id| (call_context_id, Cycles::zero())),
