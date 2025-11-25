@@ -3,7 +3,6 @@ pub mod deploy;
 use anyhow::{Context, Result, bail};
 use rexpect::session::PtySession;
 use rexpect::{ReadUntil, spawn};
-use std::io::{Read, Write};
 use std::net::Ipv6Addr;
 use std::time::Duration;
 

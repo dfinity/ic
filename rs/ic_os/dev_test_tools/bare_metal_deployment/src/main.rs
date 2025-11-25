@@ -1,17 +1,16 @@
 use anyhow::{Context, Result, bail, ensure};
-use bare_metal_deployment::{
-    BareMetalIpmiSession,
-    parse_login_info_from_csv,
-};
+use bare_metal_deployment::deploy::{DeploymentConfig, ImageSource, deploy_to_bare_metal};
+use bare_metal_deployment::{BareMetalIpmiSession, parse_login_info_from_csv};
 use clap::Parser;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::{env, fs};
-use bare_metal_deployment::deploy::{deploy_to_bare_metal, DeploymentConfig, ImageSource};
 
 #[derive(Parser, Debug)]
-#[command(about = "Deploy HostOS and GuestOS images to bare metal hosts. If no images are specified, only injects SSH key via IPMI.")]
+#[command(
+    about = "Deploy HostOS and GuestOS images to bare metal hosts. If no images are specified, only injects SSH key via IPMI."
+)]
 struct Args {
     /// Path to CSV file with baremetal login info (host,username,password,guest_ipv6), e.g. zh2-dll01.csv.
     /// Ask the node team for access to this file.
