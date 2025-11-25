@@ -772,7 +772,7 @@ impl ApiState {
         let replica_url = match http_gateway_config.forward_to {
             HttpGatewayBackend::Replica(ref replica_url) => replica_url.clone(),
             HttpGatewayBackend::PocketIcInstance(instance_id) => {
-                format!("http://127.0.0.1:{pocket_ic_server_port}/instances/{instance_id}/")
+                format!("http://localhost:{pocket_ic_server_port}/instances/{instance_id}/")
             }
         };
         let agent = ic_agent::Agent::builder()
