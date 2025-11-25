@@ -1,0 +1,16 @@
+[package]
+name = "signed-canister-reply"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[dependencies]
+base64 = { workspace = true }
+candid = { workspace = true }
+clap = { workspace = true }
+ic-agent = { workspace = true }
+ic-certification = { workspace = true }
+serde_cbor = { workspace = true }
+tokio = { workspace = true }

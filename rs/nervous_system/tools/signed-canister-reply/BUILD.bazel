@@ -1,0 +1,23 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+# TODO: Open this up.
+package(default_visibility = ["//visibility:private"])
+
+BINARY_SRCS = glob(
+    ["src/**/*.rs"],
+    exclude = ["**/*tests.rs"],
+)
+
+rust_binary(
+    name = "signed-canister-reply",
+    srcs = BINARY_SRCS,
+    deps = [
+        "@crate_index//:base64",
+        "@crate_index//:candid",
+        "@crate_index//:clap",
+        "@crate_index//:ic-agent",
+        "@crate_index//:ic-certification",
+        "@crate_index//:serde_cbor",
+        "@crate_index//:tokio",
+    ],
+)

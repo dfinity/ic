@@ -23005,6 +23005,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "signed-canister-reply"
+version = "0.9.0"
+dependencies = [
+ "base64 0.13.1",
+ "candid",
+ "clap 4.5.27",
+ "ic-agent",
+ "ic-certification 3.0.3",
+ "serde_cbor",
+ "tokio",
+]
+
+[[package]]
 name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
