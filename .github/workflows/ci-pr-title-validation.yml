@@ -15,7 +15,7 @@ permissions:
 jobs:
   validate-pr-title:
     name: PR Conventional Commit Validation
-    if: ${{ github.event_name == 'pull_request' }}
+    if: ${{ github.event_name == 'pull_request_target' }}
     runs-on: ubuntu-latest
     steps:
       - name: Validate PR Title
