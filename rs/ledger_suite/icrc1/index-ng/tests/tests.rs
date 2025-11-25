@@ -767,6 +767,71 @@ fn test_get_account_transactions() {
 }
 
 #[test]
+fn test_get_account_transactions_self_transfer() {
+    let initial_balances: Vec<_> = vec![(account(1, 0), 1_000_000_000_000)];
+    let env = &StateMachine::new();
+    let minter = minter_identity().sender().unwrap();
+    let ledger_id = install_ledger(
+        env,
+        initial_balances,
+        default_archive_options(),
+        None,
+        minter,
+    );
+    let index_id = install_index_ng(env, index_init_arg_without_interval(ledger_id));
+
+    // List of the transactions that the test is going to add. This exists to make
+    // the test easier to read.
+    let tx0 = TransactionWithId {
+        id: 0u8.into(),
+        transaction: Transaction::mint(
+            Mint {
+                to: account(1, 0),
+                amount: 1_000_000_000_000_u64.into(),
+                created_at_time: None,
+                memo: None,
+                fee: None,
+            },
+            0,
+        ),
+    };
+    let tx1 = TransactionWithId {
+        id: 1u8.into(),
+        transaction: Transaction::transfer(
+            Transfer {
+                from: account(1, 0),
+                to: account(1, 0),
+                spender: None,
+                amount: 1_000_000u32.into(),
+                fee: Some(FEE.into()),
+                created_at_time: None,
+                memo: None,
+            },
+            0,
+        ),
+    };
+
+    ////////////
+    //// Phase 1: only 1 mint to (1, 0).
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // Account (1, 0) has one mint.
+    let actual_txs =
+        get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).transactions;
+    assert_txs_with_id_eq(actual_txs, vec![tx0.clone()]);
+
+    /////////////
+    //// Phase 2: transfer from (1, 0) to (1, 0).
+    transfer(env, ledger_id, account(1, 0), account(1, 0), 1_000_000);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // Account (1, 0) has one transfer and one mint.
+    let actual_txs =
+        get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).transactions;
+    assert_txs_with_id_eq(actual_txs, vec![tx1.clone(), tx0.clone()]);
+}
+
+#[test]
 fn test_get_account_transactions_start_length() {
     // 10 mint transactions to index for the same account.
     let initial_balances: Vec<_> = (0..10).map(|i| (account(1, 0), i * 10_000)).collect();
