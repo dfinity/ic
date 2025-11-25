@@ -75,7 +75,7 @@ rust_test(
     tags = [
         "cpu:16",
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
-        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+        # Failed to bind PocketIC server to address 127.0.0.1:0
         "requires-network",
         "test_all_platforms",
     ],
@@ -130,7 +130,7 @@ rust_test(
     tags = [
         "cpu:16",
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
-        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+        # Failed to bind PocketIC server to address 127.0.0.1:0
         "requires-network",
         "test_all_platforms",
     ],
@@ -177,7 +177,7 @@ rust_test(
         tags = [
             "cpu:16",
             # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
-            # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+            # Failed to bind PocketIC server to address 127.0.0.1:0
             "requires-network",
             "long_test",  # The P90 of this test is over 8m for the week starting on 2025-08-20
         ] + (["test_all_platforms"] if name_suffix == "" else []),  # do not build NNS canisters on all platforms
@@ -220,7 +220,7 @@ rust_test(
     },
     tags = [
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
-        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+        # Failed to bind PocketIC server to address 127.0.0.1:0
         "requires-network",
         "test_all_platforms",
     ],
@@ -247,7 +247,7 @@ rust_test(
     tags = [
         "cpu:16",
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
-        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+        # Failed to bind PocketIC server to address 127.0.0.1:0
         "requires-network",
         "test_all_platforms",
     ],
@@ -276,14 +276,16 @@ rust_test(
     tags = [
         "cpu:16",
         # TODO: remove 'requires-network' tag when the root cause for sporadic error below on Apple Silicon is identified and fixed.
-        # Failed to crate http gateway: Failed to bind to address 127.0.0.1:0: Operation not permitted (os error 1)
+        # Failed to bind PocketIC server to address 127.0.0.1:0
         "requires-network",
         "test_all_platforms",
     ],
     deps = [
         ":pocket-ic",
+        "//rs/types/management_canister_types",
         "@crate_index//:candid",
         "@crate_index//:hex",
+        "@crate_index//:serde_json",
         "@crate_index//:tempfile",
     ],
 )

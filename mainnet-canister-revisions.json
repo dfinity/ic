@@ -96,8 +96,8 @@
     "sha256": "b443df3315902404b142d60f3cfd2f580181683310f6e6321b52de297deffcda"
   },
   "internet_identity_test": {
-    "sha256": "59a779dd4143416f8761ade228ca81efd222a54117d2728a2ebc2793d60a9c9e",
-    "tag": "release-2025-11-14"
+    "sha256": "4d845df4e4a89c91918cab3d6a5f48a259c81c9bae86b5289302d96568cef905",
+    "tag": "release-2025-11-21"
   },
   "ledger": {
     "rev": "69b755062f5ef0a7d6efc9a127172b46121420c8",
@@ -112,8 +112,8 @@
     "sha256": "2bcf1c2c8adba6f7bff5e7abda164f22e0a8f6a07120fbe3596c94234727d04c"
   },
   "nns_dapp_test": {
-    "sha256": "bf351f9bf770b9782a785aba5c83559527c4400dec022ad8537b02179cd58631",
-    "tag": "proposal-139207"
+    "sha256": "ab640ac8df064da1c4b9feb3b9938b3cc0a8f578b702a34e99ca9a0e36da7b85",
+    "tag": "proposal-139482"
   },
   "node-rewards": {
     "rev": "a93a3f1eea5cacfd570d96941b5d6f6d2a9b508b",
