@@ -423,6 +423,11 @@ pub struct Proposal {
     /// 2000 bytes.
     #[prost(string, tag = "2")]
     pub url: ::prost::alloc::string::String,
+    /// A self-describing action that can be understood without the schema of a specific proposal type.
+    /// This is populated and stored at the time of proposal creation and does not change as the
+    /// proposal type evolves.
+    #[prost(message, optional, tag = "30")]
+    pub self_describing_action: ::core::option::Option<SelfDescribingProposalAction>,
     /// This section describes the action that the proposal proposes to
     /// take.
     #[prost(
@@ -3248,6 +3253,9 @@ pub struct MonthlyNodeProviderRewards {
     /// The registry version used to calculate these rewards at the time the rewards were calculated.
     #[prost(uint64, optional, tag = "6")]
     pub registry_version: ::core::option::Option<u64>,
+    /// Rewards calculation algorithm version used to calculate rewards.
+    #[prost(uint32, optional, tag = "10")]
+    pub algorithm_version: ::core::option::Option<u32>,
     /// The list of node_provieders at the time when the rewards were calculated.
     #[prost(message, repeated, tag = "7")]
     pub node_providers: ::prost::alloc::vec::Vec<NodeProvider>,
@@ -4090,6 +4098,92 @@ pub struct FinalizeDisburseMaturity {
     /// The account identifer to which to transfer the ICPs.
     #[prost(message, optional, tag = "5")]
     pub to_account_identifier: ::core::option::Option<::icp_ledger::protobuf::AccountIdentifier>,
+}
+/// An ICRC-3-like value.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Value {
+    #[prost(oneof = "value::Value", tags = "1, 2, 3, 4, 5, 6")]
+    pub value: ::core::option::Option<value::Value>,
+}
+/// Nested message and enum types in `Value`.
+pub mod value {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
+    pub enum Value {
+        #[prost(bytes, tag = "1")]
+        Blob(::prost::alloc::vec::Vec<u8>),
+        #[prost(string, tag = "2")]
+        Text(::prost::alloc::string::String),
+        /// nat/int are stored as bytes since candid Nat/Int does not have equivalent protobuf types.
+        #[prost(bytes, tag = "3")]
+        Nat(::prost::alloc::vec::Vec<u8>),
+        #[prost(bytes, tag = "4")]
+        Int(::prost::alloc::vec::Vec<u8>),
+        #[prost(message, tag = "5")]
+        Array(super::ValueArray),
+        #[prost(message, tag = "6")]
+        Map(super::ValueMap),
+    }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ValueArray {
+    #[prost(message, repeated, tag = "1")]
+    pub values: ::prost::alloc::vec::Vec<Value>,
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct ValueMap {
+    #[prost(map = "string, message", tag = "1")]
+    pub values: ::std::collections::HashMap<::prost::alloc::string::String, Value>,
+}
+/// Proposal action that is self-describing. It can be understood without the schema of a specific
+/// proposal type.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct SelfDescribingProposalAction {
+    #[prost(string, tag = "1")]
+    pub type_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub type_description: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "3")]
+    pub value: ::core::option::Option<Value>,
 }
 /// Proposal types are organized into topics. Neurons can automatically
 /// vote based on following other neurons, and these follow
