@@ -1,10 +1,11 @@
 use candid::Principal;
 use ic_ckdoge_minter::candid_api::{
-    RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError, WithdrawalFee,
+    EstimateWithdrawalFeeError, RetrieveDogeWithApprovalArgs, RetrieveDogeWithApprovalError,
+    WithdrawalFee,
 };
 use ic_ckdoge_minter_test_utils::{
     DOGE, DOGECOIN_ADDRESS_1, LEDGER_TRANSFER_FEE, RETRIEVE_DOGE_MIN_AMOUNT, Setup, USER_PRINCIPAL,
-    assert_trap, utxo_with_value,
+    assert_trap, utxo_with_value, utxos_with_value,
 };
 use std::array;
 use std::time::Duration;
@@ -419,13 +420,15 @@ mod withdrawal {
 }
 
 #[test]
-fn should_refresh_fee_percentiles() {
+fn should_estimate_withdrawal_fee() {
     let setup = Setup::default();
     let dogecoin = setup.dogecoin();
     let minter = setup.minter();
-    let fee_percentiles = array::from_fn(|i| i as u64);
+    let fee_percentiles = array::from_fn(|i| i as u64 * 1_000_000);
     let median_fee = fee_percentiles[50];
-    assert_eq!(median_fee, 50);
+    // The fee is in millikoinu/byte so a median fee of 50M millikoinu/byte translates
+    // into a fee of 50_000 koinu/byte == 0.0005 DOGE/byte
+    assert_eq!(median_fee, 50 * 1_000_000);
     dogecoin.set_fee_percentiles(fee_percentiles);
     setup.env.advance_time(Duration::from_secs(60 * 6 + 1));
     setup.env.tick();
@@ -438,9 +441,29 @@ fn should_refresh_fee_percentiles() {
 
     assert_eq!(
         minter.estimate_withdrawal_fee(DOGE),
+        Err(EstimateWithdrawalFeeError::AmountTooHigh),
+        "Any amount should be too high since there are no UTXOs"
+    );
+
+    setup
+        .deposit_flow()
+        .minter_get_dogecoin_deposit_address(USER_PRINCIPAL)
+        .dogecoin_simulate_transaction(utxos_with_value(&[RETRIEVE_DOGE_MIN_AMOUNT; 2]))
+        .minter_update_balance()
+        .expect_mint();
+
+    assert_eq!(
+        minter.estimate_withdrawal_fee(DOGE),
+        Err(EstimateWithdrawalFeeError::AmountTooLow {
+            min_amount: RETRIEVE_DOGE_MIN_AMOUNT
+        })
+    );
+
+    assert_eq!(
+        minter.estimate_withdrawal_fee(RETRIEVE_DOGE_MIN_AMOUNT),
         Ok(WithdrawalFee {
-            dogecoin_fee: 0,
-            minter_fee: 0
+            minter_fee: 180_000_000,
+            dogecoin_fee: 11_150_000,
         })
     );
 }
