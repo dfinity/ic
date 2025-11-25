@@ -840,7 +840,7 @@ mod tests {
         }
 
         async fn wait_for_console_contains(&self, expected_parts: &[&str]) {
-            const MAX_ATTEMPTS: usize = 20;
+            const MAX_ATTEMPTS: u64 = 20;
             'retry: for attempt in 1..=MAX_ATTEMPTS {
                 let console_content = self.read_console();
                 for part in expected_parts {
@@ -850,7 +850,7 @@ mod tests {
                                 "Console content does not contain '{part}'\nConsole content:\n{console_content}"
                             );
                         }
-                        sleep(Duration::from_millis((attempt * 50) as u64)).await;
+                        sleep(Duration::from_millis(attempt * 50)).await;
                         continue 'retry;
                     };
                 }
