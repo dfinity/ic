@@ -4,6 +4,7 @@ pub mod endpoints;
 pub mod hash;
 pub(crate) mod known_tags;
 
+use candid::Principal;
 use ciborium::tag::Required;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
@@ -80,6 +81,17 @@ pub enum Operation<Tokens: TokensType> {
         #[serde(skip_serializing_if = "Option::is_none")]
         fee: Option<Tokens>,
     },
+    #[serde(rename = "107set_fee_collector")]
+    FeeCollector {
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            with = "compact_account::opt"
+        )]
+        fee_collector: Option<Account>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        caller: Option<Principal>,
+    },
 }
 
 // A [Transaction] but flattened meaning that [Operation]
@@ -117,8 +129,10 @@ struct FlattenedTransaction<Tokens: TokensType> {
     #[serde(with = "compact_account::opt")]
     spender: Option<Account>,
 
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "amt")]
-    amount: Tokens,
+    amount: Option<Tokens>,
 
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -131,6 +145,15 @@ struct FlattenedTransaction<Tokens: TokensType> {
     #[serde(default)]
     #[serde(skip_serializing_if = "Option::is_none")]
     expires_at: Option<u64>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(with = "compact_account::opt")]
+    fee_collector: Option<Account>,
+
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    caller: Option<Principal>,
 }
 
 impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<Tokens> {
@@ -142,13 +165,17 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
                 from: value
                     .from
                     .ok_or("`from` field required for `burn` operation")?,
-                amount: value.amount,
+                amount: value
+                    .amount
+                    .ok_or("`amount` required for `burn` operations")?,
                 spender: value.spender,
                 fee: value.fee,
             },
             "mint" => Operation::Mint {
                 to: value.to.ok_or("`to` field required for `mint` operation")?,
-                amount: value.amount.clone(),
+                amount: value
+                    .amount
+                    .ok_or("`amount` required for `mint` operations")?,
                 fee: value.fee,
             },
             "xfer" => Operation::Transfer {
@@ -157,7 +184,9 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
                     .ok_or("`from` field required for `xfer` operation")?,
                 spender: value.spender,
                 to: value.to.ok_or("`to` field required for `xfer` operation")?,
-                amount: value.amount,
+                amount: value
+                    .amount
+                    .ok_or("`amount` required for `xfer` operations")?,
                 fee: value.fee,
             },
             "approve" => Operation::Approve {
@@ -167,10 +196,16 @@ impl<Tokens: TokensType> TryFrom<FlattenedTransaction<Tokens>> for Transaction<T
                 spender: value
                     .spender
                     .ok_or("`spender` field required for `approve` operation")?,
-                amount: value.amount,
+                amount: value
+                    .amount
+                    .ok_or("`amount` required for `approve` operations")?,
                 expected_allowance: value.expected_allowance,
                 expires_at: value.expires_at,
                 fee: value.fee,
+            },
+            "107set_fee_collector" => Operation::FeeCollector {
+                fee_collector: value.fee_collector,
+                caller: value.caller,
             },
             unknown_op => return Err(format!("Unknown operation name {unknown_op}")),
         };
@@ -194,6 +229,7 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Mint { .. } => "mint",
                 Transfer { .. } => "xfer",
                 Approve { .. } => "approve",
+                FeeCollector { .. } => "107set_fee_collector",
             }
             .into(),
             from: match &t.operation {
@@ -213,13 +249,15 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
                 Burn { amount, .. }
                 | Mint { amount, .. }
                 | Transfer { amount, .. }
-                | Approve { amount, .. } => amount.clone(),
+                | Approve { amount, .. } => Some(amount.clone()),
+                FeeCollector { .. } => None,
             },
             fee: match &t.operation {
                 Transfer { fee, .. }
                 | Approve { fee, .. }
                 | Mint { fee, .. }
                 | Burn { fee, .. } => fee.to_owned(),
+                FeeCollector { .. } => None,
             },
             expected_allowance: match &t.operation {
                 Approve {
@@ -229,6 +267,14 @@ impl<Tokens: TokensType> From<Transaction<Tokens>> for FlattenedTransaction<Toke
             },
             expires_at: match &t.operation {
                 Approve { expires_at, .. } => expires_at.to_owned(),
+                _ => None,
+            },
+            fee_collector: match &t.operation {
+                FeeCollector { fee_collector, .. } => fee_collector.to_owned(),
+                _ => None,
+            },
+            caller: match &t.operation {
+                FeeCollector { caller, .. } => caller.to_owned(),
                 _ => None,
             },
         }
@@ -421,6 +467,9 @@ impl<Tokens: TokensType> LedgerTransaction for Transaction<Tokens> {
                     return Err(e);
                 }
             }
+            Operation::FeeCollector { .. } => {
+                panic!("FeeCollector107 not implemented")
+            }
         }
         Ok(())
     }
@@ -492,6 +541,10 @@ pub struct Block<Tokens: TokensType> {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "fee_col_block")]
     pub fee_collector_block_index: Option<u64>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "btype")]
+    pub btype: Option<String>,
 }
 
 type TaggedBlock<Tokens> = Required<Block<Tokens>, 55799>;
@@ -545,6 +598,9 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
         let effective_fee = match &transaction.operation {
             Operation::Transfer { fee, .. } => fee.is_none().then_some(effective_fee),
             Operation::Approve { fee, .. } => fee.is_none().then_some(effective_fee),
+            Operation::FeeCollector { .. } => {
+                panic!("FeeCollector107 not implemented")
+            }
             _ => None,
         };
         let (fee_collector, fee_collector_block_index) = match fee_collector {
@@ -562,6 +618,7 @@ impl<Tokens: TokensType> BlockType for Block<Tokens> {
             timestamp: timestamp.as_nanos_since_unix_epoch(),
             fee_collector,
             fee_collector_block_index,
+            btype: None,
         }
     }
 }
