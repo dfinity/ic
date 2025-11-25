@@ -302,13 +302,13 @@ pub fn syscalls<
         caller: &mut Caller<'_, StoreData>,
         message_num_bytes: usize,
     ) -> Result<usize, anyhow::Error> {
-        let capacity = with_system_api(caller, |s| Ok(s.canister_log().byte_capacity()))?;
-        let remaining_space = with_system_api(caller, |s| Ok(s.canister_log().remaining_bytes()))?;
-        let allocated_num_bytes = message_num_bytes.min(capacity);
-        let transmitted_num_bytes = message_num_bytes.min(remaining_space);
+        let byte_capacity = with_system_api(caller, |s| Ok(s.canister_log().byte_capacity()))?;
+        let remaining_bytes = with_system_api(caller, |s| Ok(s.canister_log().remaining_bytes()))?;
+        let allocated_num_bytes = message_num_bytes.min(byte_capacity);
+        let transmitted_num_bytes = message_num_bytes.min(remaining_bytes);
         // LINT.IfChange
         // The cost of logging is proportional to the size of the message, but is limited
-        // by the log capacity and the remaining space in the log.
+        // by the log byte capacity and the remaining bytes in the log.
         // The cost is calculated as follows:
         // - the allocated bytes (x2 to account for adding new message and removing the oldest one)
         //   - this must be in sync with `CanisterLog::add_record()` from `ic_management_canister_types_private`
