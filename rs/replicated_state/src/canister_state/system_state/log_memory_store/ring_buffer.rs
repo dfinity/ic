@@ -22,7 +22,10 @@ pub const INDEX_ENTRY_COUNT_MAX: u64 = INDEX_TABLE_SIZE.get() / INDEX_ENTRY_SIZE
 pub const DATA_REGION_OFFSET: MemoryAddress = INDEX_TABLE_OFFSET.add_size(INDEX_TABLE_SIZE);
 
 // Ring buffer constraints.
-pub const RESULT_MAX_SIZE: MemorySize = MemorySize::new(2_000_000); // 2 MB
+
+/// Maximum total size of log records returned in a single message.
+pub const RESULT_MAX_SIZE: MemorySize = MemorySize::new(2_000_000);
+const _: () = assert!(RESULT_MAX_SIZE.get() <= 2_000_000, "Exceeds 2 MB");
 
 // With index table of 1 page (4 KiB) and 28 bytes per entry -> 146 entries max.
 // With 2 MB result max size limit we want each index entry segment to be under
@@ -414,6 +417,11 @@ mod tests {
       --test_output=streamed \
       --test_arg=--nocapture \
       --test_arg=tmp_test_performance
+
+    bazel test //rs/execution_environment:execution_environment_test \
+      --test_output=streamed \
+      --test_arg=--nocapture \
+      --test_arg=canister_manager::tests::can_rename_canister
 
       100 KB
     */

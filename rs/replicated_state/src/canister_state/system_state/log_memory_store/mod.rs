@@ -27,13 +27,12 @@ pub struct LogMemoryStore {
     #[validate_eq(Ignore)]
     pub page_map: PageMap,
 
-    // ring_buffer: RingBuffer, // cached reference to the inner ring buffer of the
-    // page_map: PageMap,
     /// (!) No need to preserve across checkpoints.
     /// Tracks the size of each delta log appended during a round.
     /// Multiple logs can be appended in one round (e.g. heartbeat, timers, or message executions).
     /// The collected sizes are used to expose per-round memory usage metrics
     /// and the record is cleared at the end of the round.
+    #[validate_eq(Ignore)]
     delta_log_sizes: VecDeque<usize>,
 }
 
