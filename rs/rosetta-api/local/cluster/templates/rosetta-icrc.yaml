@@ -76,6 +76,10 @@ spec:
           {{- if eq (toString $.Values.icrcConfig.flushCacheShrinkMem) "true" }}
             - "--flush-cache-shrink-mem"
           {{- end }}
+          {{- if $.Values.icrcConfig.balanceSyncBatchSize }}
+            - "--balance-sync-batch-size"
+            - {{ $.Values.icrcConfig.balanceSyncBatchSize | quote }}
+          {{- end }}
           ports:
             - containerPort: {{ .containerPort }}
           volumeMounts:

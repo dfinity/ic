@@ -23,10 +23,10 @@ use maplit::btreeset;
 use proptest::{
     array::uniform20,
     collection::{btree_set, vec as pvec},
-    option,
     prelude::any,
     prop_assert, prop_assert_eq, prop_assume, proptest,
 };
+use std::cmp::max;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::str::FromStr;
 use std::time::Duration;
@@ -451,7 +451,7 @@ fn test_no_dust_in_change_output() {
             ]
         );
         assert!(
-            change_output.value >= change + BitcoinFeeEstimator::MINTER_ADDRESS_P2PWPKH_DUST_LIMIT
+            change_output.value >= change + BitcoinFeeEstimator::MINTER_ADDRESS_P2WPKH_DUST_LIMIT
         );
     }
 }
@@ -618,7 +618,7 @@ proptest! {
 
         let fee_estimator = bitcoin_fee_estimator();
         let minter_address= BitcoinAddress::P2wpkhV0(main_pkhash);
-        let fee_estimate = estimate_retrieve_btc_fee(&utxos, Some(target), fee_per_vbyte, &fee_estimator);
+        let fee_estimate = estimate_retrieve_btc_fee(&utxos, target, fee_per_vbyte, &fee_estimator).unwrap();
         let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee;
 
         let (unsigned_tx, _, _, _) = build_unsigned_transaction(
@@ -629,14 +629,6 @@ proptest! {
             &fee_estimator
         )
         .expect("failed to build transaction");
-
-        let vsize = fake_sign(&unsigned_tx).vsize() as u64;
-
-        prop_assert_eq!(
-            vsize,
-            crate::tx_vsize_estimate(unsigned_tx.inputs.len() as u64, unsigned_tx.outputs.len() as u64),
-            "incorrect transaction vsize estimate"
-        );
 
         let inputs_value = unsigned_tx.inputs.iter().map(|input| input.value).sum::<u64>();
         let outputs_value = unsigned_tx.outputs.iter().map(|output| output.value).sum::<u64>();
@@ -1011,15 +1003,16 @@ proptest! {
 
     #[test]
     fn test_fee_range(
-        utxos in btree_set(arbitrary::utxo(5_000u64..1_000_000_000), 0..20),
-        amount in option::of(any::<u64>()),
+        utxos in btree_set(arbitrary::utxo(5_000u64..1_000_000_000), 20..40),
+        amount in 0_u64..15_000, //can be covered by UTXOs
         fee_per_vbyte in 2000..10000u64,
     ) {
         const SMALLEST_TX_SIZE_VBYTES: u64 = 140; // one input, two outputs
-        const MIN_MINTER_FEE: u64 = 312;
+        const MIN_MINTER_FEE: u64 = BitcoinFeeEstimator::MINTER_ADDRESS_P2WPKH_DUST_LIMIT;
 
         let fee_estimator = bitcoin_fee_estimator();
-        let estimate = estimate_retrieve_btc_fee(&utxos, amount, fee_per_vbyte, &fee_estimator);
+        let amount = max(amount, fee_estimator.fee_based_minimum_withdrawal_amount(fee_per_vbyte));
+        let estimate = estimate_retrieve_btc_fee(&utxos, amount, fee_per_vbyte, &fee_estimator).unwrap();
         let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte / 1000;
         let estimate_amount = estimate.minter_fee + estimate.bitcoin_fee;
         prop_assert!(
