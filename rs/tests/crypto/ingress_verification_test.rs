@@ -1127,7 +1127,7 @@ fn resign_certificate_with_random_signature<R: Rng + CryptoRng>(
 
     let previous_signature = certificate.signature.clone();
     assert_eq!(previous_signature.len(), 48);
- 
+
     let random_g1 = G1Affine::hash(b"bls_signature", &rng.r#gen::<[u8; 32]>());
     certificate.signature = random_g1.serialize().to_vec();
     assert_eq!(certificate.signature.len(), 48);
