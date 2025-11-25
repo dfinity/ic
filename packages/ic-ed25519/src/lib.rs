@@ -509,7 +509,7 @@ pub struct PublicKey {
 }
 
 /// An error that occurs when verifying signatures or batches of signatures
-#[derive(Copy, Clone, Debug, Error)]
+#[derive(Copy, Clone, Debug, Error, Eq, PartialEq)]
 pub enum SignatureError {
     /// The signature had an invalid length, and cannot possibly be valid
     #[error("The signature had an invalid length, and cannot possibly be valid")]
