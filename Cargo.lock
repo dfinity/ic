@@ -19765,6 +19765,7 @@ checksum = "ab8809e0c18450a2db0f236d2a44ec0b4c1412d0eb936233579f0990faa5d5cd"
 dependencies = [
  "bitflags 1.3.2",
  "byteorder",
+ "chrono",
  "flate2",
  "hex",
  "lazy_static",
@@ -24761,6 +24762,7 @@ dependencies = [
  "anyhow",
  "ic-http-utils",
  "mockall",
+ "procfs 0.9.1",
  "reqwest 0.12.15",
  "rusb",
  "serde",

@@ -51,12 +51,15 @@ fn get_hostos_vsock_version() -> Response {
 }
 
 fn is_manual_recovery_running() -> bool {
-    std::process::Command::new("pgrep")
-        .arg("-f")
-        .arg("hostos_tool.*manual-recovery")
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
+    match procfs::process::all_processes() {
+        Ok(processes) => processes.into_iter().any(|process| {
+            process.cmdline().is_ok_and(|args| {
+                let cmd = args.join(" ");
+                cmd.contains("hostos_tool") && cmd.contains("manual-recovery")
+            })
+        }),
+        Err(_) => false,
+    }
 }
 
 fn notify(notify_data: &NotifyData) -> Response {

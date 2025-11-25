@@ -763,6 +763,7 @@ pprof = { version = "0.14.0", default-features = false, features = [
 ] }
 predicates = "3.1.2"
 pretty_assertions = "1.4.0"
+procfs = { version = "^0.9" }
 proc-macro2 = "1.0.89"
 prometheus = { version = "0.13.4", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
