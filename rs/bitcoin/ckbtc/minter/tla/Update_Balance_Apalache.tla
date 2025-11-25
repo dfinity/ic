@@ -4,6 +4,7 @@ EXTENDS Apalache, TypeAliases
 
 \* CODE_LINK_INSERT_CONSTANTS
 
+(*
 CONSTANTS
     \* @type: Set($principal);
     PRINCIPALS,
@@ -21,6 +22,7 @@ CONSTANTS
     TX_HASH_OP,
     \* @type: $value;
     CHECK_FEE
+*)
 
 VARIABLES
           \* @type: $ckbtcAddress -> Set($utxo);
