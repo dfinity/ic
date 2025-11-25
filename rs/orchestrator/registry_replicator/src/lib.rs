@@ -45,7 +45,7 @@ use ic_types::{
     NodeId, RegistryVersion, crypto::threshold_sig::ThresholdSigPublicKey,
     registry::RegistryClientError,
 };
-use metrics::RegistryreplicatorMetrics;
+use metrics::RegistryReplicatorMetrics;
 use std::{
     future::Future,
     io::{Error, ErrorKind},
@@ -85,7 +85,7 @@ pub struct RegistryReplicator {
     started: Arc<AtomicBool>,
     cancelled: Arc<AtomicBool>,
     poll_delay: Duration,
-    metrics: Arc<RegistryreplicatorMetrics>,
+    metrics: Arc<RegistryReplicatorMetrics>,
 }
 
 impl RegistryReplicator {
@@ -127,7 +127,7 @@ impl RegistryReplicator {
             )
         }
 
-        let metrics = Arc::new(RegistryreplicatorMetrics::new(&metrics_registry));
+        let metrics = Arc::new(RegistryReplicatorMetrics::new(&metrics_registry));
 
         Self {
             logger,
