@@ -338,10 +338,6 @@ if [[ "$EXTERNAL_PORTS" == true ]]; then
         kubectl port-forward --address 0.0.0.0 -n rosetta-api svc/icrc-rosetta-latest 8888:3000 --context="$MINIKUBE_PROFILE" &>/dev/null &
         sleep 1
     fi
-
-    echo "External ports configured:"
-    echo "  ICP Rosetta:  0.0.0.0:8080"
-    echo "  ICRC Rosetta: 0.0.0.0:8888"
 fi
 
 # Print the URLs
