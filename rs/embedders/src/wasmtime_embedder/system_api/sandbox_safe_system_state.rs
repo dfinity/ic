@@ -30,6 +30,7 @@ use ic_replicated_state::{
 use ic_types::batch::CanisterCyclesCostSchedule;
 use ic_types::{
     CanisterLog, CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumInstructions, Time,
+    max_delta_log_memory_limit,
     messages::{CallContextId, CallbackId, NO_DEADLINE, RejectContext, Request, RequestMetadata},
     methods::Callback,
     time::CoarseTime,
@@ -675,9 +676,12 @@ impl SandboxSafeSystemState {
         request_metadata: RequestMetadata,
         caller: Option<PrincipalId>,
         next_canister_log_record_idx: u64,
+        canister_log_memory_limit: usize,
         is_wasm64_execution: bool,
         network_topology: NetworkTopology,
     ) -> Self {
+        let delta_log_memory_limit =
+            canister_log_memory_limit.min(max_delta_log_memory_limit().get() as usize);
         Self {
             canister_id,
             status,
@@ -692,7 +696,10 @@ impl SandboxSafeSystemState {
             compute_allocation,
             system_state_modifications: SystemStateModifications {
                 // Start indexing new batch of canister log records from the given index.
-                canister_log: CanisterLog::new_with_next_index(next_canister_log_record_idx),
+                canister_log: CanisterLog::new_with_next_index(
+                    next_canister_log_record_idx,
+                    delta_log_memory_limit,
+                ),
                 call_context_balance_taken: call_context_id
                     .map(|call_context_id| (call_context_id, Cycles::zero())),
                 ..SystemStateModifications::default()
@@ -833,6 +840,7 @@ impl SandboxSafeSystemState {
             request_metadata,
             caller,
             system_state.canister_log.next_idx(),
+            system_state.canister_log.byte_capacity(),
             is_wasm64_execution,
             network_topology.clone(),
         )
@@ -1470,6 +1478,7 @@ mod tests {
         CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
         Time,
         batch::CanisterCyclesCostSchedule,
+        default_aggregate_log_memory_limit,
         messages::{NO_DEADLINE, RequestMetadata},
         time::CoarseTime,
     };
@@ -1574,6 +1583,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            default_aggregate_log_memory_limit().get() as usize,
             // Wasm32 execution environment. Sufficient in testing.
             false,
             NetworkTopology::default(),
@@ -1627,6 +1637,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
+            default_aggregate_log_memory_limit().get() as usize,
             // Wasm32 execution environment. Sufficient in testing.
             false,
             NetworkTopology::default(),

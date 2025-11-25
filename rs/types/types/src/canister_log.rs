@@ -54,6 +54,11 @@ pub fn default_aggregate_log_memory_limit() -> NumBytes {
     NumBytes::new(DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT as u64)
 }
 
+/// Returns the max size of a delta (per message) canister log buffer.
+pub fn max_delta_log_memory_limit() -> NumBytes {
+    NumBytes::new(MAX_DELTA_LOG_MEMORY_LIMIT as u64)
+}
+
 /// Truncates the content of a log record so that the record fits within the allowed size.
 fn truncate_content(byte_capacity: usize, mut record: CanisterLogRecord) -> CanisterLogRecord {
     let max_record_size = std::cmp::min(byte_capacity, MAX_ALLOWED_LOG_RECORD_SIZE);
@@ -281,7 +286,7 @@ mod tests {
 
     #[test]
     fn test_canister_log_memory_usage_by_default() {
-        let log = CanisterLog::default();
+        let log = CanisterLog::default_aggregate();
         // Assert log has no records and memory usage is zero.
         assert_eq!(log.records().len(), 0);
         assert_eq!(log.bytes_used(), 0);
@@ -291,7 +296,7 @@ mod tests {
 
     #[test]
     fn test_canister_log_new_applies_memory_limit() {
-        let log = CanisterLog::new(
+        let log = CanisterLog::new_aggregate(
             3,
             canister_log_records(&[
                 (0, 100, BIGGER_THAN_LIMIT_MESSAGE),
@@ -308,7 +313,7 @@ mod tests {
 
     #[test]
     fn test_canister_log_add_record_applies_memory_limit() {
-        let mut log = CanisterLog::default();
+        let mut log = CanisterLog::default_aggregate();
         log.add_record(100, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
         log.add_record(100, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
         log.add_record(100, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
@@ -322,7 +327,7 @@ mod tests {
     #[test]
     fn test_canister_log_clear() {
         // Arrange.
-        let mut log = CanisterLog::default();
+        let mut log = CanisterLog::default_aggregate();
         log.add_record(100, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
         log.add_record(100, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
         log.add_record(100, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
@@ -338,7 +343,7 @@ mod tests {
     #[test]
     fn test_canister_log_increases_next_idx_after_reaching_memory_limit() {
         let records_number = 42;
-        let mut log = CanisterLog::default();
+        let mut log = CanisterLog::default_aggregate();
         for _ in 0..records_number {
             log.add_record(0, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
         }
@@ -349,7 +354,7 @@ mod tests {
 
     #[test]
     fn test_canister_log_adds_records() {
-        let mut log = CanisterLog::default();
+        let mut log = CanisterLog::default_aggregate();
         log.add_record(100, b"record #0".to_vec());
         log.add_record(101, b"record #1".to_vec());
         log.add_record(102, b"record #2".to_vec());
@@ -366,7 +371,7 @@ mod tests {
     #[test]
     fn test_canister_log_append() {
         // Arrange.
-        let mut main = CanisterLog::new(
+        let mut main = CanisterLog::new_aggregate(
             3,
             canister_log_records(&[
                 (0, 100, b"main #0"),
@@ -374,7 +379,7 @@ mod tests {
                 (2, 102, b"main #2"),
             ]),
         );
-        let mut delta = CanisterLog::new_with_next_index(main.next_idx());
+        let mut delta = CanisterLog::new_with_next_index(main.next_idx(), TEST_MAX_ALLOWED_SIZE);
         delta.add_record(200, b"delta #0".to_vec());
         delta.add_record(201, b"delta #1".to_vec());
         delta.add_record(202, b"delta #2".to_vec());
@@ -399,7 +404,7 @@ mod tests {
     #[test]
     fn test_canister_log_append_when_delta_reached_memory_limit() {
         // Arrange.
-        let mut main = CanisterLog::new(
+        let mut main = CanisterLog::new_aggregate(
             3,
             canister_log_records(&[
                 (0, 100, b"main #0"),
@@ -407,7 +412,7 @@ mod tests {
                 (2, 102, b"main #2"),
             ]),
         );
-        let mut delta = CanisterLog::new_with_next_index(main.next_idx());
+        let mut delta = CanisterLog::new_with_next_index(main.next_idx(), TEST_MAX_ALLOWED_SIZE);
         // Add big records to reach memory limit and a small one at the end.
         delta.add_record(200, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
         delta.add_record(201, BIGGER_THAN_LIMIT_MESSAGE.to_vec());
@@ -433,7 +438,7 @@ mod tests {
     fn test_canister_log_record_used_space() {
         let (size_a, size_b, size_c) = (3 * 48, 3 * 48, 4 * 48);
         // Batch A.
-        let mut main = CanisterLog::new(
+        let mut main = CanisterLog::new_aggregate(
             3,
             canister_log_records(&[
                 (0, 100, b"main_ #0"),
@@ -444,7 +449,7 @@ mod tests {
         assert_eq!(main.bytes_used(), size_a);
 
         // Batch B.
-        let mut delta = CanisterLog::new_with_next_index(main.next_idx());
+        let mut delta = CanisterLog::new_with_next_index(main.next_idx(), TEST_MAX_ALLOWED_SIZE);
         delta.add_record(200, b"delta #0".to_vec());
         delta.add_record(201, b"delta #1".to_vec());
         delta.add_record(202, b"delta #2".to_vec());
@@ -452,7 +457,7 @@ mod tests {
         main.append_delta_log(&mut delta);
 
         // Batch C.
-        let mut delta = CanisterLog::new_with_next_index(main.next_idx());
+        let mut delta = CanisterLog::new_with_next_index(main.next_idx(), TEST_MAX_ALLOWED_SIZE);
         delta.add_record(300, b"delta #3".to_vec());
         delta.add_record(301, b"delta #4".to_vec());
         delta.add_record(302, b"delta #5".to_vec());
