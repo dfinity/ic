@@ -48,9 +48,9 @@ CONSTANTS
     \* @type: Int;
     \* Initial "supply" of BTC (all allocated to the user account initially)
     MAX_USER_BTC_TRANSFERS,
-    \* @type: $amount;
+    \* @type: $value;
     BTC_SUPPLY,
-    \* @type: $amount;
+    \* @type: $value;
     MINTER_INITIAL_SUPPLY,
     \* @type: Set($pid);
     UPDATE_BALANCE_PROCESS_IDS,
@@ -68,10 +68,12 @@ CONSTANTS
     BTC_CANISTER_PROCESS_ID,
     \* @type: Set($pid);
     HEARTBEAT_PROCESS_IDS,
-    \* @type: $amount;
+    \* @type: $value;
     RETRIEVE_BTC_FEE,
     \* @type: $ckbtcAddress -> $btcAddress;
-    DEPOSIT_ADDRESS
+    DEPOSIT_ADDRESS,
+    \* @type: $value;
+    CHECK_FEE
 
 (*
 @typeAlias: requestId = Int;
@@ -88,8 +90,14 @@ VARIABLES
     \* @type: $ckbtcAddress -> Set($utxo);
     utxos_state_addresses,
     \* @type: Set($principal);
+    update_balance_locks,
+    \* @type: Set($principal);
+    retrieve_btc_locks,
+    \* TODO: there aren't any locks used by the actual timer. However, the model uses them to check for something.
+    \* Figure out if this check still exists and which type of locks they are.
+    \* @type: Set($principal);
     locks,
-    \* @type: $ckbtcAddress -> $amount;
+    \* @type: $ckbtcAddress -> $value;
     balance,
     \* @type: Set($submission);
     btc_canister_to_btc,
@@ -111,16 +119,18 @@ VARIABLES
     submitted_ids,
     \* @type: $pid -> Set($utxo);
     spent,
-    \* @type: $pid -> Seq({ owner: $btcAddress, amount: $amount});
+    \* @type: $pid -> Seq($outputEntry);
     outputs,
     \* @type: Int;
     nr_user_transfers,
-    \* @type: $pid -> $amount;
+    \* @type: $pid -> $value;
     amount,
     \* @type: $pid -> $ckbtcAddress;
     caller_account,
     \* @type: $pid -> Set($utxo);
-    new_utxos,
+    utxos,
+    \* @type: $pid -> $utxo;
+    utxo,
     \* @type: $pid -> $optSubmission;
     new_transaction,
     \* @type: Seq($withdrawalReq);
@@ -174,7 +184,8 @@ vars == <<
     btc,
     btc_canister,
     utxos_state_addresses,
-    locks,
+    update_balance_locks,
+    retrieve_btc_locks,
     balance,
     btc_canister_to_btc,
     minter_to_btc_canister,
@@ -190,7 +201,8 @@ vars == <<
     nr_user_transfers,
     amount,
     caller_account,
-    new_utxos,
+    utxos,
+    utxo,
     new_transaction,
     pending,
     finalized_utxos,
@@ -277,7 +289,7 @@ Inv_Available_Exist_On_The_BTC_Network ==
 Inv_No_Locks_When_Done ==
     /\ \A p \in UPDATE_BALANCE_PROCESS_IDS: pc[p] = "Done"
    =>
-    locks = {}
+    update_balance_locks = {}
 
 \* This is an invariant to check that the model itself doesn't create any new BTC (the BTC supply stays constant)
 Inv_BTC_Supply_Constant ==
@@ -407,6 +419,8 @@ Init == (* Global variables *)
     /\ utxos_state_addresses \in Empty_Funs
     /\ available_utxos = {}
     /\ finalized_utxos \in Empty_Funs
+    /\ update_balance_locks = {}
+    /\ retrieve_btc_locks = {}
     /\ locks = {}
     /\ pending = <<>>
     /\ submitted_transactions = {}
@@ -427,8 +441,8 @@ Init == (* Global variables *)
 retrieve_btc_local_vars == << amount, next_request_id >>
 timer_local_vars == << submitted, submitted_ids, spent, outputs, new_transaction >>
 environment_local_vars == << btc, btc_canister, balance, nr_user_transfers, btc_canister_to_btc >>
-update_balance_local_vars == << caller_account, new_utxos >>
-minter_global_vars == << utxos_state_addresses, locks, 
+update_balance_local_vars == << caller_account, utxos, utxo >>
+minter_global_vars == << utxos_state_addresses, update_balance_locks, retrieve_btc_locks, locks,
                         pending, finalized_utxos,
                         available_utxos, submitted_transactions >>
 

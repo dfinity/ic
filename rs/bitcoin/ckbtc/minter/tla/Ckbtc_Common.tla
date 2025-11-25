@@ -65,8 +65,8 @@ Sum_Seq(seq) == FoldRight(LAMBDA x, y: x + y, seq, 0)
 
 \* Definitions on UTXO sets
 \* @type: (Int, $utxo) => Int;
-Add_Utxo_Amount(amt, utxo) == utxo.amount + amt
-\* @type: Set($utxo) => $amount;
+Add_Utxo_Amount(amt, utxo) == utxo.value + amt
+\* @type: Set($utxo) => $value;
 Sum_Utxos(S) == \* Sum_F(LAMBDA x: x.amount, S)
                 ApaFoldSet(Add_Utxo_Amount, 0, S)
 \* @type: (Set({owner: $btcAddress, b}), Set($btcAddress)) => Set({owner: $btcAddress, b});
@@ -113,22 +113,22 @@ Burn_Request(caller_id, address, amount) == [
 \* @type: $minterToLedgerRequest => Bool;
 Is_Burn_Request(req) == VariantTag(req.request) = "Burn"
 
-\* @type: (Set($utxo), Seq({ address: $btcAddress, amount: $amount, b }), $btcAddress) => Seq({ owner: $btcAddress, amount: $amount });
+\* @type: (Set($utxo), Seq({ address: $btcAddress, value: $value, b }), $btcAddress) => Seq($outputEntry);
 New_Outputs(utxos, requests, change_address) ==
     LET
         total_available == Sum_Utxos(utxos)
         \* Apalache doesn't seem to like lambdas, so introduce a definition
-        \* @type: { address: $btcAddress, amount: $amount } => $amount;
-        get_amt(request) == request.amount
+        \* @type: { address: $btcAddress, value: $value } => $value;
+        get_amt(request) == request.value
         total_requested == Sum_Seq(Map(get_amt, requests))
         change == total_available - total_requested
         parent_ids == { utxo.id : utxo \in utxos }
-        \* @type: { address: $btcAddress, amount: $amount } => { owner: $btcAddress, amount: $amount };
-        mk_record(request) == [ owner |-> request.address, amount |-> request.amount ]
+        \* @type: { address: $btcAddress, value: $value } => { owner: $btcAddress, value: $value };
+        mk_record(request) == [ owner |-> request.address, value |-> request.value ]
         new_outputs == Map(mk_record, requests)
     IN
         new_outputs \o
-        IF change > 0 THEN << [ owner |-> change_address, amount |-> change ] >> ELSE << >>
+        IF change > 0 THEN << [ owner |-> change_address, value |-> change ] >> ELSE << >>
 
 Submission_Request(caller_id, submission) == [
     caller_id |-> caller_id,

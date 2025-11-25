@@ -42,22 +42,22 @@ Unwrap_Submission(opt_submission) ==
 \* These were PlusCal definitions originally, but Apalache doesn't like LAMBDAs. Turn them into
 \* TLA+ definitions instead to be able to use LET/IN and give type hints.
 
-\* @type: (Seq($withdrawalReq), $amount) => Set(Int);
+\* @type: (Seq($withdrawalReq), $value) => Set(Int);
 possible_indexes(pndng, available_amount) == 
   LET
-    \* @type: $withdrawalReq => $amount;
-    amt(x) == x.amount
+    \* @type: $withdrawalReq => $value;
+    amt(x) == x.value
   IN
     {i\in 1..Len(pndng): Sum_Seq(Map(amt, SubSeq(pndng,1,i))) < available_amount}
 
 \* @type: (Seq($withdrawalReq), Set(Int)) => Seq($withdrawalReq);
 requests_to_submit(pndng, pindexes) == SubSeq(pndng,1,Cardinality(pindexes))
 
-\* @type: Seq($withdrawalReq) => $amount;
+\* @type: Seq($withdrawalReq) => $value;
 requested_amount(reqs_to_submit) == 
   LET
-    \* @type: $withdrawalReq => $amount;
-    amt(y) == y.amount
+    \* @type: $withdrawalReq => $value;
+    amt(y) == y.value
   IN
     Sum_Seq(Map(amt, reqs_to_submit))
 \* @type: Seq($withdrawalReq) => Seq($requestId);
@@ -69,7 +69,7 @@ submitted_request_ids(reqs_to_submit) ==
     Map(req_id, reqs_to_submit)
 
 
-\* @type: (Set($utxo), Seq({ owner: $btcAddress, amount: $amount })) => $submission;
+\* @type: (Set($utxo), Seq($outputEntry)) => $submission;
 New_Submission(consumed_utxos, outputs) ==
     [ consumed_utxos |-> consumed_utxos, outputs |-> outputs ]
 
@@ -83,8 +83,8 @@ variables
     \* is a simplification, as the BTC network doesn't have a notion of current state.
     \* We don't attempt to define a precise mapping onto the state of the BTC network here.
     btc = { 
-        [ id |-> << "GENESIS", 0 >>, owner |-> USER_BTC_ADDRESS, amount |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY], 
-        [ id |-> << "GENESIS", 1 >>, owner |-> DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS], amount |-> MINTER_INITIAL_SUPPLY] };
+        [ id |-> << "GENESIS", 0 >>, owner |-> USER_BTC_ADDRESS, value |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY], 
+        [ id |-> << "GENESIS", 1 >>, owner |-> DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS], value |-> MINTER_INITIAL_SUPPLY] };
     \**********************************************************************************************
     \* BTC Canister
     \**********************************************************************************************
@@ -106,6 +106,8 @@ variables
     \**********************************************************************************************
     \* The remaining minter state
     \**********************************************************************************************
+    update_balance_locks = {},
+    retrieve_btc_locks = {},
     \* Currently locked ckBTC (user) addresses, for which balance update is in progress.
     \* Note that in the model we only have locks for updating balances, but not for retrieving
     \* BTC. The model doesn't find any errors arising from the missing retrieve BTC locks.
@@ -216,7 +218,14 @@ variables
         {
             btc_canister_to_minter := btc_canister_to_minter \ {response};
             if(VariantTag(response.response) = "SubmissionOk") {
-                submitted_transactions := submitted_transactions \union {[requests |-> submitted_ids, txid |-> Tx_Hash(Unwrap_Submission(new_transaction)), used_utxos |-> spent, change_output |-> [vout |-> change_index, vamount |-> outputs[change_index].amount]] } ;
+                submitted_transactions := submitted_transactions 
+                    \union 
+                    {[
+                        requests |-> submitted_ids, 
+                        txid |-> Tx_Hash(Unwrap_Submission(new_transaction)), 
+                        used_utxos |-> spent, 
+                        change_output |-> [vout |-> change_index, value |-> outputs[change_index].value]] 
+                    } ;
             } else {
                 \* This puts the submission at the end of the queue;
                 \* this corresponds to the plans for the implementation, though for the model's purposes
@@ -267,30 +276,33 @@ variables
 }
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "5f389fd" /\ chksum(tla) = "f0225d1c")
+\* BEGIN TRANSLATION (chksum(pcal) = "12a8aa6d" /\ chksum(tla) = "2adae1c7")
 VARIABLES pc, btc, btc_canister, utxos_state_addresses, available_utxos, 
-          finalized_utxos, locks, pending, submitted_transactions, balance, 
-          btc_canister_to_btc, minter_to_btc_canister, btc_canister_to_minter, 
-          minter_to_ledger, ledger_to_minter, next_request_id, submitted, 
-          submitted_ids, spent, outputs, new_transaction
+          finalized_utxos, update_balance_locks, retrieve_btc_locks, locks, 
+          pending, submitted_transactions, balance, btc_canister_to_btc, 
+          minter_to_btc_canister, btc_canister_to_minter, minter_to_ledger, 
+          ledger_to_minter, next_request_id, submitted, submitted_ids, spent, 
+          outputs, new_transaction
 
 vars == << pc, btc, btc_canister, utxos_state_addresses, available_utxos, 
-           finalized_utxos, locks, pending, submitted_transactions, balance, 
-           btc_canister_to_btc, minter_to_btc_canister, 
-           btc_canister_to_minter, minter_to_ledger, ledger_to_minter, 
-           next_request_id, submitted, submitted_ids, spent, outputs, 
-           new_transaction >>
+           finalized_utxos, update_balance_locks, retrieve_btc_locks, locks, 
+           pending, submitted_transactions, balance, btc_canister_to_btc, 
+           minter_to_btc_canister, btc_canister_to_minter, minter_to_ledger, 
+           ledger_to_minter, next_request_id, submitted, submitted_ids, spent, 
+           outputs, new_transaction >>
 
 ProcSet == (HEARTBEAT_PROCESS_IDS)
 
 Init == (* Global variables *)
         /\ btc =   {
-                 [ id |-> << "GENESIS", 0 >>, owner |-> USER_BTC_ADDRESS, amount |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY],
-                 [ id |-> << "GENESIS", 1 >>, owner |-> DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS], amount |-> MINTER_INITIAL_SUPPLY] }
+                 [ id |-> << "GENESIS", 0 >>, owner |-> USER_BTC_ADDRESS, value |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY],
+                 [ id |-> << "GENESIS", 1 >>, owner |-> DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS], value |-> MINTER_INITIAL_SUPPLY] }
         /\ btc_canister = {}
         /\ utxos_state_addresses \in Empty_Funs
         /\ available_utxos = {}
         /\ finalized_utxos \in Empty_Funs
+        /\ update_balance_locks = {}
+        /\ retrieve_btc_locks = {}
         /\ locks = {}
         /\ pending = <<>>
         /\ submitted_transactions = {}
@@ -349,7 +361,8 @@ Heartbeat_Start(self) == /\ pc[self] = "Heartbeat_Start"
                                                     new_transaction >>
                          /\ UNCHANGED << btc, btc_canister, 
                                          utxos_state_addresses, 
-                                         finalized_utxos, locks, 
+                                         finalized_utxos, update_balance_locks, 
+                                         retrieve_btc_locks, locks, 
                                          submitted_transactions, balance, 
                                          btc_canister_to_btc, 
                                          btc_canister_to_minter, 
@@ -361,7 +374,14 @@ Conclude_Submission(self) == /\ pc[self] = "Conclude_Submission"
                                   \E change_index \in {i\in DOMAIN outputs[self] : outputs[self][i].owner = DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS]}:
                                     /\ btc_canister_to_minter' = btc_canister_to_minter \ {response}
                                     /\ IF VariantTag(response.response) = "SubmissionOk"
-                                          THEN /\ submitted_transactions' = (submitted_transactions \union {[requests |-> submitted_ids[self], txid |-> Tx_Hash(Unwrap_Submission(new_transaction[self])), used_utxos |-> spent[self], change_output |-> [vout |-> change_index, vamount |-> outputs[self][change_index].amount]] })
+                                          THEN /\ submitted_transactions' =                       submitted_transactions
+                                                                            \union
+                                                                            {[
+                                                                                requests |-> submitted_ids[self],
+                                                                                txid |-> Tx_Hash(Unwrap_Submission(new_transaction[self])),
+                                                                                used_utxos |-> spent[self],
+                                                                                change_output |-> [vout |-> change_index, value |-> outputs[self][change_index].value]]
+                                                                            }
                                                /\ pc' = [pc EXCEPT ![self] = "Finalize_Requests"]
                                                /\ UNCHANGED << available_utxos, 
                                                                pending, 
@@ -380,8 +400,10 @@ Conclude_Submission(self) == /\ pc[self] = "Conclude_Submission"
                                                /\ UNCHANGED submitted_transactions
                              /\ UNCHANGED << btc, btc_canister, 
                                              utxos_state_addresses, 
-                                             finalized_utxos, locks, balance, 
-                                             btc_canister_to_btc, 
+                                             finalized_utxos, 
+                                             update_balance_locks, 
+                                             retrieve_btc_locks, locks, 
+                                             balance, btc_canister_to_btc, 
                                              minter_to_btc_canister, 
                                              minter_to_ledger, 
                                              ledger_to_minter, next_request_id >>
@@ -393,7 +415,8 @@ Finalize_Requests(self) == /\ pc[self] = "Finalize_Requests"
                            /\ UNCHANGED << btc, btc_canister, 
                                            utxos_state_addresses, 
                                            available_utxos, finalized_utxos, 
-                                           locks, pending, 
+                                           update_balance_locks, 
+                                           retrieve_btc_locks, locks, pending, 
                                            submitted_transactions, balance, 
                                            btc_canister_to_btc, 
                                            btc_canister_to_minter, 
@@ -435,7 +458,9 @@ Receive_Change_Utxos(self) == /\ pc[self] = "Receive_Change_Utxos"
                                                               available_utxos, 
                                                               finalized_utxos, 
                                                               submitted_transactions >>
-                              /\ UNCHANGED << btc, btc_canister, locks, 
+                              /\ UNCHANGED << btc, btc_canister, 
+                                              update_balance_locks, 
+                                              retrieve_btc_locks, locks, 
                                               pending, balance, 
                                               btc_canister_to_btc, 
                                               minter_to_btc_canister, 

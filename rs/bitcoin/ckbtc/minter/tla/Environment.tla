@@ -38,7 +38,7 @@ Utxos_Of(submission) ==
     LET
         tx_hash == Tx_Hash(submission)
     IN
-        { [id |-> << tx_hash, i >>, owner |-> submission.outputs[i].owner, amount |-> submission.outputs[i].amount] 
+        { [id |-> << tx_hash, i >>, owner |-> submission.outputs[i].owner, value |-> submission.outputs[i].value] 
             : i \in 1..Len(submission.outputs) }
 
 BTC_Canister_Error_Response(caller_id) == [ caller_id |-> caller_id, response |-> Variant("Error", UNIT) ]
@@ -59,8 +59,8 @@ variables
     \* is a simplification, as the BTC network doesn't have a notion of current state.
     \* We don't attempt to define a precise mapping onto the state of the BTC network here.
     btc = { 
-        [ id |-> << "GENESIS", 0 >>, owner |-> USER_BTC_ADDRESS, amount |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY], 
-        [ id |-> << "GENESIS", 1 >>, owner |-> DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS], amount |-> MINTER_INITIAL_SUPPLY] };
+        [ id |-> << "GENESIS", 0 >>, owner |-> USER_BTC_ADDRESS, value |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY], 
+        [ id |-> << "GENESIS", 1 >>, owner |-> DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS], value |-> MINTER_INITIAL_SUPPLY] };
     \**********************************************************************************************
     \* BTC Canister
     \**********************************************************************************************
@@ -124,7 +124,7 @@ BTC_Loop:
             with(user_utxos \in SUBSET Utxos_Owned_By(btc, {USER_BTC_ADDRESS});
                     dest_address \in Image(DEPOSIT_ADDRESS, CK_BTC_ADDRESSES \union {MINTER_CKBTC_ADDRESS});
                     dest_amount \in 1..Sum_Utxos(user_utxos);
-                    transaction = [ consumed_utxos |-> user_utxos, outputs |-> New_Outputs(user_utxos, <<[address |-> dest_address, amount |-> dest_amount]>>, USER_BTC_ADDRESS) ];
+                    transaction = [ consumed_utxos |-> user_utxos, outputs |-> New_Outputs(user_utxos, <<[address |-> dest_address, value |-> dest_amount]>>, USER_BTC_ADDRESS) ];
                     local_new_utxos = Utxos_Of(transaction)
                     ) {
                 btc := (btc \ user_utxos) \union local_new_utxos;
@@ -247,7 +247,7 @@ Ledger_Loop:
 }
 
 } *)
-\* BEGIN TRANSLATION (chksum(pcal) = "205982a4" /\ chksum(tla) = "f737ad74")
+\* BEGIN TRANSLATION (chksum(pcal) = "74e2ab5f" /\ chksum(tla) = "e3698aa0")
 VARIABLES btc, btc_canister, balance, btc_canister_to_btc, 
           minter_to_btc_canister, btc_canister_to_minter, minter_to_ledger, 
           ledger_to_minter, nr_user_transfers
@@ -260,8 +260,8 @@ ProcSet == {BTC_PROCESS_ID} \cup {BTC_CANISTER_PROCESS_ID} \cup {LEDGER_PROCESS_
 
 Init == (* Global variables *)
         /\ btc =   {
-                 [ id |-> << "GENESIS", 0 >>, owner |-> USER_BTC_ADDRESS, amount |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY],
-                 [ id |-> << "GENESIS", 1 >>, owner |-> DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS], amount |-> MINTER_INITIAL_SUPPLY] }
+                 [ id |-> << "GENESIS", 0 >>, owner |-> USER_BTC_ADDRESS, value |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY],
+                 [ id |-> << "GENESIS", 1 >>, owner |-> DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS], value |-> MINTER_INITIAL_SUPPLY] }
         /\ btc_canister = {}
         /\ balance \in Empty_Funs
         /\ btc_canister_to_btc = {}
@@ -276,7 +276,7 @@ BTC == /\ \/ /\ (nr_user_transfers < MAX_USER_BTC_TRANSFERS)
              /\ \E user_utxos \in SUBSET Utxos_Owned_By(btc, {USER_BTC_ADDRESS}):
                   \E dest_address \in Image(DEPOSIT_ADDRESS, CK_BTC_ADDRESSES \union {MINTER_CKBTC_ADDRESS}):
                     \E dest_amount \in 1..Sum_Utxos(user_utxos):
-                      LET transaction == [ consumed_utxos |-> user_utxos, outputs |-> New_Outputs(user_utxos, <<[address |-> dest_address, amount |-> dest_amount]>>, USER_BTC_ADDRESS) ] IN
+                      LET transaction == [ consumed_utxos |-> user_utxos, outputs |-> New_Outputs(user_utxos, <<[address |-> dest_address, value |-> dest_amount]>>, USER_BTC_ADDRESS) ] IN
                         LET local_new_utxos == Utxos_Of(transaction) IN
                           /\ btc' = ((btc \ user_utxos) \union local_new_utxos)
                           /\ nr_user_transfers' = nr_user_transfers + 1
@@ -360,8 +360,8 @@ local_vars == << btc, btc_canister, balance, nr_user_transfers, btc_canister_to_
 
 Local_Init ==
     /\ btc =   {
-             [ id |-> << "GENESIS", 0 >>, owner |-> USER_BTC_ADDRESS, amount |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY],
-             [ id |-> << "GENESIS", 1 >>, owner |-> DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS], amount |-> MINTER_INITIAL_SUPPLY] }
+             [ id |-> << "GENESIS", 0 >>, owner |-> USER_BTC_ADDRESS, value |-> BTC_SUPPLY - MINTER_INITIAL_SUPPLY],
+             [ id |-> << "GENESIS", 1 >>, owner |-> DEPOSIT_ADDRESS[MINTER_CKBTC_ADDRESS], value |-> MINTER_INITIAL_SUPPLY] }
     /\ btc_canister = {}
     (* Process BTC *)
     /\ nr_user_transfers = 0

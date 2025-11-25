@@ -16,9 +16,9 @@ CONSTANTS
     DEPOSIT_ADDRESS
 
 \* Put a submission at the end of the minter's "pending" queue
-\* @type: (Seq($withdrawalReq), $requestId, $btcAddress, $amount) => Seq($withdrawalReq);
+\* @type: (Seq($withdrawalReq), $requestId, $btcAddress, $value) => Seq($withdrawalReq);
 Queue_Pending(pending, request_id, address, amount) == Append(pending,
-    [ request_id |-> request_id, address |-> address, amount |-> amount ])
+    [ request_id |-> request_id, address |-> address, value |-> amount ])
 
 (* --algorithm retrieve_btc {
 
@@ -36,8 +36,10 @@ variables
     \* The remaining minter state
     \**********************************************************************************************
     \* Currently locked ckBTC (user) addresses, for which balance update is in progress.
-    \* Note that in the model we only have locks for updating balances, but not for retrieving
-    \* BTC. The model doesn't find any errors arising from the missing retrieve BTC locks.
+    \* Note that in the model we only have retrieve_btc_locks for updating balances, but not for retrieving
+    \* BTC. The model doesn't find any errors arising from the missing retrieve BTC retrieve_btc_locks.
+    update_balance_locks = {};
+    retrieve_btc_locks = {};
     locks = {};
     \* The queue of pending submissions (initially, an empty sequence)
     pending = <<>>;
@@ -93,14 +95,16 @@ Retrieve_BTC_Wait_Burn:
 
 }
 *)
-\* BEGIN TRANSLATION (chksum(pcal) = "4489f86e" /\ chksum(tla) = "16e589a0")
-VARIABLES pc, utxos_state_addresses, available_utxos, finalized_utxos, locks, 
-          pending, submitted_transactions, minter_to_btc_canister, 
+\* BEGIN TRANSLATION (chksum(pcal) = "a0124875" /\ chksum(tla) = "d45f0693")
+VARIABLES pc, utxos_state_addresses, available_utxos, finalized_utxos, 
+          update_balance_locks, retrieve_btc_locks, locks, pending, 
+          submitted_transactions, minter_to_btc_canister, 
           btc_canister_to_minter, minter_to_ledger, ledger_to_minter, 
           next_request_id, amount
 
-vars == << pc, utxos_state_addresses, available_utxos, finalized_utxos, locks, 
-           pending, submitted_transactions, minter_to_btc_canister, 
+vars == << pc, utxos_state_addresses, available_utxos, finalized_utxos, 
+           update_balance_locks, retrieve_btc_locks, locks, pending, 
+           submitted_transactions, minter_to_btc_canister, 
            btc_canister_to_minter, minter_to_ledger, ledger_to_minter, 
            next_request_id, amount >>
 
@@ -110,6 +114,8 @@ Init == (* Global variables *)
         /\ utxos_state_addresses \in Empty_Funs
         /\ available_utxos = {}
         /\ finalized_utxos \in Empty_Funs
+        /\ update_balance_locks = {}
+        /\ retrieve_btc_locks = {}
         /\ locks = {}
         /\ pending = <<>>
         /\ submitted_transactions = {}
@@ -130,7 +136,8 @@ Retrieve_BTC_Start(self) == /\ pc[self] = "Retrieve_BTC_Start"
                             /\ pc' = [pc EXCEPT ![self] = "Retrieve_BTC_Wait_Burn"]
                             /\ UNCHANGED << utxos_state_addresses, 
                                             available_utxos, finalized_utxos, 
-                                            locks, pending, 
+                                            update_balance_locks, 
+                                            retrieve_btc_locks, locks, pending, 
                                             submitted_transactions, 
                                             minter_to_btc_canister, 
                                             btc_canister_to_minter, 
@@ -151,7 +158,9 @@ Retrieve_BTC_Wait_Burn(self) == /\ pc[self] = "Retrieve_BTC_Wait_Burn"
                                 /\ pc' = [pc EXCEPT ![self] = "Done"]
                                 /\ UNCHANGED << utxos_state_addresses, 
                                                 available_utxos, 
-                                                finalized_utxos, locks, 
+                                                finalized_utxos, 
+                                                update_balance_locks, 
+                                                retrieve_btc_locks, locks, 
                                                 submitted_transactions, 
                                                 minter_to_btc_canister, 
                                                 btc_canister_to_minter, 

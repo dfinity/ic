@@ -9,18 +9,18 @@ EXTENDS TLC
 @typeAlias: pc = $pid -> Str;
 @typeAlias: txid = Str;
 @typeAlias: utxoId = << $txid, Int >>;
-@typeAlias: amount = Int;
-@typeAlias: utxo = {id: $utxoId, owner: $btcAddress, amount: $amount};
+@typeAlias: value = Int;
+@typeAlias: utxo = {id: $utxoId, owner: $btcAddress, value: $value};
 $typeAlias: requestId = Int;
-@typeAlias: withdrawalReq = {request_id: Int, address: $btcAddress, amount: $amount};
-@typeAlias: outputEntry = {owner: $btcAddress, amount: $amount};
+@typeAlias: withdrawalReq = {request_id: Int, address: $btcAddress, value: $value};
+@typeAlias: outputEntry = {owner: $btcAddress, value: $value};
 @typeAlias: submission = {consumed_utxos: Set($utxo), outputs: Seq($outputEntry)};
 @typeAlias: txHashOp = TextHash(UNIT) | OtherHash($submission -> $txid);
 @typeAlias: ckbtcAddress = { owner: $principal, subaccount: $subaccount };
 @typeAlias: addressState = {discovered_utxos: Set($utxo), processed_utxos: Set($utxo), spent_utxos: Set($utxo)};
-@typeAlias: submittedTx = {requests: Seq(Int), txid: $txid, used_utxos: Set($utxo), change_output: {vout: Int, vamount: $amount}};
+@typeAlias: submittedTx = {requests: Seq(Int), txid: $txid, used_utxos: Set($utxo), change_output: {vout: Int, value: $value}};
 @typeAlias: btcTransaction = {txid: $txid, consumed_utxos: Set($utxo), outputs: Seq($outputEntry)};
-@typeAlias: minterToLedgerRequestType = Mint({to: $ckbtcAddress, amount: $amount}) | Burn({address: $ckbtcAddress, amount: $amount});
+@typeAlias: minterToLedgerRequestType = Mint({to: $ckbtcAddress, amount: $value}) | Burn({address: $ckbtcAddress, amount: $value});
 @typeAlias: minterToLedgerRequest = { 
     caller_id: $pid, 
     request: $minterToLedgerRequestType 
