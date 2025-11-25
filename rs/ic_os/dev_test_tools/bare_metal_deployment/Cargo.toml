@@ -3,5 +3,8 @@ name = "bare_metal_deployment"
 edition = "2021"
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { workspace = true }
+http = { workspace = true }
+rand = { workspace = true }
 rexpect = { workspace = true }
+ssh2 = { workspace = true }

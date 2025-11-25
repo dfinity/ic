@@ -171,6 +171,16 @@ pub struct Args {
     /// Timeout in seconds for sync watchdog. If no synchronization is attempted within this time, the sync thread will be restarted.
     #[arg(long = "watchdog-timeout-seconds", default_value = "60")]
     pub watchdog_timeout_seconds: u64,
+
+    /// Maximum cache size for SQLite in KB. This controls the PRAGMA cache_size.
+    /// Lower values reduce memory usage but may impact performance.
+    #[arg(long = "sqlite-max-cache-kb")]
+    pub sqlite_max_cache_kb: Option<i64>,
+
+    /// Flush the cache and shrink the memory after processing account balances.
+    /// If enabled, reduces memory usage but may impact performance.
+    #[arg(long = "flush-cache-shrink-mem", default_value = "false")]
+    pub flush_cache_shrink_mem: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -185,6 +195,8 @@ pub struct ParsedConfig {
     pub offline: bool,
     pub log_file: PathBuf,
     pub watchdog_timeout_seconds: u64,
+    pub sqlite_max_cache_kb: Option<i64>,
+    pub flush_cache_shrink_mem: bool,
 }
 
 impl ParsedConfig {
@@ -229,6 +241,8 @@ impl ParsedConfig {
             offline: args.offline,
             log_file: args.log_file,
             watchdog_timeout_seconds: args.watchdog_timeout_seconds,
+            sqlite_max_cache_kb: args.sqlite_max_cache_kb,
+            flush_cache_shrink_mem: args.flush_cache_shrink_mem,
         })
     }
 
@@ -306,6 +320,8 @@ mod tests {
             offline: false,
             log_file: PathBuf::from("/test/log"),
             watchdog_timeout_seconds: 60,
+            sqlite_max_cache_kb: None,
+            flush_cache_shrink_mem: false,
         }
     }
 

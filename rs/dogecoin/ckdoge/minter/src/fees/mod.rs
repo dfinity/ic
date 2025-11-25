@@ -7,7 +7,7 @@ use ic_ckbtc_minter::{MillisatoshiPerByte, Satoshi, fees::FeeEstimator};
 use std::cmp::max;
 
 // TODO DEFI-2458: have proper domain design for handling units:
-// * fee rate (millistatoshis/vbyte or millikoinus/byte)
+// * fee rate (millisatoshis/vbyte or millikoinus/byte)
 // * base unit (satoshi or koinu)
 // * millis base unit (millisatoshis or millikoinus)
 pub struct DogecoinFeeEstimator {
@@ -32,8 +32,12 @@ impl DogecoinFeeEstimator {
 }
 
 impl FeeEstimator for DogecoinFeeEstimator {
+    // Dogecoin has a dust limit of 0.01 DOGE.
+    // in Koinu
+    const DUST_LIMIT: u64 = 1_000_000;
+
     fn estimate_median_fee(&self, fee_percentiles: &[u64]) -> Option<u64> {
-        const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = 5_000;
+        const DEFAULT_REGTEST_FEE: MillisatoshiPerByte = DogecoinFeeEstimator::DUST_LIMIT * 1_000;
 
         match &self.network {
             Network::Mainnet | Network::Testnet => {
@@ -63,24 +67,23 @@ impl FeeEstimator for DogecoinFeeEstimator {
         const MINTER_FEE_PER_OUTPUT: u64 = 4_000_000;
         //in Koinu
         const MINTER_FEE_CONSTANT: u64 = 26_000_000;
-        // Dogecoin has a dust limit of 0.01 DOGE.
-        // in Koinu
-        const MINTER_ADDRESS_DUST_LIMIT: u64 = 1_000_000;
 
         max(
             MINTER_FEE_PER_INPUT * num_inputs
                 + MINTER_FEE_PER_OUTPUT * num_outputs
                 + MINTER_FEE_CONSTANT,
-            MINTER_ADDRESS_DUST_LIMIT,
+            Self::DUST_LIMIT,
         )
     }
 
-    fn fee_based_minimum_withrawal_amount(&self, median_fee: u64) -> u64 {
+    fn fee_based_minimum_withdrawal_amount(&self, median_fee: u64) -> u64 {
         match self.network {
             Network::Mainnet | Network::Testnet => {
                 //in Koinu
                 const PER_REQUEST_RBF_BOUND: u64 = 374_000;
-                //in Bytes
+                // in Bytes
+                // Size of a typical transaction made by the minter,
+                // which is a P2PKH transaction with 2 inputs and 2 outputs
                 const PER_REQUEST_SIZE_BOUND: u64 = 374;
                 //in Koinu
                 const PER_REQUEST_MINTER_FEE_BOUND: u64 = 326_000;

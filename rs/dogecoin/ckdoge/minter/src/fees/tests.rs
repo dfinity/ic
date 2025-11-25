@@ -14,14 +14,14 @@ fn should_increase_minimum_withdrawal_amount_by_half() {
         [0, 1, 100, 1_000, 10_000, 100_000, 1_000_000].map(|f| f * 1_000)
     {
         assert_eq!(
-            estimator.fee_based_minimum_withrawal_amount(fee_rate_in_millikoinus_per_byte),
+            estimator.fee_based_minimum_withdrawal_amount(fee_rate_in_millikoinus_per_byte),
             initial_min_amount,
             "BUG: unexpected fee for fee rate {fee_rate_in_millikoinus_per_byte}"
         );
     }
 
     assert_eq!(
-        estimator.fee_based_minimum_withrawal_amount(10_000_000 * 1_000),
+        estimator.fee_based_minimum_withdrawal_amount(10_000_000 * 1_000),
         initial_min_amount + increment,
     );
 }

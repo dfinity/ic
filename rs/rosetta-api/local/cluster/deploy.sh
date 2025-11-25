@@ -6,7 +6,9 @@ set -e
 # Options:
 #   --icp-ledger <ledger_id>         Set the ICP Ledger ID (default: xafvr-biaaa-aaaai-aql5q-cai)
 #   --icp-symbol <symbol>            Set the ICP token symbol (default: TESTICP)
-#   --icrc1-ledgers <ledger_ids>      Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
+#   --icrc1-ledgers <ledger_ids>     Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
+#   --sqlite-cache-kb <size>         SQLite cache size in KB (optional, no default)
+#   --flush-cache-shrink-mem         Flush the database cache and shrink the memory after updating account balances
 #   --local-icp-image-tar <path>     Path to local ICP image tar file
 #   --local-icrc1-image-tar <path>   Path to local ICRC1 image tar file
 #   --no-icp-latest                  Don't deploy ICP Rosetta latest image
@@ -19,6 +21,8 @@ set -e
 ICP_LEDGER="xafvr-biaaa-aaaai-aql5q-cai"
 ICP_SYMBOL="TESTICP"
 ICRC1_LEDGER="3jkp5-oyaaa-aaaaj-azwqa-cai"
+SQLITE_CACHE_KB=""
+FLUSH_CACHE_SHRINK_MEM=false
 LOCAL_ICP_IMAGE_TAR=""
 LOCAL_ICRC1_IMAGE_TAR=""
 DEPLOY_ICP_LATEST=true
@@ -42,6 +46,13 @@ while [[ "$#" -gt 0 ]]; do
             ICRC1_LEDGER="$2"
             shift
             ;;
+        --sqlite-cache-kb)
+            SQLITE_CACHE_KB="$2"
+            shift
+            ;;
+        --flush-cache-shrink-mem)
+            FLUSH_CACHE_SHRINK_MEM=true
+            ;;
         --local-icp-image-tar)
             LOCAL_ICP_IMAGE_TAR="$2"
             shift
@@ -59,7 +70,7 @@ while [[ "$#" -gt 0 ]]; do
         --clean) CLEAN=true ;;
         --stop) STOP=true ;;
         --help)
-            sed -n '5,16p' "$0"
+            sed -n '5,18p' "$0"
             exit 0
             ;;
         *)
@@ -186,19 +197,6 @@ port_forward() {
     }
 }
 
-# Install or upgrade Prometheus
-helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q prometheus || {
-    echo "Installing Prometheus..."
-    helm install prometheus prometheus-community/prometheus --namespace monitoring --create-namespace --kube-context="$MINIKUBE_PROFILE" --values prometheus_values.yaml
-}
-
-# Wait for Prometheus server to be ready
-echo "Waiting for Prometheus server to be ready..."
-wait_for_ready pod app.kubernetes.io/instance=prometheus monitoring 300
-
-# Forward Prometheus port if not already forwarded
-port_forward monitoring prometheus-server 9090:80
-
 # Install or upgrade cAdvisor
 helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q cadvisor || {
     echo "Installing cAdvisor..."
@@ -209,11 +207,26 @@ helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q cadvisor ||
 echo "Waiting for cAdvisor server to be ready..."
 wait_for_ready pod app.kubernetes.io/name=cadvisor monitoring 300
 
-# Install or upgrade kube-prometheus
+# Install or upgrade kube-prometheus-stack (includes Prometheus, Grafana, Alertmanager, Node Exporter, etc.)
 helm list -n monitoring --kube-context="$MINIKUBE_PROFILE" | grep -q kube-prometheus || {
-    echo "Installing kube-prometheus..."
-    helm install kube-prometheus prometheus-community/kube-prometheus-stack --namespace monitoring --kube-context="$MINIKUBE_PROFILE"
+    echo "Installing kube-prometheus-stack..."
+    helm install kube-prometheus prometheus-community/kube-prometheus-stack \
+        --namespace monitoring \
+        --create-namespace \
+        --values kube-prometheus-values.yaml \
+        --kube-context="$MINIKUBE_PROFILE"
 }
+
+# Wait for kube-prometheus-stack operator to be ready first
+echo "Waiting for kube-prometheus-stack operator to be ready..."
+wait_for_ready pod app=kube-prometheus-stack-operator monitoring 300
+
+# Wait for Prometheus to be ready
+echo "Waiting for Prometheus to be ready..."
+wait_for_ready pod app.kubernetes.io/name=prometheus monitoring 300
+
+# Forward Prometheus port if not already forwarded
+port_forward monitoring kube-prometheus-kube-prome-prometheus 9090:9090
 
 # Function to load a local TAR if provided
 load_local_tar() {
@@ -235,22 +248,34 @@ echo "Deploying Helm chart..."
 # Deploy or upgrade the Helm chart
 # Escape commas in ICRC1_LEDGER for Helm (commas are interpreted as value separators)
 ESCAPED_ICRC1_LEDGER="${ICRC1_LEDGER//,/\\,}"
-helm upgrade --install local-rosetta . \
-    --set icpConfig.canisterId="$ICP_LEDGER" \
-    --set icpConfig.tokenSymbol="$ICP_SYMBOL" \
-    --set icpConfig.deployLatest="$DEPLOY_ICP_LATEST" \
-    --set-string icrcConfig.multiTokens="$ESCAPED_ICRC1_LEDGER" \
-    --set icrcConfig.deployLatest="$DEPLOY_ICRC1_LATEST" \
-    --set icpConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICP_IMAGE_TAR" ]] && echo "true" || echo "false") \
-    --set icrcConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]] && echo "true" || echo "false") \
+
+# Build helm command with conditional parameters
+HELM_CMD=(helm upgrade --install local-rosetta .
+    --set icpConfig.canisterId="$ICP_LEDGER"
+    --set icpConfig.tokenSymbol="$ICP_SYMBOL"
+    --set icpConfig.deployLatest="$DEPLOY_ICP_LATEST"
+    --set-string icrcConfig.ledgerId="$ESCAPED_ICRC1_LEDGER"
+    --set icrcConfig.deployLatest="$DEPLOY_ICRC1_LATEST"
+    --set icpConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICP_IMAGE_TAR" ]] && echo "true" || echo "false")
+    --set icrcConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]] && echo "true" || echo "false")
     --kube-context="$MINIKUBE_PROFILE"
+)
+
+# Add optional sqlite-cache-kb parameter only if specified
+[[ -n "$SQLITE_CACHE_KB" ]] && HELM_CMD+=(--set icrcConfig.sqliteCacheKb="$SQLITE_CACHE_KB")
+
+# Add flush-cache-shrink-mem parameter
+HELM_CMD+=(--set icrcConfig.flushCacheShrinkMem="$FLUSH_CACHE_SHRINK_MEM")
+
+# Execute the helm command
+"${HELM_CMD[@]}"
 
 # Wait for Grafana server to be ready
 echo "Waiting for Grafana server to be ready..."
-wait_for_ready pod app=grafana monitoring 300
+wait_for_ready pod app.kubernetes.io/name=grafana monitoring 300
 
 # Forward Grafana port if not already forwarded
-port_forward monitoring grafana 3000:80
+port_forward monitoring kube-prometheus-grafana 3000:80
 
 # Function to check if a service exists and print its URL
 print_service_url() {

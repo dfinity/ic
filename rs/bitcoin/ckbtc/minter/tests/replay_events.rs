@@ -53,7 +53,7 @@ pub mod mock {
 
         #[async_trait]
         impl CanisterRuntime for CanisterRuntime {
-            type Fee = BitcoinFeeEstimator;
+            type Estimator = BitcoinFeeEstimator;
             fn caller(&self) -> Principal;
             fn id(&self) -> Principal;
             fn time(&self) -> u64;
