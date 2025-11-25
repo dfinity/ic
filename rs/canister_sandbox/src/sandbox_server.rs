@@ -147,6 +147,7 @@ mod tests {
     use ic_types::{
         CanisterTimer, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
         batch::CanisterCyclesCostSchedule,
+        default_aggregate_log_memory_limit,
         ingress::WasmResult,
         messages::{CallContextId, RequestMetadata},
         methods::{FuncRef, WasmMethod},
@@ -222,6 +223,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             caller,
             0,
+            default_aggregate_log_memory_limit().get() as usize,
             IS_WASM64_EXECUTION,
             NetworkTopology::default(),
         )
