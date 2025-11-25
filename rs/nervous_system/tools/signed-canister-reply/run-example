@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+
+set -eou pipefail
+
+PROPOSAL_ID=139499
+# This gets left behind, in case you want to inspect it yourself.
+SIGNED_REPLY_PATH=signed_reply.cbor
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+# Save to $SIGNED_REPLY_PATH.
+didc encode "(${PROPOSAL_ID} : nat64)" \
+    | xxd -r -p \
+    | cargo run \
+            --bin signed-canister-reply \
+            -- \
+            call-canister \
+            --callee=rrkah-fqaaa-aaaaa-aaaaq-cai \
+            --method=get_proposal_info \
+            --arg-path=- \
+            > "${SIGNED_REPLY_PATH}"
+
+# At some later time, load from $SIGNED_REPLY_PATH
+cargo run \
+      --bin signed-canister-reply \
+      -- \
+      load-from-file \
+      --signed-reply-path="${SIGNED_REPLY_PATH}" \
+    | didc decode \
+           --defs "${REPO_ROOT}"/rs/nns/governance/canister/governance.did \
+           --types '(opt ProposalInfo)' \
+    | idl2json \
+    | jq '.[0] | {
+        action: (.proposal[0].action[0] | keys | .[0]),
+        latest_tally
+    }'
