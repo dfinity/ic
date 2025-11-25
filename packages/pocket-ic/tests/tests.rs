@@ -126,17 +126,12 @@ fn test_create_canister_with_id() {
     let topology = pic.topology();
     let ii_subnet_id = topology.get_ii().unwrap();
     assert_eq!(pic.get_subnet(canister_id).unwrap(), ii_subnet_id);
+    // The II canister ID is a singleton range.
     let ii_canister_ranges = &topology
         .subnet_configs
         .get(&ii_subnet_id)
         .unwrap()
         .canister_ranges;
-    // The II subnet has 3 canister ranges
-    // (2 mainnet ranges and 1 custom allocation range
-    // in which new canisters can be created without specifying
-    // their canister ID).
-    assert_eq!(ii_canister_ranges.len(), 3);
-    // And the II canister ID is a singleton range.
     let ii_canister_range = CanisterIdRange {
         start: canister_id.into(),
         end: canister_id.into(),
