@@ -57,7 +57,7 @@ fn default_canister_state_bits() -> CanisterStateBits {
         total_query_stats: TotalQueryStats::default(),
         log_visibility: Default::default(),
         log_memory_limit: default_aggregate_log_memory_limit(),
-        canister_log: Default::default(),
+        canister_log: CanisterLog::default_aggregate(),
         wasm_memory_limit: None,
         next_snapshot_id: 0,
         snapshots_memory_usage: NumBytes::from(0),
