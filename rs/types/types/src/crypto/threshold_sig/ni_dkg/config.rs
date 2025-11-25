@@ -100,6 +100,40 @@ impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
     }
 }
 
+impl<'de> Deserialize<'de> for NiDkgConfig {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct NiDkgConfigUnchecked {
+            dkg_id: NiDkgId,
+            max_corrupt_dealers: NumberOfNodes,
+            dealers: NiDkgDealers,
+            max_corrupt_receivers: NumberOfNodes,
+            receivers: NiDkgReceivers,
+            threshold: NiDkgThreshold,
+            registry_version: RegistryVersion,
+            resharing_transcript: Option<NiDkgTranscript>,
+        }
+        let unchecked = NiDkgConfigUnchecked::deserialize(deserializer)?;
+
+        let config_data = NiDkgConfigData {
+            dkg_id: unchecked.dkg_id,
+            max_corrupt_dealers: unchecked.max_corrupt_dealers,
+            dealers: unchecked.dealers.get().clone(),
+            max_corrupt_receivers: unchecked.max_corrupt_receivers,
+            receivers: unchecked.receivers.get().clone(),
+            threshold: unchecked.threshold.get(),
+            registry_version: unchecked.registry_version,
+            resharing_transcript: unchecked.resharing_transcript,
+        };
+
+        NiDkgConfig::new(config_data).map_err(|e| {
+            D::Error::custom(format!(
+                "Invariant check failed while constructing NiDkgConfig: {e:?}"
+            ))
+        })
+    }
+}
+
 /// The non-validated config parameter object to be passed to the `NiDkgConfig`
 /// constructor.
 #[derive(Clone, Eq, PartialEq, Hash, Debug, Deserialize, Serialize)]
