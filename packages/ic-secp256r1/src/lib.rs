@@ -412,6 +412,15 @@ impl PrivateKey {
         sig.to_bytes().into()
     }
 
+    /// Sign a message, using a DER encoded signature
+    ///
+    /// The message is hashed with SHA-256
+    pub fn sign_message_with_der_encoded_sig(&self, message: &[u8]) -> Vec<u8> {
+        use p256::ecdsa::{Signature, signature::Signer};
+        let sig: Signature = self.key.sign(message);
+        sig.to_der().to_bytes().to_vec()
+    }
+
     /// Sign a message digest
     pub fn sign_digest(&self, digest: &[u8]) -> Option<[u8; 64]> {
         if digest.len() < 16 {
