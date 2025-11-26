@@ -19,10 +19,6 @@ on:
         default: ${{ github.event.pull_request.number }}
         type: string
 
-env:
-  CI_PROJECT_DIR: ${{ github.workspace }}
-  ORG: ${{ github.repository_owner }}
-
 jobs:
 
   # Run didc compatibility checks against the merge base
