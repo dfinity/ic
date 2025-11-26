@@ -428,7 +428,7 @@ mod tests {
         signature::BasicSignatureBatch,
         time::UNIX_EPOCH,
     };
-    use ic_types_test_utils::ids::{NODE_1, SUBNET_0};
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, SUBNET_0};
     use tower::ServiceExt;
 
     enum PoolMessage {
@@ -838,6 +838,33 @@ mod tests {
                 ConsensusMessageId::from(&block),
                 dealing.message_id(),
                 node_index_in_request,
+            ),
+        )
+        .await;
+
+        assert_eq!(response, Err(StatusCode::NOT_FOUND));
+    }
+
+    #[tokio::test]
+    async fn rpc_get_idkg_dealing_not_found_mismatched_hash_test() {
+        let node_index = 1;
+        let dealing_in_block = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_1);
+        let dealing_in_request = SignedIDkgDealing::fake(dummy_idkg_dealing_for_tests(), NODE_2);
+        let block =
+            fake_block_proposal_with_idkg_dealing(dealing_in_block.clone(), node_index, false);
+        let pools = mock_pools(
+            PoolMessage::IDkgDealing(None),
+            Some(block.clone()),
+            /*expect_consensus_pool_access=*/ true,
+        );
+        let router = build_axum_router(pools);
+
+        let response = send_request(
+            router,
+            idkg_dealing_request(
+                ConsensusMessageId::from(&block),
+                dealing_in_request.message_id(),
+                node_index,
             ),
         )
         .await;
