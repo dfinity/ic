@@ -617,7 +617,7 @@ mod tests {
     }
 
     #[test]
-    fn ingress_payload_insertion_works_test() {
+    fn stripped_message_insertion_works_test() {
         let ingress_2 = fake_ingress_message("fake_2");
         let idkg_dealing_2 = fake_idkg_dealing(NODE_2, 2);
         let stripped_block_proposal =
@@ -642,7 +642,7 @@ mod tests {
     }
 
     #[test]
-    fn ingress_payload_insertion_existing_fails_test() {
+    fn stripped_message_insertion_existing_fails_test() {
         let ingress_2 = fake_ingress_message("fake_2");
         let idkg_dealing_2 = fake_idkg_dealing(NODE_2, 2);
         let stripped_block_proposal =
@@ -663,7 +663,7 @@ mod tests {
     }
 
     #[test]
-    fn ingress_payload_insertion_unknown_fails_test() {
+    fn stripped_message_insertion_unknown_fails_test() {
         let ingress_1 = fake_ingress_message("fake_1");
         let ingress_2 = fake_ingress_message("fake_2");
         let idkg_dealing_1 = fake_idkg_dealing(NODE_1, 1);
