@@ -183,8 +183,7 @@ impl ConsensusImpl {
             replica_config.subnet_id,
         ));
 
-        let stable_registry_version_age =
-            POLLING_PERIOD + Duration::from_millis(registry_poll_delay_duration_ms);
+        let stable_registry_version_age = Duration::from_millis(registry_poll_delay_duration_ms);
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
             replica_config.subnet_id,
             replica_config.node_id,
