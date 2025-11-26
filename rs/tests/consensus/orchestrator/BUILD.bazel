@@ -65,6 +65,25 @@ system_test_nns(
     ],
 )
 
+system_test_nns(
+    name = "node_registration_test_with_max_rewardable_nodes",
+    runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
+    deps = [
+        # Keep sorted.
+        "//rs/nns/constants",
+        "//rs/nns/governance/api",
+        "//rs/registry/canister",
+        "//rs/registry/subnet_type",
+        "//rs/rust_canisters/canister_test",
+        "//rs/tests/consensus/utils",
+        "//rs/tests/driver:ic-system-test-driver",
+        "//rs/types/base_types",
+        "//rs/types/types",
+        "@crate_index//:anyhow",
+        "@crate_index//:slog",
+    ],
+)
+
 system_test(
     name = "cup_compatibility_test",
     env = MAINNET_ENV,
