@@ -1,5 +1,18 @@
-use crate::pb::v1::{ExecuteNnsFunction, NnsFunction};
-use crate::proposals::execute_nns_function::ValidExecuteNnsFunction;
+use crate::{
+    pb::v1::{ExecuteNnsFunction, NnsFunction},
+    proposals::{
+        ValidProposalAction,
+        execute_nns_function::{ValidExecuteNnsFunction, ValidNnsFunction},
+    },
+    test_utils::{ExpectedCallCanisterMethodCallArguments, MockEnvironment},
+};
+use candid::Encode;
+use ic_base_types::CanisterId;
+use ic_management_canister_types_private::{CanisterMetadataRequest, CanisterMetadataResponse};
+use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
+use ic_nns_governance_api::SelfDescribingValue as ApiValue;
+use maplit::hashmap;
+use std::sync::Arc;
 
 #[test]
 fn test_execute_nns_function_try_from_errors() {
@@ -101,4 +114,75 @@ fn test_execute_nns_function_try_from_errors() {
     for (execute_nns_function, error_message) in try_from_error_test_cases {
         test_execute_nns_function_try_from_error(execute_nns_function, error_message);
     }
+}
+
+#[tokio::test]
+async fn test_to_self_describing_update_subnet_type() {
+    // Minimal CMC candid file with only update_subnet_type method
+    let cmc_candid = r#"
+type UpdateSubnetTypeArgs = variant {
+  Add : text;
+  Remove : text;
+};
+
+service : {
+  update_subnet_type : (UpdateSubnetTypeArgs) -> ();
+}
+"#;
+
+    // Create the UpdateSubnetTypeArgs::Add variant
+    #[derive(candid::CandidType)]
+    #[allow(dead_code)]
+    enum UpdateSubnetTypeArgs {
+        Add(String),
+        Remove(String),
+    }
+
+    let arg = UpdateSubnetTypeArgs::Add("application".to_string());
+    let payload = Encode!(&arg).unwrap();
+
+    let execute_nns_function = ValidExecuteNnsFunction {
+        nns_function: ValidNnsFunction::UpdateSubnetType,
+        payload,
+    };
+
+    // Mock the canister_metadata call
+    let metadata_request =
+        CanisterMetadataRequest::new(CYCLES_MINTING_CANISTER_ID, "candid:service".to_string());
+    let metadata_response = CanisterMetadataResponse::new(cmc_candid.as_bytes().to_vec());
+
+    let expected_metadata_call = ExpectedCallCanisterMethodCallArguments::new(
+        CanisterId::ic_00(),
+        "canister_metadata",
+        Encode!(&metadata_request).unwrap(),
+    );
+
+    let env = Arc::new(MockEnvironment::new(
+        vec![(
+            expected_metadata_call,
+            Ok(Encode!(&metadata_response).unwrap()),
+        )],
+        0,
+    ));
+
+    // Test through ValidProposalAction::to_self_describing
+    let proposal_action = ValidProposalAction::ExecuteNnsFunction(execute_nns_function);
+    let result = proposal_action.to_self_describing(env).await.unwrap();
+
+    // Verify the type name and description
+    assert_eq!(result.type_name, "Update Subnet Type");
+    assert!(
+        result
+            .type_description
+            .contains("Add or remove a subnet type")
+    );
+
+    // Verify the value
+    let api_value = ApiValue::from(result.value.unwrap());
+    assert_eq!(
+        api_value,
+        ApiValue::Map(hashmap! {
+            "Add".to_string() => ApiValue::Text("application".to_string()),
+        })
+    );
 }

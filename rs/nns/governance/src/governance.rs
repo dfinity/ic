@@ -5125,13 +5125,14 @@ impl Governance {
             ));
         }
 
-        let self_describing_action = if is_self_describing_proposal_actions_enabled() {
-            // TODO(NNS1-4271): handle the error case when the self-describing action is fully
-            // implemented.
-            action.to_self_describing(self.env.clone()).await.ok()
-        } else {
-            None
-        };
+        let self_describing_action =
+            if is_self_describing_proposal_actions_enabled() && cfg!(target_arch = "wasm32") {
+                // TODO(NNS1-4271): handle the error case when the self-describing action is fully
+                // implemented.
+                action.to_self_describing(self.env.clone()).await.ok()
+            } else {
+                None
+            };
 
         // Before actually modifying anything, we first make sure that
         // the neuron is allowed to make this proposal and create the
