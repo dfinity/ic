@@ -188,6 +188,7 @@ def _custom_partitions(mode):
     ]
 
 def create_test_img(name, source, compat = False, **kwargs):
+    # TODO: Remove compat with NODE-1791
     native.genrule(
         name = name,
         srcs = [source],

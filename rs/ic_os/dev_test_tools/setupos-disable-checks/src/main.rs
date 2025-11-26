@@ -16,6 +16,7 @@ struct Cli {
     /// Path to SetupOS disk image; its GRUB boot partition will be modified.
     image_path: PathBuf,
 
+    // TODO: Remove with NODE-1791
     #[arg(long)]
     /// Disable old flags for temporary backwards compatibility
     compat: bool,
@@ -89,6 +90,7 @@ fn process_cmdline(input: &str, compat: bool) -> String {
         sep = if requires_space { " " } else { "" }
     );
 
+    // TODO: Remove with NODE-1791
     // Disable old flags for temporary backwards compatibility
     if compat {
         boot_args = format!(
