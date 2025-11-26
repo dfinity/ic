@@ -59,7 +59,7 @@ def get_merge_base(git_repo):
 
     merge_base = git_repo.merge_base(tb, git_repo.head.commit)
     if not merge_base:
-        logging.error("No common merge base exists between HEAD and {tb}")
+        logging.error(f"No common merge base exists between HEAD and {tb}")
         ref_name = git_repo.head.ref
         raise ValueError(f"No merge base between {ref_name} and {tb}.")
 
