@@ -6,11 +6,15 @@ set -e
 # Options:
 #   --icp-ledger <ledger_id>         Set the ICP Ledger ID (default: xafvr-biaaa-aaaai-aql5q-cai)
 #   --icp-symbol <symbol>            Set the ICP token symbol (default: TESTICP)
-#   --icrc1-ledgers <ledger_ids>      Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
+#   --icrc1-ledgers <ledger_ids>     Set the ICRC1 Ledger IDs, comma-separated for multiple ledgers (default: 3jkp5-oyaaa-aaaaj-azwqa-cai)
+#   --sqlite-cache-kb <size>         SQLite cache size in KB (optional, no default)
+#   --flush-cache-shrink-mem         Flush the database cache and shrink the memory after updating account balances
+#   --balance-sync-batch-size <size> Balance sync batch size in blocks (optional, default: 100000)
 #   --local-icp-image-tar <path>     Path to local ICP image tar file
 #   --local-icrc1-image-tar <path>   Path to local ICRC1 image tar file
 #   --no-icp-latest                  Don't deploy ICP Rosetta latest image
 #   --no-icrc1-latest                Don't deploy ICRC1 Rosetta latest image
+#   --use-persistent-volumes         Use persistent volumes for /data partition
 #   --clean                          Clean up Minikube cluster and Helm chart before deploying
 #   --stop                           Stop the Minikube cluster
 #   --help                           Display this help message
@@ -19,10 +23,14 @@ set -e
 ICP_LEDGER="xafvr-biaaa-aaaai-aql5q-cai"
 ICP_SYMBOL="TESTICP"
 ICRC1_LEDGER="3jkp5-oyaaa-aaaaj-azwqa-cai"
+SQLITE_CACHE_KB=""
+FLUSH_CACHE_SHRINK_MEM=false
+BALANCE_SYNC_BATCH_SIZE=""
 LOCAL_ICP_IMAGE_TAR=""
 LOCAL_ICRC1_IMAGE_TAR=""
 DEPLOY_ICP_LATEST=true
 DEPLOY_ICRC1_LATEST=true
+USE_PERSISTENT_VOLUMES=false
 CLEAN=false
 STOP=false
 MINIKUBE_PROFILE="local-rosetta"
@@ -42,6 +50,17 @@ while [[ "$#" -gt 0 ]]; do
             ICRC1_LEDGER="$2"
             shift
             ;;
+        --sqlite-cache-kb)
+            SQLITE_CACHE_KB="$2"
+            shift
+            ;;
+        --flush-cache-shrink-mem)
+            FLUSH_CACHE_SHRINK_MEM=true
+            ;;
+        --balance-sync-batch-size)
+            BALANCE_SYNC_BATCH_SIZE="$2"
+            shift
+            ;;
         --local-icp-image-tar)
             LOCAL_ICP_IMAGE_TAR="$2"
             shift
@@ -56,10 +75,13 @@ while [[ "$#" -gt 0 ]]; do
         --no-icrc1-latest)
             DEPLOY_ICRC1_LATEST=false
             ;;
+        --use-persistent-volumes)
+            USE_PERSISTENT_VOLUMES=true
+            ;;
         --clean) CLEAN=true ;;
         --stop) STOP=true ;;
         --help)
-            sed -n '5,16p' "$0"
+            sed -n '5,20p' "$0"
             exit 0
             ;;
         *)
@@ -159,8 +181,16 @@ command -v helm &>/dev/null || {
 
 # Clean up Minikube cluster and Helm chart if --clean flag is set
 [[ "$CLEAN" == true ]] && {
-    echo "Cleaning up Minikube cluster and Helm chart..."
-    helm uninstall local-rosetta || true
+    echo "Cleaning up Helm chart..."
+    helm uninstall local-rosetta --kube-context="$MINIKUBE_PROFILE" 2>/dev/null || true
+
+    # Wait for pods to be deleted after helm uninstall
+    if kubectl get namespace rosetta-api --context="$MINIKUBE_PROFILE" &>/dev/null; then
+        echo "Waiting for resources to be cleaned up..."
+        kubectl wait --for=delete pod --all -n rosetta-api --timeout=60s --context="$MINIKUBE_PROFILE" 2>/dev/null || true
+    fi
+
+    echo "Deleting Minikube cluster..."
     minikube delete -p "$MINIKUBE_PROFILE"
 }
 
@@ -229,23 +259,66 @@ load_local_tar() {
     return 0
 }
 
+# Track which images were loaded for forcing restarts later
+ICP_IMAGE_LOADED=false
+ICRC_IMAGE_LOADED=false
+
 # Load local ICP and ICRC1 images if provided
-load_local_tar "$LOCAL_ICP_IMAGE_TAR"
-load_local_tar "$LOCAL_ICRC1_IMAGE_TAR"
+if [[ -n "$LOCAL_ICP_IMAGE_TAR" ]]; then
+    load_local_tar "$LOCAL_ICP_IMAGE_TAR"
+    ICP_IMAGE_LOADED=true
+fi
+
+if [[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]]; then
+    load_local_tar "$LOCAL_ICRC1_IMAGE_TAR"
+    ICRC_IMAGE_LOADED=true
+fi
 
 echo "Deploying Helm chart..."
 # Deploy or upgrade the Helm chart
 # Escape commas in ICRC1_LEDGER for Helm (commas are interpreted as value separators)
 ESCAPED_ICRC1_LEDGER="${ICRC1_LEDGER//,/\\,}"
-helm upgrade --install local-rosetta . \
-    --set icpConfig.canisterId="$ICP_LEDGER" \
-    --set icpConfig.tokenSymbol="$ICP_SYMBOL" \
-    --set icpConfig.deployLatest="$DEPLOY_ICP_LATEST" \
-    --set-string icrcConfig.multiTokens="$ESCAPED_ICRC1_LEDGER" \
-    --set icrcConfig.deployLatest="$DEPLOY_ICRC1_LATEST" \
-    --set icpConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICP_IMAGE_TAR" ]] && echo "true" || echo "false") \
-    --set icrcConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]] && echo "true" || echo "false") \
+
+# Build helm command with conditional parameters
+HELM_CMD=(helm upgrade --install local-rosetta .
+    --set icpConfig.canisterId="$ICP_LEDGER"
+    --set icpConfig.tokenSymbol="$ICP_SYMBOL"
+    --set icpConfig.deployLatest="$DEPLOY_ICP_LATEST"
+    --set-string icrcConfig.ledgerId="$ESCAPED_ICRC1_LEDGER"
+    --set icrcConfig.deployLatest="$DEPLOY_ICRC1_LATEST"
+    --set icpConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICP_IMAGE_TAR" ]] && echo "true" || echo "false")
+    --set icrcConfig.useLocallyBuilt=$([[ -n "$LOCAL_ICRC1_IMAGE_TAR" ]] && echo "true" || echo "false")
+    --set usePersistentVolumes="$USE_PERSISTENT_VOLUMES"
     --kube-context="$MINIKUBE_PROFILE"
+)
+
+# Add optional sqlite-cache-kb parameter only if specified
+[[ -n "$SQLITE_CACHE_KB" ]] && HELM_CMD+=(--set icrcConfig.sqliteCacheKb="$SQLITE_CACHE_KB")
+
+# Add optional balance-sync-batch-size parameter only if specified
+[[ -n "$BALANCE_SYNC_BATCH_SIZE" ]] && HELM_CMD+=(--set icrcConfig.balanceSyncBatchSize="$BALANCE_SYNC_BATCH_SIZE")
+
+# Add flush-cache-shrink-mem parameter
+HELM_CMD+=(--set icrcConfig.flushCacheShrinkMem="$FLUSH_CACHE_SHRINK_MEM")
+
+# Execute the helm command
+"${HELM_CMD[@]}"
+
+# Force restart of deployments if new local images were loaded
+# This is necessary because loading an image with the same tag doesn't trigger a pod restart
+if [[ "$ICP_IMAGE_LOADED" == true ]]; then
+    if kubectl get deployment icp-rosetta-local -n rosetta-api --context="$MINIKUBE_PROFILE" &>/dev/null; then
+        echo "Forcing restart of icp-rosetta-local to pick up new image..."
+        kubectl rollout restart deployment/icp-rosetta-local -n rosetta-api --context="$MINIKUBE_PROFILE"
+    fi
+fi
+
+if [[ "$ICRC_IMAGE_LOADED" == true ]]; then
+    if kubectl get deployment icrc-rosetta-local -n rosetta-api --context="$MINIKUBE_PROFILE" &>/dev/null; then
+        echo "Forcing restart of icrc-rosetta-local to pick up new image..."
+        kubectl rollout restart deployment/icrc-rosetta-local -n rosetta-api --context="$MINIKUBE_PROFILE"
+    fi
+fi
 
 # Wait for Grafana server to be ready
 echo "Waiting for Grafana server to be ready..."
