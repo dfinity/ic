@@ -80,6 +80,26 @@ impl TryFrom<pb::StrippedBlockProposal> for StrippedBlockProposal {
             )));
         }
 
+        if let Some(block) = block_proposal_without_ingresses_proto.value.as_ref() {
+            if block.ingress_payload.is_some() {
+                return Err(ProxyDecodeError::Other(String::from(
+                    "The ingress payload is NOT empty",
+                )));
+            }
+
+            if let Some(idkg) = block.idkg_payload.as_ref() {
+                for transcript in &idkg.idkg_transcripts {
+                    for dealing in &transcript.verified_dealings {
+                        if dealing.signed_dealing_tuple.is_some() {
+                            return Err(ProxyDecodeError::Other(String::from(
+                                "The IDKG dealings are NOT stripped",
+                            )));
+                        }
+                    }
+                }
+            }
+        }
+
         let unstripped_consensus_message_id: ConsensusMessageId = try_from_option_field(
             value.unstripped_consensus_message_id,
             "unstripped_consensus_message_id",
