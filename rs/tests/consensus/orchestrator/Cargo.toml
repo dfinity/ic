@@ -45,8 +45,8 @@ name = "ic-systest-ssh-access-to-nodes-test"
 path = "ssh_access_to_nodes_test.rs"
 
 [[bin]]
-name = "ic-systest-node-registration-test"
-path = "node_registration_test.rs"
+name = "ic-systest-node-registration-test-with-node-allowance"
+path = "node_registration_test_with_node_allowance.rs"
 
 [[bin]]
 name = "ic-systest-rotate-ecdsa-idkg-key"

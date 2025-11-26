@@ -47,7 +47,7 @@ system_test_nns(
 )
 
 system_test_nns(
-    name = "node_registration_test",
+    name = "node_registration_test_with_node_allowance",
     runtime_deps = UNIVERSAL_VM_RUNTIME_DEPS,
     deps = [
         # Keep sorted.
