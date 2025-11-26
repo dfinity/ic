@@ -1,5 +1,4 @@
 use canister_test::{Canister, Runtime, Wasm};
-use chrono::Utc;
 use futures::future::join_all;
 use ic_system_test_driver::driver::test_env::TestEnv;
 use ic_system_test_driver::driver::test_env_api::get_dependency_path;
@@ -29,6 +28,8 @@ pub const STATE_SYNC_SIZE_BYTES_TOTAL_COPY_CHUNKS: &str =
 const LATEST_CERTIFIED_HEIGHT: &str = "state_manager_latest_certified_height";
 const LAST_MANIFEST_HEIGHT: &str = "state_manager_last_computed_manifest_height";
 const REPLICATED_STATE_PURGE_HEIGHT_DISK: &str = "replicated_state_purge_height_disk";
+
+const GIB: u64 = 1 << 30;
 
 pub async fn rejoin_test(
     env: &TestEnv,
@@ -100,7 +101,7 @@ pub async fn rejoin_test(
 pub async fn rejoin_test_large_state(
     env: TestEnv,
     allowed_failures: usize,
-    size_level: usize,
+    canister_size_gib: u64,
     num_canisters: usize,
     dkg_interval: u64,
     rejoin_node: IcNodeSnapshot,
@@ -126,15 +127,16 @@ pub async fn rejoin_test_large_state(
 
     info!(
         logger,
-        "Start expanding the canister heap. The total size of all canisters will be {} MiB.",
-        size_level * num_canisters * 128
+        "Start writing random data to the canister stable memory for each canister. The total size of all canisters will be about {} GiB.",
+        num_canisters as u64 * canister_size_gib,
     );
-    modify_canister_heap(
+
+    write_random_data_to_stable_memory(
         logger.clone(),
         canisters.clone(),
-        size_level,
-        num_canisters,
         false,
+        0,
+        canister_size_gib,
         0,
     )
     .await;
@@ -161,19 +163,20 @@ pub async fn rejoin_test_large_state(
         .await_status_is_unavailable()
         .expect("Node still healthy");
 
-    // Note that how the canister heap is modified is decided by the random seed.
-    // Make sure to provide a different seed than the one used in the previous `modify_canister_heap` call.
+    // Note that how the canister stable memory is modified based on the random seed.
+    // Make sure to provide a different seed than the one used in the previous `write_random_data_to_stable_memory` call.
     // In the following call, we skip odd-indexed canisters so that some canisters remain the same while others change.
     info!(
         logger,
-        "Start modifying the canister heap but skip odd-indexed canisters"
+        "Start modifying canister stable memory by new random data"
     );
-    modify_canister_heap(
+
+    write_random_data_to_stable_memory(
         logger.clone(),
         canisters.clone(),
-        size_level,
-        num_canisters,
         true,
+        0,
+        canister_size_gib,
         1,
     )
     .await;
@@ -348,7 +351,7 @@ pub async fn install_statesync_test_canisters<'a>(
         let new_logger = logger.clone();
         futures.push(async move {
             // Each canister is allocated with slightly more than 1GB of memory
-            // and the memory will later grow by the `expand_state` calls.
+            // and the memory will later grow by the `write_random_data` calls.
             let canister = new_wasm
                 .clone()
                 .install(endpoint_runtime)
@@ -370,55 +373,56 @@ pub async fn install_statesync_test_canisters<'a>(
     join_all(futures).await
 }
 
-pub async fn modify_canister_heap(
+pub async fn write_random_data_to_stable_memory(
     logger: slog::Logger,
     canisters: Vec<Canister<'_>>,
-    size_level: usize,
-    num_canisters: usize,
     skip_odd_indexed_canister: bool,
-    seed: usize,
+    write_offset: u64,
+    write_size_gib: u64,
+    seed: u64,
 ) {
-    let expansions = canisters
+    let writes = canisters
         .iter()
         .enumerate()
         .filter(|(idx, _)| !(skip_odd_indexed_canister && idx % 2 == 1))
         .map(|(idx, canister)| {
             let logger_clone = logger.clone();
             async move {
-                for x in 1..=size_level {
-                    let seed_for_canister = idx + (x - 1) * num_canisters + seed;
-                    let payload = (x as u32, seed_for_canister as u32);
+                for x in 0..write_size_gib {
+                    let seed_for_canister = idx as u64 * 10000 + x * 100 + seed;
+                    let cur_offset = write_offset + x * GIB;
+                    let payload = (cur_offset, GIB, seed_for_canister);
 
-                    let _res: Result<u64, String> = retry_async(
-                        "Trying to expand the canister state",
+                    let _res: Result<(), String> = retry_async(
+                        "Trying to write stable memory",
                         &logger_clone,
                         Duration::from_secs(500),
                         Duration::from_secs(5),
                         async || {
                             canister
-                                .update_("expand_state", dfn_candid::candid, payload)
+                                .update_("write_random_data", dfn_candid::candid, payload)
                                 .await
                                 .map_err(|err| anyhow::anyhow!("{}", err))
                         },
                     )
                     .await
                     .unwrap_or_else(|err| {
-                        panic!("Calling expand_state() on canister {canister:?} failed: {err}",)
+                        panic!("Calling write_random_data() on canister {canister:?} at offset: {cur_offset}, failed: {err}",)
                     });
 
                     info!(
                         logger_clone,
-                        "Expanded canister {:?} {} times, it is now {}",
+                        "Wrote random data to the {}th canister {:?} {} times",
+                        idx,
                         canister,
-                        x,
-                        Utc::now()
+                        x + 1,
                     );
                 }
             }
         })
         .collect::<Vec<_>>();
 
-    join_all(expansions).await;
+    join_all(writes).await;
 }
 
 // The function waits for the manifest reaching or surpassing the given height and returns the manifest height.
