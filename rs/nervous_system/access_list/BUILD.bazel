@@ -1,10 +1,9 @@
-load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
 LIB_SRCS = glob(
     ["src/**"],
-    exclude = ["**/*tests.rs"],
 )
 
 rust_library(
@@ -20,8 +19,9 @@ rust_doc_test(
     deps = [],
 )
 
-rust_test(
+rust_test_suite(
     name = "test",
-    srcs = glob(["**/*tests.rs"]),
+    srcs = glob(["tests/**/*.rs"]),
     deps = [":access_list"],
 )
+

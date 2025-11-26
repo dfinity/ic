@@ -1,4 +1,4 @@
-use crate::AccessList;
+use ic_nervous_system_access_list::AccessList;
 
 #[test]
 fn allow_all_works() {

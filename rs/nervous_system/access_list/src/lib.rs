@@ -108,9 +108,6 @@
 use std::fmt::Debug;
 use std::{collections::HashSet, hash::Hash};
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Debug)]
 pub struct AccessList<T> {
     inner: AccessListInner<T>,
