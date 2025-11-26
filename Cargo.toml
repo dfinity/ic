@@ -764,6 +764,7 @@ pprof = { version = "0.14.0", default-features = false, features = [
 ] }
 predicates = "3.1.2"
 pretty_assertions = "1.4.0"
+procfs = { version = "^0.9" }
 proc-macro2 = "1.0.89"
 prometheus = { version = "0.13.4", features = ["process"] }
 prometheus-parse = { version = "0.2.4" }
@@ -783,6 +784,7 @@ quinn-udp = "0.5.5"
 quote = "1.0.37"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rand_chacha = "0.3.1"
+ratatui = "0.29"
 rayon = "1.10.0"
 rcgen = { version = "0.13.1", features = ["zeroize"] }
 regex = "1.11.0"

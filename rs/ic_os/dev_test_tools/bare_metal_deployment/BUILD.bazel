@@ -1,5 +1,5 @@
 load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
 
 package(default_visibility = ["//rs:ic-os-pkg"])
 
@@ -32,4 +32,18 @@ rust_library(
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
+)
+
+rust_binary(
+    name = "deploy",
+    srcs = ["src/main.rs"],
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [
+        ":bare_metal_deployment",
+        "@crate_index//:anyhow",
+        "@crate_index//:clap",
+        "@crate_index//:slog",
+        "@crate_index//:slog-async",
+        "@crate_index//:slog-term",
+    ],
 )
