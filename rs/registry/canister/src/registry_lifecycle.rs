@@ -287,7 +287,35 @@ mod test {
             dc_id: "dummy_dc_id_1".to_string(),
             ipv6: Some("dummy_ipv6_1".to_string()),
             // Empty rewardable nodes, should be filled in by the migration
-            max_rewardable_nodes: btreemap! {"type3".to_string() => 1},
+            max_rewardable_nodes: btreemap! {},
+            ..NodeOperatorRecord::default()
+        };
+
+        node_operator_additions.push(insert(
+            make_node_operator_record_key(no_1),
+            record_no_1.encode_to_vec(),
+        ));
+
+        registry.apply_mutations_for_test(node_operator_additions);
+        let mutations = fill_swiss_subnet_node_operators_max_rewardable_nodes(&registry);
+        assert_eq!(mutations.len(), 0);
+    }
+
+    #[test]
+    fn test_fill_node_operators_swiss_subnet_leave_untouched_not_empty_max_rewardable_nodes() {
+        let mut registry = invariant_compliant_registry(0);
+        let mut node_operator_additions = Vec::new();
+
+        let no_1 = PrincipalId::from_str(
+            "yedtm-rm5av-s256v-zzi4w-7lxen-koqg6-pzak3-rjzko-xfu2c-dw7eo-bae",
+        )
+        .unwrap();
+
+        let record_no_1 = NodeOperatorRecord {
+            node_operator_principal_id: no_1.clone().to_vec(),
+            dc_id: "dummy_dc_id_1".to_string(),
+            ipv6: Some("dummy_ipv6_1".to_string()),
+            max_rewardable_nodes: btreemap! {"type3.1".to_string() => 1},
             ..NodeOperatorRecord::default()
         };
 
