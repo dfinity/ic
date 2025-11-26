@@ -42,6 +42,13 @@ use std::{
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
+#[cfg(target_os = "linux")]
+use {
+    config::{DEFAULT_GUESTOS_CONFIG_OBJECT_PATH, deserialize_config},
+    config_types::GuestOSConfig,
+    sev::firmware::guest::Firmware,
+};
+
 const CHECK_INTERVAL_SECS: Duration = Duration::from_secs(10);
 
 /// The subnet is initially in the `Unknown` state. After the upgrade loop runs for the first time,
@@ -217,6 +224,36 @@ impl Orchestrator {
             .orchestrator_info
             .with_label_values(&[replica_version.as_ref()])
             .set(1);
+
+        // START GETTING CHIPID
+        let guestos_config: GuestOSConfig =
+            match deserialize_config(DEFAULT_GUESTOS_CONFIG_OBJECT_PATH) {
+                Ok(config) => config,
+                Err(e) => {
+                    eprintln!("Failed to read GuestOS config: {}", e);
+                    return None;
+                }
+            };
+
+        if guestos_config
+            .icos_settings
+            .enable_trusted_execution_environment
+        {
+            // Let's double-check that TEE is also enabled in the config
+            println!("TEE-enabled: Will attempt to get ChipID from SEV firmware");
+        }
+
+        let trusted_execution_config = match guestos_config.trusted_execution_environment_config {
+            Some(config) => config,
+            None => {
+                eprintln!("TrustedExecutionEnvironmentConfig missing in GuestOS config");
+                return None;
+            }
+        };
+
+        let sev_firmware = Firmware::open().context("Could not open SEV firmware")?;
+
+        // END GETTING CHIPID
 
         let mut registration = NodeRegistration::new(
             logger.clone(),
