@@ -1472,8 +1472,8 @@ mod tests {
     };
     use ic_test_utilities_types::ids::{canister_test_id, subnet_test_id, user_test_id};
     use ic_types::{
-        CanisterTimer, ComputeAllocation, Cycles, DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
-        MemoryAllocation, NumBytes, NumInstructions, Time,
+        CanisterTimer, ComputeAllocation, Cycles, MAX_DELTA_LOG_MEMORY_LIMIT, MemoryAllocation,
+        NumBytes, NumInstructions, Time,
         batch::CanisterCyclesCostSchedule,
         messages::{NO_DEADLINE, RequestMetadata},
         time::CoarseTime,
@@ -1579,7 +1579,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
-            DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
+            MAX_DELTA_LOG_MEMORY_LIMIT,
             // Wasm32 execution environment. Sufficient in testing.
             false,
             NetworkTopology::default(),
@@ -1633,7 +1633,7 @@ mod tests {
             RequestMetadata::new(0, Time::from_nanos_since_unix_epoch(0)),
             None,
             0,
-            DEFAULT_AGGREGATE_LOG_MEMORY_LIMIT,
+            MAX_DELTA_LOG_MEMORY_LIMIT,
             // Wasm32 execution environment. Sufficient in testing.
             false,
             NetworkTopology::default(),
