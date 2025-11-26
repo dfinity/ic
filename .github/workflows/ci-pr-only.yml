@@ -173,6 +173,7 @@ jobs:
       pull-requests: write
     env:
       SHELL_WRAPPER: "/usr/bin/time"
+      CARGO_AUDIT_VERSION: "0.21.0"
       CI_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       CI_MERGE_REQUEST_IID: ${{ inputs.pr-number }}
       CI_PROJECT_DIR: ${{ github.repository }}
