@@ -32,6 +32,10 @@ use ic_ckbtc_minter::{
     CKBTC_LEDGER_MEMO_SIZE, MAX_NUM_INPUTS_IN_TRANSACTION, MIN_RESUBMISSION_DELAY, MinterInfo,
     Network, UTXOS_COUNT_THRESHOLD,
 };
+#[cfg(feature = "tla")]
+use tla_instrumentation::UpdateTrace;
+#[cfg(feature = "tla")]
+use ic_ckbtc_minter::tla::perform_trace_check;
 use ic_http_types::{HttpRequest, HttpResponse};
 use ic_icrc1_ledger::{InitArgsBuilder as LedgerInitArgsBuilder, LedgerArgument};
 use ic_metrics_assert::{CanisterHttpQuery, MetricsAssert};
@@ -299,6 +303,9 @@ fn test_upgrade_read_only() {
         matches!(res, Err(RetrieveBtcError::TemporarilyUnavailable(_))),
         "unexpected result: {res:?}"
     );
+
+    #[cfg(feature = "tla")]
+    check_traces(&env, minter_id);
 }
 
 #[test]
@@ -387,6 +394,9 @@ fn test_upgrade_restricted() {
         matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
         "unexpected result: {res:?}"
     );
+
+    #[cfg(feature = "tla")]
+    check_traces(&env, minter_id);
 }
 
 #[test]
@@ -446,6 +456,9 @@ fn test_no_new_utxos() {
         .assert_does_not_contain_metric_matching(
             r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1".*"#,
         ); // no metrics for update call with new UTXOs
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -513,6 +526,9 @@ fn update_balance_should_return_correct_confirmations() {
         .assert_contains_metric_matching(
             r#"ckbtc_minter_update_calls_latency_bucket\{num_new_utxos="1",le="(\d+|\+Inf)"\} 1 \d+"#,
         ); // exactly 1 match for an update call with new UTXOs
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -560,6 +576,17 @@ pub fn get_btc_address(
         String
     )
     .expect("failed to decode String response")
+}
+
+#[cfg(feature = "tla")]
+fn check_traces(env: &StateMachine, minter_id: CanisterId) {
+    use ic_ckbtc_minter::tla::perform_trace_check;
+    let res = env
+        .query(minter_id, "get_tla_traces", Encode!(&()).unwrap())
+        .expect("get_tla_traces query failed");
+    let traces: Vec<UpdateTrace> = Decode!(&res.bytes(), Vec<UpdateTrace>)
+        .expect("failed to decode get_tla_traces response");
+    perform_trace_check(traces);
 }
 
 #[test]
@@ -769,6 +796,16 @@ impl CkBtcSetup {
             minter_id,
             btc_checker_id,
         }
+    }
+
+    #[cfg(feature = "tla")]
+    pub fn env(&self) -> &StateMachine {
+        &self.env
+    }
+
+    #[cfg(feature = "tla")]
+    pub fn env(&self) -> &StateMachine {
+        &self.env
     }
 
     pub fn bitcoin_get_current_fee_percentiles(&self) -> Vec<MillisatoshiPerByte> {
@@ -1510,6 +1547,9 @@ fn test_transaction_finalization() {
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
 
     assert_eq!(ckbtc.get_known_utxos(user), vec![]);
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -1717,6 +1757,9 @@ fn test_transaction_resubmission_finalize_new_above_threshold() {
     ckbtc.finalize_transaction(new_tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), new_txid);
     ckbtc.minter_self_check();
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -1753,6 +1796,9 @@ fn test_transaction_resubmission_finalize_new() {
     ckbtc.finalize_transaction(new_tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), new_txid);
     ckbtc.minter_self_check();
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -1782,6 +1828,9 @@ fn test_transaction_resubmission_finalize_old() {
     ckbtc.finalize_transaction(&tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), old_txid);
     ckbtc.minter_self_check();
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -1832,6 +1881,9 @@ fn test_transaction_resubmission_finalize_middle() {
     ckbtc.finalize_transaction(second_tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), second_txid);
     ckbtc.minter_self_check();
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -1897,6 +1949,9 @@ fn test_taproot_transaction_finalization() {
 
     ckbtc.finalize_transaction(tx);
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -1969,6 +2024,9 @@ fn test_ledger_memo() {
         },
         "memo not found in burn"
     );
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -2003,6 +2061,9 @@ fn test_filter_logs() {
     let logs_filtered = ckbtc.get_logs_with_params(format!("?time={}", nanos + 30 * 1_000_000_000));
 
     assert_ne!(logs.len(), logs_filtered.len());
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -2108,6 +2169,9 @@ fn test_retrieve_btc_with_approval() {
             .assert_does_not_contain_metric_matching(
                 r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="failure",le="(\d+|\+Inf)"\} 1 \d+"#
             );
+
+        #[cfg(feature = "tla")]
+        check_traces(ckbtc.env(), ckbtc.minter_id);
     }
 
     // regular fees, use median
@@ -2232,6 +2296,9 @@ fn test_retrieve_btc_with_approval_from_subaccount() {
         .assert_does_not_contain_metric_matching(
             r#"ckbtc_minter_sign_with_ecdsa_latency_bucket\{result="failure",le="(\d+|\+Inf)"\} 1 \d+"#
         );
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -2336,6 +2403,9 @@ fn test_retrieve_btc_with_approval_fail() {
         ckbtc.retrieve_btc_status_v2_by_account(Some(user_account)),
         vec![]
     );
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
 }
 
 #[test]
@@ -2442,4 +2512,7 @@ fn should_cancel_and_reimburse_large_withdrawal() {
         ckbtc.balance_of(user_account),
         balance_before_withdrawal.clone() - BitcoinFeeEstimator::COST_OF_ONE_BILLION_CYCLES
     );
+
+    #[cfg(feature = "tla")]
+    check_traces(ckbtc.env(), ckbtc.minter_id);
 }

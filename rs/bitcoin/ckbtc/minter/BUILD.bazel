@@ -128,7 +128,7 @@ alias(
         # Production version without debug assertions.
         (
             "ckbtc_minter",
-            test_with_tla(),
+            [],
         ),
         # Test version with internal consistency checks.
         (

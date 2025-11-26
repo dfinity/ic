@@ -194,7 +194,7 @@ async fn get_canister_status() -> ic_cdk::management_canister::CanisterStatusRes
     .expect("failed to fetch canister status")
 }
 
-#[cfg(all(feature = "tla", feature = "test"))]
+#[cfg(feature = "tla")]
 #[query(hidden = true)]
 fn get_tla_traces() -> Vec<tla_instrumentation::UpdateTrace> {
     use ic_ckbtc_minter::tla::TLA_TRACES_MUTEX;
