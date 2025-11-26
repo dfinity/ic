@@ -214,7 +214,7 @@ jobs:
           set -euox pipefail
           export PYTHONPATH=$PWD/ci/src:$PWD/ci/src/dependencies
           cd ci/src/dependencies/
-          python3 job/bazel_rust_ic_scanner_merge_job.py
+          $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
 
   # CI job is also executed in Schedule Hourly
   bazel-test-coverage:
